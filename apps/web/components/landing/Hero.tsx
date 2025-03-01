@@ -8,7 +8,7 @@ import { ArrowRight, ChevronRight } from "lucide-react";
 
 export const HeroSection = () => {
   return (
-    <section className="w-full relative overflow-hidden min-h-screen flex flex-col items-center justify-center dark:bg-zinc-900">
+    <section className="w-full relative overflow-hidden min-h-screen flex flex-col items-center justify-center dark:bg-zinc-900 bg-muted">
       <div className="relative w-fit mx-auto flex flex-col items-center justify-center space-y-4 text-center z-40 backdrop-blur-[2px]">
         <div className="group relative mx-auto flex items-center justify-center rounded-full px-4 py-1.5 shadow-[inset_0_-8px_10px_#8fdfff1f] transition-shadow duration-500 ease-out hover:shadow-[inset_0_-5px_10px_#8fdfff3f] ">
           <span
