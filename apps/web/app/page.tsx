@@ -1,4 +1,4 @@
-import { Navigation, HeroSection, Testimonials } from "@/components/landing";
+import { Navigation, HeroSection, Testimonials, Footer } from "@/components/landing";
 
 export default function Home() {
   return (
@@ -6,6 +6,7 @@ export default function Home() {
       <Navigation />
       <HeroSection/>
       <Testimonials/>
+      <Footer/>
     </main>
   );
 }
