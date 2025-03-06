@@ -42,7 +42,7 @@ export const HeroSection = () => {
       </div>
 
       <div>
-        <Link href="/auth/login">
+        <Link href="/signup">
           <Button
             className="rounded-md text-base h-12 mt-4 border"
             variant="default">

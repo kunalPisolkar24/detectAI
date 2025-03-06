@@ -28,8 +28,8 @@ const NavItems = () => {
         <SheetTheme />
       </div>
 
-      <Link href="/auth/signup" className="text-sm font-medium  underline-offset-4">
-        <Button className="border w-full" variant="secondary">Sign in</Button>
+      <Link href="login" className="text-sm font-medium  underline-offset-4">
+        <Button className="border w-full" variant="secondary">Log in</Button>
       </Link>
     </>
   );
