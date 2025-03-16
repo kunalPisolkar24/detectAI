@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 /**
  * @swagger
- * /api/test:
+ * /api/health:
  *   get:
  *     summary: Test API route
  *     description: Returns a success message.

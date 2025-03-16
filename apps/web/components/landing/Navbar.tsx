@@ -10,7 +10,7 @@ import { SheetTheme } from "@/components/common";
 const NavItems = () => {
   return (
     <>
-      <Link href="#docs" className="text-sm font-medium  underline-offset-4 border md:border-hidden p-2 rounded-xl">Docs</Link>
+      <Link href="/docs" className="text-sm font-medium  underline-offset-4 border md:border-hidden p-2 rounded-xl">Docs</Link>
       <Link href="#features" className="text-sm font-medium  underline-offset-4 border md:border-hidden p-2 rounded-xl">Features</Link>
       <Link href="/pricing" className="text-sm font-medium  underline-offset-4 border md:border-hidden p-2 rounded-xl">Pricing</Link>
 
