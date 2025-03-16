@@ -1,6 +1,12 @@
-'use client'
-
-import { CardWrapper } from "./card-wrapper"
+"use client";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { z } from "zod";
+import { signIn } from "next-auth/react";
+import { toast } from "sonner";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { CardWrapper } from "./card-wrapper";
 import {
   Form,
   FormControl,
@@ -8,77 +14,86 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@workspace/ui/components/form"
-import { LoginSchema } from "@/schemas"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { Input } from "@workspace/ui/components/input"
-import { Button } from "@workspace/ui/components/button"
-import { useFormStatus } from "react-dom"
-import { useState } from "react"
+} from "@workspace/ui/components/form";
+import { Input } from "@workspace/ui/components/input";
+import { Button } from "@workspace/ui/components/button";
+import { LoginSchema } from "@/schemas";
 
 export const LoginForm = () => {
-
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  const form = useForm({
+  const form = useForm<z.infer<typeof LoginSchema>>({
     resolver: zodResolver(LoginSchema),
     defaultValues: {
       email: "",
-      password: ""
-    }
-  })
+      password: "",
+    },
+  });
 
-  const onSubmit = (data: any) => {
+  const onSubmit = async (data: z.infer<typeof LoginSchema>) => {
     setLoading(true);
-    console.log(data);
-  }
+    try {
+      const result = await signIn("credentials", {
+        redirect: false,
+        email: data.email,
+        password: data.password,
+      });
 
-  const {pending} = useFormStatus();
+      if (result?.error) {
+        toast.error("Invalid credentials");
+        return;
+      }
+
+      toast.success("Login successful!");
+      router.push("/chat"); 
+    } catch (error: any) {
+      toast.error(error.message || "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <CardWrapper
-      label="Login to your account"
-      title="Welcome back"
+      label="Sign In"
+      title="Welcome Back"
       backButtonHref="/signup"
-      backButtonLabel="Don't have an account? Signup here."
+      backButtonLabel="Don't have an account? Sign up here."
     >
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <div className="space-y-4">
-            <FormField 
-              control={form.control}
-              name="email"
-              render={({field}) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input {...field} type="email" placeholder="bhaskarprajapati@gmail.com"/>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField 
-              control={form.control}
-              name="password"
-              render={({field}) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <Input {...field} type="password" placeholder="******"/>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <Button type="submit" className="w-full" disabled={pending}>
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email</FormLabel>
+                <FormControl>
+                  <Input {...field} type="email" placeholder="you@example.com" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Password</FormLabel>
+                <FormControl>
+                  <Input {...field} type="password" placeholder="******" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Loading..." : "Login"}
           </Button>
         </form>
       </Form>
     </CardWrapper>
-  )
-}
+  );
+};
