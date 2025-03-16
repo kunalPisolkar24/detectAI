@@ -2,6 +2,7 @@
 
 import { Turnstile, TurnstileInstance } from "@marsidev/react-turnstile";
 import { useRef, useState } from "react";
+import "./style.css"
 
 interface TurnstileComponentProps {
   siteKey: string; 

@@ -43,7 +43,7 @@ export const CardWrapper = ({ label, title, backButtonHref, backButtonLabel, chi
           </blockquote>
         </div>
       </div>
-      <div className="w-full lg:w-1/2 flex justify-center items-center py-10 px-10">
+      <div className="w-full lg:w-1/2 flex justify-center items-center py-10 px-3 md:px-10">
         <Card className="w-full max-w-md shadow-md">
           <CardHeader>
             <AuthHeader label={label} title={title} />

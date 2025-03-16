@@ -191,7 +191,7 @@ export const SignupForm = () => {
               )}
             />
 
-            <div className="pt-4 ml-12">
+            <div className="pt-4 flex justify-center">
               <TurnstileComponent
                 siteKey="0x4AAAAAABA_xFDZEVC1Iru5"
                 onVerify={handleTurnstileVerify}
