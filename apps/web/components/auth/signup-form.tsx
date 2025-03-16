@@ -1,4 +1,5 @@
 "use client";
+
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { z } from "zod";
@@ -18,10 +19,12 @@ import {
 import { Input } from "@workspace/ui/components/input";
 import { Button } from "@workspace/ui/components/button";
 import { SignupSchema } from "@/schemas/auth-schema";
+import { TurnstileComponent } from "@/components/common"; 
 
 export const SignupForm = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof SignupSchema>>({
     resolver: zodResolver(SignupSchema),
@@ -34,10 +37,34 @@ export const SignupForm = () => {
     },
   });
 
+  const handleTurnstileVerify = (token: string) => {
+    setTurnstileToken(token);
+  };
+
   const onSubmit = async (data: z.infer<typeof SignupSchema>) => {
     setLoading(true);
     try {
-      const response = await fetch("/api/auth/register", { // Correct endpoint
+
+      if (!turnstileToken) {
+        toast.error("Complete the Human Verification");
+        setLoading(false);
+        return;
+      }
+
+      const verifyResponse = await fetch("/api/verify-turnstile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: turnstileToken }),
+      });
+
+      if (!verifyResponse.ok) {
+        const errorData = await verifyResponse.json();
+        toast.error(errorData.error || "Invalid Turnstile token");
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -47,20 +74,17 @@ export const SignupForm = () => {
           password: data.password,
           firstName: data.firstName,
           lastName: data.lastName,
-          name: `${data.firstName} ${data.lastName}`
+          name: `${data.firstName} ${data.lastName}`,
         }),
       });
 
-
       const result = await response.json();
       if (!response.ok) {
-
         if (response.status === 409) {
-            toast.error(result.error || "Email already in use");
-        }
-        else{
+          toast.error(result.error || "Email already in use");
+        } else {
           // @ts-ignore
-            toast.error("Registration failed" || result.error)
+          toast.error("Registration failed" || result.error);
         }
         return;
       }
@@ -71,16 +95,14 @@ export const SignupForm = () => {
         redirect: false,
       });
 
-
       if (signInResult?.error) {
         toast.error("Sign in failed after registration");
         return;
       }
 
       toast.success("Signup successful");
-      router.push("/chat"); // Or wherever you want to redirect
+      router.push("/chat"); 
     } catch (error: any) {
-
       toast.error(error.message || "An error occurred during signup");
     } finally {
       setLoading(false);
@@ -168,6 +190,17 @@ export const SignupForm = () => {
                 </FormItem>
               )}
             />
+
+            <div className="pt-4 ml-12">
+              <TurnstileComponent
+                siteKey="0x4AAAAAABA_xFDZEVC1Iru5"
+                onVerify={handleTurnstileVerify}
+                onError={(error: any) => {
+                  console.error("Turnstile error:", error);
+                  toast.error("Verification Error");
+                }}
+              />
+            </div>
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Loading..." : "Signup"}
