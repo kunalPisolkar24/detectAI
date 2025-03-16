@@ -9,7 +9,7 @@ const options = {
       description: 'API documentation for Next.js 15 app',
     }
   },
-  apis: ['app/api/**/*.ts', 'app/api/**/.js'], // Matches all API routes
+  apis: ['app/api/**/*.ts', 'app/api/**/*.js'], // Matches all API routes
 };
 
 const swaggerSpec = swaggerJsdoc(options);
