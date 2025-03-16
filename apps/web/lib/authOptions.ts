@@ -8,10 +8,6 @@ import prisma from "@/lib/prisma";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import type { Adapter } from "next-auth/adapters";
 
-console.log("GITHUB_ID:", process.env.GITHUB_ID);
-console.log("GOOGLE_CLIENT_ID:", process.env.GOOGLE_CLIENT_ID!);
-console.log("NEXTAUTH_SECRET:", process.env.NEXTAUTH_SECRET);
-
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as Adapter,
   providers: [
