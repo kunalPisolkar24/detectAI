@@ -18,10 +18,12 @@ import {
 import { Input } from "@workspace/ui/components/input";
 import { Button } from "@workspace/ui/components/button";
 import { LoginSchema } from "@/schemas";
+import { TurnstileComponent } from "@/components/common";
 
 export const LoginForm = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof LoginSchema>>({
     resolver: zodResolver(LoginSchema),
@@ -31,9 +33,31 @@ export const LoginForm = () => {
     },
   });
 
+  const handleTurnstileVerify = (token: string) => {
+    setTurnstileToken(token);
+  };
+
   const onSubmit = async (data: z.infer<typeof LoginSchema>) => {
     setLoading(true);
     try {
+      if (!turnstileToken) {
+        toast.error("Please complete human verification");
+        setLoading(false);
+        return;
+      }
+
+      const verifyResponse = await fetch("/api/verify-turnstile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: turnstileToken }),
+      });
+      if (!verifyResponse.ok) {
+        const errorData = await verifyResponse.json();
+        toast.error(errorData.error || "Turnstile verification failed");
+        setLoading(false);
+        return;
+      }
+
       const result = await signIn("credentials", {
         redirect: false,
         email: data.email,
@@ -46,7 +70,7 @@ export const LoginForm = () => {
       }
 
       toast.success("Login successful!");
-      router.push("/chat"); 
+      router.push("/chat");
     } catch (error: any) {
       toast.error(error.message || "Login failed");
     } finally {
@@ -89,6 +113,17 @@ export const LoginForm = () => {
               </FormItem>
             )}
           />
+          {/* Centered Turnstile Component */}
+          <div className="flex justify-center pt-4">
+            <TurnstileComponent
+              siteKey="0x4AAAAAABA_xFDZEVC1Iru5"
+              onVerify={handleTurnstileVerify}
+              onError={(error: any) => {
+                console.error("Turnstile error:", error);
+                toast.error("Verification Error");
+              }}
+            />
+          </div>
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Loading..." : "Login"}
           </Button>
