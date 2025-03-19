@@ -1,21 +1,21 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, Dispatch, SetStateAction } from "react";
 
-// Create a Context
-// @ts-ignore
-const TabContext = createContext();
+interface TabContextType {
+  tab: string;
+  setTab: Dispatch<SetStateAction<string>>;
+}
 
-// Create a provider component
-export const TabProvider = ({ children }: any) => {
+const TabContext = createContext<TabContextType | undefined>(undefined);
+
+export const TabProvider = ({ children }: { children: React.ReactNode }) => {
   const [tab, setTab] = useState("sequential");
-
-  return (
-    <TabContext.Provider value={{ tab, setTab }}>
-      {children}
-    </TabContext.Provider>
-  );
+  return <TabContext.Provider value={{ tab, setTab }}>{children}</TabContext.Provider>;
 };
 
-// Create a custom hook to use the context
 export const useTab = () => {
-  return useContext(TabContext);
+  const context = useContext(TabContext);
+  if (context === undefined) {
+    throw new Error("useTab must be used within a TabProvider");
+  }
+  return context;
 };

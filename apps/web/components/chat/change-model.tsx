@@ -1,42 +1,24 @@
 import React from "react";
-
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@workspace/ui/components/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@workspace/ui/components/dropdown-menu";
 import { Button } from "@workspace/ui/components/button";
 import { ChevronDown } from "lucide-react";
-
-import { useTab } from "@/contexts/tabContext"; // Import the useTab hook
+import { useTab } from "@/contexts/tabContext";
 
 const ChangeModel = () => {
-
-  const { tab, setTab } : any = useTab(); // Access tab and setTab from context
-
+  const { tab, setTab } = useTab();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          className="w-[150px] text-left flex items-center justify-start"
-        >
-          Change Model
-          <ChevronDown className="mr-2 h-4 w-4" />
+        <Button variant="outline" className="w-[150px] text-left flex items-center justify-end">
+          {tab === "sequential" ? "Sequential" : "BERT"}
+          <ChevronDown className="ml-5 h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="z-50">
-        <DropdownMenuItem
-          className={tab === "sequential" ? "bg-muted" : ""}
-          onClick={() => setTab("sequential")} // Set "sequential" as selected
-        >
+        <DropdownMenuItem className={tab === "sequential" ? "bg-muted" : ""} onClick={() => setTab("sequential")}>
           Sequential
         </DropdownMenuItem>
-        <DropdownMenuItem
-          className={tab === "bert" ? "bg-muted" : ""}
-          onClick={() => setTab("bert")} // Set "bert" as selected
-        >
+        <DropdownMenuItem className={tab === "bert" ? "bg-muted" : ""} onClick={() => setTab("bert")}>
           BERT
         </DropdownMenuItem>
       </DropdownMenuContent>
