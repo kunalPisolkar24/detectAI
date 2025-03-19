@@ -1,0 +1,6 @@
+# Ignore virtual environment
+venv/
+
+# Ignore contents of bert_resources but keep the folder
+bert_resources/*
+sequential_resources/*

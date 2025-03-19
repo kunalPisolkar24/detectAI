@@ -1,3 +1,6 @@
+import os
+os.environ['TF_USE_LEGACY_KERAS'] = '0'
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pickle
@@ -77,7 +80,7 @@ def health_check():
     """
     Health check endpoint.  Returns a 200 OK status if the service is running.
     """
-    return jsonify({'status': 'OK'}), 200
+    return jsonify({'status': 'Flask Endpoint is Working'}), 200
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)
