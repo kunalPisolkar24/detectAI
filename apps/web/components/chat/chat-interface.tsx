@@ -91,23 +91,20 @@ export function ChatInterface() {
     if (validationResult.success) {
       setIsLoading(true);
       setMessage("");
-      const endpoint =
-        tab === "sequential" ? "/predict/sequential" : "/predict/bert";
+      const endpoint = tab === "sequential" ? "sequential" : "bert";
       try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_MODEL_URL}${endpoint}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${process.env.NEXT_PUBLIC_MODEL_API_SECRET}`,
-            },
-            body: JSON.stringify({ text: message }),
-          }
-        );
+        const response = await fetch(`/api/proxy/${endpoint}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ text: message }),
+        });
+
         if (!response.ok) {
           throw new Error("Server returned an error");
         }
+
         const data = await response.json();
         setCurrentChat({
           question: message,

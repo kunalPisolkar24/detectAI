@@ -13,9 +13,19 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 
-
 app = Flask(__name__)
-CORS(app)
+# Configure CORS with specific origins and options
+CORS(app, resources={r"/*": {
+    "origins": "*",
+    "methods": ["GET", "POST", "OPTIONS"],
+    "allow_headers": ["Content-Type", "Authorization"]
+}})
+
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
 
 # Load the Sequential model and tokenizer
 with open('sequential_resources/tfidf_tokenizer.pkl', 'rb') as f:
@@ -27,8 +37,11 @@ loaded_model = keras.models.load_model('sequential_resources/text_classification
 bert_tokenizer = BertTokenizer.from_pretrained('./bert_resources/bert_tokenizer')
 bert_model = TFBertForSequenceClassification.from_pretrained('./bert_resources/bert_text_classification_model')
 
-@app.route('/predict/sequential', methods=['POST'])
+@app.route('/predict/sequential', methods=['POST', 'OPTIONS'])
 def predict_sequential():
+    if request.method == 'OPTIONS':
+        return '', 200
+        
     data = request.json
     text = data.get('text') # type: ignore
     
@@ -48,8 +61,11 @@ def predict_sequential():
         'predicted_label': predicted_label
     })
     
-@app.route('/predict/bert', methods=['POST'])
+@app.route('/predict/bert', methods=['POST', 'OPTIONS'])
 def predict_bert():
+    if request.method == 'OPTIONS':
+        return '', 200
+        
     data = request.json
     text = data.get('text') # type: ignore
     
@@ -66,7 +82,7 @@ def predict_bert():
     )
     
     # Make prediction
-    predictions = bert_model.predict({'input_ids': inputs['input_ids'], 'attention_mask': inputs['attention_mask']}) # type: ignore
+    predictions = bert_model.predict({'input_ids': inputs['input_ids'], 'attention_mask': inputs['attention_mask']}) # type:ignore
     
     predicted_label = int(tf.argmax(predictions.logits, axis=1).numpy()[0])
     
@@ -77,9 +93,6 @@ def predict_bert():
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """
-    Health check endpoint.  Returns a 200 OK status if the service is running.
-    """
     return jsonify({'status': 'Flask Endpoint is Working'}), 200
 
 if __name__ == '__main__':
