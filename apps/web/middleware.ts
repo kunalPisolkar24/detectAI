@@ -17,25 +17,28 @@ export async function middleware(req: NextRequest) {
       url.pathname = "/login";
       return NextResponse.redirect(url);
     }
+    return NextResponse.next();
   }
-  // @ts-ignore
-  const identifier = req.ip ?? "127.0.0.1";
-  const isAllowed = await rateLimit.limit(identifier);
 
-  if (!isAllowed.success) {
-    // Return a 429 status code (Too Many Requests)
-    return new NextResponse(null, {
-      status: 429,
-      statusText: "Too Many Requests",
-      headers: {
-        "Content-Type": "text/plain",
-      },
-    });
+  if (pathname.startsWith("/api/")) {
+    // @ts-ignore
+    const identifier = req.ip ?? "127.0.0.1";
+    const isAllowed = await rateLimit.limit(identifier);
+
+    if (!isAllowed.success) {
+      return new NextResponse(null, {
+        status: 429,
+        statusText: "Too Many Requests",
+        headers: {
+          "Content-Type": "text/plain",
+        },
+      });
+    }
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: '/api/:path*',
+  matcher: ['/api/:path*', '/chat/:path*']
 };
