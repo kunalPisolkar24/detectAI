@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { endpoint: string } }
 ) {
   try {
-
-    const body = await request.json();
+    // Extract the endpoint from the URL pathname
+    const endpoint = request.nextUrl.pathname.split('/').pop();
     
-    const { endpoint } = await params;
+    const body = await request.json();
     
     const apiUrl = `${process.env.NEXT_PUBLIC_MODEL_URL}/predict/${endpoint}`;
     
