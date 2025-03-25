@@ -19,7 +19,7 @@ import {
 import { Input } from "@workspace/ui/components/input";
 import { Button } from "@workspace/ui/components/button";
 import { SignupSchema } from "@/schemas/auth-schema";
-import { TurnstileComponent } from "@/components/common"; 
+import { TurnstileComponent } from "@/components/common";
 
 export const SignupForm = () => {
   const router = useRouter();
@@ -44,7 +44,6 @@ export const SignupForm = () => {
   const onSubmit = async (data: z.infer<typeof SignupSchema>) => {
     setLoading(true);
     try {
-
       if (!turnstileToken) {
         toast.error("Complete the Human Verification");
         setLoading(false);
@@ -101,7 +100,9 @@ export const SignupForm = () => {
       }
 
       toast.success("Signup successful");
-      router.push("/chat"); 
+      setTimeout(() => {
+        router.push("/chat");
+      }, 2000);
     } catch (error: any) {
       toast.error(error.message || "An error occurred during signup");
     } finally {

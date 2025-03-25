@@ -70,7 +70,9 @@ export const LoginForm = () => {
       }
 
       toast.success("Login successful!");
-      router.push("/chat");
+       setTimeout(() => {
+          router.push("/chat");
+       }, 2000);
     } catch (error: any) {
       toast.error(error.message || "Login failed");
     } finally {
