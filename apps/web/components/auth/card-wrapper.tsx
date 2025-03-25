@@ -12,19 +12,16 @@ import AuthImg from "@/public/authImage.jpg";
 import { Logo } from "@/components/common";
 
 export const CardWrapper = ({ label, title, backButtonHref, backButtonLabel, children }: any) => {
-  const { theme } = useTheme();
+  const { theme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-
   useEffect(() => {
     setMounted(true);
   }, []);
-
   if (!mounted) {
     return null;
   }
-
-  const iconColor = theme === "dark" ? "text-white" : "text-black";
-
+  const currentTheme = theme === "system" ? resolvedTheme : theme;
+  const iconColor = currentTheme === "dark" ? "text-white" : "text-black";
   return (
     <div className="flex min-h-screen">
       <div className="hidden lg:block w-3/4 relative text-white">
@@ -51,11 +48,11 @@ export const CardWrapper = ({ label, title, backButtonHref, backButtonLabel, chi
           <CardContent>
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row gap-2 w-full">
-                <Button onClick={() => signIn("google", {callbackUrl: '/chat'})} className="w-full py-2 px-4 font-semibold flex items-center justify-center" variant="outline">
+                <Button onClick={() => signIn("google", { callbackUrl: '/chat' })} className="w-full py-2 px-4 font-semibold flex items-center justify-center" variant="outline">
                   <FaGoogle className={iconColor} size={20} />
                   Continue with Google
                 </Button>
-                <Button onClick={() => signIn("github", {callbackUrl: '/chat'})} className="w-full py-2 px-4 font-semibold flex items-center justify-center" variant="outline">
+                <Button onClick={() => signIn("github", { callbackUrl: '/chat' })} className="w-full py-2 px-4 font-semibold flex items-center justify-center" variant="outline">
                   <FaGithub className={iconColor} size={20} />
                   Continue with GitHub
                 </Button>
