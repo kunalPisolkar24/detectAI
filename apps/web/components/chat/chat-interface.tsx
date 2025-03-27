@@ -13,11 +13,12 @@ import {
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip";
 import { AnimatedGradientText } from "@workspace/ui/components/magicui/animated-gradient-text";
+import { toast } from "sonner"; // Import the toast from sonner
 import ChangeModel from "./change-model";
 import { useTab } from "@/contexts/tabContext";
 import { MessageSchema } from "@/schemas";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-
+import "./style.css"
 interface CurrentChat {
   question: string;
   response: string;
@@ -33,6 +34,10 @@ export function ChatInterface() {
   const [isMobile, setIsMobile] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isColdStarting, setIsColdStarting] = useState(false);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const maxRetries = 5;
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     document.documentElement.style.overflow = "hidden";
@@ -72,6 +77,15 @@ export function ChatInterface() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Clean up any pending retries when component unmounts
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const validateMessage = (msg: string) => {
     if (!msg.trim()) {
       setError("");
@@ -85,40 +99,105 @@ export function ChatInterface() {
     }
   };
 
+  const fetchWithRetry = async (endpoint: string, messageText: string, attempt = 1): Promise<any> => {
+    try {
+      const response = await fetch(`/api/proxy/${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text: messageText }),
+      });
+
+      if (!response.ok) {
+        // For 503 or 504 status codes, we can assume the server is cold starting
+        if (response.status === 503 || response.status === 504 || response.status === 500) {
+          if (attempt === 1) {
+            setIsColdStarting(true);
+            toast.loading(
+              "Models are warming up!", 
+              { duration: 10000, id: "cold-start-toast" }
+            );
+          }
+          
+          // If we haven't exceeded max retries, try again
+          if (attempt <= maxRetries) {
+            setRetryCount(attempt);
+            // Exponential backoff - wait longer between each retry
+            const retryDelay = Math.min(14000 * Math.pow(1.5, attempt - 1), 30000);
+            
+            return new Promise((resolve) => {
+              retryTimeoutRef.current = setTimeout(() => {
+                resolve(fetchWithRetry(endpoint, messageText, attempt + 1));
+              }, retryDelay);
+            });
+          } else {
+            throw new Error("Server is not responding after multiple attempts");
+          }
+        }
+        throw new Error(`Server returned ${response.status}`);
+      }
+
+      // If we get here, the request succeeded
+      if (isColdStarting) {
+        setIsColdStarting(false);
+        toast.success("Models are ready!", { id: "cold-start-toast" });
+        setRetryCount(0);
+      }
+      
+      return response.json();
+    } catch (error) {
+      if (attempt <= maxRetries && isColdStarting) {
+        const retryDelay = Math.min(2000 * Math.pow(1.5, attempt - 1), 10000);
+        setRetryCount(attempt);
+        
+        return new Promise((resolve) => {
+          retryTimeoutRef.current = setTimeout(() => {
+            resolve(fetchWithRetry(endpoint, messageText, attempt + 1));
+          }, retryDelay);
+        });
+      }
+      throw error;
+    }
+  };
+
   const handleSubmit = async () => {
     if (!message.trim()) return;
     const validationResult = MessageSchema.safeParse({ message });
     if (validationResult.success) {
       setIsLoading(true);
+      const questionText = message;
       setMessage("");
       const endpoint = tab === "sequential" ? "sequential" : "bert";
+      
       try {
-        const response = await fetch(`/api/proxy/${endpoint}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ text: message }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Server returned an error");
-        }
-
-        const data = await response.json();
+        // Set initial state for submission
+        setIsSubmitted(true);
         setCurrentChat({
-          question: message,
+          question: questionText,
+          response: "",
+        });
+        
+        // Use the retry mechanism
+        const data = await fetchWithRetry(endpoint, questionText);
+        
+        setCurrentChat({
+          question: questionText,
           response: `Model: ${data.model}, Predicted Label: ${data.predicted_label}`,
         });
       } catch (error: any) {
         console.error(error);
-        setCurrentChat({
-          question: message,
-          response: "Error: Server is likely down",
+        toast.error("Our models are currently unavailable.", { 
+          id: "cold-start-toast" 
         });
+        setCurrentChat({
+          question: questionText,
+          response: "Error: Server is currently unavailable. Please try again later.",
+        });
+        setIsColdStarting(false);
       }
+      
       setIsLoading(false);
-      setIsSubmitted(true);
       setError("");
     } else {
       const errorMessage =
@@ -131,6 +210,11 @@ export function ChatInterface() {
     setIsSubmitted(false);
     setCurrentChat(null);
     setMessage("");
+    setIsColdStarting(false);
+    setRetryCount(0);
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -182,7 +266,7 @@ export function ChatInterface() {
           </p>
         </motion.div>
       )}
-      <ScrollArea className="flex-1 px-4 transition-all min-h-[40vh] max-h-[70vh]">
+      <ScrollArea className="flex-1 px-4 transition-all min-h-[40vh] max-h-[80vh]">
         <div className="w-full max-w-2xl mx-auto pt-20">
           <AnimatePresence mode="popLayout">
             {isSubmitted && currentChat && (
@@ -205,12 +289,21 @@ export function ChatInterface() {
                   >
                     <p className="dark:text-zinc-200">{currentChat.question}</p>
                   </motion.div>
-                  {isLoading ? (
-                    <div className="flex w-full items-center gap-1.5">
+                  {isLoading && (
+                    <div className="flex w-full items-start gap-1.5">
                       <Skeleton className="h-9 w-9 rounded-lg" />
-                      <Skeleton className="w-1/4 p-4 rounded-2xl h-9" />
+                      <div className="flex-1">
+                        <Skeleton className="w-3/4 p-4 rounded-2xl h-9 mb-2" />
+                        {isColdStarting && (
+                          <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-blue-500"></span>
+                            <p>Warming up models... Retry attempt {retryCount}/{maxRetries}</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  ) : (
+                  )}
+                  {!isLoading && currentChat.response && (
                     <motion.div
                       key={`response-${currentChat.response}`}
                       initial={{ opacity: 0, y: 10 }}
@@ -223,9 +316,13 @@ export function ChatInterface() {
                         <BotIcon className="h-5 w-5 text-primary" />
                       </div>
                       <p
-                        className={`text-foreground ${currentChat.response === "Error: Server is likely down" ? "bg-red-950 p-2 text-red-300 rounded-md" : ""}`}
+                        className={`text-foreground ${
+                          currentChat.response.includes("Error:") 
+                            ? "dark:bg-red-800/2 p-2 bg-red-800 text-zinc-100 rounded-md" 
+                            : ""
+                        }`}
                       >
-                        {currentChat.response === "Error: Server is likely down"
+                        {currentChat.response.includes("Error:")
                           ? currentChat.response
                           : currentChat.response.includes("Predicted Label: 0")
                             ? "The text is likely Human Written 👨🏻‍🦱"
@@ -251,7 +348,7 @@ export function ChatInterface() {
         </div>
         <ScrollBar />
       </ScrollArea>
-      <div className="w-full p-4 fixed bottom-16 bg-background">
+      <div className="cutpad w-full p-4 fixed bottom-10 bg-background">
         <div className="relative max-w-3xl mx-auto">
           <div className="flex items-center bg-background rounded-3xl shadow-lg pb-3 border border-gray-400 dark:border-zinc-600">
             <ScrollArea className="w-full">
@@ -265,6 +362,7 @@ export function ChatInterface() {
                     validateMessage(e.target.value);
                   }}
                   onKeyDown={handleKeyDown}
+                  disabled={isLoading && isColdStarting}
                   className="resize-none w-full min-h-[50px] max-h-[210px] overflow-y-auto dark:text-zinc-200"
                 />
                 {error && <p className="text-red-500 mt-2">{error}</p>}
@@ -293,7 +391,7 @@ export function ChatInterface() {
               <Button
                 size="icon"
                 onClick={handleSubmit}
-                disabled={!message.trim()}
+                disabled={!message.trim() || (isLoading && isColdStarting)}
                 className="h-10 w-10 rounded-xl bg-primary text-primary-foreground hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200"
               >
                 <ArrowUp className="h-4 w-4" />
