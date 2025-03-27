@@ -13,7 +13,7 @@ import {
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip";
 import { AnimatedGradientText } from "@workspace/ui/components/magicui/animated-gradient-text";
-import { toast } from "sonner"; // Import the toast from sonner
+import { toast } from "sonner";
 import ChangeModel from "./change-model";
 import { useTab } from "@/contexts/tabContext";
 import { MessageSchema } from "@/schemas";
