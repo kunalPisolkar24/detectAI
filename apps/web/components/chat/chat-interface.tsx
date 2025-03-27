@@ -18,7 +18,8 @@ import ChangeModel from "./change-model";
 import { useTab } from "@/contexts/tabContext";
 import { MessageSchema } from "@/schemas";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-import "./style.css"
+import "./style.css";
+
 interface CurrentChat {
   question: string;
   response: string;
@@ -38,6 +39,7 @@ export function ChatInterface() {
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxRetries = 5;
   const [retryCount, setRetryCount] = useState(0);
+  const coldStartingRef = useRef(false);
 
   useEffect(() => {
     document.documentElement.style.overflow = "hidden";
@@ -77,7 +79,6 @@ export function ChatInterface() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Clean up any pending retries when component unmounts
   useEffect(() => {
     return () => {
       if (retryTimeoutRef.current) {
@@ -99,7 +100,11 @@ export function ChatInterface() {
     }
   };
 
-  const fetchWithRetry = async (endpoint: string, messageText: string, attempt = 1): Promise<any> => {
+  const fetchWithRetry = async (
+    endpoint: string,
+    messageText: string,
+    attempt = 1
+  ): Promise<any> => {
     try {
       const response = await fetch(`/api/proxy/${endpoint}`, {
         method: "POST",
@@ -109,23 +114,29 @@ export function ChatInterface() {
         body: JSON.stringify({ text: messageText }),
       });
 
+      console.log("Response status:", response.status);
       if (!response.ok) {
-        // For 503 or 504 status codes, we can assume the server is cold starting
-        if (response.status === 503 || response.status === 504 || response.status === 500) {
+        if (
+          response.status === 503 ||
+          response.status === 504 ||
+          response.status === 500
+        ) {
           if (attempt === 1) {
             setIsColdStarting(true);
-            toast.loading(
-              "Models are warming up!", 
-              { duration: 10000, id: "cold-start-toast" }
-            );
+            coldStartingRef.current = true;
+            toast.loading("Models are warming up! ⏳", {
+              duration: 10000,
+              id: "cold-start-toast",
+            });
+            console.log("Cold start initiated.");
           }
-          
-          // If we haven't exceeded max retries, try again
           if (attempt <= maxRetries) {
             setRetryCount(attempt);
-            // Exponential backoff - wait longer between each retry
-            const retryDelay = Math.min(14000 * Math.pow(1.5, attempt - 1), 30000);
-            
+            const retryDelay = Math.min(
+              14000 * Math.pow(1.5, attempt - 1),
+              30000
+            );
+            console.log(`Attempt ${attempt} failed. Retrying in ${retryDelay} ms`);
             return new Promise((resolve) => {
               retryTimeoutRef.current = setTimeout(() => {
                 resolve(fetchWithRetry(endpoint, messageText, attempt + 1));
@@ -138,19 +149,25 @@ export function ChatInterface() {
         throw new Error(`Server returned ${response.status}`);
       }
 
-      // If we get here, the request succeeded
-      if (isColdStarting) {
+      if (coldStartingRef.current) {
+        console.log("Dismissing loading toast");
+        toast.dismiss("cold-start-toast");
+        console.log("Showing success toast");
+
+        toast.success("Models are ready! 🚀", {
+          id: "cold-start-toast",
+          duration: 5000,
+        });
+        coldStartingRef.current = false;
         setIsColdStarting(false);
-        toast.success("Models are ready!", { id: "cold-start-toast" });
         setRetryCount(0);
       }
-      
       return response.json();
     } catch (error) {
-      if (attempt <= maxRetries && isColdStarting) {
-        const retryDelay = Math.min(2000 * Math.pow(1.5, attempt - 1), 10000);
+      if (attempt <= maxRetries && coldStartingRef.current) {
         setRetryCount(attempt);
-        
+        const retryDelay = Math.min(2000 * Math.pow(1.5, attempt - 1), 10000);
+        console.log(`Attempt ${attempt} caught error. Retrying in ${retryDelay} ms`);
         return new Promise((resolve) => {
           retryTimeoutRef.current = setTimeout(() => {
             resolve(fetchWithRetry(endpoint, messageText, attempt + 1));
@@ -169,7 +186,7 @@ export function ChatInterface() {
       const questionText = message;
       setMessage("");
       const endpoint = tab === "sequential" ? "sequential" : "bert";
-      
+
       try {
         // Set initial state for submission
         setIsSubmitted(true);
@@ -177,26 +194,29 @@ export function ChatInterface() {
           question: questionText,
           response: "",
         });
-        
+
         // Use the retry mechanism
         const data = await fetchWithRetry(endpoint, questionText);
-        
+
         setCurrentChat({
           question: questionText,
           response: `Model: ${data.model}, Predicted Label: ${data.predicted_label}`,
         });
       } catch (error: any) {
         console.error(error);
-        toast.error("Our models are currently unavailable.", { 
-          id: "cold-start-toast" 
+        toast.error("Our models are currently unavailable.", {
+          id: "cold-start-toast",
         });
         setCurrentChat({
           question: questionText,
-          response: "Error: Server is currently unavailable. Please try again later.",
+          response:
+            "Error: Server is currently unavailable. Please try again later.",
         });
+        // Ensure cold start flag is cleared
         setIsColdStarting(false);
+        coldStartingRef.current = false;
       }
-      
+
       setIsLoading(false);
       setError("");
     } else {
@@ -261,8 +281,7 @@ export function ChatInterface() {
             Was this written by Human or AI?
           </h2>
           <p className="subText mt-4 text-center px-5">
-            AI or human? Take a wild guess—or let us do the detective work for
-            you!
+            AI or human? Take a wild guess—or let us do the detective work for you!
           </p>
         </motion.div>
       )}
@@ -297,7 +316,9 @@ export function ChatInterface() {
                         {isColdStarting && (
                           <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
                             <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-blue-500"></span>
-                            <p>Warming up models... Retry attempt {retryCount}/{maxRetries}</p>
+                            <p>
+                              Warming up models... Retry attempt {retryCount}/{maxRetries}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -317,8 +338,8 @@ export function ChatInterface() {
                       </div>
                       <p
                         className={`text-foreground ${
-                          currentChat.response.includes("Error:") 
-                            ? "dark:bg-red-800/2 p-2 bg-red-800 text-zinc-100 rounded-md" 
+                          currentChat.response.includes("Error:")
+                            ? "dark:bg-red-800/2 p-2 bg-red-800 text-zinc-100 rounded-md"
                             : ""
                         }`}
                       >
