@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     if (existingUser) {
       return NextResponse.json(
         { error: "Email already in use" },
-        { status: 409 }  // 409 Conflict
+        { status: 409 }
       );
     }
 
