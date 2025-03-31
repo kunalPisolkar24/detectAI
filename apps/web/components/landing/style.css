@@ -1,0 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&display=swap');
+
+.seriffont {
+    font-family: "Merriweather" !important;
+    letter-spacing: 0.5px;
+    font-size: 18px;
+}
+
+@media (max-width: 767px) {
+    .seriffont {
+        font-size: 14px;
+    }
+}
+
+
+.seriffont1 {
+    font-family: "Merriweather" !important;
+    letter-spacing: 0.5px;
+    font-size: 16px;
+}
+
+@media (max-width: 767px) {
+    .seriffont1 {
+        font-size: 13px;
+    }
+}

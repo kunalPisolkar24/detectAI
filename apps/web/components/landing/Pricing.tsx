@@ -48,7 +48,7 @@ export const Pricing = () => {
   ];
 
   return (
-    <section className="w-full dark:bg-zinc-900 bg-muted flex flex-col items-center justify-center">
+    <section className="w-full flex flex-col items-center justify-center">
       <div className="w-full container px-6 sm:px-8 lg:mx-auto py-32 flex flex-col items-center justify-center space-y-8">
         <div className="text-center flex flex-col items-center justify-center">
       <div className="group relative mx-auto flex items-center justify-center rounded-full px-4 py-1.5 shadow-[inset_0_-8px_10px_#8fdfff1f] transition-shadow duration-500 ease-out hover:shadow-[inset_0_-5px_10px_#8fdfff3f] ">
