@@ -1,4 +1,4 @@
-import { Bot, BotIcon, BotMessageSquare, Sparkles } from 'lucide-react'
+import {BotIcon,} from 'lucide-react'
 import Link from 'next/link'
 import React from 'react'
 
