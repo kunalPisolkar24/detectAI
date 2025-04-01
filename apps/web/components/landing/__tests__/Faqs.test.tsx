@@ -1,10 +1,18 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 
 import { Faqs } from '../Faqs';
+
+vi.mock('next/link', () => ({
+  default: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
 
 vi.mock('@workspace/ui/components/magicui/animated-gradient-text', () => ({
   AnimatedGradientText: ({ children, ...props }: { children: React.ReactNode }) => (
@@ -14,6 +22,27 @@ vi.mock('@workspace/ui/components/magicui/animated-gradient-text', () => ({
 
 vi.mock('@workspace/ui/lib/utils', () => ({
   cn: (...inputs: unknown[]) => inputs.filter(Boolean).join(' '),
+}));
+
+vi.mock('framer-motion', async () => {
+  const actual = await vi.importActual('framer-motion');
+  return {
+    ...actual,
+    motion: {
+      // @ts-ignore
+      ...actual.motion,
+      div: ({ children, ...props }: { children: React.ReactNode }) => <div {...props}>{children}</div>,
+      span: ({ children, ...props }: { children: React.ReactNode }) => <span {...props}>{children}</span>,
+      h2: ({ children, ...props }: { children: React.ReactNode }) => <h2 {...props}>{children}</h2>,
+      p: ({ children, ...props }: { children: React.ReactNode }) => <p {...props}>{children}</p>,
+      a: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a>,
+    },
+    AnimatePresence: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  };
+});
+
+vi.mock('next-themes', () => ({
+  useTheme: () => ({ theme: 'light' }),
 }));
 
 const faqsList = [
@@ -43,50 +72,53 @@ const faqsList = [
   },
 ];
 
-
 describe('Faqs Component', () => {
-  it('should render the FAQs badge', () => {
-    render(<Faqs />);
-    expect(screen.getByText('FAQs')).toBeInTheDocument();
+  beforeEach(() => {
+    // Reset mocks if needed, though mocks above are generally sufficient
   });
 
-  it('should render the main heading', () => {
+  it('should render the FAQs badge', async () => {
+    render(<Faqs />);
+    expect(await screen.findByText('FAQs')).toBeInTheDocument();
+  });
+
+  it('should render the main heading', async () => {
     render(<Faqs />);
     expect(
-      screen.getByRole('heading', { name: /Frequently Asked Questions/i })
+      await screen.findByRole('heading', { name: /Frequently Asked Questions/i })
     ).toBeInTheDocument();
   });
 
-  it('should render the description paragraph', () => {
+  it('should render the description paragraph', async () => {
     render(<Faqs />);
     expect(
-      screen.getByText(/Here are some of the most frequently asked questions/i)
+      await screen.findByText(/Here are some of the most frequently asked questions/i)
     ).toBeInTheDocument();
   });
 
-  it('should render all FAQ questions as accordion triggers', () => {
+  it('should render all FAQ questions as accordion triggers', async () => {
     render(<Faqs />);
-    faqsList.forEach((faq) => {
-      expect(
-        screen.getByRole('button', { name: faq.question })
-      ).toBeInTheDocument();
-    });
+    for (const faq of faqsList) {
+        expect(
+          await screen.findByRole('button', { name: faq.question })
+        ).toBeInTheDocument();
+    }
   });
 
-  it('should initially have all accordion items closed', () => {
+  it('should initially have all accordion items closed', async () => {
     render(<Faqs />);
-    faqsList.forEach((faq) => {
-      const trigger = screen.getByRole('button', { name: faq.question });
+    for (const faq of faqsList) {
+      const trigger = await screen.findByRole('button', { name: faq.question });
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
       expect(screen.queryByText(faq.answer)).toBeNull();
-    });
+    }
   });
 
   it('should open an accordion item when its trigger is clicked', async () => {
     const user = userEvent.setup();
     render(<Faqs />);
 
-    const firstQuestionTrigger = screen.getByRole('button', { name: faqsList[0]!.question });
+    const firstQuestionTrigger = await screen.findByRole('button', { name: faqsList[0]!.question });
     const firstAnswerText = faqsList[0]!.answer;
 
     expect(firstQuestionTrigger).toHaveAttribute('aria-expanded', 'false');
@@ -95,20 +127,21 @@ describe('Faqs Component', () => {
     await user.click(firstQuestionTrigger);
 
     expect(firstQuestionTrigger).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText(firstAnswerText)).toBeInTheDocument();
-    expect(screen.getByText(firstAnswerText)).toBeVisible();
+    const answerElement = await screen.findByText(firstAnswerText);
+    expect(answerElement).toBeInTheDocument();
+    expect(answerElement).toBeVisible();
   });
 
    it('should close an open accordion item when its trigger is clicked again', async () => {
     const user = userEvent.setup();
     render(<Faqs />);
 
-    const firstQuestionTrigger = screen.getByRole('button', { name: faqsList[0]!.question });
+    const firstQuestionTrigger = await screen.findByRole('button', { name: faqsList[0]!.question });
     const firstAnswerText = faqsList[0]!.answer;
 
     await user.click(firstQuestionTrigger);
     expect(firstQuestionTrigger).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText(firstAnswerText)).toBeVisible();
+    expect(await screen.findByText(firstAnswerText)).toBeVisible();
 
     await user.click(firstQuestionTrigger);
 
@@ -120,14 +153,14 @@ describe('Faqs Component', () => {
     const user = userEvent.setup();
     render(<Faqs />);
 
-    const firstQuestionTrigger = screen.getByRole('button', { name: faqsList[0]!.question });
-    const secondQuestionTrigger = screen.getByRole('button', { name: faqsList[1]!.question });
+    const firstQuestionTrigger = await screen.findByRole('button', { name: faqsList[0]!.question });
+    const secondQuestionTrigger = await screen.findByRole('button', { name: faqsList[1]!.question });
     const firstAnswerText = faqsList[0]!.answer;
     const secondAnswerText = faqsList[1]!.answer;
 
     await user.click(firstQuestionTrigger);
     expect(firstQuestionTrigger).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText(firstAnswerText)).toBeVisible();
+    expect(await screen.findByText(firstAnswerText)).toBeVisible();
     expect(secondQuestionTrigger).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText(secondAnswerText)).toBeNull();
 
@@ -136,6 +169,19 @@ describe('Faqs Component', () => {
     expect(firstQuestionTrigger).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText(firstAnswerText)).toBeNull();
     expect(secondQuestionTrigger).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText(secondAnswerText)).toBeVisible();
+    expect(await screen.findByText(secondAnswerText)).toBeVisible();
+  });
+
+  it('should render the CTA section', async () => {
+    render(<Faqs />);
+    expect(
+      await screen.findByRole('heading', { name: /Still have questions?/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/If you couldn't find the answer to your question/i)
+    ).toBeInTheDocument();
+    const contactLink = screen.getByRole('link', { name: /Contact Support/i });
+    expect(contactLink).toBeInTheDocument();
+    expect(contactLink).toHaveAttribute('href', '/contact');
   });
 });
