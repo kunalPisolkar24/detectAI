@@ -24,3 +24,15 @@
         font-size: 13px;
     }
 }
+
+.seriffont2 {
+    font-family: "Merriweather" !important;
+    letter-spacing: 0.5px;
+    font-size: 14px;
+}
+
+@media (max-width: 767px) {
+    .seriffont2 {
+        font-size: 11px;
+    }
+}

@@ -62,7 +62,7 @@ const Question = ({ question, answer, index }: { question: string; answer: strin
           {question}
         </AccordionTrigger>
         <AccordionContent
-          className={cn("px-4 pb-3 sm:pb-4 text-xs sm:text-sm md:text-base seriffont1", // Responsive text size and padding bottom
+          className={cn("px-4 pb-3 sm:pb-4 text-xs sm:text-sm md:text-base seriffont2", // Responsive text size and padding bottom
           theme === "dark" ? "text-neutral-300" : "text-neutral-600")}
         >
           {answer}
