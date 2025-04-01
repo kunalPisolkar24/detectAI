@@ -11,10 +11,10 @@ const NavItems = () => {
   return (
     <>
       <Link href="/docs" className="text-sm font-medium  underline-offset-4 border md:border-hidden p-2 rounded-xl">Docs</Link>
-      <Link href="#features" className="text-sm font-medium  underline-offset-4 border md:border-hidden p-2 rounded-xl">Features</Link>
-      <Link href="" className="text-sm font-medium  underline-offset-4 border md:border-hidden p-2 rounded-xl">Pricing</Link>
+      <Link href="/features" className="text-sm font-medium  underline-offset-4 border md:border-hidden p-2 rounded-xl">Features</Link>
+      <Link href="/pricing" className="text-sm font-medium  underline-offset-4 border md:border-hidden p-2 rounded-xl">Pricing</Link>
 
-      <Link href="" className="text-sm font-medium  underline-offset-4 border md:border-hidden p-2 rounded-xl">FAQs</Link>
+      <Link href="/faqs" className="text-sm font-medium  underline-offset-4 border md:border-hidden p-2 rounded-xl">FAQs</Link>
 
       <Link href="/chat" className="text-sm font-medium  underline-offset-4 border md:border-hidden p-2 rounded-xl">Detect AI</Link>
 
@@ -41,7 +41,7 @@ export const Navigation = () => {
       <header className="container mx-auto flex items-center">
         <Logo />
 
-        <nav className="ml-auto hidden md:flex items-center justify-center gap-6">
+        <nav aria-label="Main navigation" className="ml-auto hidden md:flex items-center justify-center gap-6">
           <NavItems />
         </nav>
 
@@ -53,7 +53,7 @@ export const Navigation = () => {
             </SheetTrigger>
             <SheetContent>
               <SheetTitle className="sr-only">Navigation</SheetTitle>
-              <nav className="flex flex-col gap-4 mt-12">
+              <nav aria-label="Mobile navigation" className="flex flex-col gap-4 mt-12">
                 <NavItems />
               </nav>
             </SheetContent>
