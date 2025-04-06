@@ -1,7 +1,11 @@
+import { ProfileNav } from "@/components/profile/profile-nav";
 import { UserProfile } from "@/components/profile/user-profile";
 
 export default function Chat() {
-    return(
-        <UserProfile></UserProfile>
-    );
+  return (
+    <>
+      <ProfileNav></ProfileNav>
+      <UserProfile />
+    </>
+  );
 }
