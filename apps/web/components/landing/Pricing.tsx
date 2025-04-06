@@ -319,7 +319,7 @@ export const Pricing = () => {
 
                 {/* Subscribe Button at the Bottom */}
                 <div className={cn("p-6 border-t", theme === "dark" ? "border-white/10" : "border-black/10")}>
-                  <Link href="/auth/login">
+                  <Link href="/profile">
                     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                       <Button
                         className={cn(
