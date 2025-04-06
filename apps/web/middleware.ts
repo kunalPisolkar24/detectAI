@@ -20,6 +20,16 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname.startsWith("/profile")) {
+    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+    if (!token) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith("/api/")) {
     // @ts-ignore
     const identifier = req.ip ?? "127.0.0.1";
@@ -40,5 +50,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/api/:path*', '/chat/:path*']
+  matcher: ['/api/:path*', '/chat/:path*', '/profile/:path*']
 };
