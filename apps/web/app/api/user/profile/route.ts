@@ -10,7 +10,6 @@ export interface UserProfileConnectedAccount {
   id: string;
   userId: string;
   providerAccountId: string;
-  // Add other relevant fields fetched from the Account model if needed
 }
 
 export interface UserProfileData {
@@ -21,8 +20,9 @@ export interface UserProfileData {
   memberSince: Date;
   isPremium: boolean;
   premiumPlanId: string | null;
-  premiumExpiry: Date | null; // Renamed for clarity, maps to subscriptionEndsAt
-  subscriptionStatus: SubscriptionStatus | null; // Use the enum type
+  premiumExpiry: Date | null;
+  subscriptionStatus: SubscriptionStatus | null;
+  paddleSubscriptionId: string | null; // <-- ADDED THIS LINE
   connectedAccounts: UserProfileConnectedAccount[];
   usage: {
     apiCalls: {
@@ -48,12 +48,12 @@ export async function GET() {
       where: { id: userId },
       include: {
         accounts: {
-          select: { // Select only necessary fields from Account
+          select: {
             id: true,
             userId: true,
             provider: true,
             providerAccountId: true,
-            type: true, // Might be useful to know it's 'oauth'
+            type: true,
           }
         },
       },
@@ -63,36 +63,29 @@ export async function GET() {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // --- Daily API Call Reset Logic ---
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // Start of today UTC
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     let needsUpdate = false;
     let currentDailyCount = user.apiCallCountDaily;
 
     if (!user.lastApiCallReset || user.lastApiCallReset < todayStart) {
-       // Reset needed
-       currentDailyCount = 0; // Reset count for the response
+       currentDailyCount = 0;
        needsUpdate = true;
        console.log(`Resetting daily API count for user ${userId}`);
     }
 
-    // If reset was needed, update the database *after* fetching
-    // This avoids blocking the response for the update
     if (needsUpdate) {
        prisma.user.update({
            where: { id: userId },
            data: {
                apiCallCountDaily: 0,
-               lastApiCallReset: now, // Set reset time to now
+               lastApiCallReset: now,
            },
        }).catch(err => {
-           // Log error if update fails, but don't fail the profile request
            console.error(`Failed to update daily API reset for user ${userId}:`, err);
        });
     }
-    // --- End Daily API Call Reset Logic ---
-
 
     const isPremium = user.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE;
     const dailyApiLimit = isPremium ? null : 100;
@@ -105,9 +98,10 @@ export async function GET() {
       memberSince: user.createdAt,
       isPremium: isPremium,
       premiumPlanId: user.paddlePlanId,
-      premiumExpiry: user.subscriptionEndsAt, // Use the field directly
+      premiumExpiry: user.subscriptionEndsAt,
       subscriptionStatus: user.paddleSubscriptionStatus,
-      connectedAccounts: user.accounts.map(acc => ({ // Map included accounts
+      paddleSubscriptionId: user.paddleSubscriptionId, // <-- ADDED THIS LINE TO MAP THE DATA
+      connectedAccounts: user.accounts.map(acc => ({
         provider: acc.provider,
         id: acc.id,
         userId: acc.userId,
@@ -115,7 +109,6 @@ export async function GET() {
       })),
       usage: {
         apiCalls: {
-          // Use the potentially reset count for the *current* response
           current: currentDailyCount,
           limit: dailyApiLimit,
           period: "Daily",
@@ -132,7 +125,6 @@ export async function GET() {
   }
 }
 
-// --- Optional: PUT endpoint to update basic profile info ---
 export async function PUT(request: Request) {
    try {
     const session: any = await getServerSession(authOptions);
@@ -143,11 +135,10 @@ export async function PUT(request: Request) {
 
     const body = await request.json();
 
-    // Add Zod validation for firstName and lastName updates
     const updateSchema = z.object({
        firstName: z.string().min(1).optional(),
        lastName: z.string().min(1).optional(),
-    }).strict(); // Use strict to prevent extra fields
+    }).strict();
 
     const validation = updateSchema.safeParse(body);
 
@@ -159,7 +150,6 @@ export async function PUT(request: Request) {
     if (validation.data.firstName) dataToUpdate.firstName = validation.data.firstName;
     if (validation.data.lastName) dataToUpdate.lastName = validation.data.lastName;
 
-    // Update the combined 'name' field if first/last name is updated
     if (dataToUpdate.firstName || dataToUpdate.lastName) {
          const currentUser = await prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true }});
          const newFirstName = dataToUpdate.firstName ?? currentUser?.firstName;
@@ -169,7 +159,6 @@ export async function PUT(request: Request) {
          }
     }
 
-
     if (Object.keys(dataToUpdate).length === 0) {
          return NextResponse.json({ message: "No fields provided for update." }, { status: 400 });
     }
@@ -177,7 +166,7 @@ export async function PUT(request: Request) {
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: dataToUpdate,
-      select: { // Return updated fields
+      select: {
          id: true,
          firstName: true,
          lastName: true,

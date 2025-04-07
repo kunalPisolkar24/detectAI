@@ -48,7 +48,7 @@ import { format } from "date-fns";
 import { Merriweather } from "next/font/google";
 import { toast } from "sonner";
 import type { UserProfileData } from "@/app/api/user/profile/route";
-import { signIn, useSession } from "next-auth/react"; // Import useSession
+import { signIn, useSession } from "next-auth/react";
 
 const merriweather = Merriweather({
   subsets: ["latin"],
@@ -62,18 +62,18 @@ const providerIcons: { [key: string]: React.ElementType } = {
 
 export const UserProfile: React.FC = () => {
   const { theme } = useTheme();
-  const { data: session, status: sessionStatus, update: updateSession } = useSession(); // Get session data
+  const { data: session, status: sessionStatus, update: updateSession } = useSession();
   const [mounted, setMounted] = useState(false);
-  const [user, setUser] = useState<UserProfileData | null>(null); // Still fetch profile data for details
-  const [isLoadingProfile, setIsLoadingProfile] = useState(true); // Specific loading state for API data
+  const [user, setUser] = useState<UserProfileData | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [showPricingDialog, setShowPricingDialog] = useState(false);
 
-  // Fetch profile-specific data (usage, connections, etc.)
   useEffect(() => {
     setMounted(true);
     const fetchProfile = async () => {
@@ -86,7 +86,6 @@ export const UserProfile: React.FC = () => {
         }
         const data: UserProfileData = await response.json();
         setUser(data);
-        // Initialize edit fields with fetched data if available, otherwise use session name parts
         setFirstName(data.firstName || session?.user?.name?.split(' ')[0] || "");
         setLastName(data.lastName || session?.user?.name?.split(' ').slice(1).join(' ') || "");
       } catch (err: any) {
@@ -97,18 +96,16 @@ export const UserProfile: React.FC = () => {
         setIsLoadingProfile(false);
       }
     };
-    // Fetch profile data only when authenticated
     if (sessionStatus === 'authenticated') {
        fetchProfile();
     } else if (sessionStatus === 'unauthenticated') {
-        setIsLoadingProfile(false); // No need to load profile if not logged in
-        setError("User not authenticated."); // Set an error state
+        setIsLoadingProfile(false);
+        setError("User not authenticated.");
     }
-    // If sessionStatus is 'loading', we wait
-  }, [sessionStatus, session]); // Depend on sessionStatus and session data
+  }, [sessionStatus, session]);
 
   if (!mounted) {
-     return ( /* Skeleton placeholder */
+     return (
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-16 md:py-20">
           <Skeleton className="h-12 w-1/2 mx-auto mb-4" />
           <Skeleton className="h-6 w-3/4 mx-auto mb-16" />
@@ -124,7 +121,6 @@ export const UserProfile: React.FC = () => {
      );
   }
 
-  // Combined loading state (session loading OR profile details loading)
   const isLoading = sessionStatus === 'loading' || isLoadingProfile;
 
   const getUserInitials = (name: string | null | undefined): string => {
@@ -132,15 +128,14 @@ export const UserProfile: React.FC = () => {
     return name
       .split(" ")
       .map((word) => word[0])
-      .filter(Boolean) // Ensure we don't include undefined/null chars
-      .slice(0, 2) // Max 2 initials
+      .filter(Boolean)
+      .slice(0, 2)
       .join("")
       .toUpperCase();
   };
 
   const handleSave = async () => {
-    // Save logic remains the same, using 'firstName', 'lastName' state
-     if (!user) return; // Ensure user profile data was loaded
+     if (!user) return;
      setIsSaving(true);
      try {
          const response = await fetch('/api/user/profile', {
@@ -166,21 +161,48 @@ export const UserProfile: React.FC = () => {
   };
 
   const handleCancel = () => {
-    // Reset fields based on last fetched profile data or session name as fallback
     setFirstName(user?.firstName || session?.user?.name?.split(' ')[0] || "");
     setLastName(user?.lastName || session?.user?.name?.split(' ').slice(1).join(' ') || "");
     setIsEditing(false);
   };
 
   const handleConfirmCancelSubscription = async () => {
-    // Cancellation logic remains the same
-     console.log("Attempting to cancel subscription via backend for user:", user?.id);
-     toast.info("Processing cancellation request...");
-      setUser((prev) => {
-         if (!prev) return null;
-         return { ...prev, isPremium: false, premiumExpiry: null, subscriptionStatus: "CANCELED" };
-      });
-      toast.warning("Subscription cancelled (UI updated optimistically). Verify status later.");
+      if (!user || !user.paddleSubscriptionId) {
+          toast.error("Could not find subscription details to cancel.");
+          return;
+      }
+      setIsCancelling(true);
+      toast.info("Processing cancellation request...");
+      try {
+          const response = await fetch('/api/user/subscription/cancel', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ paddleSubscriptionId: user.paddleSubscriptionId }),
+          });
+
+          if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || `Failed to cancel subscription: ${response.statusText}`);
+          }
+
+          // Assuming the API confirms cancellation and returns updated status
+          const result = await response.json();
+
+          // Update UI based on backend confirmation
+          setUser((prev) => {
+             if (!prev) return null;
+             // Update based on the API response or optimistically if API doesn't return full user state
+             return { ...prev, isPremium: false, premiumExpiry: result.endsAt ? new Date(result.endsAt) : null, subscriptionStatus: "CANCELED" };
+          });
+          toast.success("Subscription cancelled successfully.");
+
+      } catch (err: any) {
+          toast.error(err.message || "Could not cancel subscription.");
+          console.error("Subscription cancellation error:", err);
+          // Optionally revert optimistic UI update if needed, though backend should be source of truth
+      } finally {
+          setIsCancelling(false);
+      }
   };
 
   const handleConnectAccount = async (provider: string) => {
@@ -192,9 +214,8 @@ export const UserProfile: React.FC = () => {
     visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
   };
 
-  // Loading State UI
   if (isLoading) {
-     return ( /* Skeleton placeholder */
+     return (
        <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-16 md:py-20">
           <Skeleton className="h-12 w-1/2 mx-auto mb-4" />
           <Skeleton className="h-6 w-3/4 mx-auto mb-16" />
@@ -210,7 +231,6 @@ export const UserProfile: React.FC = () => {
      );
   }
 
-  // Error State UI (handles both session errors and profile fetch errors)
   if (error || sessionStatus === 'unauthenticated' || !user) {
     return (
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-20 text-center">
@@ -229,7 +249,6 @@ export const UserProfile: React.FC = () => {
     );
   }
 
-  // --- Main Render when data is loaded ---
   return (
     <section
       className={cn(
@@ -270,7 +289,6 @@ export const UserProfile: React.FC = () => {
             variants={{ visible: { ...cardVariants.visible, transition: { duration: 0.5, delay: 0.1 } } }}
             className={cn("col-span-1 flex flex-col items-center p-6 rounded-xl border transition-colors duration-300", theme === "dark" ? "bg-black/50 backdrop-blur-sm border-white/10 shadow-lg shadow-blue-900/10" : "bg-white/80 backdrop-blur-sm border-black/10 shadow-lg shadow-blue-200/30")}
           >
-            {/* --- Use Session for Avatar --- */}
             <motion.div
                 whileHover={{ scale: 1.05 }}
                 transition={{ type: "spring", stiffness: 300, damping: 15 }}
@@ -281,13 +299,11 @@ export const UserProfile: React.FC = () => {
                     <AvatarImage src={session.user.image} alt={session.user.name || "User"} />
                   ) : (
                     <AvatarFallback className="bg-gradient-to-br from-blue-600 to-purple-600 text-white">
-                      {/* Use session name for initials */}
                       {getUserInitials(session?.user?.name)}
                     </AvatarFallback>
                   )}
                 </Avatar>
               </motion.div>
-             {/* --- End Session Avatar --- */}
 
 
             {user.isPremium && (
@@ -302,7 +318,6 @@ export const UserProfile: React.FC = () => {
               {!isEditing ? (
                 <motion.div key="display-name" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center">
                   <h2 className="text-lg sm:text-xl font-semibold mb-1">
-                    {/* Display saved name first, fallback to session name, then email */}
                     {(user.firstName && user.lastName) ? `${user.firstName} ${user.lastName}` : (session?.user?.name || user.email)}
                   </h2>
                   <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)} className={cn("text-xs flex items-center gap-1 mx-auto mt-1 h-7 px-2", theme === "dark" ? "text-neutral-400 hover:text-blue-300 hover:bg-white/10" : "text-neutral-600 hover:text-blue-600 hover:bg-black/5")}>
@@ -335,9 +350,8 @@ export const UserProfile: React.FC = () => {
               <Mail size={16} className={theme === "dark" ? "text-blue-400" : "text-blue-600"} /> {user.email}
             </motion.div>
 
-            {/* Premium Actions */}
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="mt-6 w-full space-y-3">
-              {user.isPremium ? (
+              {user.isPremium && user.subscriptionStatus !== "CANCELED" ? (
                 <>
                   <div className="flex items-center gap-2 text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
                     <Calendar size={16} className="text-blue-500 dark:text-blue-400" />
@@ -345,16 +359,21 @@ export const UserProfile: React.FC = () => {
                   </div>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="sm" className={cn("w-full text-red-600 border-red-500/50 hover:bg-red-500/10 hover:text-red-500 dark:text-red-500 dark:border-red-500/50 dark:hover:bg-red-500/10 dark:hover:text-red-400")}>
-                        <AlertTriangle size={14} className="mr-2"/> Cancel Subscription
+                      <Button variant="outline" size="sm" disabled={isCancelling} className={cn("w-full text-red-600 border-red-500/50 hover:bg-red-500/10 hover:text-red-500 dark:text-red-500 dark:border-red-500/50 dark:hover:bg-red-500/10 dark:hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed")}>
+                        {isCancelling ? <Loader2 size={14} className="mr-2 animate-spin"/> : <AlertTriangle size={14} className="mr-2"/>}
+                        {isCancelling ? "Cancelling..." : "Cancel Subscription"}
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent className={theme === 'dark' ? 'bg-zinc-900 border-zinc-700' : 'bg-white'}>
-                      <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>Your premium benefits will end after the current period.</AlertDialogDescription></AlertDialogHeader>
-                      <AlertDialogFooter><AlertDialogCancel>Keep Subscription</AlertDialogCancel><AlertDialogAction onClick={handleConfirmCancelSubscription} className="bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 text-white">Yes, Cancel</AlertDialogAction></AlertDialogFooter>
+                      <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>Your premium benefits will remain active until the end of the current billing period ({user.premiumExpiry ? format(new Date(user.premiumExpiry), "MMM d, yyyy") : 'date unknown'}). This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+                      <AlertDialogFooter><AlertDialogCancel disabled={isCancelling}>Keep Subscription</AlertDialogCancel><AlertDialogAction onClick={handleConfirmCancelSubscription} disabled={isCancelling} className="bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 text-white disabled:opacity-50 disabled:cursor-not-allowed">{isCancelling ? <Loader2 size={14} className="mr-2 animate-spin"/> : null} Yes, Cancel</AlertDialogAction></AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
                 </>
+              ) : user.subscriptionStatus === "CANCELED" ? (
+                <div className="text-center text-xs sm:text-sm p-3 rounded-md bg-yellow-500/10 text-yellow-600 dark:bg-yellow-600/15 dark:text-yellow-400 border border-yellow-500/30">
+                    Subscription cancelled. Access ends {user.premiumExpiry ? format(new Date(user.premiumExpiry), "MMMM d, yyyy") : 'soon'}.
+                 </div>
               ) : (
                  <Dialog open={showPricingDialog} onOpenChange={setShowPricingDialog}>
                    <DialogTrigger asChild>
@@ -373,44 +392,40 @@ export const UserProfile: React.FC = () => {
             </motion.div>
           </motion.div>
 
-          {/* Right Column Details */}
           <motion.div
             initial="hidden"
             animate="visible"
             variants={{ visible: { ...cardVariants.visible, transition: { duration: 0.5, delay: 0.2 } } }}
             className="col-span-1 lg:col-span-2 space-y-6 md:space-y-8"
           >
-            {/* Account Information */}
             <div className={cn("p-6 rounded-xl border", theme === "dark" ? "bg-black/50 border-white/10" : "bg-white/70 border-black/10")}>
                <h2 className="text-lg sm:text-xl font-semibold mb-5 flex items-center gap-2"><UserCircle className={theme === "dark" ? "text-blue-400" : "text-blue-600"} size={20} /> Account Information</h2>
                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-                 <div><h3 className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Account Type</h3><p className="font-medium">{user.isPremium ? "Premium" : "Free"}</p></div>
+                 <div><h3 className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Account Type</h3><p className="font-medium">{user.isPremium || user.subscriptionStatus === "CANCELED" ? "Premium" : "Free"}</p></div>
                   <div>
                      <h3 className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Status</h3>
                      <Badge variant="default" className={cn("px-2 py-0.5 text-xs font-medium border-none capitalize", user.subscriptionStatus === "ACTIVE" || (!user.isPremium && !user.subscriptionStatus) ? "bg-green-500/90 dark:bg-green-600/90 text-white" : user.subscriptionStatus === "CANCELED" ? "bg-yellow-500/90 dark:bg-yellow-600/90 text-black" : "bg-red-500/90 dark:bg-red-600/90 text-white")}>
-                         {user.subscriptionStatus ? user.subscriptionStatus.toLowerCase() : "Active"}
+                         {user.subscriptionStatus ? user.subscriptionStatus.toLowerCase() : (user.isPremium ? "Active" : "Free")}
                       </Badge>
                   </div>
                  <div><h3 className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Member Since</h3><p className="font-medium">{format(new Date(user.memberSince), "MMMM d, yyyy")}</p></div>
                </div>
              </div>
 
-             {/* Connected Accounts */}
              <div className={cn("p-6 rounded-xl border", theme === "dark" ? "bg-black/50 border-white/10" : "bg-white/70 border-black/10")}>
                <h2 className="text-lg sm:text-xl font-semibold mb-5 flex items-center gap-2"><LinkIcon className={theme === "dark" ? "text-blue-400" : "text-blue-600"} size={20} /> Connected Accounts</h2>
                <div className="space-y-3">
-                 {user.connectedAccounts.map((account) => { /* Render connected accounts */
+                 {user.connectedAccounts.map((account) => {
                    const ProviderIcon = providerIcons[account.provider];
                    return ( <motion.div key={account.provider} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.4 + (account.provider === 'google' ? 0 : 0.1) }} className={cn("flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg gap-2 sm:gap-4", theme === "dark" ? "bg-white/5 hover:bg-white/10" : "bg-black/5 hover:bg-black/10")}> <div className="flex items-center gap-3"> {ProviderIcon && <ProviderIcon size={20} className={theme === "dark" ? "text-white/80" : "text-black/80"} />} <div> <h3 className="text-sm font-medium capitalize">{account.provider}</h3> <p className="text-xs text-neutral-500 dark:text-neutral-400">Account Linked</p> </div> </div> <Badge variant="default" className="px-2 py-0.5 text-xs font-medium border-none bg-green-500/90 dark:bg-green-600/90 text-white whitespace-nowrap">Connected</Badge> </motion.div> );
                  })}
-                 {Object.keys(providerIcons).filter(provider => !user.connectedAccounts.some(acc => acc.provider === provider)).map(provider => { /* Render connect buttons */
+                 {Object.keys(providerIcons).filter(provider => !user.connectedAccounts.some(acc => acc.provider === provider)).map(provider => {
                     const ProviderIcon = providerIcons[provider];
                     return ( <motion.div key={provider} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.5 }} className={cn("flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg gap-2 sm:gap-4", theme === "dark" ? "bg-white/5 hover:bg-white/10" : "bg-black/5 hover:bg-black/10")}> <div className="flex items-center gap-3"> {ProviderIcon && <ProviderIcon size={20} className={theme === "dark" ? "text-white/80" : "text-black/80"} />} <div><h3 className="text-sm font-medium capitalize">{provider}</h3></div> </div> <Button size="sm" variant="outline" onClick={() => handleConnectAccount(provider)} className="text-xs h-7 px-3 whitespace-nowrap flex items-center gap-1"> <ExternalLink size={12} /> Connect {provider.charAt(0).toUpperCase() + provider.slice(1)} </Button> </motion.div> );
                  })}
                </div>
              </div>
 
-             {/* Usage Statistics */}
             <div className={cn("p-6 rounded-xl border", theme === "dark" ? "bg-black/50 border-white/10" : "bg-white/70 border-black/10")}>
               <h2 className="text-lg sm:text-xl font-semibold mb-5 flex items-center gap-2"><Gauge className={theme === "dark" ? "text-blue-400" : "text-blue-600"} size={20} /> Usage Statistics</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
