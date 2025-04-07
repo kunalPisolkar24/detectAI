@@ -62,7 +62,7 @@ const providerIcons: { [key: string]: React.ElementType } = {
 
 export const UserProfile: React.FC = () => {
   const { theme } = useTheme();
-  const { data: session, status: sessionStatus } = useSession(); // Get session data
+  const { data: session, status: sessionStatus, update: updateSession } = useSession(); // Get session data
   const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState<UserProfileData | null>(null); // Still fetch profile data for details
   const [isLoadingProfile, setIsLoadingProfile] = useState(true); // Specific loading state for API data
@@ -155,6 +155,7 @@ export const UserProfile: React.FC = () => {
          const updatedData = await response.json();
          setUser(prev => ({ ...prev!, firstName: updatedData.firstName, lastName: updatedData.lastName, }));
          setIsEditing(false);
+         await updateSession({ name: updatedData.name });
          toast.success("Name updated successfully.");
      } catch (err: any) {
          toast.error(err.message || "Could not update name.");
@@ -182,8 +183,7 @@ export const UserProfile: React.FC = () => {
       toast.warning("Subscription cancelled (UI updated optimistically). Verify status later.");
   };
 
-  const handleConnectAccount = (provider: string) => {
-    // Connect logic remains the same
+  const handleConnectAccount = async (provider: string) => {
      signIn(provider);
   };
 
