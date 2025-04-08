@@ -125,7 +125,7 @@ export const SignupForm = () => {
       toast.success("Signup successful! Redirecting...");
       setTimeout(() => {
         router.push("/chat");
-      }, 2000); 
+      }, 5000); 
 
     } catch (error: any) {
         const errorMsg = error.message || "An unexpected error occurred during signup";
