@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 
 const userSchema = z.object({
   firstName: z.string().min(1, { message: "First Name must be at least 1 character long" }),
