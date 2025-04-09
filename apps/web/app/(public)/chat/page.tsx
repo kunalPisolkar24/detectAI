@@ -1,9 +1,10 @@
 import React, { Suspense } from 'react';
 import { ChatPage } from "@/components/chat"; 
 import { cn } from "@workspace/ui/lib/utils";
+
 function ChatLoadingFallback() {
   return (
-    <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,80px))]"> {/* Adjust min-h based on layout */}
+    <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,80px))]">
       <div
         className={cn(
           "animate-spin rounded-full h-12 w-12 border-4",
@@ -13,7 +14,7 @@ function ChatLoadingFallback() {
         role="status"
         aria-live="polite"
       >
-        <span className="sr-only">Loading chat...</span> {/* For accessibility */}
+        <span className="sr-only">Loading chat...</span>
       </div>
     </div>
   );
