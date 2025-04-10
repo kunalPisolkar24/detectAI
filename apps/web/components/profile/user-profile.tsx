@@ -1,6 +1,6 @@
 "use client";
 import type React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react"; // Added useCallback
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "next-themes";
 import { cn } from "@workspace/ui/lib/utils";
@@ -28,7 +28,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@workspace/ui/components/alert-dialog";
-import { Payment } from "../payments/payment-dialog";
+import { Payment } from "../payments/payment-dialog"; // Ensure correct path
 import {
   UserCircle,
   Mail,
@@ -47,7 +47,7 @@ import { FaGoogle, FaGithub } from "react-icons/fa";
 import { format } from "date-fns";
 import { Merriweather } from "next/font/google";
 import { toast } from "sonner";
-import type { UserProfileData } from "@/app/api/user/profile/route";
+import type { UserProfileData } from "@/app/api/user/profile/route"; // Ensure correct path
 import { signIn, useSession } from "next-auth/react";
 
 const merriweather = Merriweather({
@@ -59,6 +59,20 @@ const providerIcons: { [key: string]: React.ElementType } = {
   google: FaGoogle,
   github: FaGithub,
 };
+
+// Extend session user type if not already done in your next-auth.d.ts
+declare module "next-auth" {
+  interface User {
+    isPremium?: boolean | null;
+    id?: string; // Ensure id is part of user type if used like session.user.id
+  }
+  interface Session {
+     user?: User & {
+       isPremium?: boolean | null; // Make sure this is available
+       id?: string;
+     };
+  }
+}
 
 export const UserProfile: React.FC = () => {
   const { theme } = useTheme();
@@ -74,35 +88,57 @@ export const UserProfile: React.FC = () => {
   const [lastName, setLastName] = useState("");
   const [showPricingDialog, setShowPricingDialog] = useState(false);
 
+  const fetchProfile = useCallback(async () => {
+    setIsLoadingProfile(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/user/profile');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch profile details: ${response.statusText}`);
+      }
+      const data: UserProfileData = await response.json();
+      setUser(data);
+      setFirstName(data.firstName || session?.user?.name?.split(' ')[0] || "");
+      setLastName(data.lastName || session?.user?.name?.split(' ').slice(1).join(' ') || "");
+
+      // Sync session isPremium status with fetched profile data
+      if (session && session.user && typeof session.user.isPremium !== 'undefined' && session.user.isPremium !== data.isPremium) {
+          console.log(`Session isPremium (${session.user.isPremium}) differs from DB (${data.isPremium}). Updating session.`);
+          await updateSession({ isPremium: data.isPremium });
+      } else if (session && session.user && typeof session.user.isPremium === 'undefined' && typeof data.isPremium !== 'undefined') {
+          console.log(`Session isPremium is undefined, setting from DB (${data.isPremium}). Updating session.`);
+          await updateSession({ isPremium: data.isPremium });
+      }
+
+    } catch (err: any) {
+      setError(err.message || "Could not load profile details.");
+      toast.error("Could not load profile details.");
+      console.error("Profile fetch error:", err);
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, updateSession]); // Add updateSession to dependencies
+
   useEffect(() => {
     setMounted(true);
-    const fetchProfile = async () => {
-      setIsLoadingProfile(true);
-      setError(null);
-      try {
-        const response = await fetch('/api/user/profile');
-        if (!response.ok) {
-          throw new Error(`Failed to fetch profile details: ${response.statusText}`);
-        }
-        const data: UserProfileData = await response.json();
-        setUser(data);
-        setFirstName(data.firstName || session?.user?.name?.split(' ')[0] || "");
-        setLastName(data.lastName || session?.user?.name?.split(' ').slice(1).join(' ') || "");
-      } catch (err: any) {
-        setError(err.message || "Could not load profile details.");
-        toast.error("Could not load profile details.");
-        console.error("Profile fetch error:", err);
-      } finally {
-        setIsLoadingProfile(false);
-      }
-    };
     if (sessionStatus === 'authenticated') {
        fetchProfile();
     } else if (sessionStatus === 'unauthenticated') {
         setIsLoadingProfile(false);
         setError("User not authenticated.");
     }
-  }, [sessionStatus, session]);
+  }, [sessionStatus, fetchProfile]);
+
+  const handleSubscriptionSuccessAttempt = () => {
+    console.log("Subscription potentially successful based on Paddle event, re-fetching profile to confirm...");
+    toast.info("Checking subscription status...");
+    // Optional small delay to increase chances of webhook processing first
+    setTimeout(() => {
+      fetchProfile();
+      setShowPricingDialog(false); // Close dialog after refetch attempt
+    }, 1500); // 1.5 second delay
+  };
 
   if (!mounted) {
      return (
@@ -148,9 +184,9 @@ export const UserProfile: React.FC = () => {
              throw new Error(errorData.error || `Failed to update profile: ${response.statusText}`);
          }
          const updatedData = await response.json();
-         setUser(prev => ({ ...prev!, firstName: updatedData.firstName, lastName: updatedData.lastName, }));
+         setUser(prev => ({ ...prev!, firstName: updatedData.firstName, lastName: updatedData.lastName, name: updatedData.name })); // Store full name if returned
          setIsEditing(false);
-         await updateSession({ name: updatedData.name });
+         await updateSession({ name: updatedData.name }); // Update name in session
          toast.success("Name updated successfully.");
      } catch (err: any) {
          toast.error(err.message || "Could not update name.");
@@ -185,21 +221,15 @@ export const UserProfile: React.FC = () => {
               throw new Error(errorData.error || `Failed to cancel subscription: ${response.statusText}`);
           }
 
-          // Assuming the API confirms cancellation and returns updated status
           const result = await response.json();
 
-          // Update UI based on backend confirmation
-          setUser((prev) => {
-             if (!prev) return null;
-             // Update based on the API response or optimistically if API doesn't return full user state
-             return { ...prev, isPremium: false, premiumExpiry: result.endsAt ? new Date(result.endsAt) : null, subscriptionStatus: "CANCELED" };
-          });
-          toast.success("Subscription cancelled successfully.");
+          // Re-fetch profile to get the absolute latest state after cancellation
+          await fetchProfile();
+          toast.success("Subscription cancelled successfully. Profile updated.");
 
       } catch (err: any) {
           toast.error(err.message || "Could not cancel subscription.");
           console.error("Subscription cancellation error:", err);
-          // Optionally revert optimistic UI update if needed, though backend should be source of truth
       } finally {
           setIsCancelling(false);
       }
@@ -248,6 +278,11 @@ export const UserProfile: React.FC = () => {
       </div>
     );
   }
+
+  // Use session's isPremium as the primary source for display after initial load/update
+  const displayIsPremium = session?.user?.isPremium ?? user.isPremium;
+  const displaySubscriptionStatus = user.subscriptionStatus; // Keep using user state for detailed status
+
 
   return (
     <section
@@ -306,7 +341,7 @@ export const UserProfile: React.FC = () => {
               </motion.div>
 
 
-            {user.isPremium && (
+            {displayIsPremium && (
               <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 15, delay: 0.1 }} className="mb-4">
                 <Badge variant="default" className={cn("px-3 py-1 font-semibold flex items-center gap-1.5 text-xs sm:text-sm border-none", "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm")}>
                   <Sparkles size={14} /> Premium
@@ -318,7 +353,7 @@ export const UserProfile: React.FC = () => {
               {!isEditing ? (
                 <motion.div key="display-name" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center">
                   <h2 className="text-lg sm:text-xl font-semibold mb-1">
-                    {(user.firstName && user.lastName) ? `${user.firstName} ${user.lastName}` : (session?.user?.name || user.email)}
+                    {session?.user?.name || ((user.firstName && user.lastName) ? `${user.firstName} ${user.lastName}` : user.email)}
                   </h2>
                   <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)} className={cn("text-xs flex items-center gap-1 mx-auto mt-1 h-7 px-2", theme === "dark" ? "text-neutral-400 hover:text-blue-300 hover:bg-white/10" : "text-neutral-600 hover:text-blue-600 hover:bg-black/5")}>
                     <Edit2 size={12} /> Edit Name
@@ -351,7 +386,7 @@ export const UserProfile: React.FC = () => {
             </motion.div>
 
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="mt-6 w-full space-y-3">
-              {user.isPremium && user.subscriptionStatus !== "CANCELED" ? (
+              {displayIsPremium && displaySubscriptionStatus !== "CANCELED" ? (
                 <>
                   <div className="flex items-center gap-2 text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
                     <Calendar size={16} className="text-blue-500 dark:text-blue-400" />
@@ -370,7 +405,7 @@ export const UserProfile: React.FC = () => {
                     </AlertDialogContent>
                   </AlertDialog>
                 </>
-              ) : user.subscriptionStatus === "CANCELED" ? (
+              ) : displaySubscriptionStatus === "CANCELED" ? (
                 <div className="text-center text-xs sm:text-sm p-3 rounded-md bg-yellow-500/10 text-yellow-600 dark:bg-yellow-600/15 dark:text-yellow-400 border border-yellow-500/30">
                     Subscription cancelled. Access ends {user.premiumExpiry ? format(new Date(user.premiumExpiry), "MMMM d, yyyy") : 'soon'}.
                  </div>
@@ -384,7 +419,10 @@ export const UserProfile: React.FC = () => {
                    <DialogContent className={cn("max-w-4xl p-0 overflow-hidden border !rounded-xl", theme === "dark" ? "bg-black/95 border-white/10 backdrop-blur-md" : "bg-white/95 border-black/10 backdrop-blur-md")}>
                      <DialogHeader className="p-4 sm:p-6 pb-0"><DialogTitle className="text-xl sm:text-2xl font-bold text-center">Choose Your Plan</DialogTitle></DialogHeader>
                      <div className="overflow-y-auto max-h-[80vh] p-1 sm:p-2 md:p-4">
-                       <Payment onSubscriptionAttempt={() => setShowPricingDialog(false)} />
+                       <Payment
+                         onSubscriptionAttempt={() => setShowPricingDialog(false)}
+                         onSubscriptionSuccessAttempt={handleSubscriptionSuccessAttempt} // Pass the handler
+                       />
                      </div>
                    </DialogContent>
                  </Dialog>
@@ -401,11 +439,11 @@ export const UserProfile: React.FC = () => {
             <div className={cn("p-6 rounded-xl border", theme === "dark" ? "bg-black/50 border-white/10" : "bg-white/70 border-black/10")}>
                <h2 className="text-lg sm:text-xl font-semibold mb-5 flex items-center gap-2"><UserCircle className={theme === "dark" ? "text-blue-400" : "text-blue-600"} size={20} /> Account Information</h2>
                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-                 <div><h3 className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Account Type</h3><p className="font-medium">{user.isPremium || user.subscriptionStatus === "CANCELED" ? "Premium" : "Free"}</p></div>
+                 <div><h3 className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Account Type</h3><p className="font-medium">{displayIsPremium || displaySubscriptionStatus === "CANCELED" ? "Premium" : "Free"}</p></div>
                   <div>
                      <h3 className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Status</h3>
-                     <Badge variant="default" className={cn("px-2 py-0.5 text-xs font-medium border-none capitalize", user.subscriptionStatus === "ACTIVE" || (!user.isPremium && !user.subscriptionStatus) ? "bg-green-500/90 dark:bg-green-600/90 text-white" : user.subscriptionStatus === "CANCELED" ? "bg-yellow-500/90 dark:bg-yellow-600/90 text-black" : "bg-red-500/90 dark:bg-red-600/90 text-white")}>
-                         {user.subscriptionStatus ? user.subscriptionStatus.toLowerCase() : (user.isPremium ? "Active" : "Free")}
+                     <Badge variant="default" className={cn("px-2 py-0.5 text-xs font-medium border-none capitalize", displaySubscriptionStatus === "ACTIVE" || (!displayIsPremium && !displaySubscriptionStatus) ? "bg-green-500/90 dark:bg-green-600/90 text-white" : displaySubscriptionStatus === "CANCELED" ? "bg-yellow-500/90 dark:bg-yellow-600/90 text-black" : "bg-red-500/90 dark:bg-red-600/90 text-white")}>
+                         {displaySubscriptionStatus ? displaySubscriptionStatus.toLowerCase() : (displayIsPremium ? "Active" : "Free")}
                       </Badge>
                   </div>
                  <div><h3 className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Member Since</h3><p className="font-medium">{format(new Date(user.memberSince), "MMMM d, yyyy")}</p></div>

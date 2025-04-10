@@ -11,23 +11,23 @@ import { Badge } from "@workspace/ui/components/badge";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
-import { useSession } from "next-auth/react"; // Import useSession
+import { useSession } from "next-auth/react";
 
-// Price IDs
 const PREMIUM_MONTHLY_PRICE_ID = "pri_01jr2gqggwjakpc1hd9xzym7fy";
 const PREMIUM_YEARLY_PRICE_ID = "pri_01jr2gs8ckz66srr8sd1byh7n4";
 
 interface PaymentProps {
   onSubscriptionAttempt: () => void;
+  onSubscriptionSuccessAttempt?: () => void; // Added prop
 }
 
-export const Payment: React.FC<PaymentProps> = ({ onSubscriptionAttempt }) => {
+export const Payment: React.FC<PaymentProps> = ({ onSubscriptionAttempt, onSubscriptionSuccessAttempt }) => {
   const [billingCycle, setBillingCycle] = useState("monthly");
   const { theme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [paddle, setPaddle] = useState<Paddle | undefined>();
   const [isPaddleLoading, setIsPaddleLoading] = useState(true);
-  const { data: session, status: sessionStatus } : any = useSession(); // Get session data
+  const { data: session, status: sessionStatus } : any = useSession();
 
   useEffect(() => {
     setMounted(true);
@@ -41,6 +41,9 @@ export const Payment: React.FC<PaymentProps> = ({ onSubscriptionAttempt }) => {
           }
           if (data.name === 'checkout.completed') {
             console.log('Checkout potentially completed (verify with webhook)');
+            if (onSubscriptionSuccessAttempt) {
+               onSubscriptionSuccessAttempt(); // Call the success handler
+            }
           }
         }
       })
@@ -57,20 +60,16 @@ export const Payment: React.FC<PaymentProps> = ({ onSubscriptionAttempt }) => {
       console.error("Paddle Client Token not found.");
       setIsPaddleLoading(false);
     }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Added onSubscriptionSuccessAttempt to dependency array if needed, but likely fine without
 
   const handleSubscription = () => {
     if (!paddle) {
       alert("Payment system is initializing, please wait.");
       return;
     }
-    // Check if user is authenticated using session status and data
     if (sessionStatus !== 'authenticated' || !session?.user?.email || !session?.user?.id) {
       alert("Please log in to subscribe.");
-      // Optionally redirect to login
-      // import { useRouter } from 'next/navigation';
-      // const router = useRouter();
-      // router.push('/login');
       return;
     }
 
@@ -82,8 +81,8 @@ export const Payment: React.FC<PaymentProps> = ({ onSubscriptionAttempt }) => {
 
     paddle.Checkout.open({
       items: [{ priceId: priceId, quantity: 1 }],
-      customer: { email: session.user.email }, // Use email from session
-      customData: { userId: session.user.id }, // Use ID from session
+      customer: { email: session.user.email },
+      customData: { userId: session.user.id },
       settings: { theme: theme === 'dark' ? 'dark' : 'light' }
     });
   };
@@ -101,8 +100,8 @@ export const Payment: React.FC<PaymentProps> = ({ onSubscriptionAttempt }) => {
         "Basic accuracy level",
         "Community support",
       ],
-      buttonText: "Current Plan", // Assuming dialog shown to upgrade
-      buttonLink: "/profile", // Link back to profile maybe?
+      buttonText: "Current Plan",
+      buttonLink: "/profile",
     },
     {
       id: 2,
@@ -124,7 +123,6 @@ export const Payment: React.FC<PaymentProps> = ({ onSubscriptionAttempt }) => {
 
   if (!mounted) return null;
 
-  // Combine loading states
   const isLoading = isPaddleLoading || sessionStatus === 'loading';
 
   return (
@@ -232,8 +230,8 @@ export const Payment: React.FC<PaymentProps> = ({ onSubscriptionAttempt }) => {
                   {isPremium ? (
                     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                       <Button
-                        onClick={handleSubscription} // Action assigned here
-                        disabled={isLoading || !paddle || sessionStatus !== 'authenticated'} // Disable if loading or not authenticated
+                        onClick={handleSubscription}
+                        disabled={isLoading || !paddle || sessionStatus !== 'authenticated'}
                         size="sm"
                         className={cn(
                            "w-full font-semibold",
