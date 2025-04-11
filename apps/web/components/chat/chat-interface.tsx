@@ -14,7 +14,6 @@ import {
 } from "@workspace/ui/components/tooltip";
 import { AnimatedGradientText } from "@workspace/ui/components/magicui/animated-gradient-text";
 import { toast } from "sonner";
-import ChangeModel from "./change-model";
 import { useTab } from "@/contexts/tabContext";
 import { MessageSchema } from "@/schemas";
 import { Skeleton } from "@workspace/ui/components/skeleton";
@@ -246,11 +245,6 @@ export function ChatInterface() {
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      {!isMobile && (
-        <div className="absolute top-[70px] left-[5%] md:left-[5%] lg:left-[13%] z-50">
-          <ChangeModel />
-        </div>
-      )}
       {!isSubmitted && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
