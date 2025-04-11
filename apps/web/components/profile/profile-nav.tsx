@@ -125,8 +125,8 @@ export const ProfileNav = () => {
                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
                  className="flex items-center gap-2 cursor-pointer w-full px-2 py-1.5"
               >
-                 {theme === "dark" ? ( <><Sun size={16} className="text-yellow-400" /><span>Light Mode</span></> ) :
-                                       ( <><Moon size={16} className="text-indigo-600" /><span>Dark Mode</span></> ) }
+                 {theme === "dark" ? ( <><Sun size={16} className="text-blue-400" /><span>Light Mode</span></> ) :
+                                       ( <><Moon size={16} className="text-blue-600" /><span>Dark Mode</span></> ) }
               </DropdownMenuItem>
               <DropdownMenuSeparator className={theme === "dark" ? "bg-white/10 my-1" : "bg-black/10 my-1"} />
               <DropdownMenuItem
