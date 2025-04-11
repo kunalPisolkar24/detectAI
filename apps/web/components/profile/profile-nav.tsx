@@ -1,4 +1,3 @@
-
 "use client"
 import { useEffect, useState } from "react"
 import Link from "next/link"
@@ -20,20 +19,17 @@ import {
   Moon,
   LogOut,
   MessageCircle,
+  User,
 } from "lucide-react"
 
 export const ProfileNav = () => {
   const [mounted, setMounted] = useState(false)
-  const [isScrolled, setIsScrolled] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const { theme, setTheme } = useTheme()
   const { data: session }: any = useSession()
 
   useEffect(() => {
     setMounted(true)
-    const handleScroll = () => setIsScrolled(window.scrollY > 10)
-    window.addEventListener("scroll", handleScroll)
-    return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
   const getUserInitials = (name: string | undefined) => {
@@ -46,37 +42,29 @@ export const ProfileNav = () => {
   return (
     <motion.div
       className={cn(
-        // Added left-0 and right-0 here
         "w-full fixed top-0 z-50 left-0 right-0 transition-all duration-300",
-        isScrolled
-          ? theme === "dark"
-            ? "bg-black/80 backdrop-blur-md shadow-[0_2px_10px_rgba(0,0,0,0.3)]"
-            : "bg-white/80 backdrop-blur-md shadow-[0_2px_10px_rgba(0,0,0,0.1)]"
-          : "bg-transparent",
+        theme === "dark"
+          ? "bg-black/80 backdrop-blur-md shadow-[0_2px_10px_rgba(0,0,0,0.3)]"
+          : "bg-white/80 backdrop-blur-md shadow-[0_2px_10px_rgba(0,0,0,0.1)]"
       )}
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
-      {/* This container should now center correctly within the full-width fixed parent */}
-      <header className="container mx-auto flex items-center justify-between py-4 px-4 sm:px-6">
-        {/* Logo section */}
+      <header className="container mx-auto flex items-center justify-between py-2 px-4 sm:px-6">
         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
           <Logo />
         </motion.div>
 
-        {/* Right side controls section */}
         <motion.div
           className="flex items-center gap-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
-          {/* User Profile Dropdown */}
           <DropdownMenu onOpenChange={setIsDropdownOpen}>
             <DropdownMenuTrigger asChild>
-               {/* ... Avatar Trigger ... */}
-               <motion.div
+              <motion.div
                 className="flex items-center gap-2 cursor-pointer"
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
@@ -102,10 +90,8 @@ export const ProfileNav = () => {
 
             <DropdownMenuContent
                 align="end"
-                // Removed backdrop-blur from dropdown content, might interfere less? (optional test)
                 className={cn("w-56 mt-2 p-1.5 z-50 border", theme === "dark" ? "bg-black/90 border-white/10" : "bg-white/95 border-black/10")}
             >
-              {/* ... Dropdown Content Items ... */}
               <div className="px-2 py-1.5 mb-1">
                 <p className={cn("text-sm font-medium truncate", theme === "dark" ? "text-white" : "text-black")}>
                   {session.user?.name || "User"}

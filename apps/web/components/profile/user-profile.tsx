@@ -1,6 +1,6 @@
 "use client";
 import type React from "react";
-import { useState, useEffect, useCallback } from "react"; // Added useCallback
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "next-themes";
 import { cn } from "@workspace/ui/lib/utils";
@@ -28,7 +28,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@workspace/ui/components/alert-dialog";
-import { Payment } from "../payments/payment-dialog"; // Ensure correct path
+import { Payment } from "../payments/payment-dialog";
 import {
   UserCircle,
   Mail,
@@ -47,7 +47,7 @@ import { FaGoogle, FaGithub } from "react-icons/fa";
 import { format } from "date-fns";
 import { Merriweather } from "next/font/google";
 import { toast } from "sonner";
-import type { UserProfileData } from "@/app/api/user/profile/route"; // Ensure correct path
+import type { UserProfileData } from "@/app/api/user/profile/route";
 import { signIn, useSession } from "next-auth/react";
 
 const merriweather = Merriweather({
@@ -60,15 +60,14 @@ const providerIcons: { [key: string]: React.ElementType } = {
   github: FaGithub,
 };
 
-// Extend session user type if not already done in your next-auth.d.ts
 declare module "next-auth" {
   interface User {
     isPremium?: boolean | null;
-    id?: string; // Ensure id is part of user type if used like session.user.id
+    id?: string;
   }
   interface Session {
      user?: User & {
-       isPremium?: boolean | null; // Make sure this is available
+       isPremium?: boolean | null;
        id?: string;
      };
   }
@@ -101,7 +100,6 @@ export const UserProfile: React.FC = () => {
       setFirstName(data.firstName || session?.user?.name?.split(' ')[0] || "");
       setLastName(data.lastName || session?.user?.name?.split(' ').slice(1).join(' ') || "");
 
-      // Sync session isPremium status with fetched profile data
       if (session && session.user && typeof session.user.isPremium !== 'undefined' && session.user.isPremium !== data.isPremium) {
           console.log(`Session isPremium (${session.user.isPremium}) differs from DB (${data.isPremium}). Updating session.`);
           await updateSession({ isPremium: data.isPremium });
@@ -117,8 +115,7 @@ export const UserProfile: React.FC = () => {
     } finally {
       setIsLoadingProfile(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, updateSession]); // Add updateSession to dependencies
+  }, [session, updateSession]);
 
   useEffect(() => {
     setMounted(true);
@@ -133,18 +130,15 @@ export const UserProfile: React.FC = () => {
   const handleSubscriptionSuccessAttempt = () => {
     console.log("Subscription potentially successful based on Paddle event, re-fetching profile to confirm...");
     toast.info("Checking subscription status...");
-    // Optional small delay to increase chances of webhook processing first
     setTimeout(() => {
       fetchProfile();
-      setShowPricingDialog(false); // Close dialog after refetch attempt
-    }, 1500); // 1.5 second delay
+      setShowPricingDialog(false);
+    }, 1500);
   };
 
   if (!mounted) {
      return (
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-16 md:py-20">
-          <Skeleton className="h-12 w-1/2 mx-auto mb-4" />
-          <Skeleton className="h-6 w-3/4 mx-auto mb-16" />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
              <Skeleton className="col-span-1 h-[400px] rounded-xl" />
              <div className="col-span-1 lg:col-span-2 space-y-6 md:space-y-8">
@@ -184,9 +178,9 @@ export const UserProfile: React.FC = () => {
              throw new Error(errorData.error || `Failed to update profile: ${response.statusText}`);
          }
          const updatedData = await response.json();
-         setUser(prev => ({ ...prev!, firstName: updatedData.firstName, lastName: updatedData.lastName, name: updatedData.name })); // Store full name if returned
+         setUser(prev => ({ ...prev!, firstName: updatedData.firstName, lastName: updatedData.lastName, name: updatedData.name }));
          setIsEditing(false);
-         await updateSession({ name: updatedData.name }); // Update name in session
+         await updateSession({ name: updatedData.name });
          toast.success("Name updated successfully.");
      } catch (err: any) {
          toast.error(err.message || "Could not update name.");
@@ -222,8 +216,6 @@ export const UserProfile: React.FC = () => {
           }
 
           const result = await response.json();
-
-          // Re-fetch profile to get the absolute latest state after cancellation
           await fetchProfile();
           toast.success("Subscription cancelled successfully. Profile updated.");
 
@@ -247,8 +239,6 @@ export const UserProfile: React.FC = () => {
   if (isLoading) {
      return (
        <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-16 md:py-20">
-          <Skeleton className="h-12 w-1/2 mx-auto mb-4" />
-          <Skeleton className="h-6 w-3/4 mx-auto mb-16" />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
              <Skeleton className="col-span-1 h-[400px] rounded-xl" />
              <div className="col-span-1 lg:col-span-2 space-y-6 md:space-y-8">
@@ -279,15 +269,14 @@ export const UserProfile: React.FC = () => {
     );
   }
 
-  // Use session's isPremium as the primary source for display after initial load/update
   const displayIsPremium = session?.user?.isPremium ?? user.isPremium;
-  const displaySubscriptionStatus = user.subscriptionStatus; // Keep using user state for detailed status
+  const displaySubscriptionStatus = user.subscriptionStatus;
 
 
   return (
     <section
       className={cn(
-        "w-full relative overflow-hidden transition-colors duration-300 py-16 md:py-20",
+        "w-full relative overflow-none transition-colors duration-300 py-16 md:py-20",
         theme === "dark" ? "bg-background text-foreground" : "bg-gray-50 text-foreground"
       )}
     >
@@ -305,17 +294,6 @@ export const UserProfile: React.FC = () => {
        </div>
 
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl z-10 relative">
-        <motion.div initial="hidden" animate="visible" variants={cardVariants} className="text-center mb-12 md:mb-16">
-          <h1
-            className={cn("text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight", theme === "dark" ? "bg-clip-text text-transparent bg-gradient-to-r from-white via-blue-400 to-white" : "bg-clip-text text-transparent bg-gradient-to-r from-gray-900 via-blue-600 to-gray-900")}
-            style={{ backgroundSize: "200% 100%", animation: "gradientMove 5s linear infinite" }}
-          >
-            Your Profile
-          </h1>
-          <p className={cn("mt-3 text-sm sm:text-base tracking-[0.5px]", merriweather.className, theme === "dark" ? "text-neutral-300" : "text-neutral-600")}>
-            Manage your personal information, connections, and subscription.
-          </p>
-        </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
           <motion.div
@@ -421,7 +399,7 @@ export const UserProfile: React.FC = () => {
                      <div className="overflow-y-auto max-h-[80vh] p-1 sm:p-2 md:p-4">
                        <Payment
                          onSubscriptionAttempt={() => setShowPricingDialog(false)}
-                         onSubscriptionSuccessAttempt={handleSubscriptionSuccessAttempt} // Pass the handler
+                         onSubscriptionSuccessAttempt={handleSubscriptionSuccessAttempt}
                        />
                      </div>
                    </DialogContent>
