@@ -19,7 +19,7 @@
 .seriffont1 {
     font-family: "Merriweather" !important;
     letter-spacing: 0.5px;
-    font-size: 16px;
+    font-size: 14px;
 }
 
 @media (max-width: 767px) {

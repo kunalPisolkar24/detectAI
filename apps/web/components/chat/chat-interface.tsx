@@ -290,7 +290,8 @@ export function ChatInterface() {
                 WebkitClipPath: "padding-box",
               }}
             />
-            <AnimatedGradientText className="text-sm font-medium">Chat</AnimatedGradientText>
+            <div className="mr-2">💬</div>
+            <AnimatedGradientText className="text-sm font-medium">  Chat</AnimatedGradientText>
           </div>
           
           <h2
@@ -370,7 +371,7 @@ export function ChatInterface() {
                     >
                       <div
                         className={cn(
-                          "h-9 w-9 flex items-center justify-center rounded-lg border",
+                          "h-9 w-9 mt-[8px] mr-1 flex items-center justify-center rounded-lg border",
                           theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-gray-100 border-gray-200",
                         )}
                       >
@@ -421,7 +422,7 @@ export function ChatInterface() {
         </div>
         <ScrollBar />
       </ScrollArea>
-      <div className="w-full p-4 fixed bottom-10 bg-background">
+      <div className="cutpad w-full p-4 fixed bottom-10 bg-background">
         <div className="relative max-w-3xl mx-auto">
           <div
             className={cn(
