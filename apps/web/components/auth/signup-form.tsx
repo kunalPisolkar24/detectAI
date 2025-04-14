@@ -26,13 +26,14 @@ import { TurnstileComponent } from "@/components/common";
 import { Eye, EyeOff, User, Mail, Lock, AlertCircle } from "lucide-react";
 
 export const SignupForm = () => {
-  const router = useRouter(); // Keep router for potential future use, but not for post-signup redirect
+  const router = useRouter();
   const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [turnstileKey, setTurnstileKey] = useState(0); // Key for resetting Turnstile
 
   const form = useForm<z.infer<typeof SignupSchema>>({
     resolver: zodResolver(SignupSchema),
@@ -76,11 +77,12 @@ export const SignupForm = () => {
         setFormError(errorMsg);
         toast.error(errorMsg);
         setTurnstileToken(null);
+        setTurnstileKey(prevKey => prevKey + 1); // Reset Turnstile
         setLoading(false);
         return;
       }
 
-      const registerResponse = await fetch("/api/auth/register", { // Ensure this path is correct
+      const registerResponse = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -88,7 +90,7 @@ export const SignupForm = () => {
           password: data.password,
           firstName: data.firstName,
           lastName: data.lastName,
-          name: `${data.firstName} ${data.lastName}`, // Ensure your API route expects this
+          name: `${data.firstName} ${data.lastName}`,
         }),
       });
 
@@ -98,51 +100,38 @@ export const SignupForm = () => {
         const errorMsg = registerResult.error || "Registration failed";
         setFormError(errorMsg);
         toast.error(errorMsg);
-        setTurnstileToken(null); // Require re-verify on registration error
+        setTurnstileToken(null);
+        setTurnstileKey(prevKey => prevKey + 1); // Reset Turnstile
         setLoading(false);
         return;
       }
 
-      // Directly sign in after successful registration, letting NextAuth handle the redirect
       const signInResult = await signIn("credentials", {
         email: data.email,
         password: data.password,
-        callbackUrl: "/chat?login_success=true", // Redirect to chat on success, trigger toast there
-        // redirect: true is the default, so no need to specify
+        callbackUrl: "/chat?login_success=true",
       });
 
-      // This part will likely only be reached if signIn itself fails *after* registration
       if (signInResult?.error) {
-         // Differentiate sign-in error from registration error
          if (signInResult.error === 'CredentialsSignin') {
             setFormError("Sign in failed after registration. Please try logging in manually.");
             toast.error("Sign in failed. Please log in.");
-            // Maybe redirect to login page?
-            // router.push('/login');
          } else {
             setFormError(signInResult.error);
             toast.error(signInResult.error);
          }
-        setTurnstileToken(null); // Re-verify needed potentially
+        setTurnstileToken(null);
+        setTurnstileKey(prevKey => prevKey + 1); // Reset Turnstile
         setLoading(false);
         return;
       }
-
-      // If signIn initiates a successful redirect, the code below might not execute.
-      // The success toast is now handled on the /chat page via the callbackUrl parameter.
-      // toast.success("Signup successful! Redirecting..."); // Remove this
-      // Remove the setTimeout and router.push
-      // setTimeout(() => {
-      //   router.push("/chat");
-      // }, 5000);
-
-      // setLoading(false); // Might not be needed if page navigates away
 
     } catch (error: any) {
         const errorMsg = error.message || "An unexpected error occurred during signup";
         setFormError(errorMsg);
         toast.error(errorMsg);
         setTurnstileToken(null);
+        setTurnstileKey(prevKey => prevKey + 1); // Reset Turnstile
         setLoading(false);
     }
   };
@@ -346,12 +335,14 @@ export const SignupForm = () => {
             transition={{ duration: 0.5, delay: 0.2 }}
           >
             <TurnstileComponent
-               siteKey="0x4AAAAAABA_xFDZEVC1Iru5" // Replace with your actual site key
+               key={turnstileKey} // Add key prop
+               siteKey="0x4AAAAAABA_xFDZEVC1Iru5"
                onVerify={handleTurnstileVerify}
                onError={(error: any) => {
                  console.error("Turnstile error:", error);
                  setFormError("Verification error. Please try again.");
                  toast.error("Verification Error");
+                 setTurnstileKey(prevKey => prevKey + 1); // Reset Turnstile on error
                }}
             />
           </motion.div>
