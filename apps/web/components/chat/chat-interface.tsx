@@ -1,10 +1,10 @@
 "use client"
 import type React from "react"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ScrollArea, ScrollBar } from "@workspace/ui/components/scroll-area"
 import { cn } from "@workspace/ui/lib/utils"
-import { ArrowUp, RotateCcw, BotIcon, Link } from "lucide-react"
+import { ArrowUp, RotateCcw, BotIcon, Link as LinkIcon } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@workspace/ui/components/tooltip"
@@ -15,6 +15,8 @@ import { MessageSchema } from "@/schemas"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { useTheme } from "next-themes"
 import { Merriweather } from 'next/font/google';
+import { useSession } from "next-auth/react"
+import type { UserProfileData } from "@/app/api/user/profile/route"
 import "./style.css"
 
 const merriweather = Merriweather({
@@ -47,16 +49,41 @@ export function ChatInterface() {
   const coldStartingRef = useRef(false)
   const { theme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const { data: session, status: sessionStatus } = useSession()
+
+  const [userProfileData, setUserProfileData] = useState<UserProfileData | null>(null)
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false)
+  const [profileError, setProfileError] = useState<string | null>(null)
+
+  const fetchProfile = useCallback(async () => {
+    if (sessionStatus !== 'authenticated') return;
+    setIsLoadingProfile(true);
+    setProfileError(null);
+    try {
+      const response = await fetch('/api/user/profile');
+      if (!response.ok) {
+        throw new Error('Failed to fetch profile');
+      }
+      const data: UserProfileData = await response.json();
+      setUserProfileData(data);
+    } catch (err) {
+      console.error("Error fetching profile:", err);
+      setProfileError("Could not load usage data.");
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  }, [sessionStatus]);
 
   useEffect(() => {
     setMounted(true)
+    fetchProfile();
     document.documentElement.style.overflow = "hidden"
     document.body.style.overflow = "hidden"
     return () => {
       document.documentElement.style.overflow = ""
       document.body.style.overflow = ""
     }
-  }, [])
+  }, [fetchProfile])
 
   useEffect(() => {
     if (currentChat && msgEnd.current) {
@@ -107,6 +134,11 @@ export function ChatInterface() {
       setError("")
     }
   }
+
+  const isLimitReached = !session?.user?.isPremium &&
+                         userProfileData?.usage?.apiCalls?.limit !== null &&
+                         userProfileData?.usage?.apiCalls?.current !== undefined &&
+                         userProfileData.usage.apiCalls.current >= userProfileData.usage.apiCalls.limit;
 
   const fetchWithRetry = async (endpoint: string, messageText: string, attempt = 1): Promise<any> => {
     try {
@@ -175,8 +207,23 @@ export function ChatInterface() {
     }
   }
 
+  const incrementUsage = async () => {
+    try {
+      await fetch('/api/user/usage/increment', { method: 'POST' });
+      fetchProfile();
+    } catch (error) {
+      console.error("Failed to increment usage:", error);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!message.trim()) return
+
+    if (isLimitReached) {
+        toast.info("Daily prompt limit reached. Please come back tomorrow or upgrade.");
+        return;
+    }
+
     const validationResult = MessageSchema.safeParse({ message })
     if (validationResult.success) {
       setIsLoading(true)
@@ -185,20 +232,19 @@ export function ChatInterface() {
       const endpoint = tab === "sequential" ? "sequential" : "bert"
 
       try {
-        // Set initial state for submission
         setIsSubmitted(true)
         setCurrentChat({
           question: questionText,
           response: "",
         })
-
-        // Use the retry mechanism
         const data = await fetchWithRetry(endpoint, questionText)
 
         setCurrentChat({
           question: questionText,
           response: `Model: ${data.model}, Predicted Label: ${data.predicted_label}`,
         })
+        await incrementUsage();
+
       } catch (error: any) {
         console.error(error)
         toast.error("Our models are currently unavailable.", {
@@ -208,7 +254,6 @@ export function ChatInterface() {
           question: questionText,
           response: "Error: Server is currently unavailable. Please try again later.",
         })
-        // Ensure cold start flag is cleared
         setIsColdStarting(false)
         coldStartingRef.current = false
       }
@@ -227,6 +272,7 @@ export function ChatInterface() {
     setMessage("")
     setIsColdStarting(false)
     setRetryCount(0)
+    setError("")
     if (retryTimeoutRef.current) {
       clearTimeout(retryTimeoutRef.current)
     }
@@ -239,7 +285,7 @@ export function ChatInterface() {
     }
   }
 
-  if (!mounted) {
+  if (!mounted || (sessionStatus === 'loading' && !userProfileData) || (sessionStatus === 'authenticated' && isLoadingProfile && !userProfileData)) {
     return (
       <div className="flex h-screen flex-col bg-background text-foreground">
         <div className="flex-1 px-4 min-h-[40vh] max-h-[80vh]">
@@ -268,7 +314,7 @@ export function ChatInterface() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.3 }}
-          className="absolute inset-x-0 top-1/3 flex flex-col items-center justify-center text-center -translate-y-1/4"
+          className="absolute inset-x-0 top-1/3 flex flex-col items-center justify-center text-center -translate-y-1/4 px-4"
         >
           <div
             className={cn(
@@ -291,21 +337,20 @@ export function ChatInterface() {
               }}
             />
             <div className="mr-2">💬</div>
-            <AnimatedGradientText className="text-sm font-medium">  Chat</AnimatedGradientText>
+            <AnimatedGradientText className="text-sm font-medium">Chat</AnimatedGradientText>
           </div>
-          
+
           <h2
             className={
-              
               cn(
-              `mt-4 px-5 text-2xl font-bold tracking-tight seriffont`,
+              `mt-4 px-5 text-2xl font-bold tracking-tight ${merriweather.variable} font-serif`,
               theme === "dark" ? "text-white " : "text-gray-900",
             )}
           >
             Was this written by Human or AI?
           </h2>
           <p
-            className={cn("mt-4 text-center px-5 mx-auto seriffont1",
+            className={cn(`mt-4 text-center px-5 mx-auto ${merriweather.variable} font-serif`,
               theme === "dark" ? "text-gray-300" : "text-gray-600",
             )}
           >
@@ -325,13 +370,13 @@ export function ChatInterface() {
                 transition={{ duration: 0.2 }}
                 className="w-full max-w-2xl space-y-6 mt-2 pt-6"
               >
-                <div className="flex flex-col gap-10 pt-10">
+                <div className="flex flex-col gap-6">
                   <motion.div
                     key={`question-${currentChat.question}`}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.2 }}
+                    initial={{ opacity: 0, x: 50 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 50 }}
+                    transition={{ duration: 0.3 }}
                     className={cn(
                       "inline-block max-w-[85%] ml-auto rounded-2xl px-5 py-3 text-right break-words whitespace-normal",
                       theme === "dark" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-900",
@@ -339,58 +384,47 @@ export function ChatInterface() {
                   >
                     <p>{currentChat.question}</p>
                   </motion.div>
-                  {isLoading && (
-                    <div className="flex w-full items-start gap-1.5">
-                      <Skeleton className="h-9 w-9 rounded-lg" />
+
+                  {isLoading ? (
+                    <motion.div
+                      key="loading-skeleton"
+                      initial={{ opacity: 0, x: -50 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -50 }}
+                      transition={{ duration: 0.3 }}
+                      className="flex w-full items-start gap-2.5"
+                    >
+                      <Skeleton className="h-9 w-9 rounded-lg mt-1" />
                       <div className="flex-1">
                         <Skeleton className="w-3/4 p-4 rounded-2xl h-9 mb-2" />
                         {isColdStarting && (
                           <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                            <span
-                              className={cn(
-                                "inline-block h-2 w-2 animate-pulse rounded-full",
-                                theme === "dark" ? "bg-blue-400" : "bg-blue-600",
-                              )}
-                            ></span>
-                            <p>
-                              Warming up models... Retry attempt {retryCount}/{maxRetries}
-                            </p>
+                            <span className={cn("inline-block h-2 w-2 animate-pulse rounded-full", theme === "dark" ? "bg-blue-400" : "bg-blue-600")}></span>
+                            <p>Warming up models... Retry {retryCount}/{maxRetries}</p>
                           </div>
                         )}
                       </div>
-                    </div>
-                  )}
-                  {!isLoading && currentChat.response && (
+                    </motion.div>
+                  ) : currentChat.response ? (
                     <motion.div
-                      key={`response-${currentChat.response}`}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.2 }}
-                      className="flex w-full items-start gap-1.5"
+                      key={`response-${currentChat.question}`}
+                      initial={{ opacity: 0, x: -50 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -50 }}
+                      transition={{ duration: 0.3, delay: 0.1 }}
+                      className="flex w-full items-start gap-2.5"
                     >
-                      <div
-                        className={cn(
-                          "h-9 w-9 mt-[8px] mr-1 flex items-center justify-center rounded-lg border",
-                          theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-gray-100 border-gray-200",
-                        )}
-                      >
+                      <div className={cn("h-9 w-9 mt-1 flex-shrink-0 flex items-center justify-center rounded-lg border", theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-gray-100 border-gray-200")}>
                         <BotIcon className={cn("h-5 w-5", theme === "dark" ? "text-blue-400" : "text-blue-600")} />
                       </div>
-                      <div className="flex-1">
-                        <p
-                          className={cn(
-                            "p-3 rounded-2xl inline-block",
-                            currentChat.response.includes("Error:")
-                              ? theme === "dark"
-                                ? "bg-red-900/50 text-red-100"
-                                : "bg-red-100 text-red-800"
-                              : theme === "dark"
-                                ? "bg-gray-800 text-white"
-                                : "bg-gray-100 text-gray-900",
-                          )}
-                        >
-                          {currentChat.response.includes("Error:")
+                      <div className={cn(
+                        "p-3 rounded-2xl inline-block max-w-[85%]",
+                        currentChat.response.includes("Error:")
+                          ? theme === "dark" ? "bg-red-900/50 text-red-100" : "bg-red-100 text-red-800"
+                          : theme === "dark" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-900"
+                      )}>
+                        <p className="break-words whitespace-normal">
+                           {currentChat.response.includes("Error:")
                             ? currentChat.response
                             : currentChat.response.includes("Predicted Label: 0")
                               ? "The text is likely Human Written 👨🏻‍🦱"
@@ -398,16 +432,12 @@ export function ChatInterface() {
                         </p>
                       </div>
                     </motion.div>
-                  )}
-                  <div className="flex justify-center">
+                  ) : null }
+
+                  <div className="flex justify-center pt-4">
                     <Button
                       variant="ghost"
-                      className={cn(
-                        "flex items-center gap-2 mb-5 rounded-2xl",
-                        theme === "dark"
-                          ? "text-gray-400 hover:text-white hover:bg-gray-800"
-                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
-                      )}
+                      className={cn("flex items-center gap-2 rounded-2xl", theme === "dark" ? "text-gray-400 hover:text-white hover:bg-gray-800" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100")}
                       onClick={resetChat}
                     >
                       <RotateCcw className="h-4 w-4" />
@@ -441,15 +471,22 @@ export function ChatInterface() {
                     validateMessage(e.target.value)
                   }}
                   onKeyDown={handleKeyDown}
-                  disabled={isLoading && isColdStarting}
+                  disabled={isLoading || isLimitReached}
                   className={cn(
                     "resize-none w-full min-h-[50px] max-h-[210px] overflow-y-auto border-none focus-visible:ring-0 focus-visible:ring-offset-0",
                     theme === "dark"
                       ? "bg-transparent text-white placeholder:text-gray-400"
                       : "bg-transparent text-gray-900 placeholder:text-gray-500",
+                    isLimitReached && "opacity-60 cursor-not-allowed"
                   )}
                 />
                 {error && <p className="text-red-500 mt-2 text-sm">{error}</p>}
+                {isLimitReached && (
+                    <p className="text-amber-500 mt-2 text-xs px-1">Daily free limit reached.</p>
+                )}
+                 {profileError && (
+                    <p className="text-red-500 mt-2 text-xs px-1">{profileError}</p>
+                 )}
               </div>
               <ScrollBar />
             </ScrollArea>
@@ -461,26 +498,27 @@ export function ChatInterface() {
                     <Button
                       size="icon"
                       variant="outline"
-                      onClick={handleSubmit}
+                      disabled={true}
+                      onClick={() => toast.info("URL analysis coming soon!")}
                       className={cn(
                         "h-10 w-10 rounded-xl",
                         theme === "dark"
-                          ? "border-gray-700 bg-gray-800 hover:bg-gray-700"
-                          : "border-gray-300 bg-gray-100 hover:bg-gray-200",
+                          ? "border-gray-700 bg-gray-800 hover:bg-gray-700 disabled:opacity-50"
+                          : "border-gray-300 bg-gray-100 hover:bg-gray-200 disabled:opacity-50",
                       )}
                     >
-                      <Link className={cn("h-4 w-4", theme === "dark" ? "text-gray-300" : "text-gray-700")} />
+                      <LinkIcon className={cn("h-4 w-4", theme === "dark" ? "text-gray-400" : "text-gray-500")} />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Coming Soon!</p>
+                    <p>Analyze URL (Coming Soon)</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               <Button
                 size="icon"
                 onClick={handleSubmit}
-                disabled={!message.trim() || (isLoading && isColdStarting)}
+                disabled={!message.trim() || isLoading || isLimitReached}
                 className={cn(
                   "h-10 w-10 rounded-xl",
                   theme === "dark"
@@ -492,6 +530,12 @@ export function ChatInterface() {
               </Button>
             </div>
           </div>
+          {/* CORRECTED: Display Usage Limit */}
+          {userProfileData && userProfileData.usage.apiCalls.limit !== null && !session?.user?.isPremium && (
+              <p className="text-center text-xs mt-2 text-muted-foreground">
+                  {userProfileData.usage.apiCalls.current} / {userProfileData.usage.apiCalls.limit} daily calls used.
+              </p>
+          )}
         </div>
       </div>
       <p

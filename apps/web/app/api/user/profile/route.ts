@@ -22,7 +22,7 @@ export interface UserProfileData {
   premiumPlanId: string | null;
   premiumExpiry: Date | null;
   subscriptionStatus: SubscriptionStatus | null;
-  paddleSubscriptionId: string | null; // <-- ADDED THIS LINE
+  paddleSubscriptionId: string | null;
   connectedAccounts: UserProfileConnectedAccount[];
   usage: {
     apiCalls: {
@@ -44,6 +44,7 @@ export async function GET() {
 
     const userId = session.user.id;
 
+    // Fetch user fresh every time to ensure counts are up-to-date
     let user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -66,16 +67,13 @@ export async function GET() {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    let needsUpdate = false;
     let currentDailyCount = user.apiCallCountDaily;
 
+    // Check and perform reset if needed
     if (!user.lastApiCallReset || user.lastApiCallReset < todayStart) {
-       currentDailyCount = 0;
-       needsUpdate = true;
-       console.log(`Resetting daily API count for user ${userId}`);
-    }
-
-    if (needsUpdate) {
+       currentDailyCount = 0; // Use 0 for the response
+       console.log(`Resetting daily API count for user ${userId} during profile fetch.`);
+       // Update the user record in the background
        prisma.user.update({
            where: { id: userId },
            data: {
@@ -83,12 +81,16 @@ export async function GET() {
                lastApiCallReset: now,
            },
        }).catch(err => {
+           // Log error but don't block the response
            console.error(`Failed to update daily API reset for user ${userId}:`, err);
        });
     }
 
     const isPremium = user.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE;
-    const dailyApiLimit = isPremium ? null : 100;
+    // Use environment variable for the limit
+    const dailyApiLimit = isPremium
+        ? null
+        : parseInt(process.env.DAILY_API_LIMIT_FREE || "100", 10);
 
     const profileData: UserProfileData = {
       id: user.id,
@@ -100,7 +102,7 @@ export async function GET() {
       premiumPlanId: user.paddlePlanId,
       premiumExpiry: user.subscriptionEndsAt,
       subscriptionStatus: user.paddleSubscriptionStatus,
-      paddleSubscriptionId: user.paddleSubscriptionId, // <-- ADDED THIS LINE TO MAP THE DATA
+      paddleSubscriptionId: user.paddleSubscriptionId,
       connectedAccounts: user.accounts.map(acc => ({
         provider: acc.provider,
         id: acc.id,
