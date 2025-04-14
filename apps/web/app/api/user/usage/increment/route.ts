@@ -29,27 +29,39 @@ export async function POST() {
 
     const isPremium = user.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE;
 
-    const dataToUpdate: { apiCallCountTotal: { increment: number }, apiCallCountDaily?: { increment: number }, lastApiCallReset?: Date } = {
+    // Always increment total count
+    const dataToUpdate: { apiCallCountTotal: { increment: number }, apiCallCountDaily?: { increment: number } } = {
         apiCallCountTotal: { increment: 1 }
     };
 
+    // Determine if the daily count should be incremented
+    let allowDailyIncrement = true;
+
     if (!isPremium) {
+        // For free users, check the limit
         const dailyLimit = parseInt(process.env.DAILY_API_LIMIT_FREE || "100", 10);
         const now = new Date();
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         let currentDailyCount = user.apiCallCountDaily;
 
+        // Safety check for reset (important if profile wasn't fetched recently)
         if (!user.lastApiCallReset || user.lastApiCallReset < todayStart) {
             currentDailyCount = 0;
         }
 
-        if (currentDailyCount < dailyLimit) {
-            dataToUpdate.apiCallCountDaily = { increment: 1 };
-        } else {
-            console.log(`User ${userId} attempted API call exceeding daily limit.`);
+        // Only prevent daily increment if free user is at or over the limit
+        if (currentDailyCount >= dailyLimit) {
+            allowDailyIncrement = false;
+            console.log(`User ${userId} attempted API call but reached daily limit.`);
         }
     }
 
+    // Add daily increment if allowed (true for premium, conditional for free)
+    if (allowDailyIncrement) {
+        dataToUpdate.apiCallCountDaily = { increment: 1 };
+    }
+
+    // Perform the update
     await prisma.user.update({
       where: { id: userId },
       data: dataToUpdate,
