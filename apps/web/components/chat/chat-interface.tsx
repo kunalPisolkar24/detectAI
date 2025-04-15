@@ -22,9 +22,6 @@ import "./style.css"
 const merriweather = Merriweather({
   subsets: ['latin'],
   weight: ['400', '700'],
-  style: ['normal', 'italic'],
-  variable: '--font-merriweather',
-  display: 'swap',
 });
 
 interface CurrentChat {
@@ -343,14 +340,14 @@ export function ChatInterface() {
           <h2
             className={
               cn(
-              `mt-4 px-5 text-2xl font-bold tracking-tight ${merriweather.variable} font-serif`,
+              `mt-4 px-5 text-2xl font-bold tracking-tight ${merriweather.className} font-serif tracking-[0.5px]`,
               theme === "dark" ? "text-white " : "text-gray-900",
             )}
           >
             Was this written by Human or AI?
           </h2>
           <p
-            className={cn(`mt-4 text-center px-5 mx-auto ${merriweather.variable} font-serif`,
+            className={cn(`mt-4 text-center px-5 mx-auto ${merriweather.className} font-serif tracking-[0.5px]`,
               theme === "dark" ? "text-gray-300" : "text-gray-600",
             )}
           >
@@ -511,7 +508,7 @@ export function ChatInterface() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Analyze URL (Coming Soon)</p>
+                    <p>Analyze Documents (Coming Soon)</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
