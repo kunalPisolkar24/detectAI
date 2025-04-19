@@ -1,11 +1,12 @@
+// api/webhooks/paddle/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { validateSignature } from "@/utils/paddle"; // Assuming this util function is correct
-import prisma from "@/lib/prisma"; // Ensure this path is correct
-import { SubscriptionStatus } from "@prisma/client"; // Ensure this enum exists
+import { validateSignature } from "@/utils/paddle";
+import prisma from "@/lib/prisma";
+import { SubscriptionStatus } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   const signature = req.headers.get("Paddle-Signature");
-  const body = await req.text(); // Read body as text for signature validation
+  const body = await req.text();
 
   if (!signature) {
     console.warn("[Webhook Error] Missing Paddle signature header.");
@@ -17,14 +18,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Webhook secret not configured." }, { status: 500 });
   }
 
-  // Use Buffer for crypto functions if validateSignature expects it,
-  // otherwise pass the raw text body if that's what validateSignature needs.
-  // Assuming validateSignature is adapted to handle the text body or uses a Buffer internally.
-  // If validateSignature *needs* a Buffer, you might need to read differently or convert:
-  // const bodyBuffer = Buffer.from(body, 'utf-8'); // Convert text to buffer if needed by validateSignature
-  // const isValid = await validateSignature(signature, bodyBuffer, process.env.PADDLE_WEBHOOK_SECRET!);
   const isValid = await validateSignature(signature, body, process.env.PADDLE_WEBHOOK_SECRET!);
-
 
   if (!isValid) {
     console.warn("[Webhook Error] Invalid Paddle webhook signature.");
@@ -49,7 +43,7 @@ export async function POST(req: NextRequest) {
     const userId = eventData?.custom_data?.userId;
     if (!userId) {
       console.error("[Webhook Error] Critical: Webhook received without userId in custom_data. Event:", eventType, "Data:", JSON.stringify(eventData));
-      return NextResponse.json({ received: true, error: "Missing userId" }, { status: 200 }); // Acknowledge receipt
+      return NextResponse.json({ received: true, error: "Missing userId" }, { status: 200 });
     }
 
     let prismaStatus: SubscriptionStatus | null = null;
@@ -68,14 +62,16 @@ export async function POST(req: NextRequest) {
     const subscriptionId = eventData?.id;
     const customerId = eventData?.customer_id;
     const planId = eventData?.items?.[0]?.price?.id;
-    const endsAtString = eventData?.current_billing_period?.ends_at || eventData?.scheduled_change?.effective_at || null;
+    const endsAtString = eventData?.current_billing_period?.ends_at || eventData?.scheduled_change?.effective_at || eventData?.canceled_at || null;
     const endsAt = endsAtString ? new Date(endsAtString) : null;
+    const scheduledChangeAction = eventData?.scheduled_change?.action; // Check for scheduled change
 
     console.log(`[Webhook Data] User ID: ${userId}`);
     console.log(`[Webhook Data] Subscription ID: ${subscriptionId}`);
     console.log(`[Webhook Data] Customer ID: ${customerId}`);
     console.log(`[Webhook Data] Plan ID: ${planId}`);
     console.log(`[Webhook Data] Ends At: ${endsAt}`);
+    console.log(`[Webhook Data] Scheduled Change Action: ${scheduledChangeAction}`);
 
 
     switch (eventType) {
@@ -83,44 +79,59 @@ export async function POST(req: NextRequest) {
       case "subscription.updated":
         if (!subscriptionId || !customerId || !prismaStatus || !planId) {
            console.error("[Webhook Error] Missing required data for update/create event:", eventType, "for user:", userId, "Sub:", subscriptionId, "Cust:", customerId, "Status:", prismaStatus, "Plan:", planId);
-           return NextResponse.json({ received: true, error: "Missing subscription data for update" }, { status: 200 }); // Acknowledge receipt
+           return NextResponse.json({ received: true, error: "Missing subscription data for update" }, { status: 200 });
         }
-        console.log(`[Webhook DB] Attempting to update user ${userId} with status ${prismaStatus}, subId ${subscriptionId}`);
-        await prisma.user.update({
-          where: { id: userId },
-          data: {
+
+        const dataToUpdate: any = {
             paddleCustomerId: customerId,
             paddleSubscriptionId: subscriptionId,
             paddlePlanId: planId,
             paddleSubscriptionStatus: prismaStatus,
             subscriptionEndsAt: endsAt,
-          },
+        };
+
+        // *** Critical Change Here ***
+        // Only reset the scheduled flag if the update IS NOT just confirming a cancellation schedule
+        if (scheduledChangeAction !== 'cancel') {
+            console.log(`[Webhook DB Update] Resetting paddleCancellationScheduled=false because scheduledChangeAction is not 'cancel' (it is '${scheduledChangeAction}')`);
+            dataToUpdate.paddleCancellationScheduled = false;
+        } else {
+             console.log(`[Webhook DB Update] Keeping paddleCancellationScheduled as is because scheduledChangeAction is 'cancel'.`);
+             // Don't touch the flag if the update is due to scheduling cancellation
+        }
+
+        console.log(`[Webhook DB] Attempting to update user ${userId} with status ${prismaStatus}, subId ${subscriptionId}`);
+        await prisma.user.update({
+          where: { id: userId },
+          data: dataToUpdate,
         });
         console.log(`[Webhook DB Success] User ${userId} updated.`);
         break;
 
-      case "subscription.canceled": // Note: Paddle often uses 'canceled' (one L)
+      case "subscription.canceled":
+         // This logic remains the same - it handles the FINAL cancellation
          if (!subscriptionId || !prismaStatus || prismaStatus !== SubscriptionStatus.CANCELED) {
            console.error("[Webhook Error] Missing required data or incorrect status for cancel event:", eventType," for user:", userId, "Status:", prismaStatus, "Sub:", subscriptionId);
-           return NextResponse.json({ received: true, error: "Missing/Invalid subscription data for cancel" }, { status: 200 }); // Acknowledge receipt
+           return NextResponse.json({ received: true, error: "Missing/Invalid subscription data for cancel" }, { status: 200 });
          }
-         console.log(`[Webhook DB] Attempting to update user ${userId} for cancellation, subId ${subscriptionId}`);
+         console.log(`[Webhook DB] Attempting to update user ${userId} for FINAL cancellation, subId ${subscriptionId}`);
          await prisma.user.updateMany({
             where: { id: userId, paddleSubscriptionId: subscriptionId },
             data: {
                 paddleSubscriptionStatus: SubscriptionStatus.CANCELED,
-                subscriptionEndsAt: endsAt, // Ensure endsAt reflects cancellation effective date if provided
+                subscriptionEndsAt: endsAt,
+                paddleCancellationScheduled: false, // Reset flag on final cancellation
+                // Clear Paddle details
+                paddleSubscriptionId: null,
+                paddlePlanId: null,
+                // paddleCustomerId: null, // Optional: keep customer ID
             },
          });
-        console.log(`[Webhook DB Success] User ${userId} cancellation processed.`);
+        console.log(`[Webhook DB Success] User ${userId} FINAL cancellation processed, status CANCELED, flag reset, details cleared.`);
         break;
 
       case "transaction.completed":
-          // Often subscription.updated covers this, but you can add specific logic
-          // if you need to track individual transactions or payment details.
-          // For example, update last payment date or check transaction details.
-          console.log(`[Webhook Info] Received transaction.completed for user ${userId}, Sub ID: ${eventData?.subscription_id}, Transaction ID: ${eventData?.id}. Check if subscription.updated handles status.`);
-          // Optional: Add specific Prisma updates if needed
+          console.log(`[Webhook Info] Received transaction.completed for user ${userId}, Sub ID: ${eventData?.subscription_id}, Transaction ID: ${eventData?.id}. Subscription status likely handled by subscription.updated.`);
           break;
 
       default:
@@ -132,10 +143,9 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error(`[Webhook Processing Error] Error processing event ${event?.event_type} for user ${event?.data?.custom_data?.userId}:`, error);
-    if (error.code) { // Log Prisma-specific errors if available
+    if (error.code) {
         console.error(`[Webhook Prisma Error] Code: ${error.code}, Meta: ${JSON.stringify(error.meta)}`);
     }
-    // Return 500 for internal processing errors AFTER successful validation
     return NextResponse.json({ error: "Webhook processing failed." }, { status: 500 });
   }
 }

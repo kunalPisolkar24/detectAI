@@ -1,3 +1,4 @@
+// api/user/profile/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/authOptions";
@@ -23,6 +24,7 @@ export interface UserProfileData {
   premiumExpiry: Date | null;
   subscriptionStatus: SubscriptionStatus | null;
   paddleSubscriptionId: string | null;
+  isCancellationScheduled: boolean; // Added field
   connectedAccounts: UserProfileConnectedAccount[];
   usage: {
     apiCalls: {
@@ -44,7 +46,6 @@ export async function GET() {
 
     const userId = session.user.id;
 
-    // Fetch user fresh every time to ensure counts are up-to-date
     let user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -69,11 +70,9 @@ export async function GET() {
 
     let currentDailyCount = user.apiCallCountDaily;
 
-    // Check and perform reset if needed
     if (!user.lastApiCallReset || user.lastApiCallReset < todayStart) {
-       currentDailyCount = 0; // Use 0 for the response
+       currentDailyCount = 0;
        console.log(`Resetting daily API count for user ${userId} during profile fetch.`);
-       // Update the user record in the background
        prisma.user.update({
            where: { id: userId },
            data: {
@@ -81,13 +80,13 @@ export async function GET() {
                lastApiCallReset: now,
            },
        }).catch(err => {
-           // Log error but don't block the response
            console.error(`Failed to update daily API reset for user ${userId}:`, err);
        });
     }
 
-    const isPremium = user.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE;
-    // Use environment variable for the limit
+    const isPremium = user.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE ||
+                      user.paddleSubscriptionStatus === SubscriptionStatus.TRIALING;
+
     const dailyApiLimit = isPremium
         ? null
         : parseInt(process.env.DAILY_API_LIMIT_FREE || "100", 10);
@@ -103,6 +102,7 @@ export async function GET() {
       premiumExpiry: user.subscriptionEndsAt,
       subscriptionStatus: user.paddleSubscriptionStatus,
       paddleSubscriptionId: user.paddleSubscriptionId,
+      isCancellationScheduled: user.paddleCancellationScheduled, // Pass the flag
       connectedAccounts: user.accounts.map(acc => ({
         provider: acc.provider,
         id: acc.id,
@@ -154,16 +154,16 @@ export async function PUT(request: Request) {
 
     if (dataToUpdate.firstName || dataToUpdate.lastName) {
          const currentUser = await prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true }});
-         const newFirstName = dataToUpdate.firstName ?? currentUser?.firstName;
-         const newLastName = dataToUpdate.lastName ?? currentUser?.lastName;
-         if (newFirstName && newLastName) {
-            dataToUpdate.name = `${newFirstName} ${newLastName}`;
-         }
-    }
+         const finalFirstName = dataToUpdate.firstName ?? currentUser?.firstName ?? '';
+         const finalLastName = dataToUpdate.lastName ?? currentUser?.lastName ?? '';
+         dataToUpdate.name = `${finalFirstName} ${finalLastName}`.trim();
+     }
 
-    if (Object.keys(dataToUpdate).length === 0) {
+
+    if (Object.keys(dataToUpdate).length === 0 && !dataToUpdate.name) {
          return NextResponse.json({ message: "No fields provided for update." }, { status: 400 });
     }
+
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },

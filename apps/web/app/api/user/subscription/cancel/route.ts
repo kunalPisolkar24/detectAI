@@ -1,109 +1,74 @@
-import { NextResponse, NextRequest } from "next/server";
+// api/user/subscription/cancel/route.ts
+import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/authOptions";
-import { Paddle } from '@paddle/paddle-node-sdk';
 import prisma from "@/lib/prisma";
-import { SubscriptionStatus } from "@prisma/client";
 
-const paddleApiKey = process.env.PADDLE_API_KEY;
+const PADDLE_API_URL = process.env.PADDLE_ENVIRONMENT === 'production'
+  ? 'https://api.paddle.com'
+  : 'https://sandbox-api.paddle.com';
 
-if (!paddleApiKey) {
-  console.error("CRITICAL: PADDLE_API_KEY environment variable is not set.");
-}
-
-const paddle = new Paddle(paddleApiKey || '');
-
-export async function POST(req: NextRequest) {
-  if (!paddleApiKey) {
-      return NextResponse.json({ error: "Paddle API key not configured on server." }, { status: 500 });
-  }
-
+export async function POST() {
   try {
     const session: any = await getServerSession(authOptions);
-
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized: No active session found." }, { status: 401 });
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
-
     const userId = session.user.id;
-    const { paddleSubscriptionId } = await req.json();
 
-    if (!paddleSubscriptionId || typeof paddleSubscriptionId !== 'string') {
-      return NextResponse.json({ error: "Missing or invalid paddleSubscriptionId in request body." }, { status: 400 });
-    }
-
-    // Optional: Verify the subscription ID belongs to the logged-in user in your DB
-    const userSubscription = await prisma.user.findFirst({
-        where: {
-            id: userId,
-            paddleSubscriptionId: paddleSubscriptionId,
-        },
-        select: { paddleSubscriptionId: true } // Just need to confirm it exists for this user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { paddleSubscriptionId: true, paddleSubscriptionStatus: true },
     });
 
-    if (!userSubscription) {
-        console.warn(`[API Cancel Sub Warn] User ${userId} attempted to cancel non-matching/non-existent subscription ID: ${paddleSubscriptionId}`);
-        // Return a generic error or a more specific one depending on security policy
-        return NextResponse.json({ error: "Subscription not found or doesn't belong to user." }, { status: 404 });
+    if (!user || !user.paddleSubscriptionId) {
+      return NextResponse.json({ error: "Subscription details not found for user." }, { status: 404 });
     }
 
-    console.log(`[API Cancel Sub] User ${userId} initiating cancellation for subscription ID: ${paddleSubscriptionId}`);
+    // Prevent multiple cancellation requests if already scheduled or not active
+    if (user.paddleSubscriptionStatus !== 'ACTIVE' && user.paddleSubscriptionStatus !== 'TRIALING') {
+        return NextResponse.json({ error: "Subscription is not active or already canceled." }, { status: 400 });
+    }
 
-    const canceledSubscription = await paddle.subscriptions.cancel(paddleSubscriptionId, {});
+    const subscriptionId = user.paddleSubscriptionId;
 
-    console.log(`[API Cancel Sub Success] Paddle API response for ${paddleSubscriptionId}: Status=${canceledSubscription.status}, EffectiveAt=${canceledSubscription.scheduledChange?.effectiveAt}`);
+    console.log(`[API Cancel] Attempting to cancel subscription ${subscriptionId} for user ${userId} at period end.`);
 
-    const endsAt = canceledSubscription.scheduledChange?.effectiveAt || canceledSubscription.currentBillingPeriod?.endsAt || null;
+    const paddleResponse = await fetch(`${PADDLE_API_URL}/subscriptions/${subscriptionId}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.PADDLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
 
-    // Update local database to reflect the cancellation status immediately
+    const responseData = await paddleResponse.json();
+
+    if (!paddleResponse.ok) {
+      console.error(`[API Cancel Error] Paddle API error for user ${userId}, subscription ${subscriptionId}: Status ${paddleResponse.status}`, responseData);
+      const errorMessage = responseData?.error?.detail || "Failed to schedule subscription cancellation with payment provider.";
+      return NextResponse.json({ error: errorMessage }, { status: paddleResponse.status });
+    }
+
+    console.log(`[API Cancel Success] Paddle scheduled cancellation for user ${userId}, subscription ${subscriptionId}. Response:`, responseData);
+
+    // Update DB to mark cancellation as scheduled
     await prisma.user.update({
-        where: {
-            id: userId,
-            paddleSubscriptionId: paddleSubscriptionId, // Ensure idempotency and correct user
-        },
+        where: { id: userId },
         data: {
-            paddleSubscriptionStatus: SubscriptionStatus.CANCELED,
-            subscriptionEndsAt: endsAt ? new Date(endsAt) : null,
-        },
+            paddleCancellationScheduled: true,
+            // Optionally update subscriptionEndsAt if Paddle API response guarantees it
+            // subscriptionEndsAt: responseData.data.scheduled_change?.effective_at ? new Date(responseData.data.scheduled_change.effective_at) : undefined,
+        }
     });
-    console.log(`[API Cancel Sub DB Update] Local DB updated for user ${userId}, sub ${paddleSubscriptionId}. Status: CANCELED, EndsAt: ${endsAt}`);
 
-    return NextResponse.json(
-        {
-            message: "Subscription cancellation processed successfully.",
-            status: canceledSubscription.status, // e.g., "canceled"
-            endsAt: endsAt,
-        },
-        { status: 200 }
-    );
+    console.log(`[API Cancel DB Update] Set paddleCancellationScheduled=true for user ${userId}`);
+
+    return NextResponse.json({ success: true, message: "Subscription cancellation scheduled." }, { status: 200 });
 
   } catch (error: any) {
-    console.error("[API Cancel Sub Error] Failed during subscription cancellation process:", error);
-
-    let errorMessage = "Failed to process subscription cancellation.";
-    let statusCode = 500;
-
-    // Handle specific Paddle errors using paddle-node-sdk structure (check its docs for exact error types/codes)
-    // Example: (Error structure might vary based on SDK version)
-    if (error?.name === 'PaddleError') { // Check if it's a Paddle SDK error
-       console.error(`[API Cancel Sub Error] Paddle Error Details: ${error.message}`);
-       // You might check error.type or specific codes if available in the error object
-       if (error.message.includes('not found')) { // Simple string check example
-           errorMessage = "Subscription not found via Paddle API.";
-           statusCode = 404;
-       } else {
-           errorMessage = `Paddle API Error: ${error.message}`;
-           statusCode = 400; // Or 502 Bad Gateway if it's an upstream issue
-       }
-    } else if (error instanceof SyntaxError) { // JSON parsing error
-        errorMessage = "Invalid request body format.";
-        statusCode = 400;
-    }
-
-    return NextResponse.json(
-        { error: errorMessage, details: error.message || 'No additional details' },
-        { status: statusCode }
-    );
+    console.error("[API Cancel Exception] Error cancelling subscription:", error);
+    return NextResponse.json({ error: "Internal server error during cancellation request." }, { status: 500 });
   }
 }
-

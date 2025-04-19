@@ -56,7 +56,7 @@
     "@workspace/typescript-config": "workspace:*",
     "jsdom": "^26.0.0",
     "postcss": "^8",
-    "prisma": "^6.5.0",
+    "prisma": "^6.6.0",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
     "vitest": "^3.0.9"

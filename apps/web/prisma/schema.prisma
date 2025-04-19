@@ -35,6 +35,7 @@ model User {
   paddlePlanId             String?
   paddleSubscriptionStatus SubscriptionStatus?
   subscriptionEndsAt       DateTime?
+  paddleCancellationScheduled Boolean @default(false)
 
   apiCallCountDaily Int      @default(0)
   lastApiCallReset  DateTime?

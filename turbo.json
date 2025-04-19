@@ -17,7 +17,8 @@
     "TF_USE_LEGACY_KERAS",
     "NEXT_PUBLIC_PADDLE_CLIENT_TOKEN",
     "PADDLE_WEBHOOK_SECRET",
-    "PADDLE_API_KEY"
+    "PADDLE_API_KEY",
+    "DAILY_API_LIMIT_FREE"
   ],
   "ui": "tui",
   "tasks": {
