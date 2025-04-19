@@ -1,4 +1,3 @@
-// api/webhooks/paddle/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { validateSignature } from "@/utils/paddle";
 import prisma from "@/lib/prisma";
