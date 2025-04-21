@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import Chat from './page'; 
+import Chat from '../page'; 
 
 vi.mock('@/components/chat', () => ({
   ChatPage: () => <div data-testid="mock-chat-page">Mock Chat Page Content</div>,

@@ -1,4 +1,3 @@
-
 const AuthLayout = ({children}: any) => {
   return (
     <section className="w-full">
