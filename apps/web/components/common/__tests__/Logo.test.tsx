@@ -1,9 +1,8 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
-import { Logo } from "../Logo"; // Adjust path if needed
+import { Logo } from "../Logo";
 
-// Updated Mock: Explicitly handle strokeWidth mapping
 vi.mock("lucide-react", () => ({
   BotIcon: ({ className, strokeWidth, ...rest }: React.SVGProps<SVGSVGElement> & { strokeWidth?: number | string }) => (
     <svg
@@ -31,7 +30,6 @@ describe("Logo Component", () => {
     expect(linkElement).toHaveAttribute("href", "/");
   });
 
-  // Updated Test Assertion
   it("renders the BotIcon with correct attributes", () => {
     render(<Logo />);
     const iconElement = screen.getByTestId("mock-bot-icon");
@@ -53,6 +51,10 @@ describe("Logo Component", () => {
      const textElement = screen.getByText("Detect AI");
 
      expect(linkElement).toHaveClass("flex items-center gap-2");
-     expect(textElement).toHaveClass("text-xl font-semibold hidden md:block");
+     expect(textElement).toHaveClass("text-[15px]");
+     expect(textElement).toHaveClass("mt-[5px]");
+     expect(textElement).toHaveClass("font-semibold");
+     expect(textElement).toHaveClass("hidden");
+     expect(textElement).toHaveClass("md:block");
   });
 });

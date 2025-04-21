@@ -67,7 +67,7 @@ describe('Pricing Component', () => {
     expect(screen.getByText('Sequential Model for AI detection')).toBeInTheDocument();
     const getStartedButton = screen.getByRole('link', { name: /get started/i });
     expect(getStartedButton).toBeInTheDocument();
-    expect(getStartedButton).toHaveAttribute('href', '/auth/login');
+    expect(getStartedButton).toHaveAttribute('href', '/profile');
   });
 
   it('should render the premium plan card correctly on initial load (monthly)', () => {
@@ -78,7 +78,7 @@ describe('Pricing Component', () => {
     expect(screen.getByText('Most Popular')).toBeInTheDocument();
     const subscribeButton = screen.getByRole('link', { name: /subscribe/i });
     expect(subscribeButton).toBeInTheDocument();
-    expect(subscribeButton).toHaveAttribute('href', '/auth/login');
+    expect(subscribeButton).toHaveAttribute('href', '/profile');
   });
 
   it('should switch to yearly billing cycle when yearly tab is clicked', async () => {
@@ -138,7 +138,7 @@ describe('Pricing Component', () => {
   it('should have buttons linking to login', () => {
       render(<Pricing />);
       const links = screen.getAllByRole('link');
-      const loginLinks = links.filter(link => link.getAttribute('href') === '/auth/login');
+      const loginLinks = links.filter(link => link.getAttribute('href') === '/profile');
       expect(loginLinks.length).toBe(2);
       expect(loginLinks[0]).toHaveTextContent(/get started/i);
       expect(loginLinks[1]).toHaveTextContent(/subscribe/i);
