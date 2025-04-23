@@ -1,4 +1,4 @@
-async function hashSignature(
+export async function hashSignature(
   ts: string | undefined,
   requestBody: string,
   h1: string | undefined,
@@ -23,8 +23,7 @@ async function hashSignature(
     .join("");
   return signatureHex === h1;
 }
-
-function extractValues(input: string): {
+export function extractValues(input: string): {
   ts: string | undefined;
   h1: string | undefined;
 } {
