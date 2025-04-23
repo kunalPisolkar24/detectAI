@@ -12,7 +12,7 @@ export function ChatTheme() {
     setMounted(true);
   }, []);
 
-  if (!mounted) return null; // Prevent hydration mismatch
+  if (!mounted) return null;
 
   const isDarkMode = resolvedTheme === "dark";
   const nextTheme = isDarkMode ? "light" : "dark";
