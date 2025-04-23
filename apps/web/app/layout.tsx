@@ -1,5 +1,5 @@
 import { Geist, Geist_Mono } from "next/font/google";
-import "@workspace/ui/globals.css";
+import "@workspace/ui/styles/globals.css";
 import { Providers } from "@/components/providers";
 import { Toaster } from "sonner";
 import { CustomSessionProvider } from "@/lib/custom-session-provider";

@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     const planId = eventData?.items?.[0]?.price?.id;
     const endsAtString = eventData?.current_billing_period?.ends_at || eventData?.scheduled_change?.effective_at || eventData?.canceled_at || null;
     const endsAt = endsAtString ? new Date(endsAtString) : null;
-    const scheduledChangeAction = eventData?.scheduled_change?.action; // Check for scheduled change
+    const scheduledChangeAction = eventData?.scheduled_change?.action;
 
     console.log(`[Webhook Data] User ID: ${userId}`);
     console.log(`[Webhook Data] Subscription ID: ${subscriptionId}`);
@@ -89,14 +89,11 @@ export async function POST(req: NextRequest) {
             subscriptionEndsAt: endsAt,
         };
 
-        // *** Critical Change Here ***
-        // Only reset the scheduled flag if the update IS NOT just confirming a cancellation schedule
         if (scheduledChangeAction !== 'cancel') {
             console.log(`[Webhook DB Update] Resetting paddleCancellationScheduled=false because scheduledChangeAction is not 'cancel' (it is '${scheduledChangeAction}')`);
             dataToUpdate.paddleCancellationScheduled = false;
         } else {
              console.log(`[Webhook DB Update] Keeping paddleCancellationScheduled as is because scheduledChangeAction is 'cancel'.`);
-             // Don't touch the flag if the update is due to scheduling cancellation
         }
 
         console.log(`[Webhook DB] Attempting to update user ${userId} with status ${prismaStatus}, subId ${subscriptionId}`);
@@ -108,7 +105,6 @@ export async function POST(req: NextRequest) {
         break;
 
       case "subscription.canceled":
-         // This logic remains the same - it handles the FINAL cancellation
          if (!subscriptionId || !prismaStatus || prismaStatus !== SubscriptionStatus.CANCELED) {
            console.error("[Webhook Error] Missing required data or incorrect status for cancel event:", eventType," for user:", userId, "Status:", prismaStatus, "Sub:", subscriptionId);
            return NextResponse.json({ received: true, error: "Missing/Invalid subscription data for cancel" }, { status: 200 });
@@ -119,11 +115,9 @@ export async function POST(req: NextRequest) {
             data: {
                 paddleSubscriptionStatus: SubscriptionStatus.CANCELED,
                 subscriptionEndsAt: endsAt,
-                paddleCancellationScheduled: false, // Reset flag on final cancellation
-                // Clear Paddle details
+                paddleCancellationScheduled: false, 
                 paddleSubscriptionId: null,
                 paddlePlanId: null,
-                // paddleCustomerId: null, // Optional: keep customer ID
             },
          });
         console.log(`[Webhook DB Success] User ${userId} FINAL cancellation processed, status CANCELED, flag reset, details cleared.`);

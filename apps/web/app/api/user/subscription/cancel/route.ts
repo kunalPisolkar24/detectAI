@@ -24,7 +24,6 @@ export async function POST() {
       return NextResponse.json({ error: "Subscription details not found for user." }, { status: 404 });
     }
 
-    // Prevent multiple cancellation requests if already scheduled or not active
     if (user.paddleSubscriptionStatus !== 'ACTIVE' && user.paddleSubscriptionStatus !== 'TRIALING') {
         return NextResponse.json({ error: "Subscription is not active or already canceled." }, { status: 400 });
     }
@@ -52,13 +51,10 @@ export async function POST() {
 
     console.log(`[API Cancel Success] Paddle scheduled cancellation for user ${userId}, subscription ${subscriptionId}. Response:`, responseData);
 
-    // Update DB to mark cancellation as scheduled
     await prisma.user.update({
         where: { id: userId },
         data: {
             paddleCancellationScheduled: true,
-            // Optionally update subscriptionEndsAt if Paddle API response guarantees it
-            // subscriptionEndsAt: responseData.data.scheduled_change?.effective_at ? new Date(responseData.data.scheduled_change.effective_at) : undefined,
         }
     });
 
