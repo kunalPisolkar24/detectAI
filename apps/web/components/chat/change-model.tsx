@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from "react"
-import { useSession } from "next-auth/react" // Import useSession
+import { useSession } from "next-auth/react"
 import { useTheme } from "next-themes"
 import { cn } from "@workspace/ui/lib/utils"
 import {
@@ -10,13 +10,13 @@ import {
   DropdownMenuItem,
 } from "@workspace/ui/components/dropdown-menu"
 import { Button } from "@workspace/ui/components/button"
-import { ChevronDown, Cpu, Brain, Lock } from "lucide-react" // Import Lock icon
+import { ChevronDown, Cpu, Brain, Lock } from "lucide-react"
 import { useTab } from "@/contexts/tabContext"
 
 const ChangeModel = () => {
   const { tab, setTab } = useTab()
   const { theme } = useTheme()
-  const { data: session, status } : any = useSession() // Get session data and status
+  const { data: session, status } : any = useSession() 
   const [mounted, setMounted] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
 
@@ -28,23 +28,22 @@ console.log("Session JSON:", JSON.stringify(session));
     setMounted(true)
   }, [])
 
-  // Effect to switch back to sequential if user is not premium and BERT is selected
   useEffect(() => {
     if (mounted && status === "authenticated" && !isPremium && tab === "bert") {
       setTab("sequential")
     }
   }, [mounted, status, isPremium, tab, setTab])
 
-  // Determine the effective tab, considering premium status after session loads
   const effectiveTab =
     mounted && status === "authenticated" && !isPremium && tab === "bert"
       ? "sequential"
       : tab
 
   if (!mounted || isLoadingSession) {
-    // Show skeleton loader while component mounts or session is loading
     return (
-      <div className="w-[180px] h-10 rounded-md border border-input bg-background px-3 py-2 text-sm animate-pulse">
+      <div 
+      data-testid="loading-state"
+      className="w-[180px] h-10 rounded-md border border-input bg-background px-3 py-2 text-sm animate-pulse">
         <div className="h-4 w-2/3 bg-muted rounded"></div>
       </div>
     )
@@ -62,7 +61,7 @@ console.log("Session JSON:", JSON.stringify(session));
       id: "bert",
       name: "BERT",
       icon: Brain,
-      description: "Advanced model (Premium)", // Indicate premium
+      description: "Advanced model (Premium)", 
       isPremiumOnly: true,
     },
   ]
@@ -121,7 +120,7 @@ console.log("Session JSON:", JSON.stringify(session));
           return (
             <DropdownMenuItem
               key={model.id}
-              disabled={isDisabled} // Disable if premium-only and user is not premium
+              disabled={isDisabled} 
               className={cn(
                 "flex flex-col items-start py-2 px-3 cursor-pointer gap-0.5 rounded-sm transition-opacity",
                 effectiveTab === model.id
@@ -136,7 +135,6 @@ console.log("Session JSON:", JSON.stringify(session));
                   setTab(model.id)
                 }
               }}
-              // Prevent focus styles on disabled items if desired
               onSelect={(e) => isDisabled && e.preventDefault()}
             >
               <div className="flex items-center justify-between gap-2 w-full">
@@ -181,4 +179,4 @@ console.log("Session JSON:", JSON.stringify(session));
   )
 }
 
-export default ChangeModel
+export default ChangeModel;

@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useState, Dispatch, SetStateAction } from "react";
 
-interface TabContextType {
+export interface TabContextType {
   tab: string;
   setTab: Dispatch<SetStateAction<string>>;
 }
 
-const TabContext = createContext<TabContextType | undefined>(undefined);
+export const TabContext = createContext<TabContextType | undefined>(undefined);
 
 export const TabProvider = ({ children }: { children: React.ReactNode }) => {
   const [tab, setTab] = useState("sequential");
