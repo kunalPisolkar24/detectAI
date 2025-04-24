@@ -3,7 +3,7 @@ import { motion } from "framer-motion"
 import { useTheme } from "next-themes"
 import { cn } from "@workspace/ui/lib/utils"
 
-interface AuthHeaderProps {
+export interface AuthHeaderProps {
   label: string
   title: string
 }

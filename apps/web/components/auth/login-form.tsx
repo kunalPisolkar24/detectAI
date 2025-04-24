@@ -21,14 +21,13 @@ import Link from "next/link";
 
 export const LoginForm = () => {
   const router = useRouter();
-  const searchParams = useSearchParams(); // Hook to read URL query parameters
+  const searchParams = useSearchParams(); 
   const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  // Add a key state for Turnstile if needed for explicit reset
   const [turnstileKey, setTurnstileKey] = useState(0);
 
 
@@ -41,30 +40,25 @@ export const LoginForm = () => {
   });
 
   useEffect(() => {
-    // Check for error query parameter on component mount/update
     const error = searchParams.get('error');
     if (error === 'CredentialsSignin') {
       setFormError("Invalid email or password");
-      // toast.error("Invalid credentials"); // Optionally use toast instead or in addition
-      setTurnstileToken(null); // Clear the token state
-      setTurnstileKey(prevKey => prevKey + 1); // Force re-render Turnstile component by changing key
-       // Optional: Remove error from URL without full reload
-       router.replace('/login', { scroll: false });
+      setTurnstileToken(null);
+      setTurnstileKey(prevKey => prevKey + 1); 
+      router.replace('/login', { scroll: false });
     }
 
-    // Handle remembered email (Keep this logic)
     const rememberedEmail = localStorage.getItem("rememberEmail");
     if (rememberedEmail) {
       form.setValue("email", rememberedEmail);
       setRememberMe(true);
     }
-    // Add searchParams and router to dependency array
   }, [searchParams, form, router]);
 
 
   const handleTurnstileVerify = (token: string) => {
     setTurnstileToken(token);
-    setFormError(null); // Clear error when a new token is received
+    setFormError(null); 
   };
 
   const togglePasswordVisibility = () => {
@@ -73,7 +67,7 @@ export const LoginForm = () => {
 
   const onSubmit = async (data: z.infer<typeof LoginSchema>) => {
     setLoading(true);
-    setFormError(null); // Clear previous form errors before submitting
+    setFormError(null);
 
     try {
       if (!turnstileToken) {
@@ -93,24 +87,20 @@ export const LoginForm = () => {
         const errorData = await verifyResponse.json();
         setFormError(errorData.error || "Verification failed");
         toast.error(errorData.error || "Turnstile verification failed");
-        setTurnstileToken(null); // Clear token state on verify failure
-        setTurnstileKey(prevKey => prevKey + 1); // Force re-render Turnstile
+        setTurnstileToken(null);
+        setTurnstileKey(prevKey => prevKey + 1); 
         setLoading(false);
         return;
       }
 
-      // Let NextAuth handle redirect on success/failure
       const result = await signIn("credentials", {
-        callbackUrl: "/chat?login_success=true", // Success redirect URL
+        callbackUrl: "/chat?login_success=true", 
         email: data.email,
         password: data.password,
-        redirect: true, // Explicitly true (or omit as it's default)
+        redirect: true,
       });
 
-      // This block will generally NOT be reached if redirect=true and an error occurs,
-      // as NextAuth handles the redirect. It might catch other unexpected signIn issues.
       if (result?.error) {
-        // Fallback error handling if redirect didn't happen for some reason
         setFormError("An unexpected error occurred during sign in.");
         toast.error("Login failed unexpectedly");
         setTurnstileToken(null);
@@ -119,20 +109,17 @@ export const LoginForm = () => {
         return;
       }
 
-      // Success path - redirect is handled by signIn, but rememberMe logic can stay
       if (rememberMe) {
         localStorage.setItem("rememberEmail", data.email);
       } else {
         localStorage.removeItem("rememberEmail");
       }
-      // No setLoading(false) here as page should redirect away
 
     } catch (error: any) {
-      // Catch fetch errors or other JS errors during the process
       setFormError(error.message || "Login failed due to an unexpected error.");
       toast.error(error.message || "Login failed");
       setTurnstileToken(null);
-      setTurnstileKey(prevKey => prevKey + 1); // Force re-render Turnstile
+      setTurnstileKey(prevKey => prevKey + 1); 
       setLoading(false);
     }
   };
@@ -169,7 +156,6 @@ export const LoginForm = () => {
             </motion.div>
           )}
 
-          {/* Email Field */}
           <FormField
             control={form.control}
             name="email"
@@ -201,7 +187,6 @@ export const LoginForm = () => {
             )}
           />
 
-          {/* Password Field */}
           <FormField
             control={form.control}
             name="password"
@@ -245,7 +230,6 @@ export const LoginForm = () => {
             )}
           />
 
-          {/* Remember Me / Forgot Password Row */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-0 pt-1">
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -280,7 +264,6 @@ export const LoginForm = () => {
             </motion.div>
           </div>
 
-          {/* Turnstile Component */}
           <motion.div
             className="flex justify-center py-4"
             initial={{ opacity: 0, scale: 0.9 }}
@@ -288,19 +271,18 @@ export const LoginForm = () => {
             transition={{ duration: 0.5, delay: 0.2 }}
           >
             <TurnstileComponent
-              key={turnstileKey} // Use the key to force reset
-              siteKey="0x4AAAAAABA_xFDZEVC1Iru5" // Replace with your actual site key
+              key={turnstileKey} 
+              siteKey="0x4AAAAAABA_xFDZEVC1Iru5"
               onVerify={handleTurnstileVerify}
               onError={(error: any) => {
                 console.error("Turnstile error:", error);
                 setFormError("Verification error. Please try again.");
                 toast.error("Verification Error");
-                setTurnstileKey(prevKey => prevKey + 1); // Also force reset on error
+                setTurnstileKey(prevKey => prevKey + 1); 
               }}
             />
           </motion.div>
 
-          {/* Submit Button */}
           <motion.div whileHover={{ scale: 1.02, y: -1 }} whileTap={{ scale: 0.98 }}>
             <Button
               type="submit"
@@ -310,13 +292,13 @@ export const LoginForm = () => {
                   ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white border-0 shadow-md hover:shadow-lg hover:shadow-blue-500/20 dark:hover:shadow-purple-600/20"
                   : "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white border-0 shadow-md hover:shadow-lg hover:shadow-blue-500/30",
               )}
-              disabled={loading || !turnstileToken} // Disable if loading or no valid token
+              disabled={loading || !turnstileToken}
             >
               {loading ? (
                 <motion.div
                   animate={{ rotate: 360 }}
                   transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
-                  className="mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full inline-block" // Added inline-block
+                  className="mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full inline-block" 
                 />
               ) : null}
               {loading ? "Signing in..." : "Sign in"}
