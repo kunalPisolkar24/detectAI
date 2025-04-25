@@ -33,7 +33,7 @@ export const SignupForm = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [turnstileKey, setTurnstileKey] = useState(0); // Key for resetting Turnstile
+  const [turnstileKey, setTurnstileKey] = useState(0);
 
   const form = useForm<z.infer<typeof SignupSchema>>({
     resolver: zodResolver(SignupSchema),
@@ -77,7 +77,7 @@ export const SignupForm = () => {
         setFormError(errorMsg);
         toast.error(errorMsg);
         setTurnstileToken(null);
-        setTurnstileKey(prevKey => prevKey + 1); // Reset Turnstile
+        setTurnstileKey(prevKey => prevKey + 1);
         setLoading(false);
         return;
       }
@@ -101,7 +101,7 @@ export const SignupForm = () => {
         setFormError(errorMsg);
         toast.error(errorMsg);
         setTurnstileToken(null);
-        setTurnstileKey(prevKey => prevKey + 1); // Reset Turnstile
+        setTurnstileKey(prevKey => prevKey + 1);
         setLoading(false);
         return;
       }
@@ -121,7 +121,7 @@ export const SignupForm = () => {
             toast.error(signInResult.error);
          }
         setTurnstileToken(null);
-        setTurnstileKey(prevKey => prevKey + 1); // Reset Turnstile
+        setTurnstileKey(prevKey => prevKey + 1);
         setLoading(false);
         return;
       }
@@ -131,7 +131,7 @@ export const SignupForm = () => {
         setFormError(errorMsg);
         toast.error(errorMsg);
         setTurnstileToken(null);
-        setTurnstileKey(prevKey => prevKey + 1); // Reset Turnstile
+        setTurnstileKey(prevKey => prevKey + 1);
         setLoading(false);
     }
   };
@@ -342,7 +342,7 @@ export const SignupForm = () => {
                  console.error("Turnstile error:", error);
                  setFormError("Verification error. Please try again.");
                  toast.error("Verification Error");
-                 setTurnstileKey(prevKey => prevKey + 1); // Reset Turnstile on error
+                 setTurnstileKey(prevKey => prevKey + 1);
                }}
             />
           </motion.div>
