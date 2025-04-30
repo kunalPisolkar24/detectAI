@@ -2,13 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { initializePaddle, Paddle } from '@paddle/paddle-js';
-import { AnimatedGradientText } from "@workspace/ui/components/magicui/animated-gradient-text";
 import { cn } from "@workspace/ui/lib/utils";
 import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
-import { CircleCheck, Sparkles, Loader2 } from "lucide-react";
+import { CircleCheck, Loader2 } from "lucide-react";
 import { Button } from "@workspace/ui/components/button";
 import { Badge } from "@workspace/ui/components/badge";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
 import { useSession } from "next-auth/react";
@@ -18,7 +16,7 @@ const PREMIUM_YEARLY_PRICE_ID = "pri_01jr2gs8ckz66srr8sd1byh7n4";
 
 interface PaymentProps {
   onSubscriptionAttempt: () => void;
-  onSubscriptionSuccessAttempt?: () => void; // Added prop
+  onSubscriptionSuccessAttempt?: () => void; 
 }
 
 export const Payment: React.FC<PaymentProps> = ({ onSubscriptionAttempt, onSubscriptionSuccessAttempt }) => {
@@ -42,7 +40,7 @@ export const Payment: React.FC<PaymentProps> = ({ onSubscriptionAttempt, onSubsc
           if (data.name === 'checkout.completed') {
             console.log('Checkout potentially completed (verify with webhook)');
             if (onSubscriptionSuccessAttempt) {
-               onSubscriptionSuccessAttempt(); // Call the success handler
+                onSubscriptionSuccessAttempt();
             }
           }
         }
@@ -61,7 +59,7 @@ export const Payment: React.FC<PaymentProps> = ({ onSubscriptionAttempt, onSubsc
       setIsPaddleLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Added onSubscriptionSuccessAttempt to dependency array if needed, but likely fine without
+  }, []);
 
   const handleSubscription = () => {
     if (!paddle) {

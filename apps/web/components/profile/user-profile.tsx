@@ -48,7 +48,7 @@ import {
 import { FaGoogle, FaGithub } from "react-icons/fa";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import type { UserProfileData } from "@/app/api/user/profile/route"; // Ensure this is exported correctly
+import type { UserProfileData } from "@/app/api/user/profile/route"; 
 import { signIn, useSession } from "next-auth/react";
 
 const providerIcons: { [key: string]: React.ElementType } = {
@@ -82,7 +82,6 @@ export const UserProfile: React.FC = () => {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [showPricingDialog, setShowPricingDialog] = useState(false);
-  // Removed local isCancellationScheduled state
 
   const fetchProfile = useCallback(async () => {
     setIsLoadingProfile(true);
@@ -97,7 +96,6 @@ export const UserProfile: React.FC = () => {
       setFirstName(data.firstName || session?.user?.name?.split(' ')[0] || "");
       setLastName(data.lastName || session?.user?.name?.split(' ').slice(1).join(' ') || "");
 
-      // Sync session isPremium if needed
       if (session && session.user && (typeof session.user.isPremium === 'undefined' || session.user.isPremium !== data.isPremium)) {
           console.log(`Session/DB isPremium mismatch or undefined. Updating session from DB value: ${data.isPremium}`);
           await updateSession({ isPremium: data.isPremium });
@@ -111,7 +109,7 @@ export const UserProfile: React.FC = () => {
       setIsLoadingProfile(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, updateSession]); // Dependencies are correct
+  }, [session, updateSession]); 
 
   useEffect(() => {
     setMounted(true);
@@ -127,12 +125,11 @@ export const UserProfile: React.FC = () => {
   const handleSubscriptionSuccessAttempt = () => {
     toast.info("Checking subscription status...");
     setTimeout(() => {
-      fetchProfile(); // Refetch to get ACTIVE status and reset flags
+      fetchProfile(); 
       setShowPricingDialog(false);
     }, 2500);
   };
 
-  // Skeleton/Loading logic unchanged...
   if (!mounted) {
     return (
       <ScrollArea className="h-full w-full">
@@ -152,7 +149,6 @@ export const UserProfile: React.FC = () => {
 
  const isLoading = sessionStatus === 'loading' || isLoadingProfile;
 
- // getUserInitials unchanged...
  const getUserInitials = (name: string | null | undefined): string => {
     if (!name) return "U";
     return name
@@ -164,7 +160,6 @@ export const UserProfile: React.FC = () => {
       .toUpperCase();
   };
 
- // handleSave unchanged...
  const handleSave = async () => {
     if (!user) return;
     setIsSaving(true);
@@ -192,7 +187,6 @@ export const UserProfile: React.FC = () => {
  };
 
 
-  // handleCancel (for editing) unchanged...
   const handleCancel = () => {
     setFirstName(user?.firstName || session?.user?.name?.split(' ')[0] || "");
     setLastName(user?.lastName || session?.user?.name?.split(' ').slice(1).join(' ') || "");
@@ -214,14 +208,11 @@ export const UserProfile: React.FC = () => {
           }
 
           toast.success("Subscription cancellation scheduled successfully.");
-          // Refetch profile to get the updated isCancellationScheduled flag from DB
           await fetchProfile();
 
       } catch (err: any) {
           toast.error(err.message || "Could not schedule subscription cancellation.");
           console.error("Subscription cancellation error:", err);
-          // Optionally refetch profile even on error to ensure UI is sync'd with potential partial DB state?
-          // await fetchProfile();
       } finally {
           setIsCancelling(false);
       }
@@ -237,7 +228,6 @@ export const UserProfile: React.FC = () => {
     visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
   };
 
-  // isLoading skeleton unchanged...
   if (isLoading) {
     return (
       <ScrollArea className="h-full w-full">
@@ -255,7 +245,6 @@ export const UserProfile: React.FC = () => {
     );
  }
 
-  // Error/Unauthenticated state unchanged...
   if (error || sessionStatus === 'unauthenticated' || !user) {
     return (
       <ScrollArea className="h-full w-full">
@@ -276,7 +265,6 @@ export const UserProfile: React.FC = () => {
     );
   }
 
-  // Use fetched user data directly
   const displayIsPremium = user.isPremium;
   const displaySubscriptionStatus = user.subscriptionStatus;
   const displayPremiumExpiry = user.premiumExpiry;
@@ -291,7 +279,6 @@ export const UserProfile: React.FC = () => {
           theme === "dark" ? "bg-background text-foreground" : "bg-gray-50 text-foreground"
         )}
       >
-         {/* Background animations unchanged */}
          <div className="absolute inset-0 -z-10 overflow-hidden opacity-15 sm:opacity-20 pointer-events-none">
            <motion.div
              className={cn("absolute top-1/4 -left-40 w-[500px] h-[500px] rounded-full blur-3xl", theme === "dark" ? "bg-purple-600/20" : "bg-purple-400/20")}
@@ -307,14 +294,12 @@ export const UserProfile: React.FC = () => {
 
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl z-10 relative">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-            {/* Left Column - Profile Card */}
             <motion.div
               initial="hidden"
               animate="visible"
               variants={{ visible: { ...cardVariants.visible, transition: { duration: 0.5, delay: 0.1 } } }}
               className={cn("col-span-1 flex flex-col items-center p-6 rounded-xl border transition-colors duration-300", theme === "dark" ? "bg-black/50 backdrop-blur-sm border-white/10 shadow-lg shadow-blue-900/10" : "bg-white/80 backdrop-blur-sm border-black/10 shadow-lg shadow-blue-200/30")}
             >
-              {/* Avatar unchanged */}
                <motion.div
                   whileHover={{ scale: 1.05 }}
                   transition={{ type: "spring", stiffness: 300, damping: 15 }}
@@ -331,7 +316,6 @@ export const UserProfile: React.FC = () => {
                   </Avatar>
                 </motion.div>
 
-              {/* Premium Badge logic unchanged */}
               {displayIsPremium && (
                 <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 15, delay: 0.1 }} className="mb-4">
                   <Badge variant="default" className={cn("px-3 py-1 font-semibold flex items-center gap-1.5 text-xs sm:text-sm border-none", "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm")}>
@@ -340,7 +324,6 @@ export const UserProfile: React.FC = () => {
                 </motion.div>
               )}
 
-              {/* Name Display/Edit logic unchanged */}
               <AnimatePresence mode="wait">
                 {!isEditing ? (
                   <motion.div key="display-name" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center">
@@ -373,18 +356,14 @@ export const UserProfile: React.FC = () => {
                 )}
               </AnimatePresence>
 
-              {/* Email display unchanged */}
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className={cn("flex items-center gap-2 mt-5 text-sm", theme === "dark" ? "text-neutral-300" : "text-neutral-600")}>
                 <Mail size={16} className={theme === "dark" ? "text-blue-400" : "text-blue-600"} /> {user.email}
               </motion.div>
 
-              {/* Subscription Management Section - UPDATED LOGIC */}
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="mt-6 w-full space-y-3">
 
-                 {/* Scenario: ACTIVE or TRIALING Subscription */}
                 {(displaySubscriptionStatus === "ACTIVE" || displaySubscriptionStatus === "TRIALING") && (
                   <>
-                    {/* Sub-scenario: Cancellation IS scheduled (via DB flag) */}
                     {displayIsCancellationScheduled ? (
                       <div className="text-center text-xs sm:text-sm p-3 rounded-md bg-orange-500/10 text-orange-600 dark:bg-orange-600/15 dark:text-orange-400 border border-orange-500/30 flex items-center justify-center gap-2">
                           <Info size={14} />
@@ -392,7 +371,6 @@ export const UserProfile: React.FC = () => {
                       </div>
                     ) : (
                       <>
-                      {/* Sub-scenario: Cancellation is NOT scheduled */}
                         <div className="flex items-center gap-2 text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
                           <Calendar size={16} className="text-blue-500 dark:text-blue-400" />
                           <span>{displaySubscriptionStatus === "TRIALING" ? "Trial Ends:" : "Renews:"} {displayPremiumExpiry ? format(new Date(displayPremiumExpiry), "MMMM d, yyyy") : 'N/A'}</span>
@@ -424,14 +402,12 @@ export const UserProfile: React.FC = () => {
                   </>
                 )}
 
-                {/* Scenario: CANCELED Subscription (Final state via webhook) */}
                 {displaySubscriptionStatus === "CANCELED" && (
                   <>
                     <div className="text-center text-xs sm:text-sm p-3 rounded-md bg-yellow-500/10 text-yellow-600 dark:bg-yellow-600/15 dark:text-yellow-400 border border-yellow-500/30 flex items-center justify-center gap-2">
                        <Info size={14}/>
                        <span>Subscription expired{displayPremiumExpiry ? ` on ${format(new Date(displayPremiumExpiry), "MMMM d, yyyy")}` : ''}.</span>
                     </div>
-                    {/* Re-subscribe Dialog Trigger */}
                     <Dialog open={showPricingDialog} onOpenChange={setShowPricingDialog}>
                         <DialogTrigger asChild>
                         <Button size="sm" className={cn("w-full font-semibold", theme === "dark" ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-md hover:shadow-lg hover:shadow-blue-500/20" : "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-md hover:shadow-lg hover:shadow-blue-500/30")}>
@@ -451,9 +427,7 @@ export const UserProfile: React.FC = () => {
                   </>
                 )}
 
-                 {/* Scenario: Free User (null status) or Other Statuses (PAST_DUE, PAUSED) */}
                 {(displaySubscriptionStatus === null || displaySubscriptionStatus === "PAST_DUE" || displaySubscriptionStatus === "PAUSED") && (
-                   /* Upgrade Dialog Trigger */
                    <Dialog open={showPricingDialog} onOpenChange={setShowPricingDialog}>
                     <DialogTrigger asChild>
                       <Button size="sm" className={cn("w-full font-semibold", theme === "dark" ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-md hover:shadow-lg hover:shadow-blue-500/20" : "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-md hover:shadow-lg hover:shadow-blue-500/30")}>
@@ -471,31 +445,26 @@ export const UserProfile: React.FC = () => {
                     </DialogContent>
                   </Dialog>
                 )}
-                 {/* Add specific handling for PAST_DUE/PAUSED if needed - e.g., prompt to update payment */}
 
-              </motion.div> {/* End Subscription Management Section */}
+              </motion.div>
 
-            </motion.div> {/* End Left Column */}
+            </motion.div>
 
-            {/* Right Column - Account Info, Connected Accounts, Usage */}
             <motion.div
               initial="hidden"
               animate="visible"
               variants={{ visible: { ...cardVariants.visible, transition: { duration: 0.5, delay: 0.2 } } }}
               className="col-span-1 lg:col-span-2 space-y-6 md:space-y-8"
             >
-             {/* Account Information Box */}
               <div className={cn("p-6 rounded-xl border", theme === "dark" ? "bg-black/50 border-white/10" : "bg-white/70 border-black/10")}>
                 <h2 className="text-lg sm:text-xl font-semibold mb-5 flex items-center gap-2"><UserCircle className={theme === "dark" ? "text-blue-400" : "text-blue-600"} size={20} /> Account Information</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                   <div>
                       <h3 className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Account Type</h3>
-                      {/* Type is Premium if ACTIVE or TRIALING, even if cancellation is scheduled */}
                       <p className="font-medium">{displaySubscriptionStatus === "ACTIVE" || displaySubscriptionStatus === "TRIALING" ? "Premium" : "Free"}</p>
                   </div>
                     <div>
                       <h3 className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Status</h3>
-                      {/* Show 'Cancellation Scheduled' as status if applicable */}
                       {displaySubscriptionStatus === "ACTIVE" && displayIsCancellationScheduled ? (
                           <Badge variant="default" className="px-2 py-0.5 text-xs font-medium border-none capitalize bg-orange-500/90 dark:bg-orange-600/90 text-white">
                               Cancellation Scheduled
@@ -515,7 +484,6 @@ export const UserProfile: React.FC = () => {
                 </div>
               </div>
 
-              {/* Connected Accounts Box unchanged */}
               <div className={cn("p-6 rounded-xl border", theme === "dark" ? "bg-black/50 border-white/10" : "bg-white/70 border-black/10")}>
                 <h2 className="text-lg sm:text-xl font-semibold mb-5 flex items-center gap-2"><LinkIcon className={theme === "dark" ? "text-blue-400" : "text-blue-600"} size={20} /> Connected Accounts</h2>
                 <div className="space-y-3">
@@ -530,13 +498,11 @@ export const UserProfile: React.FC = () => {
                 </div>
               </div>
 
-              {/* Usage Statistics Box unchanged */}
               <div className={cn("p-6 rounded-xl border", theme === "dark" ? "bg-black/50 border-white/10" : "bg-white/70 border-black/10")}>
                 <h2 className="text-lg sm:text-xl font-semibold mb-5 flex items-center gap-2"><Gauge className={theme === "dark" ? "text-blue-400" : "text-blue-600"} size={20} /> Usage Statistics</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.6 }} className={cn("p-4 rounded-lg text-center sm:text-left", theme === "dark" ? "bg-white/5" : "bg-black/5")}>
                     <h3 className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">API Calls Today</h3>
-                    {/* Use isPremium derived in profile API for limit checking */}
                     <p className="text-xl sm:text-2xl font-bold"> {user.usage.apiCalls.current} {user.usage.apiCalls.limit !== null ? `/ ${user.usage.apiCalls.limit}` : ""} </p>
                     <p className="text-xs mt-0.5 text-neutral-500 dark:text-neutral-400">{user.usage.apiCalls.period} {user.usage.apiCalls.limit !== null ? "Limit" : "Count"}</p>
                   </motion.div>
@@ -547,10 +513,10 @@ export const UserProfile: React.FC = () => {
                   </motion.div>
                 </div>
               </div>
-            </motion.div> {/* End Right Column */}
+            </motion.div>
 
-          </div> {/* End Grid */}
-        </div> {/* End Container */}
+          </div>
+        </div> 
       </section>
     </ScrollArea>
   );
