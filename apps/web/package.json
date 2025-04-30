@@ -11,7 +11,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
-    "postinstall": "prisma generate && prisma migrate deploy"
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy",
+    "prisma:reset": "prisma migrate reset --force",
+    "postinstall": "pnpm prisma:generate && ([ \"$CI\" = true ] || pnpm prisma:migrate)"
   },
   "dependencies": {
     "@hookform/resolvers": "^4.1.3",
