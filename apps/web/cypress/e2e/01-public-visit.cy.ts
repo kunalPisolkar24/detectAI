@@ -73,7 +73,6 @@ describe('Public Page Navigation and Verification', () => {
       cy.contains('h1', /Get Started/i).should('be.visible');
     });
   });
-
   // context('Navigation to Docs Page ("/docs")', () => {
   //   it('should navigate via Navbar and display specific content', () => {
   //     cy.visit('/docs');
