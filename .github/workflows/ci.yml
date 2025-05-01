@@ -63,3 +63,8 @@ jobs:
 
       - name: Build Project
         run: pnpm build
+        
+      - name: Run Cypress E2E Tests on Staging
+        uses: cypress-io/github-action@v6
+        with:
+          working-directory: apps/web

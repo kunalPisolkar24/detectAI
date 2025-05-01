@@ -5,6 +5,6 @@ module.exports = defineConfig({
     // @ts-ignore
     setupNodeEvents(on, config) {
     },
-    baseUrl: 'https://3000-01js66k20jtjspdjdgk9d72g9s.cloudspaces.litng.ai/'
+    baseUrl: 'https://detect-ai-staging.vercel.app/'
   },
 });
