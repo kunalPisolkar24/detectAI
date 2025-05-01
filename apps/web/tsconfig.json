@@ -11,7 +11,7 @@
         "name": "next"
       }
     ],
-    "types": ["node", "jest", "@testing-library/jest-dom", "vitest/globals"]
+    "types": ["node", "jest", "@testing-library/jest-dom", "vitest/globals", "cypress"]
   },
   "include": [
     "next-env.d.ts",
@@ -21,7 +21,8 @@
     ".next/types/**/*.ts",
     "vitest.setup.ts",
     "**/*.test.ts",
-    "**/*.test.tsx" 
-  ],
+    "**/*.test.tsx",
+    "cypress/**/*.ts"
+, "cypress.config.ts"  ],
   "exclude": ["node_modules"]
 }
