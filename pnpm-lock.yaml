@@ -141,6 +141,9 @@ importers:
       '@workspace/typescript-config':
         specifier: workspace:*
         version: link:../../packages/typescript-config
+      bluebird:
+        specifier: ^3.7.2
+        version: 3.7.2
       cypress:
         specifier: ^14.3.2
         version: 14.3.2

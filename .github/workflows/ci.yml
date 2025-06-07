@@ -51,6 +51,9 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      - name: Ensure Cypress Binary is Installed
+        run: pnpm --filter=web exec cypress install
+
       - name: Prepare Test Database
         run: pnpm --filter=web run prisma:reset
         env:
@@ -68,3 +71,4 @@ jobs:
         uses: cypress-io/github-action@v6
         with:
           working-directory: apps/web
+          install: false

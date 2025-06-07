@@ -8,6 +8,7 @@ ignoredBuiltDependencies:
   - '@scarf/scarf'
   - '@tree-sitter-grammars/tree-sitter-yaml'
   - core-js-pure
+  - cypress
   - esbuild
   - prisma
   - sharp

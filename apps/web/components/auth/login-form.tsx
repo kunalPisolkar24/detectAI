@@ -272,7 +272,7 @@ export const LoginForm = () => {
           >
             <TurnstileComponent
               key={turnstileKey} 
-              siteKey="0x4AAAAAABA_xFDZEVC1Iru5"
+              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
               onVerify={handleTurnstileVerify}
               onError={(error: any) => {
                 console.error("Turnstile error:", error);
