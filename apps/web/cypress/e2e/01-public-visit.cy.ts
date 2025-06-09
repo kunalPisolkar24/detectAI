@@ -74,11 +74,24 @@ describe('Public Page Navigation and Verification', () => {
     });
   });
 
+    context('Navigation to Docs Page ("/docs")', () => {
+    it('should navigate via url and display specific content', () => {
+      cy.visit('/docs');
+      cy.url().should('include', '/docs');
+      cy.contains('h2', /DetectAI API Documentation/i).should('be.visible').wait(9000);
+      cy.contains(
+        'p',
+        /API documentation for the DetectAI Next\.js application, covering authentication, user management, model interactions, and billing./i,
+      ).should('be.visible');
+    });
+  });
+
   context('Navigation to Docs Page ("/docs")', () => {
     it('should navigate via Navbar and display specific content', () => {
       cy.visit('/docs');
+      cy.contains('button', /Docs/i).click();
       cy.url().should('include', '/docs');
-      cy.contains('h2', /DetectAI API Documentation/i).should('be.visible').wait(2000);
+      cy.contains('h2', /DetectAI API Documentation/i).should('be.visible').wait(9000);
       cy.contains(
         'p',
         /API documentation for the DetectAI Next\.js application, covering authentication, user management, model interactions, and billing./i,

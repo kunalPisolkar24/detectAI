@@ -1,0 +1,32 @@
+services:
+  api:
+    image: kunalpisolkar/detect-ai:latest
+    restart: always
+    ports:
+      - "5001:5000"
+    networks:
+      - detectai_net
+    env_file:
+      - ./apps/api/.env
+
+  monorepo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
+    networks:
+      - detectai_net
+    env_file:
+      - ./apps/web/.env
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    command: sh -c "pnpm --filter web run prisma:migrate && pnpm run dev"
+    depends_on:
+      - api
+      
+networks:
+  detectai_net:
+    driver: bridge

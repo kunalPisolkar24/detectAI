@@ -2,16 +2,16 @@ name: detectAI CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
     paths:
-      - 'apps/web/**'
-      - 'packages/ui/**'
-      - 'pnpm-lock.yaml'
-      - 'package.json'
-      - 'turbo.json'
-      - '.github/workflows/ci.yml'
+      - "apps/web/**"
+      - "packages/ui/**"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - "turbo.json"
+      - ".github/workflows/ci.yml"
 
 jobs:
   validate-web-app:

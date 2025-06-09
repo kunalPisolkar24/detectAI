@@ -1,0 +1,30 @@
+# Git files
+.git
+.gitignore
+
+# Node dependencies
+node_modules
+*/node_modules
+
+# Build artifacts and caches
+coverage
+
+
+# Large AI models and Python environments
+apps/api/bert_resources
+apps/api/sequential_resources
+apps/api/venv
+
+# Docker files
+Dockerfile
+docker-compose.yml
+
+# IDE and OS files
+.vscode
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.DS_Store
