@@ -1,0 +1,69 @@
+api:
+  replicaCount: 1
+  image:
+    repository: kunalpisolkar/detect-ai
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  service:
+    type: ClusterIP
+    port: 5000
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+web:
+  replicaCount: 1
+  image:
+    repository: localhost:5001/detect-ai-web
+    pullPolicy: IfNotPresent
+    tag: ""
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+ingress:
+  enabled: true
+  className: "nginx"
+  host: detect-ai.127.0.0.1.nip.io
+
+secretName: ""
+
+monitoring:
+  enabled: true
+  prometheus:
+    prometheusSpec:
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 1Gi
+  grafana:
+    enabled: true
+    adminPassword: "prom-operator"
+
+migration:
+  enabled: false

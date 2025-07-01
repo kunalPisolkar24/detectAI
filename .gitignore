@@ -34,3 +34,8 @@ npm-debug.log*
 # Misc
 .DS_Store
 *.pem
+
+
+detect-ai-chart/charts/
+detect-ai-chart/values-staging.yaml
+detect-ai-chart/values-prod.yaml
