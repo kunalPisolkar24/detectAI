@@ -5,15 +5,15 @@
 # Node dependencies
 node_modules
 */node_modules
+apps/*/node_modules
+packages/*/node_modules
 
 # Build artifacts and caches
 coverage
 
-
-# Large AI models and Python environments
-apps/api/bert_resources
-apps/api/sequential_resources
-apps/api/venv
+# Build output
+.next
+apps/*/.next
 
 # Docker files
 Dockerfile

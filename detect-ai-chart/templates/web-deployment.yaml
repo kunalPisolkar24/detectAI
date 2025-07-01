@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-web
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: web
+spec:
+  replicas: {{ .Values.web.replicaCount }}
+  selector:
+    matchLabels:
+      app: web
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: web
+        release: {{ .Release.Name }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.web.service.targetPort }}"
+    spec:
+      containers:
+        - name: web
+          image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
+          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.web.service.targetPort }}
+              protocol: TCP
+          env:
+            - name: NEXT_PUBLIC_MODEL_URL
+              value: "http://{{ .Release.Name }}-api-service:{{ .Values.api.service.port }}"
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secretName }}
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}

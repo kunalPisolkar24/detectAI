@@ -139,6 +139,118 @@ To get a local copy up and running, follow these simple steps.
     docker-compose up --build
     ```
 
+
+
+## 🐳 Kubernetes & Local Deployment (Helm)
+
+For advanced local development and to simulate a production-like environment, this project includes a comprehensive Kubernetes setup managed by **Helm**. This allows you to deploy the entire application stack—including the API, web app, and a full monitoring suite—with a single command.
+
+The Helm chart automatically configures:
+*   **Staging & Production Environments**: Deploys isolated versions of the application with environment-specific configurations.
+*   **Prometheus & Grafana**: A full `kube-prometheus-stack` for real-time monitoring of application and cluster metrics.
+*   **Horizontal Pod Autoscaling (HPA)**: Pre-configured to automatically scale services based on CPU load.
+*   **Automated Database Migrations**: A Helm Hook runs `prisma migrate` before every deployment to ensure the database schema is always in sync with the application code.
+
+### Prerequisites
+
+*   **Kind**: For running a local Kubernetes cluster.
+*   **Helm**: The package manager for Kubernetes.
+*   **kubectl**: The Kubernetes command-line tool.
+*   **Docker**: Required by Kind to run the cluster nodes.
+
+### Step-by-Step Deployment
+
+#### 1. Start the Local Kubernetes Cluster
+Run the provided setup script to create and configure your local environment.
+
+```sh
+sh ./setup-cluster.sh
+```
+This script automates the creation of:
+*   A **Kind** cluster named `detectai-cluster`.
+*   A local **Docker registry** for your custom images.
+*   An **NGINX Ingress Controller** to route external traffic to your services.
+
+#### 2. Build and Push Application Images
+The API model image is pulled from Docker Hub, but you need to build the Next.js web app locally. The script can tag images for different environments.
+
+```sh
+# Build the image for the staging environment
+sh ./build-and-push.sh staging
+
+# Build the image for the production environment
+sh ./build-and-push.sh prod
+```
+
+#### 3. Deploy the Application Stack using Helm
+With the cluster running and images built, you can now deploy everything using the Helm chart located in the `detect-ai-chart` directory.
+
+##### Deploying the Staging Environment
+This command installs the chart into the `detect-ai` namespace, using the `values-staging.yaml` file for configuration.
+
+```sh
+helm install staging ./detect-ai-chart \
+  --namespace detect-ai \
+  --create-namespace \
+  -f values-staging.yaml
+```
+
+##### Deploying the Production Environment
+This command installs another instance of the chart into a separate `detect-ai-prod` namespace.
+
+```sh
+helm install prod ./detect-ai-chart \
+  --namespace detect-ai-prod \
+  --create-namespace \
+  -f values-prod.yaml
+```
+
+The deployment will first run a `Prisma migration Job` to update the database schema before starting the application pods.
+
+#### 4. Accessing Your Deployed Services
+
+##### Application Access
+You can now access both environments in your browser through the configured `nip.io` URLs.
+
+*   **Staging:** `http://staging.detect-ai.127.0.0.1.nip.io`
+*   **Production:** `http://detect-ai.127.0.0.1.nip.io`
+
+##### Monitoring Dashboard (Grafana)
+To access the Grafana dashboard for your production environment, run the port-forward command in a new terminal:
+
+```sh
+kubectl port-forward --namespace detect-ai-prod svc/prod-grafana 8080:80
+```
+Then navigate to `http://localhost:8080` and log in with the credentials `admin` / `prom-operator`.
+
+### Managing Your Deployment
+
+##### Upgrading a Release
+To apply any changes from your `values` files or chart templates, use `helm upgrade`. For example, to upgrade the staging release:
+
+```sh
+helm upgrade staging ./detect-ai-chart -n detect-ai -f values-staging.yaml
+```
+
+##### Uninstalling a Release
+To completely remove an environment and all its associated resources:
+
+```sh
+# Uninstall the staging environment
+helm uninstall staging -n detect-ai
+
+# Uninstall the production environment
+helm uninstall prod -n detect-ai-prod
+```
+
+##### Deleting the Cluster
+To destroy the entire local Kubernetes environment:
+
+```sh
+kind delete cluster --name detectai-cluster
+```
+
+
 ## 🤝 Contributing
 
 Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
