@@ -1,6 +1,12 @@
 import { LoginForm } from '@/components/auth'
 import React, { Suspense } from 'react';
 import { cn } from "@workspace/ui/lib/utils";
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Login | Detect AI',
+  description: 'Sign in to your Detect AI account to access your dashboard and start analyzing text.',
+};
 
 function LoginLoadingFallback() {
   return (
