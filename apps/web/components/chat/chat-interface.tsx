@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ScrollArea, ScrollBar } from "@workspace/ui/components/scroll-area"
 import { cn } from "@workspace/ui/lib/utils"
-import { ArrowUp, RotateCcw, BotIcon, Link as LinkIcon } from "lucide-react"
+import { ArrowUp, RotateCcw, BotIcon, Link as LinkIcon, Paperclip } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@workspace/ui/components/tooltip"
@@ -34,6 +34,7 @@ export function ChatInterface() {
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [currentChat, setCurrentChat] = useState<CurrentChat | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const msgEnd = useRef<HTMLDivElement>(null)
   const { tab } = useTab()
   const [isMobile, setIsMobile] = useState(false)
@@ -118,6 +119,31 @@ export function ChatInterface() {
       }
     }
   }, [])
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/proxy/upload', { // New endpoint for file upload
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('File upload failed');
+      }
+
+      const data = await response.json();
+      setMessage(data.text);
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      toast.error("Failed to process the uploaded file.");
+    }
+  };
 
   const validateMessage = (msg: string) => {
     if (!msg.trim()) {
@@ -460,7 +486,7 @@ export function ChatInterface() {
             <ScrollArea className="w-full">
               <div className="px-4 pt-4 outline-none border-none w-full rounded-3xl">
                 <Textarea
-                  placeholder="Paste your text"
+                  placeholder="Paste your text or upload a file"
                   ref={textareaRef}
                   value={message}
                   onChange={(e) => {
@@ -476,6 +502,13 @@ export function ChatInterface() {
                       : "bg-transparent text-gray-900 placeholder:text-gray-500",
                     isLimitReached && "opacity-60 cursor-not-allowed"
                   )}
+                />
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
+                  accept=".txt,.pdf,.docx"
                 />
                 {error && <p className="text-red-500 mt-2 text-sm">{error}</p>}
                 {isLimitReached && (
@@ -495,8 +528,7 @@ export function ChatInterface() {
                     <Button
                       size="icon"
                       variant="outline"
-                      disabled={true}
-                      onClick={() => toast.info("URL analysis coming soon!")}
+                      onClick={() => fileInputRef.current?.click()}
                       className={cn(
                         "h-10 w-10 rounded-xl",
                         theme === "dark"
@@ -504,11 +536,11 @@ export function ChatInterface() {
                           : "border-gray-300 bg-gray-100 hover:bg-gray-200 disabled:opacity-50",
                       )}
                     >
-                      <LinkIcon className={cn("h-4 w-4", theme === "dark" ? "text-gray-400" : "text-gray-500")} />
+                      <Paperclip className={cn("h-4 w-4", theme === "dark" ? "text-gray-400" : "text-gray-500")} />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Analyze Documents (Coming Soon)</p>
+                    <p>Upload a file (.txt, .pdf, .docx)</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -527,7 +559,6 @@ export function ChatInterface() {
               </Button>
             </div>
           </div>
-          {/* CORRECTED: Display Usage Limit */}
           {userProfileData && userProfileData.usage.apiCalls.limit !== null && !session?.user?.isPremium && (
               <p className="text-center text-xs mt-2 text-muted-foreground">
                   {userProfileData.usage.apiCalls.current} / {userProfileData.usage.apiCalls.limit} daily calls used.
