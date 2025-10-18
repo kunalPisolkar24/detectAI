@@ -4,11 +4,8 @@ export async function POST(
   request: NextRequest,
 ) {
   try {
-    // Extract the endpoint from the URL pathname
     const endpoint = request.nextUrl.pathname.split('/').pop();
-    
     const body = await request.json();
-    
     const apiUrl = `${process.env.NEXT_PUBLIC_MODEL_URL}/predict/${endpoint}`;
     
     const response = await fetch(apiUrl, {

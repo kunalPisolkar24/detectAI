@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ScrollArea, ScrollBar } from "@workspace/ui/components/scroll-area"
 import { cn } from "@workspace/ui/lib/utils"
-import { ArrowUp, RotateCcw, BotIcon, Link as LinkIcon } from "lucide-react"
+import { ArrowUp, RotateCcw, BotIcon, Link as LinkIcon, Paperclip, RotateCw } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@workspace/ui/components/tooltip"
@@ -34,12 +34,14 @@ export function ChatInterface() {
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [currentChat, setCurrentChat] = useState<CurrentChat | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const msgEnd = useRef<HTMLDivElement>(null)
   const { tab } = useTab()
   const [isMobile, setIsMobile] = useState(false)
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isColdStarting, setIsColdStarting] = useState(false)
+  const [isUploadingFile, setIsUploadingFile] = useState(false)
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const maxRetries = 5
   const [retryCount, setRetryCount] = useState(0)
@@ -118,6 +120,55 @@ export function ChatInterface() {
       }
     }
   }, [])
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = [
+      'text/plain',
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Invalid file type. Please upload a .txt, .pdf, or .docx file.");
+      if (event.target) {
+        event.target.value = '';
+      }
+      return;
+    }
+
+    setIsUploadingFile(true);
+    const uploadToastId = toast.loading("Processing your file...");
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/proxy/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'File upload failed' }));
+        throw new Error(errorData.error || 'File upload failed');
+      }
+
+      const data = await response.json();
+      setMessage(data.text);
+      toast.success("File processed successfully!", { id: uploadToastId });
+    } catch (error: any) {
+      console.error("Error uploading file:", error);
+      toast.error(error.message || "Failed to process the uploaded file.", { id: uploadToastId });
+    } finally {
+      setIsUploadingFile(false);
+      if (event.target) {
+        event.target.value = '';
+      }
+    }
+  };
 
   const validateMessage = (msg: string) => {
     if (!msg.trim()) {
@@ -460,7 +511,7 @@ export function ChatInterface() {
             <ScrollArea className="w-full">
               <div className="px-4 pt-4 outline-none border-none w-full rounded-3xl">
                 <Textarea
-                  placeholder="Paste your text"
+                  placeholder="Paste your text or upload a file"
                   ref={textareaRef}
                   value={message}
                   onChange={(e) => {
@@ -468,14 +519,23 @@ export function ChatInterface() {
                     validateMessage(e.target.value)
                   }}
                   onKeyDown={handleKeyDown}
-                  disabled={isLoading || isLimitReached}
+                  disabled={isLoading || isLimitReached || isUploadingFile}
                   className={cn(
                     "resize-none w-full min-h-[50px] max-h-[210px] overflow-y-auto border-none focus-visible:ring-0 focus-visible:ring-offset-0",
                     theme === "dark"
                       ? "bg-transparent text-white placeholder:text-gray-400"
                       : "bg-transparent text-gray-900 placeholder:text-gray-500",
-                    isLimitReached && "opacity-60 cursor-not-allowed"
+                    isLimitReached && "opacity-60 cursor-not-allowed",
+                    isUploadingFile && "opacity-60 cursor-wait"
                   )}
+                />
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
+                  accept=".txt,.pdf,.docx"
+                  disabled={isUploadingFile}
                 />
                 {error && <p className="text-red-500 mt-2 text-sm">{error}</p>}
                 {isLimitReached && (
@@ -495,8 +555,8 @@ export function ChatInterface() {
                     <Button
                       size="icon"
                       variant="outline"
-                      disabled={true}
-                      onClick={() => toast.info("URL analysis coming soon!")}
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploadingFile || isLoading}
                       className={cn(
                         "h-10 w-10 rounded-xl",
                         theme === "dark"
@@ -504,18 +564,22 @@ export function ChatInterface() {
                           : "border-gray-300 bg-gray-100 hover:bg-gray-200 disabled:opacity-50",
                       )}
                     >
-                      <LinkIcon className={cn("h-4 w-4", theme === "dark" ? "text-gray-400" : "text-gray-500")} />
+                      {isUploadingFile ? (
+                        <RotateCw className={cn("h-4 w-4 animate-spin", theme === "dark" ? "text-gray-400" : "text-gray-500")} />
+                      ) : (
+                        <Paperclip className={cn("h-4 w-4", theme === "dark" ? "text-gray-400" : "text-gray-500")} />
+                      )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Analyze Documents (Coming Soon)</p>
+                    <p>Upload a file (.txt, .pdf, .docx)</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               <Button
                 size="icon"
                 onClick={handleSubmit}
-                disabled={!message.trim() || isLoading || isLimitReached}
+                disabled={!message.trim() || isLoading || isLimitReached || isUploadingFile}
                 className={cn(
                   "h-10 w-10 rounded-xl",
                   theme === "dark"
@@ -527,7 +591,6 @@ export function ChatInterface() {
               </Button>
             </div>
           </div>
-          {/* CORRECTED: Display Usage Limit */}
           {userProfileData && userProfileData.usage.apiCalls.limit !== null && !session?.user?.isPremium && (
               <p className="text-center text-xs mt-2 text-muted-foreground">
                   {userProfileData.usage.apiCalls.current} / {userProfileData.usage.apiCalls.limit} daily calls used.
