@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import 'pdf-parse/worker';
 import mammoth from 'mammoth';
-import {getWorkerPath} from "pdf-parse/worker";
-import {PDFParse, VerbosityLevel} from "pdf-parse";
+import { getWorkerPath } from "pdf-parse/worker";
+import { PDFParse, VerbosityLevel } from "pdf-parse";
+
 PDFParse.setWorker(getWorkerPath());
 
 export const config = {
@@ -20,6 +21,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
+    const allowedTypes = [
+      'text/plain',
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      return NextResponse.json({ error: 'Invalid file type. Only .txt, .pdf, and .docx are allowed.' }, { status: 400 });
+    }
+
     const fileBuffer = Buffer.from(await file.arrayBuffer());
     let text = '';
 
@@ -28,7 +39,6 @@ export async function POST(request: NextRequest) {
       const result = await parser.getText();
       const pageNumberRegex = /--\s*\d+\s+of\s+\d+\s*--/g;
       const cleanedText = result.text.replace(pageNumberRegex, '');
-      console.log("Text successfully cleaned.");
       text = cleanedText;
     } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
       const result = await mammoth.extractRawText({ buffer: fileBuffer });

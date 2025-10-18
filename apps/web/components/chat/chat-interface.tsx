@@ -125,6 +125,20 @@ export function ChatInterface() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    const allowedTypes = [
+      'text/plain',
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Invalid file type. Please upload a .txt, .pdf, or .docx file.");
+      if (event.target) {
+        event.target.value = '';
+      }
+      return;
+    }
+
     setIsUploadingFile(true);
     const uploadToastId = toast.loading("Processing your file...");
 
