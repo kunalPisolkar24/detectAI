@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-const mammoth = require('mammoth');
-const pdf = require('pdf-parse');
+import 'pdf-parse/worker';
+import mammoth from 'mammoth';
+import {getWorkerPath} from "pdf-parse/worker";
+import {PDFParse, VerbosityLevel} from "pdf-parse";
+PDFParse.setWorker(getWorkerPath());
+
 export const config = {
   api: {
     bodyParser: false,
   }
 };
-export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,8 +24,12 @@ export async function POST(request: NextRequest) {
     let text = '';
 
     if (file.type === 'application/pdf') {
-      const data = await pdf(fileBuffer);
-      text = data.text;
+      const parser = new PDFParse({ data: fileBuffer, verbosity: VerbosityLevel.WARNINGS });
+      const result = await parser.getText();
+      const pageNumberRegex = /--\s*\d+\s+of\s+\d+\s*--/g;
+      const cleanedText = result.text.replace(pageNumberRegex, '');
+      console.log("Text successfully cleaned.");
+      text = cleanedText;
     } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
       const result = await mammoth.extractRawText({ buffer: fileBuffer });
       text = result.value;
