@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ScrollArea, ScrollBar } from "@workspace/ui/components/scroll-area"
 import { cn } from "@workspace/ui/lib/utils"
-import { ArrowUp, RotateCcw, BotIcon, Link as LinkIcon, Paperclip } from "lucide-react"
+import { ArrowUp, RotateCcw, BotIcon, Link as LinkIcon, Paperclip, RotateCw } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@workspace/ui/components/tooltip"
@@ -41,6 +41,7 @@ export function ChatInterface() {
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isColdStarting, setIsColdStarting] = useState(false)
+  const [isUploadingFile, setIsUploadingFile] = useState(false)
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const maxRetries = 5
   const [retryCount, setRetryCount] = useState(0)
@@ -124,24 +125,34 @@ export function ChatInterface() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    setIsUploadingFile(true);
+    const uploadToastId = toast.loading("Processing your file...");
+
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      const response = await fetch('/api/proxy/upload', { // New endpoint for file upload
+      const response = await fetch('/api/proxy/upload', {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
-        throw new Error('File upload failed');
+        const errorData = await response.json().catch(() => ({ error: 'File upload failed' }));
+        throw new Error(errorData.error || 'File upload failed');
       }
 
       const data = await response.json();
       setMessage(data.text);
-    } catch (error) {
+      toast.success("File processed successfully!", { id: uploadToastId });
+    } catch (error: any) {
       console.error("Error uploading file:", error);
-      toast.error("Failed to process the uploaded file.");
+      toast.error(error.message || "Failed to process the uploaded file.", { id: uploadToastId });
+    } finally {
+      setIsUploadingFile(false);
+      if (event.target) {
+        event.target.value = '';
+      }
     }
   };
 
@@ -494,13 +505,14 @@ export function ChatInterface() {
                     validateMessage(e.target.value)
                   }}
                   onKeyDown={handleKeyDown}
-                  disabled={isLoading || isLimitReached}
+                  disabled={isLoading || isLimitReached || isUploadingFile}
                   className={cn(
                     "resize-none w-full min-h-[50px] max-h-[210px] overflow-y-auto border-none focus-visible:ring-0 focus-visible:ring-offset-0",
                     theme === "dark"
                       ? "bg-transparent text-white placeholder:text-gray-400"
                       : "bg-transparent text-gray-900 placeholder:text-gray-500",
-                    isLimitReached && "opacity-60 cursor-not-allowed"
+                    isLimitReached && "opacity-60 cursor-not-allowed",
+                    isUploadingFile && "opacity-60 cursor-wait"
                   )}
                 />
                 <input
@@ -509,6 +521,7 @@ export function ChatInterface() {
                   onChange={handleFileChange}
                   className="hidden"
                   accept=".txt,.pdf,.docx"
+                  disabled={isUploadingFile}
                 />
                 {error && <p className="text-red-500 mt-2 text-sm">{error}</p>}
                 {isLimitReached && (
@@ -529,6 +542,7 @@ export function ChatInterface() {
                       size="icon"
                       variant="outline"
                       onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploadingFile || isLoading}
                       className={cn(
                         "h-10 w-10 rounded-xl",
                         theme === "dark"
@@ -536,7 +550,11 @@ export function ChatInterface() {
                           : "border-gray-300 bg-gray-100 hover:bg-gray-200 disabled:opacity-50",
                       )}
                     >
-                      <Paperclip className={cn("h-4 w-4", theme === "dark" ? "text-gray-400" : "text-gray-500")} />
+                      {isUploadingFile ? (
+                        <RotateCw className={cn("h-4 w-4 animate-spin", theme === "dark" ? "text-gray-400" : "text-gray-500")} />
+                      ) : (
+                        <Paperclip className={cn("h-4 w-4", theme === "dark" ? "text-gray-400" : "text-gray-500")} />
+                      )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -547,7 +565,7 @@ export function ChatInterface() {
               <Button
                 size="icon"
                 onClick={handleSubmit}
-                disabled={!message.trim() || isLoading || isLimitReached}
+                disabled={!message.trim() || isLoading || isLimitReached || isUploadingFile}
                 className={cn(
                   "h-10 w-10 rounded-xl",
                   theme === "dark"
