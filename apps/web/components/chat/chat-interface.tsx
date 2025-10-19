@@ -3,7 +3,7 @@
 import type React from "react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useChat } from "@/contexts/chatContext"; // Import the useChat hook
+import { useChat } from "@/contexts/chatContext";
 import { ScrollArea, ScrollBar } from "@workspace/ui/components/scroll-area";
 import { cn } from "@workspace/ui/lib/utils";
 import { ArrowUp, RotateCcw, BotIcon, Paperclip, RotateCw } from "lucide-react";
@@ -26,7 +26,6 @@ const merriweather = Merriweather({
   weight: ['400', '700'],
 });
 
-// Define a type for individual messages
 interface Message {
   _id: string;
   role: 'user' | 'assistant';
@@ -42,13 +41,12 @@ export function ChatInterface() {
   const msgEnd = useRef<HTMLDivElement>(null);
   const { tab } = useTab();
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false); // Local loading for AI response
+  const [isLoading, setIsLoading] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const { theme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const { data: session, status: sessionStatus } = useSession();
 
-  // --- CONTEXT INTEGRATION ---
   const {
     activeChat,
     messages,
@@ -58,7 +56,6 @@ export function ChatInterface() {
     startNewChat
   } = useChat();
   const isSubmitted = !!activeChat;
-  // --- END CONTEXT INTEGRATION ---
 
   const [userProfileData, setUserProfileData] = useState<UserProfileData | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
@@ -84,7 +81,6 @@ export function ChatInterface() {
   useEffect(() => {
     setMounted(true);
     fetchProfile();
-    // Style adjustments from original file
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
     return () => {
@@ -180,7 +176,6 @@ export function ChatInterface() {
     }
   };
 
-  // The handleSubmit function now orchestrates with the context
   const handleSubmit = async () => {
     if (!message.trim() || isLoading) return;
 
@@ -201,14 +196,12 @@ export function ChatInterface() {
     setMessage("");
 
     try {
-      // Step 1: Save user message (create chat if it's the first message)
       if (!activeChat) {
         await createChat(questionText);
       } else {
         await addMessage({ role: 'user', content: questionText });
       }
 
-      // Step 2: Fetch AI response from your backend proxy
       const endpoint = tab === "sequential" ? "sequential" : "bert";
       const response = await fetch(`/api/proxy/${endpoint}`, {
         method: "POST",
@@ -221,7 +214,6 @@ export function ChatInterface() {
       const data = await response.json();
       const responseContent = `Model: ${data.model}, Predicted Label: ${data.predicted_label}`;
 
-      // Step 3: Save AI response to the database via context
       await addMessage({ role: 'assistant', content: responseContent });
 
       await incrementUsage();
@@ -230,7 +222,6 @@ export function ChatInterface() {
       console.error("API call failed:", error);
       const errorMessage = "Error: Our models are currently unavailable. Please try again later.";
       toast.error("Our models are currently unavailable.");
-      // Save error message as assistant response
       await addMessage({ role: 'assistant', content: errorMessage });
     } finally {
       setIsLoading(false);
@@ -244,7 +235,6 @@ export function ChatInterface() {
     }
   };
 
-  // Loading state from the original file
   if (!mounted || (sessionStatus === 'loading' && !userProfileData) || (sessionStatus === 'authenticated' && isLoadingProfile && !userProfileData)) {
     return (
       <div className="flex h-screen flex-col bg-background text-foreground">
@@ -276,7 +266,6 @@ export function ChatInterface() {
           transition={{ duration: 0.3 }}
           className="absolute inset-x-0 top-1/3 flex flex-col items-center justify-center text-center -translate-y-1/4 px-4"
         >
-          {/* ... Welcome message UI is unchanged ... */}
           <div className={cn("group relative mx-auto flex justify-center rounded-full px-4 py-1.5 transition-shadow duration-500 ease-out", theme === "dark" ? "shadow-[inset_0_-8px_10px_#8fdfff1f] hover:shadow-[inset_0_-5px_10px_#8fdfff3f]" : "shadow-[inset_0_-8px_10px_#8fdfff4f] hover:shadow-[inset_0_-5px_10px_#8fdfff6f]")}>
             <span className={cn("absolute inset-0 block h-full w-full animate-gradient rounded-[inherit] bg-gradient-to-r from-[#ffaa40]/50 via-[#9c40ff]/50 to-[#ffaa40]/50 bg-[length:300%_100%] p-[1px]")} style={{ WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)", WebkitMaskComposite: "destination-out", mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)", maskComposite: "subtract", WebkitClipPath: "padding-box" }} />
             <div className="mr-2">💬</div>
@@ -291,12 +280,11 @@ export function ChatInterface() {
         </motion.div>
       )}
       <ScrollArea className="flex-1 px-4 transition-all min-h-[40vh] max-h-[80vh]">
-        <div className="w-full max-w-2xl mx-auto pt-20">
+        <div className="w-full max-w-2xl mx-auto">
           <AnimatePresence mode="popLayout">
             {isSubmitted && (
-              <motion.div className="w-full max-w-2xl space-y-6 mt-2 pt-6">
+              <motion.div className="w-full max-w-2xl space-y-6 pt-8 pb-40">
                 <div className="flex flex-col gap-6">
-                  {/* Render messages from the context */}
                   {messages.map((msg: Message, index) => (
                     <motion.div
                       key={msg._id || `msg-${index}`}
@@ -327,7 +315,6 @@ export function ChatInterface() {
                       </div>
                     </motion.div>
                   ))}
-                  {/* Loading skeleton for AI response */}
                   {isLoading && (
                     <motion.div
                       key="loading-skeleton"
@@ -361,7 +348,6 @@ export function ChatInterface() {
         </div>
         <ScrollBar />
       </ScrollArea>
-      {/* ... The rest of the JSX for the input area is largely unchanged ... */}
       <div className="cutpad w-full p-4 fixed bottom-10 bg-background">
         <div className="relative max-w-3xl mx-auto">
           <div className={cn("flex items-center rounded-3xl shadow-lg pb-3 border", theme === "dark" ? "bg-black/40 border-gray-700" : "bg-white border-gray-300")}>
