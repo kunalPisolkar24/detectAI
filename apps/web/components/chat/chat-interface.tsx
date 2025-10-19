@@ -264,7 +264,7 @@ export function ChatInterface() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.3 }}
-          className="absolute inset-x-0 top-1/4 flex flex-col items-center justify-center text-center -translate-y-1/2 px-4"
+          className="absolute inset-x-0 top-1/3 flex flex-col items-center justify-center text-center -translate-y-1/2 px-4"
         >
           <div className={cn("group relative mx-auto flex justify-center rounded-full px-4 py-1.5 transition-shadow duration-500 ease-out", theme === "dark" ? "shadow-[inset_0_-8px_10px_#8fdfff1f] hover:shadow-[inset_0_-5px_10px_#8fdfff3f]" : "shadow-[inset_0_-8px_10px_#8fdfff4f] hover:shadow-[inset_0_-5px_10px_#8fdfff6f]")}>
             <span className={cn("absolute inset-0 block h-full w-full animate-gradient rounded-[inherit] bg-gradient-to-r from-[#ffaa40]/50 via-[#9c40ff]/50 to-[#ffaa40]/50 bg-[length:300%_100%] p-[1px]")} style={{ WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)", WebkitMaskComposite: "destination-out", mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)", maskComposite: "subtract", WebkitClipPath: "padding-box" }} />
@@ -279,11 +279,11 @@ export function ChatInterface() {
           </p>
         </motion.div>
       )}
-      <ScrollArea className="flex-1 px-4 transition-all min-h-[40vh] max-h-[80vh]">
+      <ScrollArea className="flex-1 px-4 pt-20 md:pt-0 transition-all min-h-[40vh] max-h-[80vh]">
         <div className="w-full max-w-2xl mx-auto">
           <AnimatePresence mode="popLayout">
             {isSubmitted && (
-              <motion.div className="w-full max-w-2xl space-y-6 pt-8 pb-40">
+              <motion.div className="w-full max-w-2xl space-y-6 pt-8 pb-24 md:pb-40">
                 <div className="flex flex-col gap-6">
                   {messages.map((msg: Message, index) => (
                     <motion.div
