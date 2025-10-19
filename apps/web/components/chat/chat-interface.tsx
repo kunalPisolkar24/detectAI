@@ -267,7 +267,7 @@ export function ChatInterface() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
+    <div className="flex h-full flex-col bg-background text-foreground">
       {!isSubmitted && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
