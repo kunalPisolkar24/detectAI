@@ -257,7 +257,7 @@ export function ChatInterface() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-background text-foreground">
+    <div className="relative flex h-full flex-col bg-background text-foreground">
       {!isSubmitted && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -348,7 +348,7 @@ export function ChatInterface() {
         </div>
         <ScrollBar />
       </ScrollArea>
-      <div className="cutpad w-full p-4 fixed bottom-10 bg-background">
+      <div className="cutpad w-full p-4 absolute bottom-10 inset-x-0 bg-background">
         <div className="relative max-w-3xl mx-auto">
           <div className={cn("flex items-center rounded-3xl shadow-lg pb-3 border", theme === "dark" ? "bg-black/40 border-gray-700" : "bg-white border-gray-300")}>
             <ScrollArea className="w-full">
@@ -395,7 +395,7 @@ export function ChatInterface() {
           )}
         </div>
       </div>
-      <p className={cn("text-center text-xs p-4 fixed bottom-0 w-full bg-background", theme === "dark" ? "text-gray-400" : "text-gray-500")}>
+      <p className={cn("text-center text-xs p-4 absolute bottom-0 inset-x-0 w-full bg-background", theme === "dark" ? "text-gray-400" : "text-gray-500")}>
         Detect AI can make mistakes. Check important info.
       </p>
     </div>
