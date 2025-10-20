@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { getServerSession } from "next-auth/next";
 import mongoose from "mongoose";
 import { authOptions } from "@/lib/authOptions";
@@ -7,43 +7,45 @@ import Chat from "@/models/Chat";
 import Message from "@/models/Message";
 
 export async function GET(
-    request: Request,
-    { params }: { params: { chatId: string } }
+    request: NextRequest,
+    context: { params: { chatId: string } }
 ) {
+    const { chatId } = context.params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    if (!mongoose.Types.ObjectId.isValid(params.chatId)) {
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
         return NextResponse.json({ error: "Invalid Chat ID." }, { status: 400 });
     }
 
     await dbConnect();
-    const chat = await Chat.findOne({ _id: params.chatId, userId: session.user.id });
+    const chat = await Chat.findOne({ _id: chatId, userId: session.user.id });
     if (!chat) {
         return NextResponse.json({ error: "Chat not found or access denied." }, { status: 404 });
     }
 
-    const messages = await Message.find({ chatId: params.chatId }).sort({ createdAt: 'asc' });
+    const messages = await Message.find({ chatId: chatId }).sort({ createdAt: 'asc' });
     return NextResponse.json(messages);
 }
 
 export async function POST(
-    request: Request,
-    { params }: { params: { chatId: string } }
+    request: NextRequest,
+    context: { params: { chatId: string } }
 ) {
+    const { chatId } = context.params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    if (!mongoose.Types.ObjectId.isValid(params.chatId)) {
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
         return NextResponse.json({ error: "Invalid Chat ID." }, { status: 400 });
     }
 
     await dbConnect();
-    const chat = await Chat.findOne({ _id: params.chatId, userId: session.user.id });
+    const chat = await Chat.findOne({ _id: chatId, userId: session.user.id });
     if (!chat) {
         return NextResponse.json({ error: "Chat not found or access denied." }, { status: 404 });
     }
@@ -56,7 +58,7 @@ export async function POST(
         }
 
         const newMessage = new Message({
-            chatId: params.chatId,
+            chatId: chatId,
             role: role,
             content: content.trim(),
         });

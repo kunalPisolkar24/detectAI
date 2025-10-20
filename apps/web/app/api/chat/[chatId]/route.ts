@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { getServerSession } from "next-auth/next";
 import mongoose from "mongoose";
 import { authOptions } from "@/lib/authOptions";
@@ -14,15 +14,16 @@ async function verifyChatOwnership(chatId: string, userId: string) {
 }
 
 export async function GET(
-    request: Request,
-    { params }: { params: { chatId: string } }
+    request: NextRequest,
+    context: { params: { chatId: string } }
 ) {
+    const { chatId } = context.params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const chat = await verifyChatOwnership(params.chatId, session.user.id);
+    const chat = await verifyChatOwnership(chatId, session.user.id);
     if (!chat) {
         return NextResponse.json({ error: "Chat not found or access denied." }, { status: 404 });
     }
@@ -31,15 +32,16 @@ export async function GET(
 }
 
 export async function PUT(
-    request: Request,
-    { params }: { params: { chatId: string } }
+    request: NextRequest,
+    context: { params: { chatId: string } }
 ) {
+    const { chatId } = context.params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const chat = await verifyChatOwnership(params.chatId, session.user.id);
+    const chat = await verifyChatOwnership(chatId, session.user.id);
     if (!chat) {
         return NextResponse.json({ error: "Chat not found or access denied." }, { status: 404 });
     }
@@ -61,15 +63,16 @@ export async function PUT(
 }
 
 export async function DELETE(
-    request: Request,
-    { params }: { params: { chatId: string } }
+    request: NextRequest,
+    context: { params: { chatId: string } }
 ) {
+    const { chatId } = context.params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const chat = await verifyChatOwnership(params.chatId, session.user.id);
+    const chat = await verifyChatOwnership(chatId, session.user.id);
     if (!chat) {
         return NextResponse.json({ error: "Chat not found or access denied." }, { status: 404 });
     }
