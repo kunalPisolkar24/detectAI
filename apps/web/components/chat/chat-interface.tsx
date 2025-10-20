@@ -26,14 +26,6 @@ const merriweather = Merriweather({
   weight: ['400', '700'],
 });
 
-interface Chat {
-  _id: string;
-  userId: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 interface Message {
   _id: string;
   role: 'user' | 'assistant';
@@ -41,6 +33,13 @@ interface Message {
   createdAt: string;
 }
 
+interface Chat {
+    _id: string;
+    userId: string;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+}
 
 export function ChatInterface() {
   const [message, setMessage] = useState("");
@@ -155,8 +154,7 @@ export function ChatInterface() {
       if (event.target) event.target.value = '';
     }
   };
-
-
+  
   const validateMessage = (msg: string) => {
     if (!msg.trim()) {
       setError("");
@@ -239,9 +237,9 @@ export function ChatInterface() {
       console.error("API call failed:", error);
       const errorMessage = "Error: Our models are currently unavailable. Please try again later.";
       toast.error(errorMessage);
-
+      
       if (targetChat) {
-        await addMessage({ role: 'assistant', content: errorMessage }, targetChat);
+         await addMessage({ role: 'assistant', content: errorMessage }, targetChat);
       }
     } finally {
       setIsLoading(false);
@@ -257,19 +255,20 @@ export function ChatInterface() {
 
   if (!mounted || (sessionStatus === 'loading' && !userProfileData) || (sessionStatus === 'authenticated' && isLoadingProfile && !userProfileData)) {
     return (
-      <div className="flex h-screen flex-col bg-background text-foreground">
-        <div className="flex-1 px-4 min-h-[40vh] max-h-[80vh]">
-          <div className="w-full max-w-2xl mx-auto pt-20">
-            <div className="absolute inset-x-0 top-1/3 flex flex-col items-center justify-center text-center -translate-y-1/4">
-              <Skeleton className="h-8 w-32 rounded-full mb-4" />
-              <Skeleton className="h-10 w-64 rounded-md mb-4" />
-              <Skeleton className="h-6 w-80 rounded-md" />
-            </div>
-          </div>
+      <div className="relative flex h-full flex-col bg-background text-foreground">
+        <div className="absolute inset-x-0 top-1/3 flex flex-col items-center justify-center text-center -translate-y-1/2 px-4">
+          <Skeleton className="h-8 w-24 rounded-full mb-4" />
+          <Skeleton className="h-8 w-80 max-w-full rounded-md mb-4" />
+          <Skeleton className="h-6 w-96 max-w-full rounded-md" />
         </div>
-        <div className="w-full p-4 fixed bottom-10 bg-background">
+        <div className="cutpad w-full p-4 absolute bottom-10 inset-x-0 bg-background">
           <div className="relative max-w-3xl mx-auto">
             <Skeleton className="h-20 w-full rounded-3xl" />
+          </div>
+        </div>
+        <div className="absolute bottom-0 inset-x-0 p-4">
+          <div className="flex justify-center">
+            <Skeleton className="h-4 w-64 rounded-md" />
           </div>
         </div>
       </div>
@@ -305,9 +304,9 @@ export function ChatInterface() {
             {isSubmitted && (
               <motion.div className="w-full max-w-2xl space-y-6 pt-8 pb-24 md:pb-40">
                 <div className="flex flex-col gap-6">
-                  {messages.map((msg: Message, index) => (
+                  {messages.map((msg: Message) => (
                     <motion.div
-                      key={msg._id || `msg-${index}`}
+                      key={msg._id}
                       initial={{ opacity: 0, x: msg.role === 'user' ? 50 : -50 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: msg.role === 'user' ? 50 : -50 }}
