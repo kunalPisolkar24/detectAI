@@ -6,10 +6,6 @@ import dbConnect from "@/lib/mongoose";
 import Chat from "@/models/Chat";
 import Message from "@/models/Message";
 
-interface Params {
-    params: { chatId: string };
-}
-
 async function verifyChatOwnership(chatId: string, userId: string) {
     if (!mongoose.Types.ObjectId.isValid(chatId)) return null;
     await dbConnect();
@@ -17,7 +13,10 @@ async function verifyChatOwnership(chatId: string, userId: string) {
     return chat;
 }
 
-export async function GET(request: Request, { params }: Params) {
+export async function GET(
+    request: Request,
+    { params }: { params: { chatId: string } }
+) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -31,7 +30,10 @@ export async function GET(request: Request, { params }: Params) {
     return NextResponse.json(chat);
 }
 
-export async function PUT(request: Request, { params }: Params) {
+export async function PUT(
+    request: Request,
+    { params }: { params: { chatId: string } }
+) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -58,7 +60,10 @@ export async function PUT(request: Request, { params }: Params) {
     }
 }
 
-export async function DELETE(request: Request, { params }: Params) {
+export async function DELETE(
+    request: Request,
+    { params }: { params: { chatId: string } }
+) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

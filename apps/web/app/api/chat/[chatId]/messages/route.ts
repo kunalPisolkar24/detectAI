@@ -6,11 +6,10 @@ import dbConnect from "@/lib/mongoose";
 import Chat from "@/models/Chat";
 import Message from "@/models/Message";
 
-interface Params {
-    params: { chatId: string };
-}
-
-export async function GET(request: Request, { params }: Params) {
+export async function GET(
+    request: Request,
+    { params }: { params: { chatId: string } }
+) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -30,7 +29,10 @@ export async function GET(request: Request, { params }: Params) {
     return NextResponse.json(messages);
 }
 
-export async function POST(request: Request, { params }: Params) {
+export async function POST(
+    request: Request,
+    { params }: { params: { chatId: string } }
+) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
