@@ -22,14 +22,32 @@ import {
   LogOut,
   PanelLeft,
 } from "lucide-react";
+import { Skeleton } from "@workspace/ui/components/skeleton";
 import ChangeModel from "./change-model";
+
+const ChatNavSkeleton = () => (
+  <div className="w-full h-[56px] md:relative">
+    <header className="container mx-auto flex items-center justify-between py-2 px-4 sm:px-6 h-full">
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-9 w-9 hidden md:flex" />
+      </div>
+      <div className="absolute left-1/2 transform -translate-x-1/2 md:hidden">
+        <Skeleton className="w-[180px] h-10" />
+      </div>
+      <div className="flex items-center gap-4">
+        <Skeleton className="w-[180px] h-10 hidden md:flex" />
+        <Skeleton className="h-9 w-9 rounded-full" />
+      </div>
+    </header>
+  </div>
+);
 
 export const ChatNav = () => {
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const { theme, setTheme } = useTheme();
-  const { data: session }: any = useSession();
+  const { data: session } = useSession();
 
   useEffect(() => {
     setMounted(true);
@@ -39,12 +57,14 @@ export const ChatNav = () => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const getUserInitials = (name: string | undefined) => {
+  const getUserInitials = (name: string) => {
     if (!name) return "U";
-    return name.split(" ").map((word) => word[0]).join("").toUpperCase();
+    return name.split(" ").map((word: string) => word[0]).join("").toUpperCase();
   };
 
-  if (!mounted) return null;
+  if (!mounted) {
+    return <ChatNavSkeleton />;
+  }
 
   return (
     <motion.div
@@ -58,90 +78,92 @@ export const ChatNav = () => {
       animate={{ y: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
-      <header className="container mx-auto flex items-center justify-between py-2 px-4 sm:px-6">
-        <div className="flex items-center gap-2">
+      <header className="container mx-auto flex items-center py-2 px-4 sm:px-6">
+        <div className="flex-shrink-0">
           <SidebarTrigger className="hidden md:flex">
             <PanelLeft size={18} />
           </SidebarTrigger>
-
-           {isMobile && (
-             <div className="absolute left-1/2 transform -translate-x-1/2">
-               <ChangeModel />
-             </div>
-           )}
         </div>
 
-        <motion.div
-          className="flex items-center gap-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-        >
-          {!isMobile && <ChangeModel />}
-          {session && (
-            <DropdownMenu onOpenChange={setIsDropdownOpen}>
-              <DropdownMenuTrigger asChild>
+        {isMobile && (
+          <div className="absolute left-1/2 transform -translate-x-1/2">
+            <ChangeModel />
+          </div>
+        )}
+
+        <div className="flex-1 flex justify-end">
+          <motion.div
+            className="flex items-center gap-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+          >
+            {!isMobile && <ChangeModel />}
+            {session && (
+              <DropdownMenu onOpenChange={setIsDropdownOpen}>
+                <DropdownMenuTrigger asChild>
                   <motion.div
                     className="flex items-center gap-2 cursor-pointer"
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.97 }}
                   >
-                  <Avatar
-                    className={cn(
-                      "h-9 w-9 transition-all duration-300 border-2",
-                      isDropdownOpen
-                        ? theme === "dark" ? "border-blue-400" : "border-blue-600"
-                        : theme === "dark" ? "border-white/20 hover:border-white/40" : "border-black/10 hover:border-black/30",
-                    )}
-                  >
-                    {session.user?.image ? (
-                      <AvatarImage src={session.user.image} alt={session.user.name || "User"} className="object-cover" />
-                    ) : (
-                      <AvatarFallback className={cn("select-none", theme === "dark" ? "bg-gradient-to-br from-blue-600 to-purple-600 text-white" : "bg-gradient-to-br from-blue-500 to-purple-500 text-white")}>
-                        {getUserInitials(session.user?.name)}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                </motion.div>
-              </DropdownMenuTrigger>
-               <DropdownMenuContent
+                    <Avatar
+                      className={cn(
+                        "h-9 w-9 transition-all duration-300 border-2",
+                        isDropdownOpen
+                          ? theme === "dark" ? "border-blue-400" : "border-blue-600"
+                          : theme === "dark" ? "border-white/20 hover:border-white/40" : "border-black/10 hover:border-black/30",
+                      )}
+                    >
+                      {session.user?.image ? (
+                        <AvatarImage src={session.user.image} alt={session.user.name || "User"} className="object-cover" />
+                      ) : (
+                        <AvatarFallback className={cn("select-none", theme === "dark" ? "bg-gradient-to-br from-blue-600 to-purple-600 text-white" : "bg-gradient-to-br from-blue-500 to-purple-500 text-white")}>
+                          {getUserInitials(session.user?.name || "U")}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                  </motion.div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
                   align="end"
                   className={cn("w-56 mt-2 p-1.5 z-50 border", theme === "dark" ? "bg-black/90 border-white/10" : "bg-white/95 border-black/10")}
-              >
-                <div className="px-2 py-1.5 mb-1">
-                  <p className={cn("text-sm font-medium truncate", theme === "dark" ? "text-white" : "text-black")}>
-                    {session.user?.name || "User"}
-                  </p>
-                  <p className={cn("text-xs truncate", theme === "dark" ? "text-neutral-400" : "text-neutral-600")}>
-                    {session.user?.email || ""}
-                  </p>
-                </div>
-                <DropdownMenuSeparator className={theme === "dark" ? "bg-white/10 my-1" : "bg-black/10 my-1"} />
-                <DropdownMenuItem asChild className="p-0">
-                  <Link href="/profile" className="flex items-center gap-2 cursor-pointer w-full px-2 py-1.5 rounded-[inherit]">
-                    <User size={16} className={theme === "dark" ? "text-blue-400" : "text-blue-600"} />
-                    <span>Profile</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                   onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                   className="flex items-center gap-2 cursor-pointer w-full px-2 py-1.5"
                 >
-                   {theme === "dark" ? ( <><Sun size={16} className="text-blue-400" /><span>Light Mode</span></> ) :
-                                         ( <><Moon size={16} className="text-blue-600" /><span>Dark Mode</span></> ) }
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className={theme === "dark" ? "bg-white/10 my-1" : "bg-black/10 my-1"} />
-                <DropdownMenuItem
-                   onClick={() => signOut({ callbackUrl: "/" })}
-                   className="flex items-center gap-2 cursor-pointer w-full px-2 py-1.5 text-red-500 focus:bg-red-500/10 focus:text-red-600 dark:focus:text-red-400"
-                >
-                   <LogOut size={16} />
-                   <span>Logout</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </motion.div>
+                  <div className="px-2 py-1.5 mb-1">
+                    <p className={cn("text-sm font-medium truncate", theme === "dark" ? "text-white" : "text-black")}>
+                      {session.user?.name || "User"}
+                    </p>
+                    <p className={cn("text-xs truncate", theme === "dark" ? "text-neutral-400" : "text-neutral-600")}>
+                      {session.user?.email || ""}
+                    </p>
+                  </div>
+                  <DropdownMenuSeparator className={theme === "dark" ? "bg-white/10 my-1" : "bg-black/10 my-1"} />
+                  <DropdownMenuItem asChild className="p-0">
+                    <Link href="/profile" className="flex items-center gap-2 cursor-pointer w-full px-2 py-1.5 rounded-[inherit]">
+                      <User size={16} className={theme === "dark" ? "text-blue-400" : "text-blue-600"} />
+                      <span>Profile</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                    className="flex items-center gap-2 cursor-pointer w-full px-2 py-1.5"
+                  >
+                    {theme === "dark" ? (<><Sun size={16} className="text-blue-400" /><span>Light Mode</span></>) :
+                      (<><Moon size={16} className="text-blue-600" /><span>Dark Mode</span></>)}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className={theme === "dark" ? "bg-white/10 my-1" : "bg-black/10 my-1"} />
+                  <DropdownMenuItem
+                    onClick={() => signOut({ callbackUrl: "/" })}
+                    className="flex items-center gap-2 cursor-pointer w-full px-2 py-1.5 text-red-500 focus:bg-red-500/10 focus:text-red-600 dark:focus:text-red-400"
+                  >
+                    <LogOut size={16} />
+                    <span>Logout</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </motion.div>
+        </div>
       </header>
     </motion.div>
   );
