@@ -47,8 +47,7 @@ export async function POST(request: Request) {
             content: firstMessage.trim(),
         });
         await newMessage.save();
-
-        return NextResponse.json(newChat, { status: 201 });
+        return NextResponse.json({ chat: newChat, firstMessage: newMessage }, { status: 201 });
     } catch (error) {
         console.error("API_CHAT_POST_ERROR:", error);
         return NextResponse.json({ error: "Failed to create a new chat." }, { status: 500 });

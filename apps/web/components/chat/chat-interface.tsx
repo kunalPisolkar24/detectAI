@@ -26,6 +26,14 @@ const merriweather = Merriweather({
   weight: ['400', '700'],
 });
 
+interface Chat {
+  _id: string;
+  userId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface Message {
   _id: string;
   role: 'user' | 'assistant';
@@ -195,11 +203,20 @@ export function ChatInterface() {
     const questionText = message;
     setMessage("");
 
+    let targetChat: Chat | null = activeChat;
+
     try {
-      if (!activeChat) {
-        await createChat(questionText);
+      if (!targetChat) {
+        const newChat = await createChat(questionText);
+        if (newChat) {
+          targetChat = newChat;
+        }
       } else {
         await addMessage({ role: 'user', content: questionText });
+      }
+
+      if (!targetChat) {
+        throw new Error("Chat session is not available.");
       }
 
       const endpoint = tab === "sequential" ? "sequential" : "bert";
@@ -214,15 +231,18 @@ export function ChatInterface() {
       const data = await response.json();
       const responseContent = `Model: ${data.model}, Predicted Label: ${data.predicted_label}`;
 
-      await addMessage({ role: 'assistant', content: responseContent });
+      await addMessage({ role: 'assistant', content: responseContent }, targetChat);
 
       await incrementUsage();
 
     } catch (error: any) {
       console.error("API call failed:", error);
       const errorMessage = "Error: Our models are currently unavailable. Please try again later.";
-      toast.error("Our models are currently unavailable.");
-      await addMessage({ role: 'assistant', content: errorMessage });
+      toast.error(errorMessage);
+
+      if (targetChat) {
+        await addMessage({ role: 'assistant', content: errorMessage }, targetChat);
+      }
     } finally {
       setIsLoading(false);
     }
