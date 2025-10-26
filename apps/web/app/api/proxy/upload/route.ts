@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import 'pdf-parse/worker';
+import { CanvasFactory } from 'pdf-parse/worker';
 import mammoth from 'mammoth';
-import { getWorkerPath } from "pdf-parse/worker";
 import { PDFParse, VerbosityLevel } from "pdf-parse";
-
-PDFParse.setWorker(getWorkerPath());
 
 export const config = {
   api: {
@@ -35,7 +32,7 @@ export async function POST(request: NextRequest) {
     let text = '';
 
     if (file.type === 'application/pdf') {
-      const parser = new PDFParse({ data: fileBuffer, verbosity: VerbosityLevel.WARNINGS });
+      const parser = new PDFParse({ data: fileBuffer, verbosity: VerbosityLevel.WARNINGS, CanvasFactory });
       const result = await parser.getText();
       const pageNumberRegex = /--\s*\d+\s+of\s+\d+\s*--/g;
       const cleanedText = result.text.replace(pageNumberRegex, '');
