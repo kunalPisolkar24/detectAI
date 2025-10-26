@@ -14,7 +14,9 @@ import {
 
 interface Chat {
   _id: string;
+  userId: string;
   title: string;
+  createdAt: string;
   updatedAt: string;
 }
 
