@@ -8,7 +8,7 @@ import Message from "@/models/Message";
 
 export async function GET(
     request: NextRequest,
-    context: { params: { chatId: string } }
+    context: any
 ) {
     const { chatId } = context.params;
     const session = await getServerSession(authOptions);
@@ -32,7 +32,7 @@ export async function GET(
 
 export async function POST(
     request: NextRequest,
-    context: { params: { chatId: string } }
+    context: any
 ) {
     const { chatId } = context.params;
     const session = await getServerSession(authOptions);

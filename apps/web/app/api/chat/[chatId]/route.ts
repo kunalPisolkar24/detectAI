@@ -15,7 +15,7 @@ async function verifyChatOwnership(chatId: string, userId: string) {
 
 export async function GET(
     request: NextRequest,
-    context: { params: { chatId: string } }
+    context: any 
 ) {
     const { chatId } = context.params;
     const session = await getServerSession(authOptions);
@@ -33,7 +33,7 @@ export async function GET(
 
 export async function PUT(
     request: NextRequest,
-    context: { params: { chatId: string } }
+    context: any
 ) {
     const { chatId } = context.params;
     const session = await getServerSession(authOptions);
@@ -64,7 +64,7 @@ export async function PUT(
 
 export async function DELETE(
     request: NextRequest,
-    context: { params: { chatId: string } }
+    context: any
 ) {
     const { chatId } = context.params;
     const session = await getServerSession(authOptions);
