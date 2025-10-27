@@ -16,9 +16,9 @@ async function verifyChatOwnership(chatId: string, userId: string) {
 
 export async function GET(
     request: NextRequest,
-    context: any 
+    { params }: any 
 ) {
-    const { chatId } = context.params;
+    const { chatId } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -34,9 +34,9 @@ export async function GET(
 
 export async function PUT(
     request: NextRequest,
-    context: any
+    { params }: any
 ) {
-    const { chatId } = context.params;
+    const { chatId } = await params; 
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -65,9 +65,9 @@ export async function PUT(
 
 export async function DELETE(
     request: NextRequest,
-    context: any
+    { params }: any
 ) {
-    const { chatId } = context.params;
+    const { chatId } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

@@ -9,9 +9,9 @@ import Message from "@/models/Message";
 export const dynamic = 'force-dynamic';
 export async function GET(
     request: NextRequest,
-    context: any
+    { params }: any 
 ) {
-    const { chatId } = context.params;
+    const { chatId } = await params; 
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -33,9 +33,9 @@ export async function GET(
 
 export async function POST(
     request: NextRequest,
-    context: any
+    { params }: any
 ) {
-    const { chatId } = context.params;
+    const { chatId } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
