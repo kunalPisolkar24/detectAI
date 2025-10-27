@@ -6,6 +6,7 @@ import dbConnect from "@/lib/mongoose";
 import Chat from "@/models/Chat";
 import Message from "@/models/Message";
 
+export const dynamic = 'force-dynamic';
 async function verifyChatOwnership(chatId: string, userId: string) {
     if (!mongoose.Types.ObjectId.isValid(chatId)) return null;
     await dbConnect();

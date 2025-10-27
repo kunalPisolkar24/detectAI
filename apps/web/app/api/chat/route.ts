@@ -5,6 +5,7 @@ import dbConnect from "@/lib/mongoose";
 import Chat from "@/models/Chat";
 import Message from "@/models/Message";
 
+export const dynamic = 'force-dynamic';
 export async function GET() {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
