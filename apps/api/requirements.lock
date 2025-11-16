@@ -8,9 +8,9 @@ absl-py==2.3.1
     # via
     #   keras
     #   tensorboard
-    #   tensorflow
+    #   tensorflow-cpu
 astunparse==1.6.3
-    # via tensorflow
+    # via tensorflow-cpu
 blinker==1.9.0
     # via flask
 certifi==2025.11.12
@@ -31,23 +31,23 @@ flask==3.1.2
 flask-cors==6.0.1
     # via -r requirements.in
 flatbuffers==25.9.23
-    # via tensorflow
+    # via tensorflow-cpu
 fsspec==2025.10.0
     # via
     #   huggingface-hub
     #   torch
 gast==0.6.0
-    # via tensorflow
+    # via tensorflow-cpu
 google-pasta==0.2.0
-    # via tensorflow
+    # via tensorflow-cpu
 grpcio==1.76.0
     # via
     #   tensorboard
-    #   tensorflow
+    #   tensorflow-cpu
 h5py==3.15.1
     # via
     #   keras
-    #   tensorflow
+    #   tensorflow-cpu
 hf-xet==1.2.0
     # via huggingface-hub
 huggingface-hub==0.36.0
@@ -65,9 +65,9 @@ jinja2==3.1.6
 joblib==1.5.2
     # via scikit-learn
 keras==3.12.0
-    # via tensorflow
+    # via tensorflow-cpu
 libclang==18.1.1
-    # via tensorflow
+    # via tensorflow-cpu
 markdown==3.10
     # via tensorboard
 markdown-it-py==4.0.0
@@ -82,7 +82,7 @@ mdurl==0.1.2
 ml-dtypes==0.5.3
     # via
     #   keras
-    #   tensorflow
+    #   tensorflow-cpu
 mpmath==1.3.0
     # via sympy
 namex==0.1.0
@@ -97,7 +97,7 @@ numpy==2.3.4
     #   scikit-learn
     #   scipy
     #   tensorboard
-    #   tensorflow
+    #   tensorflow-cpu
     #   transformers
 nvidia-cublas-cu12==12.8.4.1
     # via
@@ -137,7 +137,7 @@ nvidia-nvjitlink-cu12==12.8.93
 nvidia-nvtx-cu12==12.8.90
     # via torch
 opt-einsum==3.4.0
-    # via tensorflow
+    # via tensorflow-cpu
 optree==0.18.0
     # via keras
 packaging==25.0
@@ -145,14 +145,14 @@ packaging==25.0
     #   huggingface-hub
     #   keras
     #   tensorboard
-    #   tensorflow
+    #   tensorflow-cpu
     #   transformers
 pillow==12.0.0
     # via tensorboard
 protobuf==6.33.1
     # via
     #   tensorboard
-    #   tensorflow
+    #   tensorflow-cpu
 pygments==2.19.2
     # via rich
 python-dotenv==1.1.1
@@ -166,7 +166,7 @@ regex==2025.11.3
 requests==2.32.5
     # via
     #   huggingface-hub
-    #   tensorflow
+    #   tensorflow-cpu
     #   transformers
 rich==14.2.0
     # via keras
@@ -180,17 +180,17 @@ six==1.17.0
     # via
     #   astunparse
     #   google-pasta
-    #   tensorflow
+    #   tensorflow-cpu
 sympy==1.14.0
     # via torch
 tensorboard==2.20.0
-    # via tensorflow
+    # via tensorflow-cpu
 tensorboard-data-server==0.7.2
     # via tensorboard
-tensorflow==2.20.0
+tensorflow-cpu==2.20.0
     # via -r requirements.in
 termcolor==3.2.0
-    # via tensorflow
+    # via tensorflow-cpu
 threadpoolctl==3.6.0
     # via scikit-learn
 tokenizers==0.22.1
@@ -210,7 +210,7 @@ typing-extensions==4.15.0
     #   grpcio
     #   huggingface-hub
     #   optree
-    #   tensorflow
+    #   tensorflow-cpu
     #   torch
 urllib3==2.5.0
     # via requests
@@ -222,7 +222,7 @@ werkzeug==3.1.3
 wheel==0.45.1
     # via astunparse
 wrapt==2.0.1
-    # via tensorflow
+    # via tensorflow-cpu
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools

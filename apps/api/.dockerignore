@@ -3,18 +3,34 @@
 .gitignore
 
 # Docker
-Dockerfile
 .dockerignore
+Dockerfile
 
-# Python
+# Virtual Environments
+venv/
+.venv/
+env/
+.env/
+activate
+
+# Python Cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-venv/
-.venv/
 
-# IDE and OS files
-.idea/
+# IDE & Editor Config
 .vscode/
+.idea/
+*.swp
+*.swo
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Local artifacts and logs
 *.log
+dist/
+build/
+*.egg-info/
