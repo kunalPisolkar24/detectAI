@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+Dockerfile
+
+# Virtual Environments
+venv/
+.venv/
+env/
+.env/
+activate
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE & Editor Config
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Local artifacts and logs
+*.log
+dist/
+build/
+*.egg-info/

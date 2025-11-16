@@ -2,5 +2,5 @@
 venv/
 
 # Ignore contents of bert_resources but keep the folder
-bert_resources/*
-sequential_resources/*
+detect-ai-supreme/*
+detect-ai-base/*
