@@ -1,25 +1,34 @@
 import os
-os.environ['TF_USE_LEGACY_KERAS'] = '0'
-
+import pickle
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import pickle
 import numpy as np
-import tensorflow as tf
-from tensorflow import keras # type: ignore
-from transformers import BertTokenizer, TFBertForSequenceClassification
-
-from dotenv import load_dotenv
-import os
-load_dotenv()
+from tensorflow.keras.models import load_model
+import torch
+from transformers import BertForSequenceClassification, BertTokenizer
 
 app = Flask(__name__)
-# Configure CORS with specific origins and options
 CORS(app, resources={r"/*": {
     "origins": "*",
     "methods": ["GET", "POST", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization"]
 }})
+
+SEQUENTIAL_MODEL_PATH = 'detect-ai-base/text_classification_model_retrained.h5'
+SEQUENTIAL_TOKENIZER_PATH = 'detect-ai-base/tfidf_vectorizer_retrained.pkl'
+
+sequential_model = load_model(SEQUENTIAL_MODEL_PATH)
+with open(SEQUENTIAL_TOKENIZER_PATH, 'rb') as f:
+    tfidf_tokenizer = pickle.load(f)
+
+BERT_MODEL_PATH = './detect-ai-supreme'
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+bert_model = BertForSequenceClassification.from_pretrained(BERT_MODEL_PATH)
+bert_tokenizer = BertTokenizer.from_pretrained(BERT_MODEL_PATH)
+
+bert_model.to(device)
+bert_model.eval()
 
 @app.after_request
 def after_request(response):
@@ -27,38 +36,31 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
 
-# Load the Sequential model and tokenizer
-with open('sequential_resources/tfidf_tokenizer.pkl', 'rb') as f:
-    tfidf_tokenizer = pickle.load(f)
-
-loaded_model = keras.models.load_model('sequential_resources/text_classification_model.h5')
-
-# Load the BERT tokenizer and model
-bert_tokenizer = BertTokenizer.from_pretrained('./bert_resources/bert_tokenizer')
-bert_model = TFBertForSequenceClassification.from_pretrained('./bert_resources/bert_text_classification_model')
-
 @app.route('/predict/sequential', methods=['POST', 'OPTIONS'])
 def predict_sequential():
     if request.method == 'OPTIONS':
         return '', 200
         
-    data = request.json
-    text = data.get('text') # type: ignore
+    data = request.get_json()
+    text = data.get('text')
     
     if not text or not text.strip():
         return jsonify({'error': 'No text provided'}), 400
     
-    text_features = tfidf_tokenizer.transform([text])
-    # Convert sparse matrix to array if needed
-    if hasattr(text_features, 'toarray'):
-        text_features = text_features.toarray()
+    vectorized_text = tfidf_tokenizer.transform([text]).toarray()
+    prediction_prob = sequential_model.predict(vectorized_text)[0][0]
     
-    predictions = loaded_model.predict(text_features)
-    predicted_label = int(predictions[0][0])
-    
+    if prediction_prob > 0.5:
+        predicted_label = 1
+        confidence = float(prediction_prob)
+    else:
+        predicted_label = 0
+        confidence = float(1 - prediction_prob)
+        
     return jsonify({
         'model': 'sequential',
-        'predicted_label': predicted_label
+        'predicted_label': predicted_label,
+        'confidence': confidence
     })
     
 @app.route('/predict/bert', methods=['POST', 'OPTIONS'])
@@ -66,29 +68,28 @@ def predict_bert():
     if request.method == 'OPTIONS':
         return '', 200
         
-    data = request.json
-    text = data.get('text') # type: ignore
+    data = request.get_json()
+    text = data.get('text')
     
     if not text or not text.strip():
         return jsonify({'error': 'No text provided'}), 400
     
-    # Tokenize the input text
-    inputs = bert_tokenizer(
-        text,
-        padding=True,
-        truncation=True,
-        max_length=128,
-        return_tensors="tf"
-    )
+    inputs = bert_tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=256)
+    inputs = {key: val.to(device) for key, val in inputs.items()}
+
+    with torch.no_grad():
+        outputs = bert_model(**inputs)
+
+    logits = outputs.logits
+    probabilities = torch.nn.functional.softmax(logits, dim=-1)
     
-    # Make prediction
-    predictions = bert_model.predict({'input_ids': inputs['input_ids'], 'attention_mask': inputs['attention_mask']}) # type:ignore
-    
-    predicted_label = int(tf.argmax(predictions.logits, axis=1).numpy()[0])
+    predicted_class = torch.argmax(probabilities, dim=-1).item()
     
     return jsonify({
         'model': 'bert',
-        'predicted_label': predicted_label
+        'predicted_label': predicted_class,
+        'probability_human': probabilities[0][0].item(),
+        'probability_ai': probabilities[0][1].item()
     })
 
 @app.route('/health', methods=['GET'])
