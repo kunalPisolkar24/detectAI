@@ -1,24 +1,32 @@
-FROM python:3.11-slim
+FROM python:3.11-slim AS builder
 
 RUN apt-get update && apt-get install -y \
     build-essential \
-    libatlas-base-dev \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY requirements.lock .
-
 RUN python -m venv /venv
-
 ENV PATH="/venv/bin:$PATH"
 
+COPY requirements.lock .
 RUN pip install --upgrade pip && pip install -r requirements.lock
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY --from=builder /venv /venv
 
 COPY . .
 
-EXPOSE 5000
+ENV PATH="/venv/bin:$PATH"
 
 ENV TF_USE_LEGACY_KERAS=0
+
+RUN useradd --create-home appuser
+USER appuser
+
+EXPOSE 5000
 
 CMD ["python", "app.py"]
