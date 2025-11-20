@@ -36,9 +36,12 @@ export async function POST(request: Request) {
 
         await dbConnect();
 
+        const count = await Chat.countDocuments({ userId: session.user.id });
+        const title = `Analysis ${count + 1}`;
+
         const newChat = new Chat({
             userId: session.user.id,
-            title: "New Chat",
+            title: title,
         });
         await newChat.save();
 
