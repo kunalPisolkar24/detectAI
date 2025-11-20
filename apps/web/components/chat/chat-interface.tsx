@@ -43,6 +43,8 @@ interface Chat {
 
 export function ChatInterface() {
   const [message, setMessage] = useState("");
+  const [tempUserMessage, setTempUserMessage] = useState<string | null>(null);
+  
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const msgEnd = useRef<HTMLDivElement>(null);
@@ -62,7 +64,8 @@ export function ChatInterface() {
     addMessage,
     startNewChat
   } = useChat();
-  const isSubmitted = !!activeChat;
+
+  const isSubmitted = !!activeChat || isLoading || messages.length > 0;
 
   const [userProfileData, setUserProfileData] = useState<UserProfileData | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
@@ -97,12 +100,12 @@ export function ChatInterface() {
   }, [fetchProfile]);
 
   useEffect(() => {
-    if (messages.length > 0 && msgEnd.current) {
+    if ((messages.length > 0 || isLoading || tempUserMessage) && msgEnd.current) {
       setTimeout(() => {
         msgEnd.current?.scrollIntoView({ behavior: "smooth" });
       }, 100);
     }
-  }, [messages]);
+  }, [messages, isLoading, tempUserMessage]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -196,10 +199,11 @@ export function ChatInterface() {
       return;
     }
 
-    setIsLoading(true);
-    setError("");
     const questionText = message;
     setMessage("");
+    setTempUserMessage(questionText);
+    setIsLoading(true);
+    setError("");
 
     let targetChat: Chat | null = activeChat;
 
@@ -209,8 +213,10 @@ export function ChatInterface() {
         if (newChat) {
           targetChat = newChat;
         }
+        setTempUserMessage(null); 
       } else {
         await addMessage({ role: 'user', content: questionText });
+        setTempUserMessage(null);
       }
 
       if (!targetChat) {
@@ -235,6 +241,7 @@ export function ChatInterface() {
 
     } catch (error: any) {
       console.error("API call failed:", error);
+      setTempUserMessage(null);
       const errorMessage = "Error: Our models are currently unavailable. Please try again later.";
       toast.error(errorMessage);
       
@@ -334,6 +341,21 @@ export function ChatInterface() {
                       </div>
                     </motion.div>
                   ))}
+                  {tempUserMessage && (
+                    <motion.div
+                      key="temp-user-msg"
+                      initial={{ opacity: 0, x: 50 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="flex w-full items-start gap-2.5 justify-end"
+                    >
+                       <div className={cn(
+                        "p-3 rounded-2xl inline-block max-w-[85%] break-words whitespace-normal",
+                        theme === "dark" ? "bg-gray-800 text-white ml-auto" : "bg-gray-100 text-gray-900 ml-auto"
+                      )}>
+                        <p>{tempUserMessage}</p>
+                      </div>
+                    </motion.div>
+                  )}
                   {isLoading && (
                     <motion.div
                       key="loading-skeleton"
