@@ -9,7 +9,7 @@ import {
   SidebarGroup,
 } from "@workspace/ui/components/sidebar";
 import { Button } from "@workspace/ui/components/button";
-import { ScrollArea } from "@workspace/ui/components/scroll-area";
+import { ScrollArea, ScrollBar } from "@workspace/ui/components/scroll-area";
 import { PlusCircle } from "lucide-react";
 import { useChat } from "@/contexts/chatContext";
 import { ChatItem } from "./chat-item";
@@ -68,6 +68,7 @@ export const AppSidebar = () => {
               )
             )}
           </SidebarGroup>
+          <ScrollBar orientation="vertical" className="w-1.5" />
         </ScrollArea>
       </SidebarContent>
 
