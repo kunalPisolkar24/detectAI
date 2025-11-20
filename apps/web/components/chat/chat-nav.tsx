@@ -27,7 +27,7 @@ import ChangeModel from "./change-model";
 
 const ChatNavSkeleton = () => (
   <div className="w-full h-[56px] md:relative">
-    <header className="container mx-auto flex items-center justify-between py-2 px-4 sm:px-6 h-full">
+    <header className="w-full flex items-center justify-between py-2 px-4 sm:px-6 h-full">
       <div className="flex items-center gap-2">
         <Skeleton className="h-9 w-9 hidden md:flex" />
       </div>
@@ -78,7 +78,7 @@ export const ChatNav = () => {
       animate={{ y: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
-      <header className="container mx-auto flex items-center py-2 px-4 sm:px-6">
+      <header className="w-full flex items-center py-2 px-4 sm:px-6">
         <div className="flex-shrink-0">
           <SidebarTrigger className="hidden md:flex">
             <PanelLeft size={18} />
