@@ -43,9 +43,12 @@ interface Chat {
 
 export function ChatInterface() {
   const [message, setMessage] = useState("");
+  const [tempUserMessage, setTempUserMessage] = useState<string | null>(null);
+  
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const msgEnd = useRef<HTMLDivElement>(null);
+  
   const { tab } = useTab();
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -62,7 +65,10 @@ export function ChatInterface() {
     addMessage,
     startNewChat
   } = useChat();
-  const isSubmitted = !!activeChat;
+
+  const isSubmitted = !!activeChat || isLoading || messages.length > 0;
+
+  const lastMessageIsAssistant = messages.length > 0 && messages[messages.length - 1]?.role === 'assistant';
 
   const [userProfileData, setUserProfileData] = useState<UserProfileData | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
@@ -97,12 +103,12 @@ export function ChatInterface() {
   }, [fetchProfile]);
 
   useEffect(() => {
-    if (messages.length > 0 && msgEnd.current) {
+    if ((messages.length > 0 || isLoading || tempUserMessage) && msgEnd.current) {
       setTimeout(() => {
         msgEnd.current?.scrollIntoView({ behavior: "smooth" });
       }, 100);
     }
-  }, [messages]);
+  }, [messages, isLoading, tempUserMessage]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -196,10 +202,12 @@ export function ChatInterface() {
       return;
     }
 
+    const questionText = message;
+    
+    setMessage("");
+    setTempUserMessage(questionText);
     setIsLoading(true);
     setError("");
-    const questionText = message;
-    setMessage("");
 
     let targetChat: Chat | null = activeChat;
 
@@ -209,8 +217,10 @@ export function ChatInterface() {
         if (newChat) {
           targetChat = newChat;
         }
+        setTempUserMessage(null); 
       } else {
         await addMessage({ role: 'user', content: questionText });
+        setTempUserMessage(null);
       }
 
       if (!targetChat) {
@@ -230,20 +240,22 @@ export function ChatInterface() {
       const responseContent = `Model: ${data.model}, Predicted Label: ${data.predicted_label}`;
 
       await addMessage({ role: 'assistant', content: responseContent }, targetChat);
+      
+      setIsLoading(false);
 
       await incrementUsage();
 
     } catch (error: any) {
       console.error("API call failed:", error);
+      setTempUserMessage(null);
       const errorMessage = "Error: Our models are currently unavailable. Please try again later.";
       toast.error(errorMessage);
       
       if (targetChat) {
          await addMessage({ role: 'assistant', content: errorMessage }, targetChat);
       }
-    } finally {
       setIsLoading(false);
-    }
+    } 
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -298,12 +310,14 @@ export function ChatInterface() {
           </p>
         </motion.div>
       )}
-      <ScrollArea className="flex-1 px-4 pt-20 md:pt-0 transition-all min-h-[40vh] max-h-[80vh]">
+      
+      <ScrollArea className="flex-1 px-4 pt-14 md:pt-0 transition-all min-h-[40vh] max-h-[80vh]">
         <div className="w-full max-w-2xl mx-auto">
           <AnimatePresence mode="popLayout">
             {isSubmitted && (
-              <motion.div className="w-full max-w-2xl space-y-6 pt-8 pb-24 md:pb-40">
+              <motion.div className="w-full max-w-2xl space-y-6 pt-4 pb-24 md:pb-40">
                 <div className="flex flex-col gap-6">
+                  
                   {messages.map((msg: Message) => (
                     <motion.div
                       key={msg._id}
@@ -334,7 +348,24 @@ export function ChatInterface() {
                       </div>
                     </motion.div>
                   ))}
-                  {isLoading && (
+
+                  {tempUserMessage && (
+                    <motion.div
+                      key="temp-user-msg"
+                      initial={{ opacity: 0, x: 50 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="flex w-full items-start gap-2.5 justify-end"
+                    >
+                       <div className={cn(
+                        "p-3 rounded-2xl inline-block max-w-[85%] break-words whitespace-normal",
+                        theme === "dark" ? "bg-gray-800 text-white ml-auto" : "bg-gray-100 text-gray-900 ml-auto"
+                      )}>
+                        <p>{tempUserMessage}</p>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {isLoading && !lastMessageIsAssistant && (
                     <motion.div
                       key="loading-skeleton"
                       initial={{ opacity: 0, x: -50 }}
@@ -349,6 +380,7 @@ export function ChatInterface() {
                       </div>
                     </motion.div>
                   )}
+                  
                   <div className="flex justify-center pt-4">
                     <Button
                       variant="ghost"
