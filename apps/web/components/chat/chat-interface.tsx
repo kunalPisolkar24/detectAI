@@ -298,11 +298,11 @@ export function ChatInterface() {
           </p>
         </motion.div>
       )}
-      <ScrollArea className="flex-1 px-4 pt-20 md:pt-0 transition-all min-h-[40vh] max-h-[80vh]">
+      <ScrollArea className="flex-1 px-4 pt-14 md:pt-0 transition-all min-h-[40vh] max-h-[80vh]">
         <div className="w-full max-w-2xl mx-auto">
           <AnimatePresence mode="popLayout">
             {isSubmitted && (
-              <motion.div className="w-full max-w-2xl space-y-6 pt-8 pb-24 md:pb-40">
+              <motion.div className="w-full max-w-2xl space-y-6 pt-4 pb-24 md:pb-40">
                 <div className="flex flex-col gap-6">
                   {messages.map((msg: Message) => (
                     <motion.div
