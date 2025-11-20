@@ -21,7 +21,7 @@ export const AppSidebar = () => {
   const { chats, startNewChat, loading } = useChat();
 
   return (
-    <Sidebar className="h-screen hidden md:flex flex-col p-2 border-r z-50">
+    <Sidebar className="h-screen hidden md:flex flex-col p-2 border-r z-50 bg-background">
       <SidebarHeader className="flex items-center justify-between p-2">
         <div className="md:data-[collapsed=true]:hidden">
           <Logo />
