@@ -48,6 +48,7 @@ export function ChatInterface() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const msgEnd = useRef<HTMLDivElement>(null);
+  
   const { tab } = useTab();
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -66,6 +67,8 @@ export function ChatInterface() {
   } = useChat();
 
   const isSubmitted = !!activeChat || isLoading || messages.length > 0;
+
+  const lastMessageIsAssistant = messages.length > 0 && messages[messages.length - 1]?.role === 'assistant';
 
   const [userProfileData, setUserProfileData] = useState<UserProfileData | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
@@ -200,6 +203,7 @@ export function ChatInterface() {
     }
 
     const questionText = message;
+    
     setMessage("");
     setTempUserMessage(questionText);
     setIsLoading(true);
@@ -236,6 +240,8 @@ export function ChatInterface() {
       const responseContent = `Model: ${data.model}, Predicted Label: ${data.predicted_label}`;
 
       await addMessage({ role: 'assistant', content: responseContent }, targetChat);
+      
+      setIsLoading(false);
 
       await incrementUsage();
 
@@ -248,9 +254,8 @@ export function ChatInterface() {
       if (targetChat) {
          await addMessage({ role: 'assistant', content: errorMessage }, targetChat);
       }
-    } finally {
       setIsLoading(false);
-    }
+    } 
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -305,12 +310,14 @@ export function ChatInterface() {
           </p>
         </motion.div>
       )}
+      
       <ScrollArea className="flex-1 px-4 pt-14 md:pt-0 transition-all min-h-[40vh] max-h-[80vh]">
         <div className="w-full max-w-2xl mx-auto">
           <AnimatePresence mode="popLayout">
             {isSubmitted && (
               <motion.div className="w-full max-w-2xl space-y-6 pt-4 pb-24 md:pb-40">
                 <div className="flex flex-col gap-6">
+                  
                   {messages.map((msg: Message) => (
                     <motion.div
                       key={msg._id}
@@ -341,6 +348,7 @@ export function ChatInterface() {
                       </div>
                     </motion.div>
                   ))}
+
                   {tempUserMessage && (
                     <motion.div
                       key="temp-user-msg"
@@ -356,7 +364,8 @@ export function ChatInterface() {
                       </div>
                     </motion.div>
                   )}
-                  {isLoading && (
+
+                  {isLoading && !lastMessageIsAssistant && (
                     <motion.div
                       key="loading-skeleton"
                       initial={{ opacity: 0, x: -50 }}
@@ -371,6 +380,7 @@ export function ChatInterface() {
                       </div>
                     </motion.div>
                   )}
+                  
                   <div className="flex justify-center pt-4">
                     <Button
                       variant="ghost"
