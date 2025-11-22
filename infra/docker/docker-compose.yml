@@ -1,0 +1,33 @@
+version: '3.8'
+services:
+  ml-http:
+    image: kunalpisolkar/detect-ai:latest
+    restart: always
+    ports:
+      - "5001:5000"
+    networks:
+      - detectai_net
+    env_file:
+      - ../../services/ml-http/.env
+
+  web-portal:
+    build:
+      context: ../../
+      dockerfile: apps/web/Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
+    networks:
+      - detectai_net
+    env_file:
+      - ../../apps/web/.env
+    volumes:
+      - ../../:/app
+      - /app/node_modules
+    command: sh -c "pnpm --filter web run prisma:migrate && pnpm --filter web run dev"
+    depends_on:
+      - ml-http
+
+networks:
+  detectai_net:
+    driver: bridge
