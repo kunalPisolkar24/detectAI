@@ -10,7 +10,7 @@ services:
     env_file:
       - ../../services/ml-http/.env
 
-  web-portal:
+  detect-ai-web:
     build:
       context: ../../
       dockerfile: apps/web/Dockerfile
@@ -24,6 +24,8 @@ services:
     volumes:
       - ../../:/app
       - /app/node_modules
+      - /app/apps/web/node_modules
+      - /app/packages/ui/node_modules
     command: sh -c "pnpm --filter web run prisma:migrate && pnpm --filter web run dev"
     depends_on:
       - ml-http
