@@ -28,7 +28,14 @@ services:
       - /app/packages/ui/node_modules
     command: sh -c "pnpm --filter web run prisma:migrate && pnpm --filter web run dev"
     depends_on:
-      - ml-http
+      ml-http:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 networks:
   detectai_net:
