@@ -48,9 +48,12 @@ def test_extract_pdf_error():
         assert "PDF processing failed" in str(exc.value)
 
 def test_extract_docx_success():
-    p1 = MagicMock(); p1.text = "Paragraph 1"
-    p2 = MagicMock(); p2.text = "Paragraph 2"
-    p3 = MagicMock(); p3.text = "   "
+    p1 = MagicMock()
+    p1.text = "Paragraph 1"
+    p2 = MagicMock()
+    p2.text = "Paragraph 2"
+    p3 = MagicMock()
+    p3.text = "   "
     
     mock_doc = MagicMock()
     mock_doc.paragraphs = [p1, p3, p2]
