@@ -1,4 +1,4 @@
-import { SubscriptionStatus } from "@prisma/client";
+import { SubscriptionStatus } from "../generated/prisma/client";
 import { prisma } from "../db";
 import type { PaymentEvent, PaymentUpdatePayload } from "../types";
 
