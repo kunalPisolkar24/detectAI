@@ -1,5 +1,5 @@
-import { SubscriptionStatus } from "../generated/prisma/client";
-import { prisma } from "../db";
+import { SubscriptionStatus } from "../../generated/prisma/client";
+import { prisma } from "../lib/db";
 import type { PaymentEvent, PaymentUpdatePayload } from "../types";
 
 export class PaymentService {

@@ -1,6 +1,6 @@
 import { RabbitMQWorker } from "./lib/RabbitMQWorker";
 import { PaymentService } from "./services/PaymentService";
-import { prisma } from "./db";
+import { prisma } from "./lib/db";
 
 const QUEUE_NAME = "payment_events";
 const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";

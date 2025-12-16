@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "generate": "bunx --bun prisma generate",
-    "start": "bun run index.ts",
-    "dev": "bun --watch index.ts",
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch src/index.ts",
     "postinstall": "bunx --bun prisma generate"
   },
   "devDependencies": {
