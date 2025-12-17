@@ -9,3 +9,9 @@ down-lite:
 
 down-full:
 	docker compose down
+
+up-build-full: 
+	docker compose --build -d 
+
+up-build-lite:
+	docker compose -f docker-compose.lite.yml up --build -d
