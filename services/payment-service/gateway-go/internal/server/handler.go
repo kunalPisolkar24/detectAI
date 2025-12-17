@@ -31,6 +31,7 @@ func NewHandler(prod queue.EventProducer, val validator.SignatureValidator, secr
 func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	r.GET("/health", h.healthCheck)
 	r.POST("/webhook/paddle", h.handleWebhook)
+	r.POST("/internal/events", h.handleInternalEvent)
 }
 
 func (h *Handler) healthCheck(c *gin.Context) {
@@ -67,5 +68,26 @@ func (h *Handler) handleWebhook(c *gin.Context) {
 	}
 
 	h.logger.Info("Event queued successfully")
+	c.JSON(http.StatusOK, gin.H{"status": "queued"})
+}
+
+func (h *Handler) handleInternalEvent(c *gin.Context) {
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		h.logger.Error("Failed to read internal event body", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot read body"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := h.producer.Publish(ctx, bodyBytes); err != nil {
+		h.logger.Error("Failed to publish internal event", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Queue Error"})
+		return
+	}
+
+	h.logger.Info("Internal event queued successfully")
 	c.JSON(http.StatusOK, gin.H{"status": "queued"})
 }

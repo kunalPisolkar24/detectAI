@@ -2,21 +2,30 @@ import { SubscriptionStatus } from "../../generated/prisma/client";
 import { prisma } from "../lib/db";
 import type { PaymentEvent, PaymentUpdatePayload } from "../types";
 
+const PADDLE_API_URL = process.env.PADDLE_ENVIRONMENT === 'production'
+  ? 'https://api.paddle.com'
+  : 'https://sandbox-api.paddle.com';
+const PADDLE_API_KEY = process.env.PADDLE_API_KEY;
+
 export class PaymentService {
   public async handleEvent(event: PaymentEvent): Promise<void> {
     const { event_type, data } = event;
-    const userId = data?.custom_data?.userId;
+    const userId = data?.custom_data?.userId ?? (data as any).userId;
 
-    if (!userId) return;
+    if (!userId && event_type !== "user.cancel_subscription") return;
 
     switch (event_type) {
       case "subscription.created":
       case "subscription.updated":
-        await this.handleSubscriptionUpdate(userId, data);
+        if (userId) await this.handleSubscriptionUpdate(userId, data);
         break;
 
       case "subscription.canceled":
-        await this.handleSubscriptionCancellation(userId, data);
+        if (userId) await this.handleSubscriptionCancellation(userId, data);
+        break;
+
+      case "user.cancel_subscription":
+        await this.performCancellation(data);
         break;
     }
   }
@@ -38,8 +47,8 @@ export class PaymentService {
       subscriptionEndsAt: endsAt,
     };
 
-    if (data?.scheduled_change?.action !== "cancel") {
-      updateData.paddleCancellationScheduled = false;
+    if (data?.scheduled_change) {
+      updateData.paddleCancellationScheduled = data.scheduled_change.action === 'cancel';
     }
 
     await prisma.user.update({
@@ -67,6 +76,28 @@ export class PaymentService {
         paddlePlanId: null,
       },
     });
+  }
+
+  private async performCancellation(data: any): Promise<void> {
+    const { paddleSubscriptionId } = data;
+
+    if (!paddleSubscriptionId || !PADDLE_API_KEY) {
+      throw new Error("Missing subscription ID or API Key");
+    }
+
+    const response = await fetch(`${PADDLE_API_URL}/subscriptions/${paddleSubscriptionId}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PADDLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ effective_from: "next_billing_period" }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Paddle API Error: ${JSON.stringify(errorData)}`);
+    }
   }
 
   private parseStatus(status?: string): SubscriptionStatus | null {
