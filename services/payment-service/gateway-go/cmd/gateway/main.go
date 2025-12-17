@@ -2,10 +2,11 @@ package main
 
 import (
 	"gateway/internal/config"
+	"gateway/internal/logger"
 	"gateway/internal/queue"
 	"gateway/internal/server"
 	"gateway/internal/validator"
-	"log"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,20 +14,24 @@ import (
 const QueueName = "payment_events"
 
 func main() {
+	log := logger.New()
 	cfg := config.Load()
 
-	rabbitMQ := queue.NewRabbitMQProducer(cfg.RabbitMQURL, QueueName)
+	rabbitMQ := queue.NewRabbitMQProducer(cfg.RabbitMQURL, QueueName, log)
 	defer rabbitMQ.Close()
 
 	paddleValidator := validator.NewPaddleValidator()
 
-	handler := server.NewHandler(rabbitMQ, paddleValidator, cfg.WebhookSecret)
+	handler := server.NewHandler(rabbitMQ, paddleValidator, cfg.WebhookSecret, log)
 
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Recovery())
+
 	handler.RegisterRoutes(r)
 
-	log.Printf("Gateway running on port %s", cfg.Port)
+	log.Info("Gateway starting", "port", cfg.Port)
 	if err := r.Run(":" + cfg.Port); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		log.Error("Failed to start server", "error", err)
+		os.Exit(1)
 	}
 }

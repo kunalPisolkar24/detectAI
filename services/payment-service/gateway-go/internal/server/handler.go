@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"gateway/internal/logger"
 	"gateway/internal/queue"
 	"gateway/internal/validator"
 	"io"
@@ -15,13 +16,15 @@ type Handler struct {
 	producer      queue.EventProducer
 	validator     validator.SignatureValidator
 	webhookSecret string
+	logger        logger.Logger
 }
 
-func NewHandler(prod queue.EventProducer, val validator.SignatureValidator, secret string) *Handler {
+func NewHandler(prod queue.EventProducer, val validator.SignatureValidator, secret string, log logger.Logger) *Handler {
 	return &Handler{
 		producer:      prod,
 		validator:     val,
 		webhookSecret: secret,
+		logger:        log,
 	}
 }
 
@@ -32,6 +35,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 
 func (h *Handler) healthCheck(c *gin.Context) {
 	if !h.producer.IsConnected() {
+		h.logger.Error("Health check failed: RabbitMQ disconnected")
 		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "rabbitmq": "disconnected"})
 		return
 	}
@@ -41,12 +45,14 @@ func (h *Handler) healthCheck(c *gin.Context) {
 func (h *Handler) handleWebhook(c *gin.Context) {
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
+		h.logger.Error("Failed to read request body", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot read body"})
 		return
 	}
 
 	signature := c.GetHeader("Paddle-Signature")
 	if !h.validator.Validate(signature, bodyBytes, h.webhookSecret) {
+		h.logger.Warn("Invalid signature received", "ip", c.ClientIP())
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid signature"})
 		return
 	}
@@ -55,9 +61,11 @@ func (h *Handler) handleWebhook(c *gin.Context) {
 	defer cancel()
 
 	if err := h.producer.Publish(ctx, bodyBytes); err != nil {
+		h.logger.Error("Failed to publish event", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Queue Error"})
 		return
 	}
 
+	h.logger.Info("Event queued successfully")
 	c.JSON(http.StatusOK, gin.H{"status": "queued"})
 }
