@@ -1,8 +1,15 @@
-class MLException(Exception):
-    pass
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-class ArtifactNotFoundException(MLException):
-    pass
+class Settings(BaseSettings):
+    hf_token: str
+    hf_username: str
+    assets_dir_name: str = "assets"
+    project_root_dir: str = "."
 
-class UploadFailedException(MLException):
-    pass
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
+
+settings = Settings()
