@@ -1,9 +1,9 @@
-import Image from "next/image";
+import { HeroSection } from "@/features/landing/hero";
 
 export default function Home() {
   return (
-   <div> 
-      <h1>Hello world</h1>
+    <div>
+      <HeroSection />
     </div>
   );
 }
