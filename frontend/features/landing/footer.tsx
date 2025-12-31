@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { FooterNewsletter } from "./components/footer-newsletter"
 import { FooterSocials } from "./components/footer-socials"
 import { FooterLinks } from "./components/footer-links"
+import { teko } from "@/lib/fonts"
 
 export const Footer = () => {
   const currentYear = new Date().getFullYear()
@@ -48,7 +49,7 @@ export const Footer = () => {
               <motion.div whileHover={{ rotate: 10 }} transition={{ type: "spring", stiffness: 400, damping: 10 }}>
                 <BotIcon className="h-8 w-8 text-blue-600 dark:text-blue-400" />
               </motion.div>
-              <span className="text-xl font-bold">Detect AI</span>
+              <span className={cn("text-3xl pt-2 tracking-wide font-medium", teko.className)}>Detect AI</span>
             </Link>
             <p className="text-sm mb-6 max-w-md text-neutral-600 dark:text-neutral-400">
               Detect AI helps you identify whether text is AI-generated or human-written with advanced machine learning models and high accuracy.
