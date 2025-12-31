@@ -67,7 +67,7 @@ export const Pricing = () => {
             viewport={{ once: true }}
             transition={{ duration: 0.7, delay: 0.3 }}
             className={cn(
-              "text-sm md:text-base max-w-xl mt-3 text-neutral-600 dark:text-neutral-300 tracking-wide",
+              "text-base max-w-xl mt-3 text-neutral-600 dark:text-neutral-300",
               merriweather.className
             )}
           >
@@ -99,11 +99,11 @@ export const Pricing = () => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 lg:gap-14 mt-8 place-items-center mx-auto w-full max-w-5xl">
           {PRICING_PLANS.map((plan, index) => (
-            <PricingCard 
-              key={plan.id} 
-              plan={plan} 
-              billingCycle={billingCycle} 
-              index={index} 
+            <PricingCard
+              key={plan.id}
+              plan={plan}
+              billingCycle={billingCycle}
+              index={index}
             />
           ))}
         </div>
@@ -118,7 +118,7 @@ export const Pricing = () => {
           All plans include access to our web interface. Need a custom enterprise plan?
           <Link
             href="/contact"
-            className="ml-1 underline underline-offset-2 text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+            className="ml-1 underline underline-offset-2 text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 whitespace-nowrap"
           >
             Contact us
           </Link>
