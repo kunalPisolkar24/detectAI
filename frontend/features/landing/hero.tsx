@@ -8,6 +8,13 @@ import { cn } from "@/lib/utils"
 import { HeroBackground } from "./components/hero-background"
 import { TextDetectionVisualizer } from "./components/text-detection-visualizer"
 import { HERO_TEXT } from "./constants"
+import { Merriweather } from "next/font/google";
+
+const merriweather = Merriweather({
+  subsets: ["latin"],
+  weight: ["300", "400", "700", "900"],
+  variable: "--font-merriweather",
+});
 
 export const HeroSection = () => {
   return (
@@ -44,7 +51,7 @@ export const HeroSection = () => {
           transition={{ duration: 0.7, delay: 0.2 }}
           className="space-y-4"
         >
-          <h1 className="text-4xl sm:text-6xl lg:text-8xl font-extrabold tracking-tighter">
+          <h1 className="text-5xl sm:text-6xl lg:text-8xl font-extrabold tracking-tighter">
             <span className={cn(
               "bg-clip-text text-transparent bg-gradient-to-r bg-[length:200%_100%] animate-gradient-x",
               "from-gray-900 via-blue-600 to-gray-900",
@@ -55,7 +62,10 @@ export const HeroSection = () => {
             <span className="block mt-2">{HERO_TEXT.titleEnd}</span>
           </h1>
 
-          <p className="mx-auto max-w-2xl text-xl text-neutral-600 dark:text-neutral-300 px-4 sm:px-6 leading-relaxed">
+          <p className={cn(
+            "mx-auto max-w-2xl lg:text-lg text-sm text-neutral-600 dark:text-neutral-300 px-4 sm:px-6 leading-relaxed tracking-wide",
+            merriweather.className
+          )}>
             {HERO_TEXT.description}
           </p>
         </motion.div>
@@ -71,7 +81,7 @@ export const HeroSection = () => {
             asChild
             size="lg"
             className={cn(
-              "rounded-full text-base h-12 px-8 border-0 shadow-lg transition-all",
+              "rounded-sm text-base h-12 px-8 border-0 shadow-lg transition-all",
               "bg-gradient-to-r from-blue-600 to-purple-600 text-white",
               "hover:from-blue-700 hover:to-purple-700 hover:shadow-blue-500/25"
             )}
