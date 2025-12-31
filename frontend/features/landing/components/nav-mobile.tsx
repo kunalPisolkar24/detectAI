@@ -32,7 +32,7 @@ const NavMobile = memo(() => {
 
       <SheetContent
         className={cn(
-          "w-full sm:max-w-md p-6 border-l",
+          "w-full sm:max-w-md p-6 border-l [&>button]:hidden",
           "bg-white/95 backdrop-blur-xl border-black/10 text-gray-900",
           "dark:bg-black/95 dark:border-white/10 dark:text-white"
         )}
@@ -46,9 +46,9 @@ const NavMobile = memo(() => {
               variant="ghost"
               size="icon"
               onClick={() => setIsOpen(false)}
-              className="rounded-full hover:bg-black/5 dark:hover:bg-white/10"
+              className="rounded-full hover:bg-black/5 dark:hover:bg-white/10 border border-transparent hover:border-black/10 dark:hover:border-white/10"
             >
-              <X className="h-5 w-5" />
+              <X className="h-6 w-6" />
             </Button>
           </div>
 
@@ -78,8 +78,8 @@ const NavMobile = memo(() => {
                     )}>
                       <Icon size={20} />
                     </div>
-                    <span className={cn("font-medium text-2xl tracking-wide", teko.className)}>
-                      {link.label}
+                    <span className={cn("font-medium text-2xl tracking-wide pt-1", teko.className)}>
+                      {link.label.toUpperCase()}
                     </span>
                   </motion.div>
                 </Link>

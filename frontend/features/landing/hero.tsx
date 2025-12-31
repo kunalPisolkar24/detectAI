@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import { HeroBackground } from "./components/hero-background"
 import { TextDetectionVisualizer } from "./components/text-detection-visualizer"
 import { HERO_TEXT } from "./constants"
-import { merriweather } from "@/lib/fonts"
+import { merriweather, teko } from "@/lib/fonts"
 
 export const HeroSection = () => {
   return (
@@ -75,9 +75,10 @@ export const HeroSection = () => {
             asChild
             size="lg"
             className={cn(
-              "rounded-sm text-base h-12 px-8 border-0 shadow-lg transition-all",
+              "rounded-sm text-2xl tracing-wide h-12 px-8 border-0 shadow-lg transition-all",
               "bg-gradient-to-r from-blue-600 to-purple-600 text-white",
-              "hover:from-blue-700 hover:to-purple-700 hover:shadow-blue-500/25"
+              "hover:from-blue-700 hover:to-purple-700 hover:shadow-blue-500/25",
+              teko.className
             )}
           >
             <Link href="/signup">

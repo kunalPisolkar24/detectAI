@@ -3,6 +3,7 @@
 import { memo } from "react"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { teko } from "@/lib/fonts";
 
 const FaqCTA = memo(() => {
   return (
@@ -28,9 +29,9 @@ const FaqCTA = memo(() => {
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.97 }}
         className={cn(
-          "inline-block mt-3 sm:mt-4 px-4 py-1.5 sm:px-5 sm:py-2 rounded-md font-medium text-xs sm:text-sm transition-all duration-200",
+          "inline-block mt-3 sm:mt-4 px-4 py-1.5 sm:px-5 sm:py-2 rounded-md font-medium text-md sm:text-2xl transition-all duration-200",
           "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-300/50",
-          "dark:hover:bg-blue-500 dark:shadow-blue-900/40"
+          "dark:hover:bg-blue-500 dark:shadow-blue-900/40", teko.className
         )}
       >
         Contact Support

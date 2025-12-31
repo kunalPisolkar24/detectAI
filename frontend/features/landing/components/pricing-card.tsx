@@ -7,6 +7,7 @@ import { CircleCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { teko } from "@/lib/fonts"
 
 interface PricingCardProps {
   plan: {
@@ -96,7 +97,7 @@ const PricingCard = memo(({ plan, billingCycle, index }: PricingCardProps) => {
         <Button
           asChild
           className={cn(
-            "w-full font-semibold transition-all",
+            "w-full font-medium text-2xl tracing-wide transition-all", teko.className,
             isPopular
               ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 shadow-lg shadow-blue-500/20"
               : "bg-transparent border border-black/20 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
