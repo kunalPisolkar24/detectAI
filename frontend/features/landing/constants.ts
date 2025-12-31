@@ -46,3 +46,35 @@ export const REVIEWS_DATA = [
     img: "https://avatar.vercel.sh/olivia",
   },
 ]
+
+export const PRICING_PLANS = [
+  {
+    id: "spark",
+    name: "Spark",
+    description: "Perfect for individuals getting started with AI detection.",
+    price: { monthly: "₹0", yearly: "₹0" },
+    features: [
+      "Standard AI detection",
+      "100 scans per day",
+      "Basic reporting",
+      "Community support"
+    ],
+    popular: false,
+    cta: "Get Started"
+  },
+  {
+    id: "flare",
+    name: "Flare",
+    description: "Advanced power for professionals and heavy users.",
+    price: { monthly: "₹200", yearly: "₹1000" },
+    features: [
+      "Advanced AI detection",
+      "Unlimited scans",
+      "Deep analysis & insights",
+      "Priority support",
+      "Early access to features"
+    ],
+    popular: true,
+    cta: "Upgrade Now"
+  }
+]

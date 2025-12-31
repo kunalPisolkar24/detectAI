@@ -63,7 +63,7 @@ export const Testimonials = () => {
         </h2>
 
         <p className={cn(
-          "max-w-3xl mx-auto text-base text-neutral-600 dark:text-neutral-300 leading-relaxed",
+          "max-w-3xl mx-auto text-sm md:text-base text-neutral-600 dark:text-neutral-300 leading-relaxed tracking-wide",
           merriweather.className
         )}>
           See what our users have to say about Detect AI! <br className="hidden sm:block" />
