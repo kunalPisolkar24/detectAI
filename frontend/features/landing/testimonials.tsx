@@ -92,33 +92,6 @@ export const Testimonials = () => {
           ))}
         </Marquee>
       </motion.div>
-
-      <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
-        <motion.div
-          className="absolute top-1/4 -left-32 w-64 h-64 rounded-full blur-3xl bg-purple-400/20 dark:bg-purple-600/20"
-          animate={{
-            x: [0, 30, 0],
-            y: [0, 20, 0],
-          }}
-          transition={{
-            duration: 15,
-            repeat: Number.POSITIVE_INFINITY,
-            ease: "easeInOut",
-          }}
-        />
-        <motion.div
-          className="absolute bottom-1/4 -right-32 w-64 h-64 rounded-full blur-3xl bg-blue-400/20 dark:bg-blue-600/20"
-          animate={{
-            x: [0, -30, 0],
-            y: [0, -20, 0],
-          }}
-          transition={{
-            duration: 18,
-            repeat: Number.POSITIVE_INFINITY,
-            ease: "easeInOut",
-          }}
-        />
-      </div>
     </section>
   )
 }

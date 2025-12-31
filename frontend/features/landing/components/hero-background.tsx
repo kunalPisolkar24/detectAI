@@ -12,7 +12,7 @@ const HeroBackground = memo(() => {
         "bg-gradient-to-r from-purple-300/30 via-blue-300/30 to-cyan-300/30",
         "dark:from-purple-500/20 dark:via-blue-500/20 dark:to-cyan-500/20"
       )} />
-
+      
       <motion.div
         className={cn(
           "absolute top-1/4 -left-32 w-96 h-96 rounded-full blur-3xl opacity-30",
@@ -28,7 +28,7 @@ const HeroBackground = memo(() => {
           ease: "easeInOut",
         }}
       />
-
+      
       <motion.div
         className={cn(
           "absolute bottom-1/4 -right-32 w-96 h-96 rounded-full blur-3xl opacity-30",

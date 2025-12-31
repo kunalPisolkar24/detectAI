@@ -15,7 +15,7 @@ export const HeroSection = () => {
     <section className="w-full relative overflow-hidden min-h-screen flex flex-col items-center justify-center bg-background text-foreground transition-colors duration-300">
       <HeroBackground />
 
-      <div className="relative w-full max-w-5xl mx-auto flex flex-col items-center justify-center space-y-8 text-center z-40 px-4 sm:px-6 mt-32 mb-10">
+      <div className="relative z-10 w-full max-w-5xl mx-auto flex flex-col items-center justify-center space-y-8 text-center px-4 sm:px-6 mt-32 mb-10">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
