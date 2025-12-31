@@ -1,3 +1,4 @@
+import { Faqs } from "@/features/landing/faqs"
 import { HeroSection } from "@/features/landing/hero"
 import { Pricing } from "@/features/landing/pricing"
 import { Testimonials } from "@/features/landing/testimonials"
@@ -8,6 +9,7 @@ export default function Page() {
       <HeroSection />
       <Testimonials />
       <Pricing/>
+      <Faqs/>
     </main>
   )
 }

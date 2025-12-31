@@ -78,3 +78,32 @@ export const PRICING_PLANS = [
     cta: "Upgrade Now"
   }
 ]
+
+export const FAQS_LIST = [
+  {
+    question: "What is Detect AI?",
+    answer: "Detect AI is a tool that helps identify whether a piece of text is AI-generated or human-written.",
+  },
+  {
+    question: "How accurate is Detect AI?",
+    answer: "Detect AI uses advanced models like SNN and BERT to ensure high accuracy in AI text detection.",
+  },
+  {
+    question: "Is Detect AI free to use?",
+    answer:
+      "Yes! We offer a free plan with basic detection features, while the premium plan provides advanced analysis.",
+  },
+  {
+    question: "Can Detect AI detect mixed AI and human-written content?",
+    answer: "Yes, it can analyze hybrid content and highlight AI-generated sections.",
+  },
+  {
+    question: "Do I need an account to use Detect AI?",
+    answer:
+      "No, you can use the free version without an account. However, creating an account unlocks additional features.",
+  },
+  {
+    question: "How does Detect AI handle user data?",
+    answer: "We prioritize privacy and do not store or share any text submitted for analysis.",
+  },
+]
