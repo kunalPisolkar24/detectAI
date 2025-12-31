@@ -76,16 +76,16 @@ export const Testimonials = () => {
         whileInView={{ opacity: 1 }}
         viewport={{ once: true }}
         transition={{ duration: 1, delay: 0.4 }}
-        className="relative flex w-full flex-col items-center justify-center overflow-hidden mt-10 [mask-image:linear-gradient(to_right,transparent,black_20%,black_80%,transparent)]"
+        className="relative flex w-full flex-col items-center justify-center overflow-hidden mt-10 [mask-image:linear-gradient(to_right,transparent,black_15%,black_85%,transparent)]"
       >
         <Marquee pauseOnHover className="[--duration:20s]">
           {firstRow.map((review) => (
             <ReviewCard key={review.username} {...review} />
           ))}
         </Marquee>
-        
+
         <div className="h-4" />
-        
+
         <Marquee reverse pauseOnHover className="[--duration:20s]">
           {secondRow.map((review) => (
             <ReviewCard key={review.username} {...review} />
