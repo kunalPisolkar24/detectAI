@@ -1,4 +1,4 @@
-import { Github, Twitter, Linkedin, Mail } from "lucide-react"
+import { Github, Twitter, Linkedin, Mail, FileText, Package, DollarSign, HelpCircle, BotIcon } from "lucide-react"
 
 export const HERO_TEXT = {
   badge: "Introducing Detect AI",
@@ -140,4 +140,12 @@ export const SOCIAL_LINKS = [
   { name: "Twitter", icon: Twitter, href: "https://twitter.com" },
   { name: "LinkedIn", icon: Linkedin, href: "https://linkedin.com" },
   { name: "Email", icon: Mail, href: "mailto:info@detectai.com" },
+]
+
+export const NAV_LINKS = [
+  { href: "/docs", label: "Docs", icon: FileText },
+  { href: "/features", label: "Features", icon: Package },
+  { href: "/pricing", label: "Pricing", icon: DollarSign },
+  { href: "/faqs", label: "FAQs", icon: HelpCircle },
+  { href: "/chat", label: "Detect AI", icon: BotIcon },
 ]
