@@ -1,8 +1,9 @@
+import { HeroSection } from "@/features/landing/hero"
 
-export default function Home() {
+export default function Page() {
   return (
-    <div>
-      Hello world
-    </div>
-  );
+    <main className="flex min-h-screen flex-col items-center justify-between">
+      <HeroSection />
+    </main>
+  )
 }
