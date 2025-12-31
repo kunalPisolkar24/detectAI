@@ -1,4 +1,4 @@
-import { Merriweather, Inter } from "next/font/google";
+import { Merriweather, Inter, Teko } from "next/font/google";
 
 export const merriweather = Merriweather({
   subsets: ["latin"],
@@ -9,5 +9,12 @@ export const merriweather = Merriweather({
 
 export const inter = Inter({
   subsets: ["latin"],
+  display: "swap",
+});
+
+export const teko = Teko({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"], 
+  variable: "--font-teko",
   display: "swap",
 });

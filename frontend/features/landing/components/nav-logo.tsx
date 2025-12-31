@@ -4,6 +4,7 @@ import { memo } from "react"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import { BotIcon } from "lucide-react"
+import { teko } from "@/lib/fonts"
 import { cn } from "@/lib/utils"
 
 const NavLogo = memo(() => {
@@ -16,10 +17,10 @@ const NavLogo = memo(() => {
         <BotIcon className="h-8 w-8 text-blue-600 dark:text-blue-400" />
       </motion.div>
       <span className={cn(
-        "text-xl font-bold tracking-tight transition-colors",
+        "text-3xl font-medium tracking-wide transition-colors mt-2",
         "text-gray-900 group-hover:text-blue-600",
         "dark:text-white dark:group-hover:text-blue-400"
-      )}>
+      , teko.className)}>
         Detect AI
       </span>
     </Link>

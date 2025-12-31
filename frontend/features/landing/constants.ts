@@ -143,9 +143,8 @@ export const SOCIAL_LINKS = [
 ]
 
 export const NAV_LINKS = [
-  { href: "/docs", label: "Docs", icon: FileText },
-  { href: "/features", label: "Features", icon: Package },
-  { href: "/pricing", label: "Pricing", icon: DollarSign },
-  { href: "/faqs", label: "FAQs", icon: HelpCircle },
-  { href: "/chat", label: "Detect AI", icon: BotIcon },
+  { href: "/docs", label: "DOCS", icon: FileText },
+  { href: "/features", label: "FEATURES", icon: Package },
+  { href: "/pricing", label: "PRICING", icon: DollarSign },
+  { href: "/faqs", label: "FAQs", icon: HelpCircle }
 ]

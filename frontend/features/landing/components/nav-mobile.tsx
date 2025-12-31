@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 import { NAV_LINKS } from "../constants"
 import { NavLogo } from "./nav-logo"
 import { ModeToggle } from "./mode-toggle"
+import { teko } from "@/lib/fonts"
 
 const NavMobile = memo(() => {
   const [isOpen, setIsOpen] = useState(false)
@@ -22,9 +23,9 @@ const NavMobile = memo(() => {
           <Button
             variant="ghost"
             size="icon"
-            className="rounded-full bg-black/5 dark:bg-white/10"
+            className="rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
           >
-            <PanelRight className="h-5 w-5" />
+            <PanelRight className="h-6 w-6" />
           </Button>
         </SheetTrigger>
       </div>
@@ -77,7 +78,9 @@ const NavMobile = memo(() => {
                     )}>
                       <Icon size={20} />
                     </div>
-                    <span className="font-medium text-lg">{link.label}</span>
+                    <span className={cn("font-medium text-2xl tracking-wide", teko.className)}>
+                      {link.label}
+                    </span>
                   </motion.div>
                 </Link>
               )
@@ -88,13 +91,15 @@ const NavMobile = memo(() => {
             <Button
               asChild
               className={cn(
-                "w-full h-12 rounded-xl text-lg font-medium shadow-lg",
+                "w-full h-12 rounded-md shadow-lg",
                 "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0"
               )}
             >
-              <Link href="/login" onClick={() => setIsOpen(false)}>
+              <Link href="/login" onClick={() => setIsOpen(false)} className="flex items-center justify-center">
                 <LogIn className="mr-2 h-5 w-5" />
-                Log in
+                <span className={cn("text-xl tracking-wide pt-1", teko.className)}>
+                  LOG IN
+                </span>
               </Link>
             </Button>
           </div>
