@@ -1,3 +1,5 @@
+import { Github, Twitter, Linkedin, Mail } from "lucide-react"
+
 export const HERO_TEXT = {
   badge: "Introducing Detect AI",
   titleStart: "Detect your text",
@@ -106,4 +108,36 @@ export const FAQS_LIST = [
     question: "How does Detect AI handle user data?",
     answer: "We prioritize privacy and do not store or share any text submitted for analysis.",
   },
+]
+
+export const FOOTER_LINKS = [
+  {
+    title: "Product",
+    links: [
+      { name: "Pricing", href: "/pricing" },
+      { name: "FAQs", href: "/faqs" },
+      { name: "API", href: "/api" },
+    ],
+  },
+  {
+    title: "Company",
+    links: [
+      { name: "About", href: "/about" },
+      { name: "Contact", href: "/contact" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { name: "Terms", href: "/terms" },
+      { name: "Privacy", href: "/privacy" },
+    ],
+  },
+]
+
+export const SOCIAL_LINKS = [
+  { name: "GitHub", icon: Github, href: "https://github.com" },
+  { name: "Twitter", icon: Twitter, href: "https://twitter.com" },
+  { name: "LinkedIn", icon: Linkedin, href: "https://linkedin.com" },
+  { name: "Email", icon: Mail, href: "mailto:info@detectai.com" },
 ]
