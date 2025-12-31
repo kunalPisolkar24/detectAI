@@ -8,13 +8,7 @@ import { cn } from "@/lib/utils"
 import { HeroBackground } from "./components/hero-background"
 import { TextDetectionVisualizer } from "./components/text-detection-visualizer"
 import { HERO_TEXT } from "./constants"
-import { Merriweather } from "next/font/google";
-
-const merriweather = Merriweather({
-  subsets: ["latin"],
-  weight: ["300", "400", "700", "900"],
-  variable: "--font-merriweather",
-});
+import { merriweather } from "@/lib/fonts"
 
 export const HeroSection = () => {
   return (
