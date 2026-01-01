@@ -17,14 +17,16 @@ import { SignupSchema } from "@/schemas/auth"
 import { TurnstileComponent } from "./turnstile"
 import { CardWrapper } from "./card-wrapper"
 import { teko } from "@/lib/fonts"
+import { verifyTurnstileToken, registerUser } from "@/features/auth/services/auth"
+import { useTurnstile } from "@/features/auth/hooks/use-turnstile"
 
 export const SignupForm = () => {
   const [loading, setLoading] = useState(false)
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-  const [turnstileKey, setTurnstileKey] = useState(0)
+
+  const { token, key, onVerify, reset, siteKey } = useTurnstile()
 
   const form = useForm<z.infer<typeof SignupSchema>>({
     resolver: zodResolver(SignupSchema),
@@ -40,37 +42,14 @@ export const SignupForm = () => {
   const onSubmit = async (data: z.infer<typeof SignupSchema>) => {
     setLoading(true)
     setFormError(null)
-    
+
     try {
-      if (!turnstileToken) {
+      if (!token) {
         throw new Error("Please complete human verification")
       }
 
-      const verifyResponse = await fetch("/api/verify-turnstile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: turnstileToken }),
-      })
-
-      if (!verifyResponse.ok) {
-        throw new Error((await verifyResponse.json()).error || "Verification failed")
-      }
-
-      const registerResponse = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: data.email,
-          password: data.password,
-          firstName: data.firstName,
-          lastName: data.lastName,
-          name: `${data.firstName} ${data.lastName}`,
-        }),
-      })
-
-      if (!registerResponse.ok) {
-        throw new Error((await registerResponse.json()).error || "Registration failed")
-      }
+      await verifyTurnstileToken(token)
+      await registerUser(data)
 
       const signInResult = await signIn("credentials", {
         email: data.email,
@@ -81,13 +60,11 @@ export const SignupForm = () => {
       if (signInResult?.error) {
         throw new Error(signInResult.error)
       }
-
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Login failed"
+      const msg = error instanceof Error ? error.message : "Registration failed"
       setFormError(msg)
       toast.error(msg)
-      setTurnstileToken(null)
-      setTurnstileKey(prev => prev + 1)
+      reset()
       setLoading(false)
     }
   }
@@ -122,7 +99,11 @@ export const SignupForm = () => {
                   <FormControl>
                     <div className="relative">
                       <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input {...field} placeholder="John" className="pl-9 bg-background/50 border-black/10 dark:border-white/10" />
+                      <Input
+                        {...field}
+                        placeholder="John"
+                        className="pl-9 bg-background/50 border-black/10 dark:border-white/10"
+                      />
                     </div>
                   </FormControl>
                   <FormMessage />
@@ -138,7 +119,11 @@ export const SignupForm = () => {
                   <FormControl>
                     <div className="relative">
                       <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input {...field} placeholder="Doe" className="pl-9 bg-background/50 border-black/10 dark:border-white/10" />
+                      <Input
+                        {...field}
+                        placeholder="Doe"
+                        className="pl-9 bg-background/50 border-black/10 dark:border-white/10"
+                      />
                     </div>
                   </FormControl>
                   <FormMessage />
@@ -156,7 +141,12 @@ export const SignupForm = () => {
                 <FormControl>
                   <div className="relative">
                     <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input {...field} type="email" placeholder="john@example.com" className="pl-9 bg-background/50 border-black/10 dark:border-white/10" />
+                    <Input
+                      {...field}
+                      type="email"
+                      placeholder="john@example.com"
+                      className="pl-9 bg-background/50 border-black/10 dark:border-white/10"
+                    />
                   </div>
                 </FormControl>
                 <FormMessage />
@@ -173,13 +163,17 @@ export const SignupForm = () => {
                 <FormControl>
                   <div className="relative">
                     <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      {...field} 
-                      type={showPassword ? "text" : "password"} 
-                      placeholder="••••••••" 
-                      className="pl-9 pr-10 bg-background/50 border-black/10 dark:border-white/10" 
+                    <Input
+                      {...field}
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      className="pl-9 pr-10 bg-background/50 border-black/10 dark:border-white/10"
                     />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground">
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                    >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
@@ -198,13 +192,17 @@ export const SignupForm = () => {
                 <FormControl>
                   <div className="relative">
                     <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      {...field} 
-                      type={showConfirm ? "text" : "password"} 
-                      placeholder="••••••••" 
-                      className="pl-9 pr-10 bg-background/50 border-black/10 dark:border-white/10" 
+                    <Input
+                      {...field}
+                      type={showConfirm ? "text" : "password"}
+                      placeholder="••••••••"
+                      className="pl-9 pr-10 bg-background/50 border-black/10 dark:border-white/10"
                     />
-                    <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground">
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm(!showConfirm)}
+                      className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                    >
                       {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
@@ -216,12 +214,12 @@ export const SignupForm = () => {
 
           <div className="flex justify-center pt-2">
             <TurnstileComponent
-              key={turnstileKey}
-              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
-              onVerify={setTurnstileToken}
+              key={key}
+              siteKey={siteKey}
+              onVerify={onVerify}
               onError={() => {
                 setFormError("Verification error.")
-                setTurnstileKey(prev => prev + 1)
+                reset()
               }}
             />
           </div>
@@ -232,7 +230,7 @@ export const SignupForm = () => {
               "w-full text-lg tracking-wide bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 shadow-lg",
               teko.className
             )}
-            disabled={loading || !turnstileToken}
+            disabled={loading || !token}
           >
             {loading ? "Creating Account..." : "CREATE ACCOUNT"}
           </Button>

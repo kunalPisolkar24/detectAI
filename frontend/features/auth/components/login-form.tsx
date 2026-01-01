@@ -14,22 +14,24 @@ import type { z } from "zod"
 import { cn } from "@/lib/utils"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui//button"
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { LoginSchema } from "@/schemas/auth"
 import { TurnstileComponent } from "./turnstile"
 import { CardWrapper } from "./card-wrapper"
 import { teko } from "@/lib/fonts"
+import { verifyTurnstileToken } from "@/features/auth/services/auth"
+import { useTurnstile } from "@/features/auth/hooks/use-turnstile"
 
 export const LoginForm = () => {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(false)
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-  const [turnstileKey, setTurnstileKey] = useState(0)
+  
+  const { token, key, onVerify, reset, siteKey } = useTurnstile()
 
   const form = useForm<z.infer<typeof LoginSchema>>({
     resolver: zodResolver(LoginSchema),
@@ -40,12 +42,11 @@ export const LoginForm = () => {
   })
 
   useEffect(() => {
-    const error = searchParams.get('error')
-    if (error === 'CredentialsSignin') {
+    const error = searchParams.get("error")
+    if (error === "CredentialsSignin") {
       setFormError("Invalid email or password")
-      setTurnstileToken(null)
-      setTurnstileKey(prev => prev + 1)
-      router.replace('/login', { scroll: false })
+      reset()
+      router.replace("/login", { scroll: false })
     }
 
     const rememberedEmail = localStorage.getItem("rememberEmail")
@@ -53,27 +54,18 @@ export const LoginForm = () => {
       form.setValue("email", rememberedEmail)
       setRememberMe(true)
     }
-  }, [searchParams, form, router])
+  }, [searchParams, form, router, reset])
 
   const onSubmit = async (data: z.infer<typeof LoginSchema>) => {
     setLoading(true)
     setFormError(null)
 
     try {
-      if (!turnstileToken) {
+      if (!token) {
         throw new Error("Please complete human verification")
       }
 
-      const verifyResponse = await fetch("/api/verify-turnstile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: turnstileToken }),
-      })
-
-      if (!verifyResponse.ok) {
-        const errorData = await verifyResponse.json()
-        throw new Error(errorData.error || "Verification failed")
-      }
+      await verifyTurnstileToken(token)
 
       const result = await signIn("credentials", {
         callbackUrl: "/chat?login_success=true",
@@ -91,13 +83,11 @@ export const LoginForm = () => {
       } else {
         localStorage.removeItem("rememberEmail")
       }
-
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Login failed"
       setFormError(msg)
       toast.error(msg)
-      setTurnstileToken(null)
-      setTurnstileKey(prev => prev + 1)
+      reset()
       setLoading(false)
     }
   }
@@ -180,7 +170,10 @@ export const LoginForm = () => {
                 checked={rememberMe}
                 onCheckedChange={(checked) => setRememberMe(checked === true)}
               />
-              <label htmlFor="remember" className="font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+              <label
+                htmlFor="remember"
+                className="font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
                 Remember me
               </label>
             </div>
@@ -194,12 +187,12 @@ export const LoginForm = () => {
 
           <div className="flex justify-center pt-2">
             <TurnstileComponent
-              key={turnstileKey}
-              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
-              onVerify={setTurnstileToken}
+              key={key}
+              siteKey={siteKey}
+              onVerify={onVerify}
               onError={() => {
                 setFormError("Verification error. Please try again.")
-                setTurnstileKey(prev => prev + 1)
+                reset()
               }}
             />
           </div>
@@ -210,7 +203,7 @@ export const LoginForm = () => {
               "w-full text-lg tracking-wide bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 shadow-lg",
               teko.className
             )}
-            disabled={loading || !turnstileToken}
+            disabled={loading || !token}
           >
             {loading ? "Signing in..." : "SIGN IN"}
           </Button>
