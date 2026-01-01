@@ -1,5 +1,7 @@
-import { LoginForm } from "@/features/auth/components/login-form"
+import { Suspense } from "react"
 import type { Metadata } from "next"
+import { LoginForm } from "@/features/auth/components/login-form"
+import { AuthCardSkeleton } from "@/features/auth/components/auth-card-skeleton"
 
 export const metadata: Metadata = {
   title: "Login | Detect AI",
@@ -7,5 +9,9 @@ export const metadata: Metadata = {
 }
 
 export default function LoginPage() {
-  return <LoginForm />
+  return (
+    <Suspense fallback={<AuthCardSkeleton />}>
+      <LoginForm />
+    </Suspense>
+  )
 }
