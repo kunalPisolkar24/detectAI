@@ -1,10 +1,9 @@
 "use client"
 
-import { memo } from "react"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { cn } from "@/lib/utils"
 
-const HeroBackground = memo(() => {
+export const HeroBackground = () => {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
       <div className={cn(
@@ -13,7 +12,7 @@ const HeroBackground = memo(() => {
         "dark:from-purple-500/20 dark:via-blue-500/20 dark:to-cyan-500/20"
       )} />
       
-      <motion.div
+      <m.div
         className={cn(
           "absolute top-1/4 -left-32 w-96 h-96 rounded-full blur-3xl opacity-30",
           "bg-purple-400 dark:bg-purple-600"
@@ -29,7 +28,7 @@ const HeroBackground = memo(() => {
         }}
       />
       
-      <motion.div
+      <m.div
         className={cn(
           "absolute bottom-1/4 -right-32 w-96 h-96 rounded-full blur-3xl opacity-30",
           "bg-blue-400 dark:bg-blue-600"
@@ -46,7 +45,4 @@ const HeroBackground = memo(() => {
       />
     </div>
   )
-})
-
-HeroBackground.displayName = "HeroBackground"
-export { HeroBackground }
+}

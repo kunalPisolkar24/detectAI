@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { VISUALIZER_TEXT } from "../constants"
@@ -10,7 +10,7 @@ export const TextDetectionVisualizer = () => {
   const words = useMemo(() => VISUALIZER_TEXT.split(" "), [])
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 1, delay: 0.5 }}
@@ -34,7 +34,7 @@ export const TextDetectionVisualizer = () => {
               : "text-black dark:text-white"
 
           return (
-            <motion.span
+            <m.span
               key={index}
               initial={{ opacity: 0.3 }}
               animate={{ opacity: 1 }}
@@ -47,11 +47,11 @@ export const TextDetectionVisualizer = () => {
               className={cn("inline-block mr-1 mb-1", colorClass)}
             >
               {word}
-            </motion.span>
+            </m.span>
           )
         })}
 
-        <motion.div
+        <m.div
           className="h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 mt-4 rounded-full"
           initial={{ width: "0%" }}
           animate={{ width: "100%" }}
@@ -60,14 +60,14 @@ export const TextDetectionVisualizer = () => {
 
         <div className="flex justify-between mt-2 text-xs text-neutral-600 dark:text-neutral-400">
           <span>Analyzing patterns...</span>
-          <motion.span
+          <m.span
             animate={{ opacity: [0.5, 1, 0.5] }}
             transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY }}
           >
             Processing...
-          </motion.span>
+          </m.span>
         </div>
       </div>
-    </motion.div>
+    </m.div>
   )
 }
