@@ -30,7 +30,7 @@ export const LoginForm = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-
+  
   const { token, key, onVerify, reset, siteKey } = useTurnstile()
 
   const form = useForm<z.infer<typeof LoginSchema>>({
@@ -45,15 +45,18 @@ export const LoginForm = () => {
     const error = searchParams.get("error")
     const rememberedEmail = localStorage.getItem("rememberEmail")
 
-    if (error === "CredentialsSignin") {
+    if (error) {
       router.replace("/login", { scroll: false })
     }
 
-    // Defer state updates to avoid "setState in effect" warnings (cascading renders)
     const timer = setTimeout(() => {
       if (error === "CredentialsSignin") {
         setFormError("Invalid email or password")
         reset()
+      } else if (error === "OAuthAccountNotLinked") {
+        setFormError("Email already in use with a different provider")
+      } else if (error) {
+        setFormError("An error occurred. Please try again.")
       }
 
       if (rememberedEmail) {
@@ -87,7 +90,7 @@ export const LoginForm = () => {
           callbackUrl: "/chat?login_success=true",
           email: data.email,
           password: data.password,
-          redirect: false,
+          redirect: false, 
         })
 
         if (result?.error) {

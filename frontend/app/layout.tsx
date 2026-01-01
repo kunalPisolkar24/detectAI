@@ -26,7 +26,7 @@ export default function RootLayout({
         >
           <LazyMotionProvider>
             {children}
-            <Toaster position="bottom-right" />
+            <Toaster position="bottom-right" richColors closeButton />
           </LazyMotionProvider>
         </ThemeProvider>
       </body>
