@@ -1,4 +1,4 @@
-import * as z from "zod";
+import * as z from "zod"
 
 export const SignupSchema = z.object({
   email: z.string().email({
@@ -10,25 +10,25 @@ export const SignupSchema = z.object({
   lastName: z.string().min(1, {
     message: "Please enter your last name",
   }),
-  password: z.string().min(6, {
-    message: "Password must be at least 6 characters long",
+  password: z.string().min(8, {
+    message: "Password must be at least 8 characters long",
   }),
-  confirmPassword: z.string().min(6, {
-    message: "Password must be at least 6 characters long",
+  confirmPassword: z.string().min(8, {
+    message: "Password must be at least 8 characters long",
   }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords must match",
   path: ["confirmPassword"],
-});
+})
 
 export const LoginSchema = z.object({
   email: z.string().email({
     message: "Please enter a valid email address",
   }),
-  password: z.string().min(6, {
-    message: "Please enter a valid password",
+  password: z.string().min(1, {
+    message: "Please enter your password",
   }),
-});
+})
 
 export type LoginSchemaType = z.infer<typeof LoginSchema>
 export type SignupSchemaType = z.infer<typeof SignupSchema>
