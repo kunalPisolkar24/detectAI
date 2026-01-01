@@ -1,13 +1,14 @@
-"use client";
+"use client"
 
-import { Turnstile, TurnstileInstance } from "@marsidev/react-turnstile";
-import { useRef } from "react";
+import { Turnstile, TurnstileInstance } from "@marsidev/react-turnstile"
+import { useTheme } from "next-themes"
+import { useRef } from "react"
 
 interface TurnstileComponentProps {
-  siteKey: string;
-  onVerify: (token: string) => void;
-  onError?: (error: unknown) => void;
-  onExpire?: () => void;
+  siteKey: string
+  onVerify: (token: string) => void
+  onError?: (error: unknown) => void
+  onExpire?: () => void
 }
 
 export function TurnstileComponent({
@@ -16,18 +17,18 @@ export function TurnstileComponent({
   onError,
   onExpire,
 }: TurnstileComponentProps) {
-  const turnstileRef = useRef<TurnstileInstance>(null);
+  const turnstileRef = useRef<TurnstileInstance>(null)
+  const { theme } = useTheme()
 
   const handleSuccess = (token: string) => {
-    onVerify(token);
-  };
+    onVerify(token)
+  }
 
   const handleError = (error: unknown) => {
-    console.error("Turnstile Error:", error);
     if (onError) {
-      onError(error);
+      onError(error)
     }
-  };
+  }
 
   return (
     <Turnstile
@@ -36,6 +37,10 @@ export function TurnstileComponent({
       onSuccess={handleSuccess}
       onError={handleError}
       onExpire={onExpire}
+      options={{
+        theme: theme === "dark" ? "dark" : "light",
+        size: "normal",
+      }}
     />
-  );
+  )
 }
