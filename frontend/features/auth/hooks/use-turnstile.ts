@@ -18,6 +18,6 @@ export const useTurnstile = () => {
     key,
     onVerify,
     reset,
-    siteKey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "",
+    siteKey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "1x00000000000000000000AA",
   }
 }
