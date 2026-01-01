@@ -1,4 +1,5 @@
 import "server-only"
+import { env } from "@/lib/env"
 
 interface TurnstileResponse {
   success: boolean
@@ -8,16 +9,7 @@ interface TurnstileResponse {
 }
 
 export async function validateTurnstileToken(token: string): Promise<boolean> {
-  let secretKey = process.env.TURNSTILE_SECRET_KEY
-  const isDev = process.env.NODE_ENV === "development"
-
-  if (isDev && (!secretKey || secretKey === "1x0000000000000000000000000000000AA")) {
-    secretKey = "1x0000000000000000000000000000000AA"
-  }
-
-  if (!secretKey) {
-    throw new Error("TURNSTILE_SECRET_KEY is not defined")
-  }
+  const secretKey = env.TURNSTILE_SECRET_KEY
 
   const formData = new FormData()
   formData.append("secret", secretKey)
