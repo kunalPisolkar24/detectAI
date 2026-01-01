@@ -8,10 +8,15 @@ interface TurnstileResponse {
 }
 
 export async function validateTurnstileToken(token: string): Promise<boolean> {
-  const secretKey = process.env.TURNSTILE_SECRET_KEY
+  let secretKey = process.env.TURNSTILE_SECRET_KEY
+  const isDev = process.env.NODE_ENV === "development"
+
+  if (isDev && (!secretKey || secretKey === "1x0000000000000000000000000000000AA")) {
+    secretKey = "1x0000000000000000000000000000000AA"
+  }
 
   if (!secretKey) {
-    throw new Error("TURNSTILE_SECRET_KEY is not defined in environment variables")
+    throw new Error("TURNSTILE_SECRET_KEY is not defined")
   }
 
   const formData = new FormData()
