@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { signIn } from "next-auth/react"
@@ -17,11 +17,11 @@ import { SignupSchema } from "@/schemas/auth"
 import { TurnstileComponent } from "./turnstile"
 import { CardWrapper } from "./card-wrapper"
 import { teko } from "@/lib/fonts"
-import { verifyTurnstileToken, registerUser } from "@/features/auth/services/auth"
 import { useTurnstile } from "@/features/auth/hooks/use-turnstile"
+import { registerAction } from "@/features/auth/actions/register"
 
 export const SignupForm = () => {
-  const [loading, setLoading] = useState(false)
+  const [isPending, startTransition] = useTransition()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -39,34 +39,38 @@ export const SignupForm = () => {
     },
   })
 
-  const onSubmit = async (data: z.infer<typeof SignupSchema>) => {
-    setLoading(true)
+  const onSubmit = (data: z.infer<typeof SignupSchema>) => {
     setFormError(null)
 
-    try {
-      if (!token) {
-        throw new Error("Please complete human verification")
-      }
-
-      await verifyTurnstileToken(token)
-      await registerUser(data)
-
-      const signInResult = await signIn("credentials", {
-        email: data.email,
-        password: data.password,
-        callbackUrl: "/chat?login_success=true",
-      })
-
-      if (signInResult?.error) {
-        throw new Error(signInResult.error)
-      }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "Registration failed"
-      setFormError(msg)
-      toast.error(msg)
-      reset()
-      setLoading(false)
+    if (!token) {
+      setFormError("Please complete human verification")
+      return
     }
+
+    startTransition(async () => {
+      const result = await registerAction(data, token)
+
+      if (result.error) {
+        setFormError(result.error)
+        toast.error(result.error)
+        reset() 
+        return
+      }
+
+      try {
+        const signInResult = await signIn("credentials", {
+          email: data.email,
+          password: data.password,
+          callbackUrl: "/chat?login_success=true",
+        })
+
+        if (signInResult?.error) {
+          setFormError("Account created, but auto-login failed.")
+        }
+      } catch {
+        setFormError("Something went wrong during sign in.")
+      }
+    })
   }
 
   return (
@@ -103,6 +107,7 @@ export const SignupForm = () => {
                         {...field}
                         placeholder="John"
                         className="pl-9 bg-background/50 border-black/10 dark:border-white/10"
+                        disabled={isPending}
                       />
                     </div>
                   </FormControl>
@@ -123,6 +128,7 @@ export const SignupForm = () => {
                         {...field}
                         placeholder="Doe"
                         className="pl-9 bg-background/50 border-black/10 dark:border-white/10"
+                        disabled={isPending}
                       />
                     </div>
                   </FormControl>
@@ -146,6 +152,7 @@ export const SignupForm = () => {
                       type="email"
                       placeholder="john@example.com"
                       className="pl-9 bg-background/50 border-black/10 dark:border-white/10"
+                      disabled={isPending}
                     />
                   </div>
                 </FormControl>
@@ -168,11 +175,13 @@ export const SignupForm = () => {
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
                       className="pl-9 pr-10 bg-background/50 border-black/10 dark:border-white/10"
+                      disabled={isPending}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                      disabled={isPending}
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
@@ -197,11 +206,13 @@ export const SignupForm = () => {
                       type={showConfirm ? "text" : "password"}
                       placeholder="••••••••"
                       className="pl-9 pr-10 bg-background/50 border-black/10 dark:border-white/10"
+                      disabled={isPending}
                     />
                     <button
                       type="button"
                       onClick={() => setShowConfirm(!showConfirm)}
                       className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                      disabled={isPending}
                     >
                       {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
@@ -230,9 +241,9 @@ export const SignupForm = () => {
               "w-full text-lg tracking-wide bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 shadow-lg",
               teko.className
             )}
-            disabled={loading || !token}
+            disabled={isPending || !token}
           >
-            {loading ? "Creating Account..." : "CREATE ACCOUNT"}
+            {isPending ? "Creating Account..." : "CREATE ACCOUNT"}
           </Button>
         </form>
       </Form>
