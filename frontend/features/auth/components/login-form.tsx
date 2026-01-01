@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter, useSearchParams } from "next/navigation"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useTransition } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { signIn } from "next-auth/react"
@@ -20,17 +20,17 @@ import { LoginSchema } from "@/schemas/auth"
 import { TurnstileComponent } from "./turnstile"
 import { CardWrapper } from "./card-wrapper"
 import { teko } from "@/lib/fonts"
-import { verifyTurnstileToken } from "@/features/auth/services/auth"
 import { useTurnstile } from "@/features/auth/hooks/use-turnstile"
+import { verifyTurnstileAction } from "@/features/auth/actions/verify-turnstile"
 
 export const LoginForm = () => {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [loading, setLoading] = useState(false)
+  const [isPending, startTransition] = useTransition()
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-  
+
   const { token, key, onVerify, reset, siteKey } = useTurnstile()
 
   const form = useForm<z.infer<typeof LoginSchema>>({
@@ -43,53 +43,72 @@ export const LoginForm = () => {
 
   useEffect(() => {
     const error = searchParams.get("error")
+    const rememberedEmail = localStorage.getItem("rememberEmail")
+
     if (error === "CredentialsSignin") {
-      setFormError("Invalid email or password")
-      reset()
       router.replace("/login", { scroll: false })
     }
 
-    const rememberedEmail = localStorage.getItem("rememberEmail")
-    if (rememberedEmail) {
-      form.setValue("email", rememberedEmail)
-      setRememberMe(true)
-    }
+    // Defer state updates to avoid "setState in effect" warnings (cascading renders)
+    const timer = setTimeout(() => {
+      if (error === "CredentialsSignin") {
+        setFormError("Invalid email or password")
+        reset()
+      }
+
+      if (rememberedEmail) {
+        form.setValue("email", rememberedEmail)
+        setRememberMe(true)
+      }
+    }, 0)
+
+    return () => clearTimeout(timer)
   }, [searchParams, form, router, reset])
 
-  const onSubmit = async (data: z.infer<typeof LoginSchema>) => {
-    setLoading(true)
+  const onSubmit = (data: z.infer<typeof LoginSchema>) => {
     setFormError(null)
 
-    try {
-      if (!token) {
-        throw new Error("Please complete human verification")
-      }
-
-      await verifyTurnstileToken(token)
-
-      const result = await signIn("credentials", {
-        callbackUrl: "/chat?login_success=true",
-        email: data.email,
-        password: data.password,
-        redirect: true,
-      })
-
-      if (result?.error) {
-        throw new Error("An unexpected error occurred during sign in.")
-      }
-
-      if (rememberMe) {
-        localStorage.setItem("rememberEmail", data.email)
-      } else {
-        localStorage.removeItem("rememberEmail")
-      }
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Login failed"
-      setFormError(msg)
-      toast.error(msg)
-      reset()
-      setLoading(false)
+    if (!token) {
+      setFormError("Please complete human verification")
+      return
     }
+
+    startTransition(async () => {
+      const verificationResult = await verifyTurnstileAction(token)
+
+      if (!verificationResult.success) {
+        setFormError(verificationResult.error || "Verification failed")
+        reset()
+        return
+      }
+
+      try {
+        const result = await signIn("credentials", {
+          callbackUrl: "/chat?login_success=true",
+          email: data.email,
+          password: data.password,
+          redirect: false,
+        })
+
+        if (result?.error) {
+          setFormError("Invalid credentials")
+          reset()
+          return
+        }
+
+        if (rememberMe) {
+          localStorage.setItem("rememberEmail", data.email)
+        } else {
+          localStorage.removeItem("rememberEmail")
+        }
+
+        router.push("/chat?login_success=true")
+        router.refresh()
+      } catch {
+        setFormError("Something went wrong")
+        toast.error("An unexpected error occurred")
+      }
+    })
   }
 
   return (
@@ -126,6 +145,7 @@ export const LoginForm = () => {
                       type="email"
                       placeholder="you@example.com"
                       className="pl-9 bg-background/50 border-black/10 dark:border-white/10"
+                      disabled={isPending}
                     />
                   </div>
                 </FormControl>
@@ -148,11 +168,13 @@ export const LoginForm = () => {
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
                       className="pl-9 pr-10 bg-background/50 border-black/10 dark:border-white/10"
+                      disabled={isPending}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
+                      disabled={isPending}
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
@@ -169,6 +191,7 @@ export const LoginForm = () => {
                 id="remember"
                 checked={rememberMe}
                 onCheckedChange={(checked) => setRememberMe(checked === true)}
+                disabled={isPending}
               />
               <label
                 htmlFor="remember"
@@ -203,9 +226,9 @@ export const LoginForm = () => {
               "w-full text-lg tracking-wide bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 shadow-lg",
               teko.className
             )}
-            disabled={loading || !token}
+            disabled={isPending || !token}
           >
-            {loading ? "Signing in..." : "SIGN IN"}
+            {isPending ? "Signing in..." : "SIGN IN"}
           </Button>
         </form>
       </Form>
