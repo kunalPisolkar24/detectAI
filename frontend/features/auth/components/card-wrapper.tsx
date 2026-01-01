@@ -27,6 +27,10 @@ export const CardWrapper = ({
   children,
   showSocial = true
 }: CardWrapperProps) => {
+  const handleSocialLogin = (provider: "google" | "github") => {
+    signIn(provider, { callbackUrl: "/chat" })
+  }
+
   return (
     <m.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -49,7 +53,7 @@ export const CardWrapper = ({
               <div className="grid grid-cols-2 gap-4">
                 <Button
                   variant="outline"
-                  onClick={() => signIn("google", { callbackUrl: "/chat" })}
+                  onClick={() => handleSocialLogin("google")}
                   className="w-full bg-transparent border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5"
                 >
                   <FaGoogle className="mr-2 h-4 w-4" />
@@ -57,7 +61,7 @@ export const CardWrapper = ({
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => signIn("github", { callbackUrl: "/chat" })}
+                  onClick={() => handleSocialLogin("github")}
                   className="w-full bg-transparent border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5"
                 >
                   <FaGithub className="mr-2 h-4 w-4" />
