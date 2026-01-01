@@ -1,17 +1,16 @@
 "use client"
 
-import { memo } from "react"
 import Link from "next/link"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { ArrowUpRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { FOOTER_LINKS } from "../constants"
 
-const FooterLinks = memo(() => {
+export const FooterLinks = () => {
   return (
     <>
       {FOOTER_LINKS.map((section, sectionIndex) => (
-        <motion.div
+        <m.div
           key={section.title}
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -21,7 +20,7 @@ const FooterLinks = memo(() => {
           <h3 className="font-semibold mb-4 text-foreground">{section.title}</h3>
           <ul className="space-y-3">
             {section.links.map((link, linkIndex) => (
-              <motion.li
+              <m.li
                 key={link.name}
                 initial={{ opacity: 0, x: -10 }}
                 whileInView={{ opacity: 1, x: 0 }}
@@ -37,7 +36,7 @@ const FooterLinks = memo(() => {
                   )}
                 >
                   {link.name}
-                  <motion.span
+                  <m.span
                     initial={{ opacity: 0, x: -5 }}
                     animate={{ opacity: 0, x: -5 }}
                     whileHover={{ opacity: 1, x: 0 }}
@@ -45,16 +44,13 @@ const FooterLinks = memo(() => {
                     className="ml-1 inline-block"
                   >
                     <ArrowUpRight size={12} className="text-blue-500 dark:text-blue-400" />
-                  </motion.span>
+                  </m.span>
                 </Link>
-              </motion.li>
+              </m.li>
             ))}
           </ul>
-        </motion.div>
+        </m.div>
       ))}
     </>
   )
-})
-
-FooterLinks.displayName = "FooterLinks"
-export { FooterLinks }
+}

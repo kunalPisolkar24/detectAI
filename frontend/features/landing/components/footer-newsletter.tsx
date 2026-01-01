@@ -1,11 +1,10 @@
 "use client"
 
-import { memo } from "react"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { teko } from "@/lib/fonts"
 
-const FooterNewsletter = memo(() => {
+export const FooterNewsletter = () => {
   return (
     <div className={cn(
       "p-4 rounded-lg mb-6 transition-colors",
@@ -27,7 +26,7 @@ const FooterNewsletter = memo(() => {
             "focus:ring-2 focus:ring-blue-500/20"
           )}
         />
-        <motion.button
+        <m.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           className={cn(
@@ -38,11 +37,8 @@ const FooterNewsletter = memo(() => {
           )}
         >
           Subscribe
-        </motion.button>
+        </m.button>
       </div>
     </div>
   )
-})
-
-FooterNewsletter.displayName = "FooterNewsletter"
-export { FooterNewsletter }
+}

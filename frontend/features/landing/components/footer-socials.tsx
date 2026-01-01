@@ -1,17 +1,16 @@
 "use client"
 
-import { memo } from "react"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { SOCIAL_LINKS } from "../constants"
 
-const FooterSocials = memo(() => {
+export const FooterSocials = () => {
   return (
     <div className="flex space-x-4 mb-6">
       {SOCIAL_LINKS.map((social, index) => {
         const Icon = social.icon
         return (
-          <motion.a
+          <m.a
             key={social.name}
             href={social.href}
             target="_blank"
@@ -29,12 +28,9 @@ const FooterSocials = memo(() => {
             aria-label={social.name}
           >
             <Icon size={18} />
-          </motion.a>
+          </m.a>
         )
       })}
     </div>
   )
-})
-
-FooterSocials.displayName = "FooterSocials"
-export { FooterSocials }
+}

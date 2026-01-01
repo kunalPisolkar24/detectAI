@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { BotIcon, Heart } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { FooterNewsletter } from "./components/footer-newsletter"
@@ -24,12 +24,12 @@ export const Footer = () => {
           "bg-gradient-to-r from-purple-300/20 via-blue-300/20 to-cyan-300/20",
           "dark:from-purple-500/10 dark:via-blue-500/10 dark:to-cyan-500/10"
         )} />
-        <motion.div
+        <m.div
           className="absolute top-1/3 -left-32 w-64 h-64 rounded-full blur-3xl bg-purple-400/20 dark:bg-purple-600/20"
           animate={{ x: [0, 30, 0], y: [0, 15, 0] }}
           transition={{ duration: 15, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
         />
-        <motion.div
+        <m.div
           className="absolute bottom-1/3 -right-32 w-64 h-64 rounded-full blur-3xl bg-blue-400/20 dark:bg-blue-600/20"
           animate={{ x: [0, -30, 0], y: [0, -15, 0] }}
           transition={{ duration: 18, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
@@ -38,7 +38,7 @@ export const Footer = () => {
 
       <div className="container mx-auto px-6 py-12 z-10 relative">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -46,9 +46,9 @@ export const Footer = () => {
             className="lg:col-span-2"
           >
             <Link href="/" className="flex items-center gap-2 mb-4 w-fit">
-              <motion.div whileHover={{ rotate: 10 }} transition={{ type: "spring", stiffness: 400, damping: 10 }}>
+              <m.div whileHover={{ rotate: 10 }} transition={{ type: "spring", stiffness: 400, damping: 10 }}>
                 <BotIcon className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-              </motion.div>
+              </m.div>
               <span className={cn("text-3xl pt-2 tracking-wide font-medium", teko.className)}>Detect AI</span>
             </Link>
             <p className="text-sm mb-6 max-w-md text-neutral-600 dark:text-neutral-400">
@@ -57,12 +57,12 @@ export const Footer = () => {
 
             <FooterSocials />
             <FooterNewsletter />
-          </motion.div>
+          </m.div>
 
           <FooterLinks />
         </div>
 
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
@@ -73,13 +73,13 @@ export const Footer = () => {
             <p className="text-xs text-neutral-600 dark:text-neutral-400">
               &copy; {currentYear} Detect AI Inc. All rights reserved.
             </p>
-            <motion.div
+            <m.div
               animate={{ scale: [1, 1.1, 1] }}
               transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY }}
               className="inline-flex mx-2"
             >
               <Heart size={12} className="text-red-500" />
-            </motion.div>
+            </m.div>
           </div>
           <nav className="flex gap-6 flex-wrap justify-center">
             <Link
@@ -95,7 +95,7 @@ export const Footer = () => {
               Privacy Policy
             </Link>
           </nav>
-        </motion.div>
+        </m.div>
       </div>
     </footer>
   )
