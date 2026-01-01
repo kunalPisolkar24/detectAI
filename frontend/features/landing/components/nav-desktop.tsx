@@ -1,8 +1,8 @@
 "use client"
 
-import { memo, useState } from "react"
+import { useState } from "react"
 import Link from "next/link"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { LogIn } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -10,7 +10,7 @@ import { NAV_LINKS } from "../constants"
 import { ModeToggle } from "./mode-toggle"
 import { teko } from "@/lib/fonts"
 
-const NavDesktop = memo(() => {
+export const NavDesktop = () => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
   return (
@@ -31,7 +31,7 @@ const NavDesktop = memo(() => {
           >
             {link.label}
             {hoveredIndex === index && (
-              <motion.span
+              <m.span
                 layoutId="nav-underline"
                 className="absolute left-0 right-0 -bottom-1 h-[2px] bg-gradient-to-r from-blue-600 to-purple-600 rounded-full"
                 initial={{ opacity: 0, width: "0%" }}
@@ -64,7 +64,4 @@ const NavDesktop = memo(() => {
       </div>
     </div>
   )
-})
-
-NavDesktop.displayName = "NavDesktop"
-export { NavDesktop }
+}

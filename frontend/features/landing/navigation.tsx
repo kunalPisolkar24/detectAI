@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { motion, useScroll, useMotionValueEvent } from "framer-motion"
+import { m, useScroll, useMotionValueEvent } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { NavLogo } from "./components/nav-logo"
 import { NavDesktop } from "./components/nav-desktop"
@@ -20,7 +20,7 @@ export const Navigation = () => {
   })
 
   return (
-    <motion.header
+    <m.header
       className={cn(
         "fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-in-out border-b",
         isScrolled 
@@ -36,6 +36,6 @@ export const Navigation = () => {
         <NavDesktop />
         <NavMobile />
       </div>
-    </motion.header>
+    </m.header>
   )
 }

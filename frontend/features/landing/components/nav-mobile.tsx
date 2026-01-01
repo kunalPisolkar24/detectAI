@@ -1,18 +1,18 @@
 "use client"
 
-import { memo, useState } from "react"
+import { useState } from "react"
 import Link from "next/link"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { PanelRight, X, LogIn } from "lucide-react"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { NAV_LINKS } from "../constants"
-import { NavLogo } from "./nav-logo"
-import { ModeToggle } from "./mode-toggle"
+import { NavLogo } from "../components/nav-logo"
+import { ModeToggle } from "../components/mode-toggle"
 import { teko } from "@/lib/fonts"
 
-const NavMobile = memo(() => {
+export const NavMobile = () => {
   const [isOpen, setIsOpen] = useState(false)
 
   return (
@@ -62,7 +62,7 @@ const NavMobile = memo(() => {
                   onClick={() => setIsOpen(false)}
                   className="group"
                 >
-                  <motion.div
+                  <m.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.1 + index * 0.05 }}
@@ -81,7 +81,7 @@ const NavMobile = memo(() => {
                     <span className={cn("font-medium text-2xl tracking-wide pt-1", teko.className)}>
                       {link.label.toUpperCase()}
                     </span>
-                  </motion.div>
+                  </m.div>
                 </Link>
               )
             })}
@@ -107,7 +107,4 @@ const NavMobile = memo(() => {
       </SheetContent>
     </Sheet>
   )
-})
-
-NavMobile.displayName = "NavMobile"
-export { NavMobile }
+}
