@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import Image from "next/image"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { cn } from "@/lib/utils"
 
 interface ReviewCardProps {
@@ -14,7 +14,7 @@ interface ReviewCardProps {
 
 const ReviewCard = memo(({ img, name, username, body }: ReviewCardProps) => {
   return (
-    <motion.figure
+    <m.figure
       whileHover={{ scale: 1.03 }}
       className={cn(
         "relative h-full w-64 cursor-pointer overflow-hidden rounded-xl border p-4 transition-all duration-300 mx-2",
@@ -29,6 +29,7 @@ const ReviewCard = memo(({ img, name, username, body }: ReviewCardProps) => {
           height={32}
           alt={`${name}'s avatar`}
           src={img}
+          loading="lazy"
         />
         <div className="flex flex-col">
           <figcaption className="text-sm font-medium text-gray-900 dark:text-white">
@@ -44,7 +45,7 @@ const ReviewCard = memo(({ img, name, username, body }: ReviewCardProps) => {
       </blockquote>
 
       <div className="absolute bottom-0 left-0 h-0.5 w-full bg-gradient-to-r from-blue-500 to-purple-500" />
-    </motion.figure>
+    </m.figure>
   )
 })
 

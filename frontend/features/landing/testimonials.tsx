@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { AnimatedGradientText } from "@/components/ui/animated-gradient-text"
 import { Marquee } from "@/components/ui/marquee"
 import { cn } from "@/lib/utils"
@@ -18,7 +18,7 @@ export const Testimonials = () => {
       id="testimonials"
       className="relative w-full flex flex-col items-center justify-center py-12 mb-10 overflow-hidden px-6 lg:mx-auto transition-colors duration-300"
     >
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: -20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
@@ -37,17 +37,17 @@ export const Testimonials = () => {
             WebkitClipPath: "padding-box",
           }}
         />
-        <motion.span
+        <m.span
           animate={{ rotate: [0, 5, 0] }}
           transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
           className="mr-2"
         >
           ⭐
-        </motion.span>
+        </m.span>
         <AnimatedGradientText className="text-sm font-medium">Testimonials</AnimatedGradientText>
-      </motion.div>
+      </m.div>
 
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
@@ -69,9 +69,9 @@ export const Testimonials = () => {
           See what our users have to say about Detect AI! <br className="hidden sm:block" />
           Read their experiences and discover how Detect AI can benefit you.
         </p>
-      </motion.div>
+      </m.div>
 
-      <motion.div
+      <m.div
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
         viewport={{ once: true }}
@@ -91,7 +91,7 @@ export const Testimonials = () => {
             <ReviewCard key={review.username} {...review} />
           ))}
         </Marquee>
-      </motion.div>
+      </m.div>
     </section>
   )
 }

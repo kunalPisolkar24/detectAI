@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import Link from "next/link"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { CircleCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -27,7 +27,7 @@ const PricingCard = memo(({ plan, billingCycle, index }: PricingCardProps) => {
   const isPopular = plan.popular
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 30 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
@@ -55,14 +55,14 @@ const PricingCard = memo(({ plan, billingCycle, index }: PricingCardProps) => {
         </p>
 
         <div className="mt-8 flex items-baseline">
-          <motion.span
+          <m.span
             key={billingCycle}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             className="text-4xl font-extrabold text-gray-900 dark:text-white"
           >
             {plan.price[billingCycle]}
-          </motion.span>
+          </m.span>
           <span className="ml-1 text-base font-medium text-neutral-600 dark:text-neutral-400">
             /{billingCycle === "monthly" ? "month" : "year"}
           </span>
@@ -76,7 +76,7 @@ const PricingCard = memo(({ plan, billingCycle, index }: PricingCardProps) => {
         </h4>
         <ul className="mt-4 space-y-4">
           {plan.features.map((feature, i) => (
-            <motion.li
+            <m.li
               key={i}
               initial={{ opacity: 0, x: -10 }}
               whileInView={{ opacity: 1, x: 0 }}
@@ -88,7 +88,7 @@ const PricingCard = memo(({ plan, billingCycle, index }: PricingCardProps) => {
               <span className="text-sm text-neutral-700 dark:text-neutral-300 leading-tight">
                 {feature}
               </span>
-            </motion.li>
+            </m.li>
           ))}
         </ul>
       </div>
@@ -113,7 +113,7 @@ const PricingCard = memo(({ plan, billingCycle, index }: PricingCardProps) => {
       {isPopular && (
         <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-b-xl" />
       )}
-    </motion.div>
+    </m.div>
   )
 })
 

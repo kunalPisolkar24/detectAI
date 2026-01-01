@@ -1,6 +1,6 @@
 "use client"
 
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { AnimatedGradientText } from "@/components/ui/animated-gradient-text"
 import { Accordion } from "@/components/ui/accordion"
 import { cn } from "@/lib/utils"
@@ -16,19 +16,19 @@ export const Faqs = () => {
       className="w-full relative overflow-hidden flex flex-col items-center justify-center bg-background text-foreground transition-colors duration-300 py-16 md:py-24 px-4 sm:px-6 lg:px-8"
     >
       <div className="absolute inset-0 -z-10 overflow-hidden opacity-15 sm:opacity-20 pointer-events-none">
-        <motion.div
+        <m.div
           className="absolute top-1/4 -left-24 w-72 h-72 sm:w-[500px] sm:h-[500px] sm:-left-40 rounded-full blur-3xl bg-purple-400/20 dark:bg-purple-600/20"
           animate={{ x: [0, 50, 0], y: [0, 30, 0] }}
           transition={{ duration: 20, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
         />
-        <motion.div
+        <m.div
           className="absolute bottom-1/4 -right-24 w-72 h-72 sm:w-[500px] sm:h-[500px] sm:-right-40 rounded-full blur-3xl bg-blue-400/20 dark:bg-blue-600/20"
           animate={{ x: [0, -50, 0], y: [0, -30, 0] }}
           transition={{ duration: 23, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
         />
       </div>
 
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: -20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
@@ -47,17 +47,17 @@ export const Faqs = () => {
             WebkitClipPath: "padding-box",
           }}
         />
-        <motion.span
+        <m.span
           animate={{ rotate: [0, 5, 0] }}
           transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
           className="mr-1.5 sm:mr-2"
         >
           💬
-        </motion.span>
+        </m.span>
         <AnimatedGradientText className="text-xs sm:text-sm font-medium">FAQs</AnimatedGradientText>
-      </motion.div>
+      </m.div>
 
-      <motion.h2
+      <m.h2
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
@@ -69,9 +69,9 @@ export const Faqs = () => {
         )}
       >
         Frequently Asked Questions
-      </motion.h2>
+      </m.h2>
 
-      <motion.p
+      <m.p
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
@@ -82,9 +82,9 @@ export const Faqs = () => {
         )}
       >
         Here are some of the most frequently asked questions about our product.
-      </motion.p>
+      </m.p>
 
-      <motion.div
+      <m.div
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
         viewport={{ once: true }}
@@ -101,7 +101,7 @@ export const Faqs = () => {
             />
           ))}
         </Accordion>
-      </motion.div>
+      </m.div>
 
       <FaqCTA />
     </section>

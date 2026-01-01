@@ -18,7 +18,8 @@ export const ModeToggle = () => {
         "bg-black/5 hover:bg-black/10 text-gray-700",
         "dark:bg-white/10 dark:hover:bg-white/20 dark:text-yellow-400"
       )}
-      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label="Toggle theme"
+      title="Toggle theme"
     >
       <Sun
         size={18}

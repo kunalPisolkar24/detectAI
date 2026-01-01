@@ -1,13 +1,13 @@
 "use client"
 
 import { memo } from "react"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { teko } from "@/lib/fonts";
 
 const FaqCTA = memo(() => {
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
@@ -24,7 +24,7 @@ const FaqCTA = memo(() => {
       <p className="text-xs sm:text-sm md:text-base text-neutral-600 dark:text-neutral-300">
         If you couldn&apos;t find the answer to your question, feel free to reach out to our support team.
       </p>
-      <motion.a
+      <m.a
         href="/contact"
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.97 }}
@@ -35,8 +35,8 @@ const FaqCTA = memo(() => {
         )}
       >
         Contact Support
-      </motion.a>
-    </motion.div>
+      </m.a>
+    </m.div>
   )
 })
 

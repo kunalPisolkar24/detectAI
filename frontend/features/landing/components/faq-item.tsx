@@ -1,7 +1,7 @@
 "use client"
 
 import { memo } from "react"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { cn } from "@/lib/utils"
 import { merriweather } from "@/lib/fonts"
@@ -14,7 +14,7 @@ interface FaqItemProps {
 
 const FaqItem = memo(({ question, answer, index }: FaqItemProps) => {
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
@@ -47,7 +47,7 @@ const FaqItem = memo(({ question, answer, index }: FaqItemProps) => {
           {answer}
         </AccordionContent>
       </AccordionItem>
-    </motion.div>
+    </m.div>
   )
 })
 

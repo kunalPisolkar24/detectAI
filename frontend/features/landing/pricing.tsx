@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { Sparkles } from "lucide-react"
 import { AnimatedGradientText } from "@/components/ui/animated-gradient-text"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -18,7 +18,7 @@ export const Pricing = () => {
     <section className="w-full relative overflow-hidden flex flex-col items-center justify-center bg-background text-foreground transition-colors duration-300 py-16 md:py-24">
       <div className="w-full container px-6 sm:px-8 lg:mx-auto flex flex-col items-center justify-center space-y-8 z-10">
         <div className="text-center flex flex-col items-center justify-center">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: -20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -37,17 +37,17 @@ export const Pricing = () => {
                 WebkitClipPath: "padding-box",
               }}
             />
-            <motion.span
+            <m.span
               animate={{ rotate: [0, 5, 0] }}
               transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
               className="mr-2"
             >
               <Sparkles className="h-4 w-4 text-yellow-400" />
-            </motion.span>
+            </m.span>
             <AnimatedGradientText className="text-sm font-medium">Pricing</AnimatedGradientText>
-          </motion.div>
+          </m.div>
 
-          <motion.h2
+          <m.h2
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -59,9 +59,9 @@ export const Pricing = () => {
             )}
           >
             Choose The Plan For AI Text Detection
-          </motion.h2>
+          </m.h2>
 
-          <motion.p
+          <m.p
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -72,10 +72,10 @@ export const Pricing = () => {
             )}
           >
             From simple AI text detection to in-depth analysis with advanced models, choose the plan that fits your requirements.
-          </motion.p>
+          </m.p>
         </div>
 
-        <motion.div
+        <m.div
           initial={{ opacity: 0, scale: 0.95 }}
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true }}
@@ -95,7 +95,7 @@ export const Pricing = () => {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-        </motion.div>
+        </m.div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 lg:gap-14 mt-8 place-items-center mx-auto w-full max-w-5xl">
           {PRICING_PLANS.map((plan, index) => (
@@ -108,7 +108,7 @@ export const Pricing = () => {
           ))}
         </div>
 
-        <motion.p
+        <m.p
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
@@ -123,7 +123,7 @@ export const Pricing = () => {
             Contact us
           </Link>
           .
-        </motion.p>
+        </m.p>
       </div>
     </section>
   )
