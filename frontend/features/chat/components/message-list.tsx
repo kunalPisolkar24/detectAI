@@ -8,6 +8,7 @@ import { AnalysisCard } from "./analysis-card"
 import { cn } from "@/lib/utils"
 import { Bot, User } from "lucide-react"
 import { Message, ChatSession } from "../types"
+import { chatService } from "../services/mock-service"
 
 export const MessageList = () => {
   const { currentChatId } = useChatUIStore()
@@ -15,6 +16,10 @@ export const MessageList = () => {
 
   const { data: chat } = useQuery<ChatSession>({
     queryKey: ["chat", currentChatId],
+    queryFn: async () => {
+      if (!currentChatId) throw new Error("No chat ID provided")
+      return chatService.getChat(currentChatId)
+    },
     enabled: !!currentChatId,
   })
 

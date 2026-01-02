@@ -66,6 +66,17 @@ class MockChatService {
     return newChat
   }
 
+  async getChat(chatId: string): Promise<ChatSession> {
+    await this.delay()
+    const chat = this.chats.find((c) => c.id === chatId)
+
+    if (!chat) {
+      throw new Error("Chat session not found")
+    }
+
+    return chat
+  }
+
   async sendMessage(chatId: string, content: string, model: ModelType): Promise<Message> {
     await this.delay()
 
