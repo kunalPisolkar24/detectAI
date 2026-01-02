@@ -14,10 +14,10 @@ export const AnalysisCard = ({ result }: AnalysisCardProps) => {
   const isAI = result.label === "AI"
   const humanScore = Math.round(result.scores.human * 100)
   const aiScore = Math.round(result.scores.ai * 100)
-  
-  const statusColor = isAI 
-    ? "text-purple-300 bg-purple-500/20 border-purple-500/20" 
-    : "text-emerald-300 bg-emerald-500/20 border-emerald-500/20"
+
+  const statusColor = isAI
+    ? "text-purple-600 bg-purple-100 border-purple-200 dark:text-purple-300 dark:bg-purple-500/20 dark:border-purple-500/20"
+    : "text-emerald-600 bg-emerald-100 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/20 dark:border-emerald-500/20"
 
   const modelName = result.model === "spark" ? "Spark" : "Flare"
   const statusText = isAI ? "AI-GENERATED" : "HUMAN-WRITTEN"
@@ -48,7 +48,7 @@ export const AnalysisCard = ({ result }: AnalysisCardProps) => {
             "px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border flex items-center gap-2",
             statusColor
           )}>
-            <div className={cn("w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full animate-pulse", isAI ? "bg-purple-400" : "bg-emerald-400")} />
+            <div className={cn("w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full animate-pulse", isAI ? "bg-purple-500" : "bg-emerald-500")} />
             <span className={cn("text-base sm:text-lg font-medium tracking-wide pt-0.5 uppercase", teko.className)}>
               {statusText}
             </span>
@@ -68,7 +68,7 @@ export const AnalysisCard = ({ result }: AnalysisCardProps) => {
                 {humanScore}%
               </span>
             </div>
-            
+
             <div className="flex flex-col gap-0.5 items-end">
               <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
                 <span className={cn("text-[10px] sm:text-xs font-bold uppercase tracking-wider", inter.className)}>
@@ -83,23 +83,23 @@ export const AnalysisCard = ({ result }: AnalysisCardProps) => {
           </div>
 
           <div className="relative h-3 sm:h-4 w-full rounded-full overflow-hidden bg-neutral-200/50 dark:bg-white/5 flex p-0.5 border border-black/5 dark:border-white/5">
-            <m.div 
+            <m.div
               initial={{ width: "50%" }}
               animate={{ width: `${humanScore}%` }}
               transition={{ duration: 1, ease: "circOut" }}
               className="h-full rounded-l-full bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]"
             />
-            
+
             <div className="w-0.5 h-full bg-transparent" />
 
-            <m.div 
+            <m.div
               initial={{ width: "50%" }}
               animate={{ width: `${aiScore}%` }}
               transition={{ duration: 1, ease: "circOut" }}
               className="h-full rounded-r-full bg-purple-600 shadow-[0_0_15px_rgba(147,51,234,0.4)]"
             />
           </div>
-          
+
           <div className="flex justify-between px-1 opacity-20 text-[8px] sm:text-[10px]">
             <span className="h-2 w-px bg-current block" />
             <span className="h-2 w-px bg-current block" />
