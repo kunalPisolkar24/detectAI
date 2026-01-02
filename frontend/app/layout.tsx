@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "@/providers";
 import { LazyMotionProvider } from "@/components/providers/lazy-motion-provider";
-import { Toaster } from "@/components/ui/sonner"; 
+import { QueryProvider } from "@/components/providers/query-provider";
+import { Toaster } from "@/components/ui/sonner";
 import { inter } from "@/lib/fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Detect AI - AI Text Detection",
-  description: "Detect AI generated text with high accuracy.",
+  title: "Detect AI",
+  description: "AI Text Detection",
 }
 
 export default function RootLayout({
@@ -24,10 +25,12 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <LazyMotionProvider>
-            {children}
-            <Toaster position="bottom-right" richColors closeButton />
-          </LazyMotionProvider>
+          <QueryProvider>
+            <LazyMotionProvider>
+              {children}
+              <Toaster position="bottom-right" />
+            </LazyMotionProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>
