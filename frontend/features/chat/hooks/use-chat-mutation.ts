@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { chatService } from "../services/mock-service"
+import { chatService } from "../services"
 import { useChatUIStore } from "../stores/ui-store"
 import { Message, ChatSession } from "../types"
 
@@ -9,43 +9,51 @@ export const useSendMessage = () => {
 
   return useMutation({
     mutationFn: async (content: string) => {
-      let chatId = currentChatId
+      let activeChatId = currentChatId
 
-      if (!chatId) {
+      if (!activeChatId) {
         const newChat = await chatService.createChat(content)
-        chatId = newChat.id
-        setCurrentChatId(chatId)
-        queryClient.setQueryData<ChatSession>(["chat", chatId], { ...newChat, messages: [] })
+        activeChatId = newChat.id
+        setCurrentChatId(activeChatId)
+        
+        queryClient.setQueryData<ChatSession>(["chat", activeChatId], { 
+          ...newChat, 
+          messages: [] 
+        })
       }
 
-      const userMsg: Message = {
+      const optimisticMessage: Message = {
         id: crypto.randomUUID(),
         role: "user",
         content,
         createdAt: new Date()
       }
 
-      queryClient.setQueryData<ChatSession>(["chat", chatId], (old) => {
+      queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
         if (!old) return undefined
         return {
           ...old,
-          messages: [...old.messages, userMsg]
+          messages: [...old.messages, optimisticMessage]
         }
       })
 
-      return chatService.sendMessage(chatId, content, selectedModel)
+      return chatService.sendMessage(activeChatId, content, selectedModel)
     },
-    onSuccess: (data) => {
-      const chatId = useChatUIStore.getState().currentChatId
-      if (chatId) {
-        queryClient.setQueryData<ChatSession>(["chat", chatId], (old) => {
+    onSuccess: (newMessage, _, context) => {
+      const activeChatId = useChatUIStore.getState().currentChatId
+      
+      if (activeChatId) {
+        queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
           if (!old) return undefined
           return {
             ...old,
-            messages: [...old.messages, data]
+            messages: [...old.messages, newMessage]
           }
         })
       }
+    },
+    onError: (error) => {
+        console.error("Failed to send message", error)
     }
   })
 }
