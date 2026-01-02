@@ -1,4 +1,5 @@
 import { AnalysisResult, ChatSession, Message, ModelType } from "../types"
+import { IChatService } from "./chat-service.interface"
 
 interface SparkRawResponse {
   confidence: number
@@ -15,7 +16,7 @@ interface FlareRawResponse {
 
 const DELAY_MS = 1500
 
-class MockChatService {
+class MockChatService implements IChatService {
   private chats: ChatSession[] = []
 
   private async delay() {
@@ -110,4 +111,4 @@ class MockChatService {
   }
 }
 
-export const chatService = new MockChatService()
+export const mockChatService = new MockChatService()
