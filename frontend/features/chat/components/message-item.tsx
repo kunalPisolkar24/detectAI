@@ -28,7 +28,7 @@ export const MessageItem = ({ message }: MessageItemProps) => {
       )}>
         {isUser ? (
            <div className={cn(
-             "px-5 py-3 rounded-2xl text-sm sm:text-base leading-relaxed whitespace-pre-wrap shadow-sm",
+             "px-5 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap shadow-sm",
              "bg-white/90 dark:bg-white/10 text-neutral-800 dark:text-neutral-100",
              "border border-black/5 dark:border-white/5",
              "rounded-tr-sm", 

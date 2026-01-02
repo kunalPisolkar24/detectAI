@@ -44,8 +44,8 @@ export const MessageList = () => {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6 scroll-smooth">
-      <div className="max-w-4xl mx-auto space-y-8">
+    <div className="flex-1 overflow-y-auto py-6 scroll-smooth">
+      <div className="w-full max-w-4xl mx-auto px-4 space-y-8">
         {messages.map((msg: Message) => (
           <MessageItem key={msg.id} message={msg} />
         ))}
