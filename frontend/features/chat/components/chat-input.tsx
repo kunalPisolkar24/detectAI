@@ -43,7 +43,7 @@ export const ChatInput = () => {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 pb-8">
+    <div className="w-full max-w-4xl mx-auto px-4 pb-8 lg:pb-4">
       <m.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
