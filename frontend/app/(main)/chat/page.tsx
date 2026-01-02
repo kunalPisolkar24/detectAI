@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function ChatPage() {
   return (
-    <main className="h-screen w-full bg-background overflow-hidden">
+    <main className="h-full w-full overflow-hidden">
       <ChatView />
     </main>
   )
