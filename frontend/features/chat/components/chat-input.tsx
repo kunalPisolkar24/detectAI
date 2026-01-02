@@ -44,7 +44,7 @@ export const ChatInput = () => {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 pb-8 lg:pb-4">
+    <div className="w-full">
       <m.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -53,7 +53,7 @@ export const ChatInput = () => {
           "relative flex flex-col rounded-xl overflow-hidden transition-all duration-300",
           "bg-white/70 border border-neutral-300 shadow-sm",
           "dark:bg-black/40 dark:border-white/10 dark:shadow-[0_8px_40px_-12px_rgba(0,0,0,0.5)]",
-          "backdrop-blur-xl supports-[backdrop-filter]:bg-white/50 dark:supports-[backdrop-filter]:bg-black/40"
+          "supports-[backdrop-filter]:bg-white/50 dark:supports-[backdrop-filter]:bg-black/40"
         )}
       >
         {isPending && (

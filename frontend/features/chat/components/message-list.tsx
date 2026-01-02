@@ -23,7 +23,7 @@ export const MessageList = () => {
 
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
+      <div className="flex-1 h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
         <div className="mb-6 p-4 rounded-full bg-secondary/30 border border-border/50">
           <m.div 
             animate={{ rotate: [0, 10, -10, 0] }}
@@ -44,8 +44,8 @@ export const MessageList = () => {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto py-6 scroll-smooth">
-      <div className="w-full max-w-4xl mx-auto px-4 space-y-8">
+    <div className="h-full overflow-y-auto scroll-smooth">
+      <div className="w-full max-w-4xl mx-auto px-4 pt-6 pb-48 space-y-8">
         {messages.map((msg: Message) => (
           <MessageItem key={msg.id} message={msg} />
         ))}
