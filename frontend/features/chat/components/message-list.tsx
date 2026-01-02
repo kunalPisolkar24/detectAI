@@ -6,9 +6,9 @@ import { m, AnimatePresence } from "framer-motion"
 import { useChatUIStore } from "../stores/ui-store"
 import { AnalysisCard } from "./analysis-card"
 import { cn } from "@/lib/utils"
-import { Bot, User } from "lucide-react"
 import { Message, ChatSession } from "../types"
 import { chatService } from "../services/mock-service"
+import { merriweather } from "@/lib/fonts"
 
 export const MessageList = () => {
   const { currentChatId } = useChatUIStore()
@@ -55,46 +55,36 @@ export const MessageList = () => {
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-6 scroll-smooth">
-      <div className="max-w-3xl mx-auto space-y-8">
+      <div className="max-w-4xl mx-auto space-y-8">
         <AnimatePresence initial={false}>
           {messages.map((msg: Message) => (
             <m.div
               key={msg.id}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className={cn(
-                "flex gap-4",
+                "flex w-full",
                 msg.role === "user" ? "justify-end" : "justify-start"
               )}
             >
-              {msg.role === "assistant" && (
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20">
-                  <Bot size={16} className="text-primary" />
-                </div>
-              )}
-              
-              <div className={cn("flex flex-col max-w-[85%]", msg.role === "user" ? "items-end" : "items-start")}>
-                <div className={cn(
-                  "text-sm font-medium mb-1 opacity-50",
-                  msg.role === "user" ? "mr-1" : "ml-1"
-                )}>
-                  {msg.role === "user" ? "You" : "Detect AI"}
-                </div>
-                
+              <div className={cn(
+                "flex flex-col w-full",
+                msg.role === "user" ? "items-end max-w-[85%]" : "items-start max-w-full"
+              )}>
                 {msg.role === "user" ? (
-                   <div className="bg-secondary/50 px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed font-serif whitespace-pre-wrap border border-border/50">
+                   <div className={cn(
+                     "px-5 py-3 rounded-2xl text-sm sm:text-base leading-relaxed whitespace-pre-wrap shadow-sm",
+                     "bg-white/90 dark:bg-white/10 text-neutral-800 dark:text-neutral-100",
+                     "border border-black/5 dark:border-white/5",
+                     "rounded-tr-sm", 
+                     merriweather.className
+                   )}>
                      {msg.content}
                    </div>
                 ) : (
                    msg.analysis && <AnalysisCard result={msg.analysis} />
                 )}
               </div>
-
-              {msg.role === "user" && (
-                <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0 border border-border">
-                  <User size={16} className="text-muted-foreground" />
-                </div>
-              )}
             </m.div>
           ))}
         </AnimatePresence>
