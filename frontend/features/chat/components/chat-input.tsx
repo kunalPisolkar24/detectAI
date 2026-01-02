@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, useState } from "react"
 import { m, AnimatePresence } from "framer-motion"
 import { useChatUIStore } from "../stores/ui-store"
 import { useSendMessage } from "../hooks/use-chat-mutation"
@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 export const ChatInput = () => {
-  const { input, setInput, selectedModel, setModel } = useChatUIStore()
+  const [localInput, setLocalInput] = useState("")
+  const { selectedModel, setModel } = useChatUIStore()
   const { mutate, isPending } = useSendMessage()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -26,12 +27,12 @@ export const ChatInput = () => {
       textareaRef.current.style.height = "auto"
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
     }
-  }, [input])
+  }, [localInput])
 
   const handleSubmit = () => {
-    if (!input.trim() || isPending) return
-    mutate(input)
-    setInput("")
+    if (!localInput.trim() || isPending) return
+    mutate(localInput)
+    setLocalInput("")
     if (textareaRef.current) textareaRef.current.style.height = "auto"
   }
 
@@ -61,8 +62,8 @@ export const ChatInput = () => {
 
         <Textarea
           ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
+          value={localInput}
+          onChange={(e) => setLocalInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Paste your text here for AI detection..."
           className={cn(
@@ -73,6 +74,7 @@ export const ChatInput = () => {
             merriweather.className
           )}
           disabled={isPending}
+          aria-label="Text to analyze"
         />
         
         <div className="flex items-center justify-between px-3 pb-3 pt-1">
@@ -83,8 +85,9 @@ export const ChatInput = () => {
                 size="icon" 
                 className="h-8 w-8 text-neutral-500 hover:text-blue-600 hover:bg-blue-50/50 dark:text-neutral-400 dark:hover:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
                 disabled={isPending}
+                aria-label="Attach file"
               >
-                <Paperclip size={18} />
+                <Paperclip size={18} aria-hidden="true" />
               </Button>
             </m.div>
             
@@ -99,9 +102,10 @@ export const ChatInput = () => {
                     "text-neutral-700 dark:text-neutral-200 transition-all duration-200"
                   )}
                   disabled={isPending}
+                  aria-label={`Select model, current: ${selectedModel}`}
                 >
                   <span className="capitalize tracking-wide">{selectedModel}</span>
-                  <ChevronDown size={12} className="opacity-50" />
+                  <ChevronDown size={12} className="opacity-50" aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent 
@@ -133,15 +137,15 @@ export const ChatInput = () => {
           <m.div
             initial={false}
             animate={{ 
-              scale: input.trim() ? 1 : 0.95,
-              opacity: input.trim() ? 1 : 0.8
+              scale: localInput.trim() ? 1 : 0.95,
+              opacity: localInput.trim() ? 1 : 0.8
             }}
-            whileHover={input.trim() ? { scale: 1.02 } : {}}
-            whileTap={input.trim() ? { scale: 0.98 } : {}}
+            whileHover={localInput.trim() ? { scale: 1.02 } : {}}
+            whileTap={localInput.trim() ? { scale: 0.98 } : {}}
           >
             <Button 
               onClick={handleSubmit}
-              disabled={!input.trim() || isPending}
+              disabled={!localInput.trim() || isPending}
               className={cn(
                 "h-9 min-w-[36px] rounded-lg transition-all duration-300 px-3 sm:px-5",
                 "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md shadow-blue-500/20",
@@ -149,6 +153,7 @@ export const ChatInput = () => {
                 "disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none",
                 teko.className
               )}
+              aria-label="Analyze text"
             >
               <AnimatePresence mode="wait">
                 {isPending ? (
@@ -158,7 +163,7 @@ export const ChatInput = () => {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.5 }}
                   >
-                    <Loader2 size={16} className="animate-spin" />
+                    <Loader2 size={16} className="animate-spin" aria-hidden="true" />
                   </m.div>
                 ) : (
                   <m.div
@@ -169,7 +174,7 @@ export const ChatInput = () => {
                     className="flex items-center gap-2"
                   >
                     <span className="hidden sm:inline text-lg tracking-wide pt-0.5">ANALYZE</span>
-                    <ArrowUp size={16} strokeWidth={2.5} />
+                    <ArrowUp size={16} strokeWidth={2.5} aria-hidden="true" />
                   </m.div>
                 )}
               </AnimatePresence>
@@ -180,7 +185,7 @@ export const ChatInput = () => {
 
       <div className="mt-3 flex justify-center">
         <p className="text-[10px] text-neutral-400 dark:text-neutral-500 flex items-center gap-1.5 opacity-80">
-          <Sparkles size={9} />
+          <Sparkles size={9} aria-hidden="true" />
           <span>AI can make mistakes. Verify important results.</span>
         </p>
       </div>
