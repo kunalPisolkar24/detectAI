@@ -25,7 +25,7 @@ export const AnalysisCard = ({ result }: AnalysisCardProps) => {
       initial={{ opacity: 0, y: 10, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       className={cn(
-        "sm:ml-2 w-full max-w-[380px] overflow-hidden rounded-2xl border shadow-sm transition-all",
+        "sm:ml-2 w-full max-w-[360px] overflow-hidden rounded-2xl border shadow-sm transition-all",
         "bg-white/80 border-neutral-200",
         "dark:bg-black/60 dark:border-white/10 dark:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.5)]",
         "backdrop-blur-xl supports-[backdrop-filter]:bg-white/50 dark:supports-[backdrop-filter]:bg-black/40"
