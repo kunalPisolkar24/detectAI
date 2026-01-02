@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { AnalysisResult } from "../types"
 import { Fingerprint, Bot } from "lucide-react"
 import { teko, inter } from "@/lib/fonts"
+import { formatPercentage, getAnalysisConfig, getModelDisplayName } from "../utils/formatting"
 
 interface AnalysisCardProps {
   result: AnalysisResult
@@ -12,15 +13,12 @@ interface AnalysisCardProps {
 
 export const AnalysisCard = ({ result }: AnalysisCardProps) => {
   const isAI = result.label === "AI"
-  const humanScore = Math.round(result.scores.human * 100)
-  const aiScore = Math.round(result.scores.ai * 100)
-  
-  const statusColor = isAI 
-    ? "text-purple-600 bg-purple-100 border-purple-200 dark:text-purple-300 dark:bg-purple-500/20 dark:border-purple-500/20" 
-    : "text-emerald-600 bg-emerald-100 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/20 dark:border-emerald-500/20"
+  const config = getAnalysisConfig(isAI)
 
-  const modelName = result.model === "spark" ? "Spark" : "Flare"
-  const statusText = isAI ? "AI-GENERATED" : "HUMAN-WRITTEN"
+  const humanScoreDisplay = formatPercentage(result.scores.human)
+  const aiScoreDisplay = formatPercentage(result.scores.ai)
+  const humanScoreValue = Math.round(result.scores.human * 100)
+  const aiScoreValue = Math.round(result.scores.ai * 100)
 
   return (
     <m.div
@@ -40,17 +38,19 @@ export const AnalysisCard = ({ result }: AnalysisCardProps) => {
               Analysis Model
             </span>
             <span className={cn("text-xl sm:text-2xl font-medium leading-none tracking-wide", teko.className)}>
-              {modelName}
+              {getModelDisplayName(result.model)}
             </span>
           </div>
 
           <div className={cn(
             "px-2.5 py-1 rounded-lg border flex items-center gap-1.5",
-            statusColor
+            config.colors.text,
+            config.colors.bg,
+            config.colors.border
           )}>
-            <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", isAI ? "bg-purple-500" : "bg-emerald-500")} />
+            <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", config.colors.dot)} />
             <span className={cn("text-sm sm:text-base font-medium tracking-wide pt-0.5 uppercase", teko.className)}>
-              {statusText}
+              {config.label}
             </span>
           </div>
         </div>
@@ -59,48 +59,55 @@ export const AnalysisCard = ({ result }: AnalysisCardProps) => {
           <div className="flex justify-between items-end px-0.5">
             <div className="flex flex-col gap-0.5">
               <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                <Fingerprint size={10} strokeWidth={2.5} />
+                <Fingerprint size={10} strokeWidth={2.5} aria-hidden="true" />
                 <span className={cn("text-[10px] font-bold uppercase tracking-wider", inter.className)}>
                   Human
                 </span>
               </div>
               <span className={cn("text-2xl sm:text-3xl font-bold leading-none tracking-tight", teko.className)}>
-                {humanScore}%
+                {humanScoreDisplay}
               </span>
             </div>
-            
+
             <div className="flex flex-col gap-0.5 items-end">
               <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
                 <span className={cn("text-[10px] font-bold uppercase tracking-wider", inter.className)}>
                   AI
                 </span>
-                <Bot size={10} strokeWidth={2.5} />
+                <Bot size={10} strokeWidth={2.5} aria-hidden="true" />
               </div>
               <span className={cn("text-2xl sm:text-3xl font-bold leading-none tracking-tight", teko.className)}>
-                {aiScore}%
+                {aiScoreDisplay}
               </span>
             </div>
           </div>
 
-          <div className="relative h-2.5 sm:h-3 w-full rounded-full overflow-hidden bg-neutral-200/50 dark:bg-white/5 flex p-0.5 border border-black/5 dark:border-white/5">
-            <m.div 
+          <div
+            className="relative h-2.5 sm:h-3 w-full rounded-full overflow-hidden bg-neutral-200/50 dark:bg-white/5 flex p-0.5 border border-black/5 dark:border-white/5"
+            role="progressbar"
+            aria-valuenow={aiScoreValue}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="AI Likelihood"
+          >
+            <m.div
               initial={{ width: "50%" }}
-              animate={{ width: `${humanScore}%` }}
+              animate={{ width: `${humanScoreValue}%` }}
               transition={{ duration: 1, ease: "circOut" }}
               className="h-full rounded-l-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]"
             />
-            
+
             <div className="w-0.5 h-full bg-transparent" />
 
-            <m.div 
+            <m.div
               initial={{ width: "50%" }}
-              animate={{ width: `${aiScore}%` }}
+              animate={{ width: `${aiScoreValue}%` }}
               transition={{ duration: 1, ease: "circOut" }}
               className="h-full rounded-r-full bg-purple-600 shadow-[0_0_10px_rgba(147,51,234,0.4)]"
             />
           </div>
-          
-          <div className="flex justify-between px-1 opacity-20 text-[6px] sm:text-[8px]">
+
+          <div className="flex justify-between px-1 opacity-20 text-[6px] sm:text-[8px]" aria-hidden="true">
             <span className="h-1.5 w-px bg-current block" />
             <span className="h-1.5 w-px bg-current block" />
             <span className="h-1.5 w-px bg-current block" />
