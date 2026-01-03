@@ -1,3 +1,6 @@
+import { Sidebar } from "@/features/chat/components/layout/sidebar"
+import { MobileHeader } from "@/features/chat/components/layout/mobile-header"
+
 export default function MainLayout({
   children,
 }: {
@@ -5,7 +8,9 @@ export default function MainLayout({
 }) {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
+      <Sidebar />
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+        <MobileHeader />
         {children}
       </div>
     </div>
