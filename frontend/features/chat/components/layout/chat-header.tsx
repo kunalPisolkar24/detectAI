@@ -31,7 +31,7 @@ export const ChatHeader = () => {
   const { currentChatId } = useChatUIStore()
   const { data: chat } = useChatSession(currentChatId)
   const { deleteChat, renameChat } = useChatMutations()
-  
+
   const [showRenameDialog, setShowRenameDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [newTitle, setNewTitle] = useState("")
@@ -58,17 +58,17 @@ export const ChatHeader = () => {
 
   return (
     <>
-      <div className="hidden md:flex absolute top-0 left-0 w-full z-10 h-14 border-b border-black/5 dark:border-white/5 bg-background/80 backdrop-blur-xl items-center px-4 md:px-6">
+      <div className="hidden md:flex w-full h-14 shrink-0 border-b border-black/5 dark:border-white/5 bg-background items-center px-4 md:px-6">
         <div className="flex-1 flex justify-start">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 className="h-9 px-3 gap-2 hover:bg-secondary/80 data-[state=open]:bg-secondary/80 transition-all rounded-lg group"
               >
                 <span className={cn(
-                  "text-sm font-medium tracking-normal max-w-[300px] truncate text-foreground/90 group-hover:text-foreground", 
+                  "text-sm font-medium tracking-normal max-w-[300px] truncate text-foreground/90 group-hover:text-foreground",
                   inter.className
                 )}>
                   {chat.title}
@@ -82,7 +82,7 @@ export const ChatHeader = () => {
                 Rename
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => setShowDeleteDialog(true)}
                 className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400 focus:bg-red-50 dark:focus:bg-red-950/20"
               >
@@ -105,7 +105,7 @@ export const ChatHeader = () => {
           </AlertDialogHeader>
           <form onSubmit={handleRenameSubmit}>
             <div className="py-4">
-              <Input 
+              <Input
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 placeholder="Chat title"
@@ -117,8 +117,8 @@ export const ChatHeader = () => {
               <AlertDialogCancel type="button" className={cn("text-base tracking-wide", teko.className)}>
                 CANCEL
               </AlertDialogCancel>
-              <AlertDialogAction 
-                type="submit" 
+              <AlertDialogAction
+                type="submit"
                 disabled={!newTitle.trim()}
                 className={cn("bg-gradient-to-r from-blue-600 to-purple-600 text-white border-0 tracking-wide text-lg", teko.className)}
               >
@@ -140,7 +140,7 @@ export const ChatHeader = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className={cn("text-base tracking-wide", teko.className)}>CANCEL</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={handleDelete}
               className={cn("bg-red-600 hover:bg-red-700 text-white border-red-600 dark:border-red-600 tracking-wide text-lg", teko.className)}
             >

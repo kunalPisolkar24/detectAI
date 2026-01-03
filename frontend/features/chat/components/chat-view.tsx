@@ -6,9 +6,9 @@ import { ChatHeader } from "./layout/chat-header"
 
 export const ChatView = () => {
   return (
-    <div className="relative h-full w-full bg-background overflow-hidden isolate">
+    <div className="flex flex-col relative h-full w-full bg-background overflow-hidden isolate">
       <ChatHeader />
-      <div className="h-full w-full z-0">
+      <div className="flex-1 w-full overflow-y-auto scroll-smooth z-0 custom-scrollbar">
         <MessageList />
       </div>
 
