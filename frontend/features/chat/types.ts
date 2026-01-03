@@ -28,3 +28,9 @@ export interface ChatSession {
   messages: Message[]
   updatedAt: Date
 }
+
+export interface ChatHistoryItem {
+  id: string
+  title: string
+  updatedAt: Date
+}
