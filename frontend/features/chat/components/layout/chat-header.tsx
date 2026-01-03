@@ -4,7 +4,7 @@ import { useChatUIStore } from "../../stores/ui-store"
 import { useChatSession } from "../../hooks/use-chat-history"
 import { useChatMutations } from "../../hooks/use-chat-mutation"
 import { cn } from "@/lib/utils"
-import { teko } from "@/lib/fonts"
+import { teko, inter } from "@/lib/fonts"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,8 +58,8 @@ export const ChatHeader = () => {
 
   return (
     <>
-      <div className="absolute top-0 left-0 w-full z-10 h-14 border-b border-black/5 dark:border-white/5 bg-background/80 backdrop-blur-xl flex items-center px-4 md:px-6">
-        <div className="flex-1 flex justify-center md:justify-start">
+      <div className="hidden md:flex absolute top-0 left-0 w-full z-10 h-14 border-b border-black/5 dark:border-white/5 bg-background/80 backdrop-blur-xl items-center px-4 md:px-6">
+        <div className="flex-1 flex justify-start">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button 
@@ -68,8 +68,8 @@ export const ChatHeader = () => {
                 className="h-9 px-3 gap-2 hover:bg-secondary/80 data-[state=open]:bg-secondary/80 transition-all rounded-lg group"
               >
                 <span className={cn(
-                  "text-lg font-medium tracking-wide max-w-[200px] md:max-w-[300px] truncate text-foreground/90 group-hover:text-foreground", 
-                  teko.className
+                  "text-sm font-medium tracking-normal max-w-[300px] truncate text-foreground/90 group-hover:text-foreground", 
+                  inter.className
                 )}>
                   {chat.title}
                 </span>
@@ -87,7 +87,7 @@ export const ChatHeader = () => {
                 className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400 focus:bg-red-50 dark:focus:bg-red-950/20"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-                Delete Chat
+                Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -114,9 +114,15 @@ export const ChatHeader = () => {
               />
             </div>
             <AlertDialogFooter>
-              <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
-              <AlertDialogAction type="submit" disabled={!newTitle.trim()}>
-                Save Changes
+              <AlertDialogCancel type="button" className={cn("text-base tracking-wide", teko.className)}>
+                CANCEL
+              </AlertDialogCancel>
+              <AlertDialogAction 
+                type="submit" 
+                disabled={!newTitle.trim()}
+                className={cn("bg-gradient-to-r from-blue-600 to-purple-600 text-white border-0 tracking-wide text-lg", teko.className)}
+              >
+                SAVE
               </AlertDialogAction>
             </AlertDialogFooter>
           </form>
@@ -133,12 +139,12 @@ export const ChatHeader = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className={cn("text-base tracking-wide", teko.className)}>CANCEL</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleDelete}
-              className="bg-red-600 hover:bg-red-700 text-white border-red-600 dark:border-red-600"
+              className={cn("bg-red-600 hover:bg-red-700 text-white border-red-600 dark:border-red-600 tracking-wide text-lg", teko.className)}
             >
-              Delete
+              DELETE
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
