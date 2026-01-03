@@ -16,9 +16,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+import { useRouter } from "next/navigation"
+
 export const ChatInput = () => {
+  const router = useRouter()
   const [localInput, setLocalInput] = useState("")
-  const { selectedModel, setModel } = useChatUIStore()
+  const { selectedModel, setModel, userType } = useChatUIStore()
   const { mutate, isPending } = useSendMessage()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -45,7 +48,7 @@ export const ChatInput = () => {
 
   return (
     <div className="w-full">
-      <m.div 
+      <m.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
@@ -76,13 +79,13 @@ export const ChatInput = () => {
           disabled={isPending}
           aria-label="Text to analyze"
         />
-        
+
         <div className="flex items-center justify-between px-3 pb-3 pt-1">
           <div className="flex items-center gap-2">
             <m.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                variant="ghost"
+                size="icon"
                 className="h-8 w-8 text-neutral-500 hover:text-blue-600 hover:bg-blue-50/50 dark:text-neutral-400 dark:hover:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
                 disabled={isPending}
                 aria-label="Attach file"
@@ -90,12 +93,12 @@ export const ChatInput = () => {
                 <Paperclip size={18} aria-hidden="true" />
               </Button>
             </m.div>
-            
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className={cn(
                     "h-8 gap-2 px-3 text-xs font-medium rounded-lg border-neutral-200 dark:border-white/10",
                     "bg-white/50 hover:bg-black/5 dark:bg-white/5 dark:hover:bg-white/10",
@@ -108,11 +111,11 @@ export const ChatInput = () => {
                   <ChevronDown size={12} className="opacity-50" aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent 
-                align="start" 
+              <DropdownMenuContent
+                align="start"
                 className="w-[200px] p-1.5 rounded-xl bg-white/95 dark:bg-black/95 backdrop-blur-xl border-neutral-200 dark:border-white/10 shadow-lg"
               >
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   onClick={() => setModel("spark")}
                   className="rounded-lg p-2 focus:bg-neutral-100 dark:focus:bg-white/10 cursor-pointer mb-1"
                 >
@@ -121,14 +124,25 @@ export const ChatInput = () => {
                     <span className="text-[10px] text-muted-foreground leading-tight">Fast analysis for everyday content.</span>
                   </div>
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => setModel("flare")}
-                  className="rounded-lg p-2 focus:bg-neutral-100 dark:focus:bg-white/10 cursor-pointer"
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (userType === "free") {
+                      router.push("/upgrade")
+                      return
+                    }
+                    setModel("flare")
+                  }}
+                  className="rounded-lg p-2 focus:bg-neutral-100 dark:focus:bg-white/10 cursor-pointer flex items-center justify-between"
                 >
                   <div className="flex flex-col gap-0.5">
                     <span className="font-semibold text-xs">Flare</span>
                     <span className="text-[10px] text-muted-foreground leading-tight">Deep, multi-layered detection.</span>
                   </div>
+                  {userType === "free" && (
+                    <span className="text-[10px] font-medium text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/20 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800 ml-2">
+                      Upgrade
+                    </span>
+                  )}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -136,14 +150,14 @@ export const ChatInput = () => {
 
           <m.div
             initial={false}
-            animate={{ 
+            animate={{
               scale: localInput.trim() ? 1 : 0.95,
               opacity: localInput.trim() ? 1 : 0.8
             }}
             whileHover={localInput.trim() ? { scale: 1.02 } : {}}
             whileTap={localInput.trim() ? { scale: 0.98 } : {}}
           >
-            <Button 
+            <Button
               onClick={handleSubmit}
               disabled={!localInput.trim() || isPending}
               className={cn(
