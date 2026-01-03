@@ -18,9 +18,9 @@ export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
     GithubProvider({
-      clientId: env.GITHUB_ID as string,
-      clientSecret: env.GITHUB_SECRET as string,
-      allowDangerousEmailAccountLinking: true,
+      clientId: env.GITHUB_ID,
+      clientSecret: env.GITHUB_SECRET,
+      allowDangerousEmailAccountLinking: false,
       profile(profile) {
         return {
           id: profile.id.toString(),
@@ -33,9 +33,9 @@ export const authOptions: NextAuthOptions = {
       },
     }),
     GoogleProvider({
-      clientId: env.GOOGLE_ID as string,
-      clientSecret: env.GOOGLE_SECRET as string,
-      allowDangerousEmailAccountLinking: true,
+      clientId: env.GOOGLE_ID,
+      clientSecret: env.GOOGLE_SECRET,
+      allowDangerousEmailAccountLinking: false,
       profile(profile) {
         return {
           id: profile.sub,
@@ -113,7 +113,7 @@ export const authOptions: NextAuthOptions = {
             token.isPremium = dbUser.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE
           }
         } catch (error) {
-          console.error("JWT Callback: Error fetching user from DB", error)
+          console.error("JWT Callback error:", error)
         }
       }
 
@@ -163,7 +163,7 @@ export const authOptions: NextAuthOptions = {
               data: dataToUpdate,
             })
           } catch (error) {
-            console.error("Error updating profile during linkAccount event:", error)
+            console.error("LinkAccount event error:", error)
           }
         }
       }
@@ -173,5 +173,5 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
     error: "/auth/error",
   },
-  debug: process.env.NODE_ENV === "development",
+  debug: env.NODE_ENV === "development",
 }
