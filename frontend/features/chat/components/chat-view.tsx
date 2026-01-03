@@ -2,11 +2,13 @@
 
 import { ChatInput } from "./chat-input"
 import { MessageList } from "./message-list"
+import { ChatHeader } from "./layout/chat-header"
 
 export const ChatView = () => {
   return (
     <div className="relative h-full w-full bg-background overflow-hidden isolate">
-      <div className="h-full w-full z-0">
+      <ChatHeader />
+      <div className="h-full w-full z-0 pt-10 md:pt-0">
         <MessageList />
       </div>
       
