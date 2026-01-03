@@ -23,14 +23,19 @@ import {
 } from "lucide-react"
 import { inter } from "@/lib/fonts"
 
+import { useRouter } from "next/navigation"
+import { useChatUIStore } from "../../stores/ui-store"
+
 interface UserMenuProps {
   isCollapsed: boolean
 }
 
 export const UserMenu = ({ isCollapsed }: UserMenuProps) => {
+  const router = useRouter()
+  const { userType } = useChatUIStore()
   const { data: session } = useSession()
   const { setTheme, resolvedTheme } = useTheme()
-  
+
   const user = session?.user
 
   const initials = user?.name
@@ -81,7 +86,7 @@ export const UserMenu = ({ isCollapsed }: UserMenuProps) => {
             </p>
           </div>
         </DropdownMenuLabel>
-        
+
         <DropdownMenuSeparator />
 
         <DropdownMenuItem className="cursor-pointer">
@@ -89,8 +94,11 @@ export const UserMenu = ({ isCollapsed }: UserMenuProps) => {
           <span>Profile</span>
         </DropdownMenuItem>
 
-        {!user?.isPremium && (
-          <DropdownMenuItem className="cursor-pointer">
+        {userType === "free" && (
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onClick={() => router.push("/upgrade")}
+          >
             <CircleFadingArrowUp className="mr-2 h-4 w-4" />
             <span>Upgrade Plan</span>
           </DropdownMenuItem>

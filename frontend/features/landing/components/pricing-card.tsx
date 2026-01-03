@@ -1,7 +1,8 @@
 "use client"
 
 import { memo } from "react"
-import Link from "next/link"
+import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import { m } from "framer-motion"
 import { CircleCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,16 @@ interface PricingCardProps {
 
 const PricingCard = memo(({ plan, billingCycle, index }: PricingCardProps) => {
   const isPopular = plan.popular
+  const { data: session } = useSession()
+  const router = useRouter()
+
+  const handleSubscribe = () => {
+    if (session) {
+      router.push("/upgrade")
+    } else {
+      router.push("/login")
+    }
+  }
 
   return (
     <m.div
@@ -95,7 +106,7 @@ const PricingCard = memo(({ plan, billingCycle, index }: PricingCardProps) => {
 
       <div className="p-6 pt-0">
         <Button
-          asChild
+          onClick={handleSubscribe}
           className={cn(
             "w-full font-medium text-2xl tracing-wide transition-all", teko.className,
             isPopular
@@ -104,9 +115,7 @@ const PricingCard = memo(({ plan, billingCycle, index }: PricingCardProps) => {
           )}
           variant={isPopular ? "default" : "outline"}
         >
-          <Link href={isPopular ? "/signup" : "/signup"}>
-            {plan.cta}
-          </Link>
+          {plan.cta}
         </Button>
       </div>
 
