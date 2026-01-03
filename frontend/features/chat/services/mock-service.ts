@@ -43,7 +43,7 @@ class MockChatService implements IChatService {
   private normalizeSparkResponse(raw: SparkRawResponse): AnalysisResult {
     const isAI = raw.predicted_label === 0
     const confidence = raw.confidence
-    
+
     return {
       model: "spark",
       label: isAI ? "AI" : "Human",
@@ -103,6 +103,17 @@ class MockChatService implements IChatService {
   async sendMessage(chatId: string, content: string, model: ModelType): Promise<Message> {
     await this.delay()
 
+    const chat = this.chats.find(c => c.id === chatId)
+    if (!chat) throw new Error("Chat not found")
+
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content,
+      createdAt: new Date()
+    }
+    chat.messages.push(userMessage)
+
     let analysis: AnalysisResult
 
     if (model === "spark") {
@@ -123,13 +134,17 @@ class MockChatService implements IChatService {
       analysis = this.normalizeFlareResponse(mockRaw)
     }
 
-    return {
+    const assistantMessage: Message = {
       id: crypto.randomUUID(),
       role: "assistant",
-      content: "", 
+      content: "",
       analysis,
       createdAt: new Date()
     }
+
+    chat.messages.push(assistantMessage)
+
+    return assistantMessage
   }
 
   async deleteChat(chatId: string): Promise<void> {
