@@ -3,7 +3,7 @@
 import { useEffect, useRef, useMemo } from "react"
 import { m } from "framer-motion"
 import { useChatUIStore } from "../stores/ui-store"
-import { useChatHistory } from "../hooks/use-chat-history"
+import { useChatSession } from "../hooks/use-chat-history"
 import { MessageItem } from "./message-item"
 import { Message } from "../types"
 
@@ -11,7 +11,7 @@ export const MessageList = () => {
   const { currentChatId } = useChatUIStore()
   const scrollRef = useRef<HTMLDivElement>(null)
   
-  const { data: chat } = useChatHistory(currentChatId)
+  const { data: chat } = useChatSession(currentChatId)
   
   const messages = useMemo(() => chat?.messages || [], [chat?.messages])
 
@@ -44,8 +44,8 @@ export const MessageList = () => {
   }
 
   return (
-    <div className="h-full overflow-y-auto scroll-smooth">
-      <div className="w-full max-w-4xl mx-auto px-4 pt-6 pb-48 space-y-8">
+    <div className="h-full overflow-y-auto scroll-smooth pt-4 md:pt-12">
+      <div className="w-full max-w-4xl mx-auto px-4 pb-48 space-y-8">
         {messages.map((msg: Message) => (
           <MessageItem key={msg.id} message={msg} />
         ))}
