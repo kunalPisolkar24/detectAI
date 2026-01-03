@@ -25,7 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { ChatHistoryItem } from "../../types"
-import { inter } from "@/lib/fonts"
+import { inter, teko } from "@/lib/fonts"
 
 interface SidebarItemProps {
   chat: ChatHistoryItem
@@ -128,9 +128,15 @@ export const SidebarItem = ({ chat }: SidebarItemProps) => {
               />
             </div>
             <AlertDialogFooter>
-              <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
-              <AlertDialogAction type="submit" disabled={!newTitle.trim()}>
-                Save Changes
+              <AlertDialogCancel type="button" className={cn("tracking-wide text-base", teko.className)}>
+                CANCEL
+              </AlertDialogCancel>
+              <AlertDialogAction 
+                type="submit" 
+                disabled={!newTitle.trim()}
+                className={cn("bg-gradient-to-r from-blue-600 to-purple-600 text-white border-0 tracking-wide text-lg", teko.className)}
+              >
+                SAVE
               </AlertDialogAction>
             </AlertDialogFooter>
           </form>
@@ -147,12 +153,12 @@ export const SidebarItem = ({ chat }: SidebarItemProps) => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className={cn("tracking-wide text-base", teko.className)}>CANCEL</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleDelete}
-              className="bg-red-600 hover:bg-red-700 text-white border-red-600 dark:border-red-600"
+              className={cn("bg-red-600 hover:bg-red-700 text-white border-red-600 dark:border-red-600 tracking-wide text-lg", teko.className)}
             >
-              Delete
+              DELETE
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
