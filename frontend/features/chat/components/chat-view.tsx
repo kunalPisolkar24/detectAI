@@ -8,7 +8,7 @@ export const ChatView = () => {
   return (
     <div className="flex flex-col relative h-full w-full bg-background overflow-hidden isolate">
       <ChatHeader />
-      <div className="flex-1 w-full overflow-y-auto scroll-smooth z-0 custom-scrollbar">
+      <div className="flex-1 w-full overflow-y-auto scroll-smooth z-0 custom-scrollbar flex flex-col">
         <MessageList />
       </div>
 

@@ -23,7 +23,7 @@ export const MessageList = () => {
 
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
+      <div className="flex-1 flex flex-col items-center justify-center p-8 pb-24 text-center animate-in fade-in duration-500">
         <div className="mb-6 p-4 rounded-full bg-secondary/30 border border-border/50">
           <m.div
             animate={{ rotate: [0, 10, -10, 0] }}
