@@ -11,11 +11,23 @@ import { merriweather } from "@/lib/fonts"
 import { PRICING_PLANS } from "./constants"
 import { PricingCard } from "./components/pricing-card"
 
-export const Pricing = () => {
+interface PricingProps {
+  onPlanSelect?: (planId: string, billingCycle: "monthly" | "yearly") => void
+  isProcessing?: boolean
+  isUpgradePage?: boolean
+}
+
+export const Pricing = ({ onPlanSelect, isProcessing = false, isUpgradePage = false }: PricingProps) => {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly")
 
+  const handleCardAction = (planId: string) => {
+    if (onPlanSelect) {
+      onPlanSelect(planId, billingCycle)
+    }
+  }
+
   return (
-    <section className="w-full relative overflow-hidden flex flex-col items-center justify-center bg-background text-foreground transition-colors duration-300 py-16 md:py-24">
+    <section className="w-full relative overflow-hidden flex flex-col items-center justify-center bg-transparent text-foreground transition-colors duration-300 py-16 md:py-24">
       <div className="w-full container px-6 sm:px-8 lg:mx-auto flex flex-col items-center justify-center space-y-8 z-10">
         <div className="text-center flex flex-col items-center justify-center">
           <m.div
@@ -98,14 +110,22 @@ export const Pricing = () => {
         </m.div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 lg:gap-14 mt-8 place-items-center mx-auto w-full max-w-5xl">
-          {PRICING_PLANS.map((plan, index) => (
-            <PricingCard
-              key={plan.id}
-              plan={plan}
-              billingCycle={billingCycle}
-              index={index}
-            />
-          ))}
+          {PRICING_PLANS.map((plan, index) => {
+            const isProcessingThisCard = isProcessing && isUpgradePage && plan.popular;
+            const isDisabled = isUpgradePage && !plan.popular;
+            
+            return (
+              <PricingCard
+                key={plan.id}
+                plan={plan}
+                billingCycle={billingCycle}
+                index={index}
+                onAction={isUpgradePage ? handleCardAction : undefined}
+                isLoading={isProcessingThisCard}
+                disabled={isDisabled}
+              />
+            )
+          })}
         </div>
 
         <m.p

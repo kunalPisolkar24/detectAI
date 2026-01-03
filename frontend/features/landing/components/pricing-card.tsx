@@ -4,7 +4,7 @@ import { memo } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { m } from "framer-motion"
-import { CircleCheck } from "lucide-react"
+import { CircleCheck, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -22,18 +22,32 @@ interface PricingCardProps {
   }
   billingCycle: "monthly" | "yearly"
   index: number
+  onAction?: (planId: string) => void
+  isLoading?: boolean
+  disabled?: boolean
 }
 
-const PricingCard = memo(({ plan, billingCycle, index }: PricingCardProps) => {
+const PricingCard = memo(({ 
+  plan, 
+  billingCycle, 
+  index, 
+  onAction,
+  isLoading = false,
+  disabled = false
+}: PricingCardProps) => {
   const isPopular = plan.popular
   const { data: session } = useSession()
   const router = useRouter()
 
   const handleSubscribe = () => {
-    if (session) {
-      router.push("/upgrade")
+    if (onAction) {
+      onAction(plan.id)
     } else {
-      router.push("/login")
+      if (session) {
+        router.push("/upgrade")
+      } else {
+        router.push("/login")
+      }
     }
   }
 
@@ -107,6 +121,7 @@ const PricingCard = memo(({ plan, billingCycle, index }: PricingCardProps) => {
       <div className="p-6 pt-0">
         <Button
           onClick={handleSubscribe}
+          disabled={disabled || isLoading}
           className={cn(
             "w-full font-medium text-2xl tracing-wide transition-all", teko.className,
             isPopular
@@ -115,6 +130,7 @@ const PricingCard = memo(({ plan, billingCycle, index }: PricingCardProps) => {
           )}
           variant={isPopular ? "default" : "outline"}
         >
+          {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
           {plan.cta}
         </Button>
       </div>
