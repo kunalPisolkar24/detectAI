@@ -5,7 +5,7 @@ import { useChatHistory } from "../../hooks/use-chat-history"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { m, AnimatePresence } from "framer-motion"
-import { PanelLeftClose, PanelLeftOpen, SquarePen, BotIcon } from "lucide-react"
+import { PanelLeftClose, PanelLeftOpen, CircleFadingPlus, BotIcon } from "lucide-react"
 import { SidebarItem } from "./sidebar-item"
 import { UserMenu } from "./user-menu"
 import { teko } from "@/lib/fonts"
@@ -75,7 +75,7 @@ export const Sidebar = () => {
             !isSidebarOpen && "px-0 justify-center"
           )}
         >
-          <SquarePen size={18} className="shrink-0" />
+          <CircleFadingPlus size={18} className="shrink-0" />
           {isSidebarOpen && <span className="truncate">New Chat</span>}
         </Button>
       </div>
@@ -105,7 +105,6 @@ export const Sidebar = () => {
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2 mt-2">
-             {/* Tooltips could go here for collapsed state history */}
              <div className="w-8 h-px bg-border/50" />
           </div>
         )}
