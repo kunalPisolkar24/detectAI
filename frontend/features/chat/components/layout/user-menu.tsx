@@ -2,6 +2,7 @@
 
 import { useSession, signOut } from "next-auth/react"
 import { useTheme } from "next-themes"
+import { useRouter } from "next/navigation"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +24,6 @@ import {
 } from "lucide-react"
 import { inter } from "@/lib/fonts"
 
-import { useRouter } from "next/navigation"
 import { useChatUIStore } from "../../stores/ui-store"
 
 interface UserMenuProps {
@@ -89,7 +89,10 @@ export const UserMenu = ({ isCollapsed }: UserMenuProps) => {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem className="cursor-pointer">
+        <DropdownMenuItem 
+          className="cursor-pointer" 
+          onClick={() => router.push("/profile")}
+        >
           <User className="mr-2 h-4 w-4" />
           <span>Profile</span>
         </DropdownMenuItem>
