@@ -1,7 +1,11 @@
+import type { Metadata } from "next"
+import { UpgradeView } from "@/features/upgrade/components/upgrade-view"
+
+export const metadata: Metadata = {
+  title: "Upgrade Plan | Detect AI",
+  description: "Choose a plan that fits your needs",
+}
+
 export default function UpgradePage() {
-    return (
-        <div className="flex h-screen w-full items-center justify-center">
-            <h1 className="text-2xl font-bold">This is the upgrade page</h1>
-        </div>
-    )
+  return <UpgradeView />
 }
