@@ -41,6 +41,13 @@ export const ChatInput = () => {
 
   const handleSubmit = () => {
     if (!localInput.trim() || isPending) return
+
+    const wordCount = localInput.trim().split(/\s+/).length
+    if (wordCount < 100) {
+      toast.error(`Please enter at least 100 words (current: ${wordCount})`)
+      return
+    }
+
     mutate(localInput)
     setLocalInput("")
     if (textareaRef.current) textareaRef.current.style.height = "auto"
