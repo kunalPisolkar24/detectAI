@@ -57,6 +57,14 @@ export const ChatInput = () => {
     const file = e.target.files?.[0]
     if (!file) return
 
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File size exceeds 10MB limit")
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+      return
+    }
+
     setIsExtracting(true)
     const formData = new FormData()
     formData.append("file", file)
