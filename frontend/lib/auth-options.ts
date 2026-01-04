@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma"
 import { SubscriptionStatus } from "@/lib/generated/prisma/client"
 import { LoginSchema } from "@/schemas/auth"
 import { env } from "@/lib/env"
+import { redis } from "@/lib/redis"
 
 interface ExtendedProfile extends Profile {
   firstName?: string
@@ -92,25 +93,40 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id
         token.isPremium = user.isPremium ?? false
-        
-        try {
-          const dbUser = await prisma.user.findUnique({
-            where: { id: user.id },
-            select: {
-              name: true,
-              email: true,
-              image: true,
-              paddleSubscriptionStatus: true,
-              firstName: true,
-              lastName: true,
-            },
-          })
+      }
 
-          if (dbUser) {
-            token.name = dbUser.name ?? token.name
-            token.email = dbUser.email ?? token.email
-            token.picture = dbUser.image ?? token.picture
+      if (token.id) {
+        try {
+          const cacheKey = `user:${token.id}`
+          const cachedUser = await redis.get(cacheKey)
+
+          if (cachedUser) {
+            const dbUser = JSON.parse(cachedUser)
+            token.name = dbUser.name
+            token.email = dbUser.email
+            token.picture = dbUser.image
             token.isPremium = dbUser.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE
+          } else {
+            const dbUser = await prisma.user.findUnique({
+              where: { id: token.id },
+              select: {
+                name: true,
+                email: true,
+                image: true,
+                paddleSubscriptionStatus: true,
+                firstName: true,
+                lastName: true,
+              },
+            })
+
+            if (dbUser) {
+              token.name = dbUser.name ?? token.name
+              token.email = dbUser.email ?? token.email
+              token.picture = dbUser.image ?? token.picture
+              token.isPremium = dbUser.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE
+
+              await redis.set(cacheKey, JSON.stringify(dbUser), "EX", 3600)
+            }
           }
         } catch (error) {
           console.error("JWT Callback error:", error)
@@ -145,7 +161,7 @@ export const authOptions: NextAuthOptions = {
   events: {
     async linkAccount(message) {
       if (!message.user.id) return
-      
+
       const user = await prisma.user.findUnique({ where: { id: message.user.id } })
       const profileData = message.profile as ExtendedProfile
 
