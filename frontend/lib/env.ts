@@ -13,6 +13,7 @@ export const env = createEnv({
     GITHUB_SECRET: z.string().min(1),
     TURNSTILE_SECRET_KEY: z.string().min(1),
     REDIS_URL: z.string().url().optional(),
+    FILE_EXTRACTOR_API_URL: z.string().url(),
   },
   client: {
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1),
@@ -29,6 +30,7 @@ export const env = createEnv({
     GITHUB_SECRET: process.env.GITHUB_SECRET,
     TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY,
     REDIS_URL: process.env.REDIS_URL,
+    FILE_EXTRACTOR_API_URL: process.env.FILE_EXTRACTOR_API_URL,
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
     NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
   },
