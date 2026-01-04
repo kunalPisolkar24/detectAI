@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter, usePathname } from "next/navigation"
 import { useChatUIStore } from "../../stores/ui-store"
 import { useChatMutations } from "../../hooks/use-chat-mutation"
 import { cn } from "@/lib/utils"
@@ -34,12 +35,14 @@ interface SidebarItemProps {
 export const SidebarItem = ({ chat }: SidebarItemProps) => {
   const { currentChatId, setCurrentChatId } = useChatUIStore()
   const { deleteChat, renameChat } = useChatMutations()
-  
+
   const [showRenameDialog, setShowRenameDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [newTitle, setNewTitle] = useState(chat.title)
 
   const isActive = currentChatId === chat.id
+  const router = useRouter()
+  const pathname = usePathname()
 
   const handleRename = (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,17 +60,22 @@ export const SidebarItem = ({ chat }: SidebarItemProps) => {
   return (
     <>
       <div
-        onClick={() => setCurrentChatId(chat.id)}
+        onClick={() => {
+          setCurrentChatId(chat.id)
+          if (pathname !== "/chat") {
+            router.push("/chat")
+          }
+        }}
         className={cn(
           "group flex items-center justify-between px-3 py-2 mx-2 rounded-lg cursor-pointer transition-all duration-200 text-sm mb-1",
-          isActive 
-            ? "bg-secondary text-foreground font-medium shadow-sm" 
+          isActive
+            ? "bg-secondary text-foreground font-medium shadow-sm"
             : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
           inter.className
         )}
       >
         <span className="truncate flex-1 pr-2">{chat.title}</span>
-        
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -83,7 +91,7 @@ export const SidebarItem = ({ chat }: SidebarItemProps) => {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation()
                 setNewTitle(chat.title)
@@ -94,7 +102,7 @@ export const SidebarItem = ({ chat }: SidebarItemProps) => {
               Rename
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation()
                 setShowDeleteDialog(true)
@@ -119,7 +127,7 @@ export const SidebarItem = ({ chat }: SidebarItemProps) => {
           </AlertDialogHeader>
           <form onSubmit={handleRename}>
             <div className="py-4">
-              <Input 
+              <Input
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 placeholder="Chat title"
@@ -131,8 +139,8 @@ export const SidebarItem = ({ chat }: SidebarItemProps) => {
               <AlertDialogCancel type="button" className={cn("tracking-wide text-base", teko.className)}>
                 CANCEL
               </AlertDialogCancel>
-              <AlertDialogAction 
-                type="submit" 
+              <AlertDialogAction
+                type="submit"
                 disabled={!newTitle.trim()}
                 className={cn("bg-gradient-to-r from-blue-600 to-purple-600 text-white border-0 tracking-wide text-lg", teko.className)}
               >
@@ -154,7 +162,7 @@ export const SidebarItem = ({ chat }: SidebarItemProps) => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className={cn("tracking-wide text-base", teko.className)}>CANCEL</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={handleDelete}
               className={cn("bg-red-600 hover:bg-red-700 text-white border-red-600 dark:border-red-600 tracking-wide text-lg", teko.className)}
             >

@@ -10,19 +10,25 @@ import { SidebarItem } from "./sidebar-item"
 import { UserMenu } from "./user-menu"
 import { teko } from "@/lib/fonts"
 import Link from "next/link"
+import { useRouter, usePathname } from "next/navigation"
 
 export const Sidebar = () => {
   const { isSidebarOpen, toggleSidebar, setCurrentChatId } = useChatUIStore()
   const { data: history } = useChatHistory()
+  const router = useRouter()
+  const pathname = usePathname()
 
   const handleNewChat = () => {
     setCurrentChatId(null)
+    if (pathname !== "/chat") {
+      router.push("/chat")
+    }
   }
 
   return (
     <m.aside
       initial={false}
-      animate={{ 
+      animate={{
         width: isSidebarOpen ? 260 : 60,
       }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -34,13 +40,13 @@ export const Sidebar = () => {
       <div className="p-3 flex items-center justify-between h-14">
         <AnimatePresence mode="wait">
           {isSidebarOpen ? (
-            <m.div 
+            <m.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="flex items-center gap-2 pl-2"
             >
-               <Link href="/" className="flex items-center gap-2 group">
+              <Link href="/" className="flex items-center gap-2 group">
                 <BotIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 <span className={cn("text-xl font-medium tracking-wide pt-1", teko.className)}>
                   Detect AI
@@ -48,9 +54,9 @@ export const Sidebar = () => {
               </Link>
             </m.div>
           ) : (
-             <div className="w-full flex justify-center">
-                <BotIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-             </div>
+            <div className="w-full flex justify-center">
+              <BotIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            </div>
           )}
         </AnimatePresence>
 
@@ -82,7 +88,7 @@ export const Sidebar = () => {
 
       {!isSidebarOpen && (
         <div className="px-3 pb-2 flex justify-center">
-           <Button
+          <Button
             variant="ghost"
             size="icon"
             onClick={toggleSidebar}
@@ -105,7 +111,7 @@ export const Sidebar = () => {
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2 mt-2">
-             <div className="w-8 h-px bg-border/50" />
+            <div className="w-8 h-px bg-border/50" />
           </div>
         )}
       </div>
