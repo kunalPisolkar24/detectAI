@@ -17,11 +17,14 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 
 export const ChatInput = () => {
   const router = useRouter()
+  const { data: session } = useSession()
+  const isPremium = session?.user?.isPremium ?? false
   const [localInput, setLocalInput] = useState("")
-  const { selectedModel, setModel, userType } = useChatUIStore()
+  const { selectedModel, setModel } = useChatUIStore()
   const { mutate, isPending } = useSendMessage()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -126,7 +129,7 @@ export const ChatInput = () => {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
-                    if (userType === "free") {
+                    if (!isPremium) {
                       router.push("/upgrade")
                       return
                     }
@@ -138,7 +141,7 @@ export const ChatInput = () => {
                     <span className="font-semibold text-xs">Flare</span>
                     <span className="text-[10px] text-muted-foreground leading-tight">Deep, multi-layered detection.</span>
                   </div>
-                  {userType === "free" && (
+                  {(!isPremium) && (
                     <span className="text-[10px] font-medium text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/20 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800 ml-2">
                       Upgrade
                     </span>
