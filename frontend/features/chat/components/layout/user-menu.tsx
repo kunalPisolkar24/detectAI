@@ -50,8 +50,10 @@ export const UserMenu = ({ isCollapsed }: UserMenuProps) => {
         <Button
           variant="ghost"
           className={cn(
-            "h-auto p-2 hover:bg-black/5 dark:hover:bg-white/5 w-full group",
-            isCollapsed ? "justify-center" : "justify-start gap-3"
+            "group transition-all duration-200 ease-in-out",
+            isCollapsed
+              ? "h-10 w-10 rounded-full p-0 justify-center hover:bg-primary/10 hover:scale-105 active:scale-95 mx-auto"
+              : "h-auto w-full p-2 justify-start gap-3 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg ml-0"
           )}
         >
           <Avatar className="h-8 w-8 shrink-0">
