@@ -1,6 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
+import { useRouter } from "next/navigation"
 import { teko, inter } from "@/lib/fonts"
 import { Button } from "@/components/ui/button"
 import { CreditCard, Sparkles } from "lucide-react"
@@ -16,6 +17,7 @@ interface BillingTabProps {
 }
 
 export const BillingTab = ({ user }: BillingTabProps) => {
+  const router = useRouter()
   const handleCancel = () => {
     toast.info("Subscription cancellation feature is coming soon.")
   }
@@ -29,8 +31,8 @@ export const BillingTab = ({ user }: BillingTabProps) => {
 
         <div className={cn(
           "relative overflow-hidden rounded-xl border p-6 transition-all",
-          user.isPremium 
-            ? "bg-purple-500/5 border-purple-500/20" 
+          user.isPremium
+            ? "bg-purple-500/5 border-purple-500/20"
             : "bg-card/50 border-border"
         )}>
           {user.isPremium && (
@@ -46,15 +48,15 @@ export const BillingTab = ({ user }: BillingTabProps) => {
                   {user.isPremium ? "Premium Plan" : "Free Plan"}
                 </h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {user.isPremium 
-                    ? "You have access to advanced AI detection models." 
+                  {user.isPremium
+                    ? "You have access to advanced AI detection models."
                     : "You are currently on the limited free tier."}
                 </p>
               </div>
               <div className={cn(
                 "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border",
-                user.isPremium 
-                  ? "bg-purple-500 text-white border-purple-600" 
+                user.isPremium
+                  ? "bg-purple-500 text-white border-purple-600"
                   : "bg-secondary text-secondary-foreground border-border"
               )}>
                 {user.paddleSubscriptionStatus || "Active"}
@@ -66,7 +68,7 @@ export const BillingTab = ({ user }: BillingTabProps) => {
                 <div className="grid gap-1">
                   <span className="text-xs uppercase text-muted-foreground font-medium">Next Billing Date</span>
                   <span className={cn("text-lg", inter.className)}>
-                    {user.subscriptionEndsAt 
+                    {user.subscriptionEndsAt
                       ? format(new Date(user.subscriptionEndsAt), "MMMM d, yyyy")
                       : "N/A"}
                   </span>
@@ -79,8 +81,14 @@ export const BillingTab = ({ user }: BillingTabProps) => {
               </div>
             ) : (
               <div className="pt-4">
-                <Button className="bg-gradient-to-r from-blue-600 to-purple-600 text-white border-0">
-                  Upgrade to Premium
+                <Button
+                  onClick={() => router.push("/upgrade")}
+                  className={cn(
+                    "w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 text-xl tracking-wide shadow-lg hover:shadow-xl transition-all duration-200",
+                    teko.className
+                  )}
+                >
+                  Upgrade Now
                 </Button>
               </div>
             )}
