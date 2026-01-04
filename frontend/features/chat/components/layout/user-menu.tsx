@@ -89,15 +89,15 @@ export const UserMenu = ({ isCollapsed }: UserMenuProps) => {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem 
-          className="cursor-pointer" 
+        <DropdownMenuItem
+          className="cursor-pointer"
           onClick={() => router.push("/profile")}
         >
           <User className="mr-2 h-4 w-4" />
           <span>Profile</span>
         </DropdownMenuItem>
 
-        {userType === "free" && (
+        {!user?.isPremium && (
           <DropdownMenuItem
             className="cursor-pointer"
             onClick={() => router.push("/upgrade")}
