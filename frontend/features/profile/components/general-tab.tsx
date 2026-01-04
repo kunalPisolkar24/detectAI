@@ -74,7 +74,7 @@ export const GeneralTab = ({ user }: GeneralTabProps) => {
         <div className="flex items-start gap-6">
           <Avatar className="h-20 w-20 border-2 border-border shadow-sm">
             <AvatarImage src={user.image || ""} />
-            <AvatarFallback className="text-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+            <AvatarFallback className="text-2xl bg-gradient-to-br from-blue-500 to-purple-600 text-white">
               {initials}
             </AvatarFallback>
           </Avatar>
