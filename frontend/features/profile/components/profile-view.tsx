@@ -103,7 +103,7 @@ export const ProfileView = ({ user }: ProfileViewProps) => {
       </div>
 
       {/* Content Area */}
-      <main className="flex-1 max-w-2xl">
+      <main className="flex-1 w-full">
         <AnimatePresence mode="wait">
           {activeTab === "general" ? (
             <m.div

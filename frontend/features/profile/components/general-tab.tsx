@@ -79,7 +79,7 @@ export const GeneralTab = ({ user }: GeneralTabProps) => {
             </AvatarFallback>
           </Avatar>
 
-          <div className="flex-1 max-w-xl">
+          <div className="flex-1 w-full">
             {isEditing ? (
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

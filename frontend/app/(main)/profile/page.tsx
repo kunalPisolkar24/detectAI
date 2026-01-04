@@ -48,7 +48,7 @@ export default async function ProfilePage() {
 
   return (
     <div className="flex-1 h-full overflow-y-auto">
-      <div className="container max-w-5xl mx-auto py-8 px-4 md:px-6">
+      <div className="w-full max-w-[90%] xl:max-w-[1600px] mx-auto py-8 px-4 md:px-8">
         <ProfileView user={userData} />
         <div className="h-20 md:h-0" />
       </div>
