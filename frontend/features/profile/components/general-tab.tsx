@@ -112,18 +112,25 @@ export const GeneralTab = ({ user }: GeneralTabProps) => {
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button type="submit" disabled={isPending} size="sm">
+                    <Button
+                      type="submit"
+                      disabled={isPending}
+                      className={cn(
+                        "bg-gradient-to-r from-blue-600 to-purple-600 text-white border-0 tracking-wide text-lg",
+                        teko.className
+                      )}
+                    >
                       {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Save Changes
+                      SAVE
                     </Button>
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      type="button"
+                      variant="outline"
                       onClick={() => setIsEditing(false)}
                       disabled={isPending}
+                      className={cn("tracking-wide text-base", teko.className)}
                     >
-                      Cancel
+                      CANCEL
                     </Button>
                   </div>
                 </form>
@@ -151,7 +158,7 @@ export const GeneralTab = ({ user }: GeneralTabProps) => {
         <div className="flex items-center justify-between pb-4 border-b border-border/50">
           <h2 className={cn("text-2xl font-medium", teko.className)}>Account Details</h2>
         </div>
-        
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="p-4 rounded-lg border border-border bg-card/50">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -184,8 +191,8 @@ export const GeneralTab = ({ user }: GeneralTabProps) => {
         <div className="flex items-center justify-between pb-4 border-b border-border/50">
           <h2 className={cn("text-2xl font-medium", teko.className)}>Usage Statistics</h2>
         </div>
-        <UsageStats 
-          dailyCount={user.apiCallCountDaily} 
+        <UsageStats
+          dailyCount={user.apiCallCountDaily}
           totalCount={user.apiCallCountTotal}
           isPremium={user.isPremium}
         />
