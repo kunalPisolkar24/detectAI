@@ -74,8 +74,15 @@ export const BillingTab = ({ user }: BillingTabProps) => {
                   </span>
                 </div>
                 <div className="pt-4 flex gap-3">
-                  <Button variant="outline" onClick={handleCancel} className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 border-red-200 dark:border-red-900/30">
-                    Cancel Subscription
+                  <Button
+                    variant="outline"
+                    onClick={handleCancel}
+                    className={cn(
+                      "border-red-500/50 text-red-500 hover:bg-red-500 hover:text-white hover:border-red-500 tracking-wide text-lg transition-all duration-200",
+                      teko.className
+                    )}
+                  >
+                    CANCEL SUBSCRIPTION
                   </Button>
                 </div>
               </div>
