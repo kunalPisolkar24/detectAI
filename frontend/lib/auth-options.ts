@@ -5,10 +5,11 @@ import GoogleProvider from "next-auth/providers/google"
 import bcrypt from "bcryptjs"
 import { PrismaAdapter } from "@next-auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
-import { SubscriptionStatus } from "@/lib/generated/prisma/client"
+import { SubscriptionStatus, User } from "@/lib/generated/prisma/client"
 import { LoginSchema } from "@/schemas/auth"
 import { env } from "@/lib/env"
 import { redis } from "@/lib/redis"
+import { JsonSerializer } from "@/lib/serialization"
 
 interface ExtendedProfile extends Profile {
   firstName?: string
@@ -101,7 +102,7 @@ export const authOptions: NextAuthOptions = {
           const cachedUser = await redis.get(cacheKey)
 
           if (cachedUser) {
-            const dbUser = JSON.parse(cachedUser)
+            const dbUser = JsonSerializer.deserialize<User>(cachedUser)
             token.name = dbUser.name
             token.email = dbUser.email
             token.picture = dbUser.image
@@ -125,7 +126,7 @@ export const authOptions: NextAuthOptions = {
               token.picture = dbUser.image ?? token.picture
               token.isPremium = dbUser.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE
 
-              await redis.set(cacheKey, JSON.stringify(dbUser), "EX", 3600)
+              await redis.set(cacheKey, JsonSerializer.serialize(dbUser), "EX", 3600)
             }
           }
         } catch (error) {
@@ -178,6 +179,7 @@ export const authOptions: NextAuthOptions = {
               where: { id: user.id },
               data: dataToUpdate,
             })
+            await redis.del(`user:${user.id}`)
           } catch (error) {
             console.error("LinkAccount event error:", error)
           }

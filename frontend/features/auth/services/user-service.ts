@@ -1,6 +1,7 @@
 import { redis } from "@/lib/redis"
 import { userRepository } from "@/features/auth/repositories/user-repository"
 import { User, Prisma } from "@/lib/generated/prisma/client"
+import { JsonSerializer } from "@/lib/serialization"
 
 const CACHE_TTL = 3600
 
@@ -11,7 +12,7 @@ export const userService = {
     try {
       const cachedUser = await redis.get(cacheKey)
       if (cachedUser) {
-        return JSON.parse(cachedUser)
+        return JsonSerializer.deserialize<User>(cachedUser)
       }
     } catch (error) {
       console.error("Redis error:", error)
@@ -21,7 +22,7 @@ export const userService = {
 
     if (user) {
       try {
-        await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(user))
+        await redis.setex(cacheKey, CACHE_TTL, JsonSerializer.serialize(user))
       } catch (error) {
         console.error("Redis set error:", error)
       }
@@ -36,7 +37,7 @@ export const userService = {
     try {
       const cachedUser = await redis.get(cacheKey)
       if (cachedUser) {
-        return JSON.parse(cachedUser)
+        return JsonSerializer.deserialize<User>(cachedUser)
       }
     } catch (error) {
       console.error("Redis error:", error)
@@ -46,9 +47,10 @@ export const userService = {
 
     if (user) {
       try {
+        const serializedUser = JsonSerializer.serialize(user)
         await Promise.all([
-          redis.setex(cacheKey, CACHE_TTL, JSON.stringify(user)),
-          redis.setex(`user:id:${user.id}`, CACHE_TTL, JSON.stringify(user))
+          redis.setex(cacheKey, CACHE_TTL, serializedUser),
+          redis.setex(`user:id:${user.id}`, CACHE_TTL, serializedUser)
         ])
       } catch (error) {
         console.error("Redis set error:", error)
@@ -60,9 +62,6 @@ export const userService = {
 
   async createUser(data: Prisma.UserCreateInput): Promise<User> {
     const user = await userRepository.create(data)
-  
-    // We do not cache immediately on create to avoid complexity. 
-    // The next read will populate the cache.
     return user
   },
 
