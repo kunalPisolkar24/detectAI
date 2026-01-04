@@ -18,15 +18,19 @@ import {
 
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { toast } from "sonner"
+import { extractTextFromFile } from "../actions/extract-file"
 
 export const ChatInput = () => {
   const router = useRouter()
   const { data: session } = useSession()
   const isPremium = session?.user?.isPremium ?? false
   const [localInput, setLocalInput] = useState("")
+  const [isExtracting, setIsExtracting] = useState(false)
   const { selectedModel, setModel } = useChatUIStore()
   const { mutate, isPending } = useSendMessage()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -49,6 +53,36 @@ export const ChatInput = () => {
     }
   }
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsExtracting(true)
+    const formData = new FormData()
+    formData.append("file", file)
+
+    const result = await extractTextFromFile(formData)
+
+    if (result.error) {
+      toast.error(result.error)
+    } else if (result.text) {
+      setLocalInput(prev => (prev ? `${prev}\n\n${result.text}` : result.text))
+      toast.success("File content extracted successfully")
+      // Reset height after content update
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          textareaRef.current.style.height = "auto"
+          textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+        }
+      })
+    }
+
+    setIsExtracting(false)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
   return (
     <div className="w-full">
       <m.div
@@ -62,7 +96,7 @@ export const ChatInput = () => {
           "supports-[backdrop-filter]:bg-white/50 dark:supports-[backdrop-filter]:bg-black/40"
         )}
       >
-        {isPending && (
+        {(isPending || isExtracting) && (
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 animate-gradient-x z-20 opacity-50" />
         )}
 
@@ -86,14 +120,26 @@ export const ChatInput = () => {
         <div className="flex items-center justify-between px-3 pb-3 pt-1">
           <div className="flex items-center gap-2">
             <m.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept=".pdf,.docx,.txt"
+                onChange={handleFileSelect}
+              />
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-neutral-500 hover:text-blue-600 hover:bg-blue-50/50 dark:text-neutral-400 dark:hover:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                disabled={isPending}
+                disabled={isPending || isExtracting}
+                onClick={() => fileInputRef.current?.click()}
                 aria-label="Attach file"
               >
-                <Paperclip size={18} aria-hidden="true" />
+                {isExtracting ? (
+                  <Loader2 size={18} className="animate-spin text-blue-600 dark:text-blue-400" />
+                ) : (
+                  <Paperclip size={18} aria-hidden="true" />
+                )}
               </Button>
             </m.div>
 
@@ -162,7 +208,7 @@ export const ChatInput = () => {
           >
             <Button
               onClick={handleSubmit}
-              disabled={!localInput.trim() || isPending}
+              disabled={!localInput.trim() || isPending || isExtracting}
               className={cn(
                 "h-9 min-w-[36px] rounded-lg transition-all duration-300 px-3 sm:px-5",
                 "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md shadow-blue-500/20",
