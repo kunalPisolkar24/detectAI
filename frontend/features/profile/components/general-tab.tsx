@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import { useSession } from "next-auth/react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -38,6 +39,7 @@ const formSchema = z.object({
 
 export const GeneralTab = ({ user }: GeneralTabProps) => {
   const [isPending, startTransition] = useTransition()
+  const { update } = useSession()
   const [isEditing, setIsEditing] = useState(false)
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -54,6 +56,7 @@ export const GeneralTab = ({ user }: GeneralTabProps) => {
       if (result.error) {
         toast.error(result.error)
       } else {
+        await update({ name: `${values.firstName} ${values.lastName}` })
         toast.success("Profile updated successfully")
         setIsEditing(false)
       }
