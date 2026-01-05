@@ -2,7 +2,7 @@ import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
 import { prismaMock, mockUserUpdate, mockUserUpdateMany } from "../../mocks/db";
 import { getSubscriptionCreatedEvent, getSubscriptionCanceledEvent, getUserCancelRequestEvent } from "../../fixtures/paddleEvents";
 
-mock.module("@shared/db", () => prismaMock);
+mock.module("@shared/dbc", () => prismaMock);
 
 import { PaymentService } from "../../../services/PaymentService";
 
