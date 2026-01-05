@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "generate": "bunx --bun prisma generate",
-    "start": "bun run src/index.ts",
-    "dev": "bun --watch src/index.ts",
+    "start:payments": "bun run src/workers/payments/index.ts",
+    "dev:payments": "bun --watch src/workers/payments/index.ts",
     "test": "bun test",
     "coverage": "bun test --coverage",
     "postinstall": "bunx --bun prisma generate"
@@ -24,6 +24,7 @@
     "@prisma/adapter-pg": "^7.1.0",
     "@prisma/client": "^7.1.0",
     "amqplib": "^0.10.9",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "zod": "^4.3.5"
   }
 }
