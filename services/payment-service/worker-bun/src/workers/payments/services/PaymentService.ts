@@ -1,5 +1,5 @@
-import { SubscriptionStatus } from "../../generated/prisma/client";
-import { prisma } from "../lib/db";
+import { SubscriptionStatus } from "../../../../generated/prisma/client";
+import { prisma } from "@shared/db";
 import type { PaymentEvent, PaymentUpdatePayload } from "../types";
 
 const PADDLE_API_URL = process.env.PADDLE_ENVIRONMENT === 'production'

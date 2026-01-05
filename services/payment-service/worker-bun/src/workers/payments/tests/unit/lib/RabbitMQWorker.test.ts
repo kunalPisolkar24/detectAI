@@ -3,7 +3,7 @@ import { amqpMock, mockChannel, mockAck, mockNack } from "../../mocks/amqplib";
 
 mock.module("amqplib", () => amqpMock);
 
-const { RabbitMQWorker } = await import("../../../src/lib/RabbitMQWorker");
+const { RabbitMQWorker } = await import("@shared/infrastructure/RabbitMQWorker");
 
 describe("RabbitMQWorker", () => {
     let worker: any;

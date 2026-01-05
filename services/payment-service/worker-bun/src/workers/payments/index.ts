@@ -1,6 +1,6 @@
-import { RabbitMQWorker } from "./lib/RabbitMQWorker";
+import { RabbitMQWorker } from "../../shared/infrastructure/RabbitMQWorker";
 import { PaymentService } from "./services/PaymentService";
-import { prisma } from "./lib/db";
+import { prisma } from "@shared/db";
 
 const QUEUE_NAME = "payment_events";
 const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
@@ -10,7 +10,7 @@ const paymentService = new PaymentService();
 const worker = new RabbitMQWorker(
     RABBITMQ_URL,
     QUEUE_NAME,
-    async (event) => await paymentService.handleEvent(event)
+    async (event: any) => await paymentService.handleEvent(event)
 );
 
 worker.start();
