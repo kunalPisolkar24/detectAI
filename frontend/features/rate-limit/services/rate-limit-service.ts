@@ -4,6 +4,7 @@ import { startOfDay, format } from "date-fns"
 export interface IRateLimitService {
     checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }>
     trackUsage(userId: string): Promise<void>
+    getRealTimeUsage(userId: string): Promise<{ dailyCount: number; pendingCount: number }>
 }
 
 export class RedisRateLimitService implements IRateLimitService {
@@ -55,6 +56,21 @@ export class RedisRateLimitService implements IRateLimitService {
         pipeline.sadd(dirtySetKey, userId)
 
         await pipeline.exec()
+    }
+
+    public async getRealTimeUsage(userId: string): Promise<{ dailyCount: number; pendingCount: number }> {
+        const dailyKey = this.getDailyKey(userId)
+        const pendingKey = this.getPendingKey(userId)
+
+        const [daily, pending] = await Promise.all([
+            usageRedis.get(dailyKey),
+            usageRedis.get(pendingKey)
+        ])
+
+        return {
+            dailyCount: daily ? parseInt(daily, 10) : 0,
+            pendingCount: pending ? parseInt(pending, 10) : 0
+        }
     }
 }
 
