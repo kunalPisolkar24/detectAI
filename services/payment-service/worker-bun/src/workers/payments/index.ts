@@ -1,6 +1,7 @@
 import { RabbitMQWorker } from "../../shared/infrastructure/RabbitMQWorker";
 import { PaymentService } from "./services/PaymentService";
 import { prisma } from "@shared/db";
+import { redis } from "@shared/redis";
 import { config } from "./config";
 
 const QUEUE_NAME = "payment_events";
@@ -42,6 +43,7 @@ console.log(`Worker listening on http://localhost:${server.port}`);
 
 const shutdown = async () => {
     await prisma.$disconnect();
+    await redis.quit();
     process.exit(0);
 };
 
