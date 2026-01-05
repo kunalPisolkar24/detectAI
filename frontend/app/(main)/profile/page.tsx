@@ -2,7 +2,8 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
-import { prisma } from "@/lib/prisma"
+import { userService } from "@/features/auth/services/user-service"
+import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
 import { SubscriptionStatus } from "@/lib/generated/prisma/client"
 import { ProfileView } from "@/features/profile/components/profile-view"
 
@@ -18,21 +19,10 @@ export default async function ProfilePage() {
     redirect("/login?callbackUrl=/profile")
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      image: true,
-      createdAt: true,
-      paddleSubscriptionStatus: true,
-      subscriptionEndsAt: true,
-      apiCallCountDaily: true,
-      apiCallCountTotal: true,
-    }
-  })
+  const [user, realTimeUsage] = await Promise.all([
+    userService.getUserById(session.user.id),
+    rateLimitService.getRealTimeUsage(session.user.id)
+  ])
 
   if (!user) {
     redirect("/login")
@@ -43,7 +33,9 @@ export default async function ProfilePage() {
   const userData = {
     ...user,
     isPremium,
-    paddleSubscriptionStatus: user.paddleSubscriptionStatus as string | null
+    paddleSubscriptionStatus: user.paddleSubscriptionStatus as string | null,
+    apiCallCountDaily: realTimeUsage.dailyCount,
+    apiCallCountTotal: user.apiCallCountTotal + realTimeUsage.pendingCount
   }
 
   return (
