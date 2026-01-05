@@ -1,5 +1,7 @@
 import { SubscriptionStatus } from "../../../../generated/prisma/client";
 import { prisma } from "@shared/db";
+import { redis } from "@shared/redis";
+import { Logger } from "@shared/logger";
 import type { PaymentEvent, PaymentUpdatePayload } from "../types";
 import { config } from "../config";
 
@@ -51,10 +53,13 @@ export class PaymentService {
       updateData.paddleCancellationScheduled = data.scheduled_change.action === 'cancel';
     }
 
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: updateData,
+      select: { email: true }
     });
+
+    await this.invalidateUserCache(userId, updatedUser.email);
   }
 
   private async handleSubscriptionCancellation(userId: string, data: any): Promise<void> {
@@ -76,6 +81,8 @@ export class PaymentService {
         paddlePlanId: null,
       },
     });
+
+    await this.invalidateUserCache(userId);
   }
 
   private async performCancellation(data: any): Promise<void> {
@@ -97,6 +104,18 @@ export class PaymentService {
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(`Paddle API Error: ${JSON.stringify(errorData)}`);
+    }
+  }
+
+  private async invalidateUserCache(userId: string, email?: string): Promise<void> {
+    try {
+        const keys = [`user:${userId}`, `user:id:${userId}`];
+        if (email) {
+            keys.push(`user:email:${email}`);
+        }
+        await redis.del(...keys);
+    } catch (error) {
+        Logger.error("Failed to invalidate cache", error, { userId });
     }
   }
 
