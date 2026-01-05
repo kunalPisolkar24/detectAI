@@ -1,0 +1,93 @@
+"use server"
+
+import { authOptions } from "@/lib/auth-options"
+import { getServerSession } from "next-auth"
+import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
+import { AnalysisResult, ModelType } from "../types"
+
+interface SparkRawResponse {
+    confidence: number
+    model: string
+    predicted_label: number
+}
+
+interface FlareRawResponse {
+    model: string
+    predicted_label: number
+    probability_ai: number
+    probability_human: number
+}
+
+function normalizeSparkResponse(raw: SparkRawResponse): AnalysisResult {
+    const isAI = raw.predicted_label === 0
+    const confidence = raw.confidence
+
+    return {
+        model: "spark",
+        label: isAI ? "AI" : "Human",
+        confidence: confidence,
+        scores: {
+            ai: isAI ? confidence : 1 - confidence,
+            human: isAI ? 1 - confidence : confidence
+        },
+        raw
+    }
+}
+
+function normalizeFlareResponse(raw: FlareRawResponse): AnalysisResult {
+    const aiScore = raw.probability_ai
+    const humanScore = raw.probability_human
+    const isAI = aiScore > humanScore
+
+    return {
+        model: "flare",
+        label: isAI ? "AI" : "Human",
+        confidence: Math.max(aiScore, humanScore),
+        scores: {
+            ai: aiScore,
+            human: humanScore
+        },
+        raw
+    }
+}
+
+export async function analyzeText(content: string, model: ModelType): Promise<AnalysisResult> {
+    const session = await getServerSession(authOptions)
+
+    if (!session?.user?.id) {
+        throw new Error("Unauthorized")
+    }
+
+    const { allowed } = await rateLimitService.checkLimit(session.user.id, session.user.isPremium)
+
+    if (!allowed) {
+        throw new Error("Rate limit exceeded. Upgrade to Premium for unlimited scans.")
+    }
+
+    // Simulate AI Processing Latency
+    await new Promise(resolve => setTimeout(resolve, 800))
+
+    let analysis: AnalysisResult
+
+    if (model === "spark") {
+        const mockRaw: SparkRawResponse = {
+            confidence: 0.85 + Math.random() * 0.14,
+            model: "sequential",
+            predicted_label: Math.random() > 0.5 ? 0 : 1
+        }
+        analysis = normalizeSparkResponse(mockRaw)
+    } else {
+        const probAI = Math.random()
+        const mockRaw: FlareRawResponse = {
+            model: "bert",
+            predicted_label: probAI > 0.5 ? 0 : 1,
+            probability_ai: probAI,
+            probability_human: 1 - probAI
+        }
+        analysis = normalizeFlareResponse(mockRaw)
+    }
+
+    await rateLimitService.trackUsage(session.user.id)
+
+    return analysis
+}
