@@ -1,11 +1,11 @@
 import { SubscriptionStatus } from "../../../../generated/prisma/client";
 import { prisma } from "@shared/db";
 import type { PaymentEvent, PaymentUpdatePayload } from "../types";
+import { config } from "../config";
 
-const PADDLE_API_URL = process.env.PADDLE_ENVIRONMENT === 'production'
+const PADDLE_API_URL = config.PADDLE_ENVIRONMENT === 'production'
   ? 'https://api.paddle.com'
   : 'https://sandbox-api.paddle.com';
-const PADDLE_API_KEY = process.env.PADDLE_API_KEY;
 
 export class PaymentService {
   public async handleEvent(event: PaymentEvent): Promise<void> {
@@ -81,14 +81,14 @@ export class PaymentService {
   private async performCancellation(data: any): Promise<void> {
     const { paddleSubscriptionId } = data;
 
-    if (!paddleSubscriptionId || !PADDLE_API_KEY) {
-      throw new Error("Missing subscription ID or API Key");
+    if (!paddleSubscriptionId) {
+      throw new Error("Missing subscription ID");
     }
 
     const response = await fetch(`${PADDLE_API_URL}/subscriptions/${paddleSubscriptionId}/cancel`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${PADDLE_API_KEY}`,
+        'Authorization': `Bearer ${config.PADDLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ effective_from: "next_billing_period" }),
