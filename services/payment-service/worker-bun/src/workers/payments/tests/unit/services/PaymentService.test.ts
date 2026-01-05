@@ -4,7 +4,7 @@ import { getSubscriptionCreatedEvent, getSubscriptionCanceledEvent, getUserCance
 
 mock.module("../../../src/lib/db", () => prismaMock);
 
-import { PaymentService } from "../services/PaymentService.test";
+import { PaymentService } from "../../../services/PaymentService";
 
 const originalFetch = global.fetch;
 const mockFetch = mock(() => Promise.resolve(new Response(JSON.stringify({ success: true }))));
