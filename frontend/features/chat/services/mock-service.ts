@@ -1,18 +1,7 @@
 import { AnalysisResult, ChatSession, Message, ModelType, ChatHistoryItem } from "../types"
 import { IChatService } from "./chat-service.interface"
+import { analyzeText } from "../actions/analyze"
 
-interface SparkRawResponse {
-  confidence: number
-  model: string
-  predicted_label: number
-}
-
-interface FlareRawResponse {
-  model: string
-  predicted_label: number
-  probability_ai: number
-  probability_human: number
-}
 
 const DELAY_MS = 800
 
@@ -38,39 +27,6 @@ class MockChatService implements IChatService {
 
   private async delay() {
     return new Promise((resolve) => setTimeout(resolve, DELAY_MS))
-  }
-
-  private normalizeSparkResponse(raw: SparkRawResponse): AnalysisResult {
-    const isAI = raw.predicted_label === 0
-    const confidence = raw.confidence
-
-    return {
-      model: "spark",
-      label: isAI ? "AI" : "Human",
-      confidence: confidence,
-      scores: {
-        ai: isAI ? confidence : 1 - confidence,
-        human: isAI ? 1 - confidence : confidence
-      },
-      raw
-    }
-  }
-
-  private normalizeFlareResponse(raw: FlareRawResponse): AnalysisResult {
-    const aiScore = raw.probability_ai
-    const humanScore = raw.probability_human
-    const isAI = aiScore > humanScore
-
-    return {
-      model: "flare",
-      label: isAI ? "AI" : "Human",
-      confidence: Math.max(aiScore, humanScore),
-      scores: {
-        ai: aiScore,
-        human: humanScore
-      },
-      raw
-    }
   }
 
   async createChat(initialMessage: string): Promise<ChatSession> {
@@ -101,8 +57,6 @@ class MockChatService implements IChatService {
   }
 
   async sendMessage(chatId: string, content: string, model: ModelType): Promise<Message> {
-    await this.delay()
-
     const chat = this.chats.find(c => c.id === chatId)
     if (!chat) throw new Error("Chat not found")
 
@@ -114,25 +68,8 @@ class MockChatService implements IChatService {
     }
     chat.messages.push(userMessage)
 
-    let analysis: AnalysisResult
-
-    if (model === "spark") {
-      const mockRaw: SparkRawResponse = {
-        confidence: 0.85 + Math.random() * 0.14,
-        model: "sequential",
-        predicted_label: Math.random() > 0.5 ? 0 : 1
-      }
-      analysis = this.normalizeSparkResponse(mockRaw)
-    } else {
-      const probAI = Math.random()
-      const mockRaw: FlareRawResponse = {
-        model: "bert",
-        predicted_label: probAI > 0.5 ? 0 : 1,
-        probability_ai: probAI,
-        probability_human: 1 - probAI
-      }
-      analysis = this.normalizeFlareResponse(mockRaw)
-    }
+    // Call Server Action for Rate Limit & Analysis
+    const analysis = await analyzeText(content, model)
 
     const assistantMessage: Message = {
       id: crypto.randomUUID(),
