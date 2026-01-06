@@ -7,6 +7,8 @@
     "generate": "bunx --bun prisma generate",
     "start:payments": "bun run src/workers/payments/index.ts",
     "dev:payments": "bun --watch src/workers/payments/index.ts",
+    "start:analytics": "bun run src/workers/analytics/index.ts",
+    "dev:analytics": "bun --watch src/workers/analytics/index.ts",
     "test": "bun test",
     "coverage": "bun test --coverage",
     "postinstall": "bunx --bun prisma generate"
