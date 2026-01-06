@@ -1,22 +1,23 @@
-import { RabbitMQWorker } from "./lib/RabbitMQWorker";
+import { RabbitMQWorker } from "../../shared/infrastructure/RabbitMQWorker";
 import { PaymentService } from "./services/PaymentService";
-import { prisma } from "./lib/db";
+import { prisma } from "@shared/db";
+import { redis } from "@shared/redis";
+import { config } from "./config";
 
 const QUEUE_NAME = "payment_events";
-const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 
 const paymentService = new PaymentService();
 
 const worker = new RabbitMQWorker(
-    RABBITMQ_URL,
+    config.RABBITMQ_URL,
     QUEUE_NAME,
-    async (event) => await paymentService.handleEvent(event)
+    async (event: any) => await paymentService.handleEvent(event)
 );
 
 worker.start();
 
 const server = Bun.serve({
-    port: 7777,
+    port: config.PORT,
     fetch(req) {
         const { pathname } = new URL(req.url);
 
@@ -42,6 +43,7 @@ console.log(`Worker listening on http://localhost:${server.port}`);
 
 const shutdown = async () => {
     await prisma.$disconnect();
+    await redis.quit();
     process.exit(0);
 };
 

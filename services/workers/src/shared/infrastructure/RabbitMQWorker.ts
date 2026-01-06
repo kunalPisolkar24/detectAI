@@ -1,5 +1,5 @@
 import amqp, { type Connection, type Channel, type ConsumeMessage } from "amqplib";
-import { Logger } from "../utils/logger";
+import { Logger } from "@shared/logger";
 
 type MessageHandler = (msg: any) => Promise<void>;
 

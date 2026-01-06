@@ -1,11 +1,13 @@
-import { SubscriptionStatus } from "../../generated/prisma/client";
-import { prisma } from "../lib/db";
+import { SubscriptionStatus } from "../../../../generated/prisma/client";
+import { prisma } from "@shared/db";
+import { redis } from "@shared/redis";
+import { Logger } from "@shared/logger";
 import type { PaymentEvent, PaymentUpdatePayload } from "../types";
+import { config } from "../config";
 
-const PADDLE_API_URL = process.env.PADDLE_ENVIRONMENT === 'production'
+const PADDLE_API_URL = config.PADDLE_ENVIRONMENT === 'production'
   ? 'https://api.paddle.com'
   : 'https://sandbox-api.paddle.com';
-const PADDLE_API_KEY = process.env.PADDLE_API_KEY;
 
 export class PaymentService {
   public async handleEvent(event: PaymentEvent): Promise<void> {
@@ -51,10 +53,13 @@ export class PaymentService {
       updateData.paddleCancellationScheduled = data.scheduled_change.action === 'cancel';
     }
 
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: updateData,
+      select: { email: true }
     });
+
+    await this.invalidateUserCache(userId, updatedUser.email);
   }
 
   private async handleSubscriptionCancellation(userId: string, data: any): Promise<void> {
@@ -76,19 +81,21 @@ export class PaymentService {
         paddlePlanId: null,
       },
     });
+
+    await this.invalidateUserCache(userId);
   }
 
   private async performCancellation(data: any): Promise<void> {
     const { paddleSubscriptionId } = data;
 
-    if (!paddleSubscriptionId || !PADDLE_API_KEY) {
-      throw new Error("Missing subscription ID or API Key");
+    if (!paddleSubscriptionId) {
+      throw new Error("Missing subscription ID");
     }
 
     const response = await fetch(`${PADDLE_API_URL}/subscriptions/${paddleSubscriptionId}/cancel`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${PADDLE_API_KEY}`,
+        'Authorization': `Bearer ${config.PADDLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ effective_from: "next_billing_period" }),
@@ -97,6 +104,18 @@ export class PaymentService {
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(`Paddle API Error: ${JSON.stringify(errorData)}`);
+    }
+  }
+
+  private async invalidateUserCache(userId: string, email?: string): Promise<void> {
+    try {
+        const keys = [`user:${userId}`, `user:id:${userId}`];
+        if (email) {
+            keys.push(`user:email:${email}`);
+        }
+        await redis.del(...keys);
+    } catch (error) {
+        Logger.error("Failed to invalidate cache", error, { userId });
     }
   }
 
