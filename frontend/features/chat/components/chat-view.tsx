@@ -4,7 +4,22 @@ import { ChatInput } from "./chat-input"
 import { MessageList } from "./message-list"
 import { ChatHeader } from "./layout/chat-header"
 
-export const ChatView = () => {
+import { useEffect } from "react"
+import { useChatUIStore } from "../stores/ui-store"
+
+interface ChatViewProps {
+  initialRateLimited?: boolean
+}
+
+export const ChatView = ({ initialRateLimited }: ChatViewProps) => {
+  const setRateLimited = useChatUIStore((state) => state.setRateLimited)
+
+  useEffect(() => {
+    if (typeof initialRateLimited === "boolean") {
+      setRateLimited(initialRateLimited)
+    }
+  }, [initialRateLimited, setRateLimited])
+
   return (
     <div className="flex flex-col relative h-full w-full bg-background overflow-hidden isolate">
       <ChatHeader />

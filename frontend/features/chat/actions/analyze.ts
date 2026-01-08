@@ -51,17 +51,21 @@ function normalizeFlareResponse(raw: FlareRawResponse): AnalysisResult {
     }
 }
 
-export async function analyzeText(content: string, model: ModelType): Promise<AnalysisResult> {
+export type AnalyzeActionResponse =
+    | { success: true, data: AnalysisResult }
+    | { success: false, error: string, isRateLimit?: boolean }
+
+export async function analyzeText(content: string, model: ModelType): Promise<AnalyzeActionResponse> {
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
-        throw new Error("Unauthorized")
+        return { success: false, error: "Unauthorized" }
     }
 
     const { allowed } = await rateLimitService.checkLimit(session.user.id, session.user.isPremium)
 
     if (!allowed) {
-        throw new Error("Rate limit exceeded. Upgrade to Premium for unlimited scans.")
+        return { success: false, error: "Rate limit exceeded", isRateLimit: true }
     }
 
     // Simulate AI Processing Latency
@@ -89,5 +93,5 @@ export async function analyzeText(content: string, model: ModelType): Promise<An
 
     await rateLimitService.trackUsage(session.user.id)
 
-    return analysis
+    return { success: true, data: analysis }
 }
