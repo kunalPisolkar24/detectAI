@@ -69,13 +69,20 @@ class MockChatService implements IChatService {
     chat.messages.push(userMessage)
 
     // Call Server Action for Rate Limit & Analysis
-    const analysis = await analyzeText(content, model)
+    const response = await analyzeText(content, model)
+
+    if (!response.success) {
+      if (response.isRateLimit) {
+        throw new Error("Rate limit exceeded")
+      }
+      throw new Error(response.error || "Analysis failed")
+    }
 
     const assistantMessage: Message = {
       id: crypto.randomUUID(),
       role: "assistant",
       content: "",
-      analysis,
+      analysis: response.data,
       createdAt: new Date()
     }
 
