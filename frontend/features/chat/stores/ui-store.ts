@@ -7,11 +7,13 @@ interface ChatUIState {
   currentChatId: string | null
   isSidebarOpen: boolean
   userType: "free" | "premium"
+  isRateLimited: boolean
   setModel: (model: ModelType) => void
   setCurrentChatId: (id: string | null) => void
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
   setUserType: (type: "free" | "premium") => void
+  setRateLimited: (limited: boolean) => void
 }
 
 export const useChatUIStore = create<ChatUIState>()(
@@ -21,11 +23,13 @@ export const useChatUIStore = create<ChatUIState>()(
       currentChatId: null,
       isSidebarOpen: true,
       userType: "free",
+      isRateLimited: false,
       setModel: (model) => set({ selectedModel: model }),
       setCurrentChatId: (id) => set({ currentChatId: id }),
       toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
       setSidebarOpen: (open) => set({ isSidebarOpen: open }),
-      setUserType: (type) => set({ userType: type })
+      setUserType: (type) => set({ userType: type }),
+      setRateLimited: (limited) => set({ isRateLimited: limited })
     }),
     {
       name: "chat-ui-storage",
