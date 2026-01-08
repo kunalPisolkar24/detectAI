@@ -17,12 +17,12 @@ export const useSendMessage = () => {
         const newChat = await chatService.createChat(content)
         activeChatId = newChat.id
         setCurrentChatId(activeChatId)
-        
-        queryClient.setQueryData<ChatSession>(["chat", activeChatId], { 
-          ...newChat, 
-          messages: [] 
+
+        queryClient.setQueryData<ChatSession>(["chat", activeChatId], {
+          ...newChat,
+          messages: []
         })
-        
+
         await queryClient.invalidateQueries({ queryKey: ["chat-history"] })
       }
 
@@ -44,8 +44,10 @@ export const useSendMessage = () => {
       return chatService.sendMessage(activeChatId, content, selectedModel)
     },
     onSuccess: (newMessage, _, context) => {
+      useChatUIStore.getState().setRateLimited(false)
+
       const activeChatId = useChatUIStore.getState().currentChatId
-      
+
       if (activeChatId) {
         queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
           if (!old) return undefined
@@ -57,8 +59,13 @@ export const useSendMessage = () => {
       }
     },
     onError: (error) => {
-        console.error("Failed to send message", error)
+      console.error("Failed to send message", error)
+      if (error instanceof Error && (error.message.includes("Rate limit exceeded") || error.message.includes("429"))) {
+        useChatUIStore.getState().setRateLimited(true)
+        toast.error("Rate limit exceeded")
+      } else {
         toast.error("Failed to send message")
+      }
     }
   })
 }
@@ -71,10 +78,10 @@ export const useChatMutations = () => {
   const deleteChat = useMutation({
     mutationFn: (chatId: string) => chatService.deleteChat(chatId),
     onSuccess: (_, chatId) => {
-      queryClient.setQueryData<ChatHistoryItem[]>(["chat-history"], (old) => 
+      queryClient.setQueryData<ChatHistoryItem[]>(["chat-history"], (old) =>
         old?.filter(c => c.id !== chatId) || []
       )
-      
+
       if (currentChatId === chatId) {
         setCurrentChatId(null)
         router.push("/chat")
@@ -85,10 +92,10 @@ export const useChatMutations = () => {
   })
 
   const renameChat = useMutation({
-    mutationFn: ({ id, title }: { id: string, title: string }) => 
+    mutationFn: ({ id, title }: { id: string, title: string }) =>
       chatService.renameChat(id, title),
     onSuccess: (updatedChat) => {
-      queryClient.setQueryData<ChatHistoryItem[]>(["chat-history"], (old) => 
+      queryClient.setQueryData<ChatHistoryItem[]>(["chat-history"], (old) =>
         old?.map(c => c.id === updatedChat.id ? updatedChat : c) || []
       )
       queryClient.invalidateQueries({ queryKey: ["chat", updatedChat.id] })
