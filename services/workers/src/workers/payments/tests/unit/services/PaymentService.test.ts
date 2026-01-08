@@ -1,5 +1,5 @@
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
-import { prismaMock, mockUserUpdate, mockUserUpdateMany } from "../../mocks/db";
+import { prismaMock, mockUserUpdate, mockUserUpdateMany, mockUserFindUnique } from "../../mocks/db";
 import { redisMock, mockRedisDel } from "../../mocks/redis";
 import { configMock } from "../../mocks/config";
 import { getSubscriptionCreatedEvent, getSubscriptionCanceledEvent, getUserCancelRequestEvent } from "../../fixtures/paddleEvents";
@@ -20,6 +20,7 @@ describe("PaymentService", () => {
         service = new PaymentService();
         mockUserUpdate.mockClear();
         mockUserUpdateMany.mockClear();
+        mockUserFindUnique.mockClear();
         mockRedisDel.mockClear();
         mockFetch.mockClear();
         global.fetch = mockFetch as unknown as typeof fetch;
@@ -29,36 +30,54 @@ describe("PaymentService", () => {
         global.fetch = originalFetch;
     });
 
-    test("should update user details and invalidate cache when subscription is created", async () => {
+    test("should update user details and invalidate all cache keys when subscription is created", async () => {
         const event = getSubscriptionCreatedEvent();
+        const userId = "user_abc";
+        const email = "test@example.com";
         
-        mockUserUpdate.mockResolvedValueOnce({ email: "test@example.com" });
+        mockUserUpdate.mockResolvedValueOnce({ email });
 
         await service.handleEvent(event as any);
 
         expect(mockUserUpdate).toHaveBeenCalled();
         const callArgs = (mockUserUpdate.mock.calls as any)[0][0];
-        expect(callArgs.where.id).toBe("user_abc");
+        expect(callArgs.where.id).toBe(userId);
         expect(callArgs.data.paddleSubscriptionStatus).toBe("ACTIVE");
 
         expect(mockRedisDel).toHaveBeenCalled();
         const redisArgs = mockRedisDel.mock.calls[0] as string[];
-        expect(redisArgs).toContain("user:id:user_abc");
-        expect(redisArgs).toContain("user:email:test@example.com");
+        
+        expect(redisArgs).toHaveLength(3);
+        expect(redisArgs).toContain(`user:${userId}`);
+        expect(redisArgs).toContain(`user:id:${userId}`);
+        expect(redisArgs).toContain(`user:email:${email}`);
     });
 
-    test("should mark subscription as canceled and invalidate cache when receiving canceled event", async () => {
+    test("should fetch user email, mark subscription as canceled, and invalidate all cache keys", async () => {
         const event = getSubscriptionCanceledEvent();
+        const userId = "user_abc";
+        const email = "cancel@example.com";
+
+        mockUserFindUnique.mockResolvedValueOnce({ email });
+
         await service.handleEvent(event as any);
 
+        expect(mockUserFindUnique).toHaveBeenCalledTimes(1);
+        const findArgs = (mockUserFindUnique.mock.calls as any)[0][0];
+        expect(findArgs.where.id).toBe(userId);
+
         expect(mockUserUpdateMany).toHaveBeenCalled();
-        const callArgs = (mockUserUpdateMany.mock.calls as any)[0][0];
-        expect(callArgs.where.paddleSubscriptionId).toBe("sub_123");
-        expect(callArgs.data.paddleSubscriptionStatus).toBe("CANCELED");
+        const updateArgs = (mockUserUpdateMany.mock.calls as any)[0][0];
+        expect(updateArgs.where.paddleSubscriptionId).toBe("sub_123");
+        expect(updateArgs.data.paddleSubscriptionStatus).toBe("CANCELED");
 
         expect(mockRedisDel).toHaveBeenCalled();
         const redisArgs = mockRedisDel.mock.calls[0] as string[];
-        expect(redisArgs).toContain("user:id:user_abc");
+        
+        expect(redisArgs).toHaveLength(3);
+        expect(redisArgs).toContain(`user:${userId}`);
+        expect(redisArgs).toContain(`user:id:${userId}`);
+        expect(redisArgs).toContain(`user:email:${email}`);
     });
 
     test("should call external API when user requests cancellation", async () => {

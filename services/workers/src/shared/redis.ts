@@ -1,21 +1,26 @@
 import Redis from "ioredis";
 import { Logger } from "./logger";
 
-const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+const defaultRedisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 
-export const redis = new Redis(redisUrl, {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    retryStrategy(times) {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-    },
-});
+export const createRedisClient = (url: string, name: string = "Redis") => {
+    const client = new Redis(url, {
+        maxRetriesPerRequest: null,
+        enableReadyCheck: false,
+        retryStrategy(times) {
+            return Math.min(times * 50, 2000);
+        },
+    });
 
-redis.on("error", (error) => {
-    Logger.error("Redis connection error", error);
-});
+    client.on("error", (error) => {
+        Logger.error(`${name} connection error`, error);
+    });
 
-redis.on("connect", () => {
-    Logger.info("Redis connected successfully");
-});
+    client.on("connect", () => {
+        Logger.info(`${name} connected successfully`);
+    });
+
+    return client;
+};
+
+export const redis = createRedisClient(defaultRedisUrl, "MainRedis");

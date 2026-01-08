@@ -9,6 +9,12 @@ const PADDLE_API_URL = config.PADDLE_ENVIRONMENT === 'production'
   ? 'https://api.paddle.com'
   : 'https://sandbox-api.paddle.com';
 
+const CacheKeys = {
+  session: (id: string) => `user:${id}`,
+  byId: (id: string) => `user:id:${id}`,
+  byEmail: (email: string) => `user:email:${email}`,
+};
+
 export class PaymentService {
   public async handleEvent(event: PaymentEvent): Promise<void> {
     const { event_type, data } = event;
@@ -16,19 +22,24 @@ export class PaymentService {
 
     if (!userId && event_type !== "user.cancel_subscription") return;
 
-    switch (event_type) {
-      case "subscription.created":
-      case "subscription.updated":
-        if (userId) await this.handleSubscriptionUpdate(userId, data);
-        break;
+    try {
+      switch (event_type) {
+        case "subscription.created":
+        case "subscription.updated":
+          if (userId) await this.handleSubscriptionUpdate(userId, data);
+          break;
 
-      case "subscription.canceled":
-        if (userId) await this.handleSubscriptionCancellation(userId, data);
-        break;
+        case "subscription.canceled":
+          if (userId) await this.handleSubscriptionCancellation(userId, data);
+          break;
 
-      case "user.cancel_subscription":
-        await this.performCancellation(data);
-        break;
+        case "user.cancel_subscription":
+          await this.performCancellation(data);
+          break;
+      }
+    } catch (error) {
+      Logger.error("Error processing payment event", error, { event_type, userId });
+      throw error;
     }
   }
 
@@ -68,6 +79,13 @@ export class PaymentService {
 
     if (!subId) return;
 
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true }
+    });
+
+    if (!user) return;
+
     await prisma.user.updateMany({
       where: {
         id: userId,
@@ -82,7 +100,7 @@ export class PaymentService {
       },
     });
 
-    await this.invalidateUserCache(userId);
+    await this.invalidateUserCache(userId, user.email);
   }
 
   private async performCancellation(data: any): Promise<void> {
@@ -107,15 +125,17 @@ export class PaymentService {
     }
   }
 
-  private async invalidateUserCache(userId: string, email?: string): Promise<void> {
+  private async invalidateUserCache(userId: string, email: string): Promise<void> {
     try {
-        const keys = [`user:${userId}`, `user:id:${userId}`];
-        if (email) {
-            keys.push(`user:email:${email}`);
-        }
-        await redis.del(...keys);
+      const keys = [
+        CacheKeys.session(userId),
+        CacheKeys.byId(userId),
+        CacheKeys.byEmail(email)
+      ];
+      
+      await redis.del(...keys);
     } catch (error) {
-        Logger.error("Failed to invalidate cache", error, { userId });
+      Logger.error("Failed to invalidate cache", error, { userId });
     }
   }
 

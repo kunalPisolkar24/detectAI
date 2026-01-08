@@ -4,6 +4,7 @@ import { Logger } from "../logger";
 export const baseEnvSchema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
+  REDIS_USAGE_URL: z.string().url(),
   RABBITMQ_URL: z.string().url().default("amqp://guest:guest@localhost:5672"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().default(7777),

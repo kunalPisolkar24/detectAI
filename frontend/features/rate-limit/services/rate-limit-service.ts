@@ -9,8 +9,8 @@ export interface IRateLimitService {
 
 export class RedisRateLimitService implements IRateLimitService {
     private static readonly FREE_TIER_LIMIT = 100
-    private static readonly USAGE_TTL = 86400 * 7 // 7 days retention for safety
-    private static readonly RATE_LIMIT_TTL = 86400 // 24 hours
+    private static readonly PENDING_TTL = 86400
+    private static readonly RATE_LIMIT_TTL = 86400
 
     private getDailyKey(userId: string): string {
         const today = format(startOfDay(new Date()), "yyyy-MM-dd")
@@ -51,7 +51,7 @@ export class RedisRateLimitService implements IRateLimitService {
         pipeline.expire(dailyKey, RedisRateLimitService.RATE_LIMIT_TTL)
 
         pipeline.incr(pendingKey)
-        pipeline.expire(pendingKey, RedisRateLimitService.USAGE_TTL)
+        pipeline.expire(pendingKey, RedisRateLimitService.PENDING_TTL)
 
         pipeline.sadd(dirtySetKey, userId)
 
