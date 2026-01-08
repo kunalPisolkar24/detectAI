@@ -27,7 +27,7 @@ export const ChatInput = () => {
   const isPremium = session?.user?.isPremium ?? false
   const [localInput, setLocalInput] = useState("")
   const [isExtracting, setIsExtracting] = useState(false)
-  const { selectedModel, setModel } = useChatUIStore()
+  const { selectedModel, setModel, isRateLimited } = useChatUIStore()
   const { mutate, isPending } = useSendMessage()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -83,7 +83,7 @@ export const ChatInput = () => {
     } else if (result.text) {
       const extractedText = result.text
       setLocalInput(prev => (prev ? `${prev}\n\n${extractedText}` : extractedText))
-      
+
       toast.success("File content extracted successfully")
       requestAnimationFrame(() => {
         if (textareaRef.current) {
@@ -116,6 +116,24 @@ export const ChatInput = () => {
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 animate-gradient-x z-20 opacity-50" />
         )}
 
+        {isRateLimited && !isPremium && (
+          <div className="flex items-center justify-between gap-4 bg-neutral-50 dark:bg-[#232329]/95 px-4 py-2.5 text-sm border-b border-neutral-200 dark:border-white/5">
+            <span className="font-medium text-neutral-700 dark:text-neutral-200">Usage limit reached — your limit will reset tomorrow.</span>
+            <Button
+              size="sm"
+              onClick={() => router.push("/upgrade")}
+              className={cn(
+                "h-7 min-w-[100px] text-base font-medium uppercase tracking-wide shadow-sm",
+                "bg-neutral-900 text-white hover:bg-neutral-800",
+                "dark:bg-white dark:text-black dark:hover:bg-neutral-200",
+                teko.className
+              )}
+            >
+              UPGRADE NOW
+            </Button>
+          </div>
+        )}
+
         <Textarea
           ref={textareaRef}
           value={localInput}
@@ -129,7 +147,7 @@ export const ChatInput = () => {
             "scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-700",
             merriweather.className
           )}
-          disabled={isPending}
+          disabled={isPending || (isRateLimited && !isPremium)}
           aria-label="Text to analyze"
         />
 
@@ -147,7 +165,7 @@ export const ChatInput = () => {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-neutral-500 hover:text-blue-600 hover:bg-blue-50/50 dark:text-neutral-400 dark:hover:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                disabled={isPending || isExtracting}
+                disabled={isPending || isExtracting || (isRateLimited && !isPremium)}
                 onClick={() => fileInputRef.current?.click()}
                 aria-label="Attach file"
               >
@@ -224,7 +242,7 @@ export const ChatInput = () => {
           >
             <Button
               onClick={handleSubmit}
-              disabled={!localInput.trim() || isPending || isExtracting}
+              disabled={!localInput.trim() || isPending || isExtracting || (isRateLimited && !isPremium)}
               className={cn(
                 "h-9 min-w-[36px] rounded-lg transition-all duration-300 px-3 sm:px-5",
                 "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md shadow-blue-500/20",
