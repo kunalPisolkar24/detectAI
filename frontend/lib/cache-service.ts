@@ -1,4 +1,4 @@
-import { redis } from "@/lib/redis"
+import { redisReader, redisWriter } from "@/lib/redis"
 import { JsonSerializer } from "@/lib/serialization"
 
 export const TTL = {
@@ -13,7 +13,7 @@ export const cacheService = {
 
   async get<T>(key: string): Promise<T | null> {
     try {
-      const data = await redis.get(key)
+      const data = await redisReader.get(key)
       if (!data) return null
       return JsonSerializer.deserialize<T>(data)
     } catch (error) {
@@ -25,7 +25,7 @@ export const cacheService = {
   async set<T>(key: string, data: T, ttl: number): Promise<void> {
     try {
       const serialized = JsonSerializer.serialize(data)
-      await redis.setex(key, ttl, serialized)
+      await redisWriter.setex(key, ttl, serialized)
     } catch (error) {
       console.error(`Cache Write Error [${key}]:`, error)
     }
@@ -35,7 +35,7 @@ export const cacheService = {
     try {
       const targetKeys = Array.isArray(keys) ? keys : [keys]
       if (targetKeys.length > 0) {
-        await redis.del(...targetKeys)
+        await redisWriter.del(...targetKeys)
       }
     } catch (error) {
       console.error(`Cache Delete Error:`, error)
