@@ -3,6 +3,8 @@ import { createRedisClient } from "@shared/redis";
 import { Logger } from "@shared/logger";
 import { config } from "../config";
 import { baseEnvSchema } from "@shared/config";
+import { CacheKeys, TTL } from "@shared/cache/keys";
+import { JsonSerializer } from "@shared/cache/serialization";
 
 const mainConfig = baseEnvSchema.parse(process.env);
 
@@ -11,13 +13,18 @@ interface UsageUpdate {
   count: number;
 }
 
+interface UserCacheData {
+  apiCallCountTotal: number;
+  apiCallCountDaily: number;
+  [key: string]: any;
+}
+
 export class AnalyticsService {
   private usageRedis;
   private mainRedis;
   private readonly BATCH_SIZE = 50;
   private readonly DIRTY_SET_KEY = "usage:dirty_users";
   private readonly PENDING_KEY_PREFIX = "usage:pending:";
-  private readonly CACHE_TTL = 3600;
 
   constructor() {
     this.usageRedis = createRedisClient(config.REDIS_USAGE_URL, "UsageRedis");
@@ -91,59 +98,47 @@ export class AnalyticsService {
 
   private async patchUserCaches(updates: UsageUpdate[]) {
     try {
-      const pipeline = this.mainRedis.pipeline();
+      for (const { userId, count } of updates) {
+        const key = CacheKeys.user(userId);
 
-      updates.forEach(({ userId }) => {
-        pipeline.get(`user:${userId}`);
-        pipeline.get(`user:id:${userId}`);
-      });
+        await this.mainRedis.watch(key);
 
-      const results = await pipeline.exec();
-      if (!results) return;
+        const rawData = await this.mainRedis.get(key);
 
-      const writePipeline = this.mainRedis.pipeline();
-
-      for (let i = 0; i < updates.length; i++) {
-        const update = updates[i];
-        if (!update) continue;
-
-        const { userId, count } = update;
-
-        const sessionCacheRes = results[i * 2];
-        const dataCacheRes = results[(i * 2) + 1];
-
-        if (sessionCacheRes) {
-          this.updateCacheEntry(writePipeline, `user:${userId}`, sessionCacheRes, count);
+        if (!rawData) {
+          await this.mainRedis.unwatch();
+          continue;
         }
-        if (dataCacheRes) {
-          this.updateCacheEntry(writePipeline, `user:id:${userId}`, dataCacheRes, count);
-        }
-      }
 
-      await writePipeline.exec();
-    } catch (error) {
-      Logger.warn("Failed to patch user cache", { error });
-    }
-  }
+        try {
+          const userObj = JsonSerializer.deserialize<UserCacheData>(rawData);
 
-  private updateCacheEntry(pipeline: any, key: string, result: [error: Error | null, result: unknown], countToAdd: number) {
-    const [err, data] = result;
-    if (!err && data && typeof data === 'string') {
-      try {
-        const userObj = JSON.parse(data);
+          if (typeof userObj.apiCallCountTotal === 'number') {
+            userObj.apiCallCountTotal += count;
 
-        if (typeof userObj.apiCallCountTotal === 'number') {
-          userObj.apiCallCountTotal += countToAdd;
+            if (typeof userObj.apiCallCountDaily === 'number') {
+              userObj.apiCallCountDaily += count;
+            }
 
-          if (typeof userObj.apiCallCountDaily === 'number') {
-            userObj.apiCallCountDaily += countToAdd;
+            const newRawData = JsonSerializer.serialize(userObj);
+
+            const multi = this.mainRedis.multi();
+            multi.setex(key, TTL.USER, newRawData);
+            const result = await multi.exec();
+
+            if (!result) {
+              Logger.warn(`Optimistic lock failed for user ${userId}`);
+            }
+          } else {
+            await this.mainRedis.unwatch();
           }
-
-          pipeline.set(key, JSON.stringify(userObj), 'EX', this.CACHE_TTL);
+        } catch (e) {
+          await this.mainRedis.unwatch();
+          Logger.warn(`Failed to patch cache for ${userId}`, { error: e });
         }
-      } catch (e) {
-        Logger.warn(`Failed to parse cache entry for key ${key}`, { error: e });
       }
+    } catch (error) {
+      Logger.warn("Global error in patchUserCache", { error });
     }
   }
 

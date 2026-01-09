@@ -1,7 +1,9 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
 import { prismaMock, mockUserUpdate, mockPrismaTransaction } from "../../mocks/db";
-import { redisMock, mockRedisClient, mockRedisSpop, mockPipelineExec, mockRedisSadd } from "../../mocks/redis";
+import { redisMock, mockRedisClient, mockRedisSpop, mockPipelineExec, mockRedisSadd, mockRedisGet, mockRedisExec, mockRedisWatch, mockRedisUnwatch, mockRedisMulti } from "../../mocks/redis";
 import { configMock } from "../../mocks/config";
+import { CacheKeys } from "@shared/cache/keys";
+import { JsonSerializer } from "@shared/cache/serialization";
 
 mock.module("@shared/db", () => prismaMock);
 mock.module("@shared/redis", () => redisMock);
@@ -21,6 +23,11 @@ describe("AnalyticsService", () => {
     mockPipelineExec.mockClear();
     mockUserUpdate.mockClear();
     mockPrismaTransaction.mockClear();
+    mockRedisGet.mockClear();
+    mockRedisExec.mockClear();
+    mockRedisWatch.mockClear();
+    mockRedisUnwatch.mockClear();
+    mockRedisMulti.mockClear();
     
     (mockPipelineExec as any).mockResolvedValue([]);
   });
@@ -36,132 +43,130 @@ describe("AnalyticsService", () => {
   });
 
   test("should process batch successfully and update database", async () => {
-    const userIds = ["user_1", "user_2"];
-    const usageCounts = [
-      [null, "10"],
-      [null, "5"] 
-    ];
+    const userIds = ["user_1"];
+    const usageCounts = [[null, "10"]];
 
     mockRedisSpop.mockResolvedValue(userIds);
     
     (mockPipelineExec as any)
       .mockResolvedValueOnce(usageCounts) 
-      .mockResolvedValueOnce(usageCounts) 
-      .mockResolvedValueOnce([ 
-        [null, JSON.stringify({ apiCallCountTotal: 100, apiCallCountDaily: 10 })], 
-        [null, JSON.stringify({ id: "user_1" })], 
-        [null, null], 
-        [null, null] 
-      ])
       .mockResolvedValueOnce([[null, "OK"]]); 
 
-    mockPrismaTransaction.mockResolvedValue([{}, {}]);
+    mockPrismaTransaction.mockResolvedValue([{}]);
+    
+    mockRedisGet.mockResolvedValue(null); 
 
     const result = await service.processBatch();
 
-    expect(result).toBe(2);
+    expect(result).toBe(1);
     expect(mockPrismaTransaction).toHaveBeenCalledTimes(1);
-    expect(mockUserUpdate).toHaveBeenCalledTimes(2);
+    expect(mockUserUpdate).toHaveBeenCalledTimes(1);
     
     const calls = mockUserUpdate.mock.calls;
-    // Cast to any[] to avoid strict tuple index errors on mocked calls
     const firstUpdateCall = (calls[0] as any[])[0];
     
     expect(firstUpdateCall.where.id).toBe("user_1");
     expect(firstUpdateCall.data.apiCallCountTotal.increment).toBe(10);
   });
 
-  test("should skip users with no pending usage in redis", async () => {
-    const userIds = ["user_1", "user_2"];
+  test("should patch cache correctly using optimistic locking", async () => {
+    const userIds = ["user_1"];
     mockRedisSpop.mockResolvedValue(userIds);
-    
-    (mockPipelineExec as any).mockResolvedValueOnce([
-      [null, "10"],
-      [null, null] 
-    ]);
-    
+
+    (mockPipelineExec as any)
+      .mockResolvedValueOnce([[null, "10"]]) 
+      .mockResolvedValueOnce([[null, "OK"]]); 
+
     mockPrismaTransaction.mockResolvedValue([{}]);
 
-    const result = await service.processBatch();
-
-    expect(result).toBe(1);
-    expect(mockUserUpdate).toHaveBeenCalledTimes(1);
+    const existingUser = {
+      id: "user_1",
+      apiCallCountTotal: 100,
+      apiCallCountDaily: 20
+    };
+    const serializedUser = JsonSerializer.serialize(existingUser);
     
-    const calls = mockUserUpdate.mock.calls;
-    expect((calls[0] as any[])[0].where.id).toBe("user_1");
+    mockRedisGet.mockResolvedValue(serializedUser);
+    mockRedisExec.mockResolvedValue(["OK"]); 
+
+    await service.processBatch();
+
+    expect(mockRedisWatch).toHaveBeenCalledWith(CacheKeys.user("user_1"));
+    expect(mockRedisGet).toHaveBeenCalledWith(CacheKeys.user("user_1"));
+    expect(mockRedisMulti).toHaveBeenCalled();
+    expect(mockRedisExec).toHaveBeenCalled();
+  });
+
+  test("should abort cache update if optimistic lock fails (exec returns null)", async () => {
+    const userIds = ["user_1"];
+    mockRedisSpop.mockResolvedValue(userIds);
+
+    (mockPipelineExec as any)
+      .mockResolvedValueOnce([[null, "10"]])
+      .mockResolvedValueOnce([[null, "OK"]]);
+
+    mockPrismaTransaction.mockResolvedValue([{}]);
+
+    mockRedisGet.mockResolvedValue(JSON.stringify({ apiCallCountTotal: 100 }));
+    mockRedisExec.mockResolvedValue(null); 
+
+    await service.processBatch();
+
+    expect(mockRedisWatch).toHaveBeenCalled();
+    expect(mockRedisMulti).toHaveBeenCalled();
+    expect(mockRedisExec).toHaveBeenCalled();
+  });
+
+  test("should unwatch and skip if cache key is missing", async () => {
+    const userIds = ["user_1"];
+    mockRedisSpop.mockResolvedValue(userIds);
+
+    (mockPipelineExec as any)
+      .mockResolvedValueOnce([[null, "10"]])
+      .mockResolvedValueOnce([[null, "OK"]]);
+
+    mockPrismaTransaction.mockResolvedValue([{}]);
+
+    mockRedisGet.mockResolvedValue(null);
+
+    await service.processBatch();
+
+    expect(mockRedisWatch).toHaveBeenCalled();
+    expect(mockRedisUnwatch).toHaveBeenCalled();
+    expect(mockRedisMulti).not.toHaveBeenCalled();
+  });
+
+  test("should handle JSON deserialization errors gracefully by unwatching", async () => {
+    const userIds = ["user_1"];
+    mockRedisSpop.mockResolvedValue(userIds);
+
+    (mockPipelineExec as any)
+      .mockResolvedValueOnce([[null, "10"]])
+      .mockResolvedValueOnce([[null, "OK"]]);
+
+    mockPrismaTransaction.mockResolvedValue([{}]);
+
+    mockRedisGet.mockResolvedValue("{ invalid_json: ");
+
+    await service.processBatch();
+
+    expect(mockRedisWatch).toHaveBeenCalled();
+    expect(mockRedisUnwatch).toHaveBeenCalled();
+    expect(mockRedisMulti).not.toHaveBeenCalled();
   });
 
   test("should requeue users if database transaction fails", async () => {
     const userIds = ["user_1"];
     mockRedisSpop.mockResolvedValue(userIds);
     
-    (mockPipelineExec as any).mockResolvedValueOnce([
-      [null, "10"]
-    ]);
+    (mockPipelineExec as any).mockResolvedValueOnce([[null, "10"]]);
 
     mockPrismaTransaction.mockRejectedValue(new Error("DB Error"));
 
-    const result = await service.processBatch();
-
-    expect(result).toBe(1); 
-    expect(mockPrismaTransaction).toHaveBeenCalled();
-    expect(mockRedisSadd).toHaveBeenCalledWith("usage:dirty_users", "user_1");
-  });
-
-  test("should requeue users if decrement operation reveals remaining usage", async () => {
-    const userIds = ["user_1"];
-    mockRedisSpop.mockResolvedValue(userIds);
-    
-    (mockPipelineExec as any)
-      .mockResolvedValueOnce([[null, "10"]]) 
-      .mockResolvedValueOnce([[null, 5]])
-      .mockResolvedValueOnce([]); 
-
-    mockPrismaTransaction.mockResolvedValue([{}]);
-
-    await service.processBatch();
-
-    expect(mockRedisSadd).toHaveBeenCalledWith("usage:dirty_users", "user_1");
-  });
-
-  test("should patch cache correctly when cache hits occur", async () => {
-    const userIds = ["user_1"];
-    mockRedisSpop.mockResolvedValue(userIds);
-
-    (mockPipelineExec as any)
-      .mockResolvedValueOnce([[null, "10"]])
-      .mockResolvedValueOnce([[null, 0]]) 
-      .mockResolvedValueOnce([ 
-        [null, JSON.stringify({ apiCallCountTotal: 100, apiCallCountDaily: 20 })], 
-        [null, null]
-      ])
-      .mockResolvedValueOnce([[null, "OK"]]); 
-
-    mockPrismaTransaction.mockResolvedValue([{}]);
-
-    await service.processBatch();
-
-    expect(mockRedisClient.pipeline).toHaveBeenCalled();
-  });
-  
-  test("should handle json parse errors in cache patching gracefully", async () => {
-    const userIds = ["user_1"];
-    mockRedisSpop.mockResolvedValue(userIds);
-
-    (mockPipelineExec as any)
-      .mockResolvedValueOnce([[null, "10"]]) 
-      .mockResolvedValueOnce([[null, 0]]) 
-      .mockResolvedValueOnce([ 
-        [null, "{ invalid_json: "], 
-        [null, null]
-      ])
-      .mockResolvedValueOnce([]); 
-
-    mockPrismaTransaction.mockResolvedValue([{}]);
-
     await service.processBatch();
 
     expect(mockPrismaTransaction).toHaveBeenCalled();
+    expect(mockRedisSadd).toHaveBeenCalledWith("usage:dirty_users", "user_1");
   });
 
   test("should shutdown redis clients on shutdown", async () => {

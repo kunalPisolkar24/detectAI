@@ -2,18 +2,14 @@ import { SubscriptionStatus } from "../../../../generated/prisma/client";
 import { prisma } from "@shared/db";
 import { redis } from "@shared/redis";
 import { Logger } from "@shared/logger";
+import { CacheKeys } from "@shared/cache/keys";
+import { LockService } from "@shared/cache/lock";
 import type { PaymentEvent, PaymentUpdatePayload } from "../types";
 import { config } from "../config";
 
 const PADDLE_API_URL = config.PADDLE_ENVIRONMENT === 'production'
   ? 'https://api.paddle.com'
   : 'https://sandbox-api.paddle.com';
-
-const CacheKeys = {
-  session: (id: string) => `user:${id}`,
-  byId: (id: string) => `user:id:${id}`,
-  byEmail: (email: string) => `user:email:${email}`,
-};
 
 export class PaymentService {
   public async handleEvent(event: PaymentEvent): Promise<void> {
@@ -126,16 +122,27 @@ export class PaymentService {
   }
 
   private async invalidateUserCache(userId: string, email: string): Promise<void> {
+    const keys = [
+      CacheKeys.user(userId),
+      CacheKeys.userByEmail(email)
+    ];
+
     try {
-      const keys = [
-        CacheKeys.session(userId),
-        CacheKeys.byId(userId),
-        CacheKeys.byEmail(email)
-      ];
-      
-      await redis.del(...keys);
+      const locks: Array<(() => Promise<void>) | null> = await Promise.all(
+        keys.map(key => LockService.acquire(key))
+      );
+
+      try {
+        await redis.del(...keys);
+      } finally {
+        await Promise.all(
+          locks.map(release => release ? release() : Promise.resolve())
+        );
+      }
     } catch (error) {
-      Logger.error("Failed to invalidate cache", error, { userId });
+      Logger.error("Failed to invalidate cache with locks", error, { userId });
+      // Fallback: Try to delete anyway if locking failed entirely
+      await redis.del(...keys).catch(e => Logger.error("Fallback delete failed", e));
     }
   }
 

@@ -1,6 +1,7 @@
 import { cacheService, TTL } from "@/lib/cache-service"
 import { userRepository } from "@/features/auth/repositories/user-repository"
 import { User, Prisma } from "@/lib/generated/prisma/client"
+import { lockService } from "@/lib/lock-service"
 
 export const userService = {
   async getUserById(id: string): Promise<User | null> {
@@ -11,13 +12,28 @@ export const userService = {
       return cachedUser
     }
 
-    const user = await userRepository.findById(id)
-
-    if (user) {
-      await cacheService.set(key, user, TTL.USER)
+    const release = await lockService.acquire(key)
+    
+    if (!release) {
+      return userRepository.findById(id)
     }
 
-    return user
+    try {
+      const doubleCheck = await cacheService.get<User>(key)
+      if (doubleCheck) {
+        return doubleCheck
+      }
+
+      const user = await userRepository.findById(id)
+
+      if (user) {
+        await cacheService.set(key, user, TTL.USER)
+      }
+
+      return user
+    } finally {
+      await release()
+    }
   },
 
   async getUserByEmail(email: string): Promise<User | null> {
@@ -28,16 +44,26 @@ export const userService = {
       return cachedUser
     }
 
-    const user = await userRepository.findByEmail(email)
+    const release = await lockService.acquire(key)
+    if (!release) return userRepository.findByEmail(email)
 
-    if (user) {
-      await Promise.all([
-        cacheService.set(key, user, TTL.USER),
-        cacheService.set(cacheService.keys.user(user.id), user, TTL.USER)
-      ])
+    try {
+      const doubleCheck = await cacheService.get<User>(key)
+      if (doubleCheck) return doubleCheck
+
+      const user = await userRepository.findByEmail(email)
+
+      if (user) {
+        await Promise.all([
+          cacheService.set(key, user, TTL.USER),
+          cacheService.set(cacheService.keys.user(user.id), user, TTL.USER)
+        ])
+      }
+
+      return user
+    } finally {
+      await release()
     }
-
-    return user
   },
 
   async createUser(data: Prisma.UserCreateInput): Promise<User> {
@@ -47,10 +73,18 @@ export const userService = {
   async updateUser(id: string, data: Prisma.UserUpdateInput): Promise<User> {
     const user = await userRepository.update(id, data)
 
-    await cacheService.del([
-      cacheService.keys.user(id),
-      cacheService.keys.userByEmail(user.email)
-    ])
+    const idKey = cacheService.keys.user(id)
+    const emailKey = cacheService.keys.userByEmail(user.email)
+    
+    const releaseId = await lockService.acquire(idKey)
+    const releaseEmail = await lockService.acquire(emailKey)
+
+    try {
+      await cacheService.del([idKey, emailKey])
+    } finally {
+      if (releaseId) await releaseId()
+      if (releaseEmail) await releaseEmail()
+    }
 
     return user
   },
