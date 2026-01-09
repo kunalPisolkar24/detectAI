@@ -5,11 +5,10 @@ import GoogleProvider from "next-auth/providers/google"
 import bcrypt from "bcryptjs"
 import { PrismaAdapter } from "@next-auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
-import { SubscriptionStatus, User } from "@/lib/generated/prisma/client"
+import { SubscriptionStatus } from "@/lib/generated/prisma/client"
 import { LoginSchema } from "@/schemas/auth"
 import { env } from "@/lib/env"
-import { redis } from "@/lib/redis"
-import { JsonSerializer } from "@/lib/serialization"
+import { userService } from "@/features/auth/services/user-service"
 
 interface ExtendedProfile extends Profile {
   firstName?: string
@@ -98,36 +97,13 @@ export const authOptions: NextAuthOptions = {
 
       if (token.id) {
         try {
-          const cacheKey = `user:${token.id}`
-          const cachedUser = await redis.get(cacheKey)
+          const dbUser = await userService.getUserById(token.id)
 
-          if (cachedUser) {
-            const dbUser = JsonSerializer.deserialize<User>(cachedUser)
-            token.name = dbUser.name
-            token.email = dbUser.email
-            token.picture = dbUser.image
+          if (dbUser) {
+            token.name = dbUser.name ?? token.name
+            token.email = dbUser.email ?? token.email
+            token.picture = dbUser.image ?? token.picture
             token.isPremium = dbUser.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE
-          } else {
-            const dbUser = await prisma.user.findUnique({
-              where: { id: token.id },
-              select: {
-                name: true,
-                email: true,
-                image: true,
-                paddleSubscriptionStatus: true,
-                firstName: true,
-                lastName: true,
-              },
-            })
-
-            if (dbUser) {
-              token.name = dbUser.name ?? token.name
-              token.email = dbUser.email ?? token.email
-              token.picture = dbUser.image ?? token.picture
-              token.isPremium = dbUser.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE
-
-              await redis.set(cacheKey, JsonSerializer.serialize(dbUser), "EX", 3600)
-            }
           }
         } catch (error) {
           console.error("JWT Callback error:", error)
@@ -135,15 +111,9 @@ export const authOptions: NextAuthOptions = {
       }
 
       if (trigger === "update" && session) {
-        if (typeof session.name === "string") {
-          token.name = session.name
-        }
-        if (typeof session.picture === "string") {
-          token.picture = session.picture
-        }
-        if (typeof session.isPremium === "boolean") {
-          token.isPremium = session.isPremium
-        }
+        if (typeof session.name === "string") token.name = session.name
+        if (typeof session.picture === "string") token.picture = session.picture
+        if (typeof session.isPremium === "boolean") token.isPremium = session.isPremium
       }
 
       return token
@@ -175,11 +145,7 @@ export const authOptions: NextAuthOptions = {
 
         if (Object.keys(dataToUpdate).length > 0) {
           try {
-            await prisma.user.update({
-              where: { id: user.id },
-              data: dataToUpdate,
-            })
-            await redis.del(`user:${user.id}`)
+            await userService.updateUser(user.id, dataToUpdate)
           } catch (error) {
             console.error("LinkAccount event error:", error)
           }

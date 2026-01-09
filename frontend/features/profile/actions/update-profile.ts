@@ -2,10 +2,9 @@
 
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
-import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
-import { redis } from "@/lib/redis"
+import { userService } from "@/features/auth/services/user-service"
 
 const UpdateProfileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -28,16 +27,11 @@ export async function updateProfileAction(values: z.infer<typeof UpdateProfileSc
   const { firstName, lastName } = validated.data
 
   try {
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: {
-        firstName,
-        lastName,
-        name: `${firstName} ${lastName}`.trim(),
-      },
+    await userService.updateUser(session.user.id, {
+      firstName,
+      lastName,
+      name: `${firstName} ${lastName}`.trim(),
     })
-
-    await redis.del(`user:${session.user.id}`)
 
     revalidatePath("/profile")
     return { success: true }
