@@ -3,6 +3,7 @@ import { prisma } from "@shared/db";
 import { redis } from "@shared/redis";
 import { Logger } from "@shared/logger";
 import { CacheKeys } from "@shared/cache/keys";
+import { LockService } from "@shared/cache/lock";
 import type { PaymentEvent, PaymentUpdatePayload } from "../types";
 import { config } from "../config";
 
@@ -121,15 +122,27 @@ export class PaymentService {
   }
 
   private async invalidateUserCache(userId: string, email: string): Promise<void> {
+    const keys = [
+      CacheKeys.user(userId),
+      CacheKeys.userByEmail(email)
+    ];
+
     try {
-      const keys = [
-        CacheKeys.user(userId),
-        CacheKeys.userByEmail(email)
-      ];
-      
-      await redis.del(...keys);
+      const locks: Array<(() => Promise<void>) | null> = await Promise.all(
+        keys.map(key => LockService.acquire(key))
+      );
+
+      try {
+        await redis.del(...keys);
+      } finally {
+        await Promise.all(
+          locks.map(release => release ? release() : Promise.resolve())
+        );
+      }
     } catch (error) {
-      Logger.error("Failed to invalidate cache", error, { userId });
+      Logger.error("Failed to invalidate cache with locks", error, { userId });
+      // Fallback: Try to delete anyway if locking failed entirely
+      await redis.del(...keys).catch(e => Logger.error("Fallback delete failed", e));
     }
   }
 
