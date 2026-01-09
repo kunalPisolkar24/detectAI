@@ -2,18 +2,13 @@ import { SubscriptionStatus } from "../../../../generated/prisma/client";
 import { prisma } from "@shared/db";
 import { redis } from "@shared/redis";
 import { Logger } from "@shared/logger";
+import { CacheKeys } from "@shared/cache/keys";
 import type { PaymentEvent, PaymentUpdatePayload } from "../types";
 import { config } from "../config";
 
 const PADDLE_API_URL = config.PADDLE_ENVIRONMENT === 'production'
   ? 'https://api.paddle.com'
   : 'https://sandbox-api.paddle.com';
-
-const CacheKeys = {
-  session: (id: string) => `user:${id}`,
-  byId: (id: string) => `user:id:${id}`,
-  byEmail: (email: string) => `user:email:${email}`,
-};
 
 export class PaymentService {
   public async handleEvent(event: PaymentEvent): Promise<void> {
@@ -128,9 +123,8 @@ export class PaymentService {
   private async invalidateUserCache(userId: string, email: string): Promise<void> {
     try {
       const keys = [
-        CacheKeys.session(userId),
-        CacheKeys.byId(userId),
-        CacheKeys.byEmail(email)
+        CacheKeys.user(userId),
+        CacheKeys.userByEmail(email)
       ];
       
       await redis.del(...keys);
