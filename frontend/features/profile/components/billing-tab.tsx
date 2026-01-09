@@ -1,12 +1,26 @@
 "use client"
 
-import { cn } from "@/lib/utils"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { teko, inter } from "@/lib/fonts"
-import { Button } from "@/components/ui/button"
-import { CreditCard, Sparkles } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
+import { CreditCard, Sparkles, Loader2, AlertTriangle } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+import { teko, inter } from "@/lib/fonts"
+import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { cancelSubscriptionAction } from "../actions/cancel-subscription"
 
 interface BillingTabProps {
   user: {
@@ -18,8 +32,21 @@ interface BillingTabProps {
 
 export const BillingTab = ({ user }: BillingTabProps) => {
   const router = useRouter()
-  const handleCancel = () => {
-    toast.info("Subscription cancellation feature is coming soon.")
+  const [isPending, startTransition] = useTransition()
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+
+  const handleConfirmCancel = () => {
+    startTransition(async () => {
+      const result = await cancelSubscriptionAction()
+
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+
+      toast.success("Subscription cancellation scheduled successfully.")
+      setIsDialogOpen(false)
+    })
   }
 
   return (
@@ -73,17 +100,61 @@ export const BillingTab = ({ user }: BillingTabProps) => {
                       : "N/A"}
                   </span>
                 </div>
+
                 <div className="pt-4 flex gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={handleCancel}
-                    className={cn(
-                      "border-red-500/50 text-red-500 hover:bg-red-500 hover:text-white hover:border-red-500 tracking-wide text-lg transition-all duration-200",
-                      teko.className
-                    )}
-                  >
-                    CANCEL SUBSCRIPTION
-                  </Button>
+                  <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        disabled={isPending}
+                        className={cn(
+                          "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500",
+                          "dark:hover:bg-red-950/20 transition-all duration-200 tracking-wide text-lg",
+                          teko.className
+                        )}
+                      >
+                        CANCEL SUBSCRIPTION
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className={cn("flex items-center gap-2", teko.className)}>
+                          <AlertTriangle className="h-5 w-5 text-red-500" />
+                          Confirm Cancellation
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-muted-foreground">
+                          Are you sure you want to cancel your subscription?
+                          <br /><br />
+                          Your plan will remain active until <span className="font-medium text-foreground">{user.subscriptionEndsAt ? format(new Date(user.subscriptionEndsAt), "MMMM d, yyyy") : "the period ends"}</span>. After that, your account will revert to the Free tier.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel
+                          disabled={isPending}
+                          className={cn("text-base tracking-wide", teko.className)}
+                        >
+                          KEEP SUBSCRIPTION
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={(e) => {
+                            e.preventDefault()
+                            handleConfirmCancel()
+                          }}
+                          disabled={isPending}
+                          className={cn(
+                            "bg-red-600 hover:bg-red-700 text-white border-red-600 dark:border-red-600 tracking-wide text-lg",
+                            teko.className
+                          )}
+                        >
+                          {isPending ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            "YES, CANCEL PLAN"
+                          )}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </div>
             ) : (
@@ -91,11 +162,12 @@ export const BillingTab = ({ user }: BillingTabProps) => {
                 <Button
                   onClick={() => router.push("/upgrade")}
                   className={cn(
-                    "w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 text-xl tracking-wide shadow-lg hover:shadow-xl transition-all duration-200",
+                    "w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700",
+                    "text-white border-0 text-xl tracking-wide shadow-lg hover:shadow-xl transition-all duration-200",
                     teko.className
                   )}
                 >
-                  Upgrade Now
+                  UPGRADE NOW
                 </Button>
               </div>
             )}
@@ -113,9 +185,9 @@ export const BillingTab = ({ user }: BillingTabProps) => {
             <CreditCard size={20} />
           </div>
           <p className="text-sm text-muted-foreground">
-            Payment details are managed securely via Paddle.
-            <br />
-            {user.isPremium ? "View your invoice history in the Paddle dashboard." : "No payment method on file."}
+            {user.isPremium
+              ? "Payment details are managed securely via Paddle. Check your email for invoice history."
+              : "No payment method on file."}
           </p>
         </div>
       </section>
