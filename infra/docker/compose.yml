@@ -1,0 +1,13 @@
+version: '3.8'
+
+networks:
+  detectai_net:
+    name: detect_ai_network
+    driver: bridge
+
+include:
+  - path: ./compose.shared.yml
+  - path: ../../apps/web/compose.yml
+  - path: ../../services/document-parser/compose.yml
+  - path: ../../services/payments/gateway/compose.yml
+  - path: ../../services/workers/compose.yml
