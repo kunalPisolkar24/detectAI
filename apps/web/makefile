@@ -1,19 +1,28 @@
-.PHONY: compile redis-up redis-down redis-build
+.PHONY: compile up down build restart network logs
 
+# Run the local pnpm build script
 compile:
 	pnpm build-start
 
-# Start the Redis infrastructure in the background
-redis-up:
-	docker compose -f docker-compose.redis.yml up -d
+# Helper to ensure the external network exists before starting
+network:
+	@docker network inspect detect_ai_network >/dev/null 2>&1 || docker network create detect_ai_network
 
-# Stop and remove the Redis containers
-redis-down:
-	docker compose -f docker-compose.redis.yml down
+# Start the Web App + Redis Cluster (Create network if missing)
+up: network
+	docker compose up -d
 
-# Build (or pull) the Redis images
-redis-build:
-	docker compose -f docker-compose.redis.yml up --build -d
+# Stop and remove containers
+down:
+	docker compose down
 
-# Optional: Restart helper
-redis-restart: redis-down redis-up
+# Rebuild images and start
+build: network
+	docker compose up --build -d
+
+# Restart helper
+restart: down up
+
+# Tail logs
+logs:
+	docker compose logs -f
