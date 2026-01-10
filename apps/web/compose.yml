@@ -1,7 +1,9 @@
-version: '3.8'
+networks:
+  detectai_net:
+    name: detect_ai_network
+    external: true
 
 services:
-  # --- Next.js Frontend ---
   frontend:
     container_name: detect_ai_frontend
     build: 
@@ -21,14 +23,13 @@ services:
       - NODE_OPTIONS=--dns-result-order=ipv4first
       - HOSTNAME=0.0.0.0
     networks:
-      - app-net
+      - detectai_net
     depends_on:
       redis-master:
         condition: service_healthy
       redis-sentinel-1:
-        condition: service_healthy # CHANGED: Wait for sentinel to actually be ready
+        condition: service_healthy
 
-  # --- Redis Master ---
   redis-master:
     image: redis:7.2-alpine
     container_name: detect_ai_redis_master
@@ -37,7 +38,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - app-net
+      - detectai_net
     volumes:
       - redis_master_data:/data
     healthcheck:
@@ -46,7 +47,6 @@ services:
       timeout: 3s
       retries: 5
 
-  # --- Redis Slaves ---
   redis-slave-1:
     image: redis:7.2-alpine
     container_name: detect_ai_redis_slave_1
@@ -56,7 +56,7 @@ services:
       redis-master:
         condition: service_healthy
     networks:
-      - app-net
+      - detectai_net
 
   redis-slave-2:
     image: redis:7.2-alpine
@@ -67,9 +67,8 @@ services:
       redis-master:
         condition: service_healthy
     networks:
-      - app-net
+      - detectai_net
 
-  # --- Redis Sentinels ---
   redis-sentinel-1:
     image: redis:7.2-alpine
     container_name: detect_ai_redis_sentinel_1
@@ -85,16 +84,16 @@ services:
       echo 'sentinel auth-pass mymaster user_cache_password' >> /tmp/sentinel.conf &&
       redis-sentinel /tmp/sentinel.conf"
     networks:
-      - app-net
+      - detectai_net
     depends_on:
       redis-master:
         condition: service_healthy
-    healthcheck: # ADDED: Healthcheck
+    healthcheck:
       test: ["CMD", "redis-cli", "-p", "26379", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
-      start_period: 15s # Give time for the 'sleep 10' to finish
+      start_period: 15s
 
   redis-sentinel-2:
     image: redis:7.2-alpine
@@ -111,11 +110,11 @@ services:
       echo 'sentinel auth-pass mymaster user_cache_password' >> /tmp/sentinel.conf &&
       redis-sentinel /tmp/sentinel.conf"
     networks:
-      - app-net
+      - detectai_net
     depends_on:
       redis-master:
         condition: service_healthy
-    healthcheck: # ADDED: Healthcheck
+    healthcheck:
       test: ["CMD", "redis-cli", "-p", "26379", "ping"]
       interval: 5s
       timeout: 3s
@@ -137,18 +136,17 @@ services:
       echo 'sentinel auth-pass mymaster user_cache_password' >> /tmp/sentinel.conf &&
       redis-sentinel /tmp/sentinel.conf"
     networks:
-      - app-net
+      - detectai_net
     depends_on:
       redis-master:
         condition: service_healthy
-    healthcheck: # ADDED: Healthcheck
+    healthcheck:
       test: ["CMD", "redis-cli", "-p", "26379", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
       start_period: 15s
 
-  # --- Rate Limit Redis (Standalone) ---
   redis-ratelimit:
     image: redis:7.2-alpine
     container_name: detect_ai_redis_ratelimit
@@ -157,13 +155,9 @@ services:
     ports:
       - "6382:6379"
     networks:
-      - app-net
+      - detectai_net
     volumes:
       - redis_worker_data:/data
-
-networks:
-  app-net:
-    driver: bridge
 
 volumes:
   redis_master_data:

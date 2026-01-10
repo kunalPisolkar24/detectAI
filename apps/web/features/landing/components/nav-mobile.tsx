@@ -8,8 +8,8 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { NAV_LINKS } from "../constants"
-import { NavLogo } from "../components/nav-logo"
-import { ModeToggle } from "../components/mode-toggle"
+import { NavLogo } from "./nav-logo"
+import { ModeToggle } from "./mode-toggle"
 import { teko } from "@/lib/fonts"
 
 export const NavMobile = () => {
