@@ -1,0 +1,39 @@
+networks:
+  detectai_net:
+    name: detect_ai_network
+    external: true
+
+services:
+  worker-analytics:
+    container_name: worker_analytics
+    build: 
+      context: .
+      dockerfile: src/workers/analytics/Dockerfile.analytics
+    restart: always
+    env_file: .env
+    networks:
+      - detectai_net
+
+  worker-cron:
+    container_name: worker_cron
+    build: 
+      context: .
+      dockerfile: src/workers/cron/Dockerfile.cron
+    restart: always
+    env_file: .env
+    networks:
+      - detectai_net
+
+  worker-payments:
+    container_name: worker_payments
+    build: 
+      context: .
+      dockerfile: src/workers/payments/Dockerfile.payments
+    restart: always
+    ports:
+      - "7777:7777"
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@shared_rabbitmq:5672/
+    env_file: .env
+    networks:
+      - detectai_net
