@@ -16,3 +16,5 @@ src/generated/
 .idea/
 .DS_Store
 *.swp
+
+.coverage
