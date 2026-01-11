@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  redis-cluster:
+    image: grokzen/redis-cluster:latest
+    container_name: chat_redis_cluster
+    environment:
+      - IP=0.0.0.0
+      - INITIAL_PORT=7000
+      - MASTERS=3
+      - SLAVES_PER_MASTER=1
+    ports:
+      - "7000-7005:7000-7005"
+    networks:
+      - chat_net
+
+  mongo-config:
+    image: mongo:6.0
+    container_name: chat_mongo_config
+    command: mongod --configsvr --replSet configRS --bind_ip_all --port 27017
+    networks:
+      - chat_net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "rs.initiate({_id: 'configRS', configsvr: true, members: [{_id: 0, host: 'mongo-config:27017'}]})"]
+      interval: 5s
+      start_period: 5s
+
+  mongo-shard:
+    image: mongo:6.0
+    container_name: chat_mongo_shard
+    command: mongod --shardsvr --replSet shardRS --bind_ip_all --port 27017
+    networks:
+      - chat_net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "rs.initiate({_id: 'shardRS', members: [{_id: 0, host: 'mongo-shard:27017'}]})"]
+      interval: 5s
+      start_period: 5s
+
+  mongo-router:
+    image: mongo:6.0
+    container_name: chat_mongo_router
+    command: mongos --configdb configRS/mongo-config:27017 --bind_ip_all --port 27017
+    ports:
+      - "27017:27017"
+    networks:
+      - chat_net
+    depends_on:
+      mongo-config:
+        condition: service_healthy
+      mongo-shard:
+        condition: service_healthy
+
+  mongo-init:
+    image: mongo:6.0
+    container_name: chat_mongo_init
+    networks:
+      - chat_net
+    depends_on:
+      - mongo-router
+    command: >
+      bash -c "
+        sleep 10 &&
+        mongosh --host mongo-router:27017 --eval 'sh.addShard(\"shardRS/mongo-shard:27017\"); sh.enableSharding(\"chat_db\"); sh.shardCollection(\"chat_db.messages\", { chat_id: \"hashed\" });'
+      "
+
+networks:
+  chat_net:
+    driver: bridge
