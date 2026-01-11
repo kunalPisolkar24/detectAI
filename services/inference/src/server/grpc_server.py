@@ -4,7 +4,7 @@ import signal
 import threading
 from src.generated import ai_service_pb2_grpc
 from src.server.servicers import AIService
-from src.server.interceptors import AuthInterceptor
+from src.server.interceptors import AuthInterceptor, MonitoringInterceptor
 from src.server.health import add_health_check
 from src.config import settings
 import structlog
@@ -16,7 +16,7 @@ class GRPCServer:
         self.port = settings.GRPC_PORT
         self.server = grpc.server(
             futures.ThreadPoolExecutor(max_workers=50),
-            interceptors=[AuthInterceptor()]
+            interceptors=[AuthInterceptor(), MonitoringInterceptor()]
         )
         
         servicer = AIService(spark_engine, flare_engine)
