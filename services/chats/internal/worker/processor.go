@@ -33,11 +33,13 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 			var msg domain.Message
 			dataStr, ok := xMsg.Values["data"].(string)
 			if !ok {
+				msgIDs[stream.Stream] = append(msgIDs[stream.Stream], xMsg.ID) // Ack bad data
 				continue
 			}
 
 			if err := json.Unmarshal([]byte(dataStr), &msg); err != nil {
 				logger.Log.Error("Failed to unmarshal message", zap.Error(err))
+				msgIDs[stream.Stream] = append(msgIDs[stream.Stream], xMsg.ID) // Ack corrupted data
 				continue
 			}
 
@@ -51,7 +53,7 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 	}
 
 	if err := p.repo.BulkUpsertMessages(ctx, messages); err != nil {
-		logger.Log.Error("Bulk upsert failed", zap.Error(err))
+		logger.Log.Error("Bulk upsert failed, messages will retry", zap.Error(err))
 		return
 	}
 
