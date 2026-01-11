@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
+	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/metrics"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -32,7 +33,7 @@ func (r *CacheRepository) SaveToCache(ctx context.Context, msg *domain.Message) 
 
 	pipe := r.client.Pipeline()
 	pipe.LPush(ctx, key, data)
-	pipe.LTrim(ctx, key, 0, 49)
+	pipe.LTrim(ctx, key, 0, 19) // Keep last 20 messages hot
 	pipe.Expire(ctx, key, r.ttl)
 	_, err = pipe.Exec(ctx)
 
@@ -42,10 +43,17 @@ func (r *CacheRepository) SaveToCache(ctx context.Context, msg *domain.Message) 
 func (r *CacheRepository) GetRecentMessages(ctx context.Context, chatID string) ([]*domain.Message, error) {
 	key := fmt.Sprintf("chat:{%s}:hot", chatID)
 	result, err := r.client.LRange(ctx, key, 0, -1).Result()
+	
+	if err == redis.Nil || len(result) == 0 {
+		metrics.CacheMisses.Inc()
+		return nil, nil
+	}
+	
 	if err != nil {
 		return nil, err
 	}
 
+	metrics.CacheHits.Inc()
 	messages := make([]*domain.Message, 0, len(result))
 	for _, item := range result {
 		var msg domain.Message
