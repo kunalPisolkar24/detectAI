@@ -5,6 +5,7 @@ from concurrent import futures
 from typing import List, Tuple
 from src.core.interfaces import IInferenceEngine
 import structlog
+from src.metrics import BATCH_SIZE_DISTRIBUTION, BATCH_PROCESSING_TIME, BATCH_QUEUE_SIZE
 
 logger = structlog.get_logger()
 
@@ -21,8 +22,12 @@ class BatchingProxy(IInferenceEngine):
 
     def predict(self, text: str) -> float:
         future = futures.Future()
-        self.queue.put((text, future))
-        return future.result()
+        BATCH_QUEUE_SIZE.labels(model=self.model_name).inc()
+        try:
+            self.queue.put((text, future))
+            return future.result()
+        finally:
+            BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
 
     def _worker_loop(self):
         while not self.shutdown_flag:
@@ -49,20 +54,21 @@ class BatchingProxy(IInferenceEngine):
                 self._process_batch(batch)
 
     def _process_batch(self, batch: List[Tuple[str, futures.Future]]):
+        BATCH_SIZE_DISTRIBUTION.labels(model=self.model_name).observe(len(batch))
+        
         texts = [item[0] for item in batch]
         futures_list = [item[1] for item in batch]
         
-        start = time.monotonic()
         try:
-            results = self.engine.predict_batch(texts)
+            with BATCH_PROCESSING_TIME.labels(model=self.model_name).time():
+                results = self.engine.predict_batch(texts)
+            
             for future, result in zip(futures_list, results):
                 future.set_result(result)
                 
-            duration = time.monotonic() - start
             logger.info("batch_processed", 
                        model=self.model_name, 
-                       size=len(batch), 
-                       duration=duration)
+                       size=len(batch))
                        
         except Exception as e:
             logger.error("batch_failed", error=str(e), model=self.model_name)
