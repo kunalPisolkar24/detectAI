@@ -51,14 +51,20 @@ func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) e
 		msg.CreatedAt = time.Now().UTC()
 	}
 
-	if err := s.cache.SaveToCache(ctx, msg); err != nil {
+	if err := s.stream.Publish(ctx, msg); err != nil {
 		return err
 	}
 
-	return s.stream.Publish(ctx, msg)
+	_ = s.cache.SaveToCache(ctx, msg)
+
+	return nil
 }
 
 func (s *ChatService) GetHistory(ctx context.Context, chatID string, page, pageSize int32) ([]*domain.Message, bool, error) {
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	
 	limit := int(pageSize)
 	offset := int((page - 1) * pageSize)
 
