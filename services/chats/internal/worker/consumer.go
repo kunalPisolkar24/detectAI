@@ -10,6 +10,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/ports"
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/logger"
+	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/metrics"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -46,6 +47,12 @@ func (c *Consumer) Start(ctx context.Context) {
 		}(i)
 	}
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.runRecovery(ctx, hostname)
+	}()
+
 	wg.Wait()
 }
 
@@ -58,17 +65,25 @@ func (c *Consumer) runWorker(ctx context.Context, id int, consumerName string) {
 		stream := fmt.Sprintf("global:ingest:{%d}", i)
 		streams = append(streams, stream)
 
-		c.client.XGroupCreateMkStream(ctx, stream, group, "$")
+		err := c.client.XGroupCreateMkStream(ctx, stream, group, "$").Err()
+		if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
+			logger.Log.Error("Failed to create XGroup", zap.String("stream", stream), zap.Error(err))
+		}
 	}
 
 	for i := 0; i < c.cfg.StreamPartitionCount; i++ {
 		streams = append(streams, ">")
 	}
 
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-ticker.C:
+			c.updateLagMetrics(ctx, group)
 		default:
 			result, err := c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 				Group:    group,
@@ -86,6 +101,60 @@ func (c *Consumer) runWorker(ctx context.Context, id int, consumerName string) {
 
 			if len(result) > 0 {
 				c.processor.ProcessBatch(ctx, result, c.client, group)
+			}
+		}
+	}
+}
+
+func (c *Consumer) runRecovery(ctx context.Context, consumerName string) {
+	group := "chat_persistence_group"
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			for i := 0; i < c.cfg.StreamPartitionCount; i++ {
+				stream := fmt.Sprintf("global:ingest:{%d}", i)
+				
+				result, _, err := c.client.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+					Stream:   stream,
+					Group:    group,
+					Consumer: fmt.Sprintf("%s-recover", consumerName),
+					MinIdle:  60 * time.Second,
+					Count:    10,
+					Start:    "0-0",
+				}).Result()
+
+				if err != nil {
+					logger.Log.Error("Recovery failed", zap.String("stream", stream), zap.Error(err))
+					continue
+				}
+
+				if len(result) > 0 {
+					streams := []redis.XStream{{
+						Stream:   stream,
+						Messages: result,
+					}}
+					c.processor.ProcessBatch(ctx, streams, c.client, group)
+				}
+			}
+		}
+	}
+}
+
+func (c *Consumer) updateLagMetrics(ctx context.Context, group string) {
+	for i := 0; i < c.cfg.StreamPartitionCount; i++ {
+		stream := fmt.Sprintf("global:ingest:{%d}", i)
+		info, err := c.client.XInfoGroups(ctx, stream).Result()
+		if err != nil {
+			continue
+		}
+		for _, grp := range info {
+			if grp.Name == group {
+				metrics.StreamLag.WithLabelValues(stream).Set(float64(grp.Lag))
 			}
 		}
 	}
