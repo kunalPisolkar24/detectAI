@@ -10,4 +10,5 @@ include:
   - path: ../../apps/web/compose.yml
   - path: ../../services/document-parser/compose.yml
   - path: ../../services/payments/gateway/compose.yml
+  - path: ../../apps/inference/compose.yml
   - path: ../../services/workers/compose.yml

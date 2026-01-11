@@ -1,0 +1,28 @@
+version: '3.8'
+
+networks:
+  detectai_net:
+    name: detect_ai_network
+    external: true
+
+services:
+  ai-service:
+    container_name: detect_ai_inference
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "50051:50051"
+      - "8333:8333"
+    networks:
+      - detectai_net
+    env_file:
+      - .env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
