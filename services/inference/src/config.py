@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     ENV: str = "production"
     GRPC_PORT: int = 50051
+    METRICS_PORT: int = 8333
     API_KEY: str
     MODEL_CACHE_DIR: str = "./models"
     
