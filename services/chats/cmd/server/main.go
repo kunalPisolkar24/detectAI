@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/primary/grpc"
 	mongoRepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/secondary/repository/mongo"
@@ -51,6 +52,26 @@ func main() {
 	if cfg.ServiceRole == "api" {
 		svc := services.NewChatService(cacheRepo, streamRepo, persistenceRepo)
 		server := grpc.NewServer(cfg, svc)
+
+		go func() {
+			ticker := time.NewTicker(10 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					mErr := mongoClient.Ping(context.Background(), nil)
+					rErr := redisClient.Ping(context.Background()).Err()
+					healthy := mErr == nil && rErr == nil
+					server.SetHealth(healthy)
+					if !healthy {
+						logger.Log.Warn("Health check failed", zap.Error(mErr), zap.Error(rErr))
+					}
+				}
+			}
+		}()
+
 		if err := server.Run(ctx); err != nil {
 			logger.Log.Fatal("Server crashed", zap.Error(err))
 		}
