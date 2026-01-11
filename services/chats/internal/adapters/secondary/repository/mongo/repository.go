@@ -29,6 +29,15 @@ func (r *MongoRepository) CreateChat(ctx context.Context, chat *domain.ChatSessi
 	return err
 }
 
+func (r *MongoRepository) GetChat(ctx context.Context, chatID string) (*domain.ChatSession, error) {
+	var chat domain.ChatSession
+	err := r.chatColl.FindOne(ctx, bson.M{"_id": chatID}).Decode(&chat)
+	if err != nil {
+		return nil, err
+	}
+	return &chat, nil
+}
+
 func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*domain.Message) error {
 	if len(messages) == 0 {
 		return nil
@@ -40,14 +49,18 @@ func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*do
 		filter := bson.M{
 			"chat_id": msg.ChatID,
 			"count":   bson.M{"$lt": 50},
+			"end_date": bson.M{
+				"$gt": time.Now().Add(-24 * time.Hour),
+			},
 		}
 
 		update := bson.M{
 			"$push": bson.M{"messages": msg},
 			"$inc":  bson.M{"count": 1},
-			"$set":  bson.M{"end_date": msg.CreatedAt},
+			"$max":  bson.M{"end_date": msg.CreatedAt},
+			"$min":  bson.M{"start_date": msg.CreatedAt},
 			"$setOnInsert": bson.M{
-				"_id":          msg.ID, // Bucket ID
+				"chat_id":      msg.ChatID,
 				"bucket_index": time.Now().UnixNano(),
 				"start_date":   msg.CreatedAt,
 			},
@@ -66,8 +79,7 @@ func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*do
 }
 
 func (r *MongoRepository) GetHistory(ctx context.Context, chatID string, offset, limit int) ([]*domain.Message, error) {
-	// Estimation: 1 bucket = 50 msgs. Fetch enough buckets to cover limit.
-	bucketLimit := (limit / 50) + 2 
+	bucketLimit := (limit / 50) + 2
 
 	findOpts := options.Find().
 		SetSort(bson.D{{Key: "bucket_index", Value: -1}}).
