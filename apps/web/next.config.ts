@@ -15,6 +15,7 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "10mb",
     },
+    serverComponentsExternalPackages: ["@grpc/grpc-js", "@grpc/proto-loader"],
   },
 };
 
