@@ -41,6 +41,15 @@ func (h *Handler) SaveMessage(ctx context.Context, req *pb.SaveMessageRequest) (
 		Metadata: req.Metadata,
 	}
 
+	if req.Analysis != nil {
+		msg.Analysis = &domain.AnalysisResult{
+			HumanScore: req.Analysis.HumanScore,
+			AIScore:    req.Analysis.AiScore,
+			ModelName:  req.Analysis.ModelName,
+			Verdict:    req.Analysis.Verdict,
+		}
+	}
+
 	if err := h.service.ProcessMessage(ctx, msg); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -59,6 +68,16 @@ func (h *Handler) GetChatHistory(ctx context.Context, req *pb.GetChatHistoryRequ
 
 	pbMessages := make([]*pb.Message, len(messages))
 	for i, m := range messages {
+		var analysis *pb.Analysis
+		if m.Analysis != nil {
+			analysis = &pb.Analysis{
+				HumanScore: m.Analysis.HumanScore,
+				AiScore:    m.Analysis.AIScore,
+				ModelName:  m.Analysis.ModelName,
+				Verdict:    m.Analysis.Verdict,
+			}
+		}
+
 		pbMessages[i] = &pb.Message{
 			Id:        m.ID,
 			ChatId:    m.ChatID,
@@ -67,6 +86,7 @@ func (h *Handler) GetChatHistory(ctx context.Context, req *pb.GetChatHistoryRequ
 			Content:   m.Content,
 			CreatedAt: m.CreatedAt.Unix(),
 			Metadata:  m.Metadata,
+			Analysis:  analysis,
 		}
 	}
 
