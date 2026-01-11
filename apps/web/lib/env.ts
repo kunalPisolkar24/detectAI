@@ -17,6 +17,9 @@ export const env = createEnv({
     REDIS_PASSWORD: z.string().min(1).optional(),
     REDIS_USAGE_URL: z.string().url(),
     FILE_EXTRACTOR_API_URL: z.string().url(),
+    
+    AI_SERVICE_URL: z.string().min(1),
+    AI_SERVICE_API_KEY: z.string().min(1),
   },
   client: {
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1),
@@ -39,6 +42,8 @@ export const env = createEnv({
     REDIS_USAGE_URL: process.env.REDIS_USAGE_URL,
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
     NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
+    AI_SERVICE_URL: process.env.AI_SERVICE_URL,
+    AI_SERVICE_API_KEY: process.env.AI_SERVICE_API_KEY,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,
