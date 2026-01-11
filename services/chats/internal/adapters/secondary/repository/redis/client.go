@@ -12,7 +12,7 @@ func NewClusterClient(cfg *config.Config) (*redis.ClusterClient, error) {
 	rdb := redis.NewClusterClient(&redis.ClusterOptions{
 		Addrs:        cfg.RedisClusterAddrs,
 		Password:     cfg.RedisPassword,
-		PoolSize:     100,
+		PoolSize:     cfg.RedisPoolSize,
 		MinIdleConns: 10,
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 3 * time.Second,
