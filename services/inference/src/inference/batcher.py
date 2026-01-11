@@ -10,7 +10,7 @@ from src.metrics import BATCH_SIZE_DISTRIBUTION, BATCH_PROCESSING_TIME, BATCH_QU
 logger = structlog.get_logger()
 
 class BatchingProxy(IInferenceEngine):
-    def __init__(self, engine, batch_size: int, timeout: float, model_name: str):
+    def __init__(self, engine: IInferenceEngine, batch_size: int, timeout: float, model_name: str):
         self.engine = engine
         self.batch_size = batch_size
         self.timeout = timeout
@@ -29,11 +29,18 @@ class BatchingProxy(IInferenceEngine):
         finally:
             BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
 
+    def predict_batch(self, texts: List[str]) -> List[float]:
+        """
+        Direct pass-through for explicit batch requests.
+        Bypasses the dynamic batching queue.
+        """
+        return self.engine.predict_batch(texts)
+
     def _worker_loop(self):
         while not self.shutdown_flag:
             batch = []
             try:
-                item = self.queue.get(timeout=0.1)
+                item = self.queue.get(timeout=0.01)
                 batch.append(item)
             except queue.Empty:
                 continue
@@ -64,7 +71,8 @@ class BatchingProxy(IInferenceEngine):
                 results = self.engine.predict_batch(texts)
             
             for future, result in zip(futures_list, results):
-                future.set_result(result)
+                if not future.cancelled():
+                    future.set_result(result)
                 
             logger.info("batch_processed", 
                        model=self.model_name, 
@@ -73,4 +81,5 @@ class BatchingProxy(IInferenceEngine):
         except Exception as e:
             logger.error("batch_failed", error=str(e), model=self.model_name)
             for future in futures_list:
-                future.set_exception(e)
+                if not future.cancelled():
+                    future.set_exception(e)
