@@ -3,6 +3,7 @@ from src.generated import ai_service_pb2
 from src.generated import ai_service_pb2_grpc
 from src.core.interfaces import IInferenceEngine
 from src.config import settings
+from src.metrics import AI_CONFIDENCE_SCORE
 import structlog
 
 logger = structlog.get_logger()
@@ -13,6 +14,8 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
         self.flare = flare_engine
 
     def _build_response(self, model_name: str, ai_prob: float):
+        AI_CONFIDENCE_SCORE.labels(model=model_name.lower()).observe(ai_prob)
+        
         human_prob = 1.0 - ai_prob
         is_ai = ai_prob > 0.5
         
