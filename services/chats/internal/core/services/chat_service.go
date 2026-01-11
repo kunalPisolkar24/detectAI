@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,6 +45,14 @@ func (s *ChatService) CreateSession(ctx context.Context, userID, title string) (
 }
 
 func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) error {
+	chat, err := s.persistence.GetChat(ctx, msg.ChatID)
+	if err != nil {
+		return err
+	}
+	if chat.UserID != msg.UserID {
+		return errors.New("unauthorized: user does not own this chat session")
+	}
+
 	if msg.ID == "" {
 		msg.ID = uuid.New().String()
 	}
@@ -64,7 +73,7 @@ func (s *ChatService) GetHistory(ctx context.Context, chatID string, page, pageS
 	if pageSize <= 0 {
 		pageSize = 20
 	}
-	
+
 	limit := int(pageSize)
 	offset := int((page - 1) * pageSize)
 
