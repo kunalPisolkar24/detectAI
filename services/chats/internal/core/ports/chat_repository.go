@@ -17,6 +17,7 @@ type ChatStreamRepository interface {
 
 type ChatPersistenceRepository interface {
 	CreateChat(ctx context.Context, chat *domain.ChatSession) error
+	GetChat(ctx context.Context, chatID string) (*domain.ChatSession, error)
 	BulkUpsertMessages(ctx context.Context, messages []*domain.Message) error
 	GetHistory(ctx context.Context, chatID string, offset, limit int) ([]*domain.Message, error)
 }
