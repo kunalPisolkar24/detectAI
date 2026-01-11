@@ -1,3 +1,4 @@
+from prometheus_client import start_http_server
 from src.config import settings
 from src.log_setup import configure_logger
 from src.inference.loader import HuggingFaceLoader
@@ -12,6 +13,9 @@ logger = structlog.get_logger()
 
 def main():
     try:
+        start_http_server(settings.METRICS_PORT)
+        logger.info("metrics_server_started", port=settings.METRICS_PORT)
+        
         loader = HuggingFaceLoader(settings.MODEL_CACHE_DIR)
         
         logger.info("loading_models")
