@@ -19,12 +19,20 @@ message CreateChatResponse {
   string chat_id = 1;
 }
 
+message Analysis {
+  double human_score = 1;
+  double ai_score = 2;
+  string model_name = 3;
+  string verdict = 4;
+}
+
 message SaveMessageRequest {
   string chat_id = 1;
   string user_id = 2;
   string role = 3;
   string content = 4;
   map<string, string> metadata = 5;
+  Analysis analysis = 6;
 }
 
 message SaveMessageResponse {
@@ -46,6 +54,7 @@ message Message {
   string content = 5;
   int64 created_at = 6;
   map<string, string> metadata = 7;
+  Analysis analysis = 8;
 }
 
 message GetChatHistoryResponse {
