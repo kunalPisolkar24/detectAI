@@ -1,9 +1,8 @@
-import { AnalysisResult, ChatSession, Message, ModelType, ChatHistoryItem } from "../types"
+import { ChatSession, Message, ModelType, ChatHistoryItem } from "../types"
 import { IChatService } from "./chat-service.interface"
 import { analyzeText } from "../actions/analyze"
 
-
-const DELAY_MS = 800
+const DELAY_MS = 200
 
 class MockChatService implements IChatService {
   private chats: ChatSession[] = []
@@ -14,12 +13,6 @@ class MockChatService implements IChatService {
         id: "1",
         title: "AI Detection Analysis - Article",
         updatedAt: new Date(),
-        messages: []
-      },
-      {
-        id: "2",
-        title: "Student Essay Review",
-        updatedAt: new Date(Date.now() - 86400000),
         messages: []
       }
     ]
@@ -68,7 +61,6 @@ class MockChatService implements IChatService {
     }
     chat.messages.push(userMessage)
 
-    // Call Server Action for Rate Limit & Analysis
     const response = await analyzeText(content, model)
 
     if (!response.success) {
