@@ -16,9 +16,13 @@ func NewClusterClient(cfg *config.Config) (*redis.ClusterClient, error) {
 		MinIdleConns: 10,
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 3 * time.Second,
+		ClientName:   "go-chat-service",
 	})
 
-	if err := rdb.Ping(context.Background()).Err(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := rdb.Ping(ctx).Err(); err != nil {
 		return nil, err
 	}
 
