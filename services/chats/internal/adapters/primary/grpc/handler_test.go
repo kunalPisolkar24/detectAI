@@ -79,6 +79,7 @@ func TestSaveMessage(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "msg-uuid", resp.MessageId)
 	assert.NotZero(t, resp.Timestamp)
+	mockService.AssertExpectations(t)
 }
 
 func TestGetChatHistory(t *testing.T) {
@@ -112,6 +113,7 @@ func TestGetChatHistory(t *testing.T) {
 	assert.Len(t, resp.Messages, 1)
 	assert.Equal(t, "msg-1", resp.Messages[0].Id)
 	assert.Equal(t, "human", resp.Messages[0].Analysis.Verdict)
+	mockService.AssertExpectations(t)
 }
 
 func TestGetChatHistory_Error(t *testing.T) {
@@ -126,4 +128,5 @@ func TestGetChatHistory_Error(t *testing.T) {
 	_, err := handler.GetChatHistory(ctx, req)
 
 	assert.Error(t, err)
+	mockService.AssertExpectations(t)
 }
