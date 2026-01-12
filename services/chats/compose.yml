@@ -158,14 +158,14 @@ services:
     environment:
       - APP_ENV=production
       - SERVICE_ROLE=worker
-      - METRICS_PORT=:9091
+      - METRICS_PORT=:9099
       - MONGO_URI=mongodb://mongo-router:27017
       - MONGO_DATABASE=chat_db
       - REDIS_CLUSTER_ADDRS=redis-node-1:7001,redis-node-2:7002,redis-node-3:7003
       - BATCH_SIZE=50
       - STREAM_PARTITION_COUNT=16
     ports:
-      - "9092:9091"
+      - "9099:9099"
     depends_on:
       mongo-init:
         condition: service_started
