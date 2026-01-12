@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/ports"
+	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/metrics"
 )
 
 type ChatService struct {
@@ -80,8 +81,10 @@ func (s *ChatService) GetHistory(ctx context.Context, chatID string, page, pageS
 	if page == 1 {
 		hotMessages, err := s.cache.GetRecentMessages(ctx, chatID)
 		if err == nil && len(hotMessages) >= limit {
+			metrics.CacheHits.Inc()
 			return hotMessages[:limit], true, nil
 		}
+		metrics.CacheMisses.Inc()
 	}
 
 	coldMessages, err := s.persistence.GetHistory(ctx, chatID, offset, limit)
