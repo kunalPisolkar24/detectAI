@@ -5,7 +5,7 @@ services:
     image: grokzen/redis-cluster:latest
     container_name: chat_redis_cluster
     environment:
-      - IP=0.0.0.0
+      - IP=127.0.0.1
       - INITIAL_PORT=7000
       - MASTERS=3
       - SLAVES_PER_MASTER=1
@@ -21,7 +21,7 @@ services:
     networks:
       - chat_net
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "rs.initiate({_id: 'configRS', configsvr: true, members: [{_id: 0, host: 'mongo-config:27017'}]})"]
+      test: [ "CMD", "mongosh", "--eval", "rs.initiate({_id: 'configRS', configsvr: true, members: [{_id: 0, host: 'mongo-config:27017'}]})" ]
       interval: 5s
       start_period: 5s
 
@@ -32,7 +32,7 @@ services:
     networks:
       - chat_net
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "rs.initiate({_id: 'shardRS', members: [{_id: 0, host: 'mongo-shard:27017'}]})"]
+      test: [ "CMD", "mongosh", "--eval", "rs.initiate({_id: 'shardRS', members: [{_id: 0, host: 'mongo-shard:27017'}]})" ]
       interval: 5s
       start_period: 5s
 
