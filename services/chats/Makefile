@@ -19,7 +19,10 @@ build:
 	go build -o bin/chat-service cmd/server/main.go
 
 test:
-	go test -v ./...
+	go test -v ./... 
+
+test-coverage:
+	go test -v ./... -cover 
 
 docker-build:
 	docker compose up --build
