@@ -39,11 +39,11 @@ func (c *Consumer) Start(ctx context.Context) {
 	var wg sync.WaitGroup
 	hostname, _ := os.Hostname()
 
-	for i := 0; i < c.cfg.WorkerConcurrency; i++ {
+	for i := 0; i < c.cfg.StreamPartitionCount; i++ {
 		wg.Add(1)
-		go func(workerID int) {
+		go func(partitionID int) {
 			defer wg.Done()
-			c.runWorker(ctx, workerID, hostname)
+			c.runWorker(ctx, partitionID, hostname)
 		}(i)
 	}
 
@@ -56,24 +56,17 @@ func (c *Consumer) Start(ctx context.Context) {
 	wg.Wait()
 }
 
-func (c *Consumer) runWorker(ctx context.Context, id int, consumerName string) {
+func (c *Consumer) runWorker(ctx context.Context, partitionID int, consumerName string) {
 	group := "chat_persistence_group"
-	consumer := fmt.Sprintf("%s-%d", consumerName, id)
+	consumer := fmt.Sprintf("%s-p%d", consumerName, partitionID)
+	stream := fmt.Sprintf("global:ingest:{%d}", partitionID)
 
-	streams := make([]string, 0, c.cfg.StreamPartitionCount*2)
-	for i := 0; i < c.cfg.StreamPartitionCount; i++ {
-		stream := fmt.Sprintf("global:ingest:{%d}", i)
-		streams = append(streams, stream)
-
-		err := c.client.XGroupCreateMkStream(ctx, stream, group, "$").Err()
-		if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
-			logger.Log.Error("Failed to create XGroup", zap.String("stream", stream), zap.Error(err))
-		}
+	err := c.client.XGroupCreateMkStream(ctx, stream, group, "$").Err()
+	if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
+		logger.Log.Error("Failed to create XGroup", zap.String("stream", stream), zap.Error(err))
 	}
 
-	for i := 0; i < c.cfg.StreamPartitionCount; i++ {
-		streams = append(streams, ">")
-	}
+	streams := []string{stream, ">"}
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -83,7 +76,7 @@ func (c *Consumer) runWorker(ctx context.Context, id int, consumerName string) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			c.updateLagMetrics(ctx, group)
+			c.updateSingleLag(ctx, stream, group)
 		default:
 			result, err := c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 				Group:    group,
@@ -93,9 +86,11 @@ func (c *Consumer) runWorker(ctx context.Context, id int, consumerName string) {
 				Block:    2 * time.Second,
 			}).Result()
 
-			if err != nil && err != redis.Nil {
-				logger.Log.Error("XReadGroup failed", zap.Error(err))
-				time.Sleep(time.Second)
+			if err != nil {
+				if err != redis.Nil {
+					logger.Log.Error("XReadGroup failed", zap.String("stream", stream), zap.Error(err))
+					time.Sleep(time.Second)
+				}
 				continue
 			}
 
@@ -128,7 +123,7 @@ func (c *Consumer) runRecovery(ctx context.Context, consumerName string) {
 					Start:    "0-0",
 				}).Result()
 
-				if err != nil {
+				if err != nil && err != redis.Nil {
 					logger.Log.Error("Recovery failed", zap.String("stream", stream), zap.Error(err))
 					continue
 				}
@@ -145,17 +140,14 @@ func (c *Consumer) runRecovery(ctx context.Context, consumerName string) {
 	}
 }
 
-func (c *Consumer) updateLagMetrics(ctx context.Context, group string) {
-	for i := 0; i < c.cfg.StreamPartitionCount; i++ {
-		stream := fmt.Sprintf("global:ingest:{%d}", i)
-		info, err := c.client.XInfoGroups(ctx, stream).Result()
-		if err != nil {
-			continue
-		}
-		for _, grp := range info {
-			if grp.Name == group {
-				metrics.StreamLag.WithLabelValues(stream).Set(float64(grp.Lag))
-			}
+func (c *Consumer) updateSingleLag(ctx context.Context, stream, group string) {
+	info, err := c.client.XInfoGroups(ctx, stream).Result()
+	if err != nil {
+		return
+	}
+	for _, grp := range info {
+		if grp.Name == group {
+			metrics.StreamLag.WithLabelValues(stream).Set(float64(grp.Lag))
 		}
 	}
 }
