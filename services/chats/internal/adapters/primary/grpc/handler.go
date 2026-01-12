@@ -32,6 +32,55 @@ func (h *Handler) CreateChat(ctx context.Context, req *pb.CreateChatRequest) (*p
 	return &pb.CreateChatResponse{ChatId: session.ID}, nil
 }
 
+func (h *Handler) GetChat(ctx context.Context, req *pb.GetChatRequest) (*pb.GetChatResponse, error) {
+	session, err := h.service.GetSession(ctx, req.ChatId)
+	if err != nil {
+		return nil, status.Error(codes.NotFound, "Chat not found")
+	}
+
+	return &pb.GetChatResponse{
+		Id:        session.ID,
+		UserId:    session.UserID,
+		Title:     session.Title,
+		CreatedAt: session.CreatedAt.Unix(),
+		UpdatedAt: session.UpdatedAt.Unix(),
+	}, nil
+}
+
+func (h *Handler) GetUserChats(ctx context.Context, req *pb.GetUserChatsRequest) (*pb.GetUserChatsResponse, error) {
+	chats, err := h.service.GetUserSessions(ctx, req.UserId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	summaries := make([]*pb.ChatSummary, len(chats))
+	for i, c := range chats {
+		summaries[i] = &pb.ChatSummary{
+			Id:        c.ID,
+			Title:     c.Title,
+			UpdatedAt: c.UpdatedAt.Unix(),
+		}
+	}
+
+	return &pb.GetUserChatsResponse{Chats: summaries}, nil
+}
+
+func (h *Handler) RenameChat(ctx context.Context, req *pb.RenameChatRequest) (*pb.RenameChatResponse, error) {
+	err := h.service.RenameSession(ctx, req.ChatId, req.NewTitle)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &pb.RenameChatResponse{Success: true}, nil
+}
+
+func (h *Handler) DeleteChat(ctx context.Context, req *pb.DeleteChatRequest) (*pb.DeleteChatResponse, error) {
+	err := h.service.DeleteSession(ctx, req.ChatId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &pb.DeleteChatResponse{Success: true}, nil
+}
+
 func (h *Handler) SaveMessage(ctx context.Context, req *pb.SaveMessageRequest) (*pb.SaveMessageResponse, error) {
 	msg := &domain.Message{
 		ChatID:   req.ChatId,
