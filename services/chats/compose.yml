@@ -1,16 +1,83 @@
 version: '3.8'
 
 services:
-  redis-cluster:
-    image: grokzen/redis-cluster:latest
-    container_name: chat_redis_cluster
-    environment:
-      - IP=127.0.0.1
-      - INITIAL_PORT=7000
-      - MASTERS=3
-      - SLAVES_PER_MASTER=1
+  redis-node-1:
+    image: redis:7.2
+    container_name: chat_redis_1
+    command: >
+      redis-server 
+      --port 7001 
+      --cluster-enabled yes 
+      --cluster-config-file nodes.conf 
+      --cluster-node-timeout 5000 
+      --appendonly yes 
+      --cluster-announce-ip ${HOST_IP} 
+      --cluster-announce-port 7001 
+      --cluster-announce-bus-port 17001
     ports:
-      - "7000-7005:7000-7005"
+      - "7001:7001"
+      - "17001:17001"
+    volumes:
+      - redis-chat-1-data:/data
+    networks:
+      - chat_net
+
+  redis-node-2:
+    image: redis:7.2
+    container_name: chat_redis_2
+    command: >
+      redis-server 
+      --port 7002 
+      --cluster-enabled yes 
+      --cluster-config-file nodes.conf 
+      --cluster-node-timeout 5000 
+      --appendonly yes 
+      --cluster-announce-ip ${HOST_IP} 
+      --cluster-announce-port 7002 
+      --cluster-announce-bus-port 17002
+    ports:
+      - "7002:7002"
+      - "17002:17002"
+    volumes:
+      - redis-chat-2-data:/data
+    networks:
+      - chat_net
+
+  redis-node-3:
+    image: redis:7.2
+    container_name: chat_redis_3
+    command: >
+      redis-server 
+      --port 7003 
+      --cluster-enabled yes 
+      --cluster-config-file nodes.conf 
+      --cluster-node-timeout 5000 
+      --appendonly yes 
+      --cluster-announce-ip ${HOST_IP} 
+      --cluster-announce-port 7003 
+      --cluster-announce-bus-port 17003
+    ports:
+      - "7003:7003"
+      - "17003:17003"
+    volumes:
+      - redis-chat-3-data:/data
+    networks:
+      - chat_net
+
+  cluster-initiator:
+    image: redis:7.2
+    container_name: chat_redis_init
+    depends_on:
+      - redis-node-1
+      - redis-node-2
+      - redis-node-3
+    command: >
+      bash -c "sleep 5 && 
+      redis-cli --cluster create 
+      ${HOST_IP}:7001 
+      ${HOST_IP}:7002 
+      ${HOST_IP}:7003 
+      --cluster-replicas 0 --cluster-yes"
     networks:
       - chat_net
 
@@ -62,6 +129,11 @@ services:
         sleep 10 &&
         mongosh --host mongo-router:27017 --eval 'sh.addShard(\"shardRS/mongo-shard:27017\"); sh.enableSharding(\"chat_db\"); sh.shardCollection(\"chat_db.messages\", { chat_id: \"hashed\" });'
       "
+
+volumes:
+  redis-chat-1-data:
+  redis-chat-2-data:
+  redis-chat-3-data:
 
 networks:
   chat_net:
