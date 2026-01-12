@@ -1,3 +1,8 @@
+networks:
+  detectai_net:
+    name: detect_ai_network
+    external: true
+
 services:
   redis-node-1:
     image: redis:7.2
@@ -9,7 +14,7 @@ services:
       --cluster-config-file nodes.conf 
       --cluster-node-timeout 5000 
       --appendonly yes 
-      --cluster-announce-ip redis-node-1
+      --cluster-announce-ip chat_redis_1
       --cluster-announce-port 7001 
       --cluster-announce-bus-port 17001
     ports:
@@ -18,7 +23,7 @@ services:
     volumes:
       - redis-chat-1-data:/data
     networks:
-      - chat_net
+      - detectai_net
 
   redis-node-2:
     image: redis:7.2
@@ -30,7 +35,7 @@ services:
       --cluster-config-file nodes.conf 
       --cluster-node-timeout 5000 
       --appendonly yes 
-      --cluster-announce-ip redis-node-2
+      --cluster-announce-ip chat_redis_2
       --cluster-announce-port 7002 
       --cluster-announce-bus-port 17002
     ports:
@@ -39,7 +44,7 @@ services:
     volumes:
       - redis-chat-2-data:/data
     networks:
-      - chat_net
+      - detectai_net
 
   redis-node-3:
     image: redis:7.2
@@ -51,7 +56,7 @@ services:
       --cluster-config-file nodes.conf 
       --cluster-node-timeout 5000 
       --appendonly yes 
-      --cluster-announce-ip redis-node-3
+      --cluster-announce-ip chat_redis_3
       --cluster-announce-port 7003 
       --cluster-announce-bus-port 17003
     ports:
@@ -60,7 +65,7 @@ services:
     volumes:
       - redis-chat-3-data:/data
     networks:
-      - chat_net
+      - detectai_net
 
   cluster-initiator:
     image: redis:7.2
@@ -72,21 +77,21 @@ services:
     command: >
       bash -c "sleep 5 && 
       redis-cli --cluster create 
-      redis-node-1:7001 
-      redis-node-2:7002 
-      redis-node-3:7003 
+      chat_redis_1:7001 
+      chat_redis_2:7002 
+      chat_redis_3:7003 
       --cluster-replicas 0 --cluster-yes"
     networks:
-      - chat_net
+      - detectai_net
 
   mongo-config:
     image: mongo:6.0
     container_name: chat_mongo_config
     command: mongod --configsvr --replSet configRS --bind_ip_all --port 27017
     networks:
-      - chat_net
+      - detectai_net
     healthcheck:
-      test: [ "CMD", "mongosh", "--eval", "rs.initiate({_id: 'configRS', configsvr: true, members: [{_id: 0, host: 'mongo-config:27017'}]})" ]
+      test: [ "CMD", "mongosh", "--eval", "rs.initiate({_id: 'configRS', configsvr: true, members: [{_id: 0, host: 'chat_mongo_config:27017'}]})" ]
       interval: 5s
       start_period: 5s
 
@@ -95,20 +100,20 @@ services:
     container_name: chat_mongo_shard
     command: mongod --shardsvr --replSet shardRS --bind_ip_all --port 27017
     networks:
-      - chat_net
+      - detectai_net
     healthcheck:
-      test: [ "CMD", "mongosh", "--eval", "rs.initiate({_id: 'shardRS', members: [{_id: 0, host: 'mongo-shard:27017'}]})" ]
+      test: [ "CMD", "mongosh", "--eval", "rs.initiate({_id: 'shardRS', members: [{_id: 0, host: 'chat_mongo_shard:27017'}]})" ]
       interval: 5s
       start_period: 5s
 
   mongo-router:
     image: mongo:6.0
     container_name: chat_mongo_router
-    command: mongos --configdb configRS/mongo-config:27017 --bind_ip_all --port 27017
+    command: mongos --configdb configRS/chat_mongo_config:27017 --bind_ip_all --port 27017
     ports:
       - "27017:27017"
     networks:
-      - chat_net
+      - detectai_net
     depends_on:
       mongo-config:
         condition: service_healthy
@@ -119,13 +124,13 @@ services:
     image: mongo:6.0
     container_name: chat_mongo_init
     networks:
-      - chat_net
+      - detectai_net
     depends_on:
       - mongo-router
     command: >
       bash -c "
         sleep 10 &&
-        mongosh --host mongo-router:27017 --eval 'sh.addShard(\"shardRS/mongo-shard:27017\"); sh.enableSharding(\"chat_db\"); sh.shardCollection(\"chat_db.messages\", { chat_id: \"hashed\" });'
+        mongosh --host chat_mongo_router:27017 --eval 'sh.addShard(\"shardRS/chat_mongo_shard:27017\"); sh.enableSharding(\"chat_db\"); sh.shardCollection(\"chat_db.messages\", { chat_id: \"hashed\" });'
       "
 
   api:
@@ -136,9 +141,9 @@ services:
       - SERVICE_ROLE=api
       - GRPC_PORT=:50051
       - METRICS_PORT=:9091
-      - MONGO_URI=mongodb://mongo-router:27017
+      - MONGO_URI=mongodb://chat_mongo_router:27017
       - MONGO_DATABASE=chat_db
-      - REDIS_CLUSTER_ADDRS=redis-node-1:7001,redis-node-2:7002,redis-node-3:7003
+      - REDIS_CLUSTER_ADDRS=chat_redis_1:7001,chat_redis_2:7002,chat_redis_3:7003
       - WORKER_CONCURRENCY=10
       - STREAM_PARTITION_COUNT=16
     ports:
@@ -150,7 +155,7 @@ services:
       cluster-initiator:
         condition: service_started
     networks:
-      - chat_net
+      - detectai_net
 
   worker:
     build: .
@@ -159,9 +164,9 @@ services:
       - APP_ENV=production
       - SERVICE_ROLE=worker
       - METRICS_PORT=:9099
-      - MONGO_URI=mongodb://mongo-router:27017
+      - MONGO_URI=mongodb://chat_mongo_router:27017
       - MONGO_DATABASE=chat_db
-      - REDIS_CLUSTER_ADDRS=redis-node-1:7001,redis-node-2:7002,redis-node-3:7003
+      - REDIS_CLUSTER_ADDRS=chat_redis_1:7001,chat_redis_2:7002,chat_redis_3:7003
       - BATCH_SIZE=50
       - STREAM_PARTITION_COUNT=16
     ports:
@@ -172,13 +177,9 @@ services:
       cluster-initiator:
         condition: service_started
     networks:
-      - chat_net
+      - detectai_net
 
 volumes:
   redis-chat-1-data:
   redis-chat-2-data:
   redis-chat-3-data:
-
-networks:
-  chat_net:
-    driver: bridge
