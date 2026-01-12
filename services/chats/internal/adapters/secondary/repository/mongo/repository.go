@@ -62,7 +62,6 @@ func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*do
 			"$setOnInsert": bson.M{
 				"chat_id":      msg.ChatID,
 				"bucket_index": time.Now().UnixNano(),
-				"start_date":   msg.CreatedAt,
 			},
 		}
 
