@@ -62,3 +62,8 @@ func (r *CacheRepository) GetRecentMessages(ctx context.Context, chatID string) 
 
 	return messages, nil
 }
+
+func (r *CacheRepository) DeleteCache(ctx context.Context, chatID string) error {
+	key := fmt.Sprintf("chat:{%s}:hot", chatID)
+	return r.client.Del(ctx, key).Err()
+}
