@@ -4,22 +4,30 @@ import { z } from "zod"
 export const env = createEnv({
   server: {
     DATABASE_URL: z.string().url(),
+    
     NEXTAUTH_SECRET: z.string().min(1),
     NEXTAUTH_URL: z.string().url().optional(),
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+
     GOOGLE_ID: z.string().min(1),
     GOOGLE_SECRET: z.string().min(1),
+
     GITHUB_ID: z.string().min(1),
     GITHUB_SECRET: z.string().min(1),
+
     TURNSTILE_SECRET_KEY: z.string().min(1),
+
     REDIS_SENTINELS: z.string().min(1).default("localhost:26379,localhost:26380,localhost:26381"),
     REDIS_MASTER_NAME: z.string().min(1).default("mymaster"),
     REDIS_PASSWORD: z.string().min(1).optional(),
     REDIS_USAGE_URL: z.string().url(),
+
     FILE_EXTRACTOR_API_URL: z.string().url(),
     
     AI_SERVICE_URL: z.string().min(1),
     AI_SERVICE_API_KEY: z.string().min(1),
+
+    CHAT_SERVICE_URL: z.string().min(1).default("localhost:50051"),
   },
   client: {
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1),
@@ -44,6 +52,7 @@ export const env = createEnv({
     NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
     AI_SERVICE_URL: process.env.AI_SERVICE_URL,
     AI_SERVICE_API_KEY: process.env.AI_SERVICE_API_KEY,
+    CHAT_SERVICE_URL: process.env.CHAT_SERVICE_URL,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,
