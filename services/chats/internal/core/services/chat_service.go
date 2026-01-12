@@ -45,6 +45,31 @@ func (s *ChatService) CreateSession(ctx context.Context, userID, title string) (
 	return session, nil
 }
 
+func (s *ChatService) GetSession(ctx context.Context, chatID string) (*domain.ChatSession, error) {
+	return s.persistence.GetChat(ctx, chatID)
+}
+
+func (s *ChatService) GetUserSessions(ctx context.Context, userID string) ([]*domain.ChatSession, error) {
+	return s.persistence.GetUserChats(ctx, userID, 50)
+}
+
+func (s *ChatService) RenameSession(ctx context.Context, chatID, newTitle string) error {
+	if newTitle == "" {
+		return errors.New("title cannot be empty")
+	}
+	return s.persistence.UpdateChatTitle(ctx, chatID, newTitle)
+}
+
+func (s *ChatService) DeleteSession(ctx context.Context, chatID string) error {
+	if err := s.persistence.DeleteChat(ctx, chatID); err != nil {
+		return err
+	}
+
+	_ = s.cache.DeleteCache(ctx, chatID)
+	
+	return nil
+}
+
 func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) error {
 	chat, err := s.persistence.GetChat(ctx, msg.ChatID)
 	if err != nil {
@@ -67,6 +92,8 @@ func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) e
 
 	_ = s.cache.SaveToCache(ctx, msg)
 
+	_ = s.persistence.UpdateChatTitle(ctx, msg.ChatID, chat.Title)
+
 	return nil
 }
 
@@ -85,6 +112,22 @@ func (s *ChatService) GetHistory(ctx context.Context, chatID string, page, pageS
 			return hotMessages[:limit], true, nil
 		}
 		metrics.CacheMisses.Inc()
+		
+		dbMessages, err := s.persistence.GetHistory(ctx, chatID, offset, limit)
+		if err != nil {
+			return nil, false, err
+		}
+
+		if len(dbMessages) > 0 {
+			go func(cid string, msgs []*domain.Message) {
+				bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = s.cache.PopulateCache(bgCtx, cid, msgs)
+			}(chatID, dbMessages)
+		}
+
+		hasMore := len(dbMessages) == limit
+		return dbMessages, hasMore, nil
 	}
 
 	coldMessages, err := s.persistence.GetHistory(ctx, chatID, offset, limit)

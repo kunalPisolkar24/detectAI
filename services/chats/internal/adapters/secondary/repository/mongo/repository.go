@@ -38,6 +38,42 @@ func (r *MongoRepository) GetChat(ctx context.Context, chatID string) (*domain.C
 	return &chat, nil
 }
 
+func (r *MongoRepository) GetUserChats(ctx context.Context, userID string, limit int) ([]*domain.ChatSession, error) {
+	opts := options.Find().
+		SetSort(bson.D{{Key: "updated_at", Value: -1}}).
+		SetLimit(int64(limit))
+
+	cursor, err := r.chatColl.Find(ctx, bson.M{"user_id": userID}, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var chats []*domain.ChatSession
+	if err := cursor.All(ctx, &chats); err != nil {
+		return nil, err
+	}
+	return chats, nil
+}
+
+func (r *MongoRepository) UpdateChatTitle(ctx context.Context, chatID, title string) error {
+	filter := bson.M{"_id": chatID}
+	update := bson.M{"$set": bson.M{"title": title, "updated_at": time.Now().UTC()}}
+
+	_, err := r.chatColl.UpdateOne(ctx, filter, update)
+	return err
+}
+
+func (r *MongoRepository) DeleteChat(ctx context.Context, chatID string) error {
+	_, err := r.chatColl.DeleteOne(ctx, bson.M{"_id": chatID})
+	if err != nil {
+		return err
+	}
+
+	_, err = r.messageColl.DeleteMany(ctx, bson.M{"chat_id": chatID})
+	return err
+}
+
 func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*domain.Message) error {
 	if len(messages) == 0 {
 		return nil

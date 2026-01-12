@@ -19,6 +19,32 @@ func (m *MockChatService) CreateSession(ctx context.Context, userID, title strin
 	return args.Get(0).(*domain.ChatSession), args.Error(1)
 }
 
+func (m *MockChatService) GetSession(ctx context.Context, chatID string) (*domain.ChatSession, error) {
+	args := m.Called(ctx, chatID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.ChatSession), args.Error(1)
+}
+
+func (m *MockChatService) GetUserSessions(ctx context.Context, userID string) ([]*domain.ChatSession, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.ChatSession), args.Error(1)
+}
+
+func (m *MockChatService) RenameSession(ctx context.Context, chatID, newTitle string) error {
+	args := m.Called(ctx, chatID, newTitle)
+	return args.Error(0)
+}
+
+func (m *MockChatService) DeleteSession(ctx context.Context, chatID string) error {
+	args := m.Called(ctx, chatID)
+	return args.Error(0)
+}
+
 func (m *MockChatService) ProcessMessage(ctx context.Context, msg *domain.Message) error {
 	args := m.Called(ctx, msg)
 	return args.Error(0)

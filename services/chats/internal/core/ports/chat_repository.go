@@ -8,7 +8,9 @@ import (
 
 type ChatCacheRepository interface {
 	SaveToCache(ctx context.Context, msg *domain.Message) error
+	PopulateCache(ctx context.Context, chatID string, messages []*domain.Message) error
 	GetRecentMessages(ctx context.Context, chatID string) ([]*domain.Message, error)
+	DeleteCache(ctx context.Context, chatID string) error
 }
 
 type ChatStreamRepository interface {
@@ -18,6 +20,10 @@ type ChatStreamRepository interface {
 type ChatPersistenceRepository interface {
 	CreateChat(ctx context.Context, chat *domain.ChatSession) error
 	GetChat(ctx context.Context, chatID string) (*domain.ChatSession, error)
+	GetUserChats(ctx context.Context, userID string, limit int) ([]*domain.ChatSession, error)
+	UpdateChatTitle(ctx context.Context, chatID, title string) error
+	DeleteChat(ctx context.Context, chatID string) error
+	
 	BulkUpsertMessages(ctx context.Context, messages []*domain.Message) error
 	GetHistory(ctx context.Context, chatID string, offset, limit int) ([]*domain.Message, error)
 }
