@@ -8,6 +8,7 @@ import (
 
 type ChatCacheRepository interface {
 	SaveToCache(ctx context.Context, msg *domain.Message) error
+	PopulateCache(ctx context.Context, chatID string, messages []*domain.Message) error
 	GetRecentMessages(ctx context.Context, chatID string) ([]*domain.Message, error)
 	DeleteCache(ctx context.Context, chatID string) error
 }
