@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   redis-node-1:
     image: redis:7.2
@@ -11,7 +9,7 @@ services:
       --cluster-config-file nodes.conf 
       --cluster-node-timeout 5000 
       --appendonly yes 
-      --cluster-announce-ip ${HOST_IP} 
+      --cluster-announce-ip redis-node-1
       --cluster-announce-port 7001 
       --cluster-announce-bus-port 17001
     ports:
@@ -32,7 +30,7 @@ services:
       --cluster-config-file nodes.conf 
       --cluster-node-timeout 5000 
       --appendonly yes 
-      --cluster-announce-ip ${HOST_IP} 
+      --cluster-announce-ip redis-node-2
       --cluster-announce-port 7002 
       --cluster-announce-bus-port 17002
     ports:
@@ -53,7 +51,7 @@ services:
       --cluster-config-file nodes.conf 
       --cluster-node-timeout 5000 
       --appendonly yes 
-      --cluster-announce-ip ${HOST_IP} 
+      --cluster-announce-ip redis-node-3
       --cluster-announce-port 7003 
       --cluster-announce-bus-port 17003
     ports:
@@ -74,9 +72,9 @@ services:
     command: >
       bash -c "sleep 5 && 
       redis-cli --cluster create 
-      ${HOST_IP}:7001 
-      ${HOST_IP}:7002 
-      ${HOST_IP}:7003 
+      redis-node-1:7001 
+      redis-node-2:7002 
+      redis-node-3:7003 
       --cluster-replicas 0 --cluster-yes"
     networks:
       - chat_net
@@ -129,6 +127,52 @@ services:
         sleep 10 &&
         mongosh --host mongo-router:27017 --eval 'sh.addShard(\"shardRS/mongo-shard:27017\"); sh.enableSharding(\"chat_db\"); sh.shardCollection(\"chat_db.messages\", { chat_id: \"hashed\" });'
       "
+
+  api:
+    build: .
+    container_name: chat_api
+    environment:
+      - APP_ENV=production
+      - SERVICE_ROLE=api
+      - GRPC_PORT=:50051
+      - METRICS_PORT=:9091
+      - MONGO_URI=mongodb://mongo-router:27017
+      - MONGO_DATABASE=chat_db
+      - REDIS_CLUSTER_ADDRS=redis-node-1:7001,redis-node-2:7002,redis-node-3:7003
+      - WORKER_CONCURRENCY=10
+      - STREAM_PARTITION_COUNT=16
+    ports:
+      - "50051:50051"
+      - "9091:9091"
+    depends_on:
+      mongo-init:
+        condition: service_started
+      cluster-initiator:
+        condition: service_started
+    networks:
+      - chat_net
+
+  worker:
+    build: .
+    container_name: chat_worker
+    environment:
+      - APP_ENV=production
+      - SERVICE_ROLE=worker
+      - METRICS_PORT=:9091
+      - MONGO_URI=mongodb://mongo-router:27017
+      - MONGO_DATABASE=chat_db
+      - REDIS_CLUSTER_ADDRS=redis-node-1:7001,redis-node-2:7002,redis-node-3:7003
+      - BATCH_SIZE=50
+      - STREAM_PARTITION_COUNT=16
+    ports:
+      - "9092:9091"
+    depends_on:
+      mongo-init:
+        condition: service_started
+      cluster-initiator:
+        condition: service_started
+    networks:
+      - chat_net
 
 volumes:
   redis-chat-1-data:
