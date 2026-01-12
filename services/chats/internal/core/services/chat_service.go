@@ -112,6 +112,22 @@ func (s *ChatService) GetHistory(ctx context.Context, chatID string, page, pageS
 			return hotMessages[:limit], true, nil
 		}
 		metrics.CacheMisses.Inc()
+		
+		dbMessages, err := s.persistence.GetHistory(ctx, chatID, offset, limit)
+		if err != nil {
+			return nil, false, err
+		}
+
+		if len(dbMessages) > 0 {
+			go func(cid string, msgs []*domain.Message) {
+				bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = s.cache.PopulateCache(bgCtx, cid, msgs)
+			}(chatID, dbMessages)
+		}
+
+		hasMore := len(dbMessages) == limit
+		return dbMessages, hasMore, nil
 	}
 
 	coldMessages, err := s.persistence.GetHistory(ctx, chatID, offset, limit)
