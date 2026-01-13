@@ -1,13 +1,12 @@
 import { useQuery } from "@tanstack/react-query"
-import { chatService } from "../services"
-import { ChatSession, ChatHistoryItem } from "../types"
+import { getChatSession, getChatHistory } from "../actions/chat"
 
 export const useChatSession = (chatId: string | null) => {
-  return useQuery<ChatSession>({
+  return useQuery({
     queryKey: ["chat", chatId],
     queryFn: async () => {
       if (!chatId) throw new Error("No chat ID provided")
-      return chatService.getChat(chatId)
+      return getChatSession(chatId)
     },
     enabled: !!chatId,
     staleTime: 1000 * 60 * 5, 
@@ -15,9 +14,9 @@ export const useChatSession = (chatId: string | null) => {
 }
 
 export const useChatHistory = () => {
-  return useQuery<ChatHistoryItem[]>({
+  return useQuery({
     queryKey: ["chat-history"],
-    queryFn: async () => chatService.getHistory(),
+    queryFn: async () => getChatHistory(),
     staleTime: 1000 * 30,
   })
 }
