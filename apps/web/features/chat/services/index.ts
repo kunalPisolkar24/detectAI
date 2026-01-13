@@ -1,8 +1,4 @@
 import { IChatService } from "./chat-service.interface"
-import { mockChatService } from "./mock-service"
+import { GrpcChatService } from "./grpc-chat-service"
 
-const isProduction = process.env.NODE_ENV === "production"
-
-export const chatService: IChatService = isProduction 
-  ? mockChatService 
-  : mockChatService
+export const chatService: IChatService = new GrpcChatService()
