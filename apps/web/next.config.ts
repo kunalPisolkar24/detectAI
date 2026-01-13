@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@grpc/grpc-js", "@grpc/proto-loader"],
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [
@@ -15,7 +16,6 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "10mb",
     },
-    serverComponentsExternalPackages: ["@grpc/grpc-js", "@grpc/proto-loader"],
   },
 };
 
