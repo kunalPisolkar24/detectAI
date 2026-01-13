@@ -2,7 +2,12 @@ import { IChatService } from "./chat-service.interface"
 import { ChatSession, ChatHistoryItem, Message, ModelType } from "../types"
 import { getChatGrpcClient } from "@/lib/grpc/chat-client"
 import { inferenceService } from "./inference-service"
-import { mapGrpcMessageToDomain, mapDomainAnalysisToGrpc } from "../utils/mappers"
+import { 
+  mapGrpcMessageToDomain, 
+  mapDomainAnalysisToGrpc, 
+  mapGrpcSummaryToHistoryItem,
+  mapGrpcChatToSession
+} from "../utils/mappers"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 
@@ -23,7 +28,7 @@ export class GrpcChatService implements IChatService {
 
     return new Promise((resolve, reject) => {
       this.client.CreateChat({ user_id: userId, title }, (err: any, response: any) => {
-        if (err) return reject(err)
+        if (err) return reject(new Error(err.details || "Failed to create chat"))
         
         resolve({
           id: response.chat_id,
@@ -36,47 +41,91 @@ export class GrpcChatService implements IChatService {
   }
 
   async getChat(chatId: string): Promise<ChatSession> {
-    const history = await this.getChatHistoryMessages(chatId, 1, 50)
-    
-    return {
-      id: chatId,
-      title: "Chat Session",
-      messages: history.reverse(),
-      updatedAt: new Date()
-    }
+    const [chatData, historyData] = await Promise.all([
+      this.fetchChatMetadata(chatId),
+      this.fetchChatHistory(chatId, 1, 100)
+    ])
+
+    return mapGrpcChatToSession(chatData, historyData)
   }
 
   async getHistory(): Promise<ChatHistoryItem[]> {
-    console.warn("GetHistory not implemented in Go Backend Proto")
-    return []
+    const userId = await this.getUserId()
+
+    return new Promise((resolve, reject) => {
+      this.client.GetUserChats({ user_id: userId, limit: 50 }, (err: any, response: any) => {
+        if (err) return reject(new Error(err.details || "Failed to fetch history"))
+        
+        const items = (response.chats || []).map(mapGrpcSummaryToHistoryItem)
+        resolve(items)
+      })
+    })
   }
 
   async sendMessage(chatId: string, content: string, model: ModelType): Promise<Message> {
     const userId = await this.getUserId()
 
-    const [_, analysisResult] = await Promise.all([
-      this.saveToBackend(chatId, userId, "user", content),
-      inferenceService.detect(content, model)
-    ])
+    await this.saveToBackend(chatId, userId, "user", content)
 
-    const assistantMessage = await this.saveToBackend(
+    const analysisResult = await inferenceService.detect(content, model)
+
+    return this.saveToBackend(
       chatId, 
       userId, 
       "assistant", 
       "", 
       analysisResult
     )
-
-    return assistantMessage
   }
 
   async deleteChat(chatId: string): Promise<void> {
-    console.warn("DeleteChat not implemented in Go Backend Proto")
+    return new Promise((resolve, reject) => {
+      this.client.DeleteChat({ chat_id: chatId }, (err: any) => {
+        if (err) return reject(new Error(err.details || "Failed to delete chat"))
+        resolve()
+      })
+    })
   }
 
   async renameChat(chatId: string, newTitle: string): Promise<ChatHistoryItem> {
-    console.warn("RenameChat not implemented in Go Backend Proto")
-    return { id: chatId, title: newTitle, updatedAt: new Date() }
+    return new Promise((resolve, reject) => {
+      this.client.RenameChat({ chat_id: chatId, new_title: newTitle }, (err: any) => {
+        if (err) return reject(new Error(err.details || "Failed to rename chat"))
+        
+        resolve({
+          id: chatId,
+          title: newTitle,
+          updatedAt: new Date()
+        })
+      })
+    })
+  }
+
+  private async fetchChatMetadata(chatId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.client.GetChat({ chat_id: chatId }, (err: any, response: any) => {
+        if (err) return reject(new Error(err.details || "Chat not found"))
+        resolve(response)
+      })
+    })
+  }
+
+  private async fetchChatHistory(chatId: string, page: number, pageSize: number): Promise<Message[]> {
+    return new Promise((resolve, reject) => {
+      this.client.GetChatHistory({
+        chat_id: chatId,
+        page,
+        page_size: pageSize
+      }, (err: any, response: any) => {
+        if (err) {
+          console.error("Failed to load history:", err)
+          return resolve([]) 
+        }
+        
+        const messages = (response.messages || []).map(mapGrpcMessageToDomain)
+        resolve(messages.reverse())
+      })
+    })
   }
 
   private async saveToBackend(
@@ -98,7 +147,7 @@ export class GrpcChatService implements IChatService {
         analysis: grpcAnalysis,
         metadata: {}
       }, (err: any, response: any) => {
-        if (err) return reject(err)
+        if (err) return reject(new Error(err.details || "Failed to save message"))
 
         const msg: Message = {
           id: response.message_id,
@@ -108,21 +157,6 @@ export class GrpcChatService implements IChatService {
           analysis: analysisResult
         }
         resolve(msg)
-      })
-    })
-  }
-
-  private async getChatHistoryMessages(chatId: string, page: number, pageSize: number): Promise<Message[]> {
-    return new Promise((resolve, reject) => {
-      this.client.GetChatHistory({
-        chat_id: chatId,
-        page,
-        page_size: pageSize
-      }, (err: any, response: any) => {
-        if (err) return reject(err)
-        
-        const messages = (response.messages || []).map(mapGrpcMessageToDomain)
-        resolve(messages)
       })
     })
   }
