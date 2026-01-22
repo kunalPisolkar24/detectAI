@@ -1,28 +1,30 @@
-.PHONY: compile up down build restart network logs
+.PHONY: compile install network dev prod build-dev build-prod down logs restart
 
-# Run the local pnpm build script
 compile:
 	pnpm build-start
 
-# Helper to ensure the external network exists before starting
+install:
+	pnpm install
+
 network:
 	@docker network inspect detect_ai_network >/dev/null 2>&1 || docker network create detect_ai_network
 
-# Start the Web App + Redis Cluster (Create network if missing)
-up: network
-	docker compose up -d
+dev: network
+	docker compose -f compose.yml -f compose.dev.yml up -d
 
-# Stop and remove containers
+prod: network
+	docker compose -f compose.yml up -d
+
+build-dev: network
+	docker compose -f compose.yml -f compose.dev.yml up -d --build
+
+build-prod: network
+	docker compose -f compose.yml up -d --build
+
 down:
-	docker compose down
+	docker compose -f compose.yml -f compose.dev.yml down --remove-orphans
 
-# Rebuild images and start
-build: network
-	docker compose up --build -d
-
-# Restart helper
-restart: down up
-
-# Tail logs
 logs:
-	docker compose logs -f
+	docker compose -f compose.yml -f compose.dev.yml logs -f
+
+restart: down dev
