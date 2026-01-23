@@ -21,7 +21,9 @@ export const env = createEnv({
     REDIS_SENTINELS: z.string().min(1).default("localhost:26379,localhost:26380,localhost:26381"),
     REDIS_MASTER_NAME: z.string().min(1).default("mymaster"),
     REDIS_PASSWORD: z.string().min(1).optional(),
-    REDIS_USAGE_URL: z.string().url(),
+    
+    REDIS_USAGE_URL: z.string().min(1),
+    USE_REDIS_CLUSTER: z.string().transform((s) => s === "true").pipe(z.boolean()).optional(),
 
     FILE_EXTRACTOR_API_URL: z.string().url(),
     
@@ -50,6 +52,7 @@ export const env = createEnv({
     REDIS_PASSWORD: process.env.REDIS_PASSWORD,
     FILE_EXTRACTOR_API_URL: process.env.FILE_EXTRACTOR_API_URL,
     REDIS_USAGE_URL: process.env.REDIS_USAGE_URL,
+    USE_REDIS_CLUSTER: process.env.USE_REDIS_CLUSTER, 
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
     NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
     AI_SERVICE_URL: process.env.AI_SERVICE_URL,
