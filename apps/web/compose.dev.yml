@@ -11,6 +11,8 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
+      - USE_REDIS_CLUSTER=true
+      - REDIS_USAGE_URL=redis-cluster-node-0:6379,redis-cluster-node-1:6379,redis-cluster-node-2:6379
 
   postgres-primary:
     ports:
@@ -31,3 +33,15 @@ services:
   redis-sentinel-1:
     ports:
       - "26379:26379"
+
+  redis-cluster-node-0:
+    ports:
+      - "7000:6379"
+
+  redis-cluster-node-1:
+    ports:
+      - "7001:6379"
+
+  redis-cluster-node-2:
+    ports:
+      - "7002:6379"
