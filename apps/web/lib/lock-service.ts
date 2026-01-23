@@ -1,33 +1,42 @@
+import Redlock, { ExecutionError } from "redlock"
 import { redisWriter } from "@/lib/redis"
 
-const LOCK_TTL_MS = 5000
-const LOCK_WAIT_MS = 100
-const MAX_RETRIES = 20
+const redlock = new Redlock(
+  [redisWriter],
+  {
+    driftFactor: 0.01,
+    retryCount: 10,
+    retryDelay: 200,
+    retryJitter: 200,
+    automaticExtensionThreshold: 500,
+  }
+)
+
+redlock.on("error", (error) => {
+  if (error instanceof ExecutionError) {
+    return
+  }
+  console.error("Redlock Error:", error)
+})
 
 export const lockService = {
-  async acquire(key: string): Promise<(() => Promise<void>) | null> {
+  async acquire(key: string, ttl: number = 5000): Promise<(() => Promise<void>) | null> {
     const lockKey = `lock:${key}`
-    const token = crypto.randomUUID()
 
-    for (let i = 0; i < MAX_RETRIES; i++) {
-      const acquired = await redisWriter.set(lockKey, token, "PX", LOCK_TTL_MS, "NX")
+    try {
+      const lock = await redlock.acquire([lockKey], ttl)
 
-      if (acquired === "OK") {
-        return async () => {
-          const script = `
-            if redis.call("get", KEYS[1]) == ARGV[1] then
-              return redis.call("del", KEYS[1])
-            else
-              return 0
-            end
-          `
-          await redisWriter.eval(script, 1, lockKey, token)
+      return async () => {
+        try {
+          await lock.release()
+        } catch (error) {
+          if (process.env.NODE_ENV === "development") {
+            console.warn(`Failed to release lock ${key}`, error)
+          }
         }
       }
-
-      await new Promise((resolve) => setTimeout(resolve, LOCK_WAIT_MS))
+    } catch {
+      return null
     }
-
-    return null
-  },
+  }
 }
