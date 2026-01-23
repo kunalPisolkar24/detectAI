@@ -3,6 +3,7 @@ name: detect_ai_web
 include:
   - path: ./infra/docker/postgres.yml
   - path: ./infra/docker/redis.yml
+  - path: ./infra/docker/redis-cluster.yml
 
 networks:
   detectai_net:
@@ -22,11 +23,14 @@ services:
       - HOSTNAME=0.0.0.0
       - REDIS_SENTINELS=detect_ai_redis_sentinel_1:26379,detect_ai_redis_sentinel_2:26379,detect_ai_redis_sentinel_3:26379
       - REDIS_MASTER_NAME=mymaster
-      - REDIS_USAGE_URL=redis://:worker_password@detect_ai_redis_ratelimit:6379
+      - USE_REDIS_CLUSTER=true
+      - REDIS_USAGE_URL=redis-cluster-node-0:6379,redis-cluster-node-1:6379,redis-cluster-node-2:6379
     networks:
       - detectai_net
     depends_on:
       redis-master:
         condition: service_healthy
       postgres-primary:
+        condition: service_healthy
+      redis-cluster-node-0:
         condition: service_healthy
