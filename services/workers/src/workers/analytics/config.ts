@@ -2,7 +2,9 @@ import { baseEnvSchema, createConfig } from "@shared/config";
 
 const analyticsEnvSchema = baseEnvSchema.pick({
   DATABASE_URL: true,
+  DATABASE_URL_REPLICA: true,
   REDIS_USAGE_URL: true,
+  REDIS_URL: true,
   NODE_ENV: true,
 });
 
