@@ -1,5 +1,5 @@
 import { SubscriptionStatus } from "../../../../generated/prisma/client";
-import { prisma } from "@shared/db";
+import { prisma, prismaPrimary } from "@shared/db";
 import { redis } from "@shared/redis";
 import { Logger } from "@shared/logger";
 import { CacheKeys } from "@shared/cache/keys";
@@ -75,7 +75,7 @@ export class PaymentService {
 
     if (!subId) return;
 
-    const user = await prisma.user.findUnique({
+    const user = await prismaPrimary.user.findUnique({
       where: { id: userId },
       select: { email: true }
     });
@@ -141,7 +141,6 @@ export class PaymentService {
       }
     } catch (error) {
       Logger.error("Failed to invalidate cache with locks", error, { userId });
-      // Fallback: Try to delete anyway if locking failed entirely
       await redis.del(...keys).catch(e => Logger.error("Fallback delete failed", e));
     }
   }
