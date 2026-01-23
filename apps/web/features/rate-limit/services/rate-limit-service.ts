@@ -2,76 +2,87 @@ import { usageRedis } from "@/lib/redis-limit"
 import { startOfDay, format } from "date-fns"
 
 export interface IRateLimitService {
-    checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }>
-    trackUsage(userId: string): Promise<void>
-    getRealTimeUsage(userId: string): Promise<{ dailyCount: number; pendingCount: number }>
+  checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }>
+  trackUsage(userId: string): Promise<void>
+  getRealTimeUsage(userId: string): Promise<{ dailyCount: number; pendingCount: number }>
 }
 
 export class RedisRateLimitService implements IRateLimitService {
-    private static readonly FREE_TIER_LIMIT = 100
-    private static readonly PENDING_TTL = 86400
-    private static readonly RATE_LIMIT_TTL = 86400
+  private static readonly FREE_TIER_LIMIT = 100
+  private static readonly PENDING_TTL = 86400
+  private static readonly RATE_LIMIT_TTL = 86400
+  private static readonly GLOBAL_DIRTY_SET_KEY = "usage:dirty_users"
 
-    private getDailyKey(userId: string): string {
-        const today = format(startOfDay(new Date()), "yyyy-MM-dd")
-        return `rate_limit:daily:${today}:${userId}`
+  private getDailyKey(userId: string): string {
+    const today = format(startOfDay(new Date()), "yyyy-MM-dd")
+    return `rate_limit:{${userId}}:daily:${today}`
+  }
+
+  private getPendingKey(userId: string): string {
+    return `usage:{${userId}}:pending`
+  }
+
+  public async checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }> {
+    if (isPremium) {
+      return { allowed: true, remaining: Infinity }
     }
 
-    private getPendingKey(userId: string): string {
-        return `usage:pending:${userId}`
+    try {
+      const key = this.getDailyKey(userId)
+      const usage = await usageRedis.get(key)
+      const currentUsage = usage ? parseInt(usage, 10) : 0
+
+      return {
+        allowed: currentUsage < RedisRateLimitService.FREE_TIER_LIMIT,
+        remaining: Math.max(0, RedisRateLimitService.FREE_TIER_LIMIT - currentUsage),
+      }
+    } catch (error) {
+      console.error("Rate limit check failed:", error)
+      return { allowed: true, remaining: 1 }
     }
+  }
 
-    private getDirtySetKey(): string {
-        return "usage:dirty_users"
+  public async trackUsage(userId: string): Promise<void> {
+    const dailyKey = this.getDailyKey(userId)
+    const pendingKey = this.getPendingKey(userId)
+
+    const userPipeline = usageRedis.pipeline()
+
+    userPipeline.incr(dailyKey)
+    userPipeline.expire(dailyKey, RedisRateLimitService.RATE_LIMIT_TTL)
+    
+    userPipeline.incr(pendingKey)
+    userPipeline.expire(pendingKey, RedisRateLimitService.PENDING_TTL)
+
+    try {
+      await Promise.all([
+        userPipeline.exec(),
+        usageRedis.sadd(RedisRateLimitService.GLOBAL_DIRTY_SET_KEY, userId)
+      ])
+    } catch (error) {
+      console.error("Failed to track usage metrics:", error)
     }
+  }
 
-    public async checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }> {
-        if (isPremium) {
-            return { allowed: true, remaining: Infinity }
-        }
+  public async getRealTimeUsage(userId: string): Promise<{ dailyCount: number; pendingCount: number }> {
+    const dailyKey = this.getDailyKey(userId)
+    const pendingKey = this.getPendingKey(userId)
 
-        const key = this.getDailyKey(userId)
-        const usage = await usageRedis.get(key)
-        const currentUsage = usage ? parseInt(usage, 10) : 0
+    try {
+      const [daily, pending] = await Promise.all([
+        usageRedis.get(dailyKey),
+        usageRedis.get(pendingKey)
+      ])
 
-        return {
-            allowed: currentUsage < RedisRateLimitService.FREE_TIER_LIMIT,
-            remaining: Math.max(0, RedisRateLimitService.FREE_TIER_LIMIT - currentUsage),
-        }
+      return {
+        dailyCount: daily ? parseInt(daily, 10) : 0,
+        pendingCount: pending ? parseInt(pending, 10) : 0
+      }
+    } catch (error) {
+      console.error("Failed to retrieve real-time usage:", error)
+      return { dailyCount: 0, pendingCount: 0 }
     }
-
-    public async trackUsage(userId: string): Promise<void> {
-        const dailyKey = this.getDailyKey(userId)
-        const pendingKey = this.getPendingKey(userId)
-        const dirtySetKey = this.getDirtySetKey()
-
-        const pipeline = usageRedis.pipeline()
-
-        pipeline.incr(dailyKey)
-        pipeline.expire(dailyKey, RedisRateLimitService.RATE_LIMIT_TTL)
-
-        pipeline.incr(pendingKey)
-        pipeline.expire(pendingKey, RedisRateLimitService.PENDING_TTL)
-
-        pipeline.sadd(dirtySetKey, userId)
-
-        await pipeline.exec()
-    }
-
-    public async getRealTimeUsage(userId: string): Promise<{ dailyCount: number; pendingCount: number }> {
-        const dailyKey = this.getDailyKey(userId)
-        const pendingKey = this.getPendingKey(userId)
-
-        const [daily, pending] = await Promise.all([
-            usageRedis.get(dailyKey),
-            usageRedis.get(pendingKey)
-        ])
-
-        return {
-            dailyCount: daily ? parseInt(daily, 10) : 0,
-            pendingCount: pending ? parseInt(pending, 10) : 0
-        }
-    }
+  }
 }
 
 export const rateLimitService = new RedisRateLimitService()
