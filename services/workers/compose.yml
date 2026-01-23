@@ -11,6 +11,9 @@ services:
       dockerfile: src/workers/analytics/Dockerfile.analytics
     restart: always
     env_file: .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
     networks:
       - detectai_net
 
@@ -21,6 +24,9 @@ services:
       dockerfile: src/workers/cron/Dockerfile.cron
     restart: always
     env_file: .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
     networks:
       - detectai_net
 
@@ -33,7 +39,9 @@ services:
     ports:
       - "7777:7777"
     environment:
-      - RABBITMQ_URL=amqp://guest:guest@shared_rabbitmq:5672/
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@shared_rabbitmq:5672/}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
     env_file: .env
     networks:
       - detectai_net

@@ -1,0 +1,33 @@
+services:
+  frontend:
+    build:
+      target: base
+    command: pnpm dev
+    restart: no
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+
+  postgres-primary:
+    ports:
+      - "5432:5432"
+
+  postgres-replica:
+    ports:
+      - "5433:5432"
+
+  redis-master:
+    ports:
+      - "6379:6379"
+
+  redis-ratelimit:
+    ports:
+      - "6382:6379"
+
+  redis-sentinel-1:
+    ports:
+      - "26379:26379"

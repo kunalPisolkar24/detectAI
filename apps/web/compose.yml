@@ -1,6 +1,11 @@
+name: detect_ai_web
+
+include:
+  - path: ./infra/docker/postgres.yml
+  - path: ./infra/docker/redis.yml
+
 networks:
   detectai_net:
-    name: detect_ai_network
     external: true
 
 services:
@@ -9,156 +14,19 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
+    restart: always
     env_file:
       - .env
     environment:
+      - NODE_ENV=production
+      - HOSTNAME=0.0.0.0
       - REDIS_SENTINELS=detect_ai_redis_sentinel_1:26379,detect_ai_redis_sentinel_2:26379,detect_ai_redis_sentinel_3:26379
       - REDIS_MASTER_NAME=mymaster
-      - REDIS_PASSWORD=user_cache_password
       - REDIS_USAGE_URL=redis://:worker_password@detect_ai_redis_ratelimit:6379
-      - NEXTAUTH_URL=http://localhost:3000
-      - NODE_OPTIONS=--dns-result-order=ipv4first
-      - HOSTNAME=0.0.0.0
     networks:
       - detectai_net
     depends_on:
       redis-master:
         condition: service_healthy
-      redis-sentinel-1:
+      postgres-primary:
         condition: service_healthy
-
-  redis-master:
-    image: redis:7.2-alpine
-    container_name: detect_ai_redis_master
-    restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass "user_cache_password" --masterauth "user_cache_password"
-    ports:
-      - "6379:6379"
-    networks:
-      - detectai_net
-    volumes:
-      - redis_master_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "user_cache_password", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  redis-slave-1:
-    image: redis:7.2-alpine
-    container_name: detect_ai_redis_slave_1
-    restart: unless-stopped
-    command: redis-server --replicaof redis-master 6379 --masterauth "user_cache_password" --requirepass "user_cache_password"
-    depends_on:
-      redis-master:
-        condition: service_healthy
-    networks:
-      - detectai_net
-
-  redis-slave-2:
-    image: redis:7.2-alpine
-    container_name: detect_ai_redis_slave_2
-    restart: unless-stopped
-    command: redis-server --replicaof redis-master 6379 --masterauth "user_cache_password" --requirepass "user_cache_password"
-    depends_on:
-      redis-master:
-        condition: service_healthy
-    networks:
-      - detectai_net
-
-  redis-sentinel-1:
-    image: redis:7.2-alpine
-    container_name: detect_ai_redis_sentinel_1
-    restart: unless-stopped
-    command: >
-      sh -c "echo 'Waiting for master...' && sleep 10 &&
-      echo 'sentinel resolve-hostnames yes' > /tmp/sentinel.conf &&
-      echo 'sentinel announce-hostnames yes' >> /tmp/sentinel.conf &&
-      echo 'sentinel monitor mymaster redis-master 6379 2' >> /tmp/sentinel.conf &&
-      echo 'sentinel down-after-milliseconds mymaster 5000' >> /tmp/sentinel.conf &&
-      echo 'sentinel failover-timeout mymaster 60000' >> /tmp/sentinel.conf &&
-      echo 'sentinel parallel-syncs mymaster 1' >> /tmp/sentinel.conf &&
-      echo 'sentinel auth-pass mymaster user_cache_password' >> /tmp/sentinel.conf &&
-      redis-sentinel /tmp/sentinel.conf"
-    networks:
-      - detectai_net
-    depends_on:
-      redis-master:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 15s
-
-  redis-sentinel-2:
-    image: redis:7.2-alpine
-    container_name: detect_ai_redis_sentinel_2
-    restart: unless-stopped
-    command: >
-      sh -c "echo 'Waiting for master...' && sleep 10 &&
-      echo 'sentinel resolve-hostnames yes' > /tmp/sentinel.conf &&
-      echo 'sentinel announce-hostnames yes' >> /tmp/sentinel.conf &&
-      echo 'sentinel monitor mymaster redis-master 6379 2' >> /tmp/sentinel.conf &&
-      echo 'sentinel down-after-milliseconds mymaster 5000' >> /tmp/sentinel.conf &&
-      echo 'sentinel failover-timeout mymaster 60000' >> /tmp/sentinel.conf &&
-      echo 'sentinel parallel-syncs mymaster 1' >> /tmp/sentinel.conf &&
-      echo 'sentinel auth-pass mymaster user_cache_password' >> /tmp/sentinel.conf &&
-      redis-sentinel /tmp/sentinel.conf"
-    networks:
-      - detectai_net
-    depends_on:
-      redis-master:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 15s
-
-  redis-sentinel-3:
-    image: redis:7.2-alpine
-    container_name: detect_ai_redis_sentinel_3
-    restart: unless-stopped
-    command: >
-      sh -c "echo 'Waiting for master...' && sleep 10 &&
-      echo 'sentinel resolve-hostnames yes' > /tmp/sentinel.conf &&
-      echo 'sentinel announce-hostnames yes' >> /tmp/sentinel.conf &&
-      echo 'sentinel monitor mymaster redis-master 6379 2' >> /tmp/sentinel.conf &&
-      echo 'sentinel down-after-milliseconds mymaster 5000' >> /tmp/sentinel.conf &&
-      echo 'sentinel failover-timeout mymaster 60000' >> /tmp/sentinel.conf &&
-      echo 'sentinel parallel-syncs mymaster 1' >> /tmp/sentinel.conf &&
-      echo 'sentinel auth-pass mymaster user_cache_password' >> /tmp/sentinel.conf &&
-      redis-sentinel /tmp/sentinel.conf"
-    networks:
-      - detectai_net
-    depends_on:
-      redis-master:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 15s
-
-  redis-ratelimit:
-    image: redis:7.2-alpine
-    container_name: detect_ai_redis_ratelimit
-    restart: unless-stopped
-    command: redis-server --save "" --appendonly no --requirepass "worker_password" --maxmemory 512mb --maxmemory-policy allkeys-lru
-    ports:
-      - "6382:6379"
-    networks:
-      - detectai_net
-    volumes:
-      - redis_worker_data:/data
-
-volumes:
-  redis_master_data:
-  redis_worker_data:
