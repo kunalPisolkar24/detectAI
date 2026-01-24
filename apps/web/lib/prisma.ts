@@ -2,6 +2,8 @@ import { PrismaClient } from './generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { env } from '@/lib/env';
+import { metrics } from '@/lib/metrics';
+import { logger } from '@/lib/logger';
 
 const READ_OPERATIONS = [
   'findUnique',
@@ -32,18 +34,37 @@ const createExtendedClient = () => {
     query: {
       $allModels: {
         async $allOperations({ model, operation, args, query }) {
-          if (READ_OPERATIONS.includes(operation)) {
-            try {
-              return await (prismaReplica as any)[model][operation](args);
-            } catch (error) {
-              console.warn(
-                `[Read Replica Error] ${model}.${operation} failed. Fallback to Primary.`,
-                error instanceof Error ? error.message : error
-              );
-              return query(args);
-            }
+          const start = performance.now();
+          const isRead = READ_OPERATIONS.includes(operation);
+          
+          try {
+            const result = await (isRead 
+              ? (prismaReplica as any)[model][operation](args) 
+              : query(args));
+            
+            const duration = (performance.now() - start) / 1000;
+            metrics.dbQueryDuration.observe(
+              { model, operation, status: 'success' }, 
+              duration
+            );
+
+            return result;
+          } catch (error) {
+            const duration = (performance.now() - start) / 1000;
+            metrics.dbQueryDuration.observe(
+              { model, operation, status: 'error' }, 
+              duration
+            );
+            
+            logger.error({ 
+              msg: "DB Query Failed", 
+              model, 
+              operation, 
+              error: error instanceof Error ? error.message : error 
+            });
+            
+            throw error;
           }
-          return query(args);
         },
       },
     },
