@@ -1,6 +1,6 @@
 import { SubscriptionStatus } from "../../../../generated/prisma/client";
 import { prisma, prismaPrimary } from "@shared/db";
-import { redis } from "@shared/redis";
+import { type RedisClient } from "@shared/redis";
 import { Logger } from "@shared/logger";
 import { CacheKeys } from "@shared/cache/keys";
 import { LockService } from "@shared/cache/lock";
@@ -12,6 +12,11 @@ const PADDLE_API_URL = config.PADDLE_ENVIRONMENT === 'production'
   : 'https://sandbox-api.paddle.com';
 
 export class PaymentService {
+  constructor(
+    private readonly redis: RedisClient,
+    private readonly lockService: LockService
+  ) {}
+
   public async handleEvent(event: PaymentEvent): Promise<void> {
     const { event_type, data } = event;
     const userId = data?.custom_data?.userId ?? (data as any).userId;
@@ -129,11 +134,11 @@ export class PaymentService {
 
     try {
       const locks: Array<(() => Promise<void>) | null> = await Promise.all(
-        keys.map(key => LockService.acquire(key))
+        keys.map(key => this.lockService.acquire(key))
       );
 
       try {
-        await redis.del(...keys);
+        await this.redis.del(...keys);
       } finally {
         await Promise.all(
           locks.map(release => release ? release() : Promise.resolve())
@@ -141,7 +146,7 @@ export class PaymentService {
       }
     } catch (error) {
       Logger.error("Failed to invalidate cache with locks", error, { userId });
-      await redis.del(...keys).catch(e => Logger.error("Fallback delete failed", e));
+      await this.redis.del(...keys).catch(e => Logger.error("Fallback delete failed", e));
     }
   }
 
