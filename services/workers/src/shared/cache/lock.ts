@@ -1,33 +1,47 @@
+import Redlock, { ExecutionError } from "redlock";
 import { redis } from "../redis";
+import { Logger } from "../logger";
 
-const LOCK_TTL_MS = 5000;
-const LOCK_WAIT_MS = 100;
-const MAX_RETRIES = 20;
+const redlock = new Redlock(
+  [redis],
+  {
+    driftFactor: 0.01,
+    retryCount: 3,
+    retryDelay: 200,
+    retryJitter: 200,
+    automaticExtensionThreshold: 500,
+  }
+);
+
+redlock.on("error", (error: any) => {
+  if (error instanceof ExecutionError) {
+    return;
+  }
+  Logger.error("Redlock Client Error", error);
+});
 
 export class LockService {
-  static async acquire(key: string): Promise<(() => Promise<void>) | null> {
+  private static readonly DEFAULT_TTL = 5000;
+
+  static async acquire(key: string, ttl: number = this.DEFAULT_TTL): Promise<(() => Promise<void>) | null> {
     const lockKey = `lock:${key}`;
-    const token = crypto.randomUUID();
 
-    for (let i = 0; i < MAX_RETRIES; i++) {
-      const acquired = await redis.set(lockKey, token, "PX", LOCK_TTL_MS, "NX");
+    try {
+      const lock = await redlock.acquire([lockKey], ttl);
 
-      if (acquired === "OK") {
-        return async () => {
-          const script = `
-            if redis.call("get", KEYS[1]) == ARGV[1] then
-              return redis.call("del", KEYS[1])
-            else
-              return 0
-            end
-          `;
-          await redis.eval(script, 1, lockKey, token);
-        };
+      return async () => {
+        try {
+          await lock.release();
+        } catch (error) {
+        }
+      };
+    } catch (error) {
+      if (error instanceof ExecutionError) {
+        return null;
       }
-
-      await new Promise((resolve) => setTimeout(resolve, LOCK_WAIT_MS));
+      
+      Logger.error(`Failed to acquire lock for ${key}`, error);
+      return null;
     }
-
-    return null;
   }
 }
