@@ -1,5 +1,7 @@
 import { getGrpcClient, getGrpcMetadata } from "@/lib/grpc-client"
 import { AnalysisResult, ModelType } from "../types"
+import { metrics } from "@/lib/metrics"
+import { logger } from "@/lib/logger"
 
 interface ProtoResponse {
   model_name: string
@@ -16,14 +18,20 @@ export const inferenceService = {
     const metadata = getGrpcMetadata()
     
     const method = model === "spark" ? "DetectSpark" : "DetectFlare"
+    const start = performance.now()
 
     return new Promise((resolve, reject) => {
       client[method]({ text }, metadata, (err: any, response: ProtoResponse) => {
+        const duration = (performance.now() - start) / 1000
+
         if (err) {
-          console.error(`gRPC Error [${method}]:`, err)
+          metrics.aiInferenceDuration.observe({ model, status: 'error' }, duration)
+          logger.error({ msg: "AI Inference Failed", model, error: err })
           reject(new Error("AI Analysis Service Unavailable"))
           return
         }
+
+        metrics.aiInferenceDuration.observe({ model, status: 'success' }, duration)
 
         const aiScore = response.ai_confidence / 100
         const humanScore = response.human_confidence / 100
