@@ -2,6 +2,8 @@ import { AnalyticsService } from "./services/AnalyticsService";
 import { prisma } from "@shared/db";
 import { Logger } from "@shared/logger";
 import { RedisFactory } from "@shared/redis";
+import { MetricsService } from "@shared/monitoring/MetricsService";
+import { WorkerServer } from "@shared/infrastructure/WorkerServer";
 import { config } from "./config";
 
 const FLUSH_INTERVAL_MS = 5000;
@@ -18,11 +20,22 @@ const mainClient = RedisFactory.createClient(
     "AnalyticsMain"
 );
 
-const analyticsService = new AnalyticsService(usageClient, mainClient);
+const metricsService = new MetricsService("worker-analytics");
+const analyticsService = new AnalyticsService(usageClient, mainClient, metricsService);
+
+const server = new WorkerServer(
+    metricsService,
+    config.PORT,
+    () => usageClient.status === "ready" || usageClient.status === "connect"
+);
+
+server.start();
+
 let isShuttingDown = false;
 
 async function startWorker() {
     Logger.info("Analytics Worker started");
+    metricsService.activeWorkers.inc();
 
     while (!isShuttingDown) {
         const startTime = Date.now();
@@ -41,6 +54,7 @@ async function startWorker() {
 
         } catch (error) {
             Logger.error("Critical error in analytics loop", error);
+            metricsService.jobErrors.inc({ job_type: "main_loop", error_type: "critical" });
             await new Promise(resolve => setTimeout(resolve, FLUSH_INTERVAL_MS));
         }
     }
@@ -51,9 +65,11 @@ startWorker();
 const shutdown = async () => {
     if (isShuttingDown) return;
     isShuttingDown = true;
+    metricsService.activeWorkers.dec();
     
     Logger.info("Shutting down Analytics Worker...");
     
+    await analyticsService.shutdown();
     await usageClient.quit();
     await mainClient.quit();
     await prisma.$disconnect();
