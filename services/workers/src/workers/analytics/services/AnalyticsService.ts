@@ -2,6 +2,7 @@ import { prisma } from "@shared/db";
 import { Logger } from "@shared/logger";
 import { CacheKeys } from "@shared/cache/keys";
 import { type RedisClient } from "@shared/redis";
+import { MetricsService } from "@shared/monitoring/MetricsService";
 
 interface UsageUpdate {
     userId: string;
@@ -15,31 +16,44 @@ export class AnalyticsService {
 
     constructor(
         private readonly usageClient: RedisClient,
-        private readonly mainClient: RedisClient
+        private readonly mainClient: RedisClient,
+        private readonly metrics: MetricsService
     ) {}
 
     public async processBatch(): Promise<number> {
-        const userIds = await this.usageClient.spop(this.DIRTY_SET_KEY, this.BATCH_SIZE);
+        const timer = this.metrics.jobDuration.startTimer({ job_type: "process_batch" });
 
-        if (!userIds || userIds.length === 0) {
-            return 0;
+        try {
+            const userIds = await this.usageClient.spop(this.DIRTY_SET_KEY, this.BATCH_SIZE);
+
+            if (!userIds || userIds.length === 0) {
+                timer({ status: "empty" });
+                return 0;
+            }
+
+            const updates = await this.fetchPendingCounts(userIds);
+
+            if (updates.length === 0) {
+                timer({ status: "no_updates" });
+                return 0;
+            }
+
+            const success = await this.flushToDatabase(updates);
+
+            if (success) {
+                await this.finalizeUpdates(updates);
+                this.metrics.jobTotal.inc({ job_type: "usage_flush" }, updates.length);
+            } else {
+                await this.requeueFailedUsers(userIds);
+                this.metrics.jobErrors.inc({ job_type: "usage_flush", error_type: "db_error" });
+            }
+
+            timer({ status: "success" });
+            return updates.length;
+        } catch (error) {
+            timer({ status: "error" });
+            throw error;
         }
-
-        const updates = await this.fetchPendingCounts(userIds);
-
-        if (updates.length === 0) {
-            return 0;
-        }
-
-        const success = await this.flushToDatabase(updates);
-
-        if (success) {
-            await this.finalizeUpdates(updates);
-        } else {
-            await this.requeueFailedUsers(userIds);
-        }
-
-        return updates.length;
     }
 
     private async fetchPendingCounts(userIds: string[]): Promise<UsageUpdate[]> {
@@ -57,15 +71,16 @@ export class AnalyticsService {
                 const userId = userIds[index];
                 
                 if (count > 0 && userId) {
-                    updates.push({
-                        userId,
-                        count
-                    });
+                    updates.push({ userId, count });
+                    this.metrics.cacheOperations.inc({ operation: "hit", cache_type: "usage_cluster" });
+                } else {
+                    this.metrics.cacheOperations.inc({ operation: "miss", cache_type: "usage_cluster" });
                 }
             });
         } catch (error) {
             Logger.error("Failed to fetch pending counts from cluster", error);
             await this.requeueFailedUsers(userIds);
+            this.metrics.jobErrors.inc({ job_type: "fetch_counts", error_type: "redis_error" });
             return [];
         }
 
@@ -73,12 +88,16 @@ export class AnalyticsService {
     }
 
     private async flushToDatabase(updates: UsageUpdate[]): Promise<boolean> {
+        const dbTimer = this.metrics.jobDuration.startTimer({ job_type: "db_flush" });
         try {
             const values = updates
                 .map(({ userId, count }) => `('${userId}', ${count}, NOW())`)
                 .join(",");
 
-            if (!values) return true;
+            if (!values) {
+                dbTimer({ status: "empty" });
+                return true;
+            }
 
             await prisma.$executeRawUnsafe(`
                 UPDATE "User" as u
@@ -90,9 +109,11 @@ export class AnalyticsService {
                 WHERE u.id = v.user_id
             `);
 
+            dbTimer({ status: "success" });
             Logger.info(`Successfully flushed usage for ${updates.length} users`);
             return true;
         } catch (error) {
+            dbTimer({ status: "error" });
             Logger.error("Failed to flush usage stats to database", error);
             return false;
         }
@@ -104,6 +125,7 @@ export class AnalyticsService {
             await this.bulkInvalidateCache(updates);
         } catch (error) {
             Logger.error("Error during finalization phase", error);
+            this.metrics.jobErrors.inc({ job_type: "finalize", error_type: "partial_failure" });
         }
     }
 
@@ -144,8 +166,10 @@ export class AnalyticsService {
 
         try {
             await this.mainClient.del(...keys);
+            this.metrics.cacheOperations.inc({ operation: "invalidate", cache_type: "main_cache" }, keys.length);
         } catch (error) {
             Logger.error("Failed to invalidate cache keys", error);
+            this.metrics.jobErrors.inc({ job_type: "cache_invalidation", error_type: "redis_error" });
         }
     }
 
@@ -157,5 +181,8 @@ export class AnalyticsService {
         } catch (error) {
             Logger.error("CRITICAL: Failed to requeue users", error);
         }
+    }
+    
+    public async shutdown(): Promise<void> {
     }
 }
