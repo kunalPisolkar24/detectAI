@@ -5,6 +5,7 @@ const analyticsEnvSchema = baseEnvSchema.pick({
   DATABASE_URL_REPLICA: true,
   REDIS_USAGE_URL: true,
   REDIS_URL: true,
+  REDIS_MODE: true,
   NODE_ENV: true,
 });
 
