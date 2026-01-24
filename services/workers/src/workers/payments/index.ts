@@ -1,12 +1,20 @@
 import { RabbitMQWorker } from "../../shared/infrastructure/RabbitMQWorker";
 import { PaymentService } from "./services/PaymentService";
 import { prisma } from "@shared/db";
-import { redis } from "@shared/redis";
+import { RedisFactory } from "@shared/redis";
+import { LockService } from "@shared/cache/lock";
 import { config } from "./config";
 
 const QUEUE_NAME = "payment_events";
 
-const paymentService = new PaymentService();
+const redisClient = RedisFactory.createClient(
+    config.REDIS_URL,
+    config.REDIS_MODE,
+    "PaymentsRedis"
+);
+
+const lockService = new LockService(redisClient);
+const paymentService = new PaymentService(redisClient, lockService);
 
 const worker = new RabbitMQWorker(
     config.RABBITMQ_URL,
@@ -43,7 +51,7 @@ console.log(`Worker listening on http://localhost:${server.port}`);
 
 const shutdown = async () => {
     await prisma.$disconnect();
-    await redis.quit();
+    await redisClient.quit();
     process.exit(0);
 };
 
