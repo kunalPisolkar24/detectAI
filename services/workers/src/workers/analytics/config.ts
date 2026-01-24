@@ -7,6 +7,7 @@ const analyticsEnvSchema = baseEnvSchema.pick({
   REDIS_URL: true,
   REDIS_MODE: true,
   NODE_ENV: true,
+  PORT: true,
 });
 
 export const config = createConfig(analyticsEnvSchema, "Analytics");
