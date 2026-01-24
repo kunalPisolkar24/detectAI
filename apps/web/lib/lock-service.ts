@@ -19,24 +19,44 @@ redlock.on("error", (error) => {
   console.error("Redlock Error:", error)
 })
 
-export const lockService = {
-  async acquire(key: string, ttl: number = 5000): Promise<(() => Promise<void>) | null> {
-    const lockKey = `lock:${key}`
+export class LockService {
+  private static instance: LockService
+
+  private constructor() {}
+
+  public static getInstance(): LockService {
+    if (!LockService.instance) {
+      LockService.instance = new LockService()
+    }
+    return LockService.instance
+  }
+
+  public async execute<T>(
+    resources: string | string[],
+    task: () => Promise<T>,
+    ttl: number = 5000
+  ): Promise<T> {
+    const keys = Array.isArray(resources) ? resources.map(k => `lock:${k}`) : [`lock:${resources}`]
+    
+    let lock
+    try {
+      lock = await redlock.acquire(keys, ttl)
+    } catch (error) {
+      throw new Error(`Failed to acquire lock for resources: ${keys.join(", ")}`)
+    }
 
     try {
-      const lock = await redlock.acquire([lockKey], ttl)
-
-      return async () => {
-        try {
-          await lock.release()
-        } catch (error) {
-          if (process.env.NODE_ENV === "development") {
-            console.warn(`Failed to release lock ${key}`, error)
-          }
+      return await task()
+    } finally {
+      try {
+        await lock.release()
+      } catch (error) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn(`Failed to release lock for ${keys.join(", ")}`, error)
         }
       }
-    } catch {
-      return null
     }
   }
 }
+
+export const lockService = LockService.getInstance()
