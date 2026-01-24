@@ -1,5 +1,7 @@
 import { usageRedis } from "@/lib/redis-limit"
 import { startOfDay, format } from "date-fns"
+import { metrics } from "@/lib/metrics"
+import { logger } from "@/lib/logger"
 
 export interface IRateLimitService {
   checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }>
@@ -24,20 +26,25 @@ export class RedisRateLimitService implements IRateLimitService {
 
   public async checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }> {
     if (isPremium) {
-      return { allowed: true, remaining: Infinity }
+      return { allowed: true, remaining: -1 }
     }
 
     try {
       const key = this.getDailyKey(userId)
       const usage = await usageRedis.get(key)
       const currentUsage = usage ? parseInt(usage, 10) : 0
+      const allowed = currentUsage < RedisRateLimitService.FREE_TIER_LIMIT
+
+      if (!allowed) {
+        metrics.rateLimitHits.inc({ tier: 'free' })
+      }
 
       return {
-        allowed: currentUsage < RedisRateLimitService.FREE_TIER_LIMIT,
+        allowed,
         remaining: Math.max(0, RedisRateLimitService.FREE_TIER_LIMIT - currentUsage),
       }
     } catch (error) {
-      console.error("Rate limit check failed:", error)
+      logger.error({ msg: "Rate limit check failed", userId, error })
       return { allowed: true, remaining: 1 }
     }
   }
@@ -60,7 +67,7 @@ export class RedisRateLimitService implements IRateLimitService {
         usageRedis.sadd(RedisRateLimitService.GLOBAL_DIRTY_SET_KEY, userId)
       ])
     } catch (error) {
-      console.error("Failed to track usage metrics:", error)
+      logger.error({ msg: "Failed to track usage metrics", userId, error })
     }
   }
 
@@ -79,7 +86,7 @@ export class RedisRateLimitService implements IRateLimitService {
         pendingCount: pending ? parseInt(pending, 10) : 0
       }
     } catch (error) {
-      console.error("Failed to retrieve real-time usage:", error)
+      logger.error({ msg: "Failed to retrieve real-time usage", userId, error })
       return { dailyCount: 0, pendingCount: 0 }
     }
   }
