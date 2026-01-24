@@ -3,29 +3,44 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 export async function proxy(request: NextRequest) {
+  const start = performance.now()
   const token = await getToken({ req: request })
   const isAuth = !!token
   const { pathname } = request.nextUrl
 
-  if (pathname.startsWith("/api/auth") || pathname.startsWith("/_next") || pathname.includes("favicon.ico")) {
-    return NextResponse.next()
+  let response = NextResponse.next()
+
+  if (pathname.startsWith("/api/auth") || pathname.startsWith("/_next") || pathname.includes("favicon.ico") || pathname.startsWith("/api/metrics")) {
+    return response
   }
 
   if (isAuth) {
     if (pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/signup")) {
-      return NextResponse.redirect(new URL("/chat", request.url))
+      response = NextResponse.redirect(new URL("/chat", request.url))
     }
   }
 
   if (!isAuth) {
-    if (pathname.startsWith("/chat")) {
+    if (pathname.startsWith("/chat") || pathname.startsWith("/profile")) {
       const url = new URL("/login", request.url)
       url.searchParams.set("callbackUrl", pathname)
-      return NextResponse.redirect(url)
+      response = NextResponse.redirect(url)
     }
   }
 
-  return NextResponse.next()
+  const duration = performance.now() - start
+  console.log(JSON.stringify({
+    level: "info",
+    ts: Date.now(),
+    msg: "Incoming Request",
+    method: request.method,
+    url: pathname,
+    status: response.status,
+    durationMs: duration.toFixed(2),
+    userId: token?.id || "anonymous"
+  }))
+
+  return response
 }
 
 export const config = {
