@@ -1,10 +1,24 @@
 import { AnalyticsService } from "./services/AnalyticsService";
 import { prisma } from "@shared/db";
 import { Logger } from "@shared/logger";
+import { RedisFactory } from "@shared/redis";
+import { config } from "./config";
 
 const FLUSH_INTERVAL_MS = 5000;
 
-const analyticsService = new AnalyticsService();
+const usageClient = RedisFactory.createClient(
+    config.REDIS_USAGE_URL, 
+    "cluster", 
+    "AnalyticsUsage"
+);
+
+const mainClient = RedisFactory.createClient(
+    config.REDIS_URL,
+    config.REDIS_MODE,
+    "AnalyticsMain"
+);
+
+const analyticsService = new AnalyticsService(usageClient, mainClient);
 let isShuttingDown = false;
 
 async function startWorker() {
@@ -40,7 +54,8 @@ const shutdown = async () => {
     
     Logger.info("Shutting down Analytics Worker...");
     
-    await analyticsService.shutdown();
+    await usageClient.quit();
+    await mainClient.quit();
     await prisma.$disconnect();
     
     Logger.info("Analytics Worker exited gracefully");
