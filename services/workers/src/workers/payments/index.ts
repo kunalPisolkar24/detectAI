@@ -3,6 +3,8 @@ import { PaymentService } from "./services/PaymentService";
 import { prisma } from "@shared/db";
 import { RedisFactory } from "@shared/redis";
 import { LockService } from "@shared/cache/lock";
+import { MetricsService } from "@shared/monitoring/MetricsService";
+import { WorkerServer } from "@shared/infrastructure/WorkerServer";
 import { config } from "./config";
 
 const QUEUE_NAME = "payment_events";
@@ -13,8 +15,9 @@ const redisClient = RedisFactory.createClient(
     "PaymentsRedis"
 );
 
+const metricsService = new MetricsService("worker-payments");
 const lockService = new LockService(redisClient);
-const paymentService = new PaymentService(redisClient, lockService);
+const paymentService = new PaymentService(redisClient, lockService, metricsService);
 
 const worker = new RabbitMQWorker(
     config.RABBITMQ_URL,
@@ -23,33 +26,18 @@ const worker = new RabbitMQWorker(
 );
 
 worker.start();
+metricsService.activeWorkers.inc();
 
-const server = Bun.serve({
-    port: config.PORT,
-    fetch(req) {
-        const { pathname } = new URL(req.url);
+const server = new WorkerServer(
+    metricsService,
+    config.PORT,
+    () => worker.getStatus()
+);
 
-        if (pathname === "/health") {
-            const isHealthy = worker.getStatus();
-            return new Response(
-                JSON.stringify({
-                    status: isHealthy ? "ok" : "error",
-                    worker: isHealthy ? "active" : "disconnected",
-                }),
-                {
-                    status: isHealthy ? 200 : 503,
-                    headers: { "Content-Type": "application/json" },
-                }
-            );
-        }
-
-        return new Response("Not Found", { status: 404 });
-    },
-});
-
-console.log(`Worker listening on http://localhost:${server.port}`);
+server.start();
 
 const shutdown = async () => {
+    metricsService.activeWorkers.dec();
     await prisma.$disconnect();
     await redisClient.quit();
     process.exit(0);
