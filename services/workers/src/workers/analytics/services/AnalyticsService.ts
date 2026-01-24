@@ -1,12 +1,7 @@
-import { Cluster, Redis } from "ioredis";
 import { prisma } from "@shared/db";
-import { createRedisClient, createClusterClient } from "@shared/redis";
 import { Logger } from "@shared/logger";
-import { config } from "../config";
-import { baseEnvSchema } from "@shared/config";
 import { CacheKeys } from "@shared/cache/keys";
-
-const mainConfig = baseEnvSchema.parse(process.env);
+import { type RedisClient } from "@shared/redis";
 
 interface UsageUpdate {
     userId: string;
@@ -14,19 +9,17 @@ interface UsageUpdate {
 }
 
 export class AnalyticsService {
-    private usageCluster: Cluster;
-    private mainRedis: Redis;
     private readonly BATCH_SIZE = 50;
     private readonly DIRTY_SET_KEY = "usage:dirty_users";
     private readonly PENDING_KEY_PREFIX = "usage:pending:";
 
-    constructor() {
-        this.usageCluster = createClusterClient(config.REDIS_USAGE_URL, "UsageCluster");
-        this.mainRedis = createRedisClient(mainConfig.REDIS_URL, "MainRedis");
-    }
+    constructor(
+        private readonly usageClient: RedisClient,
+        private readonly mainClient: RedisClient
+    ) {}
 
     public async processBatch(): Promise<number> {
-        const userIds = await this.usageCluster.spop(this.DIRTY_SET_KEY, this.BATCH_SIZE);
+        const userIds = await this.usageClient.spop(this.DIRTY_SET_KEY, this.BATCH_SIZE);
 
         if (!userIds || userIds.length === 0) {
             return 0;
@@ -54,7 +47,7 @@ export class AnalyticsService {
 
         try {
             const promises = userIds.map(id => 
-                this.usageCluster.get(`${this.PENDING_KEY_PREFIX}${id}`)
+                this.usageClient.get(`${this.PENDING_KEY_PREFIX}${id}`)
             );
             
             const results = await Promise.all(promises);
@@ -81,18 +74,21 @@ export class AnalyticsService {
 
     private async flushToDatabase(updates: UsageUpdate[]): Promise<boolean> {
         try {
-            await prisma.$transaction(
-                updates.map(({ userId, count }) =>
-                    prisma.user.update({
-                        where: { id: userId },
-                        data: {
-                            apiCallCountTotal: { increment: count },
-                            apiCallCountDaily: { increment: count },
-                            lastApiCallReset: new Date()
-                        }
-                    })
-                )
-            );
+            const values = updates
+                .map(({ userId, count }) => `('${userId}', ${count}, NOW())`)
+                .join(",");
+
+            if (!values) return true;
+
+            await prisma.$executeRawUnsafe(`
+                UPDATE "User" as u
+                SET 
+                    "apiCallCountTotal" = u."apiCallCountTotal" + v.count,
+                    "apiCallCountDaily" = u."apiCallCountDaily" + v.count,
+                    "lastApiCallReset" = v.reset_time
+                FROM (VALUES ${values}) as v(user_id, count, reset_time)
+                WHERE u.id = v.user_id
+            `);
 
             Logger.info(`Successfully flushed usage for ${updates.length} users`);
             return true;
@@ -113,14 +109,14 @@ export class AnalyticsService {
 
     private async decrementPendingCounts(updates: UsageUpdate[]): Promise<void> {
         const promises = updates.map(({ userId, count }) => 
-            this.usageCluster.decrby(`${this.PENDING_KEY_PREFIX}${userId}`, count)
+            this.usageClient.decrby(`${this.PENDING_KEY_PREFIX}${userId}`, count)
         );
 
         await Promise.all(promises);
 
         const stillDirtyUsers: string[] = [];
         const checkPromises = updates.map(({ userId }) => 
-            this.usageCluster.get(`${this.PENDING_KEY_PREFIX}${userId}`)
+            this.usageClient.get(`${this.PENDING_KEY_PREFIX}${userId}`)
         );
 
         const results = await Promise.all(checkPromises);
@@ -135,7 +131,7 @@ export class AnalyticsService {
         });
 
         if (stillDirtyUsers.length > 0) {
-            await this.usageCluster.sadd(this.DIRTY_SET_KEY, ...stillDirtyUsers);
+            await this.usageClient.sadd(this.DIRTY_SET_KEY, ...stillDirtyUsers);
         }
     }
 
@@ -147,7 +143,7 @@ export class AnalyticsService {
         ]);
 
         try {
-            await this.mainRedis.del(...keys);
+            await this.mainClient.del(...keys);
         } catch (error) {
             Logger.error("Failed to invalidate cache keys", error);
         }
@@ -156,19 +152,10 @@ export class AnalyticsService {
     private async requeueFailedUsers(userIds: string[]): Promise<void> {
         if (userIds.length === 0) return;
         try {
-            await this.usageCluster.sadd(this.DIRTY_SET_KEY, ...userIds);
+            await this.usageClient.sadd(this.DIRTY_SET_KEY, ...userIds);
             Logger.warn(`Requeued ${userIds.length} users after processing failure`);
         } catch (error) {
             Logger.error("CRITICAL: Failed to requeue users", error);
-        }
-    }
-
-    public async shutdown(): Promise<void> {
-        try {
-            await this.usageCluster.quit();
-            await this.mainRedis.quit();
-        } catch (error) {
-            Logger.error("Error during service shutdown", error);
         }
     }
 }
