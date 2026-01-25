@@ -4,20 +4,17 @@ networks:
 
 services:
   postgres-primary:
-    image: bitnami/postgresql:15
+    image: postgres:15-alpine
     container_name: detect_ai_pg_primary
     restart: unless-stopped
     environment:
-      - POSTGRESQL_USERNAME=${POSTGRES_USER:-user}
-      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD:-password}
-      - POSTGRESQL_DATABASE=detect_ai
-      - POSTGRESQL_REPLICATION_MODE=master
-      - POSTGRESQL_REPLICATION_USER=repl_user
-      - POSTGRESQL_REPLICATION_PASSWORD=repl_password
+      - POSTGRES_USER=${POSTGRES_USER:-user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=detect_ai
     networks:
       - detectai_net
     volumes:
-      - pg_primary_data:/bitnami/postgresql
+      - pg_primary_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d detect_ai"]
       interval: 5s
@@ -25,22 +22,17 @@ services:
       retries: 5
 
   postgres-replica:
-    image: bitnami/postgresql:15
+    image: postgres:15-alpine
     container_name: detect_ai_pg_replica
     restart: unless-stopped
     environment:
-      - POSTGRESQL_USERNAME=${POSTGRES_USER:-user}
-      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD:-password}
-      - POSTGRESQL_DATABASE=detect_ai
-      - POSTGRESQL_REPLICATION_MODE=slave
-      - POSTGRESQL_REPLICATION_USER=repl_user
-      - POSTGRESQL_REPLICATION_PASSWORD=repl_password
-      - POSTGRESQL_MASTER_HOST=postgres-primary
-      - POSTGRESQL_MASTER_PORT_NUMBER=5432
+      - POSTGRES_USER=${POSTGRES_USER:-user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=detect_ai
     networks:
       - detectai_net
     volumes:
-      - pg_replica_data:/bitnami/postgresql
+      - pg_replica_data:/var/lib/postgresql/data
     depends_on:
       postgres-primary:
         condition: service_healthy
