@@ -1,176 +1,141 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
-import { prismaMock, mockUserUpdate, mockPrismaTransaction } from "../../mocks/db";
-import { redisMock, mockRedisClient, mockRedisSpop, mockPipelineExec, mockRedisSadd, mockRedisGet, mockRedisExec, mockRedisWatch, mockRedisUnwatch, mockRedisMulti } from "../../mocks/redis";
-import { configMock } from "../../mocks/config";
-import { CacheKeys } from "@shared/cache/keys";
-import { JsonSerializer } from "@shared/cache/serialization";
+import { prismaMock, mockExecuteRawUnsafe } from "../../mocks/db";
+import { redisFactoryMock, mockUsageClient, mockMainClient } from "../../mocks/redis";
+import { MetricsService } from "@shared/monitoring/MetricsService";
 
 mock.module("@shared/db", () => prismaMock);
-mock.module("@shared/redis", () => redisMock);
-mock.module("@shared/config", () => configMock);
-mock.module("../../../config", () => configMock);
+mock.module("@shared/redis", () => redisFactoryMock);
+const mockLogger = { info: mock(), error: mock(), warn: mock() };
+mock.module("@shared/logger", () => ({
+  Logger: mockLogger
+}));
+
 
 const { AnalyticsService } = await import("../../../services/AnalyticsService");
 
 describe("AnalyticsService", () => {
   let service: InstanceType<typeof AnalyticsService>;
+  let metricsMock: MetricsService;
 
   beforeEach(() => {
-    service = new AnalyticsService();
-    
-    mockRedisSpop.mockClear();
-    mockRedisSadd.mockClear();
-    mockPipelineExec.mockClear();
-    mockUserUpdate.mockClear();
-    mockPrismaTransaction.mockClear();
-    mockRedisGet.mockClear();
-    mockRedisExec.mockClear();
-    mockRedisWatch.mockClear();
-    mockRedisUnwatch.mockClear();
-    mockRedisMulti.mockClear();
-    
-    (mockPipelineExec as any).mockResolvedValue([]);
+    mockUsageClient.spop.mockClear();
+    mockUsageClient.get.mockClear();
+    mockUsageClient.decrby.mockClear();
+    mockUsageClient.sadd.mockClear();
+    mockMainClient.del.mockClear();
+    mockExecuteRawUnsafe.mockClear();
+    mockLogger.info.mockClear();
+    mockLogger.error.mockClear();
+    mockLogger.warn.mockClear();
+
+
+    // Setup Metrics Mock
+    metricsMock = {
+      jobDuration: { startTimer: mock(() => mock()) },
+      jobTotal: { inc: mock() },
+      jobErrors: { inc: mock() },
+      cacheOperations: { inc: mock() },
+    } as unknown as MetricsService;
+
+    service = new AnalyticsService(
+      mockUsageClient as any,
+      mockMainClient as any,
+      metricsMock
+    );
   });
 
-  test("should return 0 if no dirty users are found", async () => {
-    mockRedisSpop.mockResolvedValue([]);
+  test("should return 0 when no dirty users are found", async () => {
+    (mockUsageClient.spop as any).mockResolvedValue([]);
+    const count = await service.processBatch();
+    expect(count).toBe(0);
 
-    const result = await service.processBatch();
-
-    expect(result).toBe(0);
-    expect(mockRedisSpop).toHaveBeenCalledWith("usage:dirty_users", 50);
-    expect(mockPrismaTransaction).not.toHaveBeenCalled();
+    expect(mockUsageClient.spop).toHaveBeenCalledWith("usage:dirty_users", 50);
+    expect(mockExecuteRawUnsafe).not.toHaveBeenCalled();
   });
 
-  test("should process batch successfully and update database", async () => {
-    const userIds = ["user_1"];
-    const usageCounts = [[null, "10"]];
+  test("should process batch: fetch usage, update db, decrement redis, invalidate cache", async () => {
+    const userIds = ["user_1", "user_2"];
 
-    mockRedisSpop.mockResolvedValue(userIds);
-    
-    (mockPipelineExec as any)
-      .mockResolvedValueOnce(usageCounts) 
-      .mockResolvedValueOnce([[null, "OK"]]); 
+    // 1. Get Dirty Users
+    (mockUsageClient.spop as any).mockResolvedValue(userIds);
 
-    mockPrismaTransaction.mockResolvedValue([{}]);
-    
-    mockRedisGet.mockResolvedValue(null); 
+    // 2. Fetch Pending Counts (Mock return values for user_1 and user_2)
+    (mockUsageClient.get as any)
+      .mockResolvedValueOnce("10") // user_1
+      .mockResolvedValueOnce("5");  // user_2
 
-    const result = await service.processBatch();
+    // 3. Mock DB Success
+    (mockExecuteRawUnsafe as any).mockResolvedValue(2);
 
-    expect(result).toBe(1);
-    expect(mockPrismaTransaction).toHaveBeenCalledTimes(1);
-    expect(mockUserUpdate).toHaveBeenCalledTimes(1);
-    
-    const calls = mockUserUpdate.mock.calls;
-    const firstUpdateCall = (calls[0] as any[])[0];
-    
-    expect(firstUpdateCall.where.id).toBe("user_1");
-    expect(firstUpdateCall.data.apiCallCountTotal.increment).toBe(10);
+    // 4. Mock Decrby
+    (mockUsageClient.decrby as any).mockResolvedValue(0);
+
+    // 5. Mock check after decrement (Clean state)
+    (mockUsageClient.get as any)
+      .mockResolvedValueOnce("0")
+      .mockResolvedValueOnce("0");
+
+    const count = await service.processBatch();
+
+    expect(count).toBe(2);
+
+    // Check DB Call
+    expect(mockExecuteRawUnsafe).toHaveBeenCalled();
+    const dbCallArg = (mockExecuteRawUnsafe as any).mock.calls[0][0] as string;
+
+    expect(dbCallArg).toContain("'user_1', 10");
+    expect(dbCallArg).toContain("'user_2', 5");
+
+    // Check cleanup
+    expect(mockUsageClient.decrby).toHaveBeenCalledTimes(2);
+    expect(mockMainClient.del).toHaveBeenCalledWith("user:id:user_1", "user:id:user_2");
+    expect(mockUsageClient.sadd).not.toHaveBeenCalled();
   });
 
-  test("should patch cache correctly using optimistic locking", async () => {
-    const userIds = ["user_1"];
-    mockRedisSpop.mockResolvedValue(userIds);
+  test("should requeue user if they still have pending counts after decrement", async () => {
+    (mockUsageClient.spop as any).mockResolvedValue(["user_1"]);
+    (mockUsageClient.get as any).mockResolvedValueOnce("20"); // Initial fetch
+    (mockExecuteRawUnsafe as any).mockResolvedValue(1);
 
-    (mockPipelineExec as any)
-      .mockResolvedValueOnce([[null, "10"]]) 
-      .mockResolvedValueOnce([[null, "OK"]]); 
-
-    mockPrismaTransaction.mockResolvedValue([{}]);
-
-    const existingUser = {
-      id: "user_1",
-      apiCallCountTotal: 100,
-      apiCallCountDaily: 20
-    };
-    const serializedUser = JsonSerializer.serialize(existingUser);
-    
-    mockRedisGet.mockResolvedValue(serializedUser);
-    mockRedisExec.mockResolvedValue(["OK"]); 
+    // After decrement, user still has 5 pending (new events came in)
+    (mockUsageClient.get as any).mockResolvedValueOnce("5");
 
     await service.processBatch();
 
-    expect(mockRedisWatch).toHaveBeenCalledWith(CacheKeys.user("user_1"));
-    expect(mockRedisGet).toHaveBeenCalledWith(CacheKeys.user("user_1"));
-    expect(mockRedisMulti).toHaveBeenCalled();
-    expect(mockRedisExec).toHaveBeenCalled();
+    expect(mockUsageClient.decrby).toHaveBeenCalledWith("usage:pending:user_1", 20);
+    expect(mockUsageClient.sadd).toHaveBeenCalledWith("usage:dirty_users", "user_1");
+    expect(mockMainClient.del).toHaveBeenCalled(); // Should still invalidate
   });
 
-  test("should abort cache update if optimistic lock fails (exec returns null)", async () => {
-    const userIds = ["user_1"];
-    mockRedisSpop.mockResolvedValue(userIds);
+  test("should requeue users if database update fails", async () => {
+    (mockUsageClient.spop as any).mockResolvedValue(["user_1"]);
+    (mockUsageClient.get as any).mockResolvedValue("10");
+    (mockExecuteRawUnsafe as any).mockRejectedValue(new Error("DB Connection Error"));
 
-    (mockPipelineExec as any)
-      .mockResolvedValueOnce([[null, "10"]])
-      .mockResolvedValueOnce([[null, "OK"]]);
 
-    mockPrismaTransaction.mockResolvedValue([{}]);
+    try {
+      await service.processBatch();
+    } catch (e) {
+      // expected
+    }
 
-    mockRedisGet.mockResolvedValue(JSON.stringify({ apiCallCountTotal: 100 }));
-    mockRedisExec.mockResolvedValue(null); 
-
-    await service.processBatch();
-
-    expect(mockRedisWatch).toHaveBeenCalled();
-    expect(mockRedisMulti).toHaveBeenCalled();
-    expect(mockRedisExec).toHaveBeenCalled();
+    expect(mockUsageClient.sadd).toHaveBeenCalledWith("usage:dirty_users", "user_1");
+    expect(mockUsageClient.decrby).not.toHaveBeenCalled();
+    expect(mockMainClient.del).not.toHaveBeenCalled();
   });
 
-  test("should unwatch and skip if cache key is missing", async () => {
-    const userIds = ["user_1"];
-    mockRedisSpop.mockResolvedValue(userIds);
+  test("should handle requeue failure gracefully (log error)", async () => {
+    (mockUsageClient.spop as any).mockResolvedValue(["user_1"]);
+    (mockUsageClient.get as any).mockResolvedValue("10");
+    (mockExecuteRawUnsafe as any).mockRejectedValue(new Error("DB Error"));
 
-    (mockPipelineExec as any)
-      .mockResolvedValueOnce([[null, "10"]])
-      .mockResolvedValueOnce([[null, "OK"]]);
+    // Fail the requeue attempt
+    (mockUsageClient.sadd as any).mockRejectedValue(new Error("Redis Error"));
 
-    mockPrismaTransaction.mockResolvedValue([{}]);
+    try {
+      await service.processBatch();
+    } catch { }
 
-    mockRedisGet.mockResolvedValue(null);
-
-    await service.processBatch();
-
-    expect(mockRedisWatch).toHaveBeenCalled();
-    expect(mockRedisUnwatch).toHaveBeenCalled();
-    expect(mockRedisMulti).not.toHaveBeenCalled();
-  });
-
-  test("should handle JSON deserialization errors gracefully by unwatching", async () => {
-    const userIds = ["user_1"];
-    mockRedisSpop.mockResolvedValue(userIds);
-
-    (mockPipelineExec as any)
-      .mockResolvedValueOnce([[null, "10"]])
-      .mockResolvedValueOnce([[null, "OK"]]);
-
-    mockPrismaTransaction.mockResolvedValue([{}]);
-
-    mockRedisGet.mockResolvedValue("{ invalid_json: ");
-
-    await service.processBatch();
-
-    expect(mockRedisWatch).toHaveBeenCalled();
-    expect(mockRedisUnwatch).toHaveBeenCalled();
-    expect(mockRedisMulti).not.toHaveBeenCalled();
-  });
-
-  test("should requeue users if database transaction fails", async () => {
-    const userIds = ["user_1"];
-    mockRedisSpop.mockResolvedValue(userIds);
-    
-    (mockPipelineExec as any).mockResolvedValueOnce([[null, "10"]]);
-
-    mockPrismaTransaction.mockRejectedValue(new Error("DB Error"));
-
-    await service.processBatch();
-
-    expect(mockPrismaTransaction).toHaveBeenCalled();
-    expect(mockRedisSadd).toHaveBeenCalledWith("usage:dirty_users", "user_1");
-  });
-
-  test("should shutdown redis clients on shutdown", async () => {
-    await service.shutdown();
-    expect(mockRedisClient.quit).toHaveBeenCalledTimes(2);
+    expect(mockLogger.error).toHaveBeenCalledWith("CRITICAL: Failed to requeue users", expect.any(Error));
   });
 });
