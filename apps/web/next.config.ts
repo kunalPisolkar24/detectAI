@@ -10,12 +10,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  serverExternalPackages: ["@grpc/grpc-js", "@grpc/proto-loader"],
   experimental: {
     optimizePackageImports: ["lucide-react", "framer-motion"],
     serverActions: {
       bodySizeLimit: "10mb",
     },
-    serverComponentsExternalPackages: ["@grpc/grpc-js", "@grpc/proto-loader"],
   },
 };
 
