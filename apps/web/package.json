@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "build-start": "next build && next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:generate": "prisma generate",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.3",
