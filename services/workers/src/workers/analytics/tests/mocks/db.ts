@@ -1,12 +1,15 @@
 import { mock } from "bun:test";
-export const mockUserUpdate = mock(() => Promise.resolve({}));
-export const mockPrismaTransaction = mock((promises: any[]) => Promise.resolve(promises));
+
+export const mockExecuteRawUnsafe = mock(() => Promise.resolve(0));
+export const mockDisconnect = mock(() => Promise.resolve());
+
 export const prismaMock = {
   prisma: {
-    user: {
-      update: mockUserUpdate,
-    },
-    $transaction: mockPrismaTransaction,
-    $disconnect: mock(() => Promise.resolve()),
+    $executeRawUnsafe: mockExecuteRawUnsafe,
+    $disconnect: mockDisconnect,
+  },
+  prismaPrimary: {
+    $executeRawUnsafe: mockExecuteRawUnsafe,
+    $disconnect: mockDisconnect,
   },
 };
