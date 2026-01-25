@@ -32,8 +32,9 @@ describe("SubscriptionSweeper", () => {
   });
 
   test("should return 0 and do nothing if no expired subscriptions found", async () => {
-    mockFindMany.mockResolvedValue([]);
+    (mockFindMany as any).mockResolvedValue([]);
     const count = await sweeper.processExpiredSubscriptions();
+
     expect(count).toBe(0);
     expect(mockUpdateMany).not.toHaveBeenCalled();
     expect(mockRedisClient.del).not.toHaveBeenCalled();
@@ -45,8 +46,9 @@ describe("SubscriptionSweeper", () => {
       { id: "u2", email: "u2@test.com" }
     ];
 
-    mockFindMany.mockResolvedValue(expiredUsers);
+    (mockFindMany as any).mockResolvedValue(expiredUsers);
     mockUpdateMany.mockResolvedValue({ count: 2 });
+
 
     const count = await sweeper.processExpiredSubscriptions();
 
@@ -66,16 +68,18 @@ describe("SubscriptionSweeper", () => {
   });
 
   test("should handle db error gracefully (throw and log)", async () => {
-    mockFindMany.mockResolvedValue([{ id: "u1" }]);
+    (mockFindMany as any).mockResolvedValue([{ id: "u1" }]);
     mockUpdateMany.mockRejectedValue(new Error("DB Fail"));
+
 
     expect(sweeper.processExpiredSubscriptions()).rejects.toThrow("DB Fail");
     expect(mockRedisClient.del).not.toHaveBeenCalled();
   });
 
   test("should continue if redis invalidation fails but log error", async () => {
-    mockFindMany.mockResolvedValue([{ id: "u1", email: "u1@test.com" }]);
+    (mockFindMany as any).mockResolvedValue([{ id: "u1", email: "u1@test.com" }]);
     mockUpdateMany.mockResolvedValue({ count: 1 });
+
     mockRedisClient.del.mockRejectedValue(new Error("Redis Fail"));
 
     const count = await sweeper.processExpiredSubscriptions();
