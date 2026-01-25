@@ -1,9 +1,9 @@
 import Redis, { RedisOptions } from "ioredis"
 import { env } from "@/lib/env"
 
-const globalForRedis = global as unknown as { 
-  redisWriter: Redis 
-  redisReader: Redis 
+const globalForRedis = global as unknown as {
+  redisWriter: Redis
+  redisReader: Redis
 }
 
 const getSentinelConfig = (): RedisOptions => {
@@ -20,8 +20,9 @@ const getSentinelConfig = (): RedisOptions => {
     retryStrategy: (times) => Math.min(times * 50, 2000),
     enableReadyCheck: false,
     maxRetriesPerRequest: null,
-    family: 4, 
+    family: 4,
     keepAlive: 10000,
+    lazyConnect: true,
   }
 }
 
@@ -31,18 +32,20 @@ const createRedisClients = () => {
   const writer = new Redis({
     ...options,
     role: "master",
-    lazyConnect: true,
   })
 
   const reader = new Redis({
     ...options,
-    role: "slave", 
-    lazyConnect: true,
+    role: "slave",
   })
 
-  // Prevent process crash on Redis errors
-  writer.on("error", (err) => console.error("Redis Writer Error (Ignored):", err.message))
-  reader.on("error", (err) => console.error("Redis Reader Error (Ignored):", err.message))
+  writer.on("error", (err) => {
+    console.error("Redis Writer Error:", err.message)
+  })
+
+  reader.on("error", (err) => {
+    console.error("Redis Reader Error:", err.message)
+  })
 
   return { writer, reader }
 }
