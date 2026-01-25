@@ -1,12 +1,23 @@
 import { RabbitMQWorker } from "../../shared/infrastructure/RabbitMQWorker";
 import { PaymentService } from "./services/PaymentService";
 import { prisma } from "@shared/db";
-import { redis } from "@shared/redis";
+import { RedisFactory } from "@shared/redis";
+import { LockService } from "@shared/cache/lock";
+import { MetricsService } from "@shared/monitoring/MetricsService";
+import { WorkerServer } from "@shared/infrastructure/WorkerServer";
 import { config } from "./config";
 
 const QUEUE_NAME = "payment_events";
 
-const paymentService = new PaymentService();
+const redisClient = RedisFactory.createClient(
+    config.REDIS_URL,
+    config.REDIS_MODE,
+    "PaymentsRedis"
+);
+
+const metricsService = new MetricsService("worker-payments");
+const lockService = new LockService(redisClient);
+const paymentService = new PaymentService(redisClient, lockService, metricsService);
 
 const worker = new RabbitMQWorker(
     config.RABBITMQ_URL,
@@ -15,35 +26,20 @@ const worker = new RabbitMQWorker(
 );
 
 worker.start();
+metricsService.activeWorkers.inc();
 
-const server = Bun.serve({
-    port: config.PORT,
-    fetch(req) {
-        const { pathname } = new URL(req.url);
+const server = new WorkerServer(
+    metricsService,
+    config.PORT,
+    () => worker.getStatus()
+);
 
-        if (pathname === "/health") {
-            const isHealthy = worker.getStatus();
-            return new Response(
-                JSON.stringify({
-                    status: isHealthy ? "ok" : "error",
-                    worker: isHealthy ? "active" : "disconnected",
-                }),
-                {
-                    status: isHealthy ? 200 : 503,
-                    headers: { "Content-Type": "application/json" },
-                }
-            );
-        }
-
-        return new Response("Not Found", { status: 404 });
-    },
-});
-
-console.log(`Worker listening on http://localhost:${server.port}`);
+server.start();
 
 const shutdown = async () => {
+    metricsService.activeWorkers.dec();
     await prisma.$disconnect();
-    await redis.quit();
+    await redisClient.quit();
     process.exit(0);
 };
 

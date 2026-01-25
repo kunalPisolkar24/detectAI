@@ -11,4 +11,11 @@ export const prismaMock = {
         },
         $disconnect: mock(() => Promise.resolve()),
     },
+    prismaPrimary: {
+        user: {
+            findMany: mockFindMany,
+            updateMany: mockUpdateMany,
+        },
+        $disconnect: mock(() => Promise.resolve()),
+    },
 };

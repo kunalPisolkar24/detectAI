@@ -1,17 +1,37 @@
 import { SubscriptionSweeper } from "./services/SubscriptionSweeper";
 import { prisma } from "@shared/db";
-import { redis } from "@shared/redis";
+import { RedisFactory } from "@shared/redis";
 import { Logger } from "@shared/logger";
+import { MetricsService } from "@shared/monitoring/MetricsService";
+import { WorkerServer } from "@shared/infrastructure/WorkerServer";
+import { config } from "./config";
 
-const CHECK_INTERVAL_MS = 1000 * 60 * 60; // 1 Hour
-const BATCH_COOLDOWN_MS = 5000; // 5 Seconds (if previous batch found data)
-const ERROR_COOLDOWN_MS = 60000; // 1 Minute (if error occurs)
+const CHECK_INTERVAL_MS = 1000 * 60 * 60; 
+const BATCH_COOLDOWN_MS = 5000; 
+const ERROR_COOLDOWN_MS = 60000; 
 
-const sweeper = new SubscriptionSweeper();
+const redisClient = RedisFactory.createClient(
+    config.REDIS_URL,
+    config.REDIS_MODE as "standalone" | "cluster" || "standalone",
+    "CronRedis"
+);
+
+const metricsService = new MetricsService("worker-cron");
+const sweeper = new SubscriptionSweeper(redisClient, metricsService);
+
+const server = new WorkerServer(
+    metricsService,
+    config.PORT || 7777,
+    () => redisClient.status === "ready" || redisClient.status === "connect"
+);
+
+server.start();
+
 let isShuttingDown = false;
 
 async function startWorker() {
     Logger.info("Cron Worker (Subscription Sweeper) initializing...");
+    metricsService.activeWorkers.inc();
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     Logger.info("Initialization complete. Running immediate startup sweep.");
@@ -30,6 +50,7 @@ async function startWorker() {
 
         } catch (error) {
             Logger.error("Critical error in Cron loop", error);
+            metricsService.jobErrors.inc({ job_type: "cron_loop", error_type: "critical" });
             await new Promise(resolve => setTimeout(resolve, ERROR_COOLDOWN_MS));
         }
     }
@@ -40,11 +61,12 @@ startWorker();
 const shutdown = async () => {
     if (isShuttingDown) return;
     isShuttingDown = true;
+    metricsService.activeWorkers.dec();
     
     Logger.info("Shutting down Cron Worker...");
     
     await prisma.$disconnect();
-    await redis.quit();
+    await redisClient.quit();
     
     Logger.info("Cron Worker exited gracefully");
     process.exit(0);

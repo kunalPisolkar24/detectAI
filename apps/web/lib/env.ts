@@ -5,29 +5,23 @@ export const env = createEnv({
   server: {
     DATABASE_URL: z.string().url(),
     DATABASE_URL_REPLICA: z.string().url(),
-
     NEXTAUTH_SECRET: z.string().min(1),
     NEXTAUTH_URL: z.string().url().optional(),
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-
+    LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
     GOOGLE_ID: z.string().min(1),
     GOOGLE_SECRET: z.string().min(1),
-
     GITHUB_ID: z.string().min(1),
     GITHUB_SECRET: z.string().min(1),
-
     TURNSTILE_SECRET_KEY: z.string().min(1),
-
     REDIS_SENTINELS: z.string().min(1).default("localhost:26379,localhost:26380,localhost:26381"),
     REDIS_MASTER_NAME: z.string().min(1).default("mymaster"),
     REDIS_PASSWORD: z.string().min(1).optional(),
-    REDIS_USAGE_URL: z.string().url(),
-
+    REDIS_USAGE_URL: z.string().min(1),
+    USE_REDIS_CLUSTER: z.string().transform((s) => s === "true").pipe(z.boolean()).optional(),
     FILE_EXTRACTOR_API_URL: z.string().url(),
-    
     AI_SERVICE_URL: z.string().min(1),
     AI_SERVICE_API_KEY: z.string().min(1),
-
     CHAT_SERVICE_URL: z.string().min(1).default("localhost:50051"),
   },
   client: {
@@ -40,6 +34,7 @@ export const env = createEnv({
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     NODE_ENV: process.env.NODE_ENV,
+    LOG_LEVEL: process.env.LOG_LEVEL,
     GOOGLE_ID: process.env.GOOGLE_ID,
     GOOGLE_SECRET: process.env.GOOGLE_SECRET,
     GITHUB_ID: process.env.GITHUB_ID,
@@ -50,6 +45,7 @@ export const env = createEnv({
     REDIS_PASSWORD: process.env.REDIS_PASSWORD,
     FILE_EXTRACTOR_API_URL: process.env.FILE_EXTRACTOR_API_URL,
     REDIS_USAGE_URL: process.env.REDIS_USAGE_URL,
+    USE_REDIS_CLUSTER: process.env.USE_REDIS_CLUSTER, 
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
     NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
     AI_SERVICE_URL: process.env.AI_SERVICE_URL,

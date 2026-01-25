@@ -1,9 +1,10 @@
 import { SubscriptionStatus } from "../../../../generated/prisma/client";
 import { prisma, prismaPrimary } from "@shared/db";
-import { redis } from "@shared/redis";
+import { type RedisClient } from "@shared/redis";
 import { Logger } from "@shared/logger";
 import { CacheKeys } from "@shared/cache/keys";
 import { LockService } from "@shared/cache/lock";
+import { MetricsService } from "@shared/monitoring/MetricsService";
 import type { PaymentEvent, PaymentUpdatePayload } from "../types";
 import { config } from "../config";
 
@@ -12,11 +13,22 @@ const PADDLE_API_URL = config.PADDLE_ENVIRONMENT === 'production'
   : 'https://sandbox-api.paddle.com';
 
 export class PaymentService {
+  constructor(
+    private readonly redis: RedisClient,
+    private readonly lockService: LockService,
+    private readonly metrics: MetricsService
+  ) {}
+
   public async handleEvent(event: PaymentEvent): Promise<void> {
     const { event_type, data } = event;
     const userId = data?.custom_data?.userId ?? (data as any).userId;
+    
+    const timer = this.metrics.jobDuration.startTimer({ job_type: event_type });
 
-    if (!userId && event_type !== "user.cancel_subscription") return;
+    if (!userId && event_type !== "user.cancel_subscription") {
+        timer({ status: "ignored" });
+        return;
+    }
 
     try {
       switch (event_type) {
@@ -33,8 +45,12 @@ export class PaymentService {
           await this.performCancellation(data);
           break;
       }
+      this.metrics.jobTotal.inc({ job_type: event_type });
+      timer({ status: "success" });
     } catch (error) {
       Logger.error("Error processing payment event", error, { event_type, userId });
+      this.metrics.jobErrors.inc({ job_type: event_type, error_type: "process_failure" });
+      timer({ status: "error" });
       throw error;
     }
   }
@@ -129,11 +145,12 @@ export class PaymentService {
 
     try {
       const locks: Array<(() => Promise<void>) | null> = await Promise.all(
-        keys.map(key => LockService.acquire(key))
+        keys.map(key => this.lockService.acquire(key))
       );
 
       try {
-        await redis.del(...keys);
+        await this.redis.del(...keys);
+        this.metrics.cacheOperations.inc({ operation: "invalidate", cache_type: "main" }, keys.length);
       } finally {
         await Promise.all(
           locks.map(release => release ? release() : Promise.resolve())
@@ -141,7 +158,8 @@ export class PaymentService {
       }
     } catch (error) {
       Logger.error("Failed to invalidate cache with locks", error, { userId });
-      await redis.del(...keys).catch(e => Logger.error("Fallback delete failed", e));
+      await this.redis.del(...keys).catch(e => Logger.error("Fallback delete failed", e));
+      this.metrics.jobErrors.inc({ job_type: "cache_invalidate", error_type: "lock_failure" });
     }
   }
 

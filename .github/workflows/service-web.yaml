@@ -1,4 +1,4 @@
-name: Service - Payment Worker
+name: Service - Web App
 
 on:
   workflow_dispatch:
@@ -7,19 +7,19 @@ on:
       - main
       - staging
     paths:
-      - "services/payment-service/worker-bun/**"
-      - ".github/workflows/service-payment-worker.yaml"
+      - "apps/web/**"
+      - ".github/workflows/service-web.yaml"
   pull_request:
     branches:
       - main
       - staging
     paths:
-      - "services/payment-service/worker-bun/**"
-      - ".github/workflows/service-payment-worker.yaml"
+      - "apps/web/**"
+      - ".github/workflows/service-web.yaml"
 
 env:
-  DOCKER_IMAGE_NAME: kunalpisolkar/detect-ai-payment-worker
-  SERVICE_PATH: ./services/payment-service/worker-bun
+  DOCKER_IMAGE_NAME: kunalpisolkar/detect-ai-web
+  SERVICE_PATH: apps/web
 
 jobs:
   quality-assurance:
@@ -33,16 +33,26 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v1
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
         with:
-          bun-version: latest
+          version: 8
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ env.SERVICE_PATH }}/pnpm-lock.yaml
 
       - name: Install Dependencies
-        run: bun install
+        run: pnpm install --frozen-lockfile
 
-      - name: Run Tests
-        run: bun test
+      - name: Run Linting
+        run: pnpm lint
+
+      - name: Build Application
+        run: pnpm build
 
   build-and-push:
     name: Build & Push Docker Image

@@ -1,19 +1,19 @@
-networks:
-  detectai_net:
-    name: detect_ai_network
-    external: true
-
 services:
   worker-analytics:
     container_name: worker_analytics
     build: 
       context: .
-      dockerfile: src/workers/analytics/Dockerfile.analytics
+      dockerfile: Dockerfile
     restart: always
+    command: ["bun", "run", "start:analytics"]
     env_file: .env
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
+      - REDIS_MODE=${REDIS_MODE:-standalone}
+      - NODE_ENV=production
     networks:
       - detectai_net
 
@@ -21,12 +21,16 @@ services:
     container_name: worker_cron
     build: 
       context: .
-      dockerfile: src/workers/cron/Dockerfile.cron
+      dockerfile: Dockerfile
     restart: always
+    command: ["bun", "run", "start:cron"]
     env_file: .env
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_MODE=${REDIS_MODE:-standalone}
+      - NODE_ENV=production
     networks:
       - detectai_net
 
@@ -34,14 +38,25 @@ services:
     container_name: worker_payments
     build: 
       context: .
-      dockerfile: src/workers/payments/Dockerfile.payments
+      dockerfile: Dockerfile
     restart: always
+    command: ["bun", "run", "start:payments"]
     ports:
       - "7777:7777"
+    env_file: .env
     environment:
-      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@shared_rabbitmq:5672/}
+      - RABBITMQ_URL=${RABBITMQ_URL}
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
-    env_file: .env
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_MODE=${REDIS_MODE:-standalone}
+      - PADDLE_API_KEY=${PADDLE_API_KEY}
+      - PADDLE_ENVIRONMENT=${PADDLE_ENVIRONMENT:-sandbox}
+      - NODE_ENV=production
     networks:
       - detectai_net
+
+networks:
+  detectai_net:
+    name: detect_ai_network
+    external: true

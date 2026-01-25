@@ -1,7 +1,8 @@
 FROM oven/bun:1
 WORKDIR /app
-COPY package.json bun.lockb* ./
+COPY package.json bun.lockb ./
+COPY prisma ./prisma
+RUN bun install --frozen-lockfile --production
+RUN bunx prisma generate
 COPY . .
-RUN bun install
-EXPOSE 7777
-CMD ["bun", "run", "start"]
+ENV NODE_ENV=production

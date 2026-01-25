@@ -1,33 +1,54 @@
-import { redis } from "../redis";
-
-const LOCK_TTL_MS = 5000;
-const LOCK_WAIT_MS = 100;
-const MAX_RETRIES = 20;
+import Redlock, { ExecutionError } from "redlock";
+import { type RedisClient } from "../redis";
+import { Logger } from "../logger";
 
 export class LockService {
-  static async acquire(key: string): Promise<(() => Promise<void>) | null> {
-    const lockKey = `lock:${key}`;
-    const token = crypto.randomUUID();
+  private redlock: Redlock;
+  private static readonly DEFAULT_TTL = 5000;
 
-    for (let i = 0; i < MAX_RETRIES; i++) {
-      const acquired = await redis.set(lockKey, token, "PX", LOCK_TTL_MS, "NX");
-
-      if (acquired === "OK") {
-        return async () => {
-          const script = `
-            if redis.call("get", KEYS[1]) == ARGV[1] then
-              return redis.call("del", KEYS[1])
-            else
-              return 0
-            end
-          `;
-          await redis.eval(script, 1, lockKey, token);
-        };
+  constructor(client: RedisClient) {
+    this.redlock = new Redlock(
+      [client],
+      {
+        driftFactor: 0.01,
+        retryCount: 3,
+        retryDelay: 200,
+        retryJitter: 200,
+        automaticExtensionThreshold: 500,
       }
+    );
 
-      await new Promise((resolve) => setTimeout(resolve, LOCK_WAIT_MS));
+    this.redlock.on("error", (error: any) => {
+      if (error instanceof ExecutionError) {
+        return;
+      }
+      Logger.error("Redlock Client Error", error);
+    });
+  }
+
+  async acquire(key: string, ttl: number = LockService.DEFAULT_TTL): Promise<(() => Promise<void>) | null> {
+    const lockKey = `lock:${key}`;
+
+    try {
+      const lock = await this.redlock.acquire([lockKey], ttl);
+
+      return async () => {
+        try {
+          await lock.release();
+        } catch (error) {
+          if (error instanceof ExecutionError) {
+             return;
+          }
+          Logger.warn(`Failed to release lock for ${key}`, { error });
+        }
+      };
+    } catch (error) {
+      if (error instanceof ExecutionError) {
+        return null;
+      }
+      
+      Logger.error(`Failed to acquire lock for ${key}`, error);
+      return null;
     }
-
-    return null;
   }
 }
