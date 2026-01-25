@@ -1,11 +1,14 @@
 import { mock } from "bun:test";
 
-export const mockRedisDel = mock((...args: any[]) => Promise.resolve(1));
+export const mockRedisClient = {
+  del: mock(() => Promise.resolve(0)),
+  quit: mock(() => Promise.resolve("OK")),
+  status: "ready",
+  on: mock(),
+};
 
-export const redisMock = {
-    redis: {
-        del: mockRedisDel,
-        quit: mock(() => Promise.resolve("OK")),
-        on: mock(),
-    }
+export const redisFactoryMock = {
+  RedisFactory: {
+    createClient: mock(() => mockRedisClient),
+  },
 };
