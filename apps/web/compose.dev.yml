@@ -1,3 +1,8 @@
+include:
+  - path: ./infra/docker/postgres.yml
+  - path: ./infra/docker/redis.yml
+  - path: ./infra/docker/redis-cluster.yml
+
 services:
   frontend:
     build:
