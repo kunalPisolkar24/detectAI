@@ -1,7 +1,8 @@
 services:
   frontend:
     build:
-      target: base
+      context: .
+      dockerfile: Dockerfile
     command: pnpm dev
     restart: no
     volumes:

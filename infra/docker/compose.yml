@@ -4,10 +4,10 @@ networks:
     driver: bridge
 
 include:
-  - path: ./compose.shared.yml
+  # - path: ./compose.shared.yml
   - path: ../../apps/web/compose.yml
-  - path: ../../services/document-parser/compose.yml
-  - path: ../../services/payments/gateway/compose.yml
-  - path: ../../services/chats/compose.yml
-  - path: ../../services/inference/compose.yml
-  - path: ../../services/workers/compose.yml
+  # - path: ../../services/document-parser/compose.yml
+  # - path: ../../services/payments/gateway/compose.yml
+  # - path: ../../services/chats/compose.yml
+  # - path: ../../services/inference/compose.yml
+  # - path: ../../services/workers/compose.yml
