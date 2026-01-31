@@ -1,12 +1,13 @@
 name: detect_ai_web
 
 include:
-  - path: ./infra/docker/postgres.yml
-  - path: ./infra/docker/redis.yml
-  - path: ./infra/docker/redis-cluster.yml
+  - path: ../../infra/docker/postgres.yml
+  - path: ../../infra/docker/redis.yml
+  - path: ../../infra/docker/redis-cluster.yml
 
 networks:
   detectai_net:
+    name: detect_ai_network
     external: true
 
 services:
