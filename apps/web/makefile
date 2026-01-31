@@ -1,4 +1,4 @@
-.PHONY: compile install network dev prod build-dev build-prod down logs restart
+.PHONY: compile install network dev prod build-dev build-prod down logs restart clean
 
 compile:
 	pnpm build-start
@@ -26,5 +26,8 @@ down:
 
 logs:
 	docker compose -f compose.yml -f compose.dev.yml logs -f
+
+clean:
+	docker compose -f compose.yml -f compose.dev.yml down -v --remove-orphans
 
 restart: down dev
