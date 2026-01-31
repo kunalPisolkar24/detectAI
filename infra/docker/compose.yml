@@ -6,4 +6,6 @@ networks:
     external: true
 
 include:
-  - path: ../../apps/web/compose.dev.yml
+  - path: ./postgres.yml
+  - path: ./redis.yml
+  - path: ./redis-cluster.yml
