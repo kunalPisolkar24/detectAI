@@ -1,0 +1,55 @@
+services:
+  redis-cluster-node-0:
+    image: redis:7.2-alpine
+    container_name: detect_ai_redis_cluster_0
+    restart: unless-stopped
+    command: ["redis-server", "--port", "6379", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--cluster-node-timeout", "5000", "--appendonly", "yes"]
+    networks:
+      - detectai_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-cluster-node-1:
+    image: redis:7.2-alpine
+    container_name: detect_ai_redis_cluster_1
+    restart: unless-stopped
+    command: ["redis-server", "--port", "6379", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--cluster-node-timeout", "5000", "--appendonly", "yes"]
+    networks:
+      - detectai_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-cluster-node-2:
+    image: redis:7.2-alpine
+    container_name: detect_ai_redis_cluster_2
+    restart: unless-stopped
+    command: ["redis-server", "--port", "6379", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--cluster-node-timeout", "5000", "--appendonly", "yes"]
+    networks:
+      - detectai_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-cluster-creator:
+    image: redis:7.2-alpine
+    container_name: detect_ai_redis_cluster_creator
+    networks:
+      - detectai_net
+    depends_on:
+      redis-cluster-node-0:
+        condition: service_healthy
+      redis-cluster-node-1:
+        condition: service_healthy
+      redis-cluster-node-2:
+        condition: service_healthy
+    command: >
+      sh -c "echo 'Waiting for nodes to stabilize...' && sleep 5 &&
+      echo 'yes' | redis-cli --cluster create redis-cluster-node-0:6379 redis-cluster-node-1:6379 redis-cluster-node-2:6379 --cluster-replicas 0"
