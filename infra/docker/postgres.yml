@@ -20,6 +20,7 @@ services:
       - detectai_net
     volumes:
       - pg_primary_data:/var/lib/postgresql/data
+      - ./scripts/00_init_hba.sh:/docker-entrypoint-initdb.d/00_init_hba.sh
       - ./scripts/init_replication.sql:/docker-entrypoint-initdb.d/init_replication.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d detect_ai"]
@@ -43,14 +44,23 @@ services:
       - pg_replica_data:/var/lib/postgresql/data
     command: |
       bash -c "
+      # Wait for primary to be ready (checks 'replicator' DB which we now create)
       until pg_isready -h postgres-primary -p 5432 -U replicator; do
+        echo 'Waiting for primary...'
         sleep 1
       done
+      
       if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+        echo 'Pulling base backup...'
         pg_basebackup -h postgres-primary -D /var/lib/postgresql/data -U replicator -v -P -R -X stream -C -S replica_slot_node_1
       fi
+
+      # Fix permissions and start as postgres user
+      chown -R postgres:postgres /var/lib/postgresql/data
       chmod 0700 /var/lib/postgresql/data
-      postgres -c hot_standby=on
+      
+      echo 'Starting Replica...'
+      exec gosu postgres postgres -c hot_standby=on
       "
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U replicator -h 127.0.0.1"]
