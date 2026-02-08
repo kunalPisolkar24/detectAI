@@ -5,6 +5,7 @@ include:
   - path: ../../infra/docker/redis.yml
   - path: ../../infra/docker/redis-cluster.yml
   - path: ../../services/document-parser/compose.yml
+  - path: ../../services/inference/compose.yml
 
 networks:
   detectai_net:
@@ -28,6 +29,7 @@ services:
       - USE_REDIS_CLUSTER=true
       - REDIS_USAGE_URL=redis-cluster-node-0:6379,redis-cluster-node-1:6379,redis-cluster-node-2:6379
       - FILE_EXTRACTOR_API_URL=http://document-parser:8000
+      - AI_SERVICE_URL=detect_ai_inference:50051
     networks:
       - detectai_net
     depends_on:
@@ -38,4 +40,6 @@ services:
       redis-cluster-node-0:
         condition: service_healthy
       document-parser:
+        condition: service_started
+      ai-service:
         condition: service_started
