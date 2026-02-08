@@ -14,6 +14,9 @@ services:
       - NODE_ENV=development
       - USE_REDIS_CLUSTER=true
       - REDIS_USAGE_URL=redis-cluster-node-0:6379,redis-cluster-node-1:6379,redis-cluster-node-2:6379
+      - DATABASE_URL=postgresql://user:password@postgres-primary:5432/detect_ai
+      - DATABASE_URL_REPLICA=postgresql://replicator:replicator_password@postgres-replica:5432/detect_ai
+      - REDIS_PASSWORD=
 
   postgres-primary:
     ports:
