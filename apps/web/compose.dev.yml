@@ -19,6 +19,8 @@ services:
       - REDIS_PASSWORD=user_cache_password
       - REDIS_USAGE_PASSWORD=
       - FILE_EXTRACTOR_API_URL=http://document-parser:8000
+      - AI_SERVICE_URL=detect_ai_inference:50051
+      - AI_SERVICE_API_KEY=dev-secret-key
 
   document-parser:
     ports:
