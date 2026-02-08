@@ -1,9 +1,4 @@
-version: '3.8'
-
-networks:
-  detectai_net:
-    name: detect_ai_network
-    external: true
+name: detect_ai_inference
 
 services:
   ai-service:
@@ -19,6 +14,9 @@ services:
       - detectai_net
     env_file:
       - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GRPC_PORT=50051
     deploy:
       resources:
         reservations:
@@ -26,3 +24,8 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+networks:
+  detectai_net:
+    name: detect_ai_network
+    external: true
