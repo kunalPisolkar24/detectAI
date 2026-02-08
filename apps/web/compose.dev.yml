@@ -18,6 +18,13 @@ services:
       - DATABASE_URL_REPLICA=postgresql://user:password@postgres-replica:5432/detect_ai
       - REDIS_PASSWORD=user_cache_password
       - REDIS_USAGE_PASSWORD=
+      - FILE_EXTRACTOR_API_URL=http://document-parser:8000
+
+  document-parser:
+    ports:
+      - "5001:8000"
+    environment:
+      - LOG_LEVEL=debug
 
   postgres-primary:
     ports:
