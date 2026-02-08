@@ -22,7 +22,7 @@ const createClient = (): RedisClient => {
 
     const cluster = new Redis.Cluster(nodes, {
       redisOptions: {
-        password: env.REDIS_PASSWORD,
+        password: env.REDIS_USAGE_PASSWORD,
         keepAlive: 10000,
         family: 4,
         lazyConnect: true,
@@ -42,7 +42,7 @@ const createClient = (): RedisClient => {
 
   const options: RedisOptions = {
     lazyConnect: true,
-    password: env.REDIS_PASSWORD,
+    password: env.REDIS_USAGE_PASSWORD,
     keepAlive: 10000,
     retryStrategy: (times) => Math.min(times * 50, 2000),
   }
