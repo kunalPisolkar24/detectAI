@@ -22,6 +22,58 @@ services:
       - AI_SERVICE_URL=detect_ai_inference:50051
       - AI_SERVICE_API_KEY=dev-secret-key
 
+  worker-analytics:
+    command: /bin/sh -c "bunx prisma generate && bun --watch src/workers/analytics/index.ts"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://user:password@postgres-primary:5432/detect_ai
+      - DATABASE_URL_REPLICA=postgresql://user:password@postgres-replica:5432/detect_ai
+      - REDIS_URL=redis://:user_cache_password@redis-master:6379
+      - REDIS_USAGE_URL=redis-cluster-node-0:6379,redis-cluster-node-1:6379,redis-cluster-node-2:6379
+      - REDIS_MODE=standalone
+    volumes:
+      - ../../services/workers:/app
+      - /app/node_modules
+
+  worker-cron:
+    command: /bin/sh -c "bunx prisma generate && bun --watch src/workers/cron/index.ts"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://user:password@postgres-primary:5432/detect_ai
+      - DATABASE_URL_REPLICA=postgresql://user:password@postgres-replica:5432/detect_ai
+      - REDIS_URL=redis://:user_cache_password@redis-master:6379
+      - REDIS_USAGE_URL=redis-cluster-node-0:6379,redis-cluster-node-1:6379,redis-cluster-node-2:6379
+      - REDIS_MODE=standalone
+    volumes:
+      - ../../services/workers:/app
+      - /app/node_modules
+
+  worker-payments:
+    command: /bin/sh -c "bunx prisma generate && bun --watch src/workers/payments/index.ts"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://user:password@postgres-primary:5432/detect_ai
+      - DATABASE_URL_REPLICA=postgresql://user:password@postgres-replica:5432/detect_ai
+      - REDIS_URL=redis://:user_cache_password@redis-master:6379
+      - REDIS_USAGE_URL=redis-cluster-node-0:6379,redis-cluster-node-1:6379,redis-cluster-node-2:6379
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - REDIS_MODE=standalone
+      - PADDLE_API_KEY=${PADDLE_API_KEY}
+      - PADDLE_ENVIRONMENT=sandbox
+    ports:
+      - "7777:7777"
+    volumes:
+      - ../../services/workers:/app
+      - /app/node_modules
+    depends_on:
+      rabbitmq:
+        condition: service_started
+
+  rabbitmq:
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
   document-parser:
     ports:
       - "5001:8000"
