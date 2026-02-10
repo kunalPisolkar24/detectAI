@@ -9,6 +9,7 @@ include:
   - path: ../../services/document-parser/compose.yml
   - path: ../../services/inference/compose.yml
   - path: ../../services/workers/compose.yml
+  - path: ../../services/payments/gateway/compose.yml
 
 networks:
   detectai_net:
@@ -45,4 +46,6 @@ services:
       document-parser:
         condition: service_started
       ai-service:
+        condition: service_started
+      payment-gateway:
         condition: service_started
