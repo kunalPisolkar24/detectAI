@@ -5,14 +5,12 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
 import { SubscriptionStatus } from "@/lib/generated/prisma/client"
+import { env } from "@/lib/env"
 
 type ActionState = {
   success?: boolean
   error?: string
 }
-
-const GATEWAY_URL = process.env.PAYMENT_GATEWAY_URL || "http://localhost:8080"
-const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || ""
 
 export async function cancelSubscriptionAction(): Promise<ActionState> {
   try {
@@ -49,11 +47,10 @@ export async function cancelSubscriptionAction(): Promise<ActionState> {
       data: { paddleCancellationScheduled: true }
     })
 
-    const response = await fetch(`${GATEWAY_URL}/internal/events`, {
+    const response = await fetch(`${env.PAYMENT_GATEWAY_URL}/internal/events`, {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
-        "x-api-key": INTERNAL_API_KEY
       },
       body: JSON.stringify({
         event_type: "user.cancel_subscription",
