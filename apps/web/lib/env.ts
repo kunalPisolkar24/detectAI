@@ -24,6 +24,8 @@ export const env = createEnv({
     AI_SERVICE_URL: z.string().min(1),
     AI_SERVICE_API_KEY: z.string().min(1),
     CHAT_SERVICE_URL: z.string().min(1).default("localhost:50051"),
+    PAYMENT_GATEWAY_URL: z.string().url().default("http://payment-gateway:8080"),
+    INTERNAL_API_KEY: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1),
@@ -53,6 +55,8 @@ export const env = createEnv({
     AI_SERVICE_URL: process.env.AI_SERVICE_URL,
     AI_SERVICE_API_KEY: process.env.AI_SERVICE_API_KEY,
     CHAT_SERVICE_URL: process.env.CHAT_SERVICE_URL,
+    PAYMENT_GATEWAY_URL: process.env.PAYMENT_GATEWAY_URL,
+    INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,
