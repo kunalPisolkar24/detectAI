@@ -21,6 +21,24 @@ services:
       - FILE_EXTRACTOR_API_URL=http://document-parser:8000
       - AI_SERVICE_URL=detect_ai_inference:50051
       - AI_SERVICE_API_KEY=dev-secret-key
+      - PAYMENT_GATEWAY_URL=http://payment-gateway:8080
+      - INTERNAL_API_KEY=dev-internal-key
+
+  payment-gateway:
+    build:
+      context: ../../services/payments/gateway
+      dockerfile: Dockerfile
+    restart: no
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - PADDLE_WEBHOOK_SECRET=
+      - PORT=8080
+      - LOG_LEVEL=debug
+    ports:
+      - "8081:8080"
+    depends_on:
+      rabbitmq:
+        condition: service_started
 
   worker-analytics:
     command: /bin/sh -c "bunx prisma generate && bun --watch src/workers/analytics/index.ts"
@@ -58,7 +76,7 @@ services:
       - REDIS_USAGE_URL=redis-cluster-node-0:6379,redis-cluster-node-1:6379,redis-cluster-node-2:6379
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
       - REDIS_MODE=standalone
-      - PADDLE_API_KEY=${PADDLE_API_KEY}
+      - PADDLE_API_KEY=
       - PADDLE_ENVIRONMENT=sandbox
     ports:
       - "7777:7777"
