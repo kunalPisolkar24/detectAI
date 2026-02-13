@@ -23,6 +23,15 @@ services:
       - AI_SERVICE_API_KEY=dev-secret-key
       - PAYMENT_GATEWAY_URL=http://payment-gateway:8080
       - INTERNAL_API_KEY=dev-internal-key
+      - CHAT_SERVICE_URL=chat_api:50051
+
+  chat-service:
+    environment:
+      - APP_ENV=development
+
+  chat-worker:
+    environment:
+      - APP_ENV=development
 
   payment-gateway:
     build:
