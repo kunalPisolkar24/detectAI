@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { chatService } from "../services"
+import { createChatAction, sendMessageAction, deleteChatAction, renameChatAction } from "@/features/chat/actions/chat"
 import { useChatUIStore } from "../stores/ui-store"
 import { Message, ChatSession, ChatHistoryItem } from "../types"
 import { useRouter } from "next/navigation"
@@ -14,7 +14,13 @@ export const useSendMessage = () => {
       let activeChatId = currentChatId
 
       if (!activeChatId) {
-        const newChat = await chatService.createChat(content)
+        const createResult = await createChatAction(content)
+        
+        if (!createResult.success) {
+          throw new Error(createResult.error)
+        }
+
+        const newChat = createResult.data
         activeChatId = newChat.id
         setCurrentChatId(activeChatId)
 
@@ -41,7 +47,13 @@ export const useSendMessage = () => {
         }
       })
 
-      return chatService.sendMessage(activeChatId, content, selectedModel)
+      const sendResult = await sendMessageAction(activeChatId, content, selectedModel)
+
+      if (!sendResult.success) {
+        throw new Error(sendResult.error)
+      }
+
+      return sendResult.data
     },
     onSuccess: (newMessage, _, context) => {
       useChatUIStore.getState().setRateLimited(false)
@@ -60,7 +72,7 @@ export const useSendMessage = () => {
     },
     onError: (error) => {
       console.error("Failed to send message", error)
-      if (error instanceof Error && (error.message.includes("Rate limit exceeded") || error.message.includes("429"))) {
+      if (error instanceof Error && (error.message.includes("Rate limit") || error.message.includes("429"))) {
         useChatUIStore.getState().setRateLimited(true)
         toast.error("Rate limit exceeded")
       } else {
@@ -76,7 +88,11 @@ export const useChatMutations = () => {
   const { currentChatId, setCurrentChatId } = useChatUIStore()
 
   const deleteChat = useMutation({
-    mutationFn: (chatId: string) => chatService.deleteChat(chatId),
+    mutationFn: async (chatId: string) => {
+      const result = await deleteChatAction(chatId)
+      if (!result.success) throw new Error(result.error)
+      return result.data
+    },
     onSuccess: (_, chatId) => {
       queryClient.setQueryData<ChatHistoryItem[]>(["chat-history"], (old) =>
         old?.filter(c => c.id !== chatId) || []
@@ -92,8 +108,11 @@ export const useChatMutations = () => {
   })
 
   const renameChat = useMutation({
-    mutationFn: ({ id, title }: { id: string, title: string }) =>
-      chatService.renameChat(id, title),
+    mutationFn: async ({ id, title }: { id: string, title: string }) => {
+      const result = await renameChatAction(id, title)
+      if (!result.success) throw new Error(result.error)
+      return result.data
+    },
     onSuccess: (updatedChat) => {
       queryClient.setQueryData<ChatHistoryItem[]>(["chat-history"], (old) =>
         old?.map(c => c.id === updatedChat.id ? updatedChat : c) || []
