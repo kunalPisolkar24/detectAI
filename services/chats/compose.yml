@@ -91,8 +91,9 @@ services:
     networks:
       - detectai_net
     healthcheck:
-      test: [ "CMD", "mongosh", "--eval", "rs.initiate({_id: 'configRS', configsvr: true, members: [{_id: 0, host: 'chat_mongo_config:27017'}]})" ]
-      interval: 5s
+      test: >
+        bash -c "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id: \"configRS\", configsvr: true, members: [{_id: 0, host: \"chat_mongo_config:27017\"}]}).ok }'"
+      interval: 10s
       start_period: 5s
 
   chat-mongo-shard:
@@ -102,8 +103,9 @@ services:
     networks:
       - detectai_net
     healthcheck:
-      test: [ "CMD", "mongosh", "--eval", "rs.initiate({_id: 'shardRS', members: [{_id: 0, host: 'chat_mongo_shard:27017'}]})" ]
-      interval: 5s
+      test: >
+        bash -c "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id: \"shardRS\", members: [{_id: 0, host: \"chat_mongo_shard:27017\"}]}).ok }'"
+      interval: 10s
       start_period: 5s
 
   chat-mongo-router:
