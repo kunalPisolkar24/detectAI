@@ -147,7 +147,7 @@ services:
       - WORKER_CONCURRENCY=10
       - STREAM_PARTITION_COUNT=16
     ports:
-      - "50051:50051"
+      - "50052:50051"
       - "9095:9091"
     depends_on:
       chat-mongo-init:
