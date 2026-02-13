@@ -10,6 +10,7 @@ include:
   - path: ../../services/inference/compose.yml
   - path: ../../services/workers/compose.yml
   - path: ../../services/payments/gateway/compose.yml
+  - path: ../../services/chats/compose.yml
 
 networks:
   detectai_net:
@@ -34,6 +35,7 @@ services:
       - REDIS_USAGE_URL=redis-cluster-node-0:6379,redis-cluster-node-1:6379,redis-cluster-node-2:6379
       - FILE_EXTRACTOR_API_URL=http://document-parser:8000
       - AI_SERVICE_URL=detect_ai_inference:50051
+      - CHAT_SERVICE_URL=chat_api:50051
     networks:
       - detectai_net
     depends_on:
@@ -48,4 +50,6 @@ services:
       ai-service:
         condition: service_started
       payment-gateway:
+        condition: service_started
+      chat-service:
         condition: service_started
