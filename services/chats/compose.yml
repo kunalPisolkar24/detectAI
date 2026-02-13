@@ -133,7 +133,7 @@ services:
         mongosh --host chat_mongo_router:27017 --eval 'sh.addShard(\"shardRS/chat_mongo_shard:27017\"); sh.enableSharding(\"chat_db\"); sh.shardCollection(\"chat_db.messages\", { chat_id: \"hashed\" });'
       "
 
-  api:
+  chat-service:
     build: .
     container_name: chat_api
     environment:
@@ -157,7 +157,7 @@ services:
     networks:
       - detectai_net
 
-  worker:
+  chat-worker:
     build: .
     container_name: chat_worker
     environment:
