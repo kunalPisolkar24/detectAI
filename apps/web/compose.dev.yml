@@ -25,14 +25,6 @@ services:
       - INTERNAL_API_KEY=dev-internal-key
       - CHAT_SERVICE_URL=chat_api:50051
 
-  chat-service:
-    environment:
-      - APP_ENV=development
-
-  chat-worker:
-    environment:
-      - APP_ENV=development
-
   payment-gateway:
     build:
       context: ../../services/payments/gateway
