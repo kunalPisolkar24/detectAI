@@ -4,9 +4,9 @@ services:
     container_name: detect_ai_pg_primary
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-      POSTGRES_DB: detect_ai
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST_AUTH_METHOD: md5
       POSTGRES_INITDB_ARGS: "--auth-host=md5"
     command: |
@@ -18,12 +18,14 @@ services:
       -c hot_standby_feedback=on
     networks:
       - detectai_net
+    ports:
+      - "${POSTGRES_PORT}:5432"
     volumes:
       - pg_primary_data:/var/lib/postgresql/data
       - ./scripts/00_init_hba.sh:/docker-entrypoint-initdb.d/00_init_hba.sh
       - ./scripts/init_replication.sql:/docker-entrypoint-initdb.d/init_replication.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d detect_ai"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -40,26 +42,24 @@ services:
         condition: service_healthy
     networks:
       - detectai_net
+    ports:
+      - "${POSTGRES_REPLICA_PORT}:5432"
     volumes:
       - pg_replica_data:/var/lib/postgresql/data
     command: |
       bash -c "
-      # Wait for primary to be ready (checks 'replicator' DB which we now create)
       until pg_isready -h postgres-primary -p 5432 -U replicator; do
         echo 'Waiting for primary...'
         sleep 1
       done
       
       if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
-        echo 'Pulling base backup...'
         pg_basebackup -h postgres-primary -D /var/lib/postgresql/data -U replicator -v -P -R -X stream -C -S replica_slot_node_1
       fi
 
-      # Fix permissions and start as postgres user
       chown -R postgres:postgres /var/lib/postgresql/data
       chmod 0700 /var/lib/postgresql/data
       
-      echo 'Starting Replica...'
       exec gosu postgres postgres -c hot_standby=on
       "
     healthcheck:
@@ -71,3 +71,8 @@ services:
 volumes:
   pg_primary_data:
   pg_replica_data:
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network}
+    external: true
