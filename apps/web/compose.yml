@@ -1,22 +1,3 @@
-name: detect_ai_web
-
-include:
-  - path: ../../infra/docker/postgres.yml
-  - path: ../../infra/docker/redis.yml
-  - path: ../../infra/docker/redis-cluster.yml
-  - path: ../../infra/docker/compose.shared.yml
-  
-  - path: ../../services/document-parser/compose.yml
-  - path: ../../services/inference/compose.yml
-  - path: ../../services/workers/compose.yml
-  - path: ../../services/payments/gateway/compose.yml
-  - path: ../../services/chats/compose.yml
-
-networks:
-  detectai_net:
-    name: detect_ai_network
-    external: true
-
 services:
   frontend:
     container_name: detect_ai_frontend
@@ -24,26 +5,28 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: always
-    env_file:
-      - .env
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=${NODE_ENV}
       - HOSTNAME=0.0.0.0
       - REDIS_SENTINELS=detect_ai_redis_sentinel_1:26379,detect_ai_redis_sentinel_2:26379,detect_ai_redis_sentinel_3:26379
       - REDIS_MASTER_NAME=mymaster
       - USE_REDIS_CLUSTER=true
-      - REDIS_USAGE_URL=redis-cluster-node-0:6379,redis-cluster-node-1:6379,redis-cluster-node-2:6379
-      - FILE_EXTRACTOR_API_URL=http://document-parser:8000
-      - AI_SERVICE_URL=detect_ai_inference:50051
-      - CHAT_SERVICE_URL=chat_api:50051
+      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
+      - FILE_EXTRACTOR_API_URL=${FILE_EXTRACTOR_API_URL}
+      - AI_SERVICE_URL=${AI_SERVICE_URL}
+      - CHAT_SERVICE_URL=${CHAT_SERVICE_URL}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - PAYMENT_GATEWAY_URL=${PAYMENT_GATEWAY_URL}
+    ports:
+      - "${PORT_FRONTEND}:3000"
     networks:
       - detectai_net
     depends_on:
-      redis-master:
-        condition: service_healthy
       postgres-primary:
         condition: service_healthy
-      redis-cluster-node-0:
+      redis-master:
         condition: service_healthy
       document-parser:
         condition: service_started
@@ -53,3 +36,8 @@ services:
         condition: service_started
       chat-service:
         condition: service_started
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network}
+    external: true
