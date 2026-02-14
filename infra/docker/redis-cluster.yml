@@ -53,3 +53,8 @@ services:
     command: >
       sh -c "echo 'Waiting for nodes to stabilize...' && sleep 5 &&
       echo 'yes' | redis-cli --cluster create redis-cluster-node-0:6379 redis-cluster-node-1:6379 redis-cluster-node-2:6379 --cluster-replicas 0"
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network}
+    external: true
