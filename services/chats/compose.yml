@@ -1,8 +1,3 @@
-networks:
-  detectai_net:
-    name: detect_ai_network
-    external: true
-
 services:
   chat-redis-1:
     image: redis:7.2
@@ -185,3 +180,8 @@ volumes:
   redis-chat-1-data:
   redis-chat-2-data:
   redis-chat-3-data:
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network}
+    external: true
