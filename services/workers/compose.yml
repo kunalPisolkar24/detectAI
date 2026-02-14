@@ -6,6 +6,13 @@ services:
       dockerfile: Dockerfile
     restart: always
     command: ["bun", "run", "start:analytics"]
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
+      - REDIS_MODE=standalone
     networks:
       - detectai_net
 
@@ -16,6 +23,13 @@ services:
       dockerfile: Dockerfile
     restart: always
     command: ["bun", "run", "start:cron"]
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
+      - REDIS_MODE=standalone
     networks:
       - detectai_net
 
@@ -26,10 +40,23 @@ services:
       dockerfile: Dockerfile
     restart: always
     command: ["bun", "run", "start:payments"]
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - PADDLE_API_KEY=${PADDLE_API_KEY}
+      - PADDLE_ENVIRONMENT=${PADDLE_ENVIRONMENT}
+      - REDIS_MODE=standalone
     networks:
       - detectai_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
 networks:
   detectai_net:
-    name: detect_ai_network
+    name: ${detect_ai_network}
     external: true
