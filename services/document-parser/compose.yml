@@ -1,5 +1,3 @@
-name: document_parser
-
 services:
   document-parser:
     container_name: detect_ai_doc_parser
@@ -8,12 +6,14 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      - PORT=8000
+      - PORT=${PORT_DOC_PARSER}
       - WORKERS=4
+    ports:
+      - "${PORT_DOC_PARSER}:${PORT_DOC_PARSER}"
     networks:
       - detectai_net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT_DOC_PARSER}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -21,5 +21,5 @@ services:
 
 networks:
   detectai_net:
-    name: detect_ai_network
+    name: ${detect_ai_network}
     external: true
