@@ -1,5 +1,3 @@
-name: detect_ai_inference
-
 services:
   ai-service:
     container_name: detect_ai_inference
@@ -8,15 +6,14 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "50051:50051"
-      - "8333:8333"
+      - "${PORT_INFERENCE}:50051"
+      - "${PORT_INFERENCE_METRICS}:8333"
     networks:
       - detectai_net
-    env_file:
-      - .env
     environment:
       - PYTHONUNBUFFERED=1
       - GRPC_PORT=50051
+      - AI_SERVICE_API_KEY=${AI_SERVICE_API_KEY}
     deploy:
       resources:
         reservations:
@@ -27,5 +24,5 @@ services:
 
 networks:
   detectai_net:
-    name: detect_ai_network
+    name: ${detect_ai_network}
     external: true
