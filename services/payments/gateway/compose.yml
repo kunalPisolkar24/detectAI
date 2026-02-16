@@ -7,10 +7,9 @@ services:
     restart: always
     environment:
       - RABBITMQ_URL=${RABBITMQ_URL}
-      - PADDLE_WEBHOOK_SECRET=
+      - PADDLE_WEBHOOK_SECRET=${PADDLE_WEBHOOK_SECRET}
       - PORT=8080
-      - LOG_LEVEL=debug
-      - DATABASE_URL=${DATABASE_URL}
+      - GIN_MODE=release
     ports:
       - "${PORT_GATEWAY}:8080"
     networks:
