@@ -141,8 +141,12 @@ services:
       - MONGO_URI=mongodb://chat_mongo_router:27017
       - MONGO_DATABASE=chat_db
       - REDIS_CLUSTER_ADDRS=chat_redis_1:7010,chat_redis_2:7011,chat_redis_3:7012
+      - REDIS_PASSWORD=
+      - REDIS_POOL_SIZE=100
       - WORKER_CONCURRENCY=10
       - STREAM_PARTITION_COUNT=16
+      - CACHE_TTL=24h
+      - BATCH_SIZE=50
     ports:
       - "50052:50051"
       - "9095:9091"
@@ -153,6 +157,12 @@ services:
         condition: service_started
     networks:
       - detectai_net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   chat-worker:
     build: .
@@ -164,8 +174,13 @@ services:
       - MONGO_URI=mongodb://chat_mongo_router:27017
       - MONGO_DATABASE=chat_db
       - REDIS_CLUSTER_ADDRS=chat_redis_1:7010,chat_redis_2:7011,chat_redis_3:7012
+      - REDIS_PASSWORD=
+      - REDIS_POOL_SIZE=100
+      - WORKER_CONCURRENCY=10
       - BATCH_SIZE=50
       - STREAM_PARTITION_COUNT=16
+      - CACHE_TTL=24h
+      - GRPC_PORT=:50051
     ports:
       - "9099:9099"
     depends_on:
@@ -175,6 +190,12 @@ services:
         condition: service_started
     networks:
       - detectai_net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9099/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
 volumes:
   redis-chat-1-data:
