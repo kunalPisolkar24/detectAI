@@ -11,10 +11,20 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_USAGE_URL=${REDIS_USAGE_URL}
-      - REDIS_MODE=standalone
+      - REDIS_MODE=cluster
+      - PORT=7001
+    ports:
+      - "7001:7001"
     networks:
       - detectai_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   worker-cron:
     container_name: worker_cron
@@ -28,10 +38,19 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
-      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_MODE=standalone
+      - PORT=7002
+    ports:
+      - "7002:7002"
     networks:
       - detectai_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   worker-payments:
     container_name: worker_payments
@@ -45,16 +64,25 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
-      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_MODE=standalone
       - RABBITMQ_URL=${RABBITMQ_URL}
       - PADDLE_API_KEY=${PADDLE_API_KEY}
       - PADDLE_ENVIRONMENT=${PADDLE_ENVIRONMENT}
-      - REDIS_MODE=standalone
+      - PORT=7003
+    ports:
+      - "7003:7003"
     networks:
       - detectai_net
     depends_on:
       rabbitmq:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
 networks:
   detectai_net:
