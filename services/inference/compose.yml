@@ -12,8 +12,15 @@ services:
       - detectai_net
     environment:
       - PYTHONUNBUFFERED=1
+      
+      - ENV=${NODE_ENV}
       - GRPC_PORT=50051
-      - AI_SERVICE_API_KEY=${AI_SERVICE_API_KEY}
+      - METRICS_PORT=8333
+      - API_KEY=${AI_SERVICE_API_KEY}
+      - MODEL_CACHE_DIR=./models
+      - BATCH_SIZE=${BATCH_SIZE:-32}
+      - BATCH_TIMEOUT=${BATCH_TIMEOUT:-0.05}
+      - MAX_TEXT_LENGTH=${MAX_TEXT_LENGTH:-5000}
     deploy:
       resources:
         reservations:
