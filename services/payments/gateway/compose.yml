@@ -9,7 +9,7 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL}
       - PADDLE_WEBHOOK_SECRET=${PADDLE_WEBHOOK_SECRET}
       - PORT=8080
-      - GIN_MODE=release
+      - GIN_MODE=${GIN_MODE:-release}
     ports:
       - "${PORT_GATEWAY}:8080"
     networks:
