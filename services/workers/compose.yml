@@ -13,10 +13,10 @@ services:
       - REDIS_URL=${REDIS_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_USAGE_URL=${REDIS_USAGE_URL}
-      - REDIS_MODE=cluster
-      - PORT=7001
+      - REDIS_MODE=${REDIS_MODE_CLUSTER:-cluster}
+      - PORT=${WORKER_ANALYTICS_PORT:-7001}
     ports:
-      - "7001:7001"
+      - "${WORKER_ANALYTICS_PORT:-7001}:7001"
     networks:
       - detectai_net
     healthcheck:
@@ -39,10 +39,10 @@ services:
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_MODE=standalone
-      - PORT=7002
+      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
+      - PORT=${WORKER_CRON_PORT:-7002}
     ports:
-      - "7002:7002"
+      - "${WORKER_CRON_PORT:-7002}:7002"
     networks:
       - detectai_net
     healthcheck:
@@ -65,13 +65,13 @@ services:
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_MODE=standalone
+      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
       - RABBITMQ_URL=${RABBITMQ_URL}
       - PADDLE_API_KEY=${PADDLE_API_KEY}
       - PADDLE_ENVIRONMENT=${PADDLE_ENVIRONMENT}
-      - PORT=7003
+      - PORT=${WORKER_PAYMENTS_PORT:-7003}
     ports:
-      - "7003:7003"
+      - "${WORKER_PAYMENTS_PORT:-7003}:7003"
     networks:
       - detectai_net
     depends_on:
