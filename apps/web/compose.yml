@@ -9,7 +9,7 @@ services:
       # Environment
       - NODE_ENV=${NODE_ENV}
       - LOG_LEVEL=${LOG_LEVEL}
-      - HOSTNAME=0.0.0.0
+      - HOSTNAME=${HOSTNAME:-0.0.0.0}
       # OAuth
       - GITHUB_ID=${GITHUB_ID}
       - GITHUB_SECRET=${GITHUB_SECRET}
@@ -23,10 +23,10 @@ services:
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       # Redis User Cache Sentinel
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_MASTER_NAME=mymaster
-      - REDIS_SENTINELS=detect_ai_redis_sentinel_1:26379,detect_ai_redis_sentinel_2:26379,detect_ai_redis_sentinel_3:26379
+      - REDIS_MASTER_NAME=${REDIS_MASTER_NAME:-mymaster}
+      - REDIS_SENTINELS=${REDIS_SENTINELS:-detect_ai_redis_sentinel_1:26379,detect_ai_redis_sentinel_2:26379,detect_ai_redis_sentinel_3:26379}
       # Redis Analytics Cluster
-      - USE_REDIS_CLUSTER=true
+      - USE_REDIS_CLUSTER=${USE_REDIS_CLUSTER:-true}
       - REDIS_USAGE_URL=${REDIS_USAGE_URL}
       # Cloudflare Turnstile
       - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
