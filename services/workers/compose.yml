@@ -1,11 +1,11 @@
 services:
   worker-analytics:
     container_name: worker_analytics
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
     restart: always
-    command: ["bun", "run", "start:analytics"]
+    command: [ "bun", "run", "start:analytics" ]
     environment:
       - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
@@ -13,14 +13,14 @@ services:
       - REDIS_URL=${REDIS_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_USAGE_URL=${REDIS_USAGE_URL}
-      - REDIS_MODE=${REDIS_MODE_CLUSTER:-cluster}
+      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
       - PORT=${WORKER_ANALYTICS_PORT:-7001}
     ports:
       - "${WORKER_ANALYTICS_PORT:-7001}:7001"
     networks:
       - detectai_net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7001/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:7001/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -28,11 +28,11 @@ services:
 
   worker-cron:
     container_name: worker_cron
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
     restart: always
-    command: ["bun", "run", "start:cron"]
+    command: [ "bun", "run", "start:cron" ]
     environment:
       - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
@@ -46,7 +46,7 @@ services:
     networks:
       - detectai_net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7002/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:7002/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -54,11 +54,11 @@ services:
 
   worker-payments:
     container_name: worker_payments
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
     restart: always
-    command: ["bun", "run", "start:payments"]
+    command: [ "bun", "run", "start:payments" ]
     environment:
       - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
@@ -78,7 +78,7 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7003/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:7003/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
