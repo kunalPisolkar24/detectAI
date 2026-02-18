@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -61,13 +62,28 @@ func (c *Consumer) runWorker(ctx context.Context, partitionID int, consumerName 
 	consumer := fmt.Sprintf("%s-p%d", consumerName, partitionID)
 	stream := fmt.Sprintf("global:ingest:{%d}", partitionID)
 
-	err := c.client.XGroupCreateMkStream(ctx, stream, group, "$").Err()
-	if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
-		logger.Log.Error("Failed to create XGroup", zap.String("stream", stream), zap.Error(err))
+	ensureGroup := func() error {
+		err := c.client.XGroupCreateMkStream(ctx, stream, group, "$").Err()
+		if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
+			return err
+		}
+		return nil
+	}
+
+	for {
+		if err := ensureGroup(); err != nil {
+			logger.Log.Error("Failed to create XGroup, retrying...", zap.String("stream", stream), zap.Error(err))
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+				continue
+			}
+		}
+		break
 	}
 
 	streams := []string{stream, ">"}
-
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
@@ -88,7 +104,11 @@ func (c *Consumer) runWorker(ctx context.Context, partitionID int, consumerName 
 
 			if err != nil {
 				if err != redis.Nil {
-					logger.Log.Error("XReadGroup failed", zap.String("stream", stream), zap.Error(err))
+					logger.Log.Error("XReadGroup failed", zap.String("stream", stream), zap.Error(err))	
+					if strings.HasPrefix(err.Error(), "NOGROUP") {
+						ensureGroup()
+					}
+					
 					time.Sleep(time.Second)
 				}
 				continue
@@ -124,7 +144,9 @@ func (c *Consumer) runRecovery(ctx context.Context, consumerName string) {
 				}).Result()
 
 				if err != nil && err != redis.Nil {
-					logger.Log.Error("Recovery failed", zap.String("stream", stream), zap.Error(err))
+					if !strings.HasPrefix(err.Error(), "NOGROUP") {
+						logger.Log.Error("Recovery failed", zap.String("stream", stream), zap.Error(err))
+					}
 					continue
 				}
 
