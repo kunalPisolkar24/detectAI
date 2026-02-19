@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
 import { SubscriptionStatus } from "@/lib/generated/prisma/client"
 import { env } from "@/lib/env"
+import { userService } from "@/features/auth/services/user-service"
 
 type ActionState = {
   success?: boolean
@@ -24,9 +25,10 @@ export async function cancelSubscriptionAction(): Promise<ActionState> {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { 
-        paddleSubscriptionId: true, 
-        paddleSubscriptionStatus: true 
+      select: {
+        email: true,
+        paddleSubscriptionId: true,
+        paddleSubscriptionStatus: true
       },
     })
 
@@ -34,8 +36,8 @@ export async function cancelSubscriptionAction(): Promise<ActionState> {
       return { error: "No active subscription details found." }
     }
 
-    const isActive = 
-      user.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE || 
+    const isActive =
+      user.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE ||
       user.paddleSubscriptionStatus === SubscriptionStatus.TRIALING
 
     if (!isActive) {
@@ -47,9 +49,11 @@ export async function cancelSubscriptionAction(): Promise<ActionState> {
       data: { paddleCancellationScheduled: true }
     })
 
+    await userService.invalidateUserCache(userId, user.email)
+
     const response = await fetch(`${env.PAYMENT_GATEWAY_URL}/internal/events`, {
       method: "POST",
-      headers: { 
+      headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -66,6 +70,7 @@ export async function cancelSubscriptionAction(): Promise<ActionState> {
         where: { id: userId },
         data: { paddleCancellationScheduled: false }
       })
+      await userService.invalidateUserCache(userId, user.email)
       console.error(`Gateway Error: ${response.statusText}`)
       return { error: "Failed to communicate with payment provider. Please try again." }
     }

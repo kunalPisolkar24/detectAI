@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { toast } from "sonner"
-import { CreditCard, Sparkles, Loader2, AlertTriangle } from "lucide-react"
+import { CreditCard, Sparkles, Loader2, AlertTriangle, Clock } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { teko, inter } from "@/lib/fonts"
@@ -28,9 +28,10 @@ interface BillingTabProps {
     subscriptionEndsAt: Date | null
     paddleSubscriptionStatus: string | null
   }
+  paddleCancellationScheduled: boolean
 }
 
-export const BillingTab = ({ user }: BillingTabProps) => {
+export const BillingTab = ({ user, paddleCancellationScheduled }: BillingTabProps) => {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -93,7 +94,9 @@ export const BillingTab = ({ user }: BillingTabProps) => {
             {user.isPremium ? (
               <div className="flex flex-col gap-4">
                 <div className="grid gap-1">
-                  <span className="text-xs uppercase text-muted-foreground font-medium">Next Billing Date</span>
+                  <span className="text-xs uppercase text-muted-foreground font-medium">
+                    {paddleCancellationScheduled ? "Access Until" : "Next Billing Date"}
+                  </span>
                   <span className={cn("text-lg", inter.className)}>
                     {user.subscriptionEndsAt
                       ? format(new Date(user.subscriptionEndsAt), "MMMM d, yyyy")
@@ -101,61 +104,78 @@ export const BillingTab = ({ user }: BillingTabProps) => {
                   </span>
                 </div>
 
-                <div className="pt-4 flex gap-3">
-                  <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        disabled={isPending}
-                        className={cn(
-                          "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500",
-                          "dark:hover:bg-red-950/20 transition-all duration-200 tracking-wide text-lg",
-                          teko.className
-                        )}
-                      >
-                        CANCEL SUBSCRIPTION
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle className={cn("flex items-center gap-2", teko.className)}>
-                          <AlertTriangle className="h-5 w-5 text-red-500" />
-                          Confirm Cancellation
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-muted-foreground">
-                          Are you sure you want to cancel your subscription?
-                          <br /><br />
-                          Your plan will remain active until <span className="font-medium text-foreground">{user.subscriptionEndsAt ? format(new Date(user.subscriptionEndsAt), "MMMM d, yyyy") : "the period ends"}</span>. After that, your account will revert to the Free tier.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel
-                          disabled={isPending}
-                          className={cn("text-base tracking-wide", teko.className)}
-                        >
-                          KEEP SUBSCRIPTION
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={(e) => {
-                            e.preventDefault()
-                            handleConfirmCancel()
-                          }}
+                {paddleCancellationScheduled && (
+                  <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+                    <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                    <p className="text-amber-700 dark:text-amber-400 leading-snug">
+                      Cancellation scheduled. Your Premium access remains active until{" "}
+                      <span className="font-semibold">
+                        {user.subscriptionEndsAt
+                          ? format(new Date(user.subscriptionEndsAt), "MMMM d, yyyy")
+                          : "the end of the billing period"}
+                      </span>
+                      , after which your account will revert to the Free tier.
+                    </p>
+                  </div>
+                )}
+
+                {!paddleCancellationScheduled && (
+                  <div className="pt-4 flex gap-3">
+                    <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="outline"
                           disabled={isPending}
                           className={cn(
-                            "bg-red-600 hover:bg-red-700 text-white border-red-600 dark:border-red-600 tracking-wide text-lg",
+                            "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500",
+                            "dark:hover:bg-red-950/20 transition-all duration-200 tracking-wide text-lg",
                             teko.className
                           )}
                         >
-                          {isPending ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            "YES, CANCEL PLAN"
-                          )}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
+                          CANCEL SUBSCRIPTION
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className={cn("flex items-center gap-2", teko.className)}>
+                            <AlertTriangle className="h-5 w-5 text-red-500" />
+                            Confirm Cancellation
+                          </AlertDialogTitle>
+                          <AlertDialogDescription className="text-muted-foreground">
+                            Are you sure you want to cancel your subscription?
+                            <br /><br />
+                            Your plan will remain active until <span className="font-medium text-foreground">{user.subscriptionEndsAt ? format(new Date(user.subscriptionEndsAt), "MMMM d, yyyy") : "the period ends"}</span>. After that, your account will revert to the Free tier.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel
+                            disabled={isPending}
+                            className={cn("text-base tracking-wide", teko.className)}
+                          >
+                            KEEP SUBSCRIPTION
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={(e) => {
+                              e.preventDefault()
+                              handleConfirmCancel()
+                            }}
+                            disabled={isPending}
+                            className={cn(
+                              "bg-red-600 hover:bg-red-700 text-white border-red-600 dark:border-red-600 tracking-wide text-lg",
+                              teko.className
+                            )}
+                          >
+                            {isPending ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              "YES, CANCEL PLAN"
+                            )}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="pt-4">

@@ -24,6 +24,7 @@ interface ProfileViewProps {
     apiCallCountTotal: number
     subscriptionEndsAt: Date | null
     paddleSubscriptionStatus: string | null
+    paddleCancellationScheduled: boolean
   }
 }
 
@@ -123,7 +124,7 @@ export const ProfileView = ({ user }: ProfileViewProps) => {
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.2 }}
             >
-              <BillingTab user={user} />
+              <BillingTab user={user} paddleCancellationScheduled={user.paddleCancellationScheduled} />
             </m.div>
           )}
         </AnimatePresence>
