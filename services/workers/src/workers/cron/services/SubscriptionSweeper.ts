@@ -1,4 +1,4 @@
-import { prisma } from "@shared/db";
+import { prismaPrimary } from "@shared/db";
 import { type RedisClient } from "@shared/redis";
 import { Logger } from "@shared/logger";
 import { SubscriptionStatus } from "../../../../generated/prisma/client";
@@ -11,14 +11,14 @@ export class SubscriptionSweeper {
   constructor(
     private readonly redis: RedisClient,
     private readonly metrics: MetricsService
-  ) {}
+  ) { }
 
   public async processExpiredSubscriptions(): Promise<number> {
     const timer = this.metrics.jobDuration.startTimer({ job_type: "sweep_expired" });
     const now = new Date();
 
     try {
-      const expiredUsers = await prisma.user.findMany({
+      const expiredUsers = await prismaPrimary.user.findMany({
         where: {
           OR: [
             { paddleSubscriptionStatus: SubscriptionStatus.ACTIVE },
@@ -43,7 +43,7 @@ export class SubscriptionSweeper {
       Logger.info(`Found ${expiredUsers.length} expired subscriptions to sweep.`);
 
       await this.bulkDowngradeUsers(expiredUsers);
-      
+
       this.metrics.jobTotal.inc({ job_type: "user_downgrade" }, expiredUsers.length);
       timer({ status: "success" });
       return expiredUsers.length;
@@ -60,7 +60,7 @@ export class SubscriptionSweeper {
     const userIds = users.map(u => u.id);
 
     try {
-      await prisma.user.updateMany({
+      await prismaPrimary.user.updateMany({
         where: {
           id: { in: userIds }
         },
@@ -73,7 +73,7 @@ export class SubscriptionSweeper {
       });
 
       await this.bulkInvalidateCache(users);
-      
+
       Logger.info(`Successfully swept batch of ${users.length} users`);
     } catch (error) {
       Logger.error("Failed to perform bulk sweep", error);
