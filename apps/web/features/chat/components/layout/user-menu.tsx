@@ -24,15 +24,12 @@ import {
 } from "lucide-react"
 import { inter } from "@/lib/fonts"
 
-import { useChatUIStore } from "../../stores/ui-store"
-
 interface UserMenuProps {
   isCollapsed: boolean
 }
 
 export const UserMenu = ({ isCollapsed }: UserMenuProps) => {
   const router = useRouter()
-  const { userType } = useChatUIStore()
   const { data: session } = useSession()
   const { setTheme, resolvedTheme } = useTheme()
 
