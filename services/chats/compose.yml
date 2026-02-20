@@ -3,15 +3,7 @@ services:
     image: redis:7.2
     container_name: chat_redis_1
     command: >
-      redis-server 
-      --port 7010 
-      --cluster-enabled yes 
-      --cluster-config-file nodes.conf 
-      --cluster-node-timeout 5000 
-      --appendonly yes 
-      --cluster-announce-ip chat_redis_1
-      --cluster-announce-port 7010 
-      --cluster-announce-bus-port 17010
+      redis-server  --port 7010  --cluster-enabled yes  --cluster-config-file nodes.conf  --cluster-node-timeout 5000  --appendonly yes  --cluster-announce-ip chat_redis_1 --cluster-announce-port 7010  --cluster-announce-bus-port 17010
     ports:
       - "7010:7010"
       - "17010:17010"
@@ -24,15 +16,7 @@ services:
     image: redis:7.2
     container_name: chat_redis_2
     command: >
-      redis-server 
-      --port 7011 
-      --cluster-enabled yes 
-      --cluster-config-file nodes.conf 
-      --cluster-node-timeout 5000 
-      --appendonly yes 
-      --cluster-announce-ip chat_redis_2
-      --cluster-announce-port 7011 
-      --cluster-announce-bus-port 17011
+      redis-server  --port 7011  --cluster-enabled yes  --cluster-config-file nodes.conf  --cluster-node-timeout 5000  --appendonly yes  --cluster-announce-ip chat_redis_2 --cluster-announce-port 7011  --cluster-announce-bus-port 17011
     ports:
       - "7011:7011"
       - "17011:17011"
@@ -45,15 +29,7 @@ services:
     image: redis:7.2
     container_name: chat_redis_3
     command: >
-      redis-server 
-      --port 7012 
-      --cluster-enabled yes 
-      --cluster-config-file nodes.conf 
-      --cluster-node-timeout 5000 
-      --appendonly yes 
-      --cluster-announce-ip chat_redis_3
-      --cluster-announce-port 7012 
-      --cluster-announce-bus-port 17012
+      redis-server  --port 7012  --cluster-enabled yes  --cluster-config-file nodes.conf  --cluster-node-timeout 5000  --appendonly yes  --cluster-announce-ip chat_redis_3 --cluster-announce-port 7012  --cluster-announce-bus-port 17012
     ports:
       - "7012:7012"
       - "17012:17012"
@@ -70,12 +46,7 @@ services:
       - chat-redis-2
       - chat-redis-3
     command: >
-      bash -c "sleep 5 && 
-      redis-cli --cluster create 
-      chat_redis_1:7010 
-      chat_redis_2:7011 
-      chat_redis_3:7012 
-      --cluster-replicas 0 --cluster-yes"
+      bash -c "sleep 5 &&  redis-cli --cluster create  chat_redis_1:7010  chat_redis_2:7011  chat_redis_3:7012  --cluster-replicas 0 --cluster-yes"
     networks:
       - detectai_net
 
@@ -83,6 +54,9 @@ services:
     image: mongo:6.0
     container_name: chat_mongo_config
     command: mongod --configsvr --replSet configRS --bind_ip_all --port 27017
+    volumes:
+      - chat-mongo-config-db:/data/db
+      - chat-mongo-config-data:/data/configdb
     networks:
       - detectai_net
     healthcheck:
@@ -91,15 +65,45 @@ services:
       interval: 10s
       start_period: 5s
 
-  chat-mongo-shard:
+  chat-mongo-shard-1:
     image: mongo:6.0
-    container_name: chat_mongo_shard
-    command: mongod --shardsvr --replSet shardRS --bind_ip_all --port 27017
+    container_name: chat_mongo_shard_1
+    command: mongod --shardsvr --replSet shardRS1 --bind_ip_all --port 27017
+    volumes:
+      - chat-mongo-shard-1-data:/data/db
     networks:
       - detectai_net
     healthcheck:
       test: >
-        bash -c "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id: \"shardRS\", members: [{_id: 0, host: \"chat_mongo_shard:27017\"}]}).ok }'"
+        bash -c "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id: \"shardRS1\", members: [{_id: 0, host: \"chat_mongo_shard_1:27017\"}]}).ok }'"
+      interval: 10s
+      start_period: 5s
+
+  chat-mongo-shard-2:
+    image: mongo:6.0
+    container_name: chat_mongo_shard_2
+    command: mongod --shardsvr --replSet shardRS2 --bind_ip_all --port 27017
+    volumes:
+      - chat-mongo-shard-2-data:/data/db
+    networks:
+      - detectai_net
+    healthcheck:
+      test: >
+        bash -c "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id: \"shardRS2\", members: [{_id: 0, host: \"chat_mongo_shard_2:27017\"}]}).ok }'"
+      interval: 10s
+      start_period: 5s
+
+  chat-mongo-shard-3:
+    image: mongo:6.0
+    container_name: chat_mongo_shard_3
+    command: mongod --shardsvr --replSet shardRS3 --bind_ip_all --port 27017
+    volumes:
+      - chat-mongo-shard-3-data:/data/db
+    networks:
+      - detectai_net
+    healthcheck:
+      test: >
+        bash -c "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id: \"shardRS3\", members: [{_id: 0, host: \"chat_mongo_shard_3:27017\"}]}).ok }'"
       interval: 10s
       start_period: 5s
 
@@ -114,7 +118,11 @@ services:
     depends_on:
       chat-mongo-config:
         condition: service_healthy
-      chat-mongo-shard:
+      chat-mongo-shard-1:
+        condition: service_healthy
+      chat-mongo-shard-2:
+        condition: service_healthy
+      chat-mongo-shard-3:
         condition: service_healthy
 
   chat-mongo-init:
@@ -127,7 +135,7 @@ services:
     command: >
       bash -c "
         sleep 10 &&
-        mongosh --host chat_mongo_router:27017 --eval 'sh.addShard(\"shardRS/chat_mongo_shard:27017\"); sh.enableSharding(\"chat_db\"); sh.shardCollection(\"chat_db.messages\", { chat_id: \"hashed\" });'
+        mongosh --host chat_mongo_router:27017 --eval 'try { sh.addShard(\"shardRS1/chat_mongo_shard_1:27017\"); } catch(e) {}; try { sh.addShard(\"shardRS2/chat_mongo_shard_2:27017\"); } catch(e) {}; try { sh.addShard(\"shardRS3/chat_mongo_shard_3:27017\"); } catch(e) {}; try { sh.enableSharding(\"chat_db\"); } catch(e) {}; try { sh.shardCollection(\"chat_db.messages\", { chat_id: \"hashed\" }); } catch(e) {};'
       "
 
   chat-service:
@@ -158,7 +166,7 @@ services:
     networks:
       - detectai_net
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/metrics"]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/metrics" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -191,7 +199,7 @@ services:
     networks:
       - detectai_net
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9099/metrics"]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9099/metrics" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -201,6 +209,12 @@ volumes:
   redis-chat-1-data:
   redis-chat-2-data:
   redis-chat-3-data:
+  chat-mongo-config-db:
+  chat-mongo-config-data:
+  chat-mongo-shard-1-data:
+  chat-mongo-shard-2-data:
+  chat-mongo-shard-3-data:
+
 
 networks:
   detectai_net:
