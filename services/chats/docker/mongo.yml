@@ -1,0 +1,126 @@
+services:
+  chat-mongo-config:
+    image: mongo:6.0
+    container_name: chat_mongo_config
+    restart: unless-stopped
+    command: mongod --configsvr --replSet configRS --bind_ip_all --port 27017
+    volumes:
+      - chat-mongo-config-db:/data/db
+      - chat-mongo-config-data:/data/configdb
+    networks:
+      - detectai_net
+    healthcheck:
+      test: >
+        bash -c "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id: \"configRS\", configsvr: true, members: [{_id: 0, host: \"chat_mongo_config:27017\"}]}).ok }'"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  chat-mongo-shard-1:
+    image: mongo:6.0
+    container_name: chat_mongo_shard_1
+    restart: unless-stopped
+    command: mongod --shardsvr --replSet shardRS1 --bind_ip_all --port 27017
+    volumes:
+      - chat-mongo-shard-1-data:/data/db
+    networks:
+      - detectai_net
+    healthcheck:
+      test: >
+        bash -c "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id: \"shardRS1\", members: [{_id: 0, host: \"chat_mongo_shard_1:27017\"}]}).ok }'"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  chat-mongo-shard-2:
+    image: mongo:6.0
+    container_name: chat_mongo_shard_2
+    restart: unless-stopped
+    command: mongod --shardsvr --replSet shardRS2 --bind_ip_all --port 27017
+    volumes:
+      - chat-mongo-shard-2-data:/data/db
+    networks:
+      - detectai_net
+    healthcheck:
+      test: >
+        bash -c "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id: \"shardRS2\", members: [{_id: 0, host: \"chat_mongo_shard_2:27017\"}]}).ok }'"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  chat-mongo-shard-3:
+    image: mongo:6.0
+    container_name: chat_mongo_shard_3
+    restart: unless-stopped
+    command: mongod --shardsvr --replSet shardRS3 --bind_ip_all --port 27017
+    volumes:
+      - chat-mongo-shard-3-data:/data/db
+    networks:
+      - detectai_net
+    healthcheck:
+      test: >
+        bash -c "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id: \"shardRS3\", members: [{_id: 0, host: \"chat_mongo_shard_3:27017\"}]}).ok }'"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  chat-mongo-router:
+    image: mongo:6.0
+    container_name: chat_mongo_router
+    restart: unless-stopped
+    command: mongos --configdb configRS/chat_mongo_config:27017 --bind_ip_all --port 27017
+    ports:
+      - "27018:27017"
+    networks:
+      - detectai_net
+    depends_on:
+      chat-mongo-config:
+        condition: service_healthy
+      chat-mongo-shard-1:
+        condition: service_healthy
+      chat-mongo-shard-2:
+        condition: service_healthy
+      chat-mongo-shard-3:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  chat-mongo-init:
+    image: mongo:6.0
+    container_name: chat_mongo_init
+    restart: on-failure
+    networks:
+      - detectai_net
+    depends_on:
+      chat-mongo-router:
+        condition: service_healthy
+    command: >
+      bash -c "
+        mongosh --host chat_mongo_router:27017 --eval '
+          try { sh.addShard(\"shardRS1/chat_mongo_shard_1:27017\"); } catch(e) {};
+          try { sh.addShard(\"shardRS2/chat_mongo_shard_2:27017\"); } catch(e) {};
+          try { sh.addShard(\"shardRS3/chat_mongo_shard_3:27017\"); } catch(e) {};
+          try { sh.enableSharding(\"chat_db\"); } catch(e) {};
+          try { sh.shardCollection(\"chat_db.messages\", { chat_id: \"hashed\" }); } catch(e) {};
+        '
+      "
+
+volumes:
+  chat-mongo-config-db:
+  chat-mongo-config-data:
+  chat-mongo-shard-1-data:
+  chat-mongo-shard-2-data:
+  chat-mongo-shard-3-data:
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network}
+    external: true
