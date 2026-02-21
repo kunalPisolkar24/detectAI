@@ -36,15 +36,16 @@ const createExtendedClient = () => {
         async $allOperations({ model, operation, args, query }) {
           const start = performance.now();
           const isRead = READ_OPERATIONS.includes(operation);
-          
+
           try {
-            const result = await (isRead 
-              ? (prismaReplica as any)[model][operation](args) 
+            const result = await (isRead
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              ? (prismaReplica as any)[model][operation](args)
               : query(args));
-            
+
             const duration = (performance.now() - start) / 1000;
             metrics.dbQueryDuration.observe(
-              { model, operation, status: 'success' }, 
+              { model, operation, status: 'success' },
               duration
             );
 
@@ -52,17 +53,17 @@ const createExtendedClient = () => {
           } catch (error) {
             const duration = (performance.now() - start) / 1000;
             metrics.dbQueryDuration.observe(
-              { model, operation, status: 'error' }, 
+              { model, operation, status: 'error' },
               duration
             );
-            
-            logger.error({ 
-              msg: "DB Query Failed", 
-              model, 
-              operation, 
-              error: error instanceof Error ? error.message : error 
+
+            logger.error({
+              msg: "DB Query Failed",
+              model,
+              operation,
+              error: error instanceof Error ? error.message : error
             });
-            
+
             throw error;
           }
         },

@@ -22,7 +22,7 @@ redlock.on("error", (error) => {
 export class LockService {
   private static instance: LockService
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): LockService {
     if (!LockService.instance) {
@@ -37,11 +37,11 @@ export class LockService {
     ttl: number = 5000
   ): Promise<T> {
     const keys = Array.isArray(resources) ? resources.map(k => `lock:${k}`) : [`lock:${resources}`]
-    
+
     let lock
     try {
       lock = await redlock.acquire(keys, ttl)
-    } catch (error) {
+    } catch {
       throw new Error(`Failed to acquire lock for resources: ${keys.join(", ")}`)
     }
 

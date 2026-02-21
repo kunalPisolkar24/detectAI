@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { getGrpcClient, getGrpcMetadata } from "@/lib/grpc-client"
 import { AnalysisResult, ModelType } from "../types"
 import { metrics } from "@/lib/metrics"
@@ -16,7 +17,7 @@ export const inferenceService = {
   async detect(text: string, model: ModelType): Promise<AnalysisResult> {
     const client = getGrpcClient()
     const metadata = getGrpcMetadata()
-    
+
     const method = model === "spark" ? "DetectSpark" : "DetectFlare"
     const start = performance.now()
 
@@ -39,7 +40,7 @@ export const inferenceService = {
         const result: AnalysisResult = {
           model,
           label: response.is_ai_generated ? "AI" : "Human",
-          confidence: response.confidence_score / 100, 
+          confidence: response.confidence_score / 100,
           scores: {
             ai: aiScore,
             human: humanScore

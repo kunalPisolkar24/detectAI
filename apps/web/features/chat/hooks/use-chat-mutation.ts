@@ -15,7 +15,7 @@ export const useSendMessage = () => {
 
       if (!activeChatId) {
         const createResult = await createChatAction(content)
-        
+
         if (!createResult.success) {
           throw new Error(createResult.error)
         }
@@ -55,7 +55,7 @@ export const useSendMessage = () => {
 
       return sendResult.data
     },
-    onSuccess: (newMessage, _, context) => {
+    onSuccess: (newMessage) => {
       useChatUIStore.getState().setRateLimited(false)
 
       const activeChatId = useChatUIStore.getState().currentChatId

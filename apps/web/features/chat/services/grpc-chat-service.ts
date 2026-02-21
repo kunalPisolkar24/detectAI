@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import "server-only"
 import { IChatService } from "./chat-service.interface"
 import { ChatSession, ChatHistoryItem, Message, ModelType } from "../types"
@@ -39,7 +40,7 @@ export class GrpcChatService implements IChatService {
     return new Promise((resolve, reject) => {
       this.client.CreateChat({ user_id: userId, title }, (err: any, response: any) => {
         if (err) return reject(err)
-        
+
         resolve({
           id: response.chat_id,
           title,
@@ -89,13 +90,13 @@ export class GrpcChatService implements IChatService {
         limit: 50
       }, (err: any, response: any) => {
         if (err) return reject(err)
-        
+
         const chats: ChatHistoryItem[] = (response.chats || []).map((c: GrpcChatSummary) => ({
           id: c.id,
           title: c.title,
           updatedAt: new Date(parseInt(c.updated_at) * 1000)
         }))
-        
+
         resolve(chats)
       })
     })
@@ -104,16 +105,16 @@ export class GrpcChatService implements IChatService {
   async sendMessage(chatId: string, content: string, model: ModelType): Promise<Message> {
     const userId = await this.getUserId()
 
-    const [_, analysisResult] = await Promise.all([
+    const [, analysisResult] = await Promise.all([
       this.saveToBackend(chatId, userId, "user", content),
       inferenceService.detect(content, model)
     ])
 
     const assistantMessage = await this.saveToBackend(
-      chatId, 
-      userId, 
-      "assistant", 
-      "", 
+      chatId,
+      userId,
+      "assistant",
+      "",
       analysisResult
     )
 
@@ -143,13 +144,13 @@ export class GrpcChatService implements IChatService {
   }
 
   private async saveToBackend(
-    chatId: string, 
-    userId: string, 
-    role: "user" | "assistant", 
+    chatId: string,
+    userId: string,
+    role: "user" | "assistant",
     content: string,
     analysisResult?: any
   ): Promise<Message> {
-    
+
     const grpcAnalysis = analysisResult ? mapDomainAnalysisToGrpc(analysisResult) : undefined
 
     return new Promise((resolve, reject) => {

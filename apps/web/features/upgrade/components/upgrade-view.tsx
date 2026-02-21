@@ -48,6 +48,7 @@ export const UpgradeView = () => {
     }
 
     initPaddle()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const pollForPremiumActivation = async () => {
