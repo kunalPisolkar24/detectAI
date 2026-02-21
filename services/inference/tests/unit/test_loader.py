@@ -1,5 +1,4 @@
 import pytest
-import os
 from unittest.mock import MagicMock, patch
 from src.inference.loader import HuggingFaceLoader
 from src.core.exceptions import ModelLoadError
