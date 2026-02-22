@@ -39,6 +39,9 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
+      - name: Set up Ruff
+        uses: astral-sh/setup-ruff@v4
+
       - name: Install Dependencies
         run: pip install -r requirements.txt pytest pytest-cov pytest-asyncio pytest-mock
 
