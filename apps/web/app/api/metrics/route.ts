@@ -11,7 +11,7 @@ export async function GET() {
         "Content-Type": registry.contentType,
       },
     })
-  } catch (error) {
+  } catch {
     return new NextResponse("Internal Server Error", { status: 500 })
   }
 }

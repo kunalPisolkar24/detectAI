@@ -1,0 +1,111 @@
+services:
+  chat-redis-1:
+    image: redis:7.2-alpine
+    container_name: chat_redis_1
+    restart: unless-stopped
+    command: >
+      redis-server
+      --port 7010
+      --cluster-enabled yes
+      --cluster-config-file nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --cluster-announce-ip chat_redis_1
+      --cluster-announce-port 7010
+      --cluster-announce-bus-port 17010
+    ports:
+      - "7010:7010"
+      - "17010:17010"
+    volumes:
+      - chat-redis-1-data:/data
+    networks:
+      - detectai_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "7010", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  chat-redis-2:
+    image: redis:7.2-alpine
+    container_name: chat_redis_2
+    restart: unless-stopped
+    command: >
+      redis-server
+      --port 7011
+      --cluster-enabled yes
+      --cluster-config-file nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --cluster-announce-ip chat_redis_2
+      --cluster-announce-port 7011
+      --cluster-announce-bus-port 17011
+    ports:
+      - "7011:7011"
+      - "17011:17011"
+    volumes:
+      - chat-redis-2-data:/data
+    networks:
+      - detectai_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "7011", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  chat-redis-3:
+    image: redis:7.2-alpine
+    container_name: chat_redis_3
+    restart: unless-stopped
+    command: >
+      redis-server
+      --port 7012
+      --cluster-enabled yes
+      --cluster-config-file nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --cluster-announce-ip chat_redis_3
+      --cluster-announce-port 7012
+      --cluster-announce-bus-port 17012
+    ports:
+      - "7012:7012"
+      - "17012:17012"
+    volumes:
+      - chat-redis-3-data:/data
+    networks:
+      - detectai_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "7012", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  chat-redis-cluster-init:
+    image: redis:7.2-alpine
+    container_name: chat_redis_init
+    restart: on-failure
+    depends_on:
+      chat-redis-1:
+        condition: service_healthy
+      chat-redis-2:
+        condition: service_healthy
+      chat-redis-3:
+        condition: service_healthy
+    command: >
+      redis-cli --cluster create
+      chat_redis_1:7010
+      chat_redis_2:7011
+      chat_redis_3:7012
+      --cluster-replicas 0 --cluster-yes
+    networks:
+      - detectai_net
+
+volumes:
+  chat-redis-1-data:
+  chat-redis-2-data:
+  chat-redis-3-data:
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network}
+    external: true

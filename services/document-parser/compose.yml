@@ -1,18 +1,30 @@
-networks:
-  detectai_net:
-    name: detect_ai_network
-    external: true
-
 services:
   document-parser:
-    container_name: document_parser
+    container_name: detect_ai_doc_parser
     build: 
       context: .
       dockerfile: Dockerfile
-    restart: always
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=${PORT_DOC_PARSER}
+      - WORKERS=${DOC_PARSER_WORKERS:-4}
+      - API_TITLE=${DOC_PARSER_API_TITLE:-File Processing Service}
+      - API_VERSION=${DOC_PARSER_API_VERSION:-1.0.0}
+      - MAX_UPLOAD_SIZE_BYTES=${DOC_PARSER_MAX_UPLOAD_SIZE:-10485760}
+      - MAX_TEXT_LENGTH=${DOC_PARSER_MAX_TEXT_LENGTH:-1000000}
     ports:
-      - "5001:8000"
+      - "${PORT_DOC_PARSER}:${PORT_DOC_PARSER}"
     networks:
       - detectai_net
-    env_file:
-      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT_DOC_PARSER}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network}
+    external: true

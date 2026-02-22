@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as grpc from "@grpc/grpc-js"
 import * as protoLoader from "@grpc/proto-loader"
 import path from "path"
 import { env } from "@/lib/env"
 
-const PROTO_PATH = path.join(process.cwd(), "src/lib/proto/chat_service.proto")
+const PROTO_PATH = path.join(process.cwd(), "lib/proto/chat_service.proto")
 
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
   keepCase: true,

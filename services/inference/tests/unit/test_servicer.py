@@ -1,4 +1,3 @@
-import pytest
 import grpc
 from src.server.servicers import AIService
 from src.generated import ai_service_pb2

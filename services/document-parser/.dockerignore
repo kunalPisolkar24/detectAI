@@ -1,0 +1,55 @@
+# Version Control
+.git
+.gitignore
+
+# Python Bytecode and Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Distribution / Build
+build/
+dist/
+wheels/
+*.egg-info/
+.eggs/
+*.egg
+
+# Environment Variables (Prevent baking secrets into image)
+.env
+.env.local
+.env.*
+
+# Testing and Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE and Editor Files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS Specific
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+tests
+
+# Docker related (Optional, keeps context clean)
+Dockerfile
+docker-compose.yml

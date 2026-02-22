@@ -1,13 +1,11 @@
+name: detect_ai_infra
+
 networks:
   detectai_net:
     name: detect_ai_network
-    driver: bridge
+    external: true
 
 include:
-  - path: ./compose.shared.yml
-  - path: ../../apps/web/compose.yml
-  - path: ../../services/document-parser/compose.yml
-  - path: ../../services/payments/gateway/compose.yml
-  - path: ../../services/chats/compose.yml
-  - path: ../../services/inference/compose.yml
-  - path: ../../services/workers/compose.yml
+  - path: ./postgres.yml
+  - path: ./redis.yml
+  - path: ./redis-cluster.yml

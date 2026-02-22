@@ -1,4 +1,4 @@
-import { Github, Twitter, Linkedin, Mail, FileText, Package, DollarSign, HelpCircle, BotIcon } from "lucide-react"
+import { Github, Twitter, Linkedin, Mail, FileText, Package, DollarSign, HelpCircle } from "lucide-react"
 
 export const HERO_TEXT = {
   badge: "Introducing Detect AI",

@@ -1,17 +1,21 @@
-up-lite:
-	docker compose -f docker-compose.lite.yml up -d
+.PHONY: network up build down clean logs restart
 
-up-full:
-	docker compose up -d
+network:
+	@docker network inspect detect_ai_network >/dev/null 2>&1 || docker network create detect_ai_network
 
-down-lite:
-	docker compose -f docker-compose.lite.yml down
+up: network
+	docker compose -f compose.yml up -d
 
-down-full:
-	docker compose down
+build: network
+	docker compose -f compose.yml up -d --build
 
-up-build-full: 
-	docker compose --build -d 
+down:
+	docker compose -f compose.yml down --remove-orphans
 
-up-build-lite:
-	docker compose -f docker-compose.lite.yml up --build -d
+clean:
+	docker compose -f compose.yml down -v --remove-orphans
+
+logs:
+	docker compose -f compose.yml logs -f
+
+restart: down up

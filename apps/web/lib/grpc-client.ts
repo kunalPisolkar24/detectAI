@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as grpc from "@grpc/grpc-js"
 import * as protoLoader from "@grpc/proto-loader"
 import path from "path"
 import { env } from "@/lib/env"
 
-const PROTO_PATH = path.join(process.cwd(), "src/lib/proto/ai_service.proto")
+const PROTO_PATH = path.join(process.cwd(), "lib/proto/ai_service.proto")
 
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
   keepCase: true,
@@ -14,24 +15,33 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
 })
 
 const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any
-const aiService = protoDescriptor.aidetection.AIService
+const AIService = protoDescriptor.aidetection.AIService
 
-let clientInstance: any = null
+class GrpcClient {
+  private static instance: GrpcClient
+  private client: any
 
-export const getGrpcClient = () => {
-  if (clientInstance) return clientInstance
-
-  const client = new aiService(
-    env.AI_SERVICE_URL,
-    grpc.credentials.createInsecure()
-  )
-
-  if (process.env.NODE_ENV !== "development") {
-    clientInstance = client
+  private constructor() {
+    this.client = new AIService(
+      env.AI_SERVICE_URL,
+      grpc.credentials.createInsecure(),
+      {
+        "grpc.keepalive_time_ms": 10000,
+        "grpc.keepalive_timeout_ms": 5000,
+        "grpc.keepalive_permit_without_calls": 1,
+      }
+    )
   }
 
-  return client
+  public static getInstance(): any {
+    if (!GrpcClient.instance) {
+      GrpcClient.instance = new GrpcClient()
+    }
+    return GrpcClient.instance.client
+  }
 }
+
+export const getGrpcClient = () => GrpcClient.getInstance()
 
 export const getGrpcMetadata = () => {
   const metadata = new grpc.Metadata()

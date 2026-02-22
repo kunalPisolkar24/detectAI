@@ -7,19 +7,19 @@ on:
       - main
       - staging
     paths:
-      - "services/payment-service/gateway-go/**"
+      - "services/payments/gateway/**"
       - ".github/workflows/service-payment-gateway.yaml"
   pull_request:
     branches:
       - main
       - staging
     paths:
-      - "services/payment-service/gateway-go/**"
+      - "services/payments/gateway/**"
       - ".github/workflows/service-payment-gateway.yaml"
 
 env:
   DOCKER_IMAGE_NAME: kunalpisolkar/detect-ai-payment-gateway
-  SERVICE_PATH: ./services/payment-service/gateway-go
+  SERVICE_PATH: ./services/payments/gateway
 
 jobs:
   quality-assurance:

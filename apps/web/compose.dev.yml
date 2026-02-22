@@ -1,7 +1,8 @@
 services:
   frontend:
     build:
-      target: base
+      context: .
+      dockerfile: Dockerfile
     command: pnpm dev
     restart: no
     volumes:
@@ -10,9 +11,94 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=development
-      - USE_REDIS_CLUSTER=true
-      - REDIS_USAGE_URL=redis-cluster-node-0:6379,redis-cluster-node-1:6379,redis-cluster-node-2:6379
+      - NODE_ENV=${NODE_ENV:-development}
+      - USE_REDIS_CLUSTER=${USE_REDIS_CLUSTER:-true}
+      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_USAGE_PASSWORD=${REDIS_USAGE_PASSWORD}
+      - FILE_EXTRACTOR_API_URL=${FILE_EXTRACTOR_API_URL}
+      - AI_SERVICE_URL=${AI_SERVICE_URL}
+      - AI_SERVICE_API_KEY=${AI_SERVICE_API_KEY}
+      - PAYMENT_GATEWAY_URL=${PAYMENT_GATEWAY_URL}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - CHAT_SERVICE_URL=${CHAT_SERVICE_URL}
+
+  payment-gateway:
+    build:
+      context: ../../services/payments/gateway
+      dockerfile: Dockerfile
+    restart: no
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - PADDLE_WEBHOOK_SECRET=${PADDLE_WEBHOOK_SECRET}
+      - PORT=8080
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+    ports:
+      - "${PORT_GATEWAY_DEV:-8081}:8080"
+    depends_on:
+      rabbitmq:
+        condition: service_started
+
+  worker-analytics:
+    command: /bin/sh -c "bunx prisma generate && bun --watch src/workers/analytics/index.ts"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
+      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
+    volumes:
+      - ../../services/workers:/app
+      - /app/node_modules
+
+  worker-cron:
+    command: /bin/sh -c "bunx prisma generate && bun --watch src/workers/cron/index.ts"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
+      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
+    volumes:
+      - ../../services/workers:/app
+      - /app/node_modules
+
+  worker-payments:
+    command: /bin/sh -c "bunx prisma generate && bun --watch src/workers/payments/index.ts"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
+      - PADDLE_API_KEY=${PADDLE_API_KEY}
+      - PADDLE_ENVIRONMENT=${PADDLE_ENVIRONMENT:-sandbox}
+      - PORT=${WORKER_PAYMENTS_PORT:-7003}
+    ports:
+      - "${WORKER_PAYMENTS_PORT_DEV:-7777}:${WORKER_PAYMENTS_PORT:-7003}"
+    volumes:
+      - ../../services/workers:/app
+      - /app/node_modules
+    depends_on:
+      rabbitmq:
+        condition: service_started
+
+  rabbitmq:
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  document-parser:
+    ports:
+      - "5001:8000"
+    environment:
+      - LOG_LEVEL=debug
 
   postgres-primary:
     ports:

@@ -34,6 +34,7 @@ export default async function ProfilePage() {
     ...user,
     isPremium,
     paddleSubscriptionStatus: user.paddleSubscriptionStatus as string | null,
+    paddleCancellationScheduled: user.paddleCancellationScheduled,
     apiCallCountDaily: realTimeUsage.dailyCount,
     apiCallCountTotal: user.apiCallCountTotal + realTimeUsage.pendingCount
   }

@@ -1,5 +1,4 @@
 from concurrent import futures
-import grpc
 from grpc_health.v1 import health
 from grpc_health.v1 import health_pb2
 from grpc_health.v1 import health_pb2_grpc

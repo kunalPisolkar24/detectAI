@@ -1,62 +1,90 @@
 services:
   worker-analytics:
     container_name: worker_analytics
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
     restart: always
-    command: ["bun", "run", "start:analytics"]
-    env_file: .env
+    command: [ "bun", "run", "start:analytics" ]
     environment:
+      - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_USAGE_URL=${REDIS_USAGE_URL}
-      - REDIS_MODE=${REDIS_MODE:-standalone}
-      - NODE_ENV=production
+      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
+      - PORT=${WORKER_ANALYTICS_PORT:-7001}
+    ports:
+      - "${WORKER_ANALYTICS_PORT:-7001}:7001"
     networks:
       - detectai_net
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:7001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   worker-cron:
     container_name: worker_cron
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
     restart: always
-    command: ["bun", "run", "start:cron"]
-    env_file: .env
+    command: [ "bun", "run", "start:cron" ]
     environment:
+      - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
-      - REDIS_MODE=${REDIS_MODE:-standalone}
-      - NODE_ENV=production
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
+      - PORT=${WORKER_CRON_PORT:-7002}
+    ports:
+      - "${WORKER_CRON_PORT:-7002}:7002"
     networks:
       - detectai_net
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:7002/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   worker-payments:
     container_name: worker_payments
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
     restart: always
-    command: ["bun", "run", "start:payments"]
-    ports:
-      - "7777:7777"
-    env_file: .env
+    command: [ "bun", "run", "start:payments" ]
     environment:
-      - RABBITMQ_URL=${RABBITMQ_URL}
+      - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
-      - REDIS_MODE=${REDIS_MODE:-standalone}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
+      - RABBITMQ_URL=${RABBITMQ_URL}
       - PADDLE_API_KEY=${PADDLE_API_KEY}
-      - PADDLE_ENVIRONMENT=${PADDLE_ENVIRONMENT:-sandbox}
-      - NODE_ENV=production
+      - PADDLE_ENVIRONMENT=${PADDLE_ENVIRONMENT}
+      - PORT=${WORKER_PAYMENTS_PORT:-7003}
+    ports:
+      - "${WORKER_PAYMENTS_PORT:-7003}:7003"
     networks:
       - detectai_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:7003/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
 networks:
   detectai_net:
-    name: detect_ai_network
+    name: ${detect_ai_network}
     external: true

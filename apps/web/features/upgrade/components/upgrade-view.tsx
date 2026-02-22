@@ -15,9 +15,11 @@ import { Pricing } from "@/features/landing/pricing"
 const PREMIUM_MONTHLY_PRICE_ID = "pri_01jr2gqggwjakpc1hd9xzym7fy"
 const PREMIUM_YEARLY_PRICE_ID = "pri_01jr2gs8ckz66srr8sd1byh7n4"
 
+const POLL_INTERVALS_MS = [2000, 3000, 5000, 8000, 12000]
+
 export const UpgradeView = () => {
   const router = useRouter()
-  const { data: session, status } = useSession()
+  const { data: session, status, update: updateSession } = useSession()
   const [paddle, setPaddle] = useState<Paddle | undefined>()
   const [isPaddleInitializing, setIsPaddleInitializing] = useState(true)
 
@@ -26,13 +28,12 @@ export const UpgradeView = () => {
       try {
         if (env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN) {
           const paddleInstance = await initializePaddle({
-            token: env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN, 
-            environment: "sandbox", 
-            eventCallback: (data) => {
+            token: env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
+            environment: "sandbox",
+            eventCallback: async (data) => {
               if (data.name === "checkout.completed") {
-                toast.success("Subscription successful! Welcome to Premium.")
-                router.refresh()
-                router.push("/chat")
+                toast.success("Payment received! Activating your Premium access…")
+                await pollForPremiumActivation()
               }
             },
           })
@@ -47,7 +48,27 @@ export const UpgradeView = () => {
     }
 
     initPaddle()
-  }, [router])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const pollForPremiumActivation = async () => {
+    for (const delay of POLL_INTERVALS_MS) {
+      await new Promise<void>(resolve => setTimeout(resolve, delay))
+
+      const refreshed = await updateSession()
+
+      if (refreshed?.user?.isPremium) {
+        toast.success("Premium activated! Welcome to Flare.")
+        router.push("/chat")
+        return
+      }
+    }
+
+    toast.warning(
+      "Your subscription is being processed. It may take a moment to reflect — try refreshing if it doesn't update shortly."
+    )
+    router.push("/chat")
+  }
 
   const handlePlanSelect = (planId: string, billingCycle: "monthly" | "yearly") => {
     if (planId !== "flare") {
@@ -65,19 +86,19 @@ export const UpgradeView = () => {
       return
     }
 
-    const priceId = billingCycle === "monthly" 
-      ? PREMIUM_MONTHLY_PRICE_ID 
+    const priceId = billingCycle === "monthly"
+      ? PREMIUM_MONTHLY_PRICE_ID
       : PREMIUM_YEARLY_PRICE_ID
 
     paddle.Checkout.open({
       items: [{ priceId, quantity: 1 }],
-      customer: { 
+      customer: {
         email: session.user.email || "",
       },
-      customData: { 
-        userId: session.user.id 
+      customData: {
+        userId: session.user.id
       },
-      settings: { 
+      settings: {
         theme: "dark",
         displayMode: "overlay"
       }
@@ -105,8 +126,8 @@ export const UpgradeView = () => {
           </Button>
         </div>
 
-        <Pricing 
-          isUpgradePage={true} 
+        <Pricing
+          isUpgradePage={true}
           onPlanSelect={handlePlanSelect}
           isProcessing={isPaddleInitializing}
         />

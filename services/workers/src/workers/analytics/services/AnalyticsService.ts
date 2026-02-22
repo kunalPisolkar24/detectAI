@@ -12,13 +12,12 @@ interface UsageUpdate {
 export class AnalyticsService {
     private readonly BATCH_SIZE = 50;
     private readonly DIRTY_SET_KEY = "usage:dirty_users";
-    private readonly PENDING_KEY_PREFIX = "usage:pending:";
 
     constructor(
         private readonly usageClient: RedisClient,
         private readonly mainClient: RedisClient,
         private readonly metrics: MetricsService
-    ) {}
+    ) { }
 
     public async processBatch(): Promise<number> {
         const timer = this.metrics.jobDuration.startTimer({ job_type: "process_batch" });
@@ -60,16 +59,16 @@ export class AnalyticsService {
         const updates: UsageUpdate[] = [];
 
         try {
-            const promises = userIds.map(id => 
-                this.usageClient.get(`${this.PENDING_KEY_PREFIX}${id}`)
+            const promises = userIds.map(id =>
+                this.usageClient.get(`usage:{${id}}:pending`)
             );
-            
+
             const results = await Promise.all(promises);
 
             results.forEach((countStr, index) => {
                 const count = countStr ? parseInt(countStr, 10) : 0;
                 const userId = userIds[index];
-                
+
                 if (count > 0 && userId) {
                     updates.push({ userId, count });
                     this.metrics.cacheOperations.inc({ operation: "hit", cache_type: "usage_cluster" });
@@ -130,15 +129,15 @@ export class AnalyticsService {
     }
 
     private async decrementPendingCounts(updates: UsageUpdate[]): Promise<void> {
-        const promises = updates.map(({ userId, count }) => 
-            this.usageClient.decrby(`${this.PENDING_KEY_PREFIX}${userId}`, count)
+        const promises = updates.map(({ userId, count }) =>
+            this.usageClient.decrby(`usage:{${userId}}:pending`, count)
         );
 
         await Promise.all(promises);
 
         const stillDirtyUsers: string[] = [];
-        const checkPromises = updates.map(({ userId }) => 
-            this.usageClient.get(`${this.PENDING_KEY_PREFIX}${userId}`)
+        const checkPromises = updates.map(({ userId }) =>
+            this.usageClient.get(`usage:{${userId}}:pending`)
         );
 
         const results = await Promise.all(checkPromises);
@@ -182,7 +181,7 @@ export class AnalyticsService {
             Logger.error("CRITICAL: Failed to requeue users", error);
         }
     }
-    
+
     public async shutdown(): Promise<void> {
     }
 }

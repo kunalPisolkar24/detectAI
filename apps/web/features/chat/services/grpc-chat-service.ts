@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import "server-only"
 import { IChatService } from "./chat-service.interface"
 import { ChatSession, ChatHistoryItem, Message, ModelType } from "../types"
 import { getChatGrpcClient } from "@/lib/grpc/chat-client"
@@ -5,6 +7,20 @@ import { inferenceService } from "./inference-service"
 import { mapGrpcMessageToDomain, mapDomainAnalysisToGrpc } from "../utils/mappers"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
+
+interface GrpcChatSummary {
+  id: string
+  title: string
+  updated_at: string
+}
+
+interface GrpcChatResponse {
+  id: string
+  user_id: string
+  title: string
+  created_at: string
+  updated_at: string
+}
 
 export class GrpcChatService implements IChatService {
   private get client() {
@@ -24,7 +40,7 @@ export class GrpcChatService implements IChatService {
     return new Promise((resolve, reject) => {
       this.client.CreateChat({ user_id: userId, title }, (err: any, response: any) => {
         if (err) return reject(err)
-        
+
         resolve({
           id: response.chat_id,
           title,
@@ -36,34 +52,69 @@ export class GrpcChatService implements IChatService {
   }
 
   async getChat(chatId: string): Promise<ChatSession> {
-    const history = await this.getChatHistoryMessages(chatId, 1, 50)
-    
+    const metaPromise = new Promise<GrpcChatResponse>((resolve, reject) => {
+      this.client.GetChat({ chat_id: chatId }, (err: any, response: any) => {
+        if (err) return reject(err)
+        resolve(response)
+      })
+    })
+
+    const historyPromise = new Promise<Message[]>((resolve, reject) => {
+      this.client.GetChatHistory({
+        chat_id: chatId,
+        page: 1,
+        page_size: 50
+      }, (err: any, response: any) => {
+        if (err) return reject(err)
+        const messages = (response.messages || []).map(mapGrpcMessageToDomain)
+        resolve(messages)
+      })
+    })
+
+    const [meta, messages] = await Promise.all([metaPromise, historyPromise])
+
     return {
-      id: chatId,
-      title: "Chat Session",
-      messages: history.reverse(),
-      updatedAt: new Date()
+      id: meta.id,
+      title: meta.title,
+      messages: messages.reverse(),
+      updatedAt: new Date(parseInt(meta.updated_at) * 1000)
     }
   }
 
   async getHistory(): Promise<ChatHistoryItem[]> {
-    console.warn("GetHistory not implemented in Go Backend Proto")
-    return []
+    const userId = await this.getUserId()
+
+    return new Promise((resolve, reject) => {
+      this.client.GetUserChats({
+        user_id: userId,
+        limit: 50
+      }, (err: any, response: any) => {
+        if (err) return reject(err)
+
+        const chats: ChatHistoryItem[] = (response.chats || []).map((c: GrpcChatSummary) => ({
+          id: c.id,
+          title: c.title,
+          updatedAt: new Date(parseInt(c.updated_at) * 1000)
+        }))
+
+        resolve(chats)
+      })
+    })
   }
 
   async sendMessage(chatId: string, content: string, model: ModelType): Promise<Message> {
     const userId = await this.getUserId()
 
-    const [_, analysisResult] = await Promise.all([
+    const [, analysisResult] = await Promise.all([
       this.saveToBackend(chatId, userId, "user", content),
       inferenceService.detect(content, model)
     ])
 
     const assistantMessage = await this.saveToBackend(
-      chatId, 
-      userId, 
-      "assistant", 
-      "", 
+      chatId,
+      userId,
+      "assistant",
+      "",
       analysisResult
     )
 
@@ -71,22 +122,35 @@ export class GrpcChatService implements IChatService {
   }
 
   async deleteChat(chatId: string): Promise<void> {
-    console.warn("DeleteChat not implemented in Go Backend Proto")
+    return new Promise((resolve, reject) => {
+      this.client.DeleteChat({ chat_id: chatId }, (err: any) => {
+        if (err) return reject(err)
+        resolve()
+      })
+    })
   }
 
   async renameChat(chatId: string, newTitle: string): Promise<ChatHistoryItem> {
-    console.warn("RenameChat not implemented in Go Backend Proto")
-    return { id: chatId, title: newTitle, updatedAt: new Date() }
+    return new Promise((resolve, reject) => {
+      this.client.RenameChat({ chat_id: chatId, new_title: newTitle }, (err: any) => {
+        if (err) return reject(err)
+        resolve({
+          id: chatId,
+          title: newTitle,
+          updatedAt: new Date()
+        })
+      })
+    })
   }
 
   private async saveToBackend(
-    chatId: string, 
-    userId: string, 
-    role: "user" | "assistant", 
+    chatId: string,
+    userId: string,
+    role: "user" | "assistant",
     content: string,
     analysisResult?: any
   ): Promise<Message> {
-    
+
     const grpcAnalysis = analysisResult ? mapDomainAnalysisToGrpc(analysisResult) : undefined
 
     return new Promise((resolve, reject) => {
@@ -108,21 +172,6 @@ export class GrpcChatService implements IChatService {
           analysis: analysisResult
         }
         resolve(msg)
-      })
-    })
-  }
-
-  private async getChatHistoryMessages(chatId: string, page: number, pageSize: number): Promise<Message[]> {
-    return new Promise((resolve, reject) => {
-      this.client.GetChatHistory({
-        chat_id: chatId,
-        page,
-        page_size: pageSize
-      }, (err: any, response: any) => {
-        if (err) return reject(err)
-        
-        const messages = (response.messages || []).map(mapGrpcMessageToDomain)
-        resolve(messages)
       })
     })
   }

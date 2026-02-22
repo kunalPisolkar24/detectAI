@@ -9,7 +9,8 @@ class MockHandlerDetails:
 
 def test_auth_interceptor_valid(mock_settings):
     interceptor = AuthInterceptor()
-    continuation = lambda x: "Success"
+    def continuation(x):
+        return "Success"
     details = MockHandlerDetails([('x-api-key', 'test-secret-key')], '/service/method')
     
     result = interceptor.intercept_service(continuation, details)
@@ -17,13 +18,14 @@ def test_auth_interceptor_valid(mock_settings):
 
 def test_auth_interceptor_invalid(mock_settings):
     interceptor = AuthInterceptor()
-    continuation = lambda x: "Success"
+    def continuation(x):
+        return "Success"
     details = MockHandlerDetails([('x-api-key', 'wrong-key')], '/service/method')
     
     handler = interceptor.intercept_service(continuation, details)
     
     mock_context = type('MockContext', (), {'abort': lambda c, d: None})()
-    mock_abort = pytest.MonkeyPatch()
+    pytest.MonkeyPatch()
     
     aborted = False
     def abort(code, details):
@@ -37,7 +39,8 @@ def test_auth_interceptor_invalid(mock_settings):
 
 def test_monitoring_interceptor_metrics(mocker):
     interceptor = MonitoringInterceptor()
-    continuation = lambda x: "Response"
+    def continuation(x):
+        return "Response"
     details = MockHandlerDetails([], '/aidetection.AIService/DetectSpark')
     
     mock_counter = mocker.patch('src.server.interceptors.GRPC_REQUESTS_TOTAL')
