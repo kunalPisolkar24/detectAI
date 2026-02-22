@@ -10,7 +10,8 @@
     "build-start": "next build && next start",
     "lint": "eslint",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev"
+    "db:migrate": "prisma migrate dev",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.3",
