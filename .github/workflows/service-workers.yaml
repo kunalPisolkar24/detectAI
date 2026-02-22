@@ -25,6 +25,9 @@ jobs:
   quality-assurance:
     name: Run Tests & Lint
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://127.0.0.1:5432/dummy
+      DATABASE_URL_REPLICA: postgresql://127.0.0.1:5432/dummy
     defaults:
       run:
         working-directory: ${{ env.SERVICE_PATH }}
