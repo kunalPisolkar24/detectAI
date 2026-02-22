@@ -42,6 +42,9 @@ jobs:
       - name: Install Dependencies
         run: pip install -r requirements.txt pytest pytest-cov pytest-asyncio pytest-mock ruff
 
+      - name: Generate Protos
+        run: make proto
+
       - name: Lint with Ruff
         run: ruff check . --select F,E --ignore E501
 
@@ -49,7 +52,6 @@ jobs:
         env:
           API_KEY: "ci-dummy-key"
         run: python -m pytest --cov=src --cov-fail-under=80 tests/
-
 
   build-and-push:
     name: Build & Push Docker Image
