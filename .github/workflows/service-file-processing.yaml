@@ -7,14 +7,14 @@ on:
       - main
       - staging
     paths:
-      - "services/file-processing/**"
+      - "services/document-parser/**"
       - ".github/workflows/service-file-processing.yaml"
   pull_request:
     branches:
       - main
       - staging
     paths:
-      - "services/file-processing/**"
+      - "services/document-parser/**"
       - ".github/workflows/service-file-processing.yaml"
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./services/file-processing
+        working-directory: ./services/document-parser
 
     steps:
       - name: Checkout Repository
@@ -74,8 +74,8 @@ jobs:
       - name: Build and Push
         uses: docker/build-push-action@v5
         with:
-          context: ./services/file-processing
-          file: ./services/file-processing/Dockerfile
+          context: ./services/document-parser
+          file: ./services/document-parser/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

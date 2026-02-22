@@ -1,6 +1,0 @@
-# Ignore virtual environment
-venv/
-
-# Ignore contents of bert_resources but keep the folder
-detect-ai-supreme/*
-detect-ai-base/*

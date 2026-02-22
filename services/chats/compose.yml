@@ -1,0 +1,4 @@
+include:
+  - path: ./docker/mongo.yml
+  - path: ./docker/redis.yml
+  - path: ./docker/app.yml

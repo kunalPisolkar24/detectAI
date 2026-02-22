@@ -1,0 +1,39 @@
+"use server"
+
+import { authOptions } from "@/lib/auth-options"
+import { getServerSession } from "next-auth"
+import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
+import { inferenceService } from "../services/inference-service"
+import { AnalysisResult, ModelType } from "../types"
+
+export type AnalyzeActionResponse =
+  | { success: true, data: AnalysisResult }
+  | { success: false, error: string, isRateLimit?: boolean }
+
+export async function analyzeText(content: string, model: ModelType): Promise<AnalyzeActionResponse> {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.id) {
+    return { success: false, error: "Unauthorized" }
+  }
+
+  const { allowed } = await rateLimitService.checkLimit(session.user.id, session.user.isPremium ?? false)
+
+  if (!allowed) {
+    return { success: false, error: "Rate limit exceeded", isRateLimit: true }
+  }
+
+  try {
+    const analysis = await inferenceService.detect(content, model)
+
+    await rateLimitService.trackUsage(session.user.id)
+
+    return { success: true, data: analysis }
+  } catch (error) {
+    console.error("Analysis Action Error:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to analyze text"
+    }
+  }
+}

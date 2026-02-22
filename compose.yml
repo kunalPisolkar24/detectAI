@@ -1,0 +1,20 @@
+name: detect_ai_cluster
+
+networks:
+  detect_ai_network:
+    name: ${detect_ai_network}
+    driver: bridge
+
+include:
+  - path: ./infra/docker/postgres.yml
+  - path: ./infra/docker/redis.yml
+  - path: ./infra/docker/redis-cluster.yml
+  - path: ./infra/docker/compose.shared.yml
+  
+  - path: ./services/document-parser/compose.yml
+  - path: ./services/inference/compose.yml
+  - path: ./services/workers/compose.yml
+  - path: ./services/payments/gateway/compose.yml
+  - path: ./services/chats/compose.yml
+  
+  - path: ./apps/web/compose.yml

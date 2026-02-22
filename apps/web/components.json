@@ -4,17 +4,21 @@
   "rsc": true,
   "tsx": true,
   "tailwind": {
-    "config": "../../packages/ui/tailwind.config.ts",
-    "css": "../../packages/ui/src/styles/globals.css",
-    "baseColor": "zinc",
-    "cssVariables": true
+    "config": "",
+    "css": "app/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
   },
   "iconLibrary": "lucide",
   "aliases": {
     "components": "@/components",
-    "hooks": "@/hooks",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
     "lib": "@/lib",
-    "utils": "@workspace/ui/lib/utils",
-    "ui": "@workspace/ui/components"
+    "hooks": "@/hooks"
+  },
+  "registries": {
+    "@magicui": "https://magicui.design/r/{name}.json"
   }
 }

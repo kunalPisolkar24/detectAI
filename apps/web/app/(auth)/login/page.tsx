@@ -1,37 +1,17 @@
-import { LoginForm } from '@/components/auth'
-import React, { Suspense } from 'react';
-import { cn } from "@workspace/ui/lib/utils";
-import type { Metadata } from 'next'
+import { Suspense } from "react"
+import type { Metadata } from "next"
+import { LoginForm } from "@/features/auth/components/login-form"
+import { AuthCardSkeleton } from "@/features/auth/components/auth-card-skeleton"
 
 export const metadata: Metadata = {
-  title: 'Login | Detect AI',
-  description: 'Sign in to your Detect AI account to access your dashboard and start analyzing text.',
-};
-
-function LoginLoadingFallback() {
-  return (
-    <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,80px))]">
-      <div
-        className={cn(
-          "animate-spin rounded-full h-12 w-12 border-4",
-          "border-gray-200 dark:border-gray-600",
-          "border-t-blue-600 dark:border-t-blue-400" 
-        )}
-        role="status"
-        aria-live="polite"
-      >
-        <span className="sr-only">Loading chat...</span>
-      </div>
-    </div>
-  );
+  title: "Login | Detect AI",
+  description: "Sign in to your account",
 }
 
-const LoginPage = () => {
+export default function LoginPage() {
   return (
-    <Suspense fallback={<LoginLoadingFallback />}>
+    <Suspense fallback={<AuthCardSkeleton />}>
       <LoginForm />
     </Suspense>
   )
 }
-
-export default LoginPage

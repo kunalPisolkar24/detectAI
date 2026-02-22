@@ -1,20 +1,38 @@
-FROM node:20-slim
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN apt-get update && apt-get install -y openssl curl && rm -rf /var/lib/apt/lists/*
-RUN corepack enable
+FROM node:20-alpine
+
+RUN apk add --no-cache libc6-compat
 
 WORKDIR /app
 
-COPY pnpm-lock.yaml package.json pnpm-workspace.yaml turbo.json ./
-COPY packages/ui/package.json ./packages/ui/
-COPY apps/web/package.json ./apps/web/
-COPY apps/web/prisma ./apps/web/prisma
+RUN npm install -g pnpm
 
-RUN CI=true pnpm install --frozen-lockfile
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-COPY apps/web ./apps/web
-COPY packages ./packages
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+RUN npx prisma generate
+
+ENV SKIP_ENV_VALIDATION=true
+ENV DATABASE_URL="postgresql://localhost:5432/dummy"
+ENV DATABASE_URL_REPLICA="postgresql://localhost:5432/dummy"
+ENV NEXTAUTH_SECRET="dummy-secret"
+ENV REDIS_USAGE_URL="redis://localhost:6379"
+ENV REDIS_MASTER_NAME="mymaster"
+ENV FILE_EXTRACTOR_API_URL="http://localhost:8080"
+ENV NEXT_PUBLIC_TURNSTILE_SITE_KEY="dummy"
+ENV NEXT_PUBLIC_PADDLE_CLIENT_TOKEN="dummy"
+ENV AI_SERVICE_URL="localhost:50051"
+ENV AI_SERVICE_API_KEY="dummy"
+ENV GOOGLE_ID="dummy"
+ENV GOOGLE_SECRET="dummy"
+ENV GITHUB_ID="dummy"
+ENV GITHUB_SECRET="dummy"
+ENV TURNSTILE_SECRET_KEY="dummy"
+
+RUN pnpm build
 
 EXPOSE 3000
-CMD ["pnpm", "--filter", "web", "run", "dev"]
+
+CMD ["pnpm", "start"]

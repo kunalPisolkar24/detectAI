@@ -1,0 +1,35 @@
+services:
+  ai-service:
+    container_name: detect_ai_inference
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${PORT_INFERENCE}:50051"
+      - "${PORT_INFERENCE_METRICS}:8333"
+    networks:
+      - detectai_net
+    environment:
+      - PYTHONUNBUFFERED=1
+      
+      - ENV=${NODE_ENV}
+      - GRPC_PORT=${PORT_INFERENCE:-50051}
+      - METRICS_PORT=${PORT_INFERENCE_METRICS:-8333}
+      - API_KEY=${AI_SERVICE_API_KEY}
+      - MODEL_CACHE_DIR=${INFERENCE_MODEL_CACHE_DIR:-./models}
+      - BATCH_SIZE=${INFERENCE_BATCH_SIZE:-32}
+      - BATCH_TIMEOUT=${INFERENCE_BATCH_TIMEOUT:-0.05}
+      - MAX_TEXT_LENGTH=${INFERENCE_MAX_TEXT_LENGTH:-5000}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network}
+    external: true

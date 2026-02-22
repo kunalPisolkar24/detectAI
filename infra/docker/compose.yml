@@ -1,0 +1,11 @@
+name: detect_ai_infra
+
+networks:
+  detectai_net:
+    name: detect_ai_network
+    external: true
+
+include:
+  - path: ./postgres.yml
+  - path: ./redis.yml
+  - path: ./redis-cluster.yml
