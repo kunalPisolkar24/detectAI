@@ -7,7 +7,8 @@ const globalForRedis = global as unknown as {
 }
 
 const getSentinelConfig = (): RedisOptions => {
-  const sentinels = env.REDIS_SENTINELS.split(",").map((s) => {
+  const sentinelStr = env.REDIS_SENTINELS || "localhost:26379"
+  const sentinels = sentinelStr.split(",").map((s) => {
     const [host, port] = s.split(":")
     return { host, port: parseInt(port, 10) }
   })

@@ -57,6 +57,21 @@ jobs:
       - name: Build Application
         env:
           SKIP_ENV_VALIDATION: true
+          DATABASE_URL: "postgresql://localhost:5432/dummy"
+          DATABASE_URL_REPLICA: "postgresql://localhost:5432/dummy"
+          NEXTAUTH_SECRET: "dummy-secret"
+          NEXTAUTH_URL: "http://localhost:3000"
+          REDIS_USAGE_URL: "redis://localhost:6379"
+          FILE_EXTRACTOR_API_URL: "http://localhost:8080"
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: "dummy"
+          NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: "dummy"
+          AI_SERVICE_URL: "localhost:50051"
+          AI_SERVICE_API_KEY: "dummy"
+          GOOGLE_ID: "dummy"
+          GOOGLE_SECRET: "dummy"
+          GITHUB_ID: "dummy"
+          GITHUB_SECRET: "dummy"
+          TURNSTILE_SECRET_KEY: "dummy"
         run: pnpm build
 
   build-and-push:
