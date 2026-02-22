@@ -62,6 +62,7 @@ jobs:
           NEXTAUTH_SECRET: "dummy-secret"
           NEXTAUTH_URL: "http://localhost:3000"
           REDIS_USAGE_URL: "redis://localhost:6379"
+          REDIS_MASTER_NAME: "mymaster"
           FILE_EXTRACTOR_API_URL: "http://localhost:8080"
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: "dummy"
           NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: "dummy"
