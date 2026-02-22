@@ -36,7 +36,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: 8
+          version: 10
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -48,10 +48,15 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma Client
+        run: pnpm db:generate
+
       - name: Run Linting
         run: pnpm lint
 
       - name: Build Application
+        env:
+          SKIP_ENV_VALIDATION: true
         run: pnpm build
 
   build-and-push:

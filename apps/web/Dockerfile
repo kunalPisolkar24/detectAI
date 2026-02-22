@@ -14,6 +14,7 @@ COPY . .
 
 RUN npx prisma generate
 
+ENV SKIP_ENV_VALIDATION=true
 RUN pnpm build
 
 EXPOSE 3000
