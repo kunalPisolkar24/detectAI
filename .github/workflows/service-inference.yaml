@@ -46,7 +46,10 @@ jobs:
         run: ruff check . --select F,E --ignore E501
 
       - name: Run Tests & Coverage
+        env:
+          API_KEY: "ci-dummy-key"
         run: python -m pytest --cov=src --cov-fail-under=80 tests/
+
 
   build-and-push:
     name: Build & Push Docker Image

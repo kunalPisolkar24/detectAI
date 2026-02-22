@@ -13,4 +13,7 @@ class Settings(BaseSettings):
     
     model_config = SettingsConfigDict(env_file=".env")
 
-settings = Settings()
+try:
+    settings = Settings()
+except Exception:
+    settings = Settings(API_KEY="placeholder")
