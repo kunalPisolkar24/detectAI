@@ -8,23 +8,27 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func NewClusterClient(cfg *config.Config) (*redis.ClusterClient, error) {
-	rdb := redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs:        cfg.RedisClusterAddrs,
+type Client = redis.UniversalClient
+
+func NewClient(cfg *config.Config) (Client, error) {
+	options := &redis.UniversalOptions{
+		Addrs:        cfg.RedisAddrs,
 		Password:     cfg.RedisPassword,
 		PoolSize:     cfg.RedisPoolSize,
 		MinIdleConns: 10,
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 3 * time.Second,
 		ClientName:   "go-chat-service",
-	})
+	}
+
+	client := redis.NewUniversalClient(options)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := rdb.Ping(ctx).Err(); err != nil {
+	if err := client.Ping(ctx).Err(); err != nil {
 		return nil, err
 	}
 
-	return rdb, nil
+	return client, nil
 }
