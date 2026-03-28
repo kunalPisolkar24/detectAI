@@ -9,15 +9,22 @@ import { config } from "./config";
 const FLUSH_INTERVAL_MS = 5000;
 
 const usageClient = RedisFactory.createClient(
-    config.REDIS_USAGE_URL, 
-    "cluster", 
-    "AnalyticsUsage"
+    {
+        mode: config.REDIS_USAGE_MODE,
+        name: "AnalyticsUsage",
+        url: config.REDIS_USAGE_URL,
+    }
 );
 
 const mainClient = RedisFactory.createClient(
-    config.REDIS_URL,
-    config.REDIS_MODE,
-    "AnalyticsMain"
+    {
+        mode: config.REDIS_MODE,
+        name: "AnalyticsMain",
+        url: config.REDIS_URL,
+        sentinels: config.REDIS_SENTINELS,
+        masterName: config.REDIS_MASTER_NAME,
+        password: process.env.REDIS_PASSWORD,
+    }
 );
 
 const metricsService = new MetricsService("worker-analytics");

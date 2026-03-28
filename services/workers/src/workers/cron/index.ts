@@ -11,9 +11,14 @@ const BATCH_COOLDOWN_MS = 5000;
 const ERROR_COOLDOWN_MS = 60000; 
 
 const redisClient = RedisFactory.createClient(
-    config.REDIS_URL,
-    config.REDIS_MODE as "standalone" | "cluster" || "standalone",
-    "CronRedis"
+    {
+        mode: config.REDIS_MODE,
+        name: "CronRedis",
+        url: config.REDIS_URL,
+        sentinels: config.REDIS_SENTINELS,
+        masterName: config.REDIS_MASTER_NAME,
+        password: process.env.REDIS_PASSWORD,
+    }
 );
 
 const metricsService = new MetricsService("worker-cron");
