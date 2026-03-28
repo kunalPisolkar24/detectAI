@@ -17,14 +17,14 @@ import (
 )
 
 type Consumer struct {
-	client    *redis.ClusterClient
+	client    redis.UniversalClient
 	repo      ports.ChatPersistenceRepository
 	cfg       *config.Config
 	processor *Processor
 }
 
 func NewConsumer(
-	client *redis.ClusterClient,
+	client redis.UniversalClient,
 	repo ports.ChatPersistenceRepository,
 	cfg *config.Config,
 ) *Consumer {
