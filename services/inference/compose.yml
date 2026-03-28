@@ -21,6 +21,7 @@ services:
       - BATCH_SIZE=${INFERENCE_BATCH_SIZE:-32}
       - BATCH_TIMEOUT=${INFERENCE_BATCH_TIMEOUT:-0.05}
       - MAX_TEXT_LENGTH=${INFERENCE_MAX_TEXT_LENGTH:-5000}
+      - INFERENCE_PROVIDERS=${INFERENCE_PROVIDERS:-CUDAExecutionProvider,CPUExecutionProvider}
     deploy:
       resources:
         reservations:
