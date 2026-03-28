@@ -7,10 +7,14 @@ from src.core.interfaces import IModelLoader
 from src.core.exceptions import ModelLoadError
 
 class HuggingFaceLoader(IModelLoader):
-    def __init__(self, cache_dir: str):
+    def __init__(self, cache_dir: str, providers: list[str] | None = None):
         self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True)
-        self.providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+        self.providers = providers or [
+            provider.strip()
+            for provider in os.getenv("INFERENCE_PROVIDERS", "CUDAExecutionProvider,CPUExecutionProvider").split(",")
+            if provider.strip()
+        ]
 
     def load(self, model_key: str):
         try:

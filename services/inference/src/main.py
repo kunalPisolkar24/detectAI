@@ -16,7 +16,14 @@ def main():
         start_http_server(settings.METRICS_PORT)
         logger.info("metrics_server_started", port=settings.METRICS_PORT)
         
-        loader = HuggingFaceLoader(settings.MODEL_CACHE_DIR)
+        loader = HuggingFaceLoader(
+            settings.MODEL_CACHE_DIR,
+            [
+                provider.strip()
+                for provider in settings.INFERENCE_PROVIDERS.split(",")
+                if provider.strip()
+            ],
+        )
         
         logger.info("loading_models")
         spark_raw = SparkEngine(loader.load("spark"))
