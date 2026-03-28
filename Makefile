@@ -1,4 +1,6 @@
-.PHONY: network up build down clean logs shell-web
+.PHONY: network up build down clean logs shell-web local-up local-down local-logs
+
+LOCAL_COMPOSE=docker compose --env-file infra/docker/local/.env -f infra/docker/local/compose.yml
 
 network:
 	@docker network inspect detect_ai_network >/dev/null 2>&1 || docker network create detect_ai_network
@@ -20,3 +22,12 @@ logs:
 
 shell-web:
 	docker compose exec frontend /bin/sh
+
+local-up:
+	$(LOCAL_COMPOSE) up -d
+
+local-down:
+	$(LOCAL_COMPOSE) down --remove-orphans
+
+local-logs:
+	$(LOCAL_COMPOSE) logs -f
