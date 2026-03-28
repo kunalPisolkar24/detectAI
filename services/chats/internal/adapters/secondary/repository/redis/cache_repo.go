@@ -15,11 +15,11 @@ const (
 )
 
 type CacheRepository struct {
-	client *redis.ClusterClient
+	client redis.UniversalClient
 	ttl    time.Duration
 }
 
-func NewCacheRepository(client *redis.ClusterClient, ttl time.Duration) *CacheRepository {
+func NewCacheRepository(client redis.UniversalClient, ttl time.Duration) *CacheRepository {
 	return &CacheRepository{
 		client: client,
 		ttl:    ttl,

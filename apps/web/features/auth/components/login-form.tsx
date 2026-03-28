@@ -31,7 +31,18 @@ export const LoginForm = () => {
   const [rememberMe, setRememberMe] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   
-  const { token, key, onVerify, reset, siteKey } = useTurnstile()
+  const {
+    token,
+    key,
+    siteKey,
+    isConfigured,
+    errorMessage,
+    onVerify,
+    onError,
+    onExpire,
+    onTimeout,
+    reset,
+  } = useTurnstile()
 
   const form = useForm<z.infer<typeof LoginSchema>>({
     resolver: zodResolver(LoginSchema),
@@ -212,15 +223,42 @@ export const LoginForm = () => {
           </div>
 
           <div className="flex justify-center pt-2">
-            <TurnstileComponent
-              key={key}
-              siteKey={siteKey}
-              onVerify={onVerify}
-              onError={() => {
-                setFormError("Verification error. Please try again.")
-                reset()
-              }}
-            />
+            <div className="flex w-full flex-col items-center gap-3">
+              {isConfigured ? (
+                <TurnstileComponent
+                  key={key}
+                  siteKey={siteKey}
+                  onVerify={onVerify}
+                  onError={onError}
+                  onExpire={onExpire}
+                  onTimeout={onTimeout}
+                />
+              ) : (
+                <div className="w-full rounded-md border border-destructive/20 bg-destructive/15 px-4 py-3 text-center text-sm text-destructive">
+                  {errorMessage}
+                </div>
+              )}
+
+              {errorMessage && isConfigured ? (
+                <div className="flex w-full flex-col items-center gap-2">
+                  <p className="text-center text-sm text-destructive">
+                    {errorMessage}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setFormError(null)
+                      reset()
+                    }}
+                    disabled={isPending}
+                  >
+                    Retry verification
+                  </Button>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <Button

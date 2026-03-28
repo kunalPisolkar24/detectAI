@@ -24,7 +24,7 @@ func NewProcessor(repo ports.ChatPersistenceRepository, batchSize int) *Processo
 	}
 }
 
-func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, client *redis.ClusterClient, group string) {
+func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, client redis.UniversalClient, group string) {
 	messages := make([]*domain.Message, 0)
 	msgIDs := make(map[string][]string)
 

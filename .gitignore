@@ -1,1 +1,2 @@
-.env
+docker/prod/.env
+docker/local/.env

@@ -97,46 +97,45 @@ To get a local copy up and running, follow these simple steps.
     ```sh
     pnpm install
     ```
-4.  **Set up environment variables**
+4.  **Set up Docker environment variables**
 
-    Create a `.env` file in `apps/web` and populate it with the necessary variables from `.env.example`.
+    The root `Makefile` is the entrypoint for both Docker stacks.
 
-    **`apps/web/.env`:**
-    ```env
-    DATABASE_URL=""
-
-    GITHUB_ID=""
-    GITHUB_SECRET=""
-
-    GOOGLE_ID=""
-    GOOGLE_SECRET= ""
-
-    NEXTAUTH_SECRET="my_auth_secret"
-    NEXTAUTH_URL=""
-
-    TURNSTILE_SECRET_KEY=""
-    TURNSTILE_SITE_KEY=""
-
-    UPSTASH_REDIS_REST_URL=""
-    UPSTASH_REDIS_REST_TOKEN=""
-
-
-    NEXT_PUBLIC_LOCAL_MODEL_URL=""
-
-    NEXT_PUBLIC_MODEL_URL=""
-    NEXT_PUBLIC_MODEL_API_SECRET=""
-
-    NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=""
-    PADDLE_WEBHOOK_SECRET=""
-    PADDLE_API_KEY=""
-
-    DAILY_API_LIMIT_FREE=100
-    ```
-5.  **Run the development environment**
-
-    This will start both the AI model service and the web application.
+    For the local stack:
     ```sh
-    docker-compose up --build
+    cp docker/local/.env.example docker/local/.env
+    ```
+
+    For the prod-like stack:
+    ```sh
+    cp docker/prod/.env.example docker/prod/.env
+    ```
+
+    Update the env file for the stack you plan to run.
+
+5.  **Discover available commands**
+
+    ```sh
+    make help
+    ```
+
+6.  **Run a stack**
+
+    Start the lightweight local stack:
+    ```sh
+    make local-up
+    ```
+
+    Start the prod-like stack from the repo root:
+    ```sh
+    make up
+    ```
+
+7.  **Build images without starting containers**
+
+    ```sh
+    make build STACK=local SERVICE=frontend
+    make build STACK=prod
     ```
 
 

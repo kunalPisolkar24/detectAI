@@ -8,3 +8,5 @@ README.md
 build
 dist
 .vercel
+.env
+.env.*

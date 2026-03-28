@@ -10,9 +10,14 @@ import { config } from "./config";
 const QUEUE_NAME = "payment_events";
 
 const redisClient = RedisFactory.createClient(
-    config.REDIS_URL,
-    config.REDIS_MODE,
-    "PaymentsRedis"
+    {
+        mode: config.REDIS_MODE,
+        name: "PaymentsRedis",
+        url: config.REDIS_URL,
+        sentinels: config.REDIS_SENTINELS,
+        masterName: config.REDIS_MASTER_NAME,
+        password: process.env.REDIS_PASSWORD,
+    }
 );
 
 const metricsService = new MetricsService("worker-payments");

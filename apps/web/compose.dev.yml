@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+        NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
     command: pnpm dev
     restart: no
     volumes:
@@ -12,12 +15,20 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=${NODE_ENV:-development}
+      - REDIS_MODE=${REDIS_MODE:-sentinel}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_SENTINELS=${REDIS_SENTINELS:-redis-sentinel-1:26379}
+      - REDIS_MASTER_NAME=${REDIS_MASTER_NAME:-mymaster}
       - USE_REDIS_CLUSTER=${USE_REDIS_CLUSTER:-true}
+      - REDIS_USAGE_MODE=${REDIS_USAGE_MODE}
       - REDIS_USAGE_URL=${REDIS_USAGE_URL}
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_USAGE_PASSWORD=${REDIS_USAGE_PASSWORD}
+      - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}
+      - NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
       - FILE_EXTRACTOR_API_URL=${FILE_EXTRACTOR_API_URL}
       - AI_SERVICE_URL=${AI_SERVICE_URL}
       - AI_SERVICE_API_KEY=${AI_SERVICE_API_KEY}
@@ -49,7 +60,10 @@ services:
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
       - REDIS_USAGE_URL=${REDIS_USAGE_URL}
-      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
+      - REDIS_MODE=${REDIS_MODE:-standalone}
+      - REDIS_SENTINELS=${REDIS_SENTINELS}
+      - REDIS_MASTER_NAME=${REDIS_MASTER_NAME}
+      - REDIS_USAGE_MODE=${REDIS_USAGE_MODE}
     volumes:
       - ../../services/workers:/app
       - /app/node_modules
@@ -62,7 +76,9 @@ services:
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
       - REDIS_USAGE_URL=${REDIS_USAGE_URL}
-      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
+      - REDIS_MODE=${REDIS_MODE:-standalone}
+      - REDIS_SENTINELS=${REDIS_SENTINELS}
+      - REDIS_MASTER_NAME=${REDIS_MASTER_NAME}
     volumes:
       - ../../services/workers:/app
       - /app/node_modules
@@ -76,7 +92,9 @@ services:
       - REDIS_URL=${REDIS_URL}
       - REDIS_USAGE_URL=${REDIS_USAGE_URL}
       - RABBITMQ_URL=${RABBITMQ_URL}
-      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
+      - REDIS_MODE=${REDIS_MODE:-standalone}
+      - REDIS_SENTINELS=${REDIS_SENTINELS}
+      - REDIS_MASTER_NAME=${REDIS_MASTER_NAME}
       - PADDLE_API_KEY=${PADDLE_API_KEY}
       - PADDLE_ENVIRONMENT=${PADDLE_ENVIRONMENT:-sandbox}
       - PORT=${WORKER_PAYMENTS_PORT:-7003}

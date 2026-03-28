@@ -38,7 +38,7 @@ func main() {
 	}
 	defer mongoClient.Disconnect(context.Background())
 
-	redisClient, err := redisRepo.NewClusterClient(cfg)
+	redisClient, err := redisRepo.NewClient(cfg)
 	if err != nil {
 		logger.Log.Fatal("Failed to connect to Redis", zap.Error(err))
 	}

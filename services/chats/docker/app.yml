@@ -12,7 +12,8 @@ services:
       - METRICS_PORT=${CHAT_METRICS_PORT:-:9091}
       - MONGO_URI=${CHAT_MONGO_URI:-mongodb://chat_mongo_router:27017}
       - MONGO_DATABASE=${CHAT_MONGO_DB:-chat_db}
-      - REDIS_CLUSTER_ADDRS=${CHAT_REDIS_CLUSTER_ADDRS:-chat_redis_1:7010,chat_redis_2:7011,chat_redis_3:7012}
+      - CHAT_REDIS_MODE=${CHAT_REDIS_MODE:-cluster}
+      - CHAT_REDIS_ADDRS=${CHAT_REDIS_ADDRS:-chat_redis_1:7010,chat_redis_2:7011,chat_redis_3:7012}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_POOL_SIZE=${CHAT_REDIS_POOL_SIZE:-100}
       - WORKER_CONCURRENCY=${CHAT_WORKER_CONCURRENCY:-10}
@@ -49,7 +50,8 @@ services:
       - METRICS_PORT=${CHAT_WORKER_METRICS_PORT:-:9099}
       - MONGO_URI=${CHAT_MONGO_URI:-mongodb://chat_mongo_router:27017}
       - MONGO_DATABASE=${CHAT_MONGO_DB:-chat_db}
-      - REDIS_CLUSTER_ADDRS=${CHAT_REDIS_CLUSTER_ADDRS:-chat_redis_1:7010,chat_redis_2:7011,chat_redis_3:7012}
+      - CHAT_REDIS_MODE=${CHAT_REDIS_MODE:-cluster}
+      - CHAT_REDIS_ADDRS=${CHAT_REDIS_ADDRS:-chat_redis_1:7010,chat_redis_2:7011,chat_redis_3:7012}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_POOL_SIZE=${CHAT_REDIS_POOL_SIZE:-100}
       - WORKER_CONCURRENCY=${CHAT_WORKER_CONCURRENCY:-10}
