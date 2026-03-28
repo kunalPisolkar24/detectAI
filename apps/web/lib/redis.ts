@@ -6,6 +6,27 @@ const globalForRedis = global as unknown as {
   redisReader: Redis
 }
 
+const getRedisMode = () => env.REDIS_MODE ?? "sentinel"
+
+const getStandaloneConfig = (): { url: string; options: RedisOptions } => {
+  if (!env.REDIS_URL) {
+    throw new Error("REDIS_URL is required when REDIS_MODE=standalone")
+  }
+
+  return {
+    url: env.REDIS_URL,
+    options: {
+      password: env.REDIS_PASSWORD,
+      retryStrategy: (times) => Math.min(times * 50, 2000),
+      enableReadyCheck: false,
+      maxRetriesPerRequest: null,
+      family: 4,
+      keepAlive: 10000,
+      lazyConnect: true,
+    },
+  }
+}
+
 const getSentinelConfig = (): RedisOptions => {
   const sentinelStr = env.REDIS_SENTINELS || "localhost:26379"
   const sentinels = sentinelStr.split(",").map((s) => {
@@ -28,17 +49,23 @@ const getSentinelConfig = (): RedisOptions => {
 }
 
 const createRedisClients = () => {
-  const options = getSentinelConfig()
+  const mode = getRedisMode()
+  const standaloneConfig = mode === "standalone" ? getStandaloneConfig() : null
+  const writer =
+    mode === "standalone"
+      ? new Redis(standaloneConfig!.url, standaloneConfig!.options)
+      : new Redis({
+          ...getSentinelConfig(),
+          role: "master",
+        })
 
-  const writer = new Redis({
-    ...options,
-    role: "master",
-  })
-
-  const reader = new Redis({
-    ...options,
-    role: "slave",
-  })
+  const reader =
+    mode === "standalone"
+      ? new Redis(standaloneConfig!.url, standaloneConfig!.options)
+      : new Redis({
+          ...getSentinelConfig(),
+          role: "slave",
+        })
 
   writer.on("error", (err) => {
     console.error("Redis Writer Error:", err.message)
