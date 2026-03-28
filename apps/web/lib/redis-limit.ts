@@ -5,6 +5,14 @@ type RedisClient = Redis | Cluster
 
 const globalForRedis = global as unknown as { usageRedis: RedisClient }
 
+const getUsageMode = () => {
+  if (env.REDIS_USAGE_MODE) {
+    return env.REDIS_USAGE_MODE
+  }
+
+  return env.USE_REDIS_CLUSTER ? "cluster" : "standalone"
+}
+
 const getClusterNodes = (urlString: string): ClusterNode[] => {
   return urlString.split(",").map((url) => {
     const cleanUrl = url.replace("redis://", "")
@@ -17,7 +25,7 @@ const getClusterNodes = (urlString: string): ClusterNode[] => {
 }
 
 const createClient = (): RedisClient => {
-  if (env.USE_REDIS_CLUSTER) {
+  if (getUsageMode() === "cluster") {
     const nodes = getClusterNodes(env.REDIS_USAGE_URL)
 
     const cluster = new Redis.Cluster(nodes, {
