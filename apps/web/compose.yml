@@ -1,9 +1,12 @@
 services:
   frontend:
     container_name: detect_ai_frontend
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+        NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
     restart: always
     environment:
       # Environment

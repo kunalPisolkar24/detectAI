@@ -164,6 +164,9 @@ services:
     build:
       context: ../../../apps/web
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+        NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
     restart: "no"
     command: ["sh", "-c", "npx prisma migrate deploy"]
     environment:
@@ -350,6 +353,9 @@ services:
     build:
       context: ../../../apps/web
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+        NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
     restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV}
