@@ -22,7 +22,7 @@ const globalForPrisma = globalThis as unknown as {
 
 const createExtendedClient = () => {
   const poolPrimary = new Pool({ connectionString: env.DATABASE_URL });
-  const poolReplica = new Pool({ connectionString: env.DATABASE_URL_REPLICA });
+  const poolReplica = new Pool({ connectionString: env.DATABASE_URL_REPLICA ?? env.DATABASE_URL });
 
   const adapterPrimary = new PrismaPg(poolPrimary);
   const adapterReplica = new PrismaPg(poolReplica);
