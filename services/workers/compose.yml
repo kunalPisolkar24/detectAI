@@ -22,6 +22,11 @@ services:
       - "${WORKER_ANALYTICS_PORT:-7001}:7001"
     networks:
       - detectai_net
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      postgres-primary:
+        condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:7001/health" ]
       interval: 30s
@@ -50,6 +55,11 @@ services:
       - "${WORKER_CRON_PORT:-7002}:7002"
     networks:
       - detectai_net
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      postgres-primary:
+        condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:7002/health" ]
       interval: 30s
@@ -82,6 +92,10 @@ services:
     networks:
       - detectai_net
     depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      postgres-primary:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     healthcheck:

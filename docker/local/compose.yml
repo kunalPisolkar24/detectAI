@@ -164,11 +164,8 @@ services:
     build:
       context: ../../apps/web
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
-        NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
+      target: migrate
     restart: "no"
-    command: ["sh", "-c", "npx prisma migrate deploy"]
     environment:
       DATABASE_URL: ${DATABASE_URL}
     depends_on:

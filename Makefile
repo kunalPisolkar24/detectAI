@@ -20,7 +20,7 @@ PROD_NETWORK := $(if $(PROD_NETWORK),$(PROD_NETWORK),detect_ai_network)
 
 .PHONY: help network validate-stack \
 	up down logs clean build rebuild shell-web \
-	prod-up prod-down prod-logs prod-clean prod-build prod-rebuild prod-config prod-ps \
+	prod-up prod-down prod-logs prod-clean prod-build prod-rebuild prod-config prod-ps prod-migrate \
 	local-up local-down local-logs local-clean local-build local-rebuild local-config local-ps
 
 help:
@@ -37,7 +37,8 @@ help:
 	@printf "  make prod-build        Build prod images\n"
 	@printf "  make prod-rebuild      Rebuild prod images without cache\n"
 	@printf "  make prod-config       Render prod compose config\n"
-	@printf "  make prod-ps           Show prod containers\n\n"
+	@printf "  make prod-ps           Show prod containers\n"
+	@printf "  make prod-migrate      Run prod DB migrations once\n\n"
 	@printf "Local\n"
 	@printf "  make local-up          Start the local stack\n"
 	@printf "  make local-down        Stop the local stack\n"
@@ -107,6 +108,9 @@ prod-config:
 
 prod-ps:
 	$(PROD_COMPOSE) ps
+
+prod-migrate: network
+	$(PROD_COMPOSE) run --rm db-migrate
 
 local-up:
 	$(LOCAL_COMPOSE) up -d

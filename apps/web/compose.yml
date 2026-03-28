@@ -1,4 +1,18 @@
 services:
+  db-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    restart: "no"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+    networks:
+      - detectai_net
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+
   frontend:
     container_name: detect_ai_frontend
     build:
@@ -57,6 +71,8 @@ services:
     networks:
       - detectai_net
     depends_on:
+      db-migrate:
+        condition: service_completed_successfully
       postgres-primary:
         condition: service_healthy
       redis-master:

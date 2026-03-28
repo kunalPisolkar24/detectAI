@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:20-alpine AS base
 
 RUN apk add --no-cache libc6-compat
 
@@ -6,13 +6,23 @@ WORKDIR /app
 
 RUN npm install -g pnpm
 
+FROM base AS deps
+
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
+FROM deps AS source
+
 COPY . .
 
-RUN npx prisma generate
+RUN pnpm exec prisma generate
+
+FROM source AS migrate
+
+CMD ["pnpm", "run", "db:migrate:deploy"]
+
+FROM source AS builder
 
 ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
 ARG NEXT_PUBLIC_PADDLE_CLIENT_TOKEN
@@ -38,6 +48,10 @@ RUN test -n "$NEXT_PUBLIC_TURNSTILE_SITE_KEY" && test "$NEXT_PUBLIC_TURNSTILE_SI
  && test -n "$NEXT_PUBLIC_PADDLE_CLIENT_TOKEN" && test "$NEXT_PUBLIC_PADDLE_CLIENT_TOKEN" != "dummy"
 
 RUN pnpm build
+
+FROM source AS runner
+
+COPY --from=builder /app/.next ./.next
 
 EXPOSE 3000
 
