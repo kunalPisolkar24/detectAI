@@ -5,10 +5,40 @@ package aidetection;
 service AIService {
   rpc DetectSpark (PredictRequest) returns (PredictResponse) {}
   rpc DetectFlare (PredictRequest) returns (PredictResponse) {}
+  rpc AnalyzeDocument (AnalyzeDocumentRequest) returns (stream AnalyzeDocumentEvent) {}
+}
+
+enum AnalysisModel {
+  ANALYSIS_MODEL_UNSPECIFIED = 0;
+  ANALYSIS_MODEL_SPARK = 1;
+  ANALYSIS_MODEL_FLARE = 2;
 }
 
 message PredictRequest {
   string text = 1;
+}
+
+message AnalyzeDocumentRequest {
+  string text = 1;
+  AnalysisModel model = 2;
+}
+
+message AnalyzeDocumentStarted {
+  int32 total_chars = 1;
+  int32 total_chunks = 2;
+}
+
+message AnalyzeDocumentProgress {
+  int32 processed_chunks = 1;
+  int32 total_chunks = 2;
+}
+
+message AnalyzeDocumentEvent {
+  oneof event {
+    AnalyzeDocumentStarted started = 1;
+    AnalyzeDocumentProgress progress = 2;
+    PredictResponse final = 3;
+  }
 }
 
 message PredictResponse {
