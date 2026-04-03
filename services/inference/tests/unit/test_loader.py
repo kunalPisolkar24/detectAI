@@ -54,3 +54,13 @@ def test_load_runtime_error(mock_loader_env):
     with pytest.raises(ModelLoadError) as exc:
         loader.load("spark")
     assert "Network Error" in str(exc.value)
+
+
+def test_loader_parses_json_provider_env(mock_loader_env, monkeypatch):
+    mock_session, _, _, _ = mock_loader_env
+    monkeypatch.setenv("INFERENCE_PROVIDERS", '["CPUExecutionProvider"]')
+
+    loader = HuggingFaceLoader("./cache")
+    loader.load("spark")
+
+    assert mock_session.call_args.kwargs["providers"] == ["CPUExecutionProvider"]
