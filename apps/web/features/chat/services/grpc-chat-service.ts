@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import "server-only"
 import { IChatService } from "./chat-service.interface"
-import { ChatSession, ChatHistoryItem, Message, ModelType } from "../types"
+import { AnalysisResult, ChatSession, ChatHistoryItem, Message, ModelType } from "../types"
 import { getChatGrpcClient } from "@/lib/grpc/chat-client"
 import { inferenceService } from "./inference-service"
 import { mapGrpcMessageToDomain, mapDomainAnalysisToGrpc } from "../utils/mappers"
@@ -106,19 +106,21 @@ export class GrpcChatService implements IChatService {
     const userId = await this.getUserId()
 
     const [, analysisResult] = await Promise.all([
-      this.saveToBackend(chatId, userId, "user", content),
+      this.saveUserMessage(chatId, userId, content),
       inferenceService.detect(content, model)
     ])
 
-    const assistantMessage = await this.saveToBackend(
-      chatId,
-      userId,
-      "assistant",
-      "",
-      analysisResult
-    )
+    const assistantMessage = await this.saveAssistantAnalysis(chatId, userId, analysisResult)
 
     return assistantMessage
+  }
+
+  async saveUserMessage(chatId: string, userId: string, content: string): Promise<Message> {
+    return this.saveToBackend(chatId, userId, "user", content)
+  }
+
+  async saveAssistantAnalysis(chatId: string, userId: string, analysisResult: AnalysisResult): Promise<Message> {
+    return this.saveToBackend(chatId, userId, "assistant", "", analysisResult)
   }
 
   async deleteChat(chatId: string): Promise<void> {
