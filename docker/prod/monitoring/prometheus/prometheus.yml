@@ -1,0 +1,131 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: frontend
+    metrics_path: /api/metrics
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/web_metrics_token
+    static_configs:
+      - targets:
+          - frontend:3000
+
+  - job_name: worker-analytics
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - worker-analytics:7001
+
+  - job_name: worker-cron
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - worker-cron:7002
+
+  - job_name: worker-payments
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - worker-payments:7003
+
+  - job_name: inference
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - ai-service:8333
+
+  - job_name: chat-service
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - chat-service:9091
+
+  - job_name: chat-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - chat-worker:9099
+
+  - job_name: document-parser
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - document-parser:8000
+
+  - job_name: payment-gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - payment-gateway:8080
+
+  - job_name: postgres-primary
+    static_configs:
+      - targets:
+          - postgres-exporter-primary:9187
+
+  - job_name: postgres-replica
+    static_configs:
+      - targets:
+          - postgres-exporter-replica:9187
+
+  - job_name: rabbitmq
+    static_configs:
+      - targets:
+          - rabbitmq-exporter:9419
+
+  - job_name: redis-master
+    static_configs:
+      - targets:
+          - redis-exporter-master:9121
+
+  - job_name: redis-slave-1
+    static_configs:
+      - targets:
+          - redis-exporter-slave-1:9121
+
+  - job_name: redis-slave-2
+    static_configs:
+      - targets:
+          - redis-exporter-slave-2:9121
+
+  - job_name: redis-ratelimit
+    static_configs:
+      - targets:
+          - redis-exporter-ratelimit:9121
+
+  - job_name: redis-usage-0
+    static_configs:
+      - targets:
+          - redis-exporter-usage-0:9121
+
+  - job_name: redis-usage-1
+    static_configs:
+      - targets:
+          - redis-exporter-usage-1:9121
+
+  - job_name: redis-usage-2
+    static_configs:
+      - targets:
+          - redis-exporter-usage-2:9121
+
+  - job_name: redis-chat-1
+    static_configs:
+      - targets:
+          - redis-exporter-chat-1:9121
+
+  - job_name: redis-chat-2
+    static_configs:
+      - targets:
+          - redis-exporter-chat-2:9121
+
+  - job_name: redis-chat-3
+    static_configs:
+      - targets:
+          - redis-exporter-chat-3:9121
+
+  - job_name: mongodb
+    static_configs:
+      - targets:
+          - mongo-exporter:9216
