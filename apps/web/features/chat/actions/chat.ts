@@ -1,6 +1,7 @@
 "use server"
 
 import { chatService } from "@/features/chat/services"
+import { MAX_LIVE_ANALYSIS_CHARS } from "@/features/chat/constants"
 import { ModelType, ChatSession, Message, ChatHistoryItem } from "@/features/chat/types"
 import { authOptions } from "@/lib/auth-options"
 import { getServerSession } from "next-auth"
@@ -57,6 +58,13 @@ export async function sendMessageAction(chatId: string, content: string, model: 
 
     if (!allowed) {
       return { success: false, error: "Rate limit exceeded", isRateLimit: true }
+    }
+
+    if (content.length > MAX_LIVE_ANALYSIS_CHARS) {
+      return {
+        success: false,
+        error: `Text exceeds maximum length of ${MAX_LIVE_ANALYSIS_CHARS} characters`
+      }
     }
 
     const message = await chatService.sendMessage(chatId, content, model)
