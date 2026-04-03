@@ -1,17 +1,37 @@
 import asyncio
+from time import perf_counter
 from concurrent.futures import ThreadPoolExecutor
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Response
 from app.config import settings
 from app.utils.logger import logger, log_request_middleware
 from app.utils.validator import validate_file
 from app.utils.cleaner import TextCleaner
 from app.services.extractor import FileExtractor
 from app.schemas import ExtractionResponse, HealthCheck
+from app.metrics import record_request, render_metrics
 from starlette.middleware.base import BaseHTTPMiddleware
 
 app = FastAPI(title=settings.API_TITLE, version=settings.API_VERSION)
 
 app.add_middleware(BaseHTTPMiddleware, dispatch=log_request_middleware)
+
+async def metrics_middleware(request: Request, call_next):
+    if request.url.path == "/metrics":
+        return await call_next(request)
+
+    start = perf_counter()
+    response = None
+
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        route = request.scope.get("route")
+        route_path = getattr(route, "path", request.url.path)
+        status_code = response.status_code if response is not None else 500
+        record_request(request.method, route_path, status_code, perf_counter() - start)
+
+app.add_middleware(BaseHTTPMiddleware, dispatch=metrics_middleware)
 
 # Thread pool for CPU-bound tasks
 process_pool = ThreadPoolExecutor(max_workers=4)
@@ -57,3 +77,8 @@ async def extract_text(file: UploadFile = File(...)):
 @app.get("/health", response_model=HealthCheck)
 async def health_check():
     return HealthCheck(status="ok")
+
+@app.get("/metrics")
+async def metrics():
+    payload, content_type = render_metrics()
+    return Response(content=payload, media_type=content_type)
