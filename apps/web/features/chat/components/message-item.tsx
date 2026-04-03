@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { merriweather } from "@/lib/fonts"
 import { Message } from "../types"
 import { AnalysisCard } from "./analysis-card"
+import { AnalysisProgressCard } from "./analysis-progress-card"
 
 interface MessageItemProps {
   message: Message
@@ -37,7 +38,9 @@ export const MessageItem = ({ message }: MessageItemProps) => {
              {message.content}
            </div>
         ) : (
-           message.analysis && <AnalysisCard result={message.analysis} />
+           message.isStreaming && message.streamingProgress
+             ? <AnalysisProgressCard progress={message.streamingProgress} />
+             : message.analysis && <AnalysisCard result={message.analysis} />
         )}
       </div>
     </m.div>
