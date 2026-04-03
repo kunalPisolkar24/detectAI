@@ -9,3 +9,6 @@ class InferenceError(AIServiceException):
 
 class InvalidInputError(AIServiceException):
     pass
+
+class ServiceOverloadedError(AIServiceException):
+    pass
