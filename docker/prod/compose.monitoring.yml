@@ -19,6 +19,8 @@ services:
     volumes:
       - prometheus_data:/prometheus
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     expose:
       - "9090"
     networks:
@@ -56,6 +58,38 @@ services:
       timeout: 10s
       retries: 5
       start_period: 20s
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.54.1
+    container_name: detect_ai_cadvisor
+    restart: unless-stopped
+    privileged: true
+    command:
+      - --docker_only=true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    expose:
+      - "8080"
+    networks:
+      - detectai_net
+
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.10.2
+    container_name: detect_ai_node_exporter
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($|/)
+    network_mode: host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
 
   postgres-exporter-primary:
     image: prometheuscommunity/postgres-exporter:v0.17.1

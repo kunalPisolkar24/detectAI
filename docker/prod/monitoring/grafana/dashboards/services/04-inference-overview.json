@@ -32,19 +32,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -57,25 +45,25 @@
       "id": 1,
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "targets": [
         {
           "editorMode": "code",
-          "expr": "up{job=~\"frontend|worker-analytics|worker-cron|worker-payments|inference|chat-service|chat-worker|document-parser|payment-gateway\"}",
-          "legendFormat": "{{job}}",
+          "expr": "sum(rate(grpc_requests_total{job=\"inference\"}[5m])) by (method, model, code)",
+          "legendFormat": "{{method}} {{model}} {{code}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Service Availability",
+      "title": "gRPC Request Rate",
       "type": "timeseries"
     },
     {
@@ -89,7 +77,9 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "reqps"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -102,7 +92,7 @@
       "id": 2,
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -114,13 +104,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(worker_jobs_processed_total[5m])) by (service, job_type)",
-          "legendFormat": "{{service}} {{job_type}}",
+          "expr": "100 * sum(rate(grpc_requests_total{job=\"inference\",code!=\"OK\"}[5m])) by (method, model) / clamp_min(sum(rate(grpc_requests_total{job=\"inference\"}[5m])) by (method, model), 0.001)",
+          "legendFormat": "{{method}} {{model}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Worker Throughput",
+      "title": "gRPC Error Rate",
       "type": "timeseries"
     },
     {
@@ -159,13 +149,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket[5m])) by (le, operation))",
-          "legendFormat": "{{operation}}",
+          "expr": "histogram_quantile(0.95, sum(rate(grpc_latency_seconds_bucket{job=\"inference\"}[5m])) by (method, model, le))",
+          "legendFormat": "{{method}} {{model}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Web DB Query p95",
+      "title": "gRPC p95 Latency",
       "type": "timeseries"
     },
     {
@@ -179,7 +169,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "s"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -204,13 +194,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(ai_inference_duration_seconds_bucket[5m])) by (le, model))",
+          "expr": "sum(model_batch_queue_size{job=\"inference\"}) by (model)",
           "legendFormat": "{{model}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Web AI Inference p95",
+      "title": "Batch Queue Size",
       "type": "timeseries"
     },
     {
@@ -224,7 +214,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "reqps"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -249,13 +239,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(grpc_requests_total[5m])) by (method, code)",
-          "legendFormat": "{{method}} {{code}}",
+          "expr": "histogram_quantile(0.95, sum(rate(model_batch_size_bucket{job=\"inference\"}[5m])) by (model, le))",
+          "legendFormat": "{{model}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Inference gRPC Request Rate",
+      "title": "Batch Size p95",
       "type": "timeseries"
     },
     {
@@ -269,7 +259,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "ops"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -282,7 +272,7 @@
       "id": 6,
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -294,13 +284,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(chat_messages_ingested_total[5m]))",
-          "legendFormat": "messages",
+          "expr": "histogram_quantile(0.95, sum(rate(model_batch_processing_seconds_bucket{job=\"inference\"}[5m])) by (model, le))",
+          "legendFormat": "{{model}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Chat Messages Ingested",
+      "title": "Batch Processing p95",
       "type": "timeseries"
     },
     {
@@ -314,7 +304,9 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "reqps"
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
         },
         "overrides": []
       },
@@ -339,13 +331,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(http_requests_total{job=\"document-parser\"}[5m])) by (route, status_code)",
-          "legendFormat": "{{route}} {{status_code}}",
+          "expr": "histogram_quantile(0.50, sum(rate(model_ai_confidence_score_bucket{job=\"inference\"}[5m])) by (model, le))",
+          "legendFormat": "{{model}} p50",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(model_ai_confidence_score_bucket{job=\"inference\"}[5m])) by (model, le))",
+          "legendFormat": "{{model}} p95",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Document Parser Request Rate",
+      "title": "AI Confidence Distribution",
       "type": "timeseries"
     },
     {
@@ -359,7 +358,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "reqps"
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -384,13 +383,103 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(http_requests_total{job=\"payment-gateway\"}[5m])) by (route, status_code)",
-          "legendFormat": "{{route}} {{status_code}}",
+          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"ai-service\",id!=\"/\"}[5m]))",
+          "legendFormat": "ai-service",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Payment Gateway Request Rate",
+      "title": "Container CPU Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"ai-service\",id!=\"/\"})",
+          "legendFormat": "ai-service",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Container Memory Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "process_resident_memory_bytes{job=\"inference\"}",
+          "legendFormat": "inference",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Process Resident Memory",
       "type": "timeseries"
     }
   ],
@@ -399,7 +488,8 @@
   "style": "dark",
   "tags": [
     "detect-ai",
-    "app"
+    "service",
+    "inference"
   ],
   "templating": {
     "list": []
@@ -410,8 +500,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Detect AI App Overview",
-  "uid": "detect-ai-app-overview",
+  "title": "Detect AI Inference Overview",
+  "uid": "detect-ai-inference-overview",
   "version": 1,
   "weekStart": ""
 }

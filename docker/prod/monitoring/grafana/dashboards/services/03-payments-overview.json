@@ -32,19 +32,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -57,25 +45,25 @@
       "id": 1,
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "targets": [
         {
           "editorMode": "code",
-          "expr": "up{job=~\"postgres-primary|postgres-replica|rabbitmq|redis-.*|mongodb\"}",
-          "legendFormat": "{{job}}",
+          "expr": "sum(rate(http_request_duration_seconds_count{job=\"payment-gateway\"}[5m])) by (route, status_code)",
+          "legendFormat": "{{route}} {{status_code}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Infra Availability",
+      "title": "Request Rate by Route",
       "type": "timeseries"
     },
     {
@@ -89,7 +77,9 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "short"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -107,20 +97,20 @@
           "showLegend": true
         },
         "tooltip": {
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "targets": [
         {
           "editorMode": "code",
-          "expr": "pg_up",
-          "legendFormat": "{{instance}}",
+          "expr": "100 * sum(rate(http_request_duration_seconds_count{job=\"payment-gateway\",status_code=~\"4..|5..\"}[5m])) by (route) / clamp_min(sum(rate(http_request_duration_seconds_count{job=\"payment-gateway\"}[5m])) by (route), 0.001)",
+          "legendFormat": "{{route}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Postgres Exporter Up",
+      "title": "Error Rate by Route",
       "type": "timeseries"
     },
     {
@@ -134,7 +124,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "short"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -159,13 +149,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(pg_stat_database_numbackends) by (instance)",
-          "legendFormat": "{{instance}}",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"payment-gateway\"}[5m])) by (route, le))",
+          "legendFormat": "{{route}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Postgres Connections",
+      "title": "p95 Latency by Route",
       "type": "timeseries"
     },
     {
@@ -179,7 +169,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "short"
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -204,13 +194,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rabbitmq_queue_messages) by (queue)",
-          "legendFormat": "{{queue}}",
+          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"payment-gateway\",id!=\"/\"}[5m]))",
+          "legendFormat": "payment-gateway",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "RabbitMQ Queue Depth",
+      "title": "Container CPU Usage",
       "type": "timeseries"
     },
     {
@@ -249,13 +239,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(redis_memory_used_bytes) by (job)",
-          "legendFormat": "{{job}}",
+          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"payment-gateway\",id!=\"/\"})",
+          "legendFormat": "payment-gateway",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Redis Memory Used",
+      "title": "Container Memory Usage",
       "type": "timeseries"
     },
     {
@@ -294,13 +284,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(redis_connected_clients) by (job)",
-          "legendFormat": "{{job}}",
+          "expr": "go_goroutines{job=\"payment-gateway\"}",
+          "legendFormat": "payment-gateway",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Redis Connected Clients",
+      "title": "Go Goroutines",
       "type": "timeseries"
     },
     {
@@ -314,50 +304,83 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
+          "unit": "short"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
+        "w": 12,
         "x": 0,
         "y": 24
       },
       "id": 7,
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "targets": [
         {
           "editorMode": "code",
-          "expr": "mongodb_up",
-          "legendFormat": "{{instance}}",
+          "expr": "process_open_fds{job=\"payment-gateway\"}",
+          "legendFormat": "payment-gateway",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Mongo Availability",
+      "title": "Process Open File Descriptors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "process_resident_memory_bytes{job=\"payment-gateway\"}",
+          "legendFormat": "payment-gateway",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Process Resident Memory",
       "type": "timeseries"
     }
   ],
@@ -366,7 +389,8 @@
   "style": "dark",
   "tags": [
     "detect-ai",
-    "infra"
+    "service",
+    "payments"
   ],
   "templating": {
     "list": []
@@ -377,8 +401,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Detect AI Infra Overview",
-  "uid": "detect-ai-infra-overview",
+  "title": "Detect AI Payment Gateway Overview",
+  "uid": "detect-ai-payments-overview",
   "version": 1,
   "weekStart": ""
 }
