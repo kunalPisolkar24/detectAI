@@ -12,14 +12,14 @@ import structlog
 logger = structlog.get_logger()
 
 class GRPCServer:
-    def __init__(self, spark_engine, flare_engine):
+    def __init__(self, analysis_service):
         self.port = settings.GRPC_PORT
         self.server = grpc.server(
             futures.ThreadPoolExecutor(max_workers=50),
             interceptors=[AuthInterceptor(), MonitoringInterceptor()]
         )
         
-        servicer = AIService(spark_engine, flare_engine)
+        servicer = AIService(analysis_service)
         ai_service_pb2_grpc.add_AIServiceServicer_to_server(servicer, self.server)
         add_health_check(self.server)
         
