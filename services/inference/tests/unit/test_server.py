@@ -5,23 +5,23 @@ from unittest.mock import MagicMock, patch
 from src.server.grpc_server import GRPCServer
 
 @pytest.fixture
-def mock_engines():
-    return MagicMock(), MagicMock()
+def mock_analysis_service():
+    return MagicMock()
 
-def test_server_initialization(mock_engines):
+def test_server_initialization(mock_analysis_service):
     with patch("src.server.grpc_server.grpc.server") as mock_grpc_server, \
          patch("src.server.grpc_server.add_health_check") as mock_health:
         
         server_instance = MagicMock()
         mock_grpc_server.return_value = server_instance
         
-        GRPCServer(*mock_engines)
+        GRPCServer(mock_analysis_service)
         
         mock_grpc_server.assert_called_once()
         mock_health.assert_called_once_with(server_instance)
         server_instance.add_insecure_port.assert_not_called() 
 
-def test_server_start_stop(mock_engines):
+def test_server_start_stop(mock_analysis_service):
     with patch("src.server.grpc_server.grpc.server") as mock_grpc_server, \
          patch("src.server.grpc_server.signal.signal"), \
          patch("src.server.grpc_server.add_health_check"):
@@ -29,7 +29,7 @@ def test_server_start_stop(mock_engines):
         server_instance = MagicMock()
         mock_grpc_server.return_value = server_instance
         
-        server = GRPCServer(*mock_engines)
+        server = GRPCServer(mock_analysis_service)
         
         def stop_trigger():
             server._stop_handler(signal.SIGTERM, None)
