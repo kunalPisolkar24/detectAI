@@ -31,26 +31,28 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 0,
+          "decimals": 1,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": 0
               },
               {
                 "color": "orange",
-                "value": 70
+                "value": 90
               },
               {
-                "color": "red",
-                "value": 85
+                "color": "green",
+                "value": 99
               }
             ]
           },
-          "unit": "short"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -78,79 +80,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "count(container_start_time_seconds{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "100 * avg(up{job=\"rabbitmq\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Running Containers",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 1,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "orange",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 85
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m]))",
-          "legendFormat": "",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Total Container CPU",
+      "title": "Availability",
       "type": "stat"
     },
     {
@@ -182,7 +118,73 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rabbitmq_queue_messages_ready)",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Ready Messages",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -210,13 +212,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "sum(rabbitmq_queue_consumers)",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total Container Memory",
+      "title": "Consumers",
       "type": "stat"
     },
     {
@@ -276,13 +278,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_oom_events_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "sum(rabbitmq_connections)",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "OOM Events",
+      "title": "Connections",
       "type": "stat"
     },
     {
@@ -321,13 +323,27 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "count by (container_label_com_docker_compose_service) (container_start_time_seconds{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(rabbitmq_queue_messages_ready) by (queue)",
+          "legendFormat": "{{queue}} ready",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rabbitmq_queue_messages_unacknowledged) by (queue)",
+          "legendFormat": "{{queue}} unacked",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rabbitmq_queue_messages) by (queue)",
+          "legendFormat": "{{queue}} total",
+          "range": true,
+          "refId": "C"
         }
       ],
-      "title": "Container Count by Service",
+      "title": "Queue Depth",
       "type": "timeseries"
     },
     {
@@ -341,7 +357,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "percent"
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -366,13 +382,27 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, 100 * sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(rate(rabbitmq_queue_messages_published_total[5m])) by (queue)",
+          "legendFormat": "{{queue}} published",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(rabbitmq_queue_messages_delivered_total[5m])) by (queue)",
+          "legendFormat": "{{queue}} delivered",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(rabbitmq_queue_messages_ack_total[5m])) by (queue)",
+          "legendFormat": "{{queue}} ack",
+          "range": true,
+          "refId": "C"
         }
       ],
-      "title": "Top Container CPU",
+      "title": "Publish, Deliver, Ack Rates",
       "type": "timeseries"
     },
     {
@@ -386,7 +416,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "bytes"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -411,13 +441,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(rabbitmq_queue_consumers) by (queue)",
+          "legendFormat": "{{queue}} consumers",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "avg(rabbitmq_queue_consumer_utilisation) by (queue)",
+          "legendFormat": "{{queue}} utilisation",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Top Container Memory",
+      "title": "Consumers and Utilization",
       "type": "timeseries"
     },
     {
@@ -431,7 +468,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "bytes"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -456,13 +493,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (container_fs_usage_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "rabbitmq_connections",
+          "legendFormat": "connections",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "rabbitmq_channels",
+          "legendFormat": "channels",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Top Container Filesystem Usage",
+      "title": "Connections and Channels",
       "type": "timeseries"
     },
     {
@@ -476,7 +520,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "Bps"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -501,13 +545,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "rabbitmq_node_mem_used",
+          "legendFormat": "used",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "rabbitmq_node_mem_limit",
+          "legendFormat": "limit",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Top Container Network Receive",
+      "title": "Node Memory",
       "type": "timeseries"
     },
     {
@@ -521,7 +572,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "Bps"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -546,13 +597,34 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "rabbitmq_node_disk_free",
+          "legendFormat": "disk free",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "rabbitmq_node_disk_free_limit",
+          "legendFormat": "disk free limit",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "rabbitmq_fd_used",
+          "legendFormat": "fd used",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "editorMode": "code",
+          "expr": "rabbitmq_fd_available",
+          "legendFormat": "fd available",
+          "range": true,
+          "refId": "D"
         }
       ],
-      "title": "Top Container Network Transmit",
+      "title": "Disk Free and FD Usage",
       "type": "timeseries"
     }
   ],
@@ -562,7 +634,7 @@
   "tags": [
     "detect-ai",
     "infrastructure",
-    "containers",
+    "rabbitmq",
     "detailed"
   ],
   "templating": {
@@ -574,8 +646,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Detect AI Container Overview",
-  "uid": "detect-ai-container-overview",
+  "title": "Detect AI RabbitMQ Overview",
+  "uid": "detect-ai-rabbitmq-overview",
   "version": 1,
   "weekStart": ""
 }

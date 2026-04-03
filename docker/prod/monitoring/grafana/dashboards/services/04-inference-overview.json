@@ -29,6 +29,274 @@
       "fieldConfig": {
         "defaults": {
           "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * avg(up{job=\"inference\"})",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Availability",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(grpc_requests_total{job=\"inference\"}[5m]))",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "gRPC Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * sum(rate(grpc_requests_total{job=\"inference\",code!=\"OK\"}[5m])) / clamp_min(sum(rate(grpc_requests_total{job=\"inference\"}[5m])), 0.001)",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Error Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 3,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(grpc_latency_seconds_bucket{job=\"inference\"}[5m])) by (le))",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "gRPC p95",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
             "mode": "palette-classic"
           },
           "mappings": [],
@@ -40,9 +308,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 0
+        "y": 4
       },
-      "id": 1,
+      "id": 5,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -77,53 +345,6 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "percent",
-          "min": 0,
-          "max": 100
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "100 * sum(rate(grpc_requests_total{job=\"inference\",code!=\"OK\"}[5m])) by (method, model) / clamp_min(sum(rate(grpc_requests_total{job=\"inference\"}[5m])) by (method, model), 0.001)",
-          "legendFormat": "{{method}} {{model}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "gRPC Error Rate",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
           "unit": "s"
         },
         "overrides": []
@@ -131,10 +352,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 8
+        "x": 12,
+        "y": 4
       },
-      "id": 3,
+      "id": 6,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -176,10 +397,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 8
+        "x": 0,
+        "y": 12
       },
-      "id": 4,
+      "id": 7,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -221,10 +442,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 16
+        "x": 12,
+        "y": 12
       },
-      "id": 5,
+      "id": 8,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -240,57 +461,19 @@
         {
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum(rate(model_batch_size_bucket{job=\"inference\"}[5m])) by (model, le))",
-          "legendFormat": "{{model}}",
+          "legendFormat": "{{model}} size p95",
           "range": true,
           "refId": "A"
-        }
-      ],
-      "title": "Batch Size p95",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "unit": "s"
         },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 16
-      },
-      "id": 6,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
         {
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum(rate(model_batch_processing_seconds_bucket{job=\"inference\"}[5m])) by (model, le))",
-          "legendFormat": "{{model}}",
+          "legendFormat": "{{model}} processing p95",
           "range": true,
-          "refId": "A"
+          "refId": "B"
         }
       ],
-      "title": "Batch Processing p95",
+      "title": "Batch Size and Processing p95",
       "type": "timeseries"
     },
     {
@@ -314,9 +497,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 24
+        "y": 20
       },
-      "id": 7,
+      "id": 9,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -358,7 +541,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "percent"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -366,97 +549,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 24
-      },
-      "id": 8,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"ai-service\",id!=\"/\"}[5m]))",
-          "legendFormat": "ai-service",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Container CPU Usage",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 32
-      },
-      "id": 9,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"ai-service\",id!=\"/\"})",
-          "legendFormat": "ai-service",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Container Memory Usage",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 32
+        "y": 20
       },
       "id": 10,
       "options": {
@@ -473,13 +566,131 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "process_resident_memory_bytes{job=\"inference\"}",
-          "legendFormat": "inference",
+          "expr": "rate(process_cpu_seconds_total{job=\"inference\"}[5m])",
+          "legendFormat": "cpu cores",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "process_resident_memory_bytes{job=\"inference\"}",
+          "legendFormat": "resident memory",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Process Resident Memory",
+      "title": "Process Runtime",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"ai-service\",id!=\"/\"}[5m]))",
+          "legendFormat": "cpu %",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"ai-service\",id!=\"/\"})",
+          "legendFormat": "memory",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Container CPU and Memory",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(container_fs_usage_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"ai-service\",id!=\"/\"})",
+          "legendFormat": "fs used",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(container_network_receive_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"ai-service\",id!=\"/\"}[5m]))",
+          "legendFormat": "net rx",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(container_network_transmit_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"ai-service\",id!=\"/\"}[5m]))",
+          "legendFormat": "net tx",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Container Filesystem and Network",
       "type": "timeseries"
     }
   ],
@@ -489,7 +700,8 @@
   "tags": [
     "detect-ai",
     "service",
-    "inference"
+    "inference",
+    "detailed"
   ],
   "templating": {
     "list": []

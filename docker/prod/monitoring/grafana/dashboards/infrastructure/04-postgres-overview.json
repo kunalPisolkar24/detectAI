@@ -31,26 +31,28 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 0,
+          "decimals": 1,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": 0
               },
               {
                 "color": "orange",
-                "value": 70
+                "value": 90
               },
               {
-                "color": "red",
-                "value": 85
+                "color": "green",
+                "value": 99
               }
             ]
           },
-          "unit": "short"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -78,13 +80,79 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "count(container_start_time_seconds{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "100 * avg(up{job=~\"postgres-primary|postgres-replica\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Running Containers",
+      "title": "Availability",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(pg_stat_database_numbackends)",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Connections",
       "type": "stat"
     },
     {
@@ -116,73 +184,9 @@
               }
             ]
           },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m]))",
-          "legendFormat": "",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Total Container CPU",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 0,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "orange",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 85
-              }
-            ]
-          },
-          "unit": "bytes"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -210,13 +214,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "100 * max(sum by (instance) (pg_stat_database_numbackends) / on(instance) pg_settings_max_connections)",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total Container Memory",
+      "title": "Connection Saturation",
       "type": "stat"
     },
     {
@@ -229,7 +233,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 0,
+          "decimals": 2,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -248,7 +252,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -276,13 +280,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_oom_events_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "max(pg_replication_lag_seconds)",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "OOM Events",
+      "title": "Replication Lag",
       "type": "stat"
     },
     {
@@ -321,13 +325,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "count by (container_label_com_docker_compose_service) (container_start_time_seconds{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(pg_stat_database_numbackends) by (instance)",
+          "legendFormat": "{{instance}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Container Count by Service",
+      "title": "Connections by Instance",
       "type": "timeseries"
     },
     {
@@ -341,7 +345,9 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "percent"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -366,13 +372,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, 100 * sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "100 * sum by (instance) (pg_stat_database_numbackends) / on(instance) pg_settings_max_connections",
+          "legendFormat": "{{instance}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top Container CPU",
+      "title": "Connection Saturation",
       "type": "timeseries"
     },
     {
@@ -386,7 +392,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "bytes"
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -411,13 +417,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(rate(pg_stat_database_xact_commit[5m])) by (instance)",
+          "legendFormat": "{{instance}} commit",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(pg_stat_database_xact_rollback[5m])) by (instance)",
+          "legendFormat": "{{instance}} rollback",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Top Container Memory",
+      "title": "Transactions",
       "type": "timeseries"
     },
     {
@@ -431,7 +444,9 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "bytes"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -456,13 +471,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (container_fs_usage_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "100 * sum by (instance) (rate(pg_stat_database_blks_hit[5m])) / clamp_min(sum by (instance) (rate(pg_stat_database_blks_hit[5m]) + rate(pg_stat_database_blks_read[5m])), 0.001)",
+          "legendFormat": "{{instance}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top Container Filesystem Usage",
+      "title": "Cache Hit Ratio",
       "type": "timeseries"
     },
     {
@@ -476,7 +491,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "Bps"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -501,13 +516,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(pg_database_size_bytes) by (instance)",
+          "legendFormat": "{{instance}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top Container Network Receive",
+      "title": "Database Size",
       "type": "timeseries"
     },
     {
@@ -521,7 +536,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "Bps"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -546,13 +561,117 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(rate(pg_stat_database_deadlocks[5m])) by (instance)",
+          "legendFormat": "{{instance}} deadlocks",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(pg_stat_database_temp_bytes[5m])) by (instance)",
+          "legendFormat": "{{instance}} temp bytes",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Deadlocks and Temp Bytes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max(pg_replication_lag_seconds) by (instance)",
+          "legendFormat": "{{instance}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top Container Network Transmit",
+      "title": "Replication Lag",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "pg_wal_size_bytes",
+          "legendFormat": "{{instance}} wal size",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(pg_stat_activity_count) by (instance)",
+          "legendFormat": "{{instance}} activity",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "WAL and Activity",
       "type": "timeseries"
     }
   ],
@@ -562,7 +681,7 @@
   "tags": [
     "detect-ai",
     "infrastructure",
-    "containers",
+    "postgres",
     "detailed"
   ],
   "templating": {
@@ -574,8 +693,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Detect AI Container Overview",
-  "uid": "detect-ai-container-overview",
+  "title": "Detect AI Postgres Overview",
+  "uid": "detect-ai-postgres-overview",
   "version": 1,
   "weekStart": ""
 }

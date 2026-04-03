@@ -259,6 +259,7 @@ services:
     restart: unless-stopped
     command:
       - --mongodb.uri=mongodb://chat-mongo-router:27017/admin
+      - --collector.dbstats
     expose:
       - "9216"
     networks:

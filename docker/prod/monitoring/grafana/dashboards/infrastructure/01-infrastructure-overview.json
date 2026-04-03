@@ -29,6 +29,272 @@
       "fieldConfig": {
         "defaults": {
           "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * avg(up{job=~\"cadvisor|node|postgres-primary|postgres-replica|rabbitmq|redis-.*|mongodb\"})",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Infra Availability",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(pg_stat_database_numbackends)",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Postgres Connections",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(redis_memory_used_bytes{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"})",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Redis Memory Used",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rabbitmq_queue_messages_ready)",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "RabbitMQ Ready Messages",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
             "mode": "palette-classic"
           },
           "mappings": [],
@@ -52,9 +318,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 0
+        "y": 4
       },
-      "id": 1,
+      "id": 5,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -97,9 +363,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 0
+        "y": 4
       },
-      "id": 2,
+      "id": 6,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -134,186 +400,6 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      },
-      "id": 3,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "max(pg_replication_lag_seconds) by (instance)",
-          "legendFormat": "{{instance}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Postgres Replication Lag",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 8
-      },
-      "id": 4,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(pg_database_size_bytes) by (instance)",
-          "legendFormat": "{{instance}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Postgres Database Size",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 16
-      },
-      "id": 5,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(rabbitmq_queue_messages_ready) by (queue)",
-          "legendFormat": "{{queue}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "RabbitMQ Queue Depth",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 16
-      },
-      "id": 6,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(rabbitmq_queue_consumers) by (queue)",
-          "legendFormat": "{{queue}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "RabbitMQ Consumers",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
           "unit": "bytes"
         },
         "overrides": []
@@ -322,7 +408,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 24
+        "y": 12
       },
       "id": 7,
       "options": {
@@ -339,13 +425,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(redis_memory_used_bytes) by (job)",
+          "expr": "sum(redis_memory_used_bytes{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}) by (job)",
           "legendFormat": "{{job}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Redis Memory Used",
+      "title": "Redis Memory by Instance",
       "type": "timeseries"
     },
     {
@@ -367,7 +453,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 24
+        "y": 12
       },
       "id": 8,
       "options": {
@@ -384,13 +470,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(redis_connected_clients) by (job)",
-          "legendFormat": "{{job}}",
+          "expr": "sum(rabbitmq_queue_messages_ready) by (queue)",
+          "legendFormat": "{{queue}} ready",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rabbitmq_queue_messages_unacknowledged) by (queue)",
+          "legendFormat": "{{queue}} unacked",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Redis Connected Clients",
+      "title": "RabbitMQ Queue Depth",
       "type": "timeseries"
     },
     {
@@ -404,7 +497,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "ops"
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -412,7 +505,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 32
+        "y": 20
       },
       "id": 9,
       "options": {
@@ -429,13 +522,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(redis_commands_processed_total[5m])) by (job)",
-          "legendFormat": "{{job}}",
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"node\",mode=\"idle\"}[5m])) * 100)",
+          "legendFormat": "cpu busy",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{job=\"node\"} / node_memory_MemTotal_bytes{job=\"node\"}))",
+          "legendFormat": "memory used",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Redis Command Rate",
+      "title": "Host CPU and Memory",
       "type": "timeseries"
     },
     {
@@ -449,19 +549,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
+          "unit": "short"
         },
         "overrides": []
       },
@@ -469,30 +557,37 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 32
+        "y": 20
       },
       "id": 10,
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
-          "mode": "single",
+          "mode": "multi",
           "sort": "desc"
         }
       },
       "targets": [
         {
           "editorMode": "code",
-          "expr": "mongodb_up",
-          "legendFormat": "{{instance}}",
+          "expr": "topk(8, 100 * sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
+          "legendFormat": "{{container_label_com_docker_compose_service}} cpu",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "topk(8, sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}))",
+          "legendFormat": "{{container_label_com_docker_compose_service}} mem",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Mongo Availability",
+      "title": "Top Container Resource Usage",
       "type": "timeseries"
     }
   ],

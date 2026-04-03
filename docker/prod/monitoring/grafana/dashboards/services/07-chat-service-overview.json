@@ -31,26 +31,28 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 0,
+          "decimals": 1,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": 0
               },
               {
                 "color": "orange",
-                "value": 70
+                "value": 90
               },
               {
-                "color": "red",
-                "value": 85
+                "color": "green",
+                "value": 99
               }
             ]
           },
-          "unit": "short"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -78,13 +80,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "count(container_start_time_seconds{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "100 * avg(up{job=\"chat-service\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Running Containers",
+      "title": "Availability",
       "type": "stat"
     },
     {
@@ -97,7 +99,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 1,
+          "decimals": 2,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -116,7 +118,7 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -144,13 +146,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m]))",
+          "expr": "sum(rate(grpc_request_duration_seconds_count{job=\"chat-service\"}[5m]))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total Container CPU",
+      "title": "gRPC Rate",
       "type": "stat"
     },
     {
@@ -163,7 +165,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 0,
+          "decimals": 2,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -182,7 +184,9 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -210,13 +214,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "100 * sum(rate(grpc_request_duration_seconds_count{job=\"chat-service\",status!=\"OK\"}[5m])) / clamp_min(sum(rate(grpc_request_duration_seconds_count{job=\"chat-service\"}[5m])), 0.001)",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total Container Memory",
+      "title": "Error Rate",
       "type": "stat"
     },
     {
@@ -229,7 +233,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 0,
+          "decimals": 3,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -248,7 +252,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -276,13 +280,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_oom_events_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "histogram_quantile(0.95, sum(rate(grpc_request_duration_seconds_bucket{job=\"chat-service\"}[5m])) by (le))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "OOM Events",
+      "title": "gRPC p95",
       "type": "stat"
     },
     {
@@ -296,7 +300,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "short"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -321,13 +325,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "count by (container_label_com_docker_compose_service) (container_start_time_seconds{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(rate(grpc_request_duration_seconds_count{job=\"chat-service\"}[5m])) by (method, status)",
+          "legendFormat": "{{method}} {{status}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Container Count by Service",
+      "title": "gRPC Request Rate by Method",
       "type": "timeseries"
     },
     {
@@ -341,7 +345,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "percent"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -366,13 +370,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, 100 * sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "histogram_quantile(0.95, sum(rate(grpc_request_duration_seconds_bucket{job=\"chat-service\"}[5m])) by (method, le))",
+          "legendFormat": "{{method}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top Container CPU",
+      "title": "gRPC p95 by Method",
       "type": "timeseries"
     },
     {
@@ -386,7 +390,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "bytes"
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -411,13 +415,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "rate(chat_cache_hits_total{job=\"chat-service\"}[5m])",
+          "legendFormat": "hits",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "rate(chat_cache_misses_total{job=\"chat-service\"}[5m])",
+          "legendFormat": "misses",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Top Container Memory",
+      "title": "Chat Cache Activity",
       "type": "timeseries"
     },
     {
@@ -431,7 +442,9 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "bytes"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -456,13 +469,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (container_fs_usage_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "100 * rate(chat_cache_hits_total{job=\"chat-service\"}[5m]) / clamp_min(rate(chat_cache_hits_total{job=\"chat-service\"}[5m]) + rate(chat_cache_misses_total{job=\"chat-service\"}[5m]), 0.001)",
+          "legendFormat": "hit ratio",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top Container Filesystem Usage",
+      "title": "Cache Hit Ratio",
       "type": "timeseries"
     },
     {
@@ -476,7 +489,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "Bps"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -501,13 +514,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "go_goroutines{job=\"chat-service\"}",
+          "legendFormat": "goroutines",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "go_memstats_heap_alloc_bytes{job=\"chat-service\"}",
+          "legendFormat": "heap alloc",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Top Container Network Receive",
+      "title": "Go Runtime",
       "type": "timeseries"
     },
     {
@@ -521,7 +541,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "Bps"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -546,13 +566,138 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "rate(process_cpu_seconds_total{job=\"chat-service\"}[5m])",
+          "legendFormat": "cpu cores",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "process_resident_memory_bytes{job=\"chat-service\"}",
+          "legendFormat": "resident memory",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "process_open_fds{job=\"chat-service\"}",
+          "legendFormat": "open fds",
+          "range": true,
+          "refId": "C"
         }
       ],
-      "title": "Top Container Network Transmit",
+      "title": "Process Runtime",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"chat-service\",id!=\"/\"}[5m]))",
+          "legendFormat": "cpu %",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"chat-service\",id!=\"/\"})",
+          "legendFormat": "memory",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Container CPU and Memory",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(container_fs_usage_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"chat-service\",id!=\"/\"})",
+          "legendFormat": "fs used",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(container_network_receive_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"chat-service\",id!=\"/\"}[5m]))",
+          "legendFormat": "net rx",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(container_network_transmit_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"chat-service\",id!=\"/\"}[5m]))",
+          "legendFormat": "net tx",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Container Network and Filesystem",
       "type": "timeseries"
     }
   ],
@@ -561,8 +706,8 @@
   "style": "dark",
   "tags": [
     "detect-ai",
-    "infrastructure",
-    "containers",
+    "service",
+    "chat-service",
     "detailed"
   ],
   "templating": {
@@ -574,8 +719,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Detect AI Container Overview",
-  "uid": "detect-ai-container-overview",
+  "title": "Detect AI Chat Service Overview",
+  "uid": "detect-ai-chat-service-overview",
   "version": 1,
   "weekStart": ""
 }

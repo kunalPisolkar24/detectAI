@@ -444,7 +444,7 @@
           "refId": "B"
         }
       ],
-      "title": "Memory Usage",
+      "title": "Memory Used vs Available",
       "type": "timeseries"
     },
     {
@@ -531,12 +531,19 @@
         {
           "editorMode": "code",
           "expr": "sum(rate(node_disk_read_bytes_total{job=\"node\",device!~\"loop.*|ram.*\"}[5m])) by (device)",
-          "legendFormat": "{{device}}",
+          "legendFormat": "{{device}} read",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(node_disk_written_bytes_total{job=\"node\",device!~\"loop.*|ram.*\"}[5m])) by (device)",
+          "legendFormat": "{{device}} write",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Disk Read Throughput",
+      "title": "Disk Read and Write Throughput",
       "type": "timeseries"
     },
     {
@@ -575,103 +582,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(node_disk_written_bytes_total{job=\"node\",device!~\"loop.*|ram.*\"}[5m])) by (device)",
-          "legendFormat": "{{device}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Disk Write Throughput",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "unit": "Bps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 28
-      },
-      "id": 11,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
           "expr": "sum(rate(node_network_receive_bytes_total{job=\"node\",device!~\"lo|docker0|br-.*|veth.*\"}[5m])) by (device)",
-          "legendFormat": "{{device}}",
+          "legendFormat": "{{device}} rx",
           "range": true,
           "refId": "A"
-        }
-      ],
-      "title": "Network Receive",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "unit": "Bps"
         },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 28
-      },
-      "id": 12,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
         {
           "editorMode": "code",
           "expr": "sum(rate(node_network_transmit_bytes_total{job=\"node\",device!~\"lo|docker0|br-.*|veth.*\"}[5m])) by (device)",
-          "legendFormat": "{{device}}",
+          "legendFormat": "{{device}} tx",
           "range": true,
-          "refId": "A"
+          "refId": "B"
         }
       ],
-      "title": "Network Transmit",
+      "title": "Network Throughput",
       "type": "timeseries"
     }
   ],
@@ -681,7 +605,8 @@
   "tags": [
     "detect-ai",
     "infrastructure",
-    "host"
+    "host",
+    "detailed"
   ],
   "templating": {
     "list": []

@@ -31,26 +31,28 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 0,
+          "decimals": 1,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": 0
               },
               {
                 "color": "orange",
-                "value": 70
+                "value": 90
               },
               {
-                "color": "red",
-                "value": 85
+                "color": "green",
+                "value": 99
               }
             ]
           },
-          "unit": "short"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -78,13 +80,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "count(container_start_time_seconds{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "100 * avg(up{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Running Containers",
+      "title": "Availability",
       "type": "stat"
     },
     {
@@ -97,7 +99,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 1,
+          "decimals": 0,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -116,7 +118,7 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -144,13 +146,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m]))",
+          "expr": "sum(redis_memory_used_bytes{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total Container CPU",
+      "title": "Memory Used",
       "type": "stat"
     },
     {
@@ -182,7 +184,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -210,13 +212,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "sum(redis_connected_clients{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total Container Memory",
+      "title": "Connected Clients",
       "type": "stat"
     },
     {
@@ -229,7 +231,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 0,
+          "decimals": 2,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -248,7 +250,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -276,13 +278,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_oom_events_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "sum(rate(redis_commands_processed_total{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}[5m]))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "OOM Events",
+      "title": "Commands/sec",
       "type": "stat"
     },
     {
@@ -296,7 +298,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "short"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -321,13 +323,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "count by (container_label_com_docker_compose_service) (container_start_time_seconds{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(redis_memory_used_bytes{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}) by (job)",
+          "legendFormat": "{{job}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Container Count by Service",
+      "title": "Memory Used",
       "type": "timeseries"
     },
     {
@@ -341,7 +343,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "percent"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -366,13 +368,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, 100 * sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "avg(redis_mem_fragmentation_ratio{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}) by (job)",
+          "legendFormat": "{{job}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top Container CPU",
+      "title": "Memory Fragmentation Ratio",
       "type": "timeseries"
     },
     {
@@ -386,7 +388,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "bytes"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -411,13 +413,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(redis_connected_clients{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}) by (job)",
+          "legendFormat": "{{job}} connected",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(redis_blocked_clients{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}) by (job)",
+          "legendFormat": "{{job}} blocked",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Top Container Memory",
+      "title": "Connected Clients and Blocked Clients",
       "type": "timeseries"
     },
     {
@@ -431,7 +440,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "bytes"
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -456,13 +465,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (container_fs_usage_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(rate(redis_commands_processed_total{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}[5m])) by (job)",
+          "legendFormat": "{{job}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top Container Filesystem Usage",
+      "title": "Commands Processed Rate",
       "type": "timeseries"
     },
     {
@@ -476,7 +485,9 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "Bps"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -501,13 +512,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "100 * sum by (job) (rate(redis_keyspace_hits_total{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}[5m])) / clamp_min(sum by (job) (rate(redis_keyspace_hits_total{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}[5m]) + rate(redis_keyspace_misses_total{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}[5m])), 0.001)",
+          "legendFormat": "{{job}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top Container Network Receive",
+      "title": "Keyspace Hit Ratio",
       "type": "timeseries"
     },
     {
@@ -521,7 +532,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "Bps"
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -546,13 +557,124 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(rate(redis_expired_keys_total{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}[5m])) by (job)",
+          "legendFormat": "{{job}} expired",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(redis_evicted_keys_total{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}[5m])) by (job)",
+          "legendFormat": "{{job}} evicted",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Top Container Network Transmit",
+      "title": "Expired and Evicted Keys",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(redis_net_input_bytes_total{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}[5m])) by (job)",
+          "legendFormat": "{{job}} in",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(redis_net_output_bytes_total{job=~\"redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3\"}[5m])) by (job)",
+          "legendFormat": "{{job}} out",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Network I/O",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "redis_master_link_up{job=~\"redis-slave-1|redis-slave-2\"}",
+          "legendFormat": "{{job}} master link",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "redis_cluster_state{job=~\"redis-usage-0|redis-usage-1|redis-usage-2\"}",
+          "legendFormat": "{{job}} cluster state",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Replication and Cluster Health",
       "type": "timeseries"
     }
   ],
@@ -562,7 +684,7 @@
   "tags": [
     "detect-ai",
     "infrastructure",
-    "containers",
+    "redis",
     "detailed"
   ],
   "templating": {
@@ -574,8 +696,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Detect AI Container Overview",
-  "uid": "detect-ai-container-overview",
+  "title": "Detect AI Redis Overview",
+  "uid": "detect-ai-redis-overview",
   "version": 1,
   "weekStart": ""
 }

@@ -29,6 +29,272 @@
       "fieldConfig": {
         "defaults": {
           "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * avg(up{job=~\"worker-analytics|worker-cron|worker-payments\"})",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Availability",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(worker_jobs_processed_total{job=~\"worker-analytics|worker-cron|worker-payments\"}[5m]))",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Throughput",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(worker_job_duration_seconds_bucket{job=~\"worker-analytics|worker-cron|worker-payments\"}[5m])) by (le))",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Job Duration p95",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(worker_active_instances{job=~\"worker-analytics|worker-cron|worker-payments\"})",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Active Instances",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
             "mode": "palette-classic"
           },
           "mappings": [],
@@ -40,9 +306,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 0
+        "y": 4
       },
-      "id": 1,
+      "id": 5,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -63,7 +329,7 @@
           "refId": "A"
         }
       ],
-      "title": "Throughput by Job Type",
+      "title": "Throughput by Service and Job Type",
       "type": "timeseries"
     },
     {
@@ -85,9 +351,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 0
+        "y": 4
       },
-      "id": 2,
+      "id": 6,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -122,51 +388,6 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      },
-      "id": 3,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(rate(worker_job_errors_total{job=~\"worker-analytics|worker-cron|worker-payments\"}[5m])) by (service, job_type, error_type)",
-          "legendFormat": "{{service}} {{job_type}} {{error_type}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Worker Errors",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
           "unit": "short"
         },
         "overrides": []
@@ -174,10 +395,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 8
+        "x": 0,
+        "y": 12
       },
-      "id": 4,
+      "id": 7,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -192,13 +413,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(worker_active_instances{job=~\"worker-analytics|worker-cron|worker-payments\"}) by (service)",
-          "legendFormat": "{{service}}",
+          "expr": "sum(worker_active_instances{job=~\"worker-analytics|worker-cron|worker-payments\"}) by (service, job)",
+          "legendFormat": "{{service}} {{job}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Active Worker Instances",
+      "title": "Active Instances by Service",
       "type": "timeseries"
     },
     {
@@ -219,10 +440,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 16
+        "x": 12,
+        "y": 12
       },
-      "id": 5,
+      "id": 8,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -257,6 +478,65 @@
             "mode": "palette-classic"
           },
           "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "nodejs_eventloop_lag_p99_seconds{job=~\"worker-analytics|worker-cron|worker-payments\"}",
+          "legendFormat": "{{job}} lag",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "nodejs_heap_size_used_bytes{job=~\"worker-analytics|worker-cron|worker-payments\"}",
+          "legendFormat": "{{job}} heap",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "nodejs_active_handles{job=~\"worker-analytics|worker-cron|worker-payments\"}",
+          "legendFormat": "{{job}} handles",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Node.js Runtime",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
           "unit": "percent"
         },
         "overrides": []
@@ -265,9 +545,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 20
       },
-      "id": 6,
+      "id": 10,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -288,7 +568,7 @@
           "refId": "A"
         }
       ],
-      "title": "Container CPU Usage",
+      "title": "Container CPU",
       "type": "timeseries"
     },
     {
@@ -310,9 +590,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 24
+        "y": 28
       },
-      "id": 7,
+      "id": 11,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -333,7 +613,7 @@
           "refId": "A"
         }
       ],
-      "title": "Container Memory Usage",
+      "title": "Container Memory",
       "type": "timeseries"
     },
     {
@@ -347,7 +627,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "s"
+          "unit": "Bps"
         },
         "overrides": []
       },
@@ -355,9 +635,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 24
+        "y": 28
       },
-      "id": 8,
+      "id": 12,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -372,13 +652,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "nodejs_eventloop_lag_p99_seconds{job=~\"worker-analytics|worker-cron|worker-payments\"}",
-          "legendFormat": "{{job}}",
+          "expr": "sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=~\"worker-analytics|worker-cron|worker-payments\",id!=\"/\"}[5m]))",
+          "legendFormat": "{{container_label_com_docker_compose_service}} rx",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=~\"worker-analytics|worker-cron|worker-payments\",id!=\"/\"}[5m]))",
+          "legendFormat": "{{container_label_com_docker_compose_service}} tx",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Node.js Event Loop Lag p99",
+      "title": "Container Network",
       "type": "timeseries"
     }
   ],
@@ -388,7 +675,8 @@
   "tags": [
     "detect-ai",
     "service",
-    "workers"
+    "workers",
+    "detailed"
   ],
   "templating": {
     "list": []

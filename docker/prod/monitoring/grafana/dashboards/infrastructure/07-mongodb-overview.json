@@ -31,26 +31,28 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 0,
+          "decimals": 1,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": 0
               },
               {
                 "color": "orange",
-                "value": 70
+                "value": 90
               },
               {
-                "color": "red",
-                "value": 85
+                "color": "green",
+                "value": 99
               }
             ]
           },
-          "unit": "short"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -78,13 +80,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "count(container_start_time_seconds{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "100 * avg(mongodb_up)",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Running Containers",
+      "title": "Availability",
       "type": "stat"
     },
     {
@@ -97,7 +99,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 1,
+          "decimals": 0,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -116,7 +118,7 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -144,13 +146,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m]))",
+          "expr": "sum(mongodb_dbstats_dataSize{job=\"mongodb\",database=\"chat_db\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total Container CPU",
+      "title": "Chat DB Data Size",
       "type": "stat"
     },
     {
@@ -210,13 +212,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "sum(mongodb_dbstats_indexSize{job=\"mongodb\",database=\"chat_db\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total Container Memory",
+      "title": "Chat DB Index Size",
       "type": "stat"
     },
     {
@@ -276,13 +278,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_oom_events_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
+          "expr": "sum(mongodb_dbstats_objects{job=\"mongodb\",database=\"chat_db\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "OOM Events",
+      "title": "Chat DB Objects",
       "type": "stat"
     },
     {
@@ -296,7 +298,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "short"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -321,13 +323,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "count by (container_label_com_docker_compose_service) (container_start_time_seconds{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(mongodb_dbstats_dataSize{job=\"mongodb\"}) by (database)",
+          "legendFormat": "{{database}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Container Count by Service",
+      "title": "Data Size by Database",
       "type": "timeseries"
     },
     {
@@ -341,7 +343,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "percent"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -366,13 +368,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, 100 * sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(mongodb_dbstats_storageSize{job=\"mongodb\"}) by (database)",
+          "legendFormat": "{{database}} storage",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(mongodb_dbstats_indexSize{job=\"mongodb\"}) by (database)",
+          "legendFormat": "{{database}} index",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Top Container CPU",
+      "title": "Storage and Index Size by Database",
       "type": "timeseries"
     },
     {
@@ -386,7 +395,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "bytes"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -411,13 +420,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum(mongodb_dbstats_objects{job=\"mongodb\"}) by (database)",
+          "legendFormat": "{{database}} objects",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(mongodb_dbstats_indexes{job=\"mongodb\"}) by (database)",
+          "legendFormat": "{{database}} indexes",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Top Container Memory",
+      "title": "Objects and Index Count by Database",
       "type": "timeseries"
     },
     {
@@ -456,13 +472,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (container_fs_usage_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "avg(mongodb_dbstats_avgObjSize{job=\"mongodb\"}) by (database)",
+          "legendFormat": "{{database}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top Container Filesystem Usage",
+      "title": "Average Object Size",
       "type": "timeseries"
     },
     {
@@ -476,7 +492,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "Bps"
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -501,13 +517,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
+          "expr": "100 * sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service=~\"chat-mongo-config|chat-mongo-router|chat-mongo-shard-1|chat-mongo-shard-2|chat-mongo-shard-3\",id!=\"/\"}[5m]))",
           "legendFormat": "{{container_label_com_docker_compose_service}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top Container Network Receive",
+      "title": "Mongo Cluster Containers CPU",
       "type": "timeseries"
     },
     {
@@ -521,7 +537,7 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "Bps"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -546,13 +562,110 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk(12, sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
+          "expr": "sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=~\"chat-mongo-config|chat-mongo-router|chat-mongo-shard-1|chat-mongo-shard-2|chat-mongo-shard-3\",id!=\"/\"})",
           "legendFormat": "{{container_label_com_docker_compose_service}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top Container Network Transmit",
+      "title": "Mongo Cluster Containers Memory",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (container_label_com_docker_compose_service) (container_fs_usage_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=~\"chat-mongo-config|chat-mongo-router|chat-mongo-shard-1|chat-mongo-shard-2|chat-mongo-shard-3\",id!=\"/\"})",
+          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Mongo Cluster Containers Filesystem",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=~\"chat-mongo-config|chat-mongo-router|chat-mongo-shard-1|chat-mongo-shard-2|chat-mongo-shard-3\",id!=\"/\"}[5m]))",
+          "legendFormat": "{{container_label_com_docker_compose_service}} rx",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=~\"chat-mongo-config|chat-mongo-router|chat-mongo-shard-1|chat-mongo-shard-2|chat-mongo-shard-3\",id!=\"/\"}[5m]))",
+          "legendFormat": "{{container_label_com_docker_compose_service}} tx",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Mongo Cluster Containers Network",
       "type": "timeseries"
     }
   ],
@@ -562,7 +675,7 @@
   "tags": [
     "detect-ai",
     "infrastructure",
-    "containers",
+    "mongodb",
     "detailed"
   ],
   "templating": {
@@ -574,8 +687,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Detect AI Container Overview",
-  "uid": "detect-ai-container-overview",
+  "title": "Detect AI MongoDB Overview",
+  "uid": "detect-ai-mongodb-overview",
   "version": 1,
   "weekStart": ""
 }
