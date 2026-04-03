@@ -5,16 +5,19 @@ from transformers import BertTokenizer
 from huggingface_hub import snapshot_download, hf_hub_download
 from src.core.interfaces import IModelLoader
 from src.core.exceptions import ModelLoadError
+from src.core.inference_providers import parse_inference_providers
 
 class HuggingFaceLoader(IModelLoader):
     def __init__(self, cache_dir: str, providers: list[str] | None = None):
         self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True)
-        self.providers = providers or [
-            provider.strip()
-            for provider in os.getenv("INFERENCE_PROVIDERS", "CUDAExecutionProvider,CPUExecutionProvider").split(",")
-            if provider.strip()
-        ]
+        provider_source = providers
+        if provider_source is None:
+            provider_source = os.getenv(
+                "INFERENCE_PROVIDERS",
+                "CUDAExecutionProvider,CPUExecutionProvider",
+            )
+        self.providers = parse_inference_providers(provider_source)
 
     def load(self, model_key: str):
         try:
