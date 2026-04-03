@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 import { extractTextFromFile } from "../actions/extract-file"
+import { LIVE_ANALYSIS_WARNING_CHARS, MAX_LIVE_ANALYSIS_CHARS, MIN_ANALYSIS_WORDS } from "../constants"
 
 export const ChatInput = () => {
   const router = useRouter()
@@ -31,6 +32,9 @@ export const ChatInput = () => {
   const { mutate, isPending } = useSendMessage()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const currentCharCount = localInput.length
+  const isNearLimit = currentCharCount >= LIVE_ANALYSIS_WARNING_CHARS
+  const isOverLimit = currentCharCount > MAX_LIVE_ANALYSIS_CHARS
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -42,9 +46,14 @@ export const ChatInput = () => {
   const handleSubmit = () => {
     if (!localInput.trim() || isPending) return
 
+    if (isOverLimit) {
+      toast.error(`Text exceeds ${MAX_LIVE_ANALYSIS_CHARS.toLocaleString()} characters`)
+      return
+    }
+
     const wordCount = localInput.trim().split(/\s+/).length
-    if (wordCount < 100) {
-      toast.error(`Please enter at least 100 words (current: ${wordCount})`)
+    if (wordCount < MIN_ANALYSIS_WORDS) {
+      toast.error(`Please enter at least ${MIN_ANALYSIS_WORDS} words (current: ${wordCount})`)
       return
     }
 
@@ -82,15 +91,21 @@ export const ChatInput = () => {
       toast.error(result.error)
     } else if (result.text) {
       const extractedText = result.text
-      setLocalInput(prev => (prev ? `${prev}\n\n${extractedText}` : extractedText))
+      const nextValue = localInput ? `${localInput}\n\n${extractedText}` : extractedText
 
-      toast.success("File content extracted successfully")
-      requestAnimationFrame(() => {
-        if (textareaRef.current) {
-          textareaRef.current.style.height = "auto"
-          textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
-        }
-      })
+      if (nextValue.length > MAX_LIVE_ANALYSIS_CHARS) {
+        toast.error(`Extracted text exceeds ${MAX_LIVE_ANALYSIS_CHARS.toLocaleString()} characters`)
+      } else {
+        setLocalInput(nextValue)
+
+        toast.success("File content extracted successfully")
+        requestAnimationFrame(() => {
+          if (textareaRef.current) {
+            textareaRef.current.style.height = "auto"
+            textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+          }
+        })
+      }
     }
 
     setIsExtracting(false)
@@ -231,52 +246,65 @@ export const ChatInput = () => {
             </DropdownMenu>
           </div>
 
-          <m.div
-            initial={false}
-            animate={{
-              scale: localInput.trim() ? 1 : 0.95,
-              opacity: localInput.trim() ? 1 : 0.8
-            }}
-            whileHover={localInput.trim() ? { scale: 1.02 } : {}}
-            whileTap={localInput.trim() ? { scale: 0.98 } : {}}
-          >
-            <Button
-              onClick={handleSubmit}
-              disabled={!localInput.trim() || isPending || isExtracting || (isRateLimited && !isPremium)}
-              className={cn(
-                "h-9 min-w-[36px] rounded-lg transition-all duration-300 px-3 sm:px-5",
-                "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md shadow-blue-500/20",
-                "hover:shadow-blue-500/30 hover:from-blue-500 hover:to-purple-500",
-                "disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none",
-                teko.className
-              )}
-              aria-label="Analyze text"
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "text-[11px] font-medium tabular-nums transition-colors",
+              isOverLimit
+                ? "text-red-600 dark:text-red-400"
+                : isNearLimit
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-neutral-500 dark:text-neutral-400"
+            )}>
+              {currentCharCount.toLocaleString()} / {MAX_LIVE_ANALYSIS_CHARS.toLocaleString()}
+            </div>
+
+            <m.div
+              initial={false}
+              animate={{
+                scale: localInput.trim() ? 1 : 0.95,
+                opacity: localInput.trim() ? 1 : 0.8
+              }}
+              whileHover={localInput.trim() ? { scale: 1.02 } : {}}
+              whileTap={localInput.trim() ? { scale: 0.98 } : {}}
             >
-              <AnimatePresence mode="wait">
-                {isPending ? (
-                  <m.div
-                    key="loader"
-                    initial={{ opacity: 0, scale: 0.5 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.5 }}
-                  >
-                    <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-                  </m.div>
-                ) : (
-                  <m.div
-                    key="arrow"
-                    initial={{ opacity: 0, scale: 0.5 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.5 }}
-                    className="flex items-center gap-2"
-                  >
-                    <span className="hidden sm:inline text-lg tracking-wide pt-0.5">ANALYZE</span>
-                    <ArrowUp size={16} strokeWidth={2.5} aria-hidden="true" />
-                  </m.div>
+              <Button
+                onClick={handleSubmit}
+                disabled={!localInput.trim() || isPending || isExtracting || isOverLimit || (isRateLimited && !isPremium)}
+                className={cn(
+                  "h-9 min-w-[36px] rounded-lg transition-all duration-300 px-3 sm:px-5",
+                  "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md shadow-blue-500/20",
+                  "hover:shadow-blue-500/30 hover:from-blue-500 hover:to-purple-500",
+                  "disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none",
+                  teko.className
                 )}
-              </AnimatePresence>
-            </Button>
-          </m.div>
+                aria-label="Analyze text"
+              >
+                <AnimatePresence mode="wait">
+                  {isPending ? (
+                    <m.div
+                      key="loader"
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                    >
+                      <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                    </m.div>
+                  ) : (
+                    <m.div
+                      key="arrow"
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                      className="flex items-center gap-2"
+                    >
+                      <span className="hidden sm:inline text-lg tracking-wide pt-0.5">ANALYZE</span>
+                      <ArrowUp size={16} strokeWidth={2.5} aria-hidden="true" />
+                    </m.div>
+                  )}
+                </AnimatePresence>
+              </Button>
+            </m.div>
+          </div>
         </div>
       </m.div>
 
