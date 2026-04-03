@@ -1,5 +1,9 @@
 from prometheus_client import start_http_server
 from src.config import settings
+from src.inference.aggregation import ResultAggregator
+from src.inference.chunking import build_chunk_planner
+from src.inference.document_analysis import DocumentAnalysisService
+from src.inference.validation import InputValidator
 from src.log_setup import configure_logger
 from src.inference.loader import HuggingFaceLoader
 from src.inference.engines.spark import SparkEngine
@@ -16,33 +20,45 @@ def main():
         start_http_server(settings.METRICS_PORT)
         logger.info("metrics_server_started", port=settings.METRICS_PORT)
         
-        loader = HuggingFaceLoader(
-            settings.MODEL_CACHE_DIR,
-            [
-                provider.strip()
-                for provider in settings.INFERENCE_PROVIDERS.split(",")
-                if provider.strip()
-            ],
-        )
+        loader = HuggingFaceLoader(settings.MODEL_CACHE_DIR, settings.INFERENCE_PROVIDERS)
         
         logger.info("loading_models")
-        spark_raw = SparkEngine(loader.load("spark"))
-        flare_raw = FlareEngine(loader.load("flare"))
+        spark_resources = loader.load("spark")
+        flare_resources = loader.load("flare")
+
+        spark_raw = SparkEngine(spark_resources)
+        flare_raw = FlareEngine(flare_resources)
         
         spark_batched = BatchingProxy(
             spark_raw, 
             settings.BATCH_SIZE, 
             settings.BATCH_TIMEOUT, 
-            "spark"
+            "spark",
+            settings.BATCH_QUEUE_MAX_SIZE,
         )
         flare_batched = BatchingProxy(
             flare_raw, 
             settings.BATCH_SIZE, 
             settings.BATCH_TIMEOUT, 
-            "flare"
+            "flare",
+            settings.BATCH_QUEUE_MAX_SIZE,
+        )
+
+        analysis_service = DocumentAnalysisService(
+            engines={
+                "spark": spark_batched,
+                "flare": flare_batched,
+            },
+            planners={
+                "spark": build_chunk_planner(spark_resources[1], settings.CHUNK_TOKEN_LIMIT, settings.CHUNK_TOKEN_STRIDE),
+                "flare": build_chunk_planner(flare_resources[1], settings.CHUNK_TOKEN_LIMIT, settings.CHUNK_TOKEN_STRIDE),
+            },
+            validator=InputValidator(settings.MAX_TEXT_CHARS),
+            aggregator=ResultAggregator(),
+            max_inflight_chunks=settings.MAX_INFLIGHT_DOC_CHUNKS,
         )
         
-        server = GRPCServer(spark_batched, flare_batched)
+        server = GRPCServer(analysis_service)
         server.start()
         
     except Exception as e:
