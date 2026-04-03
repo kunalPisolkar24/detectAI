@@ -13,6 +13,12 @@ export interface AnalysisResult {
   raw: unknown
 }
 
+export interface StreamingAnalysisProgress {
+  model: ModelType
+  processedChunks: number
+  totalChunks: number
+}
+
 export interface Message {
   id: string
   role: "user" | "assistant"
@@ -20,6 +26,7 @@ export interface Message {
   analysis?: AnalysisResult
   createdAt: Date
   isStreaming?: boolean
+  streamingProgress?: StreamingAnalysisProgress
 }
 
 export interface ChatSession {
