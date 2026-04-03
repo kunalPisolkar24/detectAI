@@ -7,7 +7,7 @@ scrape_configs:
     metrics_path: /api/metrics
     authorization:
       type: Bearer
-      credentials_file: /run/secrets/web_metrics_token
+      credentials_file: /tmp/web_metrics_token
     static_configs:
       - targets:
           - frontend:3000

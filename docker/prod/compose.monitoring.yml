@@ -3,12 +3,12 @@ services:
     image: prom/prometheus:v3.9.1
     container_name: detect_ai_prometheus
     restart: unless-stopped
-    command:
+    entrypoint:
       - /bin/sh
       - -ec
+    command:
       - |
-        mkdir -p /run/secrets
-        printf "%s" "$$PROMETHEUS_WEB_SCRAPE_TOKEN" > /run/secrets/web_metrics_token
+        printf "%s" "$$PROMETHEUS_WEB_SCRAPE_TOKEN" > /tmp/web_metrics_token
         exec /bin/prometheus \
           --config.file=/etc/prometheus/prometheus.yml \
           --storage.tsdb.path=/prometheus \
@@ -104,12 +104,6 @@ services:
       - "9419"
     networks:
       - detectai_net
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9419/metrics"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 15s
 
   redis-exporter-master:
     image: oliver006/redis_exporter:v1.80.1
@@ -230,17 +224,11 @@ services:
     container_name: detect_ai_mongo_exporter
     restart: unless-stopped
     command:
-      - --mongodb.uri=mongodb://chat_mongo_router:27017/admin
+      - --mongodb.uri=mongodb://chat-mongo-router:27017/admin
     expose:
       - "9216"
     networks:
       - detectai_net
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9216/metrics"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 15s
 
 volumes:
   prometheus_data:
