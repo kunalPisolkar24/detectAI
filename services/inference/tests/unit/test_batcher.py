@@ -1,10 +1,13 @@
 import time
+import queue
 import pytest
+from unittest.mock import patch
 from concurrent import futures
 from src.inference.batcher import BatchingProxy
+from src.core.exceptions import ServiceOverloadedError
 
 def test_batcher_predict_single(mock_engine):
-    batcher = BatchingProxy(mock_engine, batch_size=1, timeout=0.1, model_name="test")
+    batcher = BatchingProxy(mock_engine, batch_size=1, timeout=0.1, model_name="test", queue_max_size=8)
     result = batcher.predict("test input")
     
     assert result == 0.8
@@ -15,7 +18,7 @@ def test_batcher_predict_single(mock_engine):
     batcher.shutdown_flag = True
 
 def test_batcher_groups_requests(mock_engine):
-    batcher = BatchingProxy(mock_engine, batch_size=2, timeout=0.5, model_name="test")
+    batcher = BatchingProxy(mock_engine, batch_size=2, timeout=0.5, model_name="test", queue_max_size=8)
     
     future1 = futures.Future()
     future2 = futures.Future()
@@ -36,7 +39,7 @@ def test_batcher_groups_requests(mock_engine):
     batcher.shutdown_flag = True
 
 def test_batcher_respects_timeout(mock_engine):
-    batcher = BatchingProxy(mock_engine, batch_size=5, timeout=0.1, model_name="test")
+    batcher = BatchingProxy(mock_engine, batch_size=5, timeout=0.1, model_name="test", queue_max_size=8)
     
     start = time.monotonic()
     result = batcher.predict("wait for me")
@@ -50,9 +53,18 @@ def test_batcher_respects_timeout(mock_engine):
 
 def test_batcher_handles_exception(mock_engine):
     mock_engine.predict_batch.side_effect = ValueError("Inference failed")
-    batcher = BatchingProxy(mock_engine, batch_size=1, timeout=0.1, model_name="test")
+    batcher = BatchingProxy(mock_engine, batch_size=1, timeout=0.1, model_name="test", queue_max_size=8)
     
     with pytest.raises(ValueError, match="Inference failed"):
         batcher.predict("boom")
         
+    batcher.shutdown_flag = True
+
+def test_batcher_rejects_when_queue_is_full(mock_engine):
+    batcher = BatchingProxy(mock_engine, batch_size=1, timeout=0.1, model_name="test", queue_max_size=1)
+
+    with patch.object(batcher.queue, "put_nowait", side_effect=queue.Full):
+        with pytest.raises(ServiceOverloadedError, match="queue is full"):
+            batcher.predict("boom")
+
     batcher.shutdown_flag = True
