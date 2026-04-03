@@ -3,6 +3,7 @@ SHELL := /bin/sh
 
 PROD_ENV := docker/prod/.env
 PROD_COMPOSE_FILE := docker/prod/compose.yml
+PROD_MONITORING_COMPOSE_FILE := docker/prod/compose.monitoring.yml
 LOCAL_ENV := docker/local/.env
 LOCAL_COMPOSE_FILE := docker/local/compose.yml
 
@@ -10,6 +11,7 @@ DOCKER_BIN := $(strip $(shell command -v docker 2>/dev/null))
 DOCKER_BIN := $(if $(DOCKER_BIN),$(DOCKER_BIN),docker)
 
 PROD_COMPOSE := $(DOCKER_BIN) compose --env-file $(PROD_ENV) -f $(PROD_COMPOSE_FILE)
+PROD_MONITORING_COMPOSE := $(DOCKER_BIN) compose --env-file $(PROD_ENV) -f $(PROD_COMPOSE_FILE) -f $(PROD_MONITORING_COMPOSE_FILE)
 LOCAL_COMPOSE := $(DOCKER_BIN) compose --env-file $(LOCAL_ENV) -f $(LOCAL_COMPOSE_FILE)
 
 STACK ?=
@@ -21,6 +23,7 @@ PROD_NETWORK := $(if $(PROD_NETWORK),$(PROD_NETWORK),detect_ai_network)
 .PHONY: help network validate-stack \
 	up down logs clean build rebuild shell-web \
 	prod-up prod-down prod-logs prod-clean prod-build prod-rebuild prod-config prod-ps prod-migrate \
+	prod-monitoring-up prod-monitoring-down prod-monitoring-logs prod-monitoring-config prod-monitoring-ps \
 	local-up local-down local-logs local-clean local-build local-rebuild local-config local-ps
 
 help:
@@ -39,6 +42,12 @@ help:
 	@printf "  make prod-config       Render prod compose config\n"
 	@printf "  make prod-ps           Show prod containers\n"
 	@printf "  make prod-migrate      Run prod DB migrations once\n\n"
+	@printf "Monitoring\n"
+	@printf "  make prod-monitoring-up     Start the prod stack with Prometheus and Grafana\n"
+	@printf "  make prod-monitoring-down   Stop the prod stack with monitoring\n"
+	@printf "  make prod-monitoring-logs   Stream prod logs with monitoring\n"
+	@printf "  make prod-monitoring-config Render prod compose config with monitoring\n"
+	@printf "  make prod-monitoring-ps     Show prod containers with monitoring\n\n"
 	@printf "Local\n"
 	@printf "  make local-up          Start the local stack\n"
 	@printf "  make local-down        Stop the local stack\n"
@@ -111,6 +120,21 @@ prod-ps:
 
 prod-migrate: network
 	$(PROD_COMPOSE) run --rm db-migrate
+
+prod-monitoring-up: network
+	$(PROD_MONITORING_COMPOSE) up -d
+
+prod-monitoring-down:
+	$(PROD_MONITORING_COMPOSE) down --remove-orphans
+
+prod-monitoring-logs:
+	$(PROD_MONITORING_COMPOSE) logs -f $(SERVICE_ARGS)
+
+prod-monitoring-config:
+	$(PROD_MONITORING_COMPOSE) config
+
+prod-monitoring-ps:
+	$(PROD_MONITORING_COMPOSE) ps
 
 local-up:
 	$(LOCAL_COMPOSE) up -d

@@ -8,6 +8,13 @@ def test_health_check():
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
+def test_metrics_endpoint():
+    client.get("/health")
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    assert "http_requests_total" in response.text
+    assert "http_request_duration_seconds" in response.text
+
 def test_extract_txt_success(mocker):
     mock_process = mocker.patch("app.services.extractor.FileExtractor.process")
     mock_process.return_value = "Mocked Extracted Text"

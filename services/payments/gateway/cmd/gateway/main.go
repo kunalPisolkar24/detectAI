@@ -3,6 +3,7 @@ package main
 import (
 	"gateway/internal/config"
 	"gateway/internal/logger"
+	"gateway/internal/monitoring"
 	"gateway/internal/queue"
 	"gateway/internal/server"
 	"gateway/internal/validator"
@@ -23,9 +24,12 @@ func main() {
 	paddleValidator := validator.NewPaddleValidator()
 
 	handler := server.NewHandler(rabbitMQ, paddleValidator, cfg.WebhookSecret, log)
+	monitor := monitoring.New("payment-gateway")
 
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(monitor.Middleware())
+	r.GET("/metrics", gin.WrapH(monitor.Handler()))
 
 	handler.RegisterRoutes(r)
 
