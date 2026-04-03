@@ -29,6 +29,7 @@ export const env = createEnv({
     CHAT_SERVICE_URL: z.string().min(1).default("localhost:50051"),
     PAYMENT_GATEWAY_URL: z.string().url().default("http://payment-gateway:8080"),
     INTERNAL_API_KEY: z.string().optional(),
+    PROMETHEUS_WEB_SCRAPE_TOKEN: z.string().min(1).optional(),
   },
   client: {
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1),
@@ -63,6 +64,7 @@ export const env = createEnv({
     CHAT_SERVICE_URL: process.env.CHAT_SERVICE_URL,
     PAYMENT_GATEWAY_URL: process.env.PAYMENT_GATEWAY_URL,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
+    PROMETHEUS_WEB_SCRAPE_TOKEN: process.env.PROMETHEUS_WEB_SCRAPE_TOKEN,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,
