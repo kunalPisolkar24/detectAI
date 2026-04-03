@@ -4,30 +4,36 @@ import time
 from concurrent import futures
 from typing import List, Tuple
 from src.core.interfaces import IInferenceEngine
+from src.core.exceptions import ServiceOverloadedError
 import structlog
 from src.metrics import BATCH_SIZE_DISTRIBUTION, BATCH_PROCESSING_TIME, BATCH_QUEUE_SIZE
 
 logger = structlog.get_logger()
 
 class BatchingProxy(IInferenceEngine):
-    def __init__(self, engine: IInferenceEngine, batch_size: int, timeout: float, model_name: str):
+    def __init__(self, engine: IInferenceEngine, batch_size: int, timeout: float, model_name: str, queue_max_size: int):
         self.engine = engine
         self.batch_size = batch_size
         self.timeout = timeout
         self.model_name = model_name
-        self.queue = queue.Queue()
+        self.queue = queue.Queue(maxsize=queue_max_size)
         self.shutdown_flag = False
-        self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+        self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True, name=f"{model_name}-batch-worker")
         self.worker_thread.start()
 
     def predict(self, text: str) -> float:
         future = futures.Future()
-        BATCH_QUEUE_SIZE.labels(model=self.model_name).inc()
+        enqueued = False
         try:
-            self.queue.put((text, future))
+            self.queue.put_nowait((text, future))
+            enqueued = True
+            BATCH_QUEUE_SIZE.labels(model=self.model_name).inc()
             return future.result()
+        except queue.Full as exc:
+            raise ServiceOverloadedError(f"{self.model_name} inference queue is full") from exc
         finally:
-            BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
+            if enqueued:
+                BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
 
     def predict_batch(self, texts: List[str]) -> List[float]:
         """
