@@ -33,7 +33,23 @@ func (r *CacheRepository) SaveToCache(ctx context.Context, msg *domain.Message) 
 	}
 
 	key := fmt.Sprintf("chat:{%s}:hot", msg.ChatID)
+	existing, err := r.client.ZRange(ctx, key, 0, -1).Result()
+	if err != nil && err != redis.Nil {
+		return err
+	}
+
 	pipe := r.client.Pipeline()
+
+	for _, item := range existing {
+		var cached domain.Message
+		if err := json.Unmarshal([]byte(item), &cached); err != nil {
+			continue
+		}
+
+		if cached.ID == msg.ID {
+			pipe.ZRem(ctx, key, item)
+		}
+	}
 
 	pipe.ZAdd(ctx, key, redis.Z{
 		Score:  float64(msg.CreatedAt.UnixNano()),

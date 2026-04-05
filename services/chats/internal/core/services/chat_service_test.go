@@ -103,7 +103,7 @@ func TestProcessMessage_Unauthorized(t *testing.T) {
 	cacheRepo.AssertNotCalled(t, "SaveToCache")
 }
 
-func TestGetHistory_CacheHit(t *testing.T) {
+func TestGetHistory_MergesCacheAndPersistence(t *testing.T) {
 	cacheRepo := new(mocks.MockChatCacheRepository)
 	streamRepo := new(mocks.MockChatStreamRepository)
 	dbRepo := new(mocks.MockChatPersistenceRepository)
@@ -114,19 +114,23 @@ func TestGetHistory_CacheHit(t *testing.T) {
 	pageSize := int32(2)
 
 	cachedMsgs := []*domain.Message{
-		{ID: "msg-1"}, {ID: "msg-2"},
+		{ID: "msg-cache-new", CreatedAt: time.Now().UTC()},
+		{ID: "msg-cache-old", CreatedAt: time.Now().UTC().Add(-time.Minute)},
 	}
 
 	cacheRepo.On("GetRecentMessages", ctx, chatID).Return(cachedMsgs, nil)
+	dbRepo.On("GetHistory", ctx, chatID, 0, 2).Return([]*domain.Message{
+		{ID: "msg-cache-old", CreatedAt: cachedMsgs[1].CreatedAt},
+		{ID: "msg-db", CreatedAt: cachedMsgs[1].CreatedAt.Add(-time.Minute)},
+	}, nil)
 
 	result, hasMore, err := service.GetHistory(ctx, chatID, 1, pageSize)
 
 	assert.NoError(t, err)
 	assert.True(t, hasMore)
 	assert.Len(t, result, 2)
-	assert.Equal(t, "msg-1", result[0].ID)
-	
-	dbRepo.AssertNotCalled(t, "GetHistory")
+	assert.Equal(t, "msg-cache-new", result[0].ID)
+	assert.Equal(t, "msg-cache-old", result[1].ID)
 	cacheRepo.AssertNotCalled(t, "PopulateCache")
 }
 
@@ -158,7 +162,7 @@ func TestGetHistory_CacheMiss_ReadRepair(t *testing.T) {
 	cacheRepo.AssertExpectations(t)
 }
 
-func TestGetHistory_PartialCache_TriggerReadRepair(t *testing.T) {
+func TestGetHistory_PartialCache_MergesWithoutDuplicates(t *testing.T) {
 	cacheRepo := new(mocks.MockChatCacheRepository)
 	streamRepo := new(mocks.MockChatStreamRepository)
 	dbRepo := new(mocks.MockChatPersistenceRepository)
@@ -181,9 +185,9 @@ func TestGetHistory_PartialCache_TriggerReadRepair(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Len(t, result, 2)
-
-	time.Sleep(50 * time.Millisecond)
-	cacheRepo.AssertExpectations(t)
+	assert.Equal(t, "msg-1", result[0].ID)
+	assert.Equal(t, "msg-2", result[1].ID)
+	cacheRepo.AssertNotCalled(t, "PopulateCache")
 }
 
 func TestGetHistory_SecondPage_SkipCache(t *testing.T) {
