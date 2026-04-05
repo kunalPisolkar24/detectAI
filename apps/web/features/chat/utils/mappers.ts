@@ -1,4 +1,5 @@
 import { Message, AnalysisResult } from "@/features/chat/types"
+import { parseAnalysisMessageMetadata } from "./analysis-message-metadata"
 
 interface GrpcMessage {
   id: string
@@ -37,6 +38,11 @@ export const mapGrpcMessageToDomain = (grpcMsg: GrpcMessage): Message => {
       },
       raw: grpcMsg.analysis
     }
+  }
+
+  const analysisStatus = parseAnalysisMessageMetadata(grpcMsg.metadata)
+  if (analysisStatus) {
+    message.analysisStatus = analysisStatus
   }
 
   return message
