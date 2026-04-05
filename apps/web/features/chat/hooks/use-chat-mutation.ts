@@ -10,6 +10,7 @@ interface SerializedMessage extends Omit<Message, "createdAt"> {
 }
 
 type StreamEvent =
+  | { type: "accepted"; message: SerializedMessage }
   | { type: "started"; totalChars: number; totalChunks: number }
   | { type: "progress"; processedChunks: number; totalChunks: number }
   | { type: "final"; message: SerializedMessage }
@@ -17,6 +18,8 @@ type StreamEvent =
 
 interface RetryAnalysisInput {
   assistantMessageId: string
+  assistantCreatedAt: Date
+  sourceMessageId: string
   content: string
   model: ModelType
 }
@@ -66,20 +69,27 @@ const parseStreamError = async (response: Response) => {
   return "Failed to analyze text"
 }
 
+const deserializeMessage = (message: SerializedMessage): Message => ({
+  ...message,
+  createdAt: new Date(message.createdAt),
+})
+
 export const useSendMessage = () => {
   const queryClient = useQueryClient()
   const currentChatId = useChatUIStore((state) => state.currentChatId)
   const selectedModel = useChatUIStore((state) => state.selectedModel)
   const setCurrentChatId = useChatUIStore((state) => state.setCurrentChatId)
   const registerActiveAnalysis = useChatUIStore((state) => state.registerActiveAnalysis)
+  const updateActiveAnalysisMessageId = useChatUIStore((state) => state.updateActiveAnalysisMessageId)
   const clearActiveAnalysis = useChatUIStore((state) => state.clearActiveAnalysis)
   const cancelActiveAnalysis = useChatUIStore((state) => state.cancelActiveAnalysis)
+  const activeAnalysisChatId = useChatUIStore((state) => state.activeAnalysisChatId)
   const activeAnalysisMessageId = useChatUIStore((state) => state.activeAnalysisMessageId)
   const isCancelling = useChatUIStore((state) => state.isCancellingAnalysis)
 
   const mutation = useMutation({
     mutationFn: async (input: AnalysisExecutionInput) => {
-      if (useChatUIStore.getState().activeAnalysisMessageId) {
+      if (useChatUIStore.getState().activeAnalysisChatId) {
         throw new Error("An analysis is already running")
       }
 
@@ -112,6 +122,7 @@ export const useSendMessage = () => {
       const optimisticUserId = input.kind === "new" ? crypto.randomUUID() : null
       const streamingAssistantId = input.kind === "retry" ? input.assistantMessageId : crypto.randomUUID()
       const controller = new AbortController()
+      let activeAssistantMessageId = streamingAssistantId
 
       if (input.kind === "new") {
         const optimisticUserMessage: Message = {
@@ -155,6 +166,13 @@ export const useSendMessage = () => {
                     analysis: undefined,
                     content: "",
                     isStreaming: true,
+                    analysisStatus: message.analysisStatus
+                      ? {
+                          ...message.analysisStatus,
+                          state: "running",
+                          error: undefined,
+                        }
+                      : message.analysisStatus,
                     streamingProgress: createStreamingProgress(effectiveModel, input.content),
                   }
                 : message,
@@ -163,7 +181,11 @@ export const useSendMessage = () => {
         })
       }
 
-      registerActiveAnalysis(streamingAssistantId, () => controller.abort())
+      registerActiveAnalysis({
+        chatId: activeChatId,
+        messageId: streamingAssistantId,
+        cancel: () => controller.abort(),
+      })
 
       let shouldRollbackUserMessage = input.kind === "new"
       let shouldRetainAssistantMessage = input.kind === "retry"
@@ -178,6 +200,9 @@ export const useSendMessage = () => {
             chatId: activeChatId,
             content: input.content,
             model: effectiveModel,
+            assistantMessageId: input.kind === "retry" ? input.assistantMessageId : undefined,
+            assistantCreatedAt: input.kind === "retry" ? input.assistantCreatedAt.toISOString() : undefined,
+            sourceMessageId: input.kind === "retry" ? input.sourceMessageId : undefined,
           }),
         })
 
@@ -220,7 +245,11 @@ export const useSendMessage = () => {
 
             const event = JSON.parse(line) as StreamEvent
 
-            if (event.type === "started") {
+            if (event.type === "accepted") {
+              const acceptedMessage = deserializeMessage(event.message)
+              activeAssistantMessageId = acceptedMessage.id
+              updateActiveAnalysisMessageId(acceptedMessage.id)
+
               queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
                 if (!old) {
                   return undefined
@@ -231,6 +260,34 @@ export const useSendMessage = () => {
                   messages: old.messages.map((message) =>
                     message.id === streamingAssistantId
                       ? {
+                          ...acceptedMessage,
+                          isStreaming: true,
+                          streamingProgress: message.streamingProgress ?? createStreamingProgress(
+                            effectiveModel,
+                            input.content,
+                            {
+                              sourceMessageId: acceptedMessage.analysisStatus?.sourceMessageId,
+                            },
+                          ),
+                        }
+                      : message,
+                  ),
+                }
+              })
+              continue
+            }
+
+            if (event.type === "started") {
+              queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
+                if (!old) {
+                  return undefined
+                }
+
+                return {
+                  ...old,
+                  messages: old.messages.map((message) =>
+                    message.id === activeAssistantMessageId
+                      ? {
                           ...message,
                           isStreaming: true,
                           streamingProgress: {
@@ -239,6 +296,7 @@ export const useSendMessage = () => {
                             totalChunks: event.totalChunks,
                             status: "running",
                             retryContent: input.content,
+                            sourceMessageId: message.analysisStatus?.sourceMessageId,
                           },
                         }
                       : message,
@@ -257,7 +315,7 @@ export const useSendMessage = () => {
                 return {
                   ...old,
                   messages: old.messages.map((message) =>
-                    message.id === streamingAssistantId
+                    message.id === activeAssistantMessageId
                       ? {
                           ...message,
                           isStreaming: true,
@@ -267,6 +325,7 @@ export const useSendMessage = () => {
                             totalChunks: event.totalChunks,
                             status: "running",
                             retryContent: input.content,
+                            sourceMessageId: message.analysisStatus?.sourceMessageId,
                           },
                         }
                       : message,
@@ -281,10 +340,7 @@ export const useSendMessage = () => {
             }
 
             if (event.type === "final") {
-              finalMessage = {
-                ...event.message,
-                createdAt: new Date(event.message.createdAt),
-              }
+              finalMessage = deserializeMessage(event.message)
 
               queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
                 if (!old) {
@@ -294,7 +350,7 @@ export const useSendMessage = () => {
                 return {
                   ...old,
                   messages: old.messages.map((message) =>
-                    message.id === streamingAssistantId ? finalMessage! : message,
+                    message.id === activeAssistantMessageId ? finalMessage! : message,
                   ),
                 }
               })
@@ -306,7 +362,10 @@ export const useSendMessage = () => {
           throw new StreamingChatError("Analysis completed without a final result", "failed", false, false, true)
         }
 
-        return finalMessage
+        return {
+          chatId: activeChatId,
+          message: finalMessage,
+        }
       } catch (error) {
         const failure =
           isAbortError(error)
@@ -350,7 +409,7 @@ export const useSendMessage = () => {
                 return []
               }
 
-              if (message.id !== streamingAssistantId) {
+              if (message.id !== activeAssistantMessageId) {
                 return [message]
               }
 
@@ -361,6 +420,13 @@ export const useSendMessage = () => {
                 analysis: undefined,
                 content: "",
                 isStreaming: false,
+                analysisStatus: message.analysisStatus
+                  ? {
+                      ...message.analysisStatus,
+                      state: failure.kind,
+                      error: failure.kind === "failed" ? failure.message : undefined,
+                    }
+                  : message.analysisStatus,
                 streamingProgress: {
                   ...previousProgress,
                   model: effectiveModel,
@@ -379,15 +445,14 @@ export const useSendMessage = () => {
 
         throw failure
       } finally {
-        clearActiveAnalysis(streamingAssistantId)
+        clearActiveAnalysis()
       }
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       useChatUIStore.getState().setRateLimited(false)
 
-      const activeChatId = useChatUIStore.getState().currentChatId
-      if (activeChatId) {
-        await queryClient.invalidateQueries({ queryKey: ["chat", activeChatId] })
+      if (result?.chatId) {
+        await queryClient.invalidateQueries({ queryKey: ["chat", result.chatId] })
       }
     },
     onError: (error) => {
@@ -411,6 +476,7 @@ export const useSendMessage = () => {
     cancelActiveAnalysis,
     isAnalyzing: Boolean(activeAnalysisMessageId),
     isCancelling,
+    activeAnalysisChatId,
     activeAnalysisMessageId,
   }
 }

@@ -7,6 +7,7 @@ interface ChatUIState {
   currentChatId: string | null
   isSidebarOpen: boolean
   isRateLimited: boolean
+  activeAnalysisChatId: string | null
   activeAnalysisMessageId: string | null
   activeAnalysisCancel: (() => void) | null
   isCancellingAnalysis: boolean
@@ -15,8 +16,9 @@ interface ChatUIState {
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
   setRateLimited: (limited: boolean) => void
-  registerActiveAnalysis: (messageId: string, cancel: () => void) => void
-  clearActiveAnalysis: (messageId?: string | null) => void
+  registerActiveAnalysis: (input: { chatId: string; messageId: string; cancel: () => void }) => void
+  updateActiveAnalysisMessageId: (messageId: string) => void
+  clearActiveAnalysis: () => void
   cancelActiveAnalysis: () => void
 }
 
@@ -27,6 +29,7 @@ export const useChatUIStore = create<ChatUIState>()(
       currentChatId: null,
       isSidebarOpen: true,
       isRateLimited: false,
+      activeAnalysisChatId: null,
       activeAnalysisMessageId: null,
       activeAnalysisCancel: null,
       isCancellingAnalysis: false,
@@ -35,27 +38,33 @@ export const useChatUIStore = create<ChatUIState>()(
       toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
       setSidebarOpen: (open) => set({ isSidebarOpen: open }),
       setRateLimited: (limited) => set({ isRateLimited: limited }),
-      registerActiveAnalysis: (messageId, cancel) =>
+      registerActiveAnalysis: ({ chatId, messageId, cancel }) =>
         set({
+          activeAnalysisChatId: chatId,
           activeAnalysisMessageId: messageId,
           activeAnalysisCancel: cancel,
           isCancellingAnalysis: false,
         }),
-      clearActiveAnalysis: (messageId) =>
+      updateActiveAnalysisMessageId: (messageId) =>
         set((state) => {
-          if (messageId && state.activeAnalysisMessageId && state.activeAnalysisMessageId !== messageId) {
+          if (!state.activeAnalysisChatId) {
             return state
           }
 
           return {
-            activeAnalysisMessageId: null,
-            activeAnalysisCancel: null,
-            isCancellingAnalysis: false,
+            activeAnalysisMessageId: messageId,
           }
+        }),
+      clearActiveAnalysis: () =>
+        set({
+          activeAnalysisChatId: null,
+          activeAnalysisMessageId: null,
+          activeAnalysisCancel: null,
+          isCancellingAnalysis: false,
         }),
       cancelActiveAnalysis: () => {
         const state = get()
-        if (!state.activeAnalysisMessageId || state.isCancellingAnalysis || !state.activeAnalysisCancel) {
+        if (!state.activeAnalysisChatId || !state.activeAnalysisMessageId || state.isCancellingAnalysis || !state.activeAnalysisCancel) {
           return
         }
 
