@@ -6,24 +6,15 @@ import { merriweather } from "@/lib/fonts"
 import { Message } from "../types"
 import { AnalysisCard } from "./analysis-card"
 import { AnalysisProgressCard } from "./analysis-progress-card"
-import { useSendMessage } from "../hooks/use-chat-mutation"
 
 interface MessageItemProps {
   message: Message
+  onRetry?: () => void
+  isRetryDisabled?: boolean
 }
 
-export const MessageItem = ({ message }: MessageItemProps) => {
+export const MessageItem = ({ message, onRetry, isRetryDisabled = false }: MessageItemProps) => {
   const isUser = message.role === "user"
-  const { retryAnalysis, isAnalyzing } = useSendMessage()
-  const handleRetry =
-    message.streamingProgress?.retryContent
-      ? () =>
-          retryAnalysis({
-            assistantMessageId: message.id,
-            content: message.streamingProgress!.retryContent!,
-            model: message.streamingProgress!.model,
-          })
-      : undefined
 
   return (
     <m.div
@@ -53,11 +44,25 @@ export const MessageItem = ({ message }: MessageItemProps) => {
              ? (
                  <AnalysisProgressCard
                    progress={message.streamingProgress}
-                   onRetry={message.streamingProgress.status === "running" ? undefined : handleRetry}
-                   isRetryDisabled={isAnalyzing}
+                   onRetry={message.streamingProgress.status === "running" ? undefined : onRetry}
+                   isRetryDisabled={isRetryDisabled}
                  />
                )
-             : message.analysis && <AnalysisCard result={message.analysis} />
+             : message.analysisStatus
+               ? (
+                   <AnalysisProgressCard
+                     progress={{
+                       model: message.analysisStatus.model,
+                       processedChunks: 0,
+                       totalChunks: 0,
+                       status: message.analysisStatus.state,
+                       error: message.analysisStatus.error,
+                     }}
+                     onRetry={onRetry}
+                     isRetryDisabled={isRetryDisabled}
+                   />
+                 )
+               : message.analysis && <AnalysisCard result={message.analysis} />
         )}
       </div>
     </m.div>
