@@ -5,7 +5,7 @@ import { z } from "zod"
 import { authOptions } from "@/lib/auth-options"
 import { MAX_LIVE_ANALYSIS_CHARS } from "@/features/chat/constants"
 import { chatService } from "@/features/chat/services"
-import { inferenceService } from "@/features/chat/services/inference-service"
+import { inferenceService, InferenceStreamAbortedError } from "@/features/chat/services/inference-service"
 import { AnalysisResult } from "@/features/chat/types"
 import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
 
@@ -68,49 +68,86 @@ export async function POST(request: Request) {
     async start(controller) {
       let finalAnalysis: AnalysisResult | null = null
       let closed = false
+      let aborted = request.signal.aborted
+
+      const closeStream = () => {
+        if (closed) {
+          return
+        }
+
+        closed = true
+
+        try {
+          controller.close()
+        } catch {
+        }
+      }
+
+      const enqueue = (payload: unknown) => {
+        if (aborted || closed) {
+          return
+        }
+
+        controller.enqueue(toStreamLine(payload))
+      }
+
+      const handleAbort = () => {
+        aborted = true
+      }
+
+      request.signal.addEventListener("abort", handleAbort, { once: true })
 
       try {
         await inferenceService.streamDocument(content, model, {
+          signal: request.signal,
           onEvent: (event) => {
+            if (aborted) {
+              return
+            }
+
             if (event.type === "final") {
               finalAnalysis = event.result
               return
             }
 
-            controller.enqueue(toStreamLine(event))
+            enqueue(event)
           },
         })
 
+        if (aborted) {
+          return
+        }
+
         if (!finalAnalysis) {
-          controller.enqueue(toStreamLine({ type: "error", error: "Analysis did not produce a final result" }))
-          controller.close()
-          closed = true
+          enqueue({ type: "error", error: "Analysis did not produce a final result" })
           return
         }
 
         const assistantMessage = await chatService.saveAssistantAnalysis(chatId, session.user.id, finalAnalysis)
+
+        if (aborted) {
+          return
+        }
+
         await rateLimitService.trackUsage(session.user.id)
 
-        controller.enqueue(
-          toStreamLine({
-            type: "final",
-            message: {
-              ...assistantMessage,
-              createdAt: assistantMessage.createdAt.toISOString(),
-            },
-          }),
-        )
+        enqueue({
+          type: "final",
+          message: {
+            ...assistantMessage,
+            createdAt: assistantMessage.createdAt.toISOString(),
+          },
+        })
       } catch (error) {
-        controller.enqueue(
-          toStreamLine({
+        if (!aborted && !(error instanceof InferenceStreamAbortedError)) {
+          enqueue({
             type: "error",
             error: error instanceof Error ? error.message : "Failed to analyze text",
-          }),
-        )
-      } finally {
-        if (!closed) {
-          controller.close()
+          })
         }
+      } finally {
+        request.signal.removeEventListener("abort", handleAbort)
+        closeStream()
       }
     },
   })
