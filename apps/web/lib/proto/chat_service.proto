@@ -80,6 +80,8 @@ message SaveMessageRequest {
   string content = 4;
   map<string, string> metadata = 5;
   Analysis analysis = 6;
+  string message_id = 7;
+  int64 created_at = 8;
 }
 
 message SaveMessageResponse {
