@@ -4,10 +4,11 @@ import { useRef, useEffect, useState } from "react"
 import { m, AnimatePresence } from "framer-motion"
 import { useChatUIStore } from "../stores/ui-store"
 import { useSendMessage } from "../hooks/use-chat-mutation"
+import { useChatHistory } from "../hooks/use-chat-history"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { Paperclip, ArrowUp, Loader2, ChevronDown, Sparkles, Square } from "lucide-react"
+import { Paperclip, ArrowUp, Loader2, ChevronDown, Sparkles, Square, ArrowLeftRight } from "lucide-react"
 import { teko, merriweather } from "@/lib/fonts"
 import {
   DropdownMenu,
@@ -16,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 import { extractTextFromFile } from "../actions/extract-file"
@@ -24,17 +25,22 @@ import { LIVE_ANALYSIS_WARNING_CHARS, MAX_LIVE_ANALYSIS_CHARS, MIN_ANALYSIS_WORD
 
 export const ChatInput = () => {
   const router = useRouter()
+  const pathname = usePathname()
   const { data: session } = useSession()
+  const { data: history } = useChatHistory()
   const isPremium = session?.user?.isPremium ?? false
   const [localInput, setLocalInput] = useState("")
   const [isExtracting, setIsExtracting] = useState(false)
-  const { selectedModel, setModel, isRateLimited } = useChatUIStore()
-  const { sendMessage, cancelActiveAnalysis, isAnalyzing, isCancelling } = useSendMessage()
+  const { selectedModel, setModel, isRateLimited, currentChatId, setCurrentChatId } = useChatUIStore()
+  const { sendMessage, cancelActiveAnalysis, isAnalyzing, isCancelling, activeAnalysisChatId } = useSendMessage()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const currentCharCount = localInput.length
   const isNearLimit = currentCharCount >= LIVE_ANALYSIS_WARNING_CHARS
   const isOverLimit = currentCharCount > MAX_LIVE_ANALYSIS_CHARS
+  const isCurrentChatAnalyzing = Boolean(activeAnalysisChatId && activeAnalysisChatId === currentChatId)
+  const isAnotherChatAnalyzing = Boolean(activeAnalysisChatId && activeAnalysisChatId !== currentChatId)
+  const runningChatTitle = history?.find((chat) => chat.id === activeAnalysisChatId)?.title
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -127,7 +133,7 @@ export const ChatInput = () => {
           "supports-[backdrop-filter]:bg-white/50 dark:supports-[backdrop-filter]:bg-black/40"
         )}
       >
-        {(isAnalyzing || isExtracting) && (
+        {(isCurrentChatAnalyzing || isExtracting) && (
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 animate-gradient-x z-20 opacity-50" />
         )}
 
@@ -149,6 +155,50 @@ export const ChatInput = () => {
           </div>
         )}
 
+        {isAnotherChatAnalyzing && (
+          <div className="flex items-center justify-between gap-4 border-b border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm dark:border-white/5 dark:bg-[#232329]/95">
+            <span className="font-medium text-neutral-700 dark:text-neutral-200">
+              {runningChatTitle
+                ? `Analysis is still running in "${runningChatTitle}".`
+                : "Analysis is still running in another chat."}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (activeAnalysisChatId) {
+                    setCurrentChatId(activeAnalysisChatId)
+                  }
+                  if (pathname !== "/chat") {
+                    router.push("/chat")
+                  }
+                }}
+                className={cn(
+                  "h-7 gap-1.5 rounded-lg border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100 dark:border-white/10 dark:bg-white/5 dark:text-neutral-100 dark:hover:bg-white/10",
+                  teko.className,
+                )}
+              >
+                <ArrowLeftRight size={12} />
+                <span className="pt-0.5 text-base tracking-wide">OPEN</span>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={cancelActiveAnalysis}
+                disabled={isCancelling}
+                className={cn(
+                  "h-7 min-w-[88px] rounded-lg bg-amber-500 text-white hover:bg-amber-400",
+                  teko.className,
+                )}
+              >
+                {isCancelling ? "STOPPING" : "CANCEL"}
+              </Button>
+            </div>
+          </div>
+        )}
+
         <Textarea
           ref={textareaRef}
           value={localInput}
@@ -162,7 +212,7 @@ export const ChatInput = () => {
             "scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-700",
             merriweather.className
           )}
-          disabled={isAnalyzing || (isRateLimited && !isPremium)}
+          disabled={isCurrentChatAnalyzing || (isRateLimited && !isPremium)}
           aria-label="Text to analyze"
         />
 
@@ -180,7 +230,7 @@ export const ChatInput = () => {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-neutral-500 hover:text-blue-600 hover:bg-blue-50/50 dark:text-neutral-400 dark:hover:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                disabled={isAnalyzing || isExtracting || (isRateLimited && !isPremium)}
+                disabled={isCurrentChatAnalyzing || isExtracting || (isRateLimited && !isPremium)}
                 onClick={() => fileInputRef.current?.click()}
                 aria-label="Attach file"
               >
@@ -202,7 +252,7 @@ export const ChatInput = () => {
                     "bg-white/50 hover:bg-black/5 dark:bg-white/5 dark:hover:bg-white/10",
                     "text-neutral-700 dark:text-neutral-200 transition-all duration-200"
                   )}
-                  disabled={isAnalyzing}
+                  disabled={isCurrentChatAnalyzing}
                   aria-label={`Select model, current: ${selectedModel}`}
                 >
                   <span className="capitalize tracking-wide">{selectedModel}</span>
@@ -261,28 +311,28 @@ export const ChatInput = () => {
             <m.div
               initial={false}
               animate={{
-                scale: isAnalyzing || localInput.trim() ? 1 : 0.95,
-                opacity: isAnalyzing || localInput.trim() ? 1 : 0.8
+                scale: isCurrentChatAnalyzing || localInput.trim() ? 1 : 0.95,
+                opacity: isCurrentChatAnalyzing || localInput.trim() ? 1 : 0.8
               }}
-              whileHover={isAnalyzing || localInput.trim() ? { scale: 1.02 } : {}}
-              whileTap={isAnalyzing || localInput.trim() ? { scale: 0.98 } : {}}
+              whileHover={isCurrentChatAnalyzing || localInput.trim() ? { scale: 1.02 } : {}}
+              whileTap={isCurrentChatAnalyzing || localInput.trim() ? { scale: 0.98 } : {}}
             >
               <Button
-                onClick={isAnalyzing ? cancelActiveAnalysis : handleSubmit}
+                onClick={isCurrentChatAnalyzing ? cancelActiveAnalysis : handleSubmit}
                 disabled={
                   isCancelling ||
                   isExtracting ||
-                  (!isAnalyzing && (!localInput.trim() || isOverLimit || (isRateLimited && !isPremium)))
+                  (!isCurrentChatAnalyzing && (!localInput.trim() || isOverLimit || isAnalyzing || (isRateLimited && !isPremium)))
                 }
                 className={cn(
                   "h-9 min-w-[36px] rounded-lg transition-all duration-300 px-3 sm:px-5",
-                  isAnalyzing
+                  isCurrentChatAnalyzing
                     ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/20 hover:shadow-amber-500/30 hover:from-amber-400 hover:to-orange-400"
                     : "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md shadow-blue-500/20 hover:shadow-blue-500/30 hover:from-blue-500 hover:to-purple-500",
                   "disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none",
                   teko.className
                 )}
-                aria-label={isAnalyzing ? "Cancel analysis" : "Analyze text"}
+                aria-label={isCurrentChatAnalyzing ? "Cancel analysis" : "Analyze text"}
               >
                 <AnimatePresence mode="wait">
                   {isCancelling ? (
@@ -294,7 +344,7 @@ export const ChatInput = () => {
                     >
                       <Loader2 size={16} className="animate-spin" aria-hidden="true" />
                     </m.div>
-                  ) : isAnalyzing ? (
+                  ) : isCurrentChatAnalyzing ? (
                     <m.div
                       key="stop"
                       initial={{ opacity: 0, scale: 0.5 }}
@@ -313,7 +363,9 @@ export const ChatInput = () => {
                       exit={{ opacity: 0, scale: 0.5 }}
                       className="flex items-center gap-2"
                     >
-                      <span className="hidden sm:inline text-lg tracking-wide pt-0.5">ANALYZE</span>
+                      <span className="hidden sm:inline text-lg tracking-wide pt-0.5">
+                        {isAnotherChatAnalyzing ? "WAIT" : "ANALYZE"}
+                      </span>
                       <ArrowUp size={16} strokeWidth={2.5} aria-hidden="true" />
                     </m.div>
                   )}
