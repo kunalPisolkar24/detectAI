@@ -128,7 +128,7 @@ export const AnalysisProgressCard = ({
               </p>
             </div>
 
-            {onRetry && progress.retryContent ? (
+            {onRetry ? (
               <Button
                 type="button"
                 variant="outline"
