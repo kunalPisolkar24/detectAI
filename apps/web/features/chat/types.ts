@@ -17,6 +17,9 @@ export interface StreamingAnalysisProgress {
   model: ModelType
   processedChunks: number
   totalChunks: number
+  status: "running" | "cancelled" | "failed"
+  retryContent?: string
+  error?: string
 }
 
 export interface Message {
