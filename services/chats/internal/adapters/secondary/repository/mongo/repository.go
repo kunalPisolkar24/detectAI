@@ -79,14 +79,34 @@ func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*do
 		return nil
 	}
 
-	models := make([]mongo.WriteModel, 0, len(messages))
+	now := time.Now().UTC()
 
 	for _, msg := range messages {
+		updateExistingResult, err := r.messageColl.UpdateOne(
+			ctx,
+			bson.M{
+				"chat_id":      msg.ChatID,
+				"messages._id": msg.ID,
+			},
+			bson.M{
+				"$set": bson.M{
+					"messages.$": msg,
+				},
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		if updateExistingResult.MatchedCount > 0 {
+			continue
+		}
+
 		filter := bson.M{
 			"chat_id": msg.ChatID,
 			"count":   bson.M{"$lt": 50},
 			"end_date": bson.M{
-				"$gt": time.Now().Add(-24 * time.Hour),
+				"$gt": now.Add(-24 * time.Hour),
 			},
 		}
 
@@ -97,20 +117,16 @@ func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*do
 			"$min":  bson.M{"start_date": msg.CreatedAt},
 			"$setOnInsert": bson.M{
 				"chat_id":      msg.ChatID,
-				"bucket_index": time.Now().UnixNano(),
+				"bucket_index": now.UnixNano(),
 			},
 		}
 
-		model := mongo.NewUpdateOneModel().
-			SetFilter(filter).
-			SetUpdate(update).
-			SetUpsert(true)
-
-		models = append(models, model)
+		if _, err := r.messageColl.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true)); err != nil {
+			return err
+		}
 	}
 
-	_, err := r.messageColl.BulkWrite(ctx, models)
-	return err
+	return nil
 }
 
 func (r *MongoRepository) GetHistory(ctx context.Context, chatID string, offset, limit int) ([]*domain.Message, error) {
