@@ -37,6 +37,12 @@ type InferenceStreamEvent =
   | { type: "progress"; processedChunks: number; totalChunks: number }
   | { type: "final"; result: AnalysisResult }
 
+export class InferenceStreamAbortedError extends Error {
+  constructor() {
+    super("AI analysis request was canceled")
+  }
+}
+
 const MODEL_CODES: Record<ModelType, number> = {
   spark: 1,
   flare: 2,
@@ -90,6 +96,7 @@ export const inferenceService = {
     model: ModelType,
     handlers: {
       onEvent: (event: InferenceStreamEvent) => void
+      signal?: AbortSignal
     }
   ): Promise<void> {
     const client = getGrpcClient()
@@ -105,6 +112,31 @@ export const inferenceService = {
         },
         metadata,
       )
+
+      const complete = (callback: () => void) => {
+        if (settled) {
+          return false
+        }
+
+        settled = true
+        handlers.signal?.removeEventListener("abort", handleAbort)
+        callback()
+        return true
+      }
+
+      const handleAbort = () => {
+        call.cancel()
+      }
+
+      if (handlers.signal?.aborted) {
+        complete(() => {
+          metrics.aiInferenceDuration.observe({ model, status: "cancelled" }, (performance.now() - start) / 1000)
+          reject(new InferenceStreamAbortedError())
+        })
+        return
+      }
+
+      handlers.signal?.addEventListener("abort", handleAbort, { once: true })
 
       call.on("data", (event: ProtoStreamEvent) => {
         if (event.event === "started" && event.started) {
@@ -134,24 +166,44 @@ export const inferenceService = {
       })
 
       call.on("end", () => {
-        if (settled) {
+        if (handlers.signal?.aborted) {
+          if (!complete(() => {
+            metrics.aiInferenceDuration.observe({ model, status: "cancelled" }, (performance.now() - start) / 1000)
+            reject(new InferenceStreamAbortedError())
+          })) {
+            return
+          }
+
           return
         }
 
-        settled = true
-        metrics.aiInferenceDuration.observe({ model, status: "success" }, (performance.now() - start) / 1000)
-        resolve()
+        if (!complete(() => {
+          metrics.aiInferenceDuration.observe({ model, status: "success" }, (performance.now() - start) / 1000)
+          resolve()
+        })) {
+          return
+        }
       })
 
       call.on("error", (error: any) => {
-        if (settled) {
+        if (handlers.signal?.aborted || error?.code === 1) {
+          if (!complete(() => {
+            metrics.aiInferenceDuration.observe({ model, status: "cancelled" }, (performance.now() - start) / 1000)
+            reject(new InferenceStreamAbortedError())
+          })) {
+            return
+          }
+
           return
         }
 
-        settled = true
-        metrics.aiInferenceDuration.observe({ model, status: "error" }, (performance.now() - start) / 1000)
-        logger.error({ msg: "AI Streaming Inference Failed", model, error })
-        reject(new Error(error?.details || "AI Analysis Service Unavailable"))
+        if (!complete(() => {
+          metrics.aiInferenceDuration.observe({ model, status: "error" }, (performance.now() - start) / 1000)
+          logger.error({ msg: "AI Streaming Inference Failed", model, error })
+          reject(new Error(error?.details || "AI Analysis Service Unavailable"))
+        })) {
+          return
+        }
       })
     })
   },
