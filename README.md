@@ -103,12 +103,12 @@ To get a local copy up and running, follow these simple steps.
 
     For the local stack:
     ```sh
-    cp docker/local/.env.example docker/local/.env
+    cp infra/docker/local/.env.example infra/docker/local/.env
     ```
 
     For the prod-like stack:
     ```sh
-    cp docker/prod/.env.example docker/prod/.env
+    cp infra/docker/prod/.env.example infra/docker/prod/.env
     ```
 
     Update the env file for the stack you plan to run.

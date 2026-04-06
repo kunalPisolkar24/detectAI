@@ -1,11 +1,11 @@
 SHELL := /bin/sh
 .DEFAULT_GOAL := help
 
-PROD_ENV := docker/prod/.env
-PROD_COMPOSE_FILE := docker/prod/compose.yml
-PROD_MONITORING_COMPOSE_FILE := docker/prod/compose.monitoring.yml
-LOCAL_ENV := docker/local/.env
-LOCAL_COMPOSE_FILE := docker/local/compose.yml
+PROD_ENV := infra/docker/prod/.env
+PROD_COMPOSE_FILE := infra/docker/prod/compose.yml
+PROD_MONITORING_COMPOSE_FILE := infra/docker/prod/compose.monitoring.yml
+LOCAL_ENV := infra/docker/local/.env
+LOCAL_COMPOSE_FILE := infra/docker/local/compose.yml
 
 DOCKER_BIN := $(strip $(shell command -v docker 2>/dev/null))
 DOCKER_BIN := $(if $(DOCKER_BIN),$(DOCKER_BIN),docker)

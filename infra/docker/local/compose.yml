@@ -90,7 +90,7 @@ services:
 
   document-parser:
     build:
-      context: ../../services/document-parser
+      context: ../../../services/document-parser
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
@@ -112,7 +112,7 @@ services:
 
   ai-service:
     build:
-      context: ../../services/inference
+      context: ../../../services/inference
       dockerfile: Dockerfile.local
     restart: unless-stopped
     environment:
@@ -144,7 +144,7 @@ services:
 
   payment-gateway:
     build:
-      context: ../../services/payments/gateway
+      context: ../../../services/payments/gateway
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
@@ -166,7 +166,7 @@ services:
 
   db-migrate:
     build:
-      context: ../../apps/web
+      context: ../../../apps/web
       dockerfile: Dockerfile
       target: migrate
     restart: "no"
@@ -178,7 +178,7 @@ services:
 
   worker-analytics:
     build:
-      context: ../../services/workers
+      context: ../../../services/workers
       dockerfile: Dockerfile
     restart: unless-stopped
     command: ["bun", "run", "start:analytics"]
@@ -214,7 +214,7 @@ services:
 
   worker-cron:
     build:
-      context: ../../services/workers
+      context: ../../../services/workers
       dockerfile: Dockerfile
     restart: unless-stopped
     command: ["bun", "run", "start:cron"]
@@ -246,7 +246,7 @@ services:
 
   worker-payments:
     build:
-      context: ../../services/workers
+      context: ../../../services/workers
       dockerfile: Dockerfile
     restart: unless-stopped
     command: ["bun", "run", "start:payments"]
@@ -283,7 +283,7 @@ services:
 
   chat-service:
     build:
-      context: ../../services/chats
+      context: ../../../services/chats
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
@@ -318,7 +318,7 @@ services:
 
   chat-worker:
     build:
-      context: ../../services/chats
+      context: ../../../services/chats
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
@@ -352,7 +352,7 @@ services:
 
   frontend:
     build:
-      context: ../../apps/web
+      context: ../../../apps/web
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}

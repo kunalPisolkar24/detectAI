@@ -37,7 +37,7 @@ The source of truth for those dashboards is:
 If you want to change dashboard content, update the generator script and then regenerate the JSON files:
 
 ```bash
-node docker/prod/monitoring/grafana/scripts/generate-dashboards.mjs
+node infra/docker/prod/monitoring/grafana/scripts/generate-dashboards.mjs
 ```
 
 Provisioning is managed by:
