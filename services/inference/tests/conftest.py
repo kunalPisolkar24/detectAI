@@ -21,7 +21,9 @@ def mock_settings(mocker):
 def mock_engine():
     engine = MagicMock(spec=IInferenceEngine)
     engine.predict.return_value = 0.8
-    engine.predict_batch.return_value = [0.8, 0.2]
+    def mock_predict_batch(texts):
+        return [0.8, 0.2, 0.5, 0.9][:len(texts)]
+    engine.predict_batch.side_effect = mock_predict_batch
     return engine
 
 @pytest.fixture
