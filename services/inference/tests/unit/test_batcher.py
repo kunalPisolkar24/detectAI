@@ -68,3 +68,22 @@ def test_batcher_rejects_when_queue_is_full(mock_engine):
             batcher.predict("boom")
 
     batcher.shutdown_flag = True
+
+
+def test_batcher_updates_metrics_on_dequeue(mock_engine, mocker):
+    mock_metric = mocker.patch("src.inference.batcher.BATCH_QUEUE_SIZE")
+    
+    # Use a large timeout so we can control the flow
+    batcher = BatchingProxy(mock_engine, batch_size=2, timeout=10.0, model_name="test", queue_max_size=8)
+    
+    # Manually put an item to avoid predict() blocking on future.result()
+    future = futures.Future()
+    batcher.queue.put(("test", future))
+    
+    # Wait a bit for the worker thread to pick it up and decrement
+    time.sleep(0.1)
+    
+    # Should have been decremented exactly once even though the batch is not complete (batch_size=2)
+    mock_metric.labels.return_value.dec.assert_called_once()
+    
+    batcher.shutdown_flag = True
