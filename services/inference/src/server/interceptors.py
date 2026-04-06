@@ -20,11 +20,14 @@ class AuthInterceptor(grpc.ServerInterceptor):
         
         return continuation(handler_call_details)
 
+_TRACE_HEADERS = ("traceparent", "x-b3-traceid", "x-request-id")
+
 class MonitoringInterceptor(grpc.ServerInterceptor):
     def intercept_service(self, continuation, handler_call_details):
         method_name = handler_call_details.method.split('/')[-1]
         start_time = time.monotonic()
-        trace_id = str(uuid.uuid4())
+        metadata = dict(handler_call_details.invocation_metadata)
+        trace_id = self._resolve_trace_id(metadata)
         
         structlog.contextvars.bind_contextvars(trace_id=trace_id)
         
@@ -62,3 +65,10 @@ class MonitoringInterceptor(grpc.ServerInterceptor):
                        code=response_code)
             
             structlog.contextvars.clear_contextvars()
+
+    def _resolve_trace_id(self, metadata: dict) -> str:
+        for header in _TRACE_HEADERS:
+            value = metadata.get(header)
+            if value:
+                return value
+        return str(uuid.uuid4())
