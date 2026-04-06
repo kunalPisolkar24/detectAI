@@ -25,6 +25,10 @@ RUN mkdir -p src/generated && \
     sed -i 's/import ai_service_pb2/from . import ai_service_pb2/' src/generated/ai_service_pb2_grpc.py && \
     touch src/generated/__init__.py
 
+RUN useradd -m -r appuser && chown -R appuser:appuser /app
+
 EXPOSE 50051 8333
+
+USER appuser
 
 CMD ["python3", "-m", "src.main"]
