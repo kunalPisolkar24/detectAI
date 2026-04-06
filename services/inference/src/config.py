@@ -11,6 +11,7 @@ InferenceProviders = Annotated[list[str], NoDecode]
 class Settings(BaseSettings):
     ENV: str = "production"
     GRPC_PORT: int = 50051
+    GRPC_MAX_WORKERS: int = 50
     METRICS_PORT: int = 8333
     API_KEY: str
     MODEL_CACHE_DIR: str = "./models"

@@ -26,6 +26,7 @@ services:
       - CHUNK_TOKEN_LIMIT=${INFERENCE_CHUNK_TOKEN_LIMIT:-256}
       - CHUNK_TOKEN_STRIDE=${INFERENCE_CHUNK_TOKEN_STRIDE:-192}
       - INFERENCE_PROVIDERS=${INFERENCE_PROVIDERS:-CUDAExecutionProvider,CPUExecutionProvider}
+      - GRPC_MAX_WORKERS=${INFERENCE_GRPC_MAX_WORKERS:-50}
     deploy:
       resources:
         reservations:
