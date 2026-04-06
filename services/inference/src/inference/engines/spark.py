@@ -12,6 +12,7 @@ class SparkEngine(IInferenceEngine, BaseEngine):
         return self.predict_batch([text])[0]
 
     def predict_batch(self, texts: list[str]) -> list[float]:
+        outputs = None
         try:
             vectorized = self.tokenizer.transform(texts).toarray().astype(np.float32)
             
@@ -31,7 +32,7 @@ class SparkEngine(IInferenceEngine, BaseEngine):
 
         except Exception as e:
             shape_info = "Unknown"
-            if 'outputs' in locals() and len(outputs) > 0:
+            if outputs is not None and isinstance(outputs, list) and len(outputs) > 0 and hasattr(outputs[0], 'shape'):
                 shape_info = str(outputs[0].shape)
             
             raise InferenceError(f"Spark batch inference failed (Shape: {shape_info}): {str(e)}")
