@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     BATCH_QUEUE_MAX_SIZE: int = 1024
     MAX_INFLIGHT_DOC_CHUNKS: int = 8
     MAX_TEXT_CHARS: int = Field(default=50000, validation_alias="MAX_TEXT_LENGTH")
+    MAX_GLOBAL_TOKENS: int = 10000
     CHUNK_TOKEN_LIMIT: int = 256
     CHUNK_TOKEN_STRIDE: int = 192
     INFERENCE_PROVIDERS: InferenceProviders = Field(
