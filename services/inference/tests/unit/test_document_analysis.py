@@ -1,3 +1,4 @@
+import pytest
 from pytest import approx
 
 from src.inference.aggregation import ResultAggregator
@@ -8,7 +9,7 @@ from src.inference.validation import InputValidator
 
 
 def test_chunk_planner_builds_multiple_chunks():
-    planner = ChunkPlanner(RegexTokenChunker(), chunk_size=4, stride=2)
+    planner = ChunkPlanner(RegexTokenChunker(), chunk_size=4, stride=2, max_global_tokens=100)
 
     chunks = planner.plan("one two three four five six seven eight")
 
@@ -18,8 +19,16 @@ def test_chunk_planner_builds_multiple_chunks():
     assert chunks[2].token_count == 4
 
 
+def test_chunk_planner_token_bomb_protection():
+    from src.core.exceptions import InvalidInputError
+    planner = ChunkPlanner(RegexTokenChunker(), chunk_size=4, stride=4, max_global_tokens=2)
+    
+    with pytest.raises(InvalidInputError, match="Request exceeds hard limit"):
+        planner.plan("one two three four five")
+
+
 def test_result_aggregator_uses_weighted_mean():
-    planner = ChunkPlanner(RegexTokenChunker(), chunk_size=4, stride=4)
+    planner = ChunkPlanner(RegexTokenChunker(), chunk_size=4, stride=4, max_global_tokens=100)
     chunks = planner.plan("one two three four five six")
 
     score = ResultAggregator().aggregate(chunks, [0.2, 0.8], total_chars=23)
@@ -34,7 +43,7 @@ def test_document_analysis_streams_progress_and_final(mock_engine):
 
     service = DocumentAnalysisService(
         engines={"spark": mock_engine},
-        planners={"spark": ChunkPlanner(RegexTokenChunker(), chunk_size=4, stride=4)},
+        planners={"spark": ChunkPlanner(RegexTokenChunker(), chunk_size=4, stride=4, max_global_tokens=100)},
         validator=InputValidator(1000),
         aggregator=ResultAggregator(),
         max_inflight_chunks=1,
