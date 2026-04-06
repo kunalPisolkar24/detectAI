@@ -23,17 +23,12 @@ class BatchingProxy(IInferenceEngine):
 
     def predict(self, text: str) -> float:
         future = futures.Future()
-        enqueued = False
         try:
             self.queue.put_nowait((text, future))
-            enqueued = True
             BATCH_QUEUE_SIZE.labels(model=self.model_name).inc()
             return future.result()
         except queue.Full as exc:
             raise ServiceOverloadedError(f"{self.model_name} inference queue is full") from exc
-        finally:
-            if enqueued:
-                BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
 
     def predict_batch(self, texts: List[str]) -> List[float]:
         """
@@ -47,6 +42,7 @@ class BatchingProxy(IInferenceEngine):
             batch = []
             try:
                 item = self.queue.get(timeout=0.01)
+                BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
                 batch.append(item)
             except queue.Empty:
                 continue
@@ -59,6 +55,7 @@ class BatchingProxy(IInferenceEngine):
                     break
                 try:
                     item = self.queue.get(timeout=remaining)
+                    BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
                     batch.append(item)
                 except queue.Empty:
                     break
