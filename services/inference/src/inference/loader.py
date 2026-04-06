@@ -1,7 +1,7 @@
 import os
 import pickle
 import onnxruntime as ort
-from transformers import BertTokenizer
+from transformers import BertTokenizer, BertTokenizerFast
 from huggingface_hub import snapshot_download, hf_hub_download
 from src.core.interfaces import IModelLoader
 from src.core.exceptions import ModelLoadError
@@ -45,7 +45,7 @@ class HuggingFaceLoader(IModelLoader):
         repo_id = "kpisolkar24/detect-ai-flare"
         model_path = snapshot_download(repo_id=repo_id, local_dir=os.path.join(self.cache_dir, "flare"))
         
-        tokenizer = BertTokenizer.from_pretrained(model_path)
+        tokenizer = BertTokenizerFast.from_pretrained(model_path)
         session = ort.InferenceSession(os.path.join(model_path, "model.onnx"), providers=self.providers)
         
         return session, tokenizer

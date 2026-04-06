@@ -76,9 +76,13 @@ class BatchingProxy(IInferenceEngine):
             with BATCH_PROCESSING_TIME.labels(model=self.model_name).time():
                 results = self.engine.predict_batch(texts)
             
-            for future, result in zip(futures_list, results):
+            if len(results) != len(futures_list):
+                raise RuntimeError("Batch results length mismatch")
+                
+            for i in range(len(futures_list)):
+                future = futures_list[i]
                 if not future.cancelled():
-                    future.set_result(result)
+                    future.set_result(results[i])
                 
             logger.info("batch_processed", 
                        model=self.model_name, 
