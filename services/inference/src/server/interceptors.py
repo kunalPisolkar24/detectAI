@@ -1,3 +1,4 @@
+import hmac
 import time
 import uuid
 import grpc
@@ -10,7 +11,8 @@ logger = structlog.get_logger()
 class AuthInterceptor(grpc.ServerInterceptor):
     def intercept_service(self, continuation, handler_call_details):
         metadata = dict(handler_call_details.invocation_metadata)
-        if metadata.get('x-api-key') != settings.API_KEY:
+        provided_key = metadata.get('x-api-key', '')
+        if not hmac.compare_digest(provided_key, settings.API_KEY):
             def abort(ignored_request, context):
                 context.abort(grpc.StatusCode.UNAUTHENTICATED, 'Invalid API Key')
                 return None
