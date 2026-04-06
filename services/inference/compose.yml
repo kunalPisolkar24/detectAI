@@ -12,7 +12,7 @@ services:
       retries: 3
     ports:
       - "${PORT_INFERENCE}:50051"
-      - "${PORT_INFERENCE_METRICS}:8333"
+      - "127.0.0.1:${PORT_INFERENCE_METRICS:-8333}:8333"
     networks:
       - detectai_net
     environment:
