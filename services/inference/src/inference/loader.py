@@ -1,11 +1,16 @@
 import os
 import pickle
 import onnxruntime as ort
-from transformers import BertTokenizer, BertTokenizerFast
+import structlog
+from transformers import BertTokenizerFast
 from huggingface_hub import snapshot_download, hf_hub_download
 from src.core.interfaces import IModelLoader
 from src.core.exceptions import ModelLoadError
 from src.core.inference_providers import parse_inference_providers
+
+logger = structlog.get_logger()
+
+_GPU_PROVIDERS = frozenset({"CUDAExecutionProvider", "TensorrtExecutionProvider", "ROCMExecutionProvider"})
 
 class HuggingFaceLoader(IModelLoader):
     def __init__(self, cache_dir: str, providers: list[str] | None = None):
@@ -36,6 +41,7 @@ class HuggingFaceLoader(IModelLoader):
         tok_path = hf_hub_download(repo_id=repo_id, filename="detect-ai-spark-tokenizer.pkl", local_dir=self.cache_dir)
         
         session = ort.InferenceSession(onnx_path, providers=self.providers)
+        self._verify_providers(session, "spark")
         with open(tok_path, 'rb') as f:
             tokenizer = pickle.load(f)
             
@@ -47,5 +53,25 @@ class HuggingFaceLoader(IModelLoader):
         
         tokenizer = BertTokenizerFast.from_pretrained(model_path)
         session = ort.InferenceSession(os.path.join(model_path, "model.onnx"), providers=self.providers)
+        self._verify_providers(session, "flare")
         
         return session, tokenizer
+
+    def _verify_providers(self, session: ort.InferenceSession, model_key: str) -> None:
+        requested_gpu = any(p in _GPU_PROVIDERS for p in self.providers)
+        active_providers = session.get_providers()
+        active_gpu = any(p in _GPU_PROVIDERS for p in active_providers)
+
+        if requested_gpu and not active_gpu:
+            logger.warning(
+                "gpu_provider_unavailable_falling_back_to_cpu",
+                model=model_key,
+                requested=self.providers,
+                active=active_providers,
+            )
+        else:
+            logger.info(
+                "model_loaded",
+                model=model_key,
+                active_providers=active_providers,
+            )
