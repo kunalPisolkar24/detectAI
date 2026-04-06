@@ -15,7 +15,7 @@ class GRPCServer:
     def __init__(self, analysis_service):
         self.port = settings.GRPC_PORT
         self.server = grpc.server(
-            futures.ThreadPoolExecutor(max_workers=50),
+            futures.ThreadPoolExecutor(max_workers=settings.GRPC_MAX_WORKERS),
             interceptors=[AuthInterceptor(), MonitoringInterceptor()]
         )
         

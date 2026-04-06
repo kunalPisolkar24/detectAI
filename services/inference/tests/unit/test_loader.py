@@ -64,3 +64,24 @@ def test_loader_parses_json_provider_env(mock_loader_env, monkeypatch):
     loader.load("spark")
 
     assert mock_session.call_args.kwargs["providers"] == ["CPUExecutionProvider"]
+
+
+def test_loader_warns_on_gpu_fallback(mock_loader_env, monkeypatch, mocker):
+    mock_session_class, _, _, _ = mock_loader_env
+    mock_session = mock_session_class.return_value
+    mock_session.get_providers.return_value = ["CPUExecutionProvider"]
+    
+    # Force GPU request
+    monkeypatch.setenv("INFERENCE_PROVIDERS", "CUDAExecutionProvider,CPUExecutionProvider")
+    
+    mock_logger = mocker.patch("src.inference.loader.logger")
+    
+    loader = HuggingFaceLoader("./cache")
+    loader.load("spark")
+    
+    mock_logger.warning.assert_called_once_with(
+        "gpu_provider_unavailable_falling_back_to_cpu",
+        model="spark",
+        requested=["CUDAExecutionProvider", "CPUExecutionProvider"],
+        active=["CPUExecutionProvider"]
+    )

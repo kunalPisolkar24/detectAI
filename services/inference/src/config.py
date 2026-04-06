@@ -11,6 +11,7 @@ InferenceProviders = Annotated[list[str], NoDecode]
 class Settings(BaseSettings):
     ENV: str = "production"
     GRPC_PORT: int = 50051
+    GRPC_MAX_WORKERS: int = 50
     METRICS_PORT: int = 8333
     API_KEY: str
     MODEL_CACHE_DIR: str = "./models"
@@ -20,6 +21,7 @@ class Settings(BaseSettings):
     BATCH_QUEUE_MAX_SIZE: int = 1024
     MAX_INFLIGHT_DOC_CHUNKS: int = 8
     MAX_TEXT_CHARS: int = Field(default=50000, validation_alias="MAX_TEXT_LENGTH")
+    MAX_GLOBAL_TOKENS: int = 10000
     CHUNK_TOKEN_LIMIT: int = 256
     CHUNK_TOKEN_STRIDE: int = 192
     INFERENCE_PROVIDERS: InferenceProviders = Field(

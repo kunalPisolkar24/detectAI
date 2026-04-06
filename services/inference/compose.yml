@@ -5,9 +5,14 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/bin/grpc_health_probe", "-addr=:50051"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     ports:
       - "${PORT_INFERENCE}:50051"
-      - "${PORT_INFERENCE_METRICS}:8333"
+      - "127.0.0.1:${PORT_INFERENCE_METRICS:-8333}:8333"
     networks:
       - detectai_net
     environment:
@@ -26,8 +31,12 @@ services:
       - CHUNK_TOKEN_LIMIT=${INFERENCE_CHUNK_TOKEN_LIMIT:-256}
       - CHUNK_TOKEN_STRIDE=${INFERENCE_CHUNK_TOKEN_STRIDE:-192}
       - INFERENCE_PROVIDERS=${INFERENCE_PROVIDERS:-CUDAExecutionProvider,CPUExecutionProvider}
+      - GRPC_MAX_WORKERS=${INFERENCE_GRPC_MAX_WORKERS:-50}
     deploy:
       resources:
+        limits:
+          memory: 8G
+          cpus: "4.0"
         reservations:
           devices:
             - driver: nvidia

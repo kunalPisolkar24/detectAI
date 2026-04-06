@@ -24,6 +24,7 @@ class DocumentAnalysisService:
         self.validator = validator
         self.aggregator = aggregator
         self.max_inflight_chunks = max(1, max_inflight_chunks)
+        self._executor = ThreadPoolExecutor(max_workers=self.max_inflight_chunks)
 
     def analyze(self, text: str, model_key: str) -> DocumentScore:
         validated_text, chunks = self._prepare(text, model_key)
@@ -49,6 +50,12 @@ class DocumentAnalysisService:
         validated_text, chunks = self._prepare(text, model_key)
         return len(validated_text), len(chunks)
 
+    def shutdown(self) -> None:
+        self._executor.shutdown(wait=True, cancel_futures=True)
+
+    def __del__(self) -> None:
+        self._executor.shutdown(wait=False, cancel_futures=True)
+
     def _prepare(self, text: str, model_key: str):
         validated_text = self.validator.validate(text)
         planner = self._get_planner(model_key)
@@ -64,28 +71,24 @@ class DocumentAnalysisService:
         return ordered_results
 
     def _predict_probabilities_with_progress(self, engine: IInferenceEngine, chunks):
-        executor = ThreadPoolExecutor(max_workers=self.max_inflight_chunks)
-        futures = {}
+        pending_futures = {}
         pending_index = 0
 
-        try:
-            while pending_index < len(chunks) and len(futures) < self.max_inflight_chunks:
-                future = executor.submit(engine.predict, chunks[pending_index].text)
-                futures[future] = pending_index
-                pending_index += 1
+        while pending_index < len(chunks) and len(pending_futures) < self.max_inflight_chunks:
+            future = self._executor.submit(engine.predict, chunks[pending_index].text)
+            pending_futures[future] = pending_index
+            pending_index += 1
 
-            while futures:
-                completed, _ = wait(futures.keys(), return_when=FIRST_COMPLETED)
-                for future in completed:
-                    chunk_index = futures.pop(future)
-                    yield chunk_index, float(future.result())
+        while pending_futures:
+            completed, _ = wait(pending_futures.keys(), return_when=FIRST_COMPLETED)
+            for future in completed:
+                chunk_index = pending_futures.pop(future)
+                yield chunk_index, float(future.result())
 
-                    if pending_index < len(chunks):
-                        next_future = executor.submit(engine.predict, chunks[pending_index].text)
-                        futures[next_future] = pending_index
-                        pending_index += 1
-        finally:
-            executor.shutdown(wait=True, cancel_futures=True)
+                if pending_index < len(chunks):
+                    next_future = self._executor.submit(engine.predict, chunks[pending_index].text)
+                    pending_futures[next_future] = pending_index
+                    pending_index += 1
 
     def _get_engine(self, model_key: str) -> IInferenceEngine:
         if model_key not in self.engines:
