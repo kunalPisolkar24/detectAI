@@ -29,6 +29,9 @@ services:
       - GRPC_MAX_WORKERS=${INFERENCE_GRPC_MAX_WORKERS:-50}
     deploy:
       resources:
+        limits:
+          memory: 8G
+          cpus: "4.0"
         reservations:
           devices:
             - driver: nvidia
