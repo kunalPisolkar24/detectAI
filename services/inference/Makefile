@@ -1,6 +1,9 @@
-.PHONY: install proto run docker-build test
+.PHONY: install install-prod proto run docker-build docker-build-local test
 
 install:
+	pip install -r requirements.local.txt
+
+install-prod:
 	pip install -r requirements.txt
 
 proto:
@@ -14,6 +17,9 @@ run:
 
 docker-build:
 	docker build -t ai-service:latest .
+
+docker-build-local:
+	docker build -f Dockerfile.local -t ai-service:local .
 
 test:
 	python -m pytest tests/ -v --cov=src --cov-report=term-missing
