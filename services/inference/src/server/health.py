@@ -1,30 +1,85 @@
 import asyncio
+
+import structlog
 from grpc_health.v1 import health
 from grpc_health.v1 import health_pb2
 from grpc_health.v1 import health_pb2_grpc
-import structlog
 
 logger = structlog.get_logger()
 
-def add_health_check(server, analysis_service):
-    health_servicer = health.aio.HealthServicer()
-    health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
-    
-    async def watchtower():
-        while True:
-            is_healthy = True
-            for engine_name, engine in analysis_service.engines.items():
-                if hasattr(engine, 'queue') and engine.queue.full():
-                    is_healthy = False
-                    break
-            
-            state = health_pb2.HealthCheckResponse.SERVING if is_healthy else health_pb2.HealthCheckResponse.NOT_SERVING
-            await health_servicer.set("", state)
-            await health_servicer.set("aidetection.AIService", state)
-            
-            if not is_healthy:
-                logger.warning("health_probe_failed", reason="inference_queues_full")
-                
-            await asyncio.sleep(5)
+_SERVICE_NAMES = ("", "aidetection.AIService")
+_POLL_INTERVAL_SECONDS = 5
 
-    asyncio.create_task(watchtower())
+
+class HealthMonitor:
+    def __init__(self, analysis_service):
+        self.analysis_service = analysis_service
+        self.health_servicer = health.aio.HealthServicer()
+        self._task: asyncio.Task | None = None
+        self._is_shutting_down = False
+        self._last_state: int | None = None
+        self._last_reason: str | None = None
+
+    async def start(self) -> None:
+        await self._publish_state()
+        if self._task is None:
+            self._task = asyncio.create_task(self._watchtower(), name="grpc-health-watchtower")
+
+    async def shutdown(self) -> None:
+        self._is_shutting_down = True
+        await self._publish_state()
+
+        if self._task is None:
+            return
+
+        self._task.cancel()
+        try:
+            await self._task
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self._task = None
+
+    async def _watchtower(self) -> None:
+        try:
+            while True:
+                await self._publish_state()
+                await asyncio.sleep(_POLL_INTERVAL_SECONDS)
+        except asyncio.CancelledError:
+            raise
+
+    async def _publish_state(self) -> None:
+        state, reason = self._resolve_state()
+        for service_name in _SERVICE_NAMES:
+            await self.health_servicer.set(service_name, state)
+
+        if state != self._last_state or reason != self._last_reason:
+            if state == health_pb2.HealthCheckResponse.NOT_SERVING:
+                logger.warning("health_state_changed", state="NOT_SERVING", reason=reason)
+            else:
+                logger.info("health_state_changed", state="SERVING")
+
+        self._last_state = state
+        self._last_reason = reason
+
+    def _resolve_state(self) -> tuple[int, str | None]:
+        if self._is_shutting_down:
+            return health_pb2.HealthCheckResponse.NOT_SERVING, "shutdown_in_progress"
+
+        for engine in self.analysis_service.engines.values():
+            queue = getattr(engine, "queue", None)
+            if queue is not None and queue.full():
+                return health_pb2.HealthCheckResponse.NOT_SERVING, "inference_queue_full"
+
+            worker_task = getattr(engine, "worker_task", None)
+            shutdown_flag = getattr(engine, "shutdown_flag", False)
+            if worker_task is not None and worker_task.done() and not shutdown_flag:
+                return health_pb2.HealthCheckResponse.NOT_SERVING, "batch_worker_stopped"
+
+        return health_pb2.HealthCheckResponse.SERVING, None
+
+
+def add_health_check(server, analysis_service) -> HealthMonitor:
+    monitor = HealthMonitor(analysis_service)
+    health_pb2_grpc.add_HealthServicer_to_server(monitor.health_servicer, server)
+    return monitor
