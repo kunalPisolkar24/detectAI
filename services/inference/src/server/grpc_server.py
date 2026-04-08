@@ -21,7 +21,7 @@ class GRPCServer:
         
         servicer = AIService(analysis_service)
         ai_service_pb2_grpc.add_AIServiceServicer_to_server(servicer, self.server)
-        add_health_check(self.server)
+        add_health_check(self.server, self.analysis_service)
         
         self.done_event = asyncio.Event()
 
