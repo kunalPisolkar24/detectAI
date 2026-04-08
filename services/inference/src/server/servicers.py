@@ -1,4 +1,5 @@
 import grpc
+import asyncio
 from src.generated import ai_service_pb2
 from src.generated import ai_service_pb2_grpc
 from src.core.exceptions import InvalidInputError, ServiceOverloadedError
@@ -35,8 +36,11 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Unsupported analysis model: {model_key}")
             
         try:
-            score = await self.analysis_service.analyze(request.text, model_key)
+            score = await self.analysis_service.analyze(request.text, model_key, cancellation_token=context.is_active)
             return self._build_response(model_key.capitalize(), score.ai_probability)
+        except asyncio.CancelledError:
+            logger.warning("grpc_client_disconnected", method="Detect")
+            raise
         except Exception as e:
             await self._abort(context, e, model_key.capitalize())
 
@@ -48,7 +52,7 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
         model_name = model_key.capitalize()
 
         try:
-            async for event in self.analysis_service.stream(request.text, model_key):
+            async for event in self.analysis_service.stream(request.text, model_key, cancellation_token=context.is_active):
                 if self.presenter.is_started(event):
                     yield self.presenter.build_started(event.total_chars, event.total_chunks)
                     continue
