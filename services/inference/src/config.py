@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     METRICS_PORT: int = 8333
     API_KEY: str
     MODEL_CACHE_DIR: str = "./models"
+    SPARK_MODEL_REVISION: str = "9a48004391c71272d6fb1d164ed7c56e1fbfe360"
+    FLARE_MODEL_REVISION: str = "e1911c0be59f4e10f0d120f639d1358e46bc2086"
     
     BATCH_SIZE: int = 32
     BATCH_TIMEOUT: float = 0.05

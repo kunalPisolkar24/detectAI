@@ -21,7 +21,12 @@ async def main():
         start_http_server(settings.METRICS_PORT)
         logger.info("metrics_server_started", port=settings.METRICS_PORT)
         
-        loader = HuggingFaceLoader(settings.MODEL_CACHE_DIR, settings.INFERENCE_PROVIDERS)
+        loader = HuggingFaceLoader(
+            settings.MODEL_CACHE_DIR,
+            settings.INFERENCE_PROVIDERS,
+            settings.SPARK_MODEL_REVISION,
+            settings.FLARE_MODEL_REVISION,
+        )
         
         logger.info("loading_models")
         spark_resources = loader.load("spark")

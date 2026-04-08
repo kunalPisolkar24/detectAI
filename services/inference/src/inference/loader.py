@@ -13,9 +13,17 @@ logger = structlog.get_logger()
 _GPU_PROVIDERS = frozenset({"CUDAExecutionProvider", "TensorrtExecutionProvider", "ROCMExecutionProvider"})
 
 class HuggingFaceLoader(IModelLoader):
-    def __init__(self, cache_dir: str, providers: list[str] | None = None):
+    def __init__(
+        self,
+        cache_dir: str,
+        providers: list[str] | None = None,
+        spark_model_revision: str = "9a48004391c71272d6fb1d164ed7c56e1fbfe360",
+        flare_model_revision: str = "e1911c0be59f4e10f0d120f639d1358e46bc2086",
+    ):
         self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True)
+        self.spark_model_revision = spark_model_revision
+        self.flare_model_revision = flare_model_revision
         provider_source = providers
         if provider_source is None:
             provider_source = os.getenv(
@@ -37,8 +45,18 @@ class HuggingFaceLoader(IModelLoader):
 
     def _load_spark(self):
         repo_id = "kpisolkar24/detect-ai-spark"
-        onnx_path = hf_hub_download(repo_id=repo_id, filename="detect-ai-spark.onnx", local_dir=self.cache_dir)
-        tok_path = hf_hub_download(repo_id=repo_id, filename="detect-ai-spark-tokenizer.pkl", local_dir=self.cache_dir)
+        onnx_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="detect-ai-spark.onnx",
+            local_dir=self.cache_dir,
+            revision=self.spark_model_revision,
+        )
+        tok_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="detect-ai-spark-tokenizer.pkl",
+            local_dir=self.cache_dir,
+            revision=self.spark_model_revision,
+        )
         
         session = ort.InferenceSession(onnx_path, providers=self.providers)
         self._verify_providers(session, "spark")
@@ -49,7 +67,11 @@ class HuggingFaceLoader(IModelLoader):
 
     def _load_flare(self):
         repo_id = "kpisolkar24/detect-ai-flare"
-        model_path = snapshot_download(repo_id=repo_id, local_dir=os.path.join(self.cache_dir, "flare"))
+        model_path = snapshot_download(
+            repo_id=repo_id,
+            local_dir=os.path.join(self.cache_dir, "flare"),
+            revision=self.flare_model_revision,
+        )
         
         tokenizer = BertTokenizerFast.from_pretrained(model_path)
         session = ort.InferenceSession(os.path.join(model_path, "model.onnx"), providers=self.providers)
