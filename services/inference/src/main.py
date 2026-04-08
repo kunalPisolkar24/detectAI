@@ -1,3 +1,4 @@
+import asyncio
 from prometheus_client import start_http_server
 from src.config import settings
 from src.inference.aggregation import ResultAggregator
@@ -15,7 +16,7 @@ import structlog
 configure_logger()
 logger = structlog.get_logger()
 
-def main():
+async def main():
     try:
         start_http_server(settings.METRICS_PORT)
         logger.info("metrics_server_started", port=settings.METRICS_PORT)
@@ -59,11 +60,11 @@ def main():
         )
         
         server = GRPCServer(analysis_service)
-        server.start()
+        await server.start()
         
     except Exception as e:
         logger.critical("startup_failed", error=str(e))
         exit(1)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
