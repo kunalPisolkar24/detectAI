@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from typing import Generator
+import asyncio
+from typing import AsyncGenerator
 
 from src.core.interfaces import IInferenceEngine
 from src.inference.aggregation import ResultAggregator
@@ -24,14 +24,13 @@ class DocumentAnalysisService:
         self.validator = validator
         self.aggregator = aggregator
         self.max_inflight_chunks = max(1, max_inflight_chunks)
-        self._executor = ThreadPoolExecutor(max_workers=self.max_inflight_chunks)
 
-    def analyze(self, text: str, model_key: str) -> DocumentScore:
+    async def analyze(self, text: str, model_key: str) -> DocumentScore:
         validated_text, chunks = self._prepare(text, model_key)
-        probabilities = self._predict_probabilities(self._get_engine(model_key), chunks)
+        probabilities = await self._predict_probabilities(self._get_engine(model_key), chunks)
         return self.aggregator.aggregate(chunks, probabilities, len(validated_text))
 
-    def stream(self, text: str, model_key: str) -> Generator[DocumentStarted | DocumentProgress | DocumentScore, None, None]:
+    async def stream(self, text: str, model_key: str) -> AsyncGenerator[DocumentStarted | DocumentProgress | DocumentScore, None]:
         validated_text, chunks = self._prepare(text, model_key)
         engine = self._get_engine(model_key)
         probabilities: list[float] = [0.0] * len(chunks)
@@ -39,7 +38,7 @@ class DocumentAnalysisService:
 
         yield DocumentStarted(total_chars=len(validated_text), total_chunks=len(chunks))
 
-        for chunk_index, probability in self._predict_probabilities_with_progress(engine, chunks):
+        async for chunk_index, probability in self._predict_probabilities_with_progress(engine, chunks):
             probabilities[chunk_index] = probability
             processed_chunks += 1
             yield DocumentProgress(processed_chunks=processed_chunks, total_chunks=len(chunks))
@@ -50,11 +49,16 @@ class DocumentAnalysisService:
         validated_text, chunks = self._prepare(text, model_key)
         return len(validated_text), len(chunks)
 
-    def shutdown(self) -> None:
-        self._executor.shutdown(wait=True, cancel_futures=True)
+    async def shutdown(self) -> None:
+        for engine in self.engines.values():
+            if hasattr(engine, "shutdown"):
+                if asyncio.iscoroutinefunction(engine.shutdown):
+                    await engine.shutdown()
+                else:
+                    engine.shutdown()
 
     def __del__(self) -> None:
-        self._executor.shutdown(wait=False, cancel_futures=True)
+        pass
 
     def _prepare(self, text: str, model_key: str):
         validated_text = self.validator.validate(text)
@@ -64,29 +68,29 @@ class DocumentAnalysisService:
             raise ValueError("No chunks were generated for the provided text")
         return validated_text, chunks
 
-    def _predict_probabilities(self, engine: IInferenceEngine, chunks) -> list[float]:
+    async def _predict_probabilities(self, engine: IInferenceEngine, chunks) -> list[float]:
         ordered_results = [0.0] * len(chunks)
-        for chunk_index, probability in self._predict_probabilities_with_progress(engine, chunks):
+        async for chunk_index, probability in self._predict_probabilities_with_progress(engine, chunks):
             ordered_results[chunk_index] = probability
         return ordered_results
 
-    def _predict_probabilities_with_progress(self, engine: IInferenceEngine, chunks):
+    async def _predict_probabilities_with_progress(self, engine: IInferenceEngine, chunks):
         pending_futures = {}
         pending_index = 0
 
         while pending_index < len(chunks) and len(pending_futures) < self.max_inflight_chunks:
-            future = self._executor.submit(engine.predict, chunks[pending_index].text)
+            future = asyncio.create_task(engine.predict(chunks[pending_index].text))
             pending_futures[future] = pending_index
             pending_index += 1
 
         while pending_futures:
-            completed, _ = wait(pending_futures.keys(), return_when=FIRST_COMPLETED)
+            completed, _ = await asyncio.wait(pending_futures.keys(), return_when=asyncio.FIRST_COMPLETED)
             for future in completed:
                 chunk_index = pending_futures.pop(future)
                 yield chunk_index, float(future.result())
 
                 if pending_index < len(chunks):
-                    next_future = self._executor.submit(engine.predict, chunks[pending_index].text)
+                    next_future = asyncio.create_task(engine.predict(chunks[pending_index].text))
                     pending_futures[next_future] = pending_index
                     pending_index += 1
 
