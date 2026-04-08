@@ -1,16 +1,30 @@
 import asyncio
 import time
 from typing import List, Tuple
-from src.core.interfaces import IInferenceEngine
+from circuitbreaker import CircuitBreaker, CircuitBreakerError
+
 from src.core.exceptions import ServiceOverloadedError
-import structlog
+from src.core.interfaces import (
+    BatcherHealthSnapshot,
+    BatcherHealthStatus,
+    IAsyncInferenceEngine,
+    IEngineHealthReporter,
+    ISyncBatchInferenceEngine,
+)
 from src.metrics import BATCH_SIZE_DISTRIBUTION, BATCH_PROCESSING_TIME, BATCH_QUEUE_SIZE
-from circuitbreaker import CircuitBreakerError, circuit
+import structlog
 
 logger = structlog.get_logger()
 
-class BatchingProxy(IInferenceEngine):
-    def __init__(self, engine: IInferenceEngine, batch_size: int, timeout: float, model_name: str, queue_max_size: int):
+class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
+    def __init__(
+        self,
+        engine: ISyncBatchInferenceEngine,
+        batch_size: int,
+        timeout: float,
+        model_name: str,
+        queue_max_size: int,
+    ):
         self.engine = engine
         self.batch_size = batch_size
         self.timeout = timeout
@@ -18,17 +32,13 @@ class BatchingProxy(IInferenceEngine):
         self.queue = asyncio.Queue(maxsize=queue_max_size)
         self.shutdown_flag = False
         self.worker_task: asyncio.Task | None = None
-
-        @circuit(
+        self._circuit_breaker = CircuitBreaker(
             failure_threshold=3,
             recovery_timeout=30,
             expected_exception=Exception,
             name=f"{model_name}-batch",
         )
-        def guarded_predict_batch(texts: List[str]) -> List[float]:
-            return self.engine.predict_batch(texts)
-
-        self._guarded_predict_batch = guarded_predict_batch
+        self._guarded_predict_batch = self._circuit_breaker.decorate(self.engine.predict_batch)
 
     async def start(self) -> None:
         if self.shutdown_flag:
@@ -62,8 +72,24 @@ class BatchingProxy(IInferenceEngine):
         except asyncio.QueueFull as exc:
             raise ServiceOverloadedError(f"{self.model_name} inference queue is full") from exc
 
-    def predict_batch(self, texts: List[str]) -> List[float]:
-        return self.engine.predict_batch(texts)
+    def health_snapshot(self) -> BatcherHealthSnapshot:
+        if self.shutdown_flag:
+            status = BatcherHealthStatus.SHUTTING_DOWN
+        elif self.worker_task is None or self.worker_task.done():
+            status = BatcherHealthStatus.WORKER_UNAVAILABLE
+        elif self._circuit_breaker.opened:
+            status = BatcherHealthStatus.CIRCUIT_OPEN
+        elif self.queue.full():
+            status = BatcherHealthStatus.QUEUE_FULL
+        else:
+            status = BatcherHealthStatus.SERVING
+
+        return BatcherHealthSnapshot(
+            status=status,
+            queue_size=self.queue.qsize(),
+            queue_capacity=self.queue.maxsize,
+            circuit_open_remaining=self._circuit_breaker.open_remaining if self._circuit_breaker.opened else None,
+        )
 
     async def shutdown(self):
         self.shutdown_flag = True

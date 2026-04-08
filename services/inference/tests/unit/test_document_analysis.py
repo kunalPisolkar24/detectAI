@@ -152,3 +152,18 @@ async def test_dispatcher_cancels_sibling_tasks_when_one_chunk_fails():
             pass
 
     assert engine.cancelled == 1
+
+
+def test_document_analysis_rejects_sync_engine():
+    class SyncEngine:
+        def predict(self, text):
+            return 0.5
+
+    with pytest.raises(TypeError, match="async predict method"):
+        DocumentAnalysisService(
+            engines={"spark": SyncEngine()},
+            planners={"spark": ChunkPlanner(RegexTokenChunker(), chunk_size=4, stride=4, max_global_tokens=100)},
+            validator=InputValidator(1000),
+            aggregator=ResultAggregator(4),
+            max_inflight_chunks=1,
+        )

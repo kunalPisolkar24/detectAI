@@ -5,6 +5,8 @@ from grpc_health.v1 import health
 from grpc_health.v1 import health_pb2
 from grpc_health.v1 import health_pb2_grpc
 
+from src.core.interfaces import BatcherHealthStatus
+
 logger = structlog.get_logger()
 
 _SERVICE_NAMES = ("", "aidetection.AIService")
@@ -66,15 +68,10 @@ class HealthMonitor:
         if self._is_shutting_down:
             return health_pb2.HealthCheckResponse.NOT_SERVING, "shutdown_in_progress"
 
-        for engine in self.analysis_service.engines.values():
-            queue = getattr(engine, "queue", None)
-            if queue is not None and queue.full():
-                return health_pb2.HealthCheckResponse.NOT_SERVING, "inference_queue_full"
-
-            worker_task = getattr(engine, "worker_task", None)
-            shutdown_flag = getattr(engine, "shutdown_flag", False)
-            if worker_task is not None and worker_task.done() and not shutdown_flag:
-                return health_pb2.HealthCheckResponse.NOT_SERVING, "batch_worker_stopped"
+        for reporter in getattr(self.analysis_service, "health_reporters", {}).values():
+            snapshot = reporter.health_snapshot()
+            if snapshot.status != BatcherHealthStatus.SERVING:
+                return health_pb2.HealthCheckResponse.NOT_SERVING, snapshot.failure_reason
 
         return health_pb2.HealthCheckResponse.SERVING, None
 

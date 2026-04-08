@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from typing import AsyncGenerator, Callable, List, Optional, Tuple
 
-from src.core.interfaces import IInferenceEngine
+from src.core.interfaces import IAsyncInferenceEngine, IEngineHealthReporter
 from src.inference.aggregation import ResultAggregator
 from src.inference.chunking import ChunkPlanner
 from src.inference.document_types import DocumentChunk, DocumentProgress, DocumentScore, DocumentStarted
@@ -32,7 +33,7 @@ class ConcurrencyDispatcher:
 
     async def execute_progressively(
         self, 
-        engine: IInferenceEngine, 
+        engine: IAsyncInferenceEngine, 
         chunks: List[DocumentChunk], 
         request_is_active: Optional[Callable[[], bool]] = None
     ) -> AsyncGenerator[Tuple[int, float], None]:
@@ -94,13 +95,18 @@ class ConcurrencyDispatcher:
 class DocumentAnalysisService:
     def __init__(
         self,
-        engines: dict[str, IInferenceEngine],
+        engines: dict[str, IAsyncInferenceEngine],
         planners: dict[str, ChunkPlanner],
         validator: InputValidator,
         aggregator: ResultAggregator,
         max_inflight_chunks: int,
+        health_reporters: dict[str, IEngineHealthReporter] | None = None,
     ):
+        for model_key, engine in engines.items():
+            if not inspect.iscoroutinefunction(getattr(engine, "predict", None)):
+                raise TypeError(f"Engine '{model_key}' must expose an async predict method")
         self.engines = engines
+        self.health_reporters = health_reporters or {}
         self.prep_pipeline = TextPreparationPipeline(validator, planners)
         self.dispatcher = ConcurrencyDispatcher(max_inflight_chunks)
         self.aggregator = aggregator
@@ -160,7 +166,7 @@ class DocumentAnalysisService:
                 else:
                     engine.shutdown()
 
-    def _get_engine(self, model_key: str) -> IInferenceEngine:
+    def _get_engine(self, model_key: str) -> IAsyncInferenceEngine:
         if model_key not in self.engines:
             raise ValueError(f"Unknown model key: {model_key}")
         return self.engines[model_key]

@@ -4,6 +4,7 @@ import grpc
 import pytest
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 
+from src.core.interfaces import BatcherHealthSnapshot, BatcherHealthStatus
 from src.generated import ai_service_pb2, ai_service_pb2_grpc
 from src.inference.document_types import DocumentProgress, DocumentScore, DocumentStarted
 from src.server.grpc_server import GRPCServer
@@ -14,16 +15,19 @@ async def collect_stream(stream):
 
 
 class SmokeEngine:
-    def __init__(self):
-        self.queue = asyncio.Queue(maxsize=4)
-        self.worker_task = asyncio.create_task(asyncio.Event().wait())
-        self.shutdown_flag = False
+    def health_snapshot(self):
+        return BatcherHealthSnapshot(
+            status=BatcherHealthStatus.SERVING,
+            queue_size=0,
+            queue_capacity=4,
+        )
 
 
 class SmokeAnalysisService:
     def __init__(self):
         self.engine = SmokeEngine()
-        self.engines = {"spark": self.engine}
+        self.engines = {"spark": object()}
+        self.health_reporters = {"spark": self.engine}
 
     async def analyze(self, text, model_key, request_is_active=None):
         assert model_key == "spark"
@@ -38,9 +42,7 @@ class SmokeAnalysisService:
         yield DocumentScore(ai_probability=0.88, total_chunks=2, total_chars=len(text))
 
     async def shutdown(self):
-        self.engine.shutdown_flag = True
-        self.engine.worker_task.cancel()
-        await asyncio.gather(self.engine.worker_task, return_exceptions=True)
+        return None
 
 
 @pytest.mark.asyncio

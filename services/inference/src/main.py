@@ -57,6 +57,10 @@ async def main():
                 "spark": spark_batched,
                 "flare": flare_batched,
             },
+            health_reporters={
+                "spark": spark_batched,
+                "flare": flare_batched,
+            },
             planners={
                 "spark": build_chunk_planner(spark_resources[1], settings.CHUNK_TOKEN_LIMIT, settings.CHUNK_TOKEN_STRIDE, settings.MAX_GLOBAL_TOKENS),
                 "flare": build_chunk_planner(flare_resources[1], settings.CHUNK_TOKEN_LIMIT, settings.CHUNK_TOKEN_STRIDE, settings.MAX_GLOBAL_TOKENS),

@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from src.core.interfaces import BatcherHealthStatus
 from src.core.exceptions import ServiceOverloadedError
 from src.inference.batcher import BatchingProxy
 
@@ -125,6 +126,23 @@ async def test_batcher_opens_circuit_after_repeated_failures():
 
     with pytest.raises(ServiceOverloadedError, match="circuit is open"):
         await batcher.predict("boom")
+
+    await batcher.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_batcher_reports_open_circuit_in_health_snapshot():
+    batcher = BatchingProxy(FailingBatchEngine(), batch_size=1, timeout=0.01, model_name="test", queue_max_size=8)
+    await batcher.start()
+
+    for _ in range(3):
+        with pytest.raises(ValueError, match="Inference failed"):
+            await batcher.predict("boom")
+
+    snapshot = batcher.health_snapshot()
+
+    assert snapshot.status == BatcherHealthStatus.CIRCUIT_OPEN
+    assert snapshot.circuit_open_remaining is not None
 
     await batcher.shutdown()
 
