@@ -82,8 +82,36 @@ def test_loader_warns_on_gpu_fallback(mock_loader_env, monkeypatch, mocker):
     mock_logger.warning.assert_called_once_with(
         "gpu_provider_unavailable_falling_back_to_cpu",
         model="spark",
+        repo_id="kpisolkar24/detect-ai-spark",
+        revision="9a48004391c71272d6fb1d164ed7c56e1fbfe360",
         requested=["CUDAExecutionProvider", "CPUExecutionProvider"],
         active=["CPUExecutionProvider"]
+    )
+
+
+def test_loader_logs_model_identity(mock_loader_env, mocker):
+    mock_session_class, _, _, _ = mock_loader_env
+    mock_session = mock_session_class.return_value
+    mock_session.get_providers.return_value = ["CPUExecutionProvider"]
+    mock_logger = mocker.patch("src.inference.loader.logger")
+
+    loader = HuggingFaceLoader("./cache", providers=["CPUExecutionProvider"])
+    loader.load("spark")
+
+    mock_logger.info.assert_any_call(
+        "model_download_started",
+        model="spark",
+        repo_id="kpisolkar24/detect-ai-spark",
+        revision="9a48004391c71272d6fb1d164ed7c56e1fbfe360",
+        requested_providers=["CPUExecutionProvider"],
+    )
+    mock_logger.info.assert_any_call(
+        "model_loaded",
+        model="spark",
+        repo_id="kpisolkar24/detect-ai-spark",
+        revision="9a48004391c71272d6fb1d164ed7c56e1fbfe360",
+        requested_providers=["CPUExecutionProvider"],
+        active_providers=["CPUExecutionProvider"],
     )
 
 
