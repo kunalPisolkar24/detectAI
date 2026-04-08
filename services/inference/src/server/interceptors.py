@@ -1,4 +1,4 @@
-import hmac
+import jwt
 import time
 import uuid
 import grpc
@@ -12,10 +12,23 @@ logger = structlog.get_logger()
 class AuthInterceptor(aio.ServerInterceptor):
     async def intercept_service(self, continuation, handler_call_details):
         metadata = dict(handler_call_details.invocation_metadata)
-        provided_key = metadata.get('x-api-key', '')
-        if not hmac.compare_digest(provided_key, settings.API_KEY):
-            async def abort(request, context):
-                await context.abort(grpc.StatusCode.UNAUTHENTICATED, 'Invalid API Key')
+        auth_header = metadata.get('authorization', '')
+        
+        async def abort(request, context):
+            await context.abort(grpc.StatusCode.UNAUTHENTICATED, 'Invalid or missing Bearer token')
+
+        if not auth_header.startswith('Bearer '):
+            return grpc.unary_unary_rpc_method_handler(abort)
+            
+        token = auth_header[7:]
+        try:
+            decoded = jwt.decode(token, settings.API_KEY, algorithms=["HS256"])
+            structlog.contextvars.bind_contextvars(user_id=decoded.get('sub'))
+        except jwt.ExpiredSignatureError:
+            async def abort_expired(request, context):
+                await context.abort(grpc.StatusCode.UNAUTHENTICATED, 'Token expired')
+            return grpc.unary_unary_rpc_method_handler(abort_expired)
+        except jwt.InvalidTokenError:
             return grpc.unary_unary_rpc_method_handler(abort)
         
         return await continuation(handler_call_details)
