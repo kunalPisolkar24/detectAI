@@ -1,7 +1,7 @@
 import os
 from typing import Annotated, Any
 
-from pydantic import Field, ValidationError, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from src.core.inference_providers import parse_inference_providers
@@ -35,15 +35,4 @@ class Settings(BaseSettings):
     def _parse_inference_providers(cls, value: Any) -> list[str]:
         return parse_inference_providers(value)
 
-
-def _build_settings() -> Settings:
-    try:
-        return Settings()
-    except ValidationError as exc:
-        errors = exc.errors(include_url=False)
-        if len(errors) == 1 and errors[0].get("loc") == ("API_KEY",) and errors[0].get("type") == "missing":
-            return Settings(API_KEY="placeholder")
-        raise
-
-
-settings = _build_settings()
+settings = Settings()

@@ -9,29 +9,81 @@ from src.metrics import GRPC_REQUESTS_TOTAL, GRPC_LATENCY_SECONDS
 
 logger = structlog.get_logger()
 
+_HEALTH_METHODS = {
+    "/grpc.health.v1.Health/Check",
+    "/grpc.health.v1.Health/Watch",
+}
+
+
 class AuthInterceptor(aio.ServerInterceptor):
     async def intercept_service(self, continuation, handler_call_details):
-        metadata = dict(handler_call_details.invocation_metadata)
-        auth_header = metadata.get('authorization', '')
-        
-        async def abort(request, context):
-            await context.abort(grpc.StatusCode.UNAUTHENTICATED, 'Invalid or missing Bearer token')
+        if handler_call_details.method in _HEALTH_METHODS:
+            return await continuation(handler_call_details)
 
-        if not auth_header.startswith('Bearer '):
-            return grpc.unary_unary_rpc_method_handler(abort)
-            
+        handler = await continuation(handler_call_details)
+        if handler is None:
+            return None
+
+        metadata = dict(handler_call_details.invocation_metadata)
+        auth_header = metadata.get("authorization", "")
+
+        if not auth_header.startswith("Bearer "):
+            return self._build_unauthenticated_handler(handler, "Invalid or missing Bearer token")
+
         token = auth_header[7:]
         try:
             decoded = jwt.decode(token, settings.API_KEY, algorithms=["HS256"])
-            structlog.contextvars.bind_contextvars(user_id=decoded.get('sub'))
+            structlog.contextvars.bind_contextvars(user_id=decoded.get("sub"))
         except jwt.ExpiredSignatureError:
-            async def abort_expired(request, context):
-                await context.abort(grpc.StatusCode.UNAUTHENTICATED, 'Token expired')
-            return grpc.unary_unary_rpc_method_handler(abort_expired)
+            return self._build_unauthenticated_handler(handler, "Token expired")
         except jwt.InvalidTokenError:
-            return grpc.unary_unary_rpc_method_handler(abort)
-        
-        return await continuation(handler_call_details)
+            return self._build_unauthenticated_handler(handler, "Invalid or missing Bearer token")
+
+        return handler
+
+    def _build_unauthenticated_handler(self, handler: grpc.RpcMethodHandler, detail: str):
+        async def unary_unary_abort(request, context):
+            await context.abort(grpc.StatusCode.UNAUTHENTICATED, detail)
+
+        async def unary_stream_abort(request, context):
+            await context.abort(grpc.StatusCode.UNAUTHENTICATED, detail)
+            if False:
+                yield None
+
+        async def stream_unary_abort(request_iterator, context):
+            await context.abort(grpc.StatusCode.UNAUTHENTICATED, detail)
+
+        async def stream_stream_abort(request_iterator, context):
+            await context.abort(grpc.StatusCode.UNAUTHENTICATED, detail)
+            if False:
+                yield None
+
+        if handler.request_streaming and handler.response_streaming:
+            return grpc.stream_stream_rpc_method_handler(
+                stream_stream_abort,
+                request_deserializer=handler.request_deserializer,
+                response_serializer=handler.response_serializer,
+            )
+
+        if handler.request_streaming:
+            return grpc.stream_unary_rpc_method_handler(
+                stream_unary_abort,
+                request_deserializer=handler.request_deserializer,
+                response_serializer=handler.response_serializer,
+            )
+
+        if handler.response_streaming:
+            return grpc.unary_stream_rpc_method_handler(
+                unary_stream_abort,
+                request_deserializer=handler.request_deserializer,
+                response_serializer=handler.response_serializer,
+            )
+
+        return grpc.unary_unary_rpc_method_handler(
+            unary_unary_abort,
+            request_deserializer=handler.request_deserializer,
+            response_serializer=handler.response_serializer,
+        )
 
 _TRACE_HEADERS = ("traceparent", "x-b3-traceid", "x-request-id")
 
