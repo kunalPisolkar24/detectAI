@@ -85,3 +85,19 @@ def test_loader_warns_on_gpu_fallback(mock_loader_env, monkeypatch, mocker):
         requested=["CUDAExecutionProvider", "CPUExecutionProvider"],
         active=["CPUExecutionProvider"]
     )
+
+
+def test_loader_passes_pinned_revisions(mock_loader_env):
+    _, _, mock_dl, mock_snap = mock_loader_env
+    loader = HuggingFaceLoader(
+        "./cache",
+        spark_model_revision="spark-rev",
+        flare_model_revision="flare-rev",
+    )
+
+    loader.load("spark")
+    loader.load("flare")
+
+    assert mock_dl.call_args_list[0].kwargs["revision"] == "spark-rev"
+    assert mock_dl.call_args_list[1].kwargs["revision"] == "spark-rev"
+    assert mock_snap.call_args.kwargs["revision"] == "flare-rev"

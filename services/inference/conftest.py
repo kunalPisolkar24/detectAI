@@ -1,4 +1,6 @@
+import os
 import sys
 
-sys.path.insert(0, './src')
+os.environ.setdefault("API_KEY", "test-secret-key")
 
+sys.path.insert(0, './src')

@@ -103,61 +103,109 @@ class MonitoringInterceptor(aio.ServerInterceptor):
             model_label = "flare"
 
         handler = await continuation(handler_call_details)
+        if handler is None:
+            structlog.contextvars.clear_contextvars()
+            return None
 
-        # Assuming handler can be unary-unary or unary-stream here
-        if handler.stream_unary or handler.stream_stream or handler.unary_stream:
-            orig_behavior = handler.behavior
-            
-            async def streaming_wrapper(request, context):
-                response_code = "OK"
-                try:
-                    async for response in orig_behavior(request, context):
-                        yield response
-                except Exception as e:
-                    response_code = "INTERNAL"
-                    if isinstance(e, grpc.RpcError):
-                        response_code = str(e.code())
-                    raise e
-                finally:
-                    duration = time.monotonic() - start_time
-                    GRPC_REQUESTS_TOTAL.labels(method=method_name, code=response_code, model=model_label).inc()
-                    GRPC_LATENCY_SECONDS.labels(method=method_name, model=model_label).observe(duration)
-                    logger.info("grpc_request_processed", method=method_name, duration=duration, code=response_code)
-                    structlog.contextvars.clear_contextvars()
-                    
-            if handler.unary_stream:
-                return grpc.unary_stream_rpc_method_handler(
-                    streaming_wrapper,
-                    request_deserializer=handler.request_deserializer,
-                    response_serializer=handler.response_serializer
-                )
-            else:
-                return handler
-
-        else:
-            orig_behavior = handler.behavior
-
-            async def unary_wrapper(request, context):
-                response_code = "OK"
-                try:
-                    return await orig_behavior(request, context)
-                except Exception as e:
-                    response_code = "INTERNAL"
-                    if isinstance(e, grpc.RpcError):
-                        response_code = str(e.code())
-                    raise e
-                finally:
-                    duration = time.monotonic() - start_time
-                    GRPC_REQUESTS_TOTAL.labels(method=method_name, code=response_code, model=model_label).inc()
-                    GRPC_LATENCY_SECONDS.labels(method=method_name, model=model_label).observe(duration)
-                    logger.info("grpc_request_processed", method=method_name, duration=duration, code=response_code)
-                    structlog.contextvars.clear_contextvars()
-
+        if handler.unary_unary:
             return grpc.unary_unary_rpc_method_handler(
-                unary_wrapper,
+                self._wrap_unary(handler.unary_unary, method_name, model_label, start_time),
                 request_deserializer=handler.request_deserializer,
-                response_serializer=handler.response_serializer
+                response_serializer=handler.response_serializer,
             )
+
+        if handler.unary_stream:
+            return grpc.unary_stream_rpc_method_handler(
+                self._wrap_unary_stream(handler.unary_stream, method_name, model_label, start_time),
+                request_deserializer=handler.request_deserializer,
+                response_serializer=handler.response_serializer,
+            )
+
+        if handler.stream_unary:
+            return grpc.stream_unary_rpc_method_handler(
+                self._wrap_stream_unary(handler.stream_unary, method_name, model_label, start_time),
+                request_deserializer=handler.request_deserializer,
+                response_serializer=handler.response_serializer,
+            )
+
+        if handler.stream_stream:
+            return grpc.stream_stream_rpc_method_handler(
+                self._wrap_stream_stream(handler.stream_stream, method_name, model_label, start_time),
+                request_deserializer=handler.request_deserializer,
+                response_serializer=handler.response_serializer,
+            )
+
+        structlog.contextvars.clear_contextvars()
+        return handler
+
+    def _wrap_unary(self, behavior, method_name: str, model_label: str, start_time: float):
+        async def unary_wrapper(request, context):
+            response_code = "OK"
+            try:
+                return await behavior(request, context)
+            except Exception as error:
+                response_code = "INTERNAL"
+                if isinstance(error, grpc.RpcError):
+                    response_code = str(error.code())
+                raise
+            finally:
+                self._record_metrics(method_name, model_label, start_time, response_code)
+
+        return unary_wrapper
+
+    def _wrap_unary_stream(self, behavior, method_name: str, model_label: str, start_time: float):
+        async def unary_stream_wrapper(request, context):
+            response_code = "OK"
+            try:
+                async for response in behavior(request, context):
+                    yield response
+            except Exception as error:
+                response_code = "INTERNAL"
+                if isinstance(error, grpc.RpcError):
+                    response_code = str(error.code())
+                raise
+            finally:
+                self._record_metrics(method_name, model_label, start_time, response_code)
+
+        return unary_stream_wrapper
+
+    def _wrap_stream_unary(self, behavior, method_name: str, model_label: str, start_time: float):
+        async def stream_unary_wrapper(request_iterator, context):
+            response_code = "OK"
+            try:
+                return await behavior(request_iterator, context)
+            except Exception as error:
+                response_code = "INTERNAL"
+                if isinstance(error, grpc.RpcError):
+                    response_code = str(error.code())
+                raise
+            finally:
+                self._record_metrics(method_name, model_label, start_time, response_code)
+
+        return stream_unary_wrapper
+
+    def _wrap_stream_stream(self, behavior, method_name: str, model_label: str, start_time: float):
+        async def stream_stream_wrapper(request_iterator, context):
+            response_code = "OK"
+            try:
+                async for response in behavior(request_iterator, context):
+                    yield response
+            except Exception as error:
+                response_code = "INTERNAL"
+                if isinstance(error, grpc.RpcError):
+                    response_code = str(error.code())
+                raise
+            finally:
+                self._record_metrics(method_name, model_label, start_time, response_code)
+
+        return stream_stream_wrapper
+
+    def _record_metrics(self, method_name: str, model_label: str, start_time: float, response_code: str) -> None:
+        duration = time.monotonic() - start_time
+        GRPC_REQUESTS_TOTAL.labels(method=method_name, code=response_code, model=model_label).inc()
+        GRPC_LATENCY_SECONDS.labels(method=method_name, model=model_label).observe(duration)
+        logger.info("grpc_request_processed", method=method_name, duration=duration, code=response_code)
+        structlog.contextvars.clear_contextvars()
 
 
     def _resolve_trace_id(self, metadata: dict) -> str:

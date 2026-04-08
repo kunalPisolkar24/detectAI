@@ -28,6 +28,7 @@ class TextPreparationPipeline:
 class ConcurrencyDispatcher:
     def __init__(self, max_inflight: int):
         self.max_inflight = max(1, max_inflight)
+        self._poll_interval = 0.05
 
     async def execute_progressively(
         self, 
@@ -51,7 +52,13 @@ class ConcurrencyDispatcher:
                 await self._cancel_and_await(pending_futures.keys())
                 raise asyncio.CancelledError("Client disconnected")
 
-            completed, _ = await asyncio.wait(pending_futures.keys(), return_when=asyncio.FIRST_COMPLETED)
+            completed, _ = await asyncio.wait(
+                pending_futures.keys(),
+                return_when=asyncio.FIRST_COMPLETED,
+                timeout=self._poll_interval,
+            )
+            if not completed:
+                continue
             for future in completed:
                 chunk_index = pending_futures.pop(future)
                 try:
