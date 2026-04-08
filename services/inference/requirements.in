@@ -16,3 +16,5 @@ pytest-mock
 pytest-asyncio
 coverage
 pytest-cov
+circuitbreaker
+PyJWT
