@@ -33,38 +33,55 @@ class ConcurrencyDispatcher:
         self, 
         engine: IInferenceEngine, 
         chunks: List[DocumentChunk], 
-        cancellation_token: Optional[Callable[[], bool]] = None
+        request_is_active: Optional[Callable[[], bool]] = None
     ) -> AsyncGenerator[Tuple[int, float], None]:
         
         pending_futures = {}
         pending_index = 0
 
         while pending_index < len(chunks) and len(pending_futures) < self.max_inflight:
-            if cancellation_token and not cancellation_token():
+            if request_is_active and not request_is_active():
                 raise asyncio.CancelledError("Client disconnected")
             future = asyncio.create_task(engine.predict(chunks[pending_index].text))
             pending_futures[future] = pending_index
             pending_index += 1
 
         while pending_futures:
-            if cancellation_token and not cancellation_token():
-                for f in pending_futures.keys():
-                    f.cancel()
+            if request_is_active and not request_is_active():
+                await self._cancel_and_await(pending_futures.keys())
                 raise asyncio.CancelledError("Client disconnected")
 
             completed, _ = await asyncio.wait(pending_futures.keys(), return_when=asyncio.FIRST_COMPLETED)
             for future in completed:
                 chunk_index = pending_futures.pop(future)
-                yield chunk_index, float(future.result())
+                try:
+                    result = float(await future)
+                except BaseException:
+                    other_completed = [task for task in completed if task is not future]
+                    await self._cancel_and_await(pending_futures.keys())
+                    await self._await_all(other_completed)
+                    raise
+
+                yield chunk_index, result
 
                 if pending_index < len(chunks):
-                    if cancellation_token and not cancellation_token():
-                        for f in pending_futures.keys():
-                            f.cancel()
+                    if request_is_active and not request_is_active():
+                        await self._cancel_and_await(pending_futures.keys())
                         raise asyncio.CancelledError("Client disconnected")
                     next_future = asyncio.create_task(engine.predict(chunks[pending_index].text))
                     pending_futures[next_future] = pending_index
                     pending_index += 1
+
+    async def _cancel_and_await(self, tasks) -> None:
+        task_list = list(tasks)
+        for task in task_list:
+            task.cancel()
+        await self._await_all(task_list)
+
+    async def _await_all(self, tasks) -> None:
+        task_list = list(tasks)
+        if task_list:
+            await asyncio.gather(*task_list, return_exceptions=True)
 
 
 class DocumentAnalysisService:
@@ -81,17 +98,31 @@ class DocumentAnalysisService:
         self.dispatcher = ConcurrencyDispatcher(max_inflight_chunks)
         self.aggregator = aggregator
 
-    async def analyze(self, text: str, model_key: str, cancellation_token: Optional[Callable[[], bool]] = None) -> DocumentScore:
+    async def analyze(
+        self,
+        text: str,
+        model_key: str,
+        request_is_active: Optional[Callable[[], bool]] = None,
+    ) -> DocumentScore:
         validated_text, chunks = self.prep_pipeline.prepare(text, model_key)
         engine = self._get_engine(model_key)
         
         probabilities = [0.0] * len(chunks)
-        async for chunk_index, prob in self.dispatcher.execute_progressively(engine, chunks, cancellation_token):
+        async for chunk_index, prob in self.dispatcher.execute_progressively(
+            engine,
+            chunks,
+            request_is_active,
+        ):
             probabilities[chunk_index] = prob
             
         return self.aggregator.aggregate(chunks, probabilities, len(validated_text))
 
-    async def stream(self, text: str, model_key: str, cancellation_token: Optional[Callable[[], bool]] = None) -> AsyncGenerator[DocumentStarted | DocumentProgress | DocumentScore, None]:
+    async def stream(
+        self,
+        text: str,
+        model_key: str,
+        request_is_active: Optional[Callable[[], bool]] = None,
+    ) -> AsyncGenerator[DocumentStarted | DocumentProgress | DocumentScore, None]:
         validated_text, chunks = self.prep_pipeline.prepare(text, model_key)
         engine = self._get_engine(model_key)
         probabilities: list[float] = [0.0] * len(chunks)
@@ -99,7 +130,11 @@ class DocumentAnalysisService:
 
         yield DocumentStarted(total_chars=len(validated_text), total_chunks=len(chunks))
 
-        async for chunk_index, prob in self.dispatcher.execute_progressively(engine, chunks, cancellation_token):
+        async for chunk_index, prob in self.dispatcher.execute_progressively(
+            engine,
+            chunks,
+            request_is_active,
+        ):
             probabilities[chunk_index] = prob
             processed_chunks += 1
             yield DocumentProgress(processed_chunks=processed_chunks, total_chunks=len(chunks))

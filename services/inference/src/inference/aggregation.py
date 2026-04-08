@@ -1,7 +1,9 @@
 from src.inference.document_types import DocumentChunk, DocumentScore
-from src.config import settings
 
 class ResultAggregator:
+    def __init__(self, chunk_stride: int):
+        self.chunk_stride = max(1, chunk_stride)
+
     def aggregate(self, chunks: list[DocumentChunk], probabilities: list[float], total_chars: int) -> DocumentScore:
         if not chunks or not probabilities or len(chunks) != len(probabilities):
             raise ValueError("Chunks and probabilities must be non-empty and aligned")
@@ -10,10 +12,10 @@ class ResultAggregator:
         weighted_sum = 0
         
         for i, (chunk, probability) in enumerate(zip(chunks, probabilities)):
-            if 0 < i < len(chunks) - 1:
-                weight = settings.CHUNK_TOKEN_STRIDE
-            else:
+            if i == 0:
                 weight = chunk.token_count
+            else:
+                weight = min(self.chunk_stride, chunk.token_count)
                 
             total_weight += weight
             weighted_sum += weight * probability

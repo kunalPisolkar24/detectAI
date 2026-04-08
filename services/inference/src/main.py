@@ -44,6 +44,8 @@ async def main():
             "flare",
             settings.BATCH_QUEUE_MAX_SIZE,
         )
+        await spark_batched.start()
+        await flare_batched.start()
 
         analysis_service = DocumentAnalysisService(
             engines={
@@ -55,7 +57,7 @@ async def main():
                 "flare": build_chunk_planner(flare_resources[1], settings.CHUNK_TOKEN_LIMIT, settings.CHUNK_TOKEN_STRIDE, settings.MAX_GLOBAL_TOKENS),
             },
             validator=InputValidator(settings.MAX_TEXT_CHARS),
-            aggregator=ResultAggregator(),
+            aggregator=ResultAggregator(settings.CHUNK_TOKEN_STRIDE),
             max_inflight_chunks=settings.MAX_INFLIGHT_DOC_CHUNKS,
         )
         

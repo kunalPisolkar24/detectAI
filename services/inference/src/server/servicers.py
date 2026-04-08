@@ -36,7 +36,11 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Unsupported analysis model: {model_key}")
             
         try:
-            score = await self.analysis_service.analyze(request.text, model_key, cancellation_token=context.is_active)
+            score = await self.analysis_service.analyze(
+                request.text,
+                model_key,
+                request_is_active=lambda: not context.done(),
+            )
             return self._build_response(model_key.capitalize(), score.ai_probability)
         except asyncio.CancelledError:
             logger.warning("grpc_client_disconnected", method="Detect")
@@ -52,7 +56,11 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
         model_name = model_key.capitalize()
 
         try:
-            async for event in self.analysis_service.stream(request.text, model_key, cancellation_token=context.is_active):
+            async for event in self.analysis_service.stream(
+                request.text,
+                model_key,
+                request_is_active=lambda: not context.done(),
+            ):
                 if self.presenter.is_started(event):
                     yield self.presenter.build_started(event.total_chars, event.total_chunks)
                     continue
@@ -63,16 +71,21 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
 
                 if self.presenter.is_final(event):
                     yield self.presenter.build_final(self._build_response(model_name, event.ai_probability))
+        except asyncio.CancelledError:
+            logger.warning("grpc_client_disconnected", method="AnalyzeDocument")
+            raise
         except Exception as e:
             await self._abort(context, e, model_name)
 
     async def _abort(self, context, error: Exception, model_name: str):
         if isinstance(error, InvalidInputError):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+            return
 
         if isinstance(error, ServiceOverloadedError):
             logger.warning("inference_overloaded", model=model_name, error=str(error))
             await context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED, str(error))
+            return
 
         logger.error("inference_error", model=model_name, error=str(error))
         await context.abort(grpc.StatusCode.INTERNAL, "Internal Inference Error")
