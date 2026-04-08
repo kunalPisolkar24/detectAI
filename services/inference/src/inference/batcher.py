@@ -1,12 +1,11 @@
-import queue
-import threading
+import asyncio
 import time
-from concurrent import futures
 from typing import List, Tuple
 from src.core.interfaces import IInferenceEngine
 from src.core.exceptions import ServiceOverloadedError
 import structlog
 from src.metrics import BATCH_SIZE_DISTRIBUTION, BATCH_PROCESSING_TIME, BATCH_QUEUE_SIZE
+from circuitbreaker import circuit
 
 logger = structlog.get_logger()
 
@@ -16,35 +15,49 @@ class BatchingProxy(IInferenceEngine):
         self.batch_size = batch_size
         self.timeout = timeout
         self.model_name = model_name
-        self.queue = queue.Queue(maxsize=queue_max_size)
+        self.queue = asyncio.Queue(maxsize=queue_max_size)
         self.shutdown_flag = False
-        self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True, name=f"{model_name}-batch-worker")
-        self.worker_thread.start()
+        self.worker_task = asyncio.create_task(self._worker_loop(), name=f"{model_name}-batch-worker")
 
-    def predict(self, text: str) -> float:
-        future = futures.Future()
+    async def predict(self, text: str) -> float:
+        future = asyncio.get_running_loop().create_future()
         try:
             self.queue.put_nowait((text, future))
             BATCH_QUEUE_SIZE.labels(model=self.model_name).inc()
-            return future.result()
-        except queue.Full as exc:
+            return await future
+        except asyncio.QueueFull as exc:
             raise ServiceOverloadedError(f"{self.model_name} inference queue is full") from exc
 
     def predict_batch(self, texts: List[str]) -> List[float]:
-        """
-        Direct pass-through for explicit batch requests.
-        Bypasses the dynamic batching queue.
-        """
         return self.engine.predict_batch(texts)
 
-    def _worker_loop(self):
+    async def shutdown(self):
+        self.shutdown_flag = True
+        future = asyncio.get_running_loop().create_future()
+        try:
+            self.queue.put_nowait(("", future))
+        except asyncio.QueueFull:
+            pass
+        await self.worker_task
+
+        while not self.queue.empty():
+            item = self.queue.get_nowait()
+            BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
+            fut = item[1]
+            if not fut.done():
+                fut.set_exception(ServiceOverloadedError(f"{self.model_name} service is shutting down"))
+
+    async def _worker_loop(self):
+        loop = asyncio.get_running_loop()
         while not self.shutdown_flag:
             batch = []
             try:
-                item = self.queue.get(timeout=0.01)
+                item = await asyncio.wait_for(self.queue.get(), timeout=0.01)
                 BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
+                if item[0] == "" and self.shutdown_flag:
+                    break
                 batch.append(item)
-            except queue.Empty:
+            except asyncio.TimeoutError:
                 continue
 
             start_time = time.monotonic()
@@ -54,39 +67,40 @@ class BatchingProxy(IInferenceEngine):
                 if remaining <= 0:
                     break
                 try:
-                    item = self.queue.get(timeout=remaining)
+                    item = await asyncio.wait_for(self.queue.get(), timeout=remaining)
                     BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
+                    if item[0] == "" and self.shutdown_flag:
+                        break
                     batch.append(item)
-                except queue.Empty:
+                except asyncio.TimeoutError:
                     break
 
             if batch:
-                self._process_batch(batch)
+                await self._process_batch(batch, loop)
 
-    def _process_batch(self, batch: List[Tuple[str, futures.Future]]):
+    async def _process_batch(self, batch: List[Tuple[str, asyncio.Future]], loop: asyncio.AbstractEventLoop):
         BATCH_SIZE_DISTRIBUTION.labels(model=self.model_name).observe(len(batch))
         
         texts = [item[0] for item in batch]
         futures_list = [item[1] for item in batch]
         
+        @circuit(failure_threshold=3, expected_exception=Exception)
+        def _guarded_predict_batch():
+            return self.engine.predict_batch(texts)
+
         try:
             with BATCH_PROCESSING_TIME.labels(model=self.model_name).time():
-                results = self.engine.predict_batch(texts)
+                results = await loop.run_in_executor(None, _guarded_predict_batch)
             
             if len(results) != len(futures_list):
                 raise RuntimeError("Batch results length mismatch")
                 
             for i in range(len(futures_list)):
                 future = futures_list[i]
-                if not future.cancelled():
+                if not future.done():
                     future.set_result(results[i])
                 
-            logger.info("batch_processed", 
-                       model=self.model_name, 
-                       size=len(batch))
-                       
         except Exception as e:
-            logger.error("batch_failed", error=str(e), model=self.model_name)
             for future in futures_list:
-                if not future.cancelled():
+                if not future.done():
                     future.set_exception(e)
