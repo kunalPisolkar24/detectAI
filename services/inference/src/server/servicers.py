@@ -10,11 +10,6 @@ import structlog
 logger = structlog.get_logger()
 
 class AIService(ai_service_pb2_grpc.AIServiceServicer):
-    MODEL_MAP = {
-        ai_service_pb2.ANALYSIS_MODEL_SPARK: "spark",
-        ai_service_pb2.ANALYSIS_MODEL_FLARE: "flare",
-    }
-
     def __init__(self, analysis_service: DocumentAnalysisService):
         self.analysis_service = analysis_service
         self.presenter = StreamingPresenter()
@@ -34,26 +29,23 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
             ai_confidence=round(ai_prob * 100, 1)
         )
 
-    async def DetectSpark(self, request, context):
+    async def Detect(self, request, context):
+        model_key = request.model_id.lower() if hasattr(request, 'model_id') and request.model_id else "spark"
+        if model_key not in self.analysis_service.engines:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Unsupported analysis model: {model_key}")
+            
         try:
-            score = await self.analysis_service.analyze(request.text, "spark")
-            return self._build_response("Spark", score.ai_probability)
+            score = await self.analysis_service.analyze(request.text, model_key)
+            return self._build_response(model_key.capitalize(), score.ai_probability)
         except Exception as e:
-            await self._abort(context, e, "Spark")
-
-    async def DetectFlare(self, request, context):
-        try:
-            score = await self.analysis_service.analyze(request.text, "flare")
-            return self._build_response("Flare", score.ai_probability)
-        except Exception as e:
-            await self._abort(context, e, "Flare")
+            await self._abort(context, e, model_key.capitalize())
 
     async def AnalyzeDocument(self, request, context):
-        model_key = self.MODEL_MAP.get(request.model)
-        if model_key is None:
-            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Unsupported analysis model")
+        model_key = request.model_id.lower() if hasattr(request, 'model_id') and request.model_id else "spark"
+        if model_key not in self.analysis_service.engines:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Unsupported analysis model: {model_key}")
 
-        model_name = "Spark" if model_key == "spark" else "Flare"
+        model_name = model_key.capitalize()
 
         try:
             async for event in self.analysis_service.stream(request.text, model_key):

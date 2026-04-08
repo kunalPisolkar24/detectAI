@@ -3,24 +3,18 @@ syntax = "proto3";
 package aidetection;
 
 service AIService {
-  rpc DetectSpark (PredictRequest) returns (PredictResponse) {}
-  rpc DetectFlare (PredictRequest) returns (PredictResponse) {}
+  rpc Detect (PredictRequest) returns (PredictResponse) {}
   rpc AnalyzeDocument (AnalyzeDocumentRequest) returns (stream AnalyzeDocumentEvent) {}
-}
-
-enum AnalysisModel {
-  ANALYSIS_MODEL_UNSPECIFIED = 0;
-  ANALYSIS_MODEL_SPARK = 1;
-  ANALYSIS_MODEL_FLARE = 2;
 }
 
 message PredictRequest {
   string text = 1;
+  string model_id = 2;
 }
 
 message AnalyzeDocumentRequest {
   string text = 1;
-  AnalysisModel model = 2;
+  string model_id = 2;
 }
 
 message AnalyzeDocumentStarted {
