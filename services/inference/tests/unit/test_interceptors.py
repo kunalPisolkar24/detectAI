@@ -10,6 +10,11 @@ class MockHandlerDetails:
         self.method = method
 
 
+class MockRequest:
+    def __init__(self, model_id=""):
+        self.model_id = model_id
+
+
 @pytest.mark.asyncio
 async def test_auth_interceptor_bypasses_health_rpc(test_settings):
     interceptor = AuthInterceptor()
@@ -86,7 +91,7 @@ async def test_monitoring_interceptor_records_unary_metrics(mocker):
 
     details = MockHandlerDetails([], "/aidetection.AIService/Detect")
     handler = await interceptor.intercept_service(continuation, details)
-    result = await handler.unary_unary(None, object())
+    result = await handler.unary_unary(MockRequest(model_id="flare"), object())
 
     assert result == "ok"
     mock_counter.labels.return_value.inc.assert_called_once()
@@ -94,7 +99,30 @@ async def test_monitoring_interceptor_records_unary_metrics(mocker):
     mock_counter.labels.assert_called_once_with(
         method="Detect",
         code="OK",
-        model="unknown",
+        model="flare",
+    )
+
+
+@pytest.mark.asyncio
+async def test_monitoring_interceptor_defaults_blank_model_to_spark(mocker):
+    interceptor = MonitoringInterceptor()
+    mock_counter = mocker.patch("src.server.interceptors.GRPC_REQUESTS_TOTAL")
+
+    async def behavior(request, context):
+        return "ok"
+
+    async def continuation(details):
+        return grpc.unary_unary_rpc_method_handler(behavior)
+
+    details = MockHandlerDetails([], "/aidetection.AIService/Detect")
+    handler = await interceptor.intercept_service(continuation, details)
+    result = await handler.unary_unary(MockRequest(model_id=""), object())
+
+    assert result == "ok"
+    mock_counter.labels.assert_called_once_with(
+        method="Detect",
+        code="OK",
+        model="spark",
     )
 
 
@@ -115,11 +143,39 @@ async def test_monitoring_interceptor_records_streaming_failures(mocker):
     handler = await interceptor.intercept_service(continuation, details)
 
     with pytest.raises(RuntimeError, match="Fail"):
-        async for _ in handler.unary_stream(None, object()):
+        async for _ in handler.unary_stream(MockRequest(model_id="spark"), object()):
             pass
 
     mock_counter.labels.assert_called_once_with(
         method="AnalyzeDocument",
         code="INTERNAL",
-        model="unknown",
+        model="spark",
     )
+
+
+@pytest.mark.asyncio
+async def test_monitoring_interceptor_records_streaming_metrics_for_flare(mocker):
+    interceptor = MonitoringInterceptor()
+    mock_counter = mocker.patch("src.server.interceptors.GRPC_REQUESTS_TOTAL")
+    mock_latency = mocker.patch("src.server.interceptors.GRPC_LATENCY_SECONDS")
+
+    async def behavior(request, context):
+        yield "ok"
+
+    async def continuation(details):
+        return grpc.unary_stream_rpc_method_handler(behavior)
+
+    details = MockHandlerDetails([], "/aidetection.AIService/AnalyzeDocument")
+    handler = await interceptor.intercept_service(continuation, details)
+
+    events = []
+    async for event in handler.unary_stream(MockRequest(model_id="flare"), object()):
+        events.append(event)
+
+    assert events == ["ok"]
+    mock_counter.labels.assert_called_once_with(
+        method="AnalyzeDocument",
+        code="OK",
+        model="flare",
+    )
+    mock_latency.labels.return_value.observe.assert_called_once()

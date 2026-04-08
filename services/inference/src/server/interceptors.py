@@ -95,12 +95,6 @@ class MonitoringInterceptor(aio.ServerInterceptor):
         trace_id = self._resolve_trace_id(metadata)
         
         structlog.contextvars.bind_contextvars(trace_id=trace_id)
-        
-        model_label = "unknown"
-        if "Spark" in method_name:
-            model_label = "spark"
-        elif "Flare" in method_name:
-            model_label = "flare"
 
         handler = await continuation(handler_call_details)
         if handler is None:
@@ -109,28 +103,28 @@ class MonitoringInterceptor(aio.ServerInterceptor):
 
         if handler.unary_unary:
             return grpc.unary_unary_rpc_method_handler(
-                self._wrap_unary(handler.unary_unary, method_name, model_label, start_time),
+                self._wrap_unary(handler.unary_unary, method_name, start_time),
                 request_deserializer=handler.request_deserializer,
                 response_serializer=handler.response_serializer,
             )
 
         if handler.unary_stream:
             return grpc.unary_stream_rpc_method_handler(
-                self._wrap_unary_stream(handler.unary_stream, method_name, model_label, start_time),
+                self._wrap_unary_stream(handler.unary_stream, method_name, start_time),
                 request_deserializer=handler.request_deserializer,
                 response_serializer=handler.response_serializer,
             )
 
         if handler.stream_unary:
             return grpc.stream_unary_rpc_method_handler(
-                self._wrap_stream_unary(handler.stream_unary, method_name, model_label, start_time),
+                self._wrap_stream_unary(handler.stream_unary, method_name, "unknown", start_time),
                 request_deserializer=handler.request_deserializer,
                 response_serializer=handler.response_serializer,
             )
 
         if handler.stream_stream:
             return grpc.stream_stream_rpc_method_handler(
-                self._wrap_stream_stream(handler.stream_stream, method_name, model_label, start_time),
+                self._wrap_stream_stream(handler.stream_stream, method_name, "unknown", start_time),
                 request_deserializer=handler.request_deserializer,
                 response_serializer=handler.response_serializer,
             )
@@ -138,9 +132,10 @@ class MonitoringInterceptor(aio.ServerInterceptor):
         structlog.contextvars.clear_contextvars()
         return handler
 
-    def _wrap_unary(self, behavior, method_name: str, model_label: str, start_time: float):
+    def _wrap_unary(self, behavior, method_name: str, start_time: float):
         async def unary_wrapper(request, context):
             response_code = "OK"
+            model_label = self._resolve_model_label(request)
             try:
                 return await behavior(request, context)
             except Exception as error:
@@ -153,9 +148,10 @@ class MonitoringInterceptor(aio.ServerInterceptor):
 
         return unary_wrapper
 
-    def _wrap_unary_stream(self, behavior, method_name: str, model_label: str, start_time: float):
+    def _wrap_unary_stream(self, behavior, method_name: str, start_time: float):
         async def unary_stream_wrapper(request, context):
             response_code = "OK"
+            model_label = self._resolve_model_label(request)
             try:
                 async for response in behavior(request, context):
                     yield response
@@ -207,6 +203,14 @@ class MonitoringInterceptor(aio.ServerInterceptor):
         logger.info("grpc_request_processed", method=method_name, duration=duration, code=response_code)
         structlog.contextvars.clear_contextvars()
 
+    def _resolve_model_label(self, request) -> str:
+        if request is None or not hasattr(request, "model_id"):
+            return "unknown"
+
+        model_id = request.model_id.strip().lower()
+        if model_id:
+            return model_id
+        return "spark"
 
     def _resolve_trace_id(self, metadata: dict) -> str:
         for header in _TRACE_HEADERS:
