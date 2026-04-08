@@ -34,29 +34,29 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
             ai_confidence=round(ai_prob * 100, 1)
         )
 
-    def DetectSpark(self, request, context):
+    async def DetectSpark(self, request, context):
         try:
-            score = self.analysis_service.analyze(request.text, "spark")
+            score = await self.analysis_service.analyze(request.text, "spark")
             return self._build_response("Spark", score.ai_probability)
         except Exception as e:
-            self._abort(context, e, "Spark")
+            await self._abort(context, e, "Spark")
 
-    def DetectFlare(self, request, context):
+    async def DetectFlare(self, request, context):
         try:
-            score = self.analysis_service.analyze(request.text, "flare")
+            score = await self.analysis_service.analyze(request.text, "flare")
             return self._build_response("Flare", score.ai_probability)
         except Exception as e:
-            self._abort(context, e, "Flare")
+            await self._abort(context, e, "Flare")
 
-    def AnalyzeDocument(self, request, context):
+    async def AnalyzeDocument(self, request, context):
         model_key = self.MODEL_MAP.get(request.model)
         if model_key is None:
-            context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Unsupported analysis model")
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Unsupported analysis model")
 
         model_name = "Spark" if model_key == "spark" else "Flare"
 
         try:
-            for event in self.analysis_service.stream(request.text, model_key):
+            async for event in self.analysis_service.stream(request.text, model_key):
                 if self.presenter.is_started(event):
                     yield self.presenter.build_started(event.total_chars, event.total_chunks)
                     continue
@@ -68,15 +68,15 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
                 if self.presenter.is_final(event):
                     yield self.presenter.build_final(self._build_response(model_name, event.ai_probability))
         except Exception as e:
-            self._abort(context, e, model_name)
+            await self._abort(context, e, model_name)
 
-    def _abort(self, context, error: Exception, model_name: str):
+    async def _abort(self, context, error: Exception, model_name: str):
         if isinstance(error, InvalidInputError):
-            return context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
 
         if isinstance(error, ServiceOverloadedError):
             logger.warning("inference_overloaded", model=model_name, error=str(error))
-            return context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED, str(error))
+            await context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED, str(error))
 
         logger.error("inference_error", model=model_name, error=str(error))
-        context.abort(grpc.StatusCode.INTERNAL, "Internal Inference Error")
+        await context.abort(grpc.StatusCode.INTERNAL, "Internal Inference Error")

@@ -1,7 +1,7 @@
 import grpc
-from concurrent import futures
+from grpc import aio
+import asyncio
 import signal
-import threading
 from src.generated import ai_service_pb2_grpc
 from src.server.servicers import AIService
 from src.server.interceptors import AuthInterceptor, MonitoringInterceptor
@@ -14,8 +14,8 @@ logger = structlog.get_logger()
 class GRPCServer:
     def __init__(self, analysis_service):
         self.port = settings.GRPC_PORT
-        self.server = grpc.server(
-            futures.ThreadPoolExecutor(max_workers=settings.GRPC_MAX_WORKERS),
+        self.analysis_service = analysis_service
+        self.server = aio.server(
             interceptors=[AuthInterceptor(), MonitoringInterceptor()]
         )
         
@@ -23,19 +23,27 @@ class GRPCServer:
         ai_service_pb2_grpc.add_AIServiceServicer_to_server(servicer, self.server)
         add_health_check(self.server)
         
-        self.done_event = threading.Event()
+        self.done_event = asyncio.Event()
 
-    def start(self):
+    async def start(self):
         self.server.add_insecure_port(f'[::]:{self.port}')
-        self.server.start()
+        await self.server.start()
         logger.info("server_started", port=self.port)
         
-        signal.signal(signal.SIGTERM, self._stop_handler)
-        signal.signal(signal.SIGINT, self._stop_handler)
+        loop = asyncio.get_running_loop()
+        try:
+            loop.add_signal_handler(signal.SIGTERM, self._stop_handler)
+            loop.add_signal_handler(signal.SIGINT, self._stop_handler)
+        except NotImplementedError:
+            pass
         
-        self.done_event.wait()
+        await self.done_event.wait()
 
-    def _stop_handler(self, signum, frame):
+    def _stop_handler(self):
         logger.info("shutdown_signal_received")
         self.done_event.set()
-        self.server.stop(grace=10)
+        asyncio.create_task(self._shutdown())
+
+    async def _shutdown(self):
+        await self.analysis_service.shutdown()
+        await self.server.stop(grace=10)
