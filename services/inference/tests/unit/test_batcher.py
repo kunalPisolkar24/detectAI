@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import threading
 import time
 from unittest.mock import patch
@@ -168,3 +169,40 @@ async def test_batcher_fails_queued_requests_during_shutdown():
 
     await shutdown_task
     assert engine.calls == [["text1"]]
+
+
+@pytest.mark.asyncio
+async def test_batcher_shutdown_does_not_leave_unretrieved_future_exceptions():
+    engine = BlockingBatchEngine()
+    batcher = BatchingProxy(engine, batch_size=1, timeout=0.01, model_name="test", queue_max_size=8)
+    await batcher.start()
+
+    loop = asyncio.get_running_loop()
+    contexts = []
+    previous_handler = loop.get_exception_handler()
+    loop.set_exception_handler(lambda _loop, context: contexts.append(context))
+
+    try:
+        first_request = asyncio.create_task(batcher.predict("text1"))
+
+        await asyncio.to_thread(engine.started.wait, 1)
+
+        second_request = asyncio.create_task(batcher.predict("text2"))
+        shutdown_task = asyncio.create_task(batcher.shutdown())
+
+        engine.release.set()
+
+        assert await first_request == 0.8
+        with pytest.raises(ServiceOverloadedError, match="shutting down"):
+            await second_request
+
+        await shutdown_task
+        gc.collect()
+        await asyncio.sleep(0)
+
+        assert not any(
+            context.get("message") == "Future exception was never retrieved"
+            for context in contexts
+        )
+    finally:
+        loop.set_exception_handler(previous_handler)
