@@ -21,7 +21,12 @@ async def main():
         start_http_server(settings.METRICS_PORT)
         logger.info("metrics_server_started", port=settings.METRICS_PORT)
         
-        loader = HuggingFaceLoader(settings.MODEL_CACHE_DIR, settings.INFERENCE_PROVIDERS)
+        loader = HuggingFaceLoader(
+            settings.MODEL_CACHE_DIR,
+            settings.INFERENCE_PROVIDERS,
+            settings.SPARK_MODEL_REVISION,
+            settings.FLARE_MODEL_REVISION,
+        )
         
         logger.info("loading_models")
         spark_resources = loader.load("spark")
@@ -44,9 +49,15 @@ async def main():
             "flare",
             settings.BATCH_QUEUE_MAX_SIZE,
         )
+        await spark_batched.start()
+        await flare_batched.start()
 
         analysis_service = DocumentAnalysisService(
             engines={
+                "spark": spark_batched,
+                "flare": flare_batched,
+            },
+            health_reporters={
                 "spark": spark_batched,
                 "flare": flare_batched,
             },
@@ -55,7 +66,7 @@ async def main():
                 "flare": build_chunk_planner(flare_resources[1], settings.CHUNK_TOKEN_LIMIT, settings.CHUNK_TOKEN_STRIDE, settings.MAX_GLOBAL_TOKENS),
             },
             validator=InputValidator(settings.MAX_TEXT_CHARS),
-            aggregator=ResultAggregator(),
+            aggregator=ResultAggregator(settings.CHUNK_TOKEN_STRIDE),
             max_inflight_chunks=settings.MAX_INFLIGHT_DOC_CHUNKS,
         )
         

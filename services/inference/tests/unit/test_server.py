@@ -1,43 +1,108 @@
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-import threading
-import signal
-from unittest.mock import MagicMock, patch
+from grpc_health.v1 import health_pb2
+
+from src.core.interfaces import BatcherHealthSnapshot, BatcherHealthStatus
 from src.server.grpc_server import GRPCServer
+from src.server.health import HealthMonitor, add_health_check
 
-@pytest.fixture
-def mock_analysis_service():
-    return MagicMock()
 
-def test_server_initialization(mock_analysis_service):
-    with patch("src.server.grpc_server.grpc.server") as mock_grpc_server, \
-         patch("src.server.grpc_server.add_health_check") as mock_health:
-        
+@pytest.mark.asyncio
+async def test_server_start_waits_for_shutdown(test_settings):
+    analysis_service = MagicMock()
+    analysis_service.shutdown = AsyncMock()
+    health_monitor = MagicMock()
+    health_monitor.start = AsyncMock()
+    health_monitor.shutdown = AsyncMock()
+
+    with patch("src.server.grpc_server.aio.server") as mock_server_factory, patch(
+        "src.server.grpc_server.add_health_check",
+        return_value=health_monitor,
+    ), patch("src.server.grpc_server.ai_service_pb2_grpc.add_AIServiceServicer_to_server"):
         server_instance = MagicMock()
-        mock_grpc_server.return_value = server_instance
-        
-        GRPCServer(mock_analysis_service)
-        
-        mock_grpc_server.assert_called_once()
-        mock_health.assert_called_once_with(server_instance)
-        server_instance.add_insecure_port.assert_not_called() 
+        server_instance.start = AsyncMock()
+        server_instance.stop = AsyncMock()
+        mock_server_factory.return_value = server_instance
 
-def test_server_start_stop(mock_analysis_service):
-    with patch("src.server.grpc_server.grpc.server") as mock_grpc_server, \
-         patch("src.server.grpc_server.signal.signal"), \
-         patch("src.server.grpc_server.add_health_check"):
-        
-        server_instance = MagicMock()
-        mock_grpc_server.return_value = server_instance
-        
-        server = GRPCServer(mock_analysis_service)
-        
-        def stop_trigger():
-            server._stop_handler(signal.SIGTERM, None)
-            
-        threading.Timer(0.1, stop_trigger).start()
-        
-        server.start()
-        
-        server_instance.add_insecure_port.assert_called_with('[::]:50051')
-        server_instance.start.assert_called_once()
-        server_instance.stop.assert_called_once()
+        server = GRPCServer(analysis_service)
+
+        async def trigger_stop():
+            await asyncio.sleep(0.05)
+            server._stop_handler()
+
+        asyncio.create_task(trigger_stop())
+        await server.start()
+
+    server_instance.add_insecure_port.assert_called_once_with(f"[::]:{test_settings.GRPC_PORT}")
+    health_monitor.start.assert_awaited_once()
+    health_monitor.shutdown.assert_awaited_once()
+    analysis_service.shutdown.assert_awaited_once()
+    server_instance.stop.assert_awaited_once_with(grace=10)
+
+
+@pytest.mark.asyncio
+async def test_add_health_check_returns_monitor():
+    analysis_service = MagicMock()
+    analysis_service.health_reporters = {}
+    server = MagicMock()
+
+    monitor = add_health_check(server, analysis_service)
+
+    assert isinstance(monitor, HealthMonitor)
+
+
+@pytest.mark.asyncio
+async def test_health_monitor_marks_queue_saturation_unhealthy():
+    engine = MagicMock()
+    engine.health_snapshot.return_value = BatcherHealthSnapshot(
+        status=BatcherHealthStatus.QUEUE_FULL,
+        queue_size=1,
+        queue_capacity=1,
+    )
+    analysis_service = MagicMock()
+    analysis_service.health_reporters = {"spark": engine}
+    monitor = HealthMonitor(analysis_service)
+
+    state, reason = monitor._resolve_state()
+
+    assert state == health_pb2.HealthCheckResponse.NOT_SERVING
+    assert reason == "inference_queue_full"
+
+
+@pytest.mark.asyncio
+async def test_health_monitor_marks_worker_failure_unhealthy():
+    engine = MagicMock()
+    engine.health_snapshot.return_value = BatcherHealthSnapshot(
+        status=BatcherHealthStatus.WORKER_UNAVAILABLE,
+        queue_size=0,
+        queue_capacity=1,
+    )
+    analysis_service = MagicMock()
+    analysis_service.health_reporters = {"spark": engine}
+    monitor = HealthMonitor(analysis_service)
+
+    state, reason = monitor._resolve_state()
+
+    assert state == health_pb2.HealthCheckResponse.NOT_SERVING
+    assert reason == "batch_worker_stopped"
+
+
+@pytest.mark.asyncio
+async def test_health_monitor_marks_open_circuit_unhealthy():
+    engine = MagicMock()
+    engine.health_snapshot.return_value = BatcherHealthSnapshot(
+        status=BatcherHealthStatus.CIRCUIT_OPEN,
+        queue_size=0,
+        queue_capacity=8,
+        circuit_open_remaining=30,
+    )
+    analysis_service = MagicMock()
+    analysis_service.health_reporters = {"spark": engine}
+    monitor = HealthMonitor(analysis_service)
+
+    state, reason = monitor._resolve_state()
+
+    assert state == health_pb2.HealthCheckResponse.NOT_SERVING
+    assert reason == "inference_circuit_open"

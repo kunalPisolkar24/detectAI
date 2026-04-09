@@ -1,51 +1,122 @@
 import asyncio
 import time
 from typing import List, Tuple
-from src.core.interfaces import IInferenceEngine
+from circuitbreaker import CircuitBreaker, CircuitBreakerError
+
 from src.core.exceptions import ServiceOverloadedError
-import structlog
+from src.core.interfaces import (
+    BatcherHealthSnapshot,
+    BatcherHealthStatus,
+    IAsyncInferenceEngine,
+    IEngineHealthReporter,
+    ISyncBatchInferenceEngine,
+)
 from src.metrics import BATCH_SIZE_DISTRIBUTION, BATCH_PROCESSING_TIME, BATCH_QUEUE_SIZE
-from circuitbreaker import circuit
+import structlog
 
 logger = structlog.get_logger()
 
-class BatchingProxy(IInferenceEngine):
-    def __init__(self, engine: IInferenceEngine, batch_size: int, timeout: float, model_name: str, queue_max_size: int):
+class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
+    def __init__(
+        self,
+        engine: ISyncBatchInferenceEngine,
+        batch_size: int,
+        timeout: float,
+        model_name: str,
+        queue_max_size: int,
+    ):
         self.engine = engine
         self.batch_size = batch_size
         self.timeout = timeout
         self.model_name = model_name
         self.queue = asyncio.Queue(maxsize=queue_max_size)
         self.shutdown_flag = False
-        self.worker_task = asyncio.create_task(self._worker_loop(), name=f"{model_name}-batch-worker")
+        self.worker_task: asyncio.Task | None = None
+        self._circuit_breaker = CircuitBreaker(
+            failure_threshold=3,
+            recovery_timeout=30,
+            expected_exception=Exception,
+            name=f"{model_name}-batch",
+        )
+        self._guarded_predict_batch = self._circuit_breaker.decorate(self.engine.predict_batch)
+
+    async def start(self) -> None:
+        if self.shutdown_flag:
+            raise RuntimeError(f"{self.model_name} batcher cannot be started after shutdown")
+        if self.worker_task is None or self.worker_task.done():
+            self.worker_task = asyncio.create_task(
+                self._worker_loop(),
+                name=f"{self.model_name}-batch-worker",
+            )
 
     async def predict(self, text: str) -> float:
+        if self.shutdown_flag:
+            raise ServiceOverloadedError(f"{self.model_name} service is shutting down")
+
+        if self.worker_task is None:
+            raise RuntimeError(f"{self.model_name} batcher has not been started")
+
+        if self.worker_task.done():
+            raise ServiceOverloadedError(f"{self.model_name} batch worker is unavailable")
+
         future = asyncio.get_running_loop().create_future()
         try:
             self.queue.put_nowait((text, future))
             BATCH_QUEUE_SIZE.labels(model=self.model_name).inc()
-            return await future
+            try:
+                return await future
+            except asyncio.CancelledError:
+                if not future.done():
+                    future.cancel()
+                raise
         except asyncio.QueueFull as exc:
             raise ServiceOverloadedError(f"{self.model_name} inference queue is full") from exc
 
-    def predict_batch(self, texts: List[str]) -> List[float]:
-        return self.engine.predict_batch(texts)
+    def health_snapshot(self) -> BatcherHealthSnapshot:
+        if self.shutdown_flag:
+            status = BatcherHealthStatus.SHUTTING_DOWN
+        elif self.worker_task is None or self.worker_task.done():
+            status = BatcherHealthStatus.WORKER_UNAVAILABLE
+        elif self._circuit_breaker.opened:
+            status = BatcherHealthStatus.CIRCUIT_OPEN
+        elif self.queue.full():
+            status = BatcherHealthStatus.QUEUE_FULL
+        else:
+            status = BatcherHealthStatus.SERVING
+
+        return BatcherHealthSnapshot(
+            status=status,
+            queue_size=self.queue.qsize(),
+            queue_capacity=self.queue.maxsize,
+            circuit_open_remaining=self._circuit_breaker.open_remaining if self._circuit_breaker.opened else None,
+        )
 
     async def shutdown(self):
         self.shutdown_flag = True
-        future = asyncio.get_running_loop().create_future()
-        try:
-            self.queue.put_nowait(("", future))
-        except asyncio.QueueFull:
-            pass
-        await self.worker_task
+
+        worker_task = self.worker_task
+        worker_error = None
+        if worker_task is not None:
+            future = asyncio.get_running_loop().create_future()
+            try:
+                self.queue.put_nowait((None, future))
+            except asyncio.QueueFull:
+                pass
+            try:
+                await worker_task
+            except Exception as exc:
+                worker_error = exc
 
         while not self.queue.empty():
             item = self.queue.get_nowait()
-            BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
             fut = item[1]
+            if item[0] is not None:
+                BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
             if not fut.done():
                 fut.set_exception(ServiceOverloadedError(f"{self.model_name} service is shutting down"))
+
+        if worker_error is not None:
+            raise worker_error
 
     async def _worker_loop(self):
         loop = asyncio.get_running_loop()
@@ -53,9 +124,9 @@ class BatchingProxy(IInferenceEngine):
             batch = []
             try:
                 item = await asyncio.wait_for(self.queue.get(), timeout=0.01)
-                BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
-                if item[0] == "" and self.shutdown_flag:
+                if item[0] is None:
                     break
+                BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
                 batch.append(item)
             except asyncio.TimeoutError:
                 continue
@@ -68,9 +139,9 @@ class BatchingProxy(IInferenceEngine):
                     break
                 try:
                     item = await asyncio.wait_for(self.queue.get(), timeout=remaining)
-                    BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
-                    if item[0] == "" and self.shutdown_flag:
+                    if item[0] is None:
                         break
+                    BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
                     batch.append(item)
                 except asyncio.TimeoutError:
                     break
@@ -78,19 +149,15 @@ class BatchingProxy(IInferenceEngine):
             if batch:
                 await self._process_batch(batch, loop)
 
-    async def _process_batch(self, batch: List[Tuple[str, asyncio.Future]], loop: asyncio.AbstractEventLoop):
+    async def _process_batch(self, batch: List[Tuple[str | None, asyncio.Future]], loop: asyncio.AbstractEventLoop):
         BATCH_SIZE_DISTRIBUTION.labels(model=self.model_name).observe(len(batch))
         
         texts = [item[0] for item in batch]
         futures_list = [item[1] for item in batch]
-        
-        @circuit(failure_threshold=3, expected_exception=Exception)
-        def _guarded_predict_batch():
-            return self.engine.predict_batch(texts)
 
         try:
             with BATCH_PROCESSING_TIME.labels(model=self.model_name).time():
-                results = await loop.run_in_executor(None, _guarded_predict_batch)
+                results = await loop.run_in_executor(None, self._guarded_predict_batch, texts)
             
             if len(results) != len(futures_list):
                 raise RuntimeError("Batch results length mismatch")
@@ -100,6 +167,12 @@ class BatchingProxy(IInferenceEngine):
                 if not future.done():
                     future.set_result(results[i])
                 
+        except CircuitBreakerError as exc:
+            error = ServiceOverloadedError(f"{self.model_name} inference circuit is open")
+            for future in futures_list:
+                if not future.done():
+                    future.set_exception(error)
+            logger.warning("batch_circuit_open", model=self.model_name, error=str(exc))
         except Exception as e:
             for future in futures_list:
                 if not future.done():

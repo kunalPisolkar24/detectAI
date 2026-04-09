@@ -1,14 +1,11 @@
 import numpy as np
-from src.core.interfaces import IInferenceEngine
+from src.core.interfaces import ISyncBatchInferenceEngine
 from src.inference.engines.base import BaseEngine
 from src.core.exceptions import InferenceError
 
-class FlareEngine(IInferenceEngine, BaseEngine):
+class FlareEngine(ISyncBatchInferenceEngine, BaseEngine):
     def __init__(self, resources):
         self.session, self.tokenizer = resources
-
-    def predict(self, text: str) -> float:
-        return self.predict_batch([text])[0]
 
     def predict_batch(self, texts: list[str]) -> list[float]:
         try:

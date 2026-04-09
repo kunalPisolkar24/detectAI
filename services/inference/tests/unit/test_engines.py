@@ -59,13 +59,13 @@ def test_spark_engine_column_output(mock_onnx_session):
     results = engine.predict_batch(["text1", "text2"])
     assert results == approx([0.9, 0.1])
 
-def test_spark_engine_single_predict(mock_onnx_session):
+def test_spark_engine_single_item_batch(mock_onnx_session):
     tokenizer = MockTokenizer()
     engine = SparkEngine((mock_onnx_session, tokenizer))
     mock_onnx_session.run.return_value = [np.array([0.7], dtype=np.float32)]
     
-    result = engine.predict("text")
-    assert result == approx(0.7)
+    results = engine.predict_batch(["text"])
+    assert results == approx([0.7])
 
 def test_spark_engine_failure(mock_onnx_session):
     tokenizer = MockTokenizer()
@@ -73,7 +73,7 @@ def test_spark_engine_failure(mock_onnx_session):
     mock_onnx_session.run.side_effect = Exception("ONNX Error")
     
     with pytest.raises(InferenceError) as exc:
-        engine.predict("text")
+        engine.predict_batch(["text"])
     assert "Spark batch inference failed" in str(exc.value)
 
 def test_flare_engine_success(mock_onnx_session):
@@ -81,9 +81,9 @@ def test_flare_engine_success(mock_onnx_session):
     engine = FlareEngine((mock_onnx_session, tokenizer))
     mock_onnx_session.run.return_value = [np.array([[-2.0, 2.0]], dtype=np.float32)]
     
-    result = engine.predict("text")
-    assert isinstance(result, float)
-    assert 0.9 < result < 1.0 
+    results = engine.predict_batch(["text"])
+    assert len(results) == 1
+    assert 0.9 < results[0] < 1.0 
 
 def test_flare_engine_failure(mock_onnx_session):
     tokenizer = MagicMock()
@@ -92,5 +92,5 @@ def test_flare_engine_failure(mock_onnx_session):
     engine = FlareEngine((mock_onnx_session, tokenizer))
     
     with pytest.raises(InferenceError) as exc:
-        engine.predict("text")
+        engine.predict_batch(["text"])
     assert "Flare batch inference failed" in str(exc.value)

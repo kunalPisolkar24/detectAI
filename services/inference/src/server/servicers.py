@@ -1,4 +1,5 @@
 import grpc
+import asyncio
 from src.generated import ai_service_pb2
 from src.generated import ai_service_pb2_grpc
 from src.core.exceptions import InvalidInputError, ServiceOverloadedError
@@ -10,11 +11,6 @@ import structlog
 logger = structlog.get_logger()
 
 class AIService(ai_service_pb2_grpc.AIServiceServicer):
-    MODEL_MAP = {
-        ai_service_pb2.ANALYSIS_MODEL_SPARK: "spark",
-        ai_service_pb2.ANALYSIS_MODEL_FLARE: "flare",
-    }
-
     def __init__(self, analysis_service: DocumentAnalysisService):
         self.analysis_service = analysis_service
         self.presenter = StreamingPresenter()
@@ -34,29 +30,37 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
             ai_confidence=round(ai_prob * 100, 1)
         )
 
-    async def DetectSpark(self, request, context):
+    async def Detect(self, request, context):
+        model_key = request.model_id.lower() if hasattr(request, 'model_id') and request.model_id else "spark"
+        if model_key not in self.analysis_service.engines:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Unsupported analysis model: {model_key}")
+            
         try:
-            score = await self.analysis_service.analyze(request.text, "spark")
-            return self._build_response("Spark", score.ai_probability)
+            score = await self.analysis_service.analyze(
+                request.text,
+                model_key,
+                request_is_active=lambda: not context.done(),
+            )
+            return self._build_response(model_key.capitalize(), score.ai_probability)
+        except asyncio.CancelledError:
+            logger.warning("grpc_client_disconnected", method="Detect")
+            raise
         except Exception as e:
-            await self._abort(context, e, "Spark")
-
-    async def DetectFlare(self, request, context):
-        try:
-            score = await self.analysis_service.analyze(request.text, "flare")
-            return self._build_response("Flare", score.ai_probability)
-        except Exception as e:
-            await self._abort(context, e, "Flare")
+            await self._abort(context, e, model_key.capitalize())
 
     async def AnalyzeDocument(self, request, context):
-        model_key = self.MODEL_MAP.get(request.model)
-        if model_key is None:
-            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Unsupported analysis model")
+        model_key = request.model_id.lower() if hasattr(request, 'model_id') and request.model_id else "spark"
+        if model_key not in self.analysis_service.engines:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Unsupported analysis model: {model_key}")
 
-        model_name = "Spark" if model_key == "spark" else "Flare"
+        model_name = model_key.capitalize()
 
         try:
-            async for event in self.analysis_service.stream(request.text, model_key):
+            async for event in self.analysis_service.stream(
+                request.text,
+                model_key,
+                request_is_active=lambda: not context.done(),
+            ):
                 if self.presenter.is_started(event):
                     yield self.presenter.build_started(event.total_chars, event.total_chunks)
                     continue
@@ -67,16 +71,21 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
 
                 if self.presenter.is_final(event):
                     yield self.presenter.build_final(self._build_response(model_name, event.ai_probability))
+        except asyncio.CancelledError:
+            logger.warning("grpc_client_disconnected", method="AnalyzeDocument")
+            raise
         except Exception as e:
             await self._abort(context, e, model_name)
 
     async def _abort(self, context, error: Exception, model_name: str):
         if isinstance(error, InvalidInputError):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+            return
 
         if isinstance(error, ServiceOverloadedError):
             logger.warning("inference_overloaded", model=model_name, error=str(error))
             await context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED, str(error))
+            return
 
         logger.error("inference_error", model=model_name, error=str(error))
         await context.abort(grpc.StatusCode.INTERNAL, "Internal Inference Error")
