@@ -40,6 +40,15 @@ const saturationThresholds = {
   ],
 };
 
+const zeroToleranceThresholds = {
+  mode: "absolute",
+  steps: [
+    { color: "green", value: 0 },
+    { color: "orange", value: 0.01 },
+    { color: "red", value: 0.1 },
+  ],
+};
+
 function resetPanelIds() {
   panelId = 1;
 }
@@ -751,6 +760,216 @@ function buildWorkersOverview() {
           query('sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{job="cadvisor",container_label_com_docker_compose_service=~"worker-analytics|worker-cron|worker-payments",id!="/"}[5m]))', "{{container_label_com_docker_compose_service}} tx", "B"),
         ],
         unit: "Bps",
+      }),
+    ],
+  });
+}
+
+function buildInferenceOperationsOverview() {
+  resetPanelIds();
+
+  return dashboard({
+    title: "Detect AI Inference Operations",
+    uid: "detect-ai-inference-operations-overview",
+    tags: ["detect-ai", "service", "inference", "operations"],
+    panels: [
+      availabilityStat("Service Health", '100 * max(inference_service_health_status{job="inference",status="serving"})', { h: 4, w: 6, x: 0, y: 0 }),
+      availabilityStat("Engines Serving", '100 * avg(inference_engine_health_status{job="inference",status="serving"})', { h: 4, w: 6, x: 6, y: 0 }),
+      stat({
+        title: "Max Queue Fill",
+        expr: '100 * max(model_batch_queue_size{job="inference"} / clamp_min(inference_engine_queue_capacity{job="inference"}, 1))',
+        gridPos: { h: 4, w: 6, x: 12, y: 0 },
+        unit: "percent",
+        decimals: 1,
+        min: 0,
+        max: 100,
+      }),
+      stat({
+        title: "Max Circuit Open",
+        expr: 'max(inference_engine_circuit_open_seconds{job="inference"})',
+        gridPos: { h: 4, w: 6, x: 18, y: 0 },
+        unit: "s",
+        decimals: 1,
+        min: 0,
+        panelThresholds: thresholds("absolute", [
+          { color: "green", value: 0 },
+          { color: "orange", value: 1 },
+          { color: "red", value: 15 },
+        ]),
+      }),
+      timeseries({
+        title: "Service Health State",
+        gridPos: { h: 8, w: 12, x: 0, y: 4 },
+        targets: [query('inference_service_health_status{job="inference"}', "{{status}}")],
+        unit: "short",
+        legendMode: "list",
+        tooltipMode: "single",
+        panelThresholds: thresholds("absolute", [
+          { color: "red", value: 0 },
+          { color: "green", value: 1 },
+        ]),
+      }),
+      timeseries({
+        title: "Service Health Reason",
+        gridPos: { h: 8, w: 12, x: 12, y: 4 },
+        targets: [query('inference_service_health_reason{job="inference",reason!="none"}', "{{reason}}")],
+        unit: "short",
+        legendMode: "list",
+        tooltipMode: "single",
+        panelThresholds: thresholds("absolute", [
+          { color: "green", value: 0 },
+          { color: "red", value: 1 },
+        ]),
+      }),
+      timeseries({
+        title: "Engine Health State",
+        gridPos: { h: 8, w: 12, x: 0, y: 12 },
+        targets: [query('inference_engine_health_status{job="inference"}', "{{model}} {{status}}")],
+        unit: "short",
+        legendMode: "list",
+        tooltipMode: "single",
+        panelThresholds: thresholds("absolute", [
+          { color: "red", value: 0 },
+          { color: "green", value: 1 },
+        ]),
+      }),
+      timeseries({
+        title: "Queue Depth and Capacity",
+        gridPos: { h: 8, w: 12, x: 12, y: 12 },
+        targets: [
+          query('model_batch_queue_size{job="inference"}', "{{model}} queued", "A"),
+          query('inference_engine_queue_capacity{job="inference"}', "{{model}} capacity", "B"),
+        ],
+        unit: "short",
+      }),
+      timeseries({
+        title: "Queue Utilization",
+        gridPos: { h: 8, w: 12, x: 0, y: 20 },
+        targets: [query('100 * model_batch_queue_size{job="inference"} / clamp_min(inference_engine_queue_capacity{job="inference"}, 1)', "{{model}}")],
+        unit: "percent",
+        min: 0,
+        max: 100,
+        panelThresholds: saturationThresholds,
+      }),
+      timeseries({
+        title: "Circuit Open Seconds",
+        gridPos: { h: 8, w: 12, x: 12, y: 20 },
+        targets: [query('inference_engine_circuit_open_seconds{job="inference"}', "{{model}}")],
+        unit: "s",
+        min: 0,
+      }),
+      timeseries({
+        title: "Process Runtime",
+        gridPos: { h: 8, w: 12, x: 0, y: 28 },
+        targets: [
+          query('rate(process_cpu_seconds_total{job="inference"}[5m])', "cpu cores", "A"),
+          query('process_resident_memory_bytes{job="inference"}', "resident memory", "B"),
+        ],
+        unit: "short",
+      }),
+      timeseries({
+        title: "Container CPU and Memory",
+        gridPos: { h: 8, w: 12, x: 12, y: 28 },
+        targets: [
+          query(containerCpuExpr("ai-service"), "cpu %", "A"),
+          query(containerMemoryExpr("ai-service"), "memory", "B"),
+        ],
+        unit: "short",
+      }),
+    ],
+  });
+}
+
+function buildInferenceTrafficOverview() {
+  resetPanelIds();
+
+  return dashboard({
+    title: "Detect AI Inference Traffic and Documents",
+    uid: "detect-ai-inference-traffic-overview",
+    tags: ["detect-ai", "service", "inference", "traffic"],
+    panels: [
+      stat({ title: "gRPC Rate", expr: 'sum(rate(grpc_requests_total{job="inference"}[5m]))', gridPos: { h: 4, w: 6, x: 0, y: 0 }, unit: "reqps", decimals: 2 }),
+      stat({
+        title: "Auth Reject Rate",
+        expr: 'sum(rate(grpc_auth_failures_total{job="inference"}[5m]))',
+        gridPos: { h: 4, w: 6, x: 6, y: 0 },
+        unit: "reqps",
+        decimals: 2,
+        min: 0,
+        panelThresholds: zeroToleranceThresholds,
+      }),
+      stat({
+        title: "p95 Input Size",
+        expr: 'histogram_quantile(0.95, sum(rate(inference_document_input_chars_bucket{job="inference"}[5m])) by (le))',
+        gridPos: { h: 4, w: 6, x: 12, y: 0 },
+        unit: "short",
+        decimals: 0,
+        min: 0,
+      }),
+      stat({
+        title: "p95 Chunk Count",
+        expr: 'histogram_quantile(0.95, sum(rate(inference_document_chunk_count_bucket{job="inference"}[5m])) by (le))',
+        gridPos: { h: 4, w: 6, x: 18, y: 0 },
+        unit: "short",
+        decimals: 1,
+        min: 0,
+      }),
+      timeseries({
+        title: "gRPC Response Rate",
+        gridPos: { h: 8, w: 12, x: 0, y: 4 },
+        targets: [query('sum(rate(grpc_requests_total{job="inference"}[5m])) by (code, method, model)', "{{code}} {{method}} {{model}}")],
+        unit: "reqps",
+      }),
+      timeseries({
+        title: "Auth Failures",
+        gridPos: { h: 8, w: 12, x: 12, y: 4 },
+        targets: [query('sum(rate(grpc_auth_failures_total{job="inference"}[5m])) by (method, reason)', "{{method}} {{reason}}")],
+        unit: "reqps",
+      }),
+      timeseries({
+        title: "Document Request Rate",
+        gridPos: { h: 8, w: 12, x: 0, y: 12 },
+        targets: [query('sum(rate(inference_document_input_chars_count{job="inference"}[5m])) by (operation, model)', "{{operation}} {{model}}")],
+        unit: "reqps",
+      }),
+      timeseries({
+        title: "Chunk Throughput",
+        gridPos: { h: 8, w: 12, x: 12, y: 12 },
+        targets: [query('sum(rate(inference_document_chunks_processed_total{job="inference"}[5m])) by (operation, model)', "{{operation}} {{model}}")],
+        unit: "ops",
+      }),
+      timeseries({
+        title: "Input Size Distribution",
+        gridPos: { h: 8, w: 12, x: 0, y: 20 },
+        targets: [
+          query('histogram_quantile(0.50, sum(rate(inference_document_input_chars_bucket{job="inference"}[5m])) by (operation, model, le))', "{{operation}} {{model}} p50", "A"),
+          query('histogram_quantile(0.95, sum(rate(inference_document_input_chars_bucket{job="inference"}[5m])) by (operation, model, le))', "{{operation}} {{model}} p95", "B"),
+        ],
+        unit: "short",
+        min: 0,
+      }),
+      timeseries({
+        title: "Chunk Count Distribution",
+        gridPos: { h: 8, w: 12, x: 12, y: 20 },
+        targets: [
+          query('histogram_quantile(0.50, sum(rate(inference_document_chunk_count_bucket{job="inference"}[5m])) by (operation, model, le))', "{{operation}} {{model}} p50", "A"),
+          query('histogram_quantile(0.95, sum(rate(inference_document_chunk_count_bucket{job="inference"}[5m])) by (operation, model, le))', "{{operation}} {{model}} p95", "B"),
+        ],
+        unit: "short",
+        min: 0,
+      }),
+      timeseries({
+        title: "In-Flight Chunk Concurrency",
+        gridPos: { h: 8, w: 12, x: 0, y: 28 },
+        targets: [query('sum(inference_document_inflight_chunks{job="inference"}) by (operation, model)', "{{operation}} {{model}}")],
+        unit: "short",
+        min: 0,
+      }),
+      timeseries({
+        title: "Cancelled and Failure Rate",
+        gridPos: { h: 8, w: 12, x: 12, y: 28 },
+        targets: [query('sum(rate(grpc_requests_total{job="inference",code=~"CANCELLED|INTERNAL|RESOURCE_EXHAUSTED|INVALID_ARGUMENT|UNKNOWN"}[5m])) by (code, method, model)', "{{code}} {{method}} {{model}}")],
+        unit: "reqps",
       }),
     ],
   });
@@ -1471,6 +1690,8 @@ async function main() {
     ["services", "06-document-parser-overview.json", buildDocumentParserOverview()],
     ["services", "07-chat-service-overview.json", buildChatServiceOverview()],
     ["services", "08-chat-worker-overview.json", buildChatWorkerOverview()],
+    ["services", "09-inference-operations-overview.json", buildInferenceOperationsOverview()],
+    ["services", "10-inference-traffic-overview.json", buildInferenceTrafficOverview()],
     ["infrastructure", "01-infrastructure-overview.json", buildInfrastructureOverview()],
     ["infrastructure", "02-host-overview.json", buildHostOverview()],
     ["infrastructure", "03-container-overview.json", buildContainerOverview()],
