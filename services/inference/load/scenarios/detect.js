@@ -6,6 +6,11 @@ import { Counter, Rate, Trend } from "k6/metrics";
 import { getRuntimeConfig, readPositiveInt, readRatio, readStages } from "../lib/config.js";
 import { pickFixture } from "../lib/fixtures.js";
 import { invokeDetect } from "../lib/grpc.js";
+import {
+  hasBoundedPredictionConfidence,
+  hasPredictionResult,
+  hasValidPredictionLabel,
+} from "../lib/prediction.js";
 
 const detectDuration = new Trend("inference_load_detect_duration", true);
 const detectFailures = new Counter("inference_load_detect_failures");
@@ -62,16 +67,9 @@ export function detectScenario() {
     response,
     {
       "grpc status ok": (value) => value && value.status === grpc.StatusOK,
-      "prediction returned": (value) => Boolean(value && value.message && value.message.model_name),
-      "prediction label valid": (value) =>
-        Boolean(value && value.message && (value.message.label === "AI" || value.message.label === "Human")),
-      "confidence bounded": (value) =>
-        Boolean(
-          value &&
-            value.message &&
-            value.message.confidence_score >= 0 &&
-            value.message.confidence_score <= 100,
-        ),
+      "prediction returned": (value) => Boolean(value && hasPredictionResult(value.message)),
+      "prediction label valid": (value) => Boolean(value && hasValidPredictionLabel(value.message)),
+      "confidence bounded": (value) => Boolean(value && hasBoundedPredictionConfidence(value.message)),
     },
     tags,
   );
