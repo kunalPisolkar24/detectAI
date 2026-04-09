@@ -106,3 +106,27 @@ async def test_health_monitor_marks_open_circuit_unhealthy():
 
     assert state == health_pb2.HealthCheckResponse.NOT_SERVING
     assert reason == "inference_circuit_open"
+
+
+@pytest.mark.asyncio
+async def test_health_monitor_publishes_health_metrics(mocker):
+    engine = MagicMock()
+    snapshot = BatcherHealthSnapshot(
+        status=BatcherHealthStatus.QUEUE_FULL,
+        queue_size=8,
+        queue_capacity=8,
+    )
+    engine.health_snapshot.return_value = snapshot
+    analysis_service = MagicMock()
+    analysis_service.health_reporters = {"spark": engine}
+    monitor = HealthMonitor(analysis_service)
+    mock_service_health = mocker.patch("src.server.health.set_service_health")
+    mock_engine_health = mocker.patch("src.server.health.set_engine_health")
+
+    await monitor._publish_state()
+
+    mock_service_health.assert_called_once_with(
+        health_pb2.HealthCheckResponse.NOT_SERVING,
+        "inference_queue_full",
+    )
+    mock_engine_health.assert_called_once_with("spark", snapshot)

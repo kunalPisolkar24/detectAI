@@ -4,16 +4,22 @@ import sys
 
 
 def configure_logger():
-    shared_processors = [
+    structlog_processors = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.filter_by_level,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
     ]
+    foreign_processors = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+    ]
 
     structlog.configure(
-        processors=shared_processors + [
+        processors=structlog_processors + [
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         context_class=dict,
@@ -24,7 +30,7 @@ def configure_logger():
 
     formatter = structlog.stdlib.ProcessorFormatter(
         processor=structlog.processors.JSONRenderer(),
-        foreign_pre_chain=shared_processors,
+        foreign_pre_chain=foreign_processors,
     )
 
     handler = logging.StreamHandler(sys.stdout)

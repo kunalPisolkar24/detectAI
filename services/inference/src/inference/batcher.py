@@ -1,6 +1,7 @@
 import asyncio
 import time
-from typing import List, Tuple
+from dataclasses import dataclass
+from typing import List
 from circuitbreaker import CircuitBreaker, CircuitBreakerError
 
 from src.core.exceptions import ServiceOverloadedError
@@ -15,6 +16,14 @@ from src.metrics import BATCH_SIZE_DISTRIBUTION, BATCH_PROCESSING_TIME, BATCH_QU
 import structlog
 
 logger = structlog.get_logger()
+_SHUTDOWN_SENTINEL = object()
+
+
+@dataclass(slots=True)
+class PendingPrediction:
+    text: str
+    future: asyncio.Future
+
 
 class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
     def __init__(
@@ -61,7 +70,7 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
 
         future = asyncio.get_running_loop().create_future()
         try:
-            self.queue.put_nowait((text, future))
+            self.queue.put_nowait(PendingPrediction(text=text, future=future))
             BATCH_QUEUE_SIZE.labels(model=self.model_name).inc()
             try:
                 return await future
@@ -97,9 +106,8 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
         worker_task = self.worker_task
         worker_error = None
         if worker_task is not None:
-            future = asyncio.get_running_loop().create_future()
             try:
-                self.queue.put_nowait((None, future))
+                self.queue.put_nowait(_SHUTDOWN_SENTINEL)
             except asyncio.QueueFull:
                 pass
             try:
@@ -109,11 +117,11 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
 
         while not self.queue.empty():
             item = self.queue.get_nowait()
-            fut = item[1]
-            if item[0] is not None:
-                BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
-            if not fut.done():
-                fut.set_exception(ServiceOverloadedError(f"{self.model_name} service is shutting down"))
+            if item is _SHUTDOWN_SENTINEL:
+                continue
+            BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
+            if not item.future.done():
+                item.future.set_exception(ServiceOverloadedError(f"{self.model_name} service is shutting down"))
 
         if worker_error is not None:
             raise worker_error
@@ -121,10 +129,10 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
     async def _worker_loop(self):
         loop = asyncio.get_running_loop()
         while not self.shutdown_flag:
-            batch = []
+            batch: list[PendingPrediction] = []
             try:
                 item = await asyncio.wait_for(self.queue.get(), timeout=0.01)
-                if item[0] is None:
+                if item is _SHUTDOWN_SENTINEL:
                     break
                 BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
                 batch.append(item)
@@ -139,7 +147,7 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
                     break
                 try:
                     item = await asyncio.wait_for(self.queue.get(), timeout=remaining)
-                    if item[0] is None:
+                    if item is _SHUTDOWN_SENTINEL:
                         break
                     BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
                     batch.append(item)
@@ -149,11 +157,11 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
             if batch:
                 await self._process_batch(batch, loop)
 
-    async def _process_batch(self, batch: List[Tuple[str | None, asyncio.Future]], loop: asyncio.AbstractEventLoop):
+    async def _process_batch(self, batch: List[PendingPrediction], loop: asyncio.AbstractEventLoop):
         BATCH_SIZE_DISTRIBUTION.labels(model=self.model_name).observe(len(batch))
         
-        texts = [item[0] for item in batch]
-        futures_list = [item[1] for item in batch]
+        texts = [item.text for item in batch]
+        futures_list = [item.future for item in batch]
 
         try:
             with BATCH_PROCESSING_TIME.labels(model=self.model_name).time():

@@ -5,7 +5,8 @@ from grpc_health.v1 import health
 from grpc_health.v1 import health_pb2
 from grpc_health.v1 import health_pb2_grpc
 
-from src.core.interfaces import BatcherHealthStatus
+from src.core.interfaces import BatcherHealthSnapshot, BatcherHealthStatus
+from src.metrics import set_engine_health, set_service_health
 
 logger = structlog.get_logger()
 
@@ -51,9 +52,14 @@ class HealthMonitor:
             raise
 
     async def _publish_state(self) -> None:
-        state, reason = self._resolve_state()
+        snapshots = self._collect_snapshots()
+        state, reason = self._resolve_state(snapshots)
         for service_name in _SERVICE_NAMES:
             await self.health_servicer.set(service_name, state)
+
+        set_service_health(state, reason)
+        for model_name, snapshot in snapshots.items():
+            set_engine_health(model_name, snapshot)
 
         if state != self._last_state or reason != self._last_reason:
             if state == health_pb2.HealthCheckResponse.NOT_SERVING:
@@ -64,12 +70,18 @@ class HealthMonitor:
         self._last_state = state
         self._last_reason = reason
 
-    def _resolve_state(self) -> tuple[int, str | None]:
+    def _collect_snapshots(self) -> dict[str, BatcherHealthSnapshot]:
+        return {
+            model_name: reporter.health_snapshot()
+            for model_name, reporter in getattr(self.analysis_service, "health_reporters", {}).items()
+        }
+
+    def _resolve_state(self, snapshots: dict[str, BatcherHealthSnapshot] | None = None) -> tuple[int, str | None]:
         if self._is_shutting_down:
             return health_pb2.HealthCheckResponse.NOT_SERVING, "shutdown_in_progress"
 
-        for reporter in getattr(self.analysis_service, "health_reporters", {}).values():
-            snapshot = reporter.health_snapshot()
+        effective_snapshots = snapshots or self._collect_snapshots()
+        for snapshot in effective_snapshots.values():
             if snapshot.status != BatcherHealthStatus.SERVING:
                 return health_pb2.HealthCheckResponse.NOT_SERVING, snapshot.failure_reason
 

@@ -16,6 +16,8 @@ Current dashboard layout:
 - `Frontend`
 - `Payment Gateway`
 - `Inference`
+- `Inference Operations`
+- `Inference Traffic and Documents`
 - `Workers`
 - `Document Parser`
 - `Chat Service`

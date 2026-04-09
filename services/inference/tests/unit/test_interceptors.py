@@ -1,3 +1,5 @@
+import asyncio
+
 import grpc
 import pytest
 
@@ -75,6 +77,23 @@ async def test_auth_interceptor_rejects_expired_token(test_settings, expired_aut
     assert grpc_context.aborts == [
         (grpc.StatusCode.UNAUTHENTICATED, "Token expired")
     ]
+
+
+@pytest.mark.asyncio
+async def test_auth_interceptor_records_auth_failure_metric(test_settings, grpc_context, mocker):
+    interceptor = AuthInterceptor()
+    mock_auth_failure = mocker.patch("src.server.interceptors.record_auth_failure")
+
+    async def continuation(details):
+        return grpc.unary_unary_rpc_method_handler(lambda request, context: None)
+
+    details = MockHandlerDetails([], "/aidetection.AIService/Detect")
+    handler = await interceptor.intercept_service(continuation, details)
+
+    with pytest.raises(Exception, match="Invalid or missing Bearer token"):
+        await handler.unary_unary(None, grpc_context)
+
+    mock_auth_failure.assert_called_once_with("Detect", "missing_or_invalid_token")
 
 
 @pytest.mark.asyncio
@@ -179,3 +198,27 @@ async def test_monitoring_interceptor_records_streaming_metrics_for_flare(mocker
         model="flare",
     )
     mock_latency.labels.return_value.observe.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_monitoring_interceptor_records_cancelled_requests(mocker):
+    interceptor = MonitoringInterceptor()
+    mock_counter = mocker.patch("src.server.interceptors.GRPC_REQUESTS_TOTAL")
+
+    async def behavior(request, context):
+        raise asyncio.CancelledError()
+
+    async def continuation(details):
+        return grpc.unary_unary_rpc_method_handler(behavior)
+
+    details = MockHandlerDetails([], "/aidetection.AIService/Detect")
+    handler = await interceptor.intercept_service(continuation, details)
+
+    with pytest.raises(asyncio.CancelledError):
+        await handler.unary_unary(MockRequest(model_id="spark"), object())
+
+    mock_counter.labels.assert_called_once_with(
+        method="Detect",
+        code="CANCELLED",
+        model="spark",
+    )
