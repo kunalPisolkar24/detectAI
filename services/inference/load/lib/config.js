@@ -45,7 +45,7 @@ function readBoolean(name, fallback) {
   throw new Error(`${name} must be true or false`);
 }
 
-function readPositiveInt(name, fallback) {
+export function readPositiveInt(name, fallback) {
   const raw = (__ENV[name] || "").trim();
   if (!raw) {
     return fallback;
@@ -57,6 +57,41 @@ function readPositiveInt(name, fallback) {
   }
 
   return value;
+}
+
+export function readRatio(name, fallback) {
+  const raw = (__ENV[name] || "").trim();
+  if (!raw) {
+    return fallback;
+  }
+
+  const value = Number.parseFloat(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new Error(`${name} must be between 0 and 1`);
+  }
+
+  return value;
+}
+
+export function readStages(name, fallback) {
+  const raw = (__ENV[name] || fallback).trim();
+  if (!raw) {
+    throw new Error(`${name} must include at least one stage`);
+  }
+
+  return raw.split(",").map((entry) => {
+    const [duration, targetValue] = entry.split(":").map((value) => value.trim());
+    const target = Number.parseInt(targetValue, 10);
+
+    if (!duration || !Number.isInteger(target) || target < 0) {
+      throw new Error(`${name} must use duration:target entries`);
+    }
+
+    return {
+      duration,
+      target,
+    };
+  });
 }
 
 let cachedRuntimeConfig;

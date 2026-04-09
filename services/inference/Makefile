@@ -1,8 +1,9 @@
 .PHONY: install install-prod proto run docker-build docker-build-local test \
-	load-smoke-local load-smoke-prod
+	load-smoke-local load-smoke-prod load-detect-local load-detect-prod
 
 LOCAL_LOAD_ENV=../../infra/docker/local/.env
 PROD_LOAD_ENV=../../infra/docker/prod/.env
+LOAD_ARGS ?=
 
 install:
 	pip install -r requirements.local.txt
@@ -29,7 +30,13 @@ test:
 	python -m pytest tests/ -v --cov=src --cov-report=term-missing
 
 load-smoke-local:
-	python3 load/scripts/run_k6.py --env-file $(LOCAL_LOAD_ENV) --script services/inference/load/scenarios/smoke.js
+	python3 load/scripts/run_k6.py --env-file $(LOCAL_LOAD_ENV) --script services/inference/load/scenarios/smoke.js -- $(LOAD_ARGS)
 
 load-smoke-prod:
-	python3 load/scripts/run_k6.py --env-file $(PROD_LOAD_ENV) --script services/inference/load/scenarios/smoke.js
+	python3 load/scripts/run_k6.py --env-file $(PROD_LOAD_ENV) --script services/inference/load/scenarios/smoke.js -- $(LOAD_ARGS)
+
+load-detect-local:
+	python3 load/scripts/run_k6.py --env-file $(LOCAL_LOAD_ENV) --script services/inference/load/scenarios/detect.js -- $(LOAD_ARGS)
+
+load-detect-prod:
+	python3 load/scripts/run_k6.py --env-file $(PROD_LOAD_ENV) --script services/inference/load/scenarios/detect.js -- $(LOAD_ARGS)
