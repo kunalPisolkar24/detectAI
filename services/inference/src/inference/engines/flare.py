@@ -1,5 +1,5 @@
 import numpy as np
-from src.core.interfaces import ISyncBatchInferenceEngine
+from src.application.ports.outbound.inference import ISyncBatchInferenceEngine
 from src.inference.engines.base import BaseEngine
 from src.domain.exceptions import InferenceError
 

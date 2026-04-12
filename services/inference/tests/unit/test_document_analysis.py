@@ -4,11 +4,11 @@ import pytest
 from pytest import approx
 
 from src.domain.exceptions import InvalidInputError
-from src.inference.aggregation import ResultAggregator
-from src.inference.chunking import ChunkPlanner, RegexTokenChunker
-from src.inference.document_analysis import ConcurrencyDispatcher, DocumentAnalysisService
+from src.application.services.aggregation import ResultAggregator
+from src.application.services.chunking import ChunkPlanner, RegexTokenChunker
+from src.application.services.document_analysis import ConcurrencyDispatcher, DocumentAnalysisService
 from src.domain.models import DocumentChunk, DocumentProgress, DocumentScore, DocumentStarted
-from src.inference.validation import InputValidator
+from src.application.services.validation import InputValidator
 
 
 class SequencedAsyncEngine:
@@ -108,10 +108,10 @@ async def test_document_analysis_streams_progress_and_final():
 @pytest.mark.asyncio
 async def test_document_analysis_records_metrics_for_analyze(mocker):
     engine = SequencedAsyncEngine([0.2, 0.9])
-    mock_plan = mocker.patch("src.inference.document_analysis.observe_document_plan")
-    mock_processed = mocker.patch("src.inference.document_analysis.record_document_chunk_processed")
-    mock_chunk_started = mocker.patch("src.inference.document_analysis.track_document_chunk_started")
-    mock_chunk_finished = mocker.patch("src.inference.document_analysis.track_document_chunk_finished")
+    mock_plan = mocker.patch("src.application.services.document_analysis.observe_document_plan")
+    mock_processed = mocker.patch("src.application.services.document_analysis.record_document_chunk_processed")
+    mock_chunk_started = mocker.patch("src.application.services.document_analysis.track_document_chunk_started")
+    mock_chunk_finished = mocker.patch("src.application.services.document_analysis.track_document_chunk_finished")
     service = DocumentAnalysisService(
         engines={"spark": engine},
         planners={"spark": ChunkPlanner(RegexTokenChunker(), chunk_size=4, stride=4, max_global_tokens=100)},
@@ -132,10 +132,10 @@ async def test_document_analysis_records_metrics_for_analyze(mocker):
 @pytest.mark.asyncio
 async def test_document_analysis_records_metrics_for_stream(mocker):
     engine = SequencedAsyncEngine([0.2, 0.9])
-    mock_plan = mocker.patch("src.inference.document_analysis.observe_document_plan")
-    mock_processed = mocker.patch("src.inference.document_analysis.record_document_chunk_processed")
-    mock_chunk_started = mocker.patch("src.inference.document_analysis.track_document_chunk_started")
-    mock_chunk_finished = mocker.patch("src.inference.document_analysis.track_document_chunk_finished")
+    mock_plan = mocker.patch("src.application.services.document_analysis.observe_document_plan")
+    mock_processed = mocker.patch("src.application.services.document_analysis.record_document_chunk_processed")
+    mock_chunk_started = mocker.patch("src.application.services.document_analysis.track_document_chunk_started")
+    mock_chunk_finished = mocker.patch("src.application.services.document_analysis.track_document_chunk_finished")
     service = DocumentAnalysisService(
         engines={"spark": engine},
         planners={"spark": ChunkPlanner(RegexTokenChunker(), chunk_size=4, stride=4, max_global_tokens=100)},

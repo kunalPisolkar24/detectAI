@@ -9,7 +9,7 @@ from src.domain.models import (
     BatcherHealthSnapshot,
     BatcherHealthStatus,
 )
-from src.core.interfaces import (
+from src.application.ports.outbound.inference import (
     IAsyncInferenceEngine,
     IEngineHealthReporter,
     ISyncBatchInferenceEngine,

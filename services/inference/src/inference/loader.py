@@ -4,7 +4,7 @@ import onnxruntime as ort
 import structlog
 from transformers import BertTokenizerFast
 from huggingface_hub import snapshot_download, hf_hub_download
-from src.core.interfaces import IModelLoader
+from src.application.ports.outbound.inference import IModelLoader
 from src.domain.exceptions import ModelLoadError
 from src.core.inference_providers import parse_inference_providers
 

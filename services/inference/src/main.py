@@ -1,10 +1,10 @@
 import asyncio
 from prometheus_client import start_http_server
 from src.config import settings
-from src.inference.aggregation import ResultAggregator
-from src.inference.chunking import build_chunk_planner
-from src.inference.document_analysis import DocumentAnalysisService
-from src.inference.validation import InputValidator
+from src.application.services.aggregation import ResultAggregator
+from src.application.services.chunking import build_chunk_planner
+from src.application.services.document_analysis import DocumentAnalysisService
+from src.application.services.validation import InputValidator
 from src.log_setup import configure_logger
 from src.inference.loader import HuggingFaceLoader
 from src.inference.engines.spark import SparkEngine

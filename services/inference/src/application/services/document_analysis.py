@@ -4,11 +4,11 @@ import asyncio
 import inspect
 from typing import AsyncGenerator, Callable, List, Optional, Tuple
 
-from src.core.interfaces import IAsyncInferenceEngine, IEngineHealthReporter
-from src.inference.aggregation import ResultAggregator
-from src.inference.chunking import ChunkPlanner
+from src.application.ports.outbound.inference import IAsyncInferenceEngine, IEngineHealthReporter
+from src.application.services.aggregation import ResultAggregator
+from src.application.services.chunking import ChunkPlanner
 from src.domain.models import DocumentChunk, DocumentProgress, DocumentScore, DocumentStarted
-from src.inference.validation import InputValidator
+from src.application.services.validation import InputValidator
 from src.metrics import (
     observe_document_plan,
     record_document_chunk_processed,

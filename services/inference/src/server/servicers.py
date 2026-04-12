@@ -3,7 +3,7 @@ import asyncio
 from src.generated import ai_service_pb2
 from src.generated import ai_service_pb2_grpc
 from src.domain.exceptions import InvalidInputError, ServiceOverloadedError
-from src.inference.document_analysis import DocumentAnalysisService
+from src.application.services.document_analysis import DocumentAnalysisService
 from src.metrics import AI_CONFIDENCE_SCORE
 from src.server.streaming_presenter import StreamingPresenter
 import structlog
