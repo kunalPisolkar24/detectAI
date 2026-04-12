@@ -1,7 +1,7 @@
 import json
 import logging
 
-from src.log_setup import configure_logger
+from src.infrastructure.log_setup import configure_logger
 
 
 def test_configure_logger_formats_foreign_records():

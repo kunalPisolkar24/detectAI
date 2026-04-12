@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from src.config import Settings
+from src.infrastructure.config import Settings
 
 
 def test_settings_accepts_comma_separated_inference_providers():

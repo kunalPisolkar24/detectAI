@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 import jwt
 import pytest
 
-import src.config as config_module
+import src.infrastructure.config as config_module
 import src.adapters.inbound.grpc.grpc_server as grpc_server_module
 import src.adapters.inbound.grpc.interceptors as interceptors_module
-from src.config import Settings
+from src.infrastructure.config import Settings
 from src.domain.models import DocumentScore
 
 

@@ -6,7 +6,7 @@ from transformers import BertTokenizerFast
 from huggingface_hub import snapshot_download, hf_hub_download
 from src.application.ports.outbound.inference import IModelLoader
 from src.domain.exceptions import ModelLoadError
-from src.core.inference_providers import parse_inference_providers
+from src.infrastructure.config import parse_inference_providers
 
 logger = structlog.get_logger()
 

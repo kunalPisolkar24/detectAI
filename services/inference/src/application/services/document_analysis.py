@@ -9,7 +9,7 @@ from src.application.services.aggregation import ResultAggregator
 from src.application.services.chunking import ChunkPlanner
 from src.domain.models import DocumentChunk, DocumentProgress, DocumentScore, DocumentStarted
 from src.application.services.validation import InputValidator
-from src.metrics import (
+from src.infrastructure.metrics import (
     observe_document_plan,
     record_document_chunk_processed,
     track_document_chunk_finished,

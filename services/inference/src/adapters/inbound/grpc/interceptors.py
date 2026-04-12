@@ -6,8 +6,8 @@ import grpc
 import jwt
 from grpc import aio
 import structlog
-from src.config import settings
-from src.metrics import GRPC_LATENCY_SECONDS, GRPC_REQUESTS_TOTAL, record_auth_failure
+from src.infrastructure.config import settings
+from src.infrastructure.metrics import GRPC_LATENCY_SECONDS, GRPC_REQUESTS_TOTAL, record_auth_failure
 
 logger = structlog.get_logger()
 
