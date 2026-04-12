@@ -132,17 +132,18 @@ services:
       CHUNK_TOKEN_LIMIT: ${INFERENCE_CHUNK_TOKEN_LIMIT}
       CHUNK_TOKEN_STRIDE: ${INFERENCE_CHUNK_TOKEN_STRIDE}
       INFERENCE_PROVIDERS: ${INFERENCE_PROVIDERS}
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
     ports:
       - "${PORT_INFERENCE}:50051"
       - "${PORT_INFERENCE_METRICS}:8333"
     volumes:
       - inference_model_cache:/app/models
     healthcheck:
-      test: ["CMD", "/bin/grpc_health_probe", "-addr=:50051"]
+      test: ["CMD", "/bin/grpc_health_probe", "-addr=127.0.0.1:50051", "-connect-timeout=5s", "-rpc-timeout=5s"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 20s
+      start_period: 10m
 
   payment-gateway:
     build:
