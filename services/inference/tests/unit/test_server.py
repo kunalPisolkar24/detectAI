@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from grpc_health.v1 import health_pb2
 
-from src.core.interfaces import BatcherHealthSnapshot, BatcherHealthStatus
+from src.domain.models import BatcherHealthSnapshot, BatcherHealthStatus
 from src.server.grpc_server import GRPCServer
 from src.server.health import HealthMonitor, add_health_check
 

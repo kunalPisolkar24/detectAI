@@ -4,10 +4,12 @@ from dataclasses import dataclass
 from typing import List
 from circuitbreaker import CircuitBreaker, CircuitBreakerError
 
-from src.core.exceptions import ServiceOverloadedError
-from src.core.interfaces import (
+from src.domain.exceptions import ServiceOverloadedError
+from src.domain.models import (
     BatcherHealthSnapshot,
     BatcherHealthStatus,
+)
+from src.core.interfaces import (
     IAsyncInferenceEngine,
     IEngineHealthReporter,
     ISyncBatchInferenceEngine,

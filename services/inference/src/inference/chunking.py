@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Protocol
 
-from src.inference.document_types import DocumentChunk
+from src.domain.models import DocumentChunk
 
 
 class TokenChunker(Protocol):
@@ -17,7 +17,7 @@ class RegexTokenChunker:
     def chunk(self, text: str, chunk_size: int, stride: int, max_global_tokens: int) -> list[DocumentChunk]:
         matches = list(self._pattern.finditer(text))
         if len(matches) > max_global_tokens:
-            from src.core.exceptions import InvalidInputError
+            from src.domain.exceptions import InvalidInputError
             raise InvalidInputError(f"Request exceeds hard limit of {max_global_tokens} tokens.")
         if not matches:
             return []
@@ -65,7 +65,7 @@ class BertTokenChunker:
         )
         offsets = encoding.get("offset_mapping", [])
         if len(offsets) > max_global_tokens:
-            from src.core.exceptions import InvalidInputError
+            from src.domain.exceptions import InvalidInputError
             raise InvalidInputError(f"Request exceeds hard limit of {max_global_tokens} tokens.")
         if not offsets:
             return []

@@ -1,7 +1,7 @@
 import numpy as np
 from src.core.interfaces import ISyncBatchInferenceEngine
 from src.inference.engines.base import BaseEngine
-from src.core.exceptions import InferenceError
+from src.domain.exceptions import InferenceError
 
 class FlareEngine(ISyncBatchInferenceEngine, BaseEngine):
     def __init__(self, resources):

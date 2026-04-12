@@ -4,9 +4,9 @@ import grpc
 import pytest
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 
-from src.core.interfaces import BatcherHealthSnapshot, BatcherHealthStatus
+from src.domain.models import BatcherHealthSnapshot, BatcherHealthStatus
 from src.generated import ai_service_pb2, ai_service_pb2_grpc
-from src.inference.document_types import DocumentProgress, DocumentScore, DocumentStarted
+from src.domain.models import DocumentProgress, DocumentScore, DocumentStarted
 from src.server.grpc_server import GRPCServer
 
 

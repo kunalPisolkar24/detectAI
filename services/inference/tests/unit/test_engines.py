@@ -4,7 +4,7 @@ import numpy as np
 from unittest.mock import MagicMock
 from src.inference.engines.spark import SparkEngine
 from src.inference.engines.flare import FlareEngine
-from src.core.exceptions import InferenceError
+from src.domain.exceptions import InferenceError
 
 class MockTokenizer:
     def __init__(self, return_tensors="np"):

@@ -7,7 +7,7 @@ from typing import AsyncGenerator, Callable, List, Optional, Tuple
 from src.core.interfaces import IAsyncInferenceEngine, IEngineHealthReporter
 from src.inference.aggregation import ResultAggregator
 from src.inference.chunking import ChunkPlanner
-from src.inference.document_types import DocumentChunk, DocumentProgress, DocumentScore, DocumentStarted
+from src.domain.models import DocumentChunk, DocumentProgress, DocumentScore, DocumentStarted
 from src.inference.validation import InputValidator
 from src.metrics import (
     observe_document_plan,

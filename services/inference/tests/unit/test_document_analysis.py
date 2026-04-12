@@ -3,11 +3,11 @@ import asyncio
 import pytest
 from pytest import approx
 
-from src.core.exceptions import InvalidInputError
+from src.domain.exceptions import InvalidInputError
 from src.inference.aggregation import ResultAggregator
 from src.inference.chunking import ChunkPlanner, RegexTokenChunker
 from src.inference.document_analysis import ConcurrencyDispatcher, DocumentAnalysisService
-from src.inference.document_types import DocumentChunk, DocumentProgress, DocumentScore, DocumentStarted
+from src.domain.models import DocumentChunk, DocumentProgress, DocumentScore, DocumentStarted
 from src.inference.validation import InputValidator
 
 

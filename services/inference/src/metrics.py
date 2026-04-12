@@ -1,7 +1,7 @@
 from grpc_health.v1 import health_pb2
 from prometheus_client import Counter, Gauge, Histogram
 
-from src.core.interfaces import BatcherHealthSnapshot, BatcherHealthStatus
+from src.domain.models import BatcherHealthSnapshot, BatcherHealthStatus
 
 GRPC_REQUESTS_TOTAL = Counter(
     'grpc_requests_total',

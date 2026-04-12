@@ -8,7 +8,7 @@ import src.config as config_module
 import src.server.grpc_server as grpc_server_module
 import src.server.interceptors as interceptors_module
 from src.config import Settings
-from src.inference.document_types import DocumentScore
+from src.domain.models import DocumentScore
 
 
 class AbortError(Exception):

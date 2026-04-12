@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from src.inference.loader import HuggingFaceLoader
-from src.core.exceptions import ModelLoadError
+from src.domain.exceptions import ModelLoadError
 
 @pytest.fixture
 def mock_loader_env(tmp_path):
