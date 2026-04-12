@@ -6,6 +6,7 @@ import { getChatGrpcClient } from "@/lib/grpc/chat-client"
 import { inferenceService } from "./inference-service"
 import { mapGrpcMessageToDomain, mapDomainAnalysisToGrpc } from "../utils/mappers"
 import { buildAnalysisMessageMetadata } from "../utils/analysis-message-metadata"
+import { orderMessagesForDisplay } from "../utils/order-messages-for-display"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 
@@ -77,7 +78,7 @@ export class GrpcChatService implements IChatService {
     return {
       id: meta.id,
       title: meta.title,
-      messages: messages.reverse(),
+      messages: orderMessagesForDisplay(messages),
       updatedAt: new Date(parseInt(meta.updated_at) * 1000)
     }
   }
