@@ -9,12 +9,7 @@ from src.application.services.aggregation import ResultAggregator
 from src.application.services.chunking import ChunkPlanner
 from src.domain.models import DocumentChunk, DocumentProgress, DocumentScore, DocumentStarted
 from src.application.services.validation import InputValidator
-from src.infrastructure.metrics import (
-    observe_document_plan,
-    record_document_chunk_processed,
-    track_document_chunk_finished,
-    track_document_chunk_started,
-)
+from src.application.ports.outbound.telemetry import ITelemetryReporter
 
 
 class TextPreparationPipeline:
@@ -44,6 +39,7 @@ class ConcurrencyDispatcher:
         request_is_active: Optional[Callable[[], bool]] = None,
         operation: str = "analyze",
         model_key: str = "unknown",
+        telemetry: ITelemetryReporter = None,
     ) -> AsyncGenerator[Tuple[int, float], None]:
         
         pending_futures = {}
@@ -53,7 +49,7 @@ class ConcurrencyDispatcher:
             if request_is_active and not request_is_active():
                 raise asyncio.CancelledError("Client disconnected")
             future = asyncio.create_task(
-                self._predict_chunk(engine, chunks[pending_index].text, operation, model_key)
+                self._predict_chunk(engine, chunks[pending_index].text, operation, model_key, telemetry)
             )
             pending_futures[future] = pending_index
             pending_index += 1
@@ -87,7 +83,7 @@ class ConcurrencyDispatcher:
                         await self._cancel_and_await(pending_futures.keys())
                         raise asyncio.CancelledError("Client disconnected")
                     next_future = asyncio.create_task(
-                        self._predict_chunk(engine, chunks[pending_index].text, operation, model_key)
+                        self._predict_chunk(engine, chunks[pending_index].text, operation, model_key, telemetry)
                     )
                     pending_futures[next_future] = pending_index
                     pending_index += 1
@@ -103,12 +99,12 @@ class ConcurrencyDispatcher:
         if task_list:
             await asyncio.gather(*task_list, return_exceptions=True)
 
-    async def _predict_chunk(self, engine: IAsyncInferenceEngine, text: str, operation: str, model_key: str) -> float:
-        track_document_chunk_started(operation, model_key)
+    async def _predict_chunk(self, engine: IAsyncInferenceEngine, text: str, operation: str, model_key: str, telemetry: ITelemetryReporter) -> float:
+        telemetry.track_document_chunk_started(operation, model_key)
         try:
             return float(await engine.predict(text))
         finally:
-            track_document_chunk_finished(operation, model_key)
+            telemetry.track_document_chunk_finished(operation, model_key)
 
 
 class DocumentAnalysisService:
@@ -119,6 +115,7 @@ class DocumentAnalysisService:
         validator: InputValidator,
         aggregator: ResultAggregator,
         max_inflight_chunks: int,
+        telemetry: ITelemetryReporter,
         health_reporters: dict[str, IEngineHealthReporter] | None = None,
     ):
         for model_key, engine in engines.items():
@@ -129,6 +126,7 @@ class DocumentAnalysisService:
         self.prep_pipeline = TextPreparationPipeline(validator, planners)
         self.dispatcher = ConcurrencyDispatcher(max_inflight_chunks)
         self.aggregator = aggregator
+        self.telemetry = telemetry
 
     async def analyze(
         self,
@@ -139,7 +137,7 @@ class DocumentAnalysisService:
         operation = "analyze"
         validated_text, chunks = self.prep_pipeline.prepare(text, model_key)
         engine = self._get_engine(model_key)
-        observe_document_plan(operation, model_key, len(validated_text), len(chunks))
+        self.telemetry.observe_document_plan(operation, model_key, len(validated_text), len(chunks))
         
         probabilities = [0.0] * len(chunks)
         async for chunk_index, prob in self.dispatcher.execute_progressively(
@@ -148,9 +146,10 @@ class DocumentAnalysisService:
             request_is_active,
             operation=operation,
             model_key=model_key,
+            telemetry=self.telemetry,
         ):
             probabilities[chunk_index] = prob
-            record_document_chunk_processed(operation, model_key)
+            self.telemetry.record_document_chunk_processed(operation, model_key)
             
         return self.aggregator.aggregate(chunks, probabilities, len(validated_text))
 
@@ -163,7 +162,7 @@ class DocumentAnalysisService:
         operation = "stream"
         validated_text, chunks = self.prep_pipeline.prepare(text, model_key)
         engine = self._get_engine(model_key)
-        observe_document_plan(operation, model_key, len(validated_text), len(chunks))
+        self.telemetry.observe_document_plan(operation, model_key, len(validated_text), len(chunks))
         probabilities: list[float] = [0.0] * len(chunks)
         processed_chunks = 0
 
@@ -175,9 +174,10 @@ class DocumentAnalysisService:
             request_is_active,
             operation=operation,
             model_key=model_key,
+            telemetry=self.telemetry,
         ):
             probabilities[chunk_index] = prob
-            record_document_chunk_processed(operation, model_key)
+            self.telemetry.record_document_chunk_processed(operation, model_key)
             processed_chunks += 1
             yield DocumentProgress(processed_chunks=processed_chunks, total_chunks=len(chunks))
 

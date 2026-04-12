@@ -1,3 +1,4 @@
+from unittest.mock import MagicMock
 import asyncio
 
 import pytest
@@ -91,6 +92,7 @@ async def test_document_analysis_streams_progress_and_final():
         validator=InputValidator(1000),
         aggregator=ResultAggregator(4),
         max_inflight_chunks=1,
+        telemetry=MagicMock(),
     )
 
     events = await collect_events(service.stream("one two three four five six", "spark"))
@@ -108,48 +110,44 @@ async def test_document_analysis_streams_progress_and_final():
 @pytest.mark.asyncio
 async def test_document_analysis_records_metrics_for_analyze(mocker):
     engine = SequencedAsyncEngine([0.2, 0.9])
-    mock_plan = mocker.patch("src.application.services.document_analysis.observe_document_plan")
-    mock_processed = mocker.patch("src.application.services.document_analysis.record_document_chunk_processed")
-    mock_chunk_started = mocker.patch("src.application.services.document_analysis.track_document_chunk_started")
-    mock_chunk_finished = mocker.patch("src.application.services.document_analysis.track_document_chunk_finished")
+    mock_telemetry = MagicMock()
     service = DocumentAnalysisService(
         engines={"spark": engine},
         planners={"spark": ChunkPlanner(RegexTokenChunker(), chunk_size=4, stride=4, max_global_tokens=100)},
         validator=InputValidator(1000),
         aggregator=ResultAggregator(4),
         max_inflight_chunks=1,
+        telemetry=mock_telemetry,
     )
 
     result = await service.analyze("one two three four five six", "spark")
 
     assert result.ai_probability == approx((4 * 0.2 + 2 * 0.9) / 6)
-    mock_plan.assert_called_once_with("analyze", "spark", 27, 2)
-    assert mock_processed.call_count == 2
-    assert mock_chunk_started.call_count == 2
-    assert mock_chunk_finished.call_count == 2
+    mock_telemetry.observe_document_plan.assert_called_once_with("analyze", "spark", 27, 2)
+    assert mock_telemetry.record_document_chunk_processed.call_count == 2
+    assert mock_telemetry.track_document_chunk_started.call_count == 2
+    assert mock_telemetry.track_document_chunk_finished.call_count == 2
 
 
 @pytest.mark.asyncio
 async def test_document_analysis_records_metrics_for_stream(mocker):
     engine = SequencedAsyncEngine([0.2, 0.9])
-    mock_plan = mocker.patch("src.application.services.document_analysis.observe_document_plan")
-    mock_processed = mocker.patch("src.application.services.document_analysis.record_document_chunk_processed")
-    mock_chunk_started = mocker.patch("src.application.services.document_analysis.track_document_chunk_started")
-    mock_chunk_finished = mocker.patch("src.application.services.document_analysis.track_document_chunk_finished")
+    mock_telemetry = MagicMock()
     service = DocumentAnalysisService(
         engines={"spark": engine},
         planners={"spark": ChunkPlanner(RegexTokenChunker(), chunk_size=4, stride=4, max_global_tokens=100)},
         validator=InputValidator(1000),
         aggregator=ResultAggregator(4),
         max_inflight_chunks=1,
+        telemetry=mock_telemetry,
     )
 
     await collect_events(service.stream("one two three four five six", "spark"))
 
-    mock_plan.assert_called_once_with("stream", "spark", 27, 2)
-    assert mock_processed.call_count == 2
-    assert mock_chunk_started.call_count == 2
-    assert mock_chunk_finished.call_count == 2
+    mock_telemetry.observe_document_plan.assert_called_once_with("stream", "spark", 27, 2)
+    assert mock_telemetry.record_document_chunk_processed.call_count == 2
+    assert mock_telemetry.track_document_chunk_started.call_count == 2
+    assert mock_telemetry.track_document_chunk_finished.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -175,6 +173,7 @@ async def test_dispatcher_cancels_inflight_tasks_when_request_is_inactive():
             engine,
             chunks,
             request_is_active=lambda: request_active,
+            telemetry=MagicMock(),
         ):
             pass
 
@@ -195,6 +194,7 @@ async def test_dispatcher_cancels_sibling_tasks_when_one_chunk_fails():
             engine,
             chunks,
             request_is_active=lambda: True,
+            telemetry=MagicMock(),
         ):
             pass
 
@@ -213,4 +213,5 @@ def test_document_analysis_rejects_sync_engine():
             validator=InputValidator(1000),
             aggregator=ResultAggregator(4),
             max_inflight_chunks=1,
+            telemetry=MagicMock(),
         )

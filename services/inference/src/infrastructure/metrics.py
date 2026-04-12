@@ -114,6 +114,24 @@ _SERVICE_HEALTH_REASONS = (
 )
 
 
+from src.application.ports.outbound.telemetry import ITelemetryReporter
+
+
+class PrometheusTelemetryReporter(ITelemetryReporter):
+    def observe_document_plan(self, operation: str, model_name: str, input_chars: int, chunk_count: int) -> None:
+        INFERENCE_DOCUMENT_INPUT_CHARS.labels(operation=operation, model=model_name).observe(input_chars)
+        INFERENCE_DOCUMENT_CHUNK_COUNT.labels(operation=operation, model=model_name).observe(chunk_count)
+
+    def track_document_chunk_started(self, operation: str, model_name: str) -> None:
+        INFERENCE_DOCUMENT_INFLIGHT_CHUNKS.labels(operation=operation, model=model_name).inc()
+
+    def track_document_chunk_finished(self, operation: str, model_name: str) -> None:
+        INFERENCE_DOCUMENT_INFLIGHT_CHUNKS.labels(operation=operation, model=model_name).dec()
+
+    def record_document_chunk_processed(self, operation: str, model_name: str) -> None:
+        INFERENCE_DOCUMENT_CHUNKS_PROCESSED_TOTAL.labels(operation=operation, model=model_name).inc()
+
+
 def record_auth_failure(method_name: str, reason: str) -> None:
     GRPC_AUTH_FAILURES_TOTAL.labels(method=method_name, reason=reason).inc()
 

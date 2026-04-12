@@ -11,6 +11,7 @@ from src.adapters.outbound.inference.engines.spark import SparkEngine
 from src.adapters.outbound.inference.engines.flare import FlareEngine
 from src.adapters.outbound.inference.batcher import BatchingProxy
 from src.adapters.inbound.grpc.grpc_server import GRPCServer
+from src.infrastructure.metrics import PrometheusTelemetryReporter
 import structlog
 
 configure_logger()
@@ -68,6 +69,7 @@ async def main():
             validator=InputValidator(settings.MAX_TEXT_CHARS),
             aggregator=ResultAggregator(settings.CHUNK_TOKEN_STRIDE),
             max_inflight_chunks=settings.MAX_INFLIGHT_DOC_CHUNKS,
+            telemetry=PrometheusTelemetryReporter(),
         )
         
         server = GRPCServer(analysis_service)
