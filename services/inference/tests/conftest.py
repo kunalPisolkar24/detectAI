@@ -1,8 +1,11 @@
+import os
 import time
 from unittest.mock import AsyncMock, MagicMock
 
 import jwt
 import pytest
+
+os.environ.setdefault("API_KEY", "test-secret-key")
 
 import src.infrastructure.config as config_module
 import src.adapters.inbound.grpc.grpc_server as grpc_server_module
