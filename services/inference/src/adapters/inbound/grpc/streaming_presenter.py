@@ -1,5 +1,5 @@
 from src.generated import ai_service_pb2
-from src.inference.document_types import DocumentProgress, DocumentScore, DocumentStarted
+from src.domain.models import DocumentProgress, DocumentScore, DocumentStarted
 
 
 class StreamingPresenter:

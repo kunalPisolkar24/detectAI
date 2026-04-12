@@ -1,7 +1,7 @@
 from grpc_health.v1 import health_pb2
 from prometheus_client import Counter, Gauge, Histogram
 
-from src.core.interfaces import BatcherHealthSnapshot, BatcherHealthStatus
+from src.domain.models import BatcherHealthSnapshot, BatcherHealthStatus
 
 GRPC_REQUESTS_TOTAL = Counter(
     'grpc_requests_total',
@@ -112,6 +112,24 @@ _SERVICE_HEALTH_REASONS = (
     'inference_circuit_open',
     'inference_queue_full',
 )
+
+
+from src.application.ports.outbound.telemetry import ITelemetryReporter
+
+
+class PrometheusTelemetryReporter(ITelemetryReporter):
+    def observe_document_plan(self, operation: str, model_name: str, input_chars: int, chunk_count: int) -> None:
+        INFERENCE_DOCUMENT_INPUT_CHARS.labels(operation=operation, model=model_name).observe(input_chars)
+        INFERENCE_DOCUMENT_CHUNK_COUNT.labels(operation=operation, model=model_name).observe(chunk_count)
+
+    def track_document_chunk_started(self, operation: str, model_name: str) -> None:
+        INFERENCE_DOCUMENT_INFLIGHT_CHUNKS.labels(operation=operation, model=model_name).inc()
+
+    def track_document_chunk_finished(self, operation: str, model_name: str) -> None:
+        INFERENCE_DOCUMENT_INFLIGHT_CHUNKS.labels(operation=operation, model=model_name).dec()
+
+    def record_document_chunk_processed(self, operation: str, model_name: str) -> None:
+        INFERENCE_DOCUMENT_CHUNKS_PROCESSED_TOTAL.labels(operation=operation, model=model_name).inc()
 
 
 def record_auth_failure(method_name: str, reason: str) -> None:

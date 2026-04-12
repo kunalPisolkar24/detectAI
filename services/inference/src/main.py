@@ -1,16 +1,17 @@
 import asyncio
 from prometheus_client import start_http_server
-from src.config import settings
-from src.inference.aggregation import ResultAggregator
-from src.inference.chunking import build_chunk_planner
-from src.inference.document_analysis import DocumentAnalysisService
-from src.inference.validation import InputValidator
-from src.log_setup import configure_logger
-from src.inference.loader import HuggingFaceLoader
-from src.inference.engines.spark import SparkEngine
-from src.inference.engines.flare import FlareEngine
-from src.inference.batcher import BatchingProxy
-from src.server.grpc_server import GRPCServer
+from src.infrastructure.config import settings
+from src.application.services.aggregation import ResultAggregator
+from src.application.services.chunking import build_chunk_planner
+from src.application.services.document_analysis import DocumentAnalysisService
+from src.application.services.validation import InputValidator
+from src.infrastructure.log_setup import configure_logger
+from src.adapters.outbound.inference.loader import HuggingFaceLoader
+from src.adapters.outbound.inference.engines.spark import SparkEngine
+from src.adapters.outbound.inference.engines.flare import FlareEngine
+from src.adapters.outbound.inference.batcher import BatchingProxy
+from src.adapters.inbound.grpc.grpc_server import GRPCServer
+from src.infrastructure.metrics import PrometheusTelemetryReporter
 import structlog
 
 configure_logger()
@@ -68,6 +69,7 @@ async def main():
             validator=InputValidator(settings.MAX_TEXT_CHARS),
             aggregator=ResultAggregator(settings.CHUNK_TOKEN_STRIDE),
             max_inflight_chunks=settings.MAX_INFLIGHT_DOC_CHUNKS,
+            telemetry=PrometheusTelemetryReporter(),
         )
         
         server = GRPCServer(analysis_service)

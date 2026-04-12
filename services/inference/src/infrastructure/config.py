@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from typing import Annotated, Any
@@ -5,10 +6,44 @@ from typing import Annotated, Any
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-from src.core.inference_providers import parse_inference_providers
-
 InferenceProviders = Annotated[list[str], NoDecode]
 _GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+
+
+def parse_inference_providers(value: Any) -> list[str]:
+    if isinstance(value, str):
+        normalized_value = value.strip()
+        if not normalized_value:
+            raise ValueError("INFERENCE_PROVIDERS must contain at least one provider")
+        if normalized_value.startswith("["):
+            try:
+                value = json.loads(normalized_value)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "INFERENCE_PROVIDERS must be a valid JSON array or a comma-separated string"
+                ) from exc
+        else:
+            value = normalized_value.split(",")
+
+    if isinstance(value, tuple):
+        value = list(value)
+
+    if not isinstance(value, list):
+        raise TypeError("INFERENCE_PROVIDERS must be a list of strings")
+
+    providers: list[str] = []
+    for provider in value:
+        if not isinstance(provider, str):
+            raise TypeError("INFERENCE_PROVIDERS must contain only strings")
+        normalized_provider = provider.strip()
+        if normalized_provider:
+            providers.append(normalized_provider)
+
+    if not providers:
+        raise ValueError("INFERENCE_PROVIDERS must contain at least one provider")
+
+    return providers
+
 
 class Settings(BaseSettings):
     ENV: str = "production"
@@ -19,7 +54,7 @@ class Settings(BaseSettings):
     MODEL_CACHE_DIR: str = "./models"
     SPARK_MODEL_REVISION: str = "9a48004391c71272d6fb1d164ed7c56e1fbfe360"
     FLARE_MODEL_REVISION: str = "e1911c0be59f4e10f0d120f639d1358e46bc2086"
-    
+
     BATCH_SIZE: int = Field(default=32, gt=0)
     BATCH_TIMEOUT: float = Field(default=0.05, gt=0)
     BATCH_QUEUE_MAX_SIZE: int = Field(default=1024, gt=0)
@@ -31,7 +66,7 @@ class Settings(BaseSettings):
     INFERENCE_PROVIDERS: InferenceProviders = Field(
         default_factory=lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"]
     )
-    
+
     model_config = SettingsConfigDict(env_file=os.getenv("ENV_FILE") or None)
 
     @field_validator("INFERENCE_PROVIDERS", mode="before")
@@ -51,5 +86,6 @@ class Settings(BaseSettings):
         if self.CHUNK_TOKEN_STRIDE > self.CHUNK_TOKEN_LIMIT:
             raise ValueError("CHUNK_TOKEN_STRIDE must be less than or equal to CHUNK_TOKEN_LIMIT")
         return self
+
 
 settings = Settings()

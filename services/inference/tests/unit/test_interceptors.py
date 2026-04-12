@@ -3,7 +3,7 @@ import asyncio
 import grpc
 import pytest
 
-from src.server.interceptors import AuthInterceptor, MonitoringInterceptor
+from src.adapters.inbound.grpc.interceptors import AuthInterceptor, MonitoringInterceptor
 
 
 class MockHandlerDetails:
@@ -82,7 +82,7 @@ async def test_auth_interceptor_rejects_expired_token(test_settings, expired_aut
 @pytest.mark.asyncio
 async def test_auth_interceptor_records_auth_failure_metric(test_settings, grpc_context, mocker):
     interceptor = AuthInterceptor()
-    mock_auth_failure = mocker.patch("src.server.interceptors.record_auth_failure")
+    mock_auth_failure = mocker.patch("src.adapters.inbound.grpc.interceptors.record_auth_failure")
 
     async def continuation(details):
         return grpc.unary_unary_rpc_method_handler(lambda request, context: None)
@@ -99,8 +99,8 @@ async def test_auth_interceptor_records_auth_failure_metric(test_settings, grpc_
 @pytest.mark.asyncio
 async def test_monitoring_interceptor_records_unary_metrics(mocker):
     interceptor = MonitoringInterceptor()
-    mock_counter = mocker.patch("src.server.interceptors.GRPC_REQUESTS_TOTAL")
-    mock_latency = mocker.patch("src.server.interceptors.GRPC_LATENCY_SECONDS")
+    mock_counter = mocker.patch("src.adapters.inbound.grpc.interceptors.GRPC_REQUESTS_TOTAL")
+    mock_latency = mocker.patch("src.adapters.inbound.grpc.interceptors.GRPC_LATENCY_SECONDS")
 
     async def behavior(request, context):
         return "ok"
@@ -125,7 +125,7 @@ async def test_monitoring_interceptor_records_unary_metrics(mocker):
 @pytest.mark.asyncio
 async def test_monitoring_interceptor_defaults_blank_model_to_spark(mocker):
     interceptor = MonitoringInterceptor()
-    mock_counter = mocker.patch("src.server.interceptors.GRPC_REQUESTS_TOTAL")
+    mock_counter = mocker.patch("src.adapters.inbound.grpc.interceptors.GRPC_REQUESTS_TOTAL")
 
     async def behavior(request, context):
         return "ok"
@@ -148,7 +148,7 @@ async def test_monitoring_interceptor_defaults_blank_model_to_spark(mocker):
 @pytest.mark.asyncio
 async def test_monitoring_interceptor_records_streaming_failures(mocker):
     interceptor = MonitoringInterceptor()
-    mock_counter = mocker.patch("src.server.interceptors.GRPC_REQUESTS_TOTAL")
+    mock_counter = mocker.patch("src.adapters.inbound.grpc.interceptors.GRPC_REQUESTS_TOTAL")
 
     async def behavior(request, context):
         raise RuntimeError("Fail")
@@ -175,8 +175,8 @@ async def test_monitoring_interceptor_records_streaming_failures(mocker):
 @pytest.mark.asyncio
 async def test_monitoring_interceptor_records_streaming_metrics_for_flare(mocker):
     interceptor = MonitoringInterceptor()
-    mock_counter = mocker.patch("src.server.interceptors.GRPC_REQUESTS_TOTAL")
-    mock_latency = mocker.patch("src.server.interceptors.GRPC_LATENCY_SECONDS")
+    mock_counter = mocker.patch("src.adapters.inbound.grpc.interceptors.GRPC_REQUESTS_TOTAL")
+    mock_latency = mocker.patch("src.adapters.inbound.grpc.interceptors.GRPC_LATENCY_SECONDS")
 
     async def behavior(request, context):
         yield "ok"
@@ -203,7 +203,7 @@ async def test_monitoring_interceptor_records_streaming_metrics_for_flare(mocker
 @pytest.mark.asyncio
 async def test_monitoring_interceptor_records_cancelled_requests(mocker):
     interceptor = MonitoringInterceptor()
-    mock_counter = mocker.patch("src.server.interceptors.GRPC_REQUESTS_TOTAL")
+    mock_counter = mocker.patch("src.adapters.inbound.grpc.interceptors.GRPC_REQUESTS_TOTAL")
 
     async def behavior(request, context):
         raise asyncio.CancelledError()

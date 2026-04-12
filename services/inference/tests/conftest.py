@@ -1,14 +1,17 @@
+import os
 import time
 from unittest.mock import AsyncMock, MagicMock
 
 import jwt
 import pytest
 
-import src.config as config_module
-import src.server.grpc_server as grpc_server_module
-import src.server.interceptors as interceptors_module
-from src.config import Settings
-from src.inference.document_types import DocumentScore
+os.environ.setdefault("API_KEY", "test-secret-key")
+
+import src.infrastructure.config as config_module
+import src.adapters.inbound.grpc.grpc_server as grpc_server_module
+import src.adapters.inbound.grpc.interceptors as interceptors_module
+from src.infrastructure.config import Settings
+from src.domain.models import DocumentScore
 
 
 class AbortError(Exception):

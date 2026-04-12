@@ -4,15 +4,17 @@ from dataclasses import dataclass
 from typing import List
 from circuitbreaker import CircuitBreaker, CircuitBreakerError
 
-from src.core.exceptions import ServiceOverloadedError
-from src.core.interfaces import (
+from src.domain.exceptions import ServiceOverloadedError
+from src.domain.models import (
     BatcherHealthSnapshot,
     BatcherHealthStatus,
+)
+from src.application.ports.outbound.inference import (
     IAsyncInferenceEngine,
     IEngineHealthReporter,
     ISyncBatchInferenceEngine,
 )
-from src.metrics import BATCH_SIZE_DISTRIBUTION, BATCH_PROCESSING_TIME, BATCH_QUEUE_SIZE
+from src.infrastructure.metrics import BATCH_SIZE_DISTRIBUTION, BATCH_PROCESSING_TIME, BATCH_QUEUE_SIZE
 import structlog
 
 logger = structlog.get_logger()

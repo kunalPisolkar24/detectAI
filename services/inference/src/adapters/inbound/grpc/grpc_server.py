@@ -3,10 +3,10 @@ from grpc import aio
 import asyncio
 import signal
 from src.generated import ai_service_pb2_grpc
-from src.server.servicers import AIService
-from src.server.interceptors import AuthInterceptor, MonitoringInterceptor
-from src.server.health import add_health_check
-from src.config import settings
+from src.adapters.inbound.grpc.servicers import AIService
+from src.adapters.inbound.grpc.interceptors import AuthInterceptor, MonitoringInterceptor
+from src.adapters.inbound.grpc.health import add_health_check
+from src.infrastructure.config import settings
 import structlog
 
 logger = structlog.get_logger()

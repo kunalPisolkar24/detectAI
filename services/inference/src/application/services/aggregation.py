@@ -1,4 +1,4 @@
-from src.inference.document_types import DocumentChunk, DocumentScore
+from src.domain.models import DocumentChunk, DocumentScore
 
 class ResultAggregator:
     def __init__(self, chunk_stride: int):

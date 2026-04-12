@@ -1,7 +1,6 @@
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, List
+
 
 class BatcherHealthStatus(str, Enum):
     SERVING = "serving"
@@ -31,25 +30,29 @@ class BatcherHealthSnapshot:
         return "inference_queue_full"
 
 
-class IAsyncInferenceEngine(ABC):
-    @abstractmethod
-    async def predict(self, text: str) -> float:
-        pass
+@dataclass(frozen=True)
+class DocumentChunk:
+    index: int
+    text: str
+    token_count: int
+    char_start: int
+    char_end: int
 
 
-class ISyncBatchInferenceEngine(ABC):
-    @abstractmethod
-    def predict_batch(self, texts: List[str]) -> List[float]:
-        pass
+@dataclass(frozen=True)
+class DocumentProgress:
+    processed_chunks: int
+    total_chunks: int
 
 
-class IEngineHealthReporter(ABC):
-    @abstractmethod
-    def health_snapshot(self) -> BatcherHealthSnapshot:
-        pass
+@dataclass(frozen=True)
+class DocumentStarted:
+    total_chars: int
+    total_chunks: int
 
 
-class IModelLoader(ABC):
-    @abstractmethod
-    def load(self, model_key: str) -> Any:
-        pass
+@dataclass(frozen=True)
+class DocumentScore:
+    ai_probability: float
+    total_chunks: int
+    total_chars: int

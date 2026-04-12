@@ -1,4 +1,4 @@
-from src.core.exceptions import InvalidInputError
+from src.domain.exceptions import InvalidInputError
 
 
 class InputValidator:

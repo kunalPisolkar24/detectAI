@@ -5,8 +5,8 @@ from grpc_health.v1 import health
 from grpc_health.v1 import health_pb2
 from grpc_health.v1 import health_pb2_grpc
 
-from src.core.interfaces import BatcherHealthSnapshot, BatcherHealthStatus
-from src.metrics import set_engine_health, set_service_health
+from src.domain.models import BatcherHealthSnapshot, BatcherHealthStatus
+from src.infrastructure.metrics import set_engine_health, set_service_health
 
 logger = structlog.get_logger()
 

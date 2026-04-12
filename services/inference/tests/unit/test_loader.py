@@ -1,15 +1,15 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from src.inference.loader import HuggingFaceLoader
-from src.core.exceptions import ModelLoadError
+from src.adapters.outbound.inference.loader import HuggingFaceLoader
+from src.domain.exceptions import ModelLoadError
 
 @pytest.fixture
 def mock_loader_env(tmp_path):
-    with patch("src.inference.loader.ort.InferenceSession") as mock_session, \
-         patch("src.inference.loader.pickle.load") as mock_pickle, \
-         patch("src.inference.loader.hf_hub_download") as mock_dl, \
-         patch("src.inference.loader.snapshot_download") as mock_snap, \
-         patch("src.inference.loader.BertTokenizerFast.from_pretrained") as mock_tok:
+    with patch("src.adapters.outbound.inference.loader.ort.InferenceSession") as mock_session, \
+         patch("src.adapters.outbound.inference.loader.pickle.load") as mock_pickle, \
+         patch("src.adapters.outbound.inference.loader.hf_hub_download") as mock_dl, \
+         patch("src.adapters.outbound.inference.loader.snapshot_download") as mock_snap, \
+         patch("src.adapters.outbound.inference.loader.BertTokenizerFast.from_pretrained") as mock_tok:
         
         mock_session.return_value = MagicMock()
         mock_pickle.return_value = MagicMock()
@@ -74,7 +74,7 @@ def test_loader_warns_on_gpu_fallback(mock_loader_env, monkeypatch, mocker):
     # Force GPU request
     monkeypatch.setenv("INFERENCE_PROVIDERS", "CUDAExecutionProvider,CPUExecutionProvider")
     
-    mock_logger = mocker.patch("src.inference.loader.logger")
+    mock_logger = mocker.patch("src.adapters.outbound.inference.loader.logger")
     
     loader = HuggingFaceLoader("./cache")
     loader.load("spark")
@@ -93,7 +93,7 @@ def test_loader_logs_model_identity(mock_loader_env, mocker):
     mock_session_class, _, _, _ = mock_loader_env
     mock_session = mock_session_class.return_value
     mock_session.get_providers.return_value = ["CPUExecutionProvider"]
-    mock_logger = mocker.patch("src.inference.loader.logger")
+    mock_logger = mocker.patch("src.adapters.outbound.inference.loader.logger")
 
     loader = HuggingFaceLoader("./cache", providers=["CPUExecutionProvider"])
     loader.load("spark")
