@@ -1,6 +1,6 @@
 import numpy as np
 from src.application.ports.outbound.inference import ISyncBatchInferenceEngine
-from src.inference.engines.base import BaseEngine
+from src.adapters.outbound.inference.engines.base import BaseEngine
 from src.domain.exceptions import InferenceError
 
 class FlareEngine(ISyncBatchInferenceEngine, BaseEngine):

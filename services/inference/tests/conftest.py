@@ -5,8 +5,8 @@ import jwt
 import pytest
 
 import src.config as config_module
-import src.server.grpc_server as grpc_server_module
-import src.server.interceptors as interceptors_module
+import src.adapters.inbound.grpc.grpc_server as grpc_server_module
+import src.adapters.inbound.grpc.interceptors as interceptors_module
 from src.config import Settings
 from src.domain.models import DocumentScore
 

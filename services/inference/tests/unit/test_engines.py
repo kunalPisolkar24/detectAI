@@ -2,8 +2,8 @@ import pytest
 from pytest import approx
 import numpy as np
 from unittest.mock import MagicMock
-from src.inference.engines.spark import SparkEngine
-from src.inference.engines.flare import FlareEngine
+from src.adapters.outbound.inference.engines.spark import SparkEngine
+from src.adapters.outbound.inference.engines.flare import FlareEngine
 from src.domain.exceptions import InferenceError
 
 class MockTokenizer:

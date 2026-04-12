@@ -5,7 +5,7 @@ from src.generated import ai_service_pb2_grpc
 from src.domain.exceptions import InvalidInputError, ServiceOverloadedError
 from src.application.services.document_analysis import DocumentAnalysisService
 from src.metrics import AI_CONFIDENCE_SCORE
-from src.server.streaming_presenter import StreamingPresenter
+from src.adapters.inbound.grpc.streaming_presenter import StreamingPresenter
 import structlog
 
 logger = structlog.get_logger()

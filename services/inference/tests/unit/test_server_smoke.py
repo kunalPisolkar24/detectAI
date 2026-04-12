@@ -7,7 +7,7 @@ from grpc_health.v1 import health_pb2, health_pb2_grpc
 from src.domain.models import BatcherHealthSnapshot, BatcherHealthStatus
 from src.generated import ai_service_pb2, ai_service_pb2_grpc
 from src.domain.models import DocumentProgress, DocumentScore, DocumentStarted
-from src.server.grpc_server import GRPCServer
+from src.adapters.inbound.grpc.grpc_server import GRPCServer
 
 
 async def collect_stream(stream):

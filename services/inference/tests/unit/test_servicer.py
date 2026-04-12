@@ -6,7 +6,7 @@ import pytest
 from src.domain.exceptions import InvalidInputError, ServiceOverloadedError
 from src.generated import ai_service_pb2
 from src.domain.models import DocumentProgress, DocumentScore, DocumentStarted
-from src.server.servicers import AIService
+from src.adapters.inbound.grpc.servicers import AIService
 
 
 async def collect_events(stream):

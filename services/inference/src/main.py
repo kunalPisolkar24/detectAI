@@ -6,11 +6,11 @@ from src.application.services.chunking import build_chunk_planner
 from src.application.services.document_analysis import DocumentAnalysisService
 from src.application.services.validation import InputValidator
 from src.log_setup import configure_logger
-from src.inference.loader import HuggingFaceLoader
-from src.inference.engines.spark import SparkEngine
-from src.inference.engines.flare import FlareEngine
-from src.inference.batcher import BatchingProxy
-from src.server.grpc_server import GRPCServer
+from src.adapters.outbound.inference.loader import HuggingFaceLoader
+from src.adapters.outbound.inference.engines.spark import SparkEngine
+from src.adapters.outbound.inference.engines.flare import FlareEngine
+from src.adapters.outbound.inference.batcher import BatchingProxy
+from src.adapters.inbound.grpc.grpc_server import GRPCServer
 import structlog
 
 configure_logger()
