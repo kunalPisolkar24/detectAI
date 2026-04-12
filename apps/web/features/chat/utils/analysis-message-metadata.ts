@@ -1,4 +1,4 @@
-import { AnalysisMessageState, ModelType, PersistedAnalysisStatus } from "../types"
+import { AnalysisLink, AnalysisMessageState, ModelType, PersistedAnalysisStatus } from "../types"
 
 const ANALYSIS_STATE_KEY = "analysis_state"
 const ANALYSIS_MODEL_KEY = "analysis_model"
@@ -17,6 +17,9 @@ const isModelType = (value: string): value is ModelType =>
 
 const isPersistedState = (value: string): value is AnalysisMessageState =>
   value === "running" || value === "cancelled" || value === "failed"
+
+const isAnalysisLinkState = (value: string): value is AnalysisLink["state"] =>
+  value === "completed" || isPersistedState(value)
 
 export const buildAnalysisMessageMetadata = ({
   state,
@@ -37,9 +40,9 @@ export const buildAnalysisMessageMetadata = ({
   return metadata
 }
 
-export const parseAnalysisMessageMetadata = (
+export const parseAnalysisLinkMetadata = (
   metadata?: Record<string, string>,
-): PersistedAnalysisStatus | undefined => {
+): AnalysisLink | undefined => {
   if (!metadata) {
     return undefined
   }
@@ -48,7 +51,7 @@ export const parseAnalysisMessageMetadata = (
   const model = metadata[ANALYSIS_MODEL_KEY]
   const sourceMessageId = metadata[ANALYSIS_SOURCE_MESSAGE_ID_KEY]
 
-  if (!state || !model || !sourceMessageId || !isPersistedState(state) || !isModelType(model)) {
+  if (!state || !model || !sourceMessageId || !isAnalysisLinkState(state) || !isModelType(model)) {
     return undefined
   }
 
@@ -57,5 +60,22 @@ export const parseAnalysisMessageMetadata = (
     model,
     sourceMessageId,
     error: metadata[ANALYSIS_ERROR_KEY],
+  }
+}
+
+export const parseAnalysisMessageMetadata = (
+  metadata?: Record<string, string>,
+): PersistedAnalysisStatus | undefined => {
+  const analysisLink = parseAnalysisLinkMetadata(metadata)
+
+  if (!analysisLink || analysisLink.state === "completed") {
+    return undefined
+  }
+
+  return {
+    state: analysisLink.state,
+    model: analysisLink.model,
+    sourceMessageId: analysisLink.sourceMessageId,
+    error: analysisLink.error,
   }
 }

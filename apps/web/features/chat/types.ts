@@ -1,5 +1,6 @@
 export type ModelType = "spark" | "flare"
 export type AnalysisMessageState = "running" | "cancelled" | "failed"
+export type AnalysisLinkState = AnalysisMessageState | "completed"
 
 export interface AnalysisScore {
   ai: number
@@ -31,12 +32,20 @@ export interface PersistedAnalysisStatus {
   error?: string
 }
 
+export interface AnalysisLink {
+  state: AnalysisLinkState
+  model: ModelType
+  sourceMessageId: string
+  error?: string
+}
+
 export interface Message {
   id: string
   role: "user" | "assistant"
   content: string
   analysis?: AnalysisResult
   analysisStatus?: PersistedAnalysisStatus
+  analysisLink?: AnalysisLink
   createdAt: Date
   isStreaming?: boolean
   streamingProgress?: StreamingAnalysisProgress
