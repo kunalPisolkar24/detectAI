@@ -27,9 +27,14 @@ class AuthInterceptor(aio.ServerInterceptor):
             return None
 
         metadata = dict(handler_call_details.invocation_metadata)
-        auth_header = metadata.get("authorization", "")
         method_name = handler_call_details.method.split('/')[-1]
 
+        api_key = metadata.get("x-api-key")
+        if api_key == settings.API_KEY:
+            structlog.contextvars.bind_contextvars(auth_type="api_key", user_id="internal_service")
+            return handler
+
+        auth_header = metadata.get("authorization", "")
         if not auth_header.startswith("Bearer "):
             return self._build_unauthenticated_handler(
                 handler,
@@ -41,7 +46,7 @@ class AuthInterceptor(aio.ServerInterceptor):
         token = auth_header[7:]
         try:
             decoded = jwt.decode(token, settings.API_KEY, algorithms=["HS256"])
-            structlog.contextvars.bind_contextvars(user_id=decoded.get("sub"))
+            structlog.contextvars.bind_contextvars(auth_type="jwt", user_id=decoded.get("sub"))
         except jwt.ExpiredSignatureError:
             return self._build_unauthenticated_handler(handler, method_name, "token_expired", "Token expired")
         except jwt.InvalidTokenError:
