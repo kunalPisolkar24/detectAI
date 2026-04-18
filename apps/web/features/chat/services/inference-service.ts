@@ -4,7 +4,7 @@ import "server-only"
 import { getGrpcClient, getGrpcMetadata } from "@/lib/grpc-client"
 import { metrics } from "@/lib/metrics"
 import { logger } from "@/lib/logger"
-import { AnalysisResult, ModelType } from "../types"
+import { AnalysisHighlightSpan, AnalysisResult, ModelType } from "../types"
 
 interface ProtoResponse {
   model_name: string
@@ -12,6 +12,13 @@ interface ProtoResponse {
   is_ai_generated: boolean
   confidence_score: number
   human_confidence: number
+  ai_confidence: number
+  highlight_spans?: ProtoHighlightSpan[]
+}
+
+interface ProtoHighlightSpan {
+  char_start: number
+  char_end: number
   ai_confidence: number
 }
 
@@ -43,9 +50,15 @@ export class InferenceStreamAbortedError extends Error {
   }
 }
 
-const MODEL_CODES: Record<ModelType, number> = {
-  spark: 1,
-  flare: 2,
+const mapProtoHighlightToDomain = (span: ProtoHighlightSpan): AnalysisHighlightSpan => {
+  const aiConfidence = span.ai_confidence / 100
+
+  return {
+    charStart: span.char_start,
+    charEnd: span.char_end,
+    aiConfidence,
+    label: aiConfidence >= 0.5 ? "AI" : "Human",
+  }
 }
 
 const mapProtoResponseToAnalysis = (response: ProtoResponse, model: ModelType): AnalysisResult => {
@@ -60,6 +73,7 @@ const mapProtoResponseToAnalysis = (response: ProtoResponse, model: ModelType): 
       ai: aiScore,
       human: humanScore,
     },
+    highlights: (response.highlight_spans ?? []).map(mapProtoHighlightToDomain),
     raw: {
       ...response,
       processed_at: new Date().toISOString(),
@@ -71,11 +85,10 @@ export const inferenceService = {
   async detect(text: string, model: ModelType): Promise<AnalysisResult> {
     const client = getGrpcClient()
     const metadata = getGrpcMetadata()
-    const method = model === "spark" ? "DetectSpark" : "DetectFlare"
     const start = performance.now()
 
     return new Promise((resolve, reject) => {
-      client[method]({ text }, metadata, (err: any, response: ProtoResponse) => {
+      client.Detect({ text, model_id: model }, metadata, (err: any, response: ProtoResponse) => {
         const duration = (performance.now() - start) / 1000
 
         if (err) {
@@ -108,7 +121,7 @@ export const inferenceService = {
       const call = client.AnalyzeDocument(
         {
           text,
-          model: MODEL_CODES[model],
+          model_id: model,
         },
         metadata,
       )

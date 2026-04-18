@@ -107,12 +107,16 @@ export class GrpcChatService implements IChatService {
   async sendMessage(chatId: string, content: string, model: ModelType): Promise<Message> {
     const userId = await this.getUserId()
 
-    const [, analysisResult] = await Promise.all([
+    const [userMessage, analysisResult] = await Promise.all([
       this.saveUserMessage(chatId, userId, content),
-      inferenceService.detect(content, model)
+      inferenceService.detect(content, model),
     ])
-
-    const assistantMessage = await this.saveAssistantAnalysis(chatId, userId, analysisResult)
+    const assistantMessage = await this.saveAssistantAnalysisMessage(chatId, userId, {
+      state: "completed",
+      model,
+      sourceMessageId: userMessage.id,
+      analysis: analysisResult,
+    })
 
     return assistantMessage
   }
@@ -144,6 +148,7 @@ export class GrpcChatService implements IChatService {
           model: input.model,
           sourceMessageId: input.sourceMessageId,
           error: input.error,
+          highlights: input.analysis?.highlights,
         }),
       },
     )
