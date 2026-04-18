@@ -5,15 +5,17 @@ import { cn } from "@/lib/utils"
 import { merriweather } from "@/lib/fonts"
 import { Message } from "../types"
 import { AnalysisCard } from "./analysis-card"
+import { AnalysisHighlightPanel } from "./analysis-highlight-panel"
 import { AnalysisProgressCard } from "./analysis-progress-card"
 
 interface MessageItemProps {
   message: Message
+  sourceText?: string
   onRetry?: () => void
   isRetryDisabled?: boolean
 }
 
-export const MessageItem = ({ message, onRetry, isRetryDisabled = false }: MessageItemProps) => {
+export const MessageItem = ({ message, sourceText, onRetry, isRetryDisabled = false }: MessageItemProps) => {
   const isUser = message.role === "user"
 
   return (
@@ -62,7 +64,17 @@ export const MessageItem = ({ message, onRetry, isRetryDisabled = false }: Messa
                      isRetryDisabled={isRetryDisabled}
                    />
                  )
-               : message.analysis && <AnalysisCard result={message.analysis} />
+               : message.analysis
+                 ? (
+                     <div className="flex w-full flex-col items-start gap-4">
+                       <AnalysisHighlightPanel
+                         sourceText={sourceText ?? ""}
+                         highlights={message.analysis.highlights}
+                       />
+                       <AnalysisCard result={message.analysis} />
+                     </div>
+                   )
+                 : null
         )}
       </div>
     </m.div>
