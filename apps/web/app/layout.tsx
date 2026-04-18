@@ -30,7 +30,7 @@ export default function RootLayout({
             <QueryProvider>
               <LazyMotionProvider>
                 {children}
-                <Toaster position="bottom-right" />
+                <Toaster position="top-right" />
               </LazyMotionProvider>
             </QueryProvider>
           </ThemeProvider>

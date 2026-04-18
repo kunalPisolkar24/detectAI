@@ -104,7 +104,6 @@ export const ChatInput = () => {
       } else {
         setLocalInput(nextValue)
 
-        toast.success("File content extracted successfully")
         requestAnimationFrame(() => {
           if (textareaRef.current) {
             textareaRef.current.style.height = "auto"

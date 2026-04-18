@@ -4,7 +4,6 @@ import { useState, useTransition } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { signIn } from "next-auth/react"
-import { toast } from "sonner"
 import { m } from "framer-motion"
 import { Eye, EyeOff, User, Mail, Lock, AlertCircle } from "lucide-react"
 import type { z } from "zod"
@@ -63,7 +62,6 @@ export const SignupForm = () => {
 
       if (result.error) {
         setFormError(result.error)
-        toast.error(result.error)
         reset() 
         return
       }
