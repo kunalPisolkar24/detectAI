@@ -4,6 +4,7 @@ import { test } from "node:test"
 import type { Message } from "../types"
 import {
   buildAnalysisMessageMetadata,
+  parseAnalysisHighlightsMetadata,
   parseAnalysisLinkMetadata,
   parseAnalysisMessageMetadata,
 } from "./analysis-message-metadata"
@@ -120,4 +121,41 @@ test("completed analysis metadata does not create an analysis status", () => {
   })
 
   assert.equal(parseAnalysisMessageMetadata(metadata), undefined)
+})
+
+test("analysis highlights metadata round-trips completed spans", () => {
+  const metadata = buildAnalysisMessageMetadata({
+    state: "completed",
+    model: "spark",
+    sourceMessageId: "user-1",
+    highlights: [
+      {
+        charStart: 0,
+        charEnd: 12,
+        aiConfidence: 0.88,
+        label: "AI",
+      },
+      {
+        charStart: 12,
+        charEnd: 20,
+        aiConfidence: 0.14,
+        label: "Human",
+      },
+    ],
+  })
+
+  assert.deepEqual(parseAnalysisHighlightsMetadata(metadata), [
+    {
+      charStart: 0,
+      charEnd: 12,
+      aiConfidence: 0.88,
+      label: "AI",
+    },
+    {
+      charStart: 12,
+      charEnd: 20,
+      aiConfidence: 0.14,
+      label: "Human",
+    },
+  ])
 })
