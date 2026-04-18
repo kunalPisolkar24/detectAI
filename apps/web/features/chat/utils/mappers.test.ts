@@ -1,5 +1,4 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { expect, test } from "vitest"
 
 import { buildAnalysisMessageMetadata } from "./analysis-message-metadata"
 import { mapGrpcMessageToDomain } from "./mappers"
@@ -33,14 +32,14 @@ test("hydrates persisted analysis highlights from assistant metadata", () => {
     },
   })
 
-  assert.equal(message.analysis?.highlights.length, 1)
-  assert.deepEqual(message.analysis?.highlights[0], {
+  expect(message.analysis?.highlights.length).toBe(1)
+  expect(message.analysis?.highlights[0]).toEqual({
     charStart: 0,
     charEnd: 8,
     aiConfidence: 0.72,
     label: "AI",
   })
-  assert.deepEqual(message.analysisLink, {
+  expect(message.analysisLink).toEqual({
     state: "completed",
     model: "spark",
     sourceMessageId: "user-1",

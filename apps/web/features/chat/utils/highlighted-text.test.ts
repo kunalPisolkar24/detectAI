@@ -1,5 +1,4 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { expect, test } from "vitest"
 
 import { buildHighlightedTextSegments } from "./highlighted-text"
 
@@ -19,7 +18,7 @@ test("builds plain and highlighted segments with uncovered gaps preserved", () =
     },
   ])
 
-  assert.deepEqual(segments, [
+  expect(segments).toEqual([
     {
       text: "Hello",
       tone: "AI",
@@ -53,7 +52,7 @@ test("clamps invalid ranges and prevents overlapping highlight duplication", () 
     },
   ])
 
-  assert.deepEqual(segments, [
+  expect(segments).toEqual([
     {
       text: "abcd",
       tone: "AI",
