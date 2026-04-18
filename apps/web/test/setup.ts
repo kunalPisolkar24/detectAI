@@ -38,3 +38,22 @@ vi.mock('framer-motion', async () => {
     domAnimation: {},
   }
 })
+
+vi.mock('next/navigation', () => ({
+  useRouter: vi.fn(() => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+    back: vi.fn(),
+  })),
+  usePathname: vi.fn(() => '/'),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
+}))
+
+vi.mock('next-auth/react', () => ({
+  signIn: vi.fn(),
+  signOut: vi.fn(),
+  useSession: vi.fn(() => ({ data: null, status: 'unauthenticated' })),
+  SessionProvider: ({ children }: { children: React.ReactNode }) => children,
+}))
+
