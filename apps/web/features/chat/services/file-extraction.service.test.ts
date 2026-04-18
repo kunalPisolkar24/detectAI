@@ -3,54 +3,97 @@ import { FileExtractionService } from './file-extraction.service'
 
 describe('FileExtractionService', () => {
   let service: FileExtractionService
-  const baseUrl = 'http://test-api.com'
+  const BASE_URL = 'http://test-api.com'
 
   beforeEach(() => {
     vi.clearAllMocks()
     global.fetch = vi.fn()
-    service = new FileExtractionService(baseUrl)
+    service = new FileExtractionService(BASE_URL)
   })
 
-  it('should return text on successful extraction', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue({ text: 'extracted text' }),
-    } as any)
+  // ─── Successful extraction ────────────────────────────────────────────────
+  describe('successful extraction', () => {
+    it('returns extracted text on a 200 response', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ text: 'extracted text content' }),
+      } as any)
 
-    const formData = new FormData()
-    const text = await service.extract(formData)
+      const result = await service.extract(new FormData())
 
-    expect(text).toBe('extracted text')
-    expect(fetch).toHaveBeenCalledWith(`${baseUrl}/extract`, expect.objectContaining({
-      method: 'POST',
-      body: formData,
-    }))
+      expect(result).toBe('extracted text content')
+    })
+
+    it('posts to the correct /extract endpoint with the provided FormData', async () => {
+      const formData = new FormData()
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ text: 'ok' }),
+      } as any)
+
+      await service.extract(formData)
+
+      expect(fetch).toHaveBeenCalledWith(`${BASE_URL}/extract`, {
+        method: 'POST',
+        body: formData,
+      })
+    })
   })
 
-  it('should throw "No text content found in file." if data.text is empty', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue({ text: '' }),
-    } as any)
+  // ─── Empty / null text ───────────────────────────────────────────────────
+  describe('empty response body', () => {
+    it('throws when response text is an empty string', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ text: '' }),
+      } as any)
 
-    await expect(service.extract(new FormData())).rejects.toThrow('No text content found in file.')
+      await expect(service.extract(new FormData())).rejects.toThrow('No text content found in file.')
+    })
+
+    it('throws when response has no text property at all', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({}),
+      } as any)
+
+      await expect(service.extract(new FormData())).rejects.toThrow('No text content found in file.')
+    })
   })
 
-  it('should handle 415 error correctly', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: false,
-      status: 415,
-    } as any)
+  // ─── HTTP error statuses ─────────────────────────────────────────────────
+  describe('HTTP error handling', () => {
+    const errorCases: [number, string][] = [
+      [400, 'Invalid file signature.'],
+      [413, 'File exceeds maximum allowed size.'],
+      [415, 'Unsupported file type. Use PDF, DOCX, or TXT.'],
+      [422, 'File is corrupt or unreadable.'],
+      [500, 'Failed to extract text from file.'],
+      [503, 'Failed to extract text from file.'],
+    ]
 
-    await expect(service.extract(new FormData())).rejects.toThrow('Unsupported file type. Use PDF, DOCX, or TXT.')
+    it.each(errorCases)(
+      'throws the correct message for HTTP %i',
+      async (status, expectedMessage) => {
+        vi.mocked(fetch).mockResolvedValue({ ok: false, status } as any)
+
+        await expect(service.extract(new FormData())).rejects.toThrow(expectedMessage)
+      },
+    )
   })
 
-  it('should handle default error for unknown status', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: false,
-      status: 500,
-    } as any)
+  // ─── Network / infrastructure failures ───────────────────────────────────
+  describe('network failure', () => {
+    it('propagates the error when fetch itself throws (e.g. DNS failure)', async () => {
+      vi.mocked(fetch).mockRejectedValue(new TypeError('Failed to fetch'))
 
-    await expect(service.extract(new FormData())).rejects.toThrow('Failed to extract text from file.')
+      await expect(service.extract(new FormData())).rejects.toThrow('Failed to fetch')
+    })
+
+    it('propagates the error when fetch throws a generic Error', async () => {
+      vi.mocked(fetch).mockRejectedValue(new Error('ECONNREFUSED'))
+
+      await expect(service.extract(new FormData())).rejects.toThrow('ECONNREFUSED')
+    })
   })
 })
