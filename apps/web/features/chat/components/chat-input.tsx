@@ -224,6 +224,7 @@ export const ChatInput = () => {
                 className="hidden"
                 accept=".pdf,.docx,.txt"
                 onChange={handleFileSelect}
+                aria-label="Upload document"
               />
               <Button
                 variant="ghost"
