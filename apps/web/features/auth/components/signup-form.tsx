@@ -109,17 +109,17 @@ export const SignupForm = () => {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>First Name</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <div className="relative">
+                    <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <FormControl>
                       <Input
                         {...field}
                         placeholder="John"
                         className="pl-9 bg-background/50 border-black/10 dark:border-white/10"
                         disabled={isPending}
                       />
-                    </div>
-                  </FormControl>
+                    </FormControl>
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
@@ -130,17 +130,17 @@ export const SignupForm = () => {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Last Name</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <div className="relative">
+                    <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <FormControl>
                       <Input
                         {...field}
                         placeholder="Doe"
                         className="pl-9 bg-background/50 border-black/10 dark:border-white/10"
                         disabled={isPending}
                       />
-                    </div>
-                  </FormControl>
+                    </FormControl>
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
@@ -153,9 +153,9 @@ export const SignupForm = () => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Email</FormLabel>
-                <FormControl>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <div className="relative">
+                  <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <FormControl>
                     <Input
                       {...field}
                       type="email"
@@ -163,8 +163,8 @@ export const SignupForm = () => {
                       className="pl-9 bg-background/50 border-black/10 dark:border-white/10"
                       disabled={isPending}
                     />
-                  </div>
-                </FormControl>
+                  </FormControl>
+                </div>
                 <FormMessage />
               </FormItem>
             )}
@@ -176,9 +176,9 @@ export const SignupForm = () => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Password</FormLabel>
-                <FormControl>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <div className="relative">
+                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <FormControl>
                     <Input
                       {...field}
                       type={showPassword ? "text" : "password"}
@@ -186,16 +186,17 @@ export const SignupForm = () => {
                       className="pl-9 pr-10 bg-background/50 border-black/10 dark:border-white/10"
                       disabled={isPending}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
-                      disabled={isPending}
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </FormControl>
+                  </FormControl>
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                    disabled={isPending}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
                 <FormMessage />
               </FormItem>
             )}
@@ -207,9 +208,9 @@ export const SignupForm = () => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Confirm Password</FormLabel>
-                <FormControl>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <div className="relative">
+                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <FormControl>
                     <Input
                       {...field}
                       type={showConfirm ? "text" : "password"}
@@ -217,16 +218,17 @@ export const SignupForm = () => {
                       className="pl-9 pr-10 bg-background/50 border-black/10 dark:border-white/10"
                       disabled={isPending}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirm(!showConfirm)}
-                      className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
-                      disabled={isPending}
-                    >
-                      {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </FormControl>
+                  </FormControl>
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirm(!showConfirm)}
+                    className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                    disabled={isPending}
+                    aria-label={showConfirm ? "Hide confirm password" : "Show confirm password"}
+                  >
+                    {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
                 <FormMessage />
               </FormItem>
             )}
