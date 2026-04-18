@@ -28,7 +28,7 @@ export const MessageItem = ({ message, sourceText, onRetry, isRetryDisabled = fa
       )}
     >
       <div className={cn(
-        "flex flex-col w-full",
+        "flex flex-col w-full min-w-0",
         isUser ? "items-end max-w-[85%]" : "items-start max-w-full"
       )}>
         {isUser ? (
@@ -36,7 +36,7 @@ export const MessageItem = ({ message, sourceText, onRetry, isRetryDisabled = fa
              "px-5 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap shadow-sm",
              "bg-white/90 dark:bg-white/10 text-neutral-800 dark:text-neutral-100",
              "border border-black/5 dark:border-white/5",
-             "rounded-tr-sm",
+             "rounded-tr-sm max-w-full break-words",
              merriweather.className
            )}>
              {message.content}
