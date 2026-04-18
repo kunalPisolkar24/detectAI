@@ -44,7 +44,7 @@ export const AnalysisHighlightPanel = ({
       <div className="p-4 sm:p-5 flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
-            <div className="rounded-xl border border-primary/15 bg-primary/10 p-2 text-primary dark:border-primary/20 dark:bg-primary/15">
+            <div className="rounded-xl border border-purple-500/20 bg-purple-500/10 p-2 text-purple-700 dark:border-purple-500/30 dark:bg-purple-500/20 dark:text-purple-300">
               <Highlighter size={16} />
             </div>
 
@@ -62,7 +62,7 @@ export const AnalysisHighlightPanel = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-1.5 rounded-lg border border-primary/15 bg-primary/10 px-2.5 py-1 text-primary dark:border-primary/20 dark:bg-primary/15">
+            <div className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/20 bg-purple-500/10 px-2.5 py-1 text-purple-700 dark:border-purple-500/30 dark:bg-purple-500/20 dark:text-purple-300">
               <Bot size={12} strokeWidth={2.5} />
               <span className={cn("text-sm font-medium tracking-wide pt-0.5 uppercase", teko.className)}>
                 AI-Likely
@@ -98,7 +98,7 @@ export const AnalysisHighlightPanel = ({
                   className={cn(
                     "rounded-[0.55rem] border px-1 py-0.5 transition-colors",
                     isAI
-                      ? "border-primary/15 bg-primary/10 text-primary dark:border-primary/20 dark:bg-primary/15"
+                      ? "border-purple-500/20 bg-purple-500/10 text-purple-700 dark:border-purple-500/30 dark:bg-purple-500/20 dark:text-purple-300"
                       : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
                   )}
                 >
