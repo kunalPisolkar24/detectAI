@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { UserService } from './user-service'
 import { userRepository } from '@/features/auth/repositories/user-repository'
-import { cacheService, TTL } from '@/lib/cache-service'
-import { lockService } from '@/lib/lock-service'
+import { cacheService, TTL } from '@/lib/services/cache-service'
+import { lockService } from '@/lib/services/lock-service'
 
 vi.mock('@/features/auth/repositories/user-repository')
-vi.mock('@/lib/cache-service', () => ({
+vi.mock('@/lib/services/cache-service', () => ({
   cacheService: {
     get: vi.fn(),
     set: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock('@/lib/cache-service', () => ({
   },
   TTL: { USER: 3600 },
 }))
-vi.mock('@/lib/lock-service', () => ({
+vi.mock('@/lib/services/lock-service', () => ({
   lockService: {
     execute: vi.fn((_key: unknown, fn: () => unknown) => fn()),
   },
