@@ -137,3 +137,20 @@ vi.mock('next/font/google', () => ({
   Outfit: () => ({ className: 'outfit' }),
   Roboto: () => ({ className: 'roboto' }),
 }))
+
+vi.mock('ioredis', () => {
+  return {
+    default: vi.fn(() => ({
+      get: vi.fn(),
+      set: vi.fn(),
+      del: vi.fn(),
+      on: vi.fn(),
+    })),
+    Redis: vi.fn(() => ({
+      get: vi.fn(),
+      set: vi.fn(),
+      del: vi.fn(),
+      on: vi.fn(),
+    })),
+  }
+})
