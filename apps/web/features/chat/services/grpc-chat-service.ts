@@ -2,7 +2,7 @@
 import "server-only"
 import { AssistantAnalysisMessageInput, IChatService } from "./chat-service.interface"
 import { AnalysisResult, ChatSession, ChatHistoryItem, Message, ModelType } from "../types"
-import { getChatGrpcClient } from "@/lib/grpc/chat-client"
+import { getChatGrpcClient } from "@/lib/shared/grpc/chat-client"
 import { inferenceService } from "./inference-service"
 import { mapGrpcMessageToDomain, mapDomainAnalysisToGrpc } from "../utils/mappers"
 import { buildAnalysisMessageMetadata } from "../utils/analysis-message-metadata"

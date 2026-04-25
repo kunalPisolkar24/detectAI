@@ -1,6 +1,6 @@
 import { cacheService, TTL } from "@/lib/cache-service"
 import { userRepository } from "@/features/auth/repositories/user-repository"
-import { User, Prisma } from "@/lib/generated/prisma/client"
+import { User, Prisma } from "@/lib/shared/generated/prisma/client"
 import { lockService } from "@/lib/lock-service"
 
 export class UserService {

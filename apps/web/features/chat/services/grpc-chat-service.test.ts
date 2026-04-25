@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { GrpcChatService } from './grpc-chat-service'
-import { getChatGrpcClient } from '@/lib/grpc/chat-client'
+import { getChatGrpcClient } from '@/lib/shared/grpc/chat-client'
 import { inferenceService } from './inference-service'
 import { getServerSession } from 'next-auth'
 
-vi.mock('@/lib/grpc/chat-client')
+vi.mock('@/lib/shared/grpc/chat-client')
 vi.mock('./inference-service')
 vi.mock('next-auth')
 vi.mock('@/lib/config/auth-options', () => ({ authOptions: {} }))
