@@ -4,7 +4,7 @@ import * as protoLoader from "@grpc/proto-loader"
 import path from "path"
 import { env } from "@/lib/config/env"
 
-const PROTO_PATH = path.join(process.cwd(), "lib/proto/ai_service.proto")
+const PROTO_PATH = path.join(process.cwd(), "lib/shared/proto/ai_service.proto")
 
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
   keepCase: true,
