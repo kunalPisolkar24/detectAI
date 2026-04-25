@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { m } from "framer-motion"
 import { ArrowUpRight } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import { FOOTER_LINKS } from "../constants"
 
 export const FooterLinks = () => {

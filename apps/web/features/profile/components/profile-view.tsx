@@ -4,8 +4,8 @@ import { useState } from "react"
 import { m, AnimatePresence } from "framer-motion"
 import { User, CreditCard } from "lucide-react"
 
-import { cn } from "@/lib/utils"
-import { teko } from "@/lib/fonts"
+import { cn } from "@/lib/core/utils"
+import { teko } from "@/lib/core/fonts"
 import { GeneralTab } from "./general-tab"
 import { BillingTab } from "./billing-tab"
 

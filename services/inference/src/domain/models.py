@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -52,7 +52,15 @@ class DocumentStarted:
 
 
 @dataclass(frozen=True)
+class HighlightSpan:
+    char_start: int
+    char_end: int
+    ai_probability: float
+
+
+@dataclass(frozen=True)
 class DocumentScore:
     ai_probability: float
     total_chunks: int
     total_chars: int
+    highlight_spans: list[HighlightSpan] = field(default_factory=list)

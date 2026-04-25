@@ -15,7 +15,8 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
         self.analysis_service = analysis_service
         self.presenter = StreamingPresenter()
 
-    def _build_response(self, model_name: str, ai_prob: float):
+    def _build_response(self, model_name: str, score):
+        ai_prob = score.ai_probability
         AI_CONFIDENCE_SCORE.labels(model=model_name.lower()).observe(ai_prob)
         
         human_prob = 1.0 - ai_prob
@@ -27,7 +28,15 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
             is_ai_generated=is_ai,
             confidence_score=round((ai_prob if is_ai else human_prob) * 100, 1),
             human_confidence=round(human_prob * 100, 1),
-            ai_confidence=round(ai_prob * 100, 1)
+            ai_confidence=round(ai_prob * 100, 1),
+            highlight_spans=[
+                ai_service_pb2.HighlightSpan(
+                    char_start=span.char_start,
+                    char_end=span.char_end,
+                    ai_confidence=round(span.ai_probability * 100, 1),
+                )
+                for span in score.highlight_spans
+            ],
         )
 
     async def Detect(self, request, context):
@@ -41,7 +50,7 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
                 model_key,
                 request_is_active=lambda: not context.done(),
             )
-            return self._build_response(model_key.capitalize(), score.ai_probability)
+            return self._build_response(model_key.capitalize(), score)
         except asyncio.CancelledError:
             logger.warning("grpc_client_disconnected", method="Detect")
             raise
@@ -70,7 +79,7 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
                     continue
 
                 if self.presenter.is_final(event):
-                    yield self.presenter.build_final(self._build_response(model_name, event.ai_probability))
+                    yield self.presenter.build_final(self._build_response(model_name, event))
         except asyncio.CancelledError:
             logger.warning("grpc_client_disconnected", method="AnalyzeDocument")
             raise

@@ -7,11 +7,19 @@ export interface AnalysisScore {
   human: number
 }
 
+export interface AnalysisHighlightSpan {
+  charStart: number
+  charEnd: number
+  aiConfidence: number
+  label: "AI" | "Human"
+}
+
 export interface AnalysisResult {
   model: ModelType
   label: "AI" | "Human"
   confidence: number
   scores: AnalysisScore
+  highlights: AnalysisHighlightSpan[]
   raw: unknown
 }
 

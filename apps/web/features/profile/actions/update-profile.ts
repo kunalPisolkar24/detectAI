@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth-options"
+import { authOptions } from "@/lib/config/auth-options"
 import { userService } from "@/features/auth/services/user-service"
 
 const UpdateProfileSchema = z.object({

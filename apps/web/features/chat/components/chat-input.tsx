@@ -7,9 +7,9 @@ import { useSendMessage } from "../hooks/use-chat-mutation"
 import { useChatHistory } from "../hooks/use-chat-history"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import { Paperclip, ArrowUp, Loader2, ChevronDown, Sparkles, Square, ArrowLeftRight } from "lucide-react"
-import { teko, merriweather } from "@/lib/fonts"
+import { teko, merriweather } from "@/lib/core/fonts"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -104,7 +104,6 @@ export const ChatInput = () => {
       } else {
         setLocalInput(nextValue)
 
-        toast.success("File content extracted successfully")
         requestAnimationFrame(() => {
           if (textareaRef.current) {
             textareaRef.current.style.height = "auto"
@@ -225,6 +224,7 @@ export const ChatInput = () => {
                 className="hidden"
                 accept=".pdf,.docx,.txt"
                 onChange={handleFileSelect}
+                aria-label="Upload document"
               />
               <Button
                 variant="ghost"

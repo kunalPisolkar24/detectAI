@@ -1,8 +1,8 @@
 "use client"
 
 import { m } from "framer-motion"
-import { cn } from "@/lib/utils"
-import { teko } from "@/lib/fonts"
+import { cn } from "@/lib/core/utils"
+import { teko } from "@/lib/core/fonts"
 
 export const FooterNewsletter = () => {
   return (

@@ -53,34 +53,43 @@ export const MessageList = () => {
     <div className="pt-4">
       <div className="w-full max-w-4xl mx-auto px-4 pb-48 space-y-8">
         {messages.map((msg: Message) => (
-          <MessageItem
-            key={msg.id}
-            message={msg}
-            onRetry={(() => {
-              if (msg.role !== "assistant") {
-                return undefined
-              }
+          (() => {
+            const sourceMessageId = msg.analysisLink?.sourceMessageId
+              ?? msg.streamingProgress?.sourceMessageId
+              ?? msg.analysisStatus?.sourceMessageId
+            const sourceText = sourceMessageId ? contentById.get(sourceMessageId) : undefined
 
-              const sourceMessageId = msg.streamingProgress?.sourceMessageId ?? msg.analysisStatus?.sourceMessageId
-              const retryContent = msg.streamingProgress?.retryContent ?? (sourceMessageId ? contentById.get(sourceMessageId) : undefined)
-              const model = msg.streamingProgress?.model ?? msg.analysisStatus?.model
+            return (
+              <MessageItem
+                key={msg.id}
+                message={msg}
+                sourceText={sourceText}
+                onRetry={(() => {
+                  if (msg.role !== "assistant") {
+                    return undefined
+                  }
 
-              if (!sourceMessageId || !retryContent || !model) {
-                return undefined
-              }
+                  const retryContent = msg.streamingProgress?.retryContent ?? sourceText
+                  const model = msg.streamingProgress?.model ?? msg.analysisStatus?.model
 
-              return () => {
-                retryAnalysis({
-                  assistantMessageId: msg.id,
-                  assistantCreatedAt: msg.createdAt,
-                  sourceMessageId,
-                  content: retryContent,
-                  model,
-                })
-              }
-            })()}
-            isRetryDisabled={isAnalyzing}
-          />
+                  if (!sourceMessageId || !retryContent || !model) {
+                    return undefined
+                  }
+
+                  return () => {
+                    retryAnalysis({
+                      assistantMessageId: msg.id,
+                      assistantCreatedAt: msg.createdAt,
+                      sourceMessageId,
+                      content: retryContent,
+                      model,
+                    })
+                  }
+                })()}
+                isRetryDisabled={isAnalyzing}
+              />
+            )
+          })()
         ))}
         <div ref={scrollRef} className="h-1" />
       </div>

@@ -7,8 +7,8 @@ import { m } from "framer-motion"
 import { CircleCheck, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
-import { teko } from "@/lib/fonts"
+import { cn } from "@/lib/core/utils"
+import { teko } from "@/lib/core/fonts"
 
 interface PricingCardProps {
   plan: {

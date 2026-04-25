@@ -83,6 +83,41 @@ def test_result_aggregator_counts_overlap_once():
     assert score.total_chars == 39
 
 
+def test_result_aggregator_merges_adjacent_spans_with_same_label():
+    score = ResultAggregator(4).aggregate(
+        [
+            DocumentChunk(index=0, text="one", token_count=1, char_start=0, char_end=4),
+            DocumentChunk(index=1, text="two", token_count=1, char_start=4, char_end=8),
+        ],
+        [0.8, 0.9],
+        total_chars=8,
+    )
+
+    assert len(score.highlight_spans) == 1
+    assert score.highlight_spans[0].char_start == 0
+    assert score.highlight_spans[0].char_end == 8
+    assert score.highlight_spans[0].ai_probability == approx(0.85)
+
+
+def test_result_aggregator_builds_non_overlapping_spans_from_overlaps():
+    score = ResultAggregator(2).aggregate(
+        [
+            DocumentChunk(index=0, text="abcd", token_count=1, char_start=0, char_end=4),
+            DocumentChunk(index=1, text="cdef", token_count=1, char_start=2, char_end=6),
+        ],
+        [0.9, 0.1],
+        total_chars=6,
+    )
+
+    assert len(score.highlight_spans) == 2
+    assert score.highlight_spans[0].char_start == 0
+    assert score.highlight_spans[0].char_end == 4
+    assert score.highlight_spans[0].ai_probability == approx(0.7)
+    assert score.highlight_spans[1].char_start == 4
+    assert score.highlight_spans[1].char_end == 6
+    assert score.highlight_spans[1].ai_probability == approx(0.1)
+
+
 @pytest.mark.asyncio
 async def test_document_analysis_streams_progress_and_final():
     engine = SequencedAsyncEngine([0.2, 0.9])
@@ -105,6 +140,13 @@ async def test_document_analysis_streams_progress_and_final():
     assert events[2].processed_chunks == 2
     assert isinstance(events[3], DocumentScore)
     assert events[3].ai_probability == approx((4 * 0.2 + 2 * 0.9) / 6)
+    assert len(events[3].highlight_spans) == 2
+    assert events[3].highlight_spans[0].char_start == 0
+    assert events[3].highlight_spans[0].char_end == 18
+    assert events[3].highlight_spans[0].ai_probability == approx(0.2)
+    assert events[3].highlight_spans[1].char_start == 19
+    assert events[3].highlight_spans[1].char_end == 27
+    assert events[3].highlight_spans[1].ai_probability == approx(0.9)
 
 
 @pytest.mark.asyncio

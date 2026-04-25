@@ -463,7 +463,6 @@ export const useSendMessage = () => {
 
       if (error instanceof Error && (error.message.includes("Rate limit") || error.message.includes("429"))) {
         useChatUIStore.getState().setRateLimited(true)
-        toast.error("Rate limit exceeded")
       } else {
         toast.error(error instanceof Error ? error.message : "Failed to send message")
       }
@@ -501,7 +500,6 @@ export const useChatMutations = () => {
         setCurrentChatId(null)
         router.push("/chat")
       }
-      toast.success("Chat deleted")
     },
     onError: () => toast.error("Failed to delete chat"),
   })
@@ -517,7 +515,6 @@ export const useChatMutations = () => {
         old?.map(c => c.id === updatedChat.id ? updatedChat : c) || [],
       )
       queryClient.invalidateQueries({ queryKey: ["chat", updatedChat.id] })
-      toast.success("Chat renamed")
     },
     onError: () => toast.error("Failed to rename chat"),
   })

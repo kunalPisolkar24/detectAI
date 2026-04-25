@@ -1,5 +1,5 @@
-import { prisma } from "@/lib/prisma"
-import { Prisma, User } from "@/lib/generated/prisma/client"
+import { prisma } from "@/lib/infrastructure/prisma"
+import { Prisma, User } from "@/lib/shared/generated/prisma/client"
 
 export const userRepository = {
   async findById(id: string): Promise<User | null> {

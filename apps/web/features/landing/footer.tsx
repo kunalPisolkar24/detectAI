@@ -3,11 +3,11 @@
 import Link from "next/link"
 import { m } from "framer-motion"
 import { BotIcon, Heart } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import { FooterNewsletter } from "./components/footer-newsletter"
 import { FooterSocials } from "./components/footer-socials"
 import { FooterLinks } from "./components/footer-links"
-import { teko } from "@/lib/fonts"
+import { teko } from "@/lib/core/fonts"
 
 export const Footer = () => {
   const currentYear = new Date().getFullYear()

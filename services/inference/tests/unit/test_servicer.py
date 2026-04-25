@@ -5,7 +5,7 @@ import pytest
 
 from src.domain.exceptions import InvalidInputError, ServiceOverloadedError
 from src.generated import ai_service_pb2
-from src.domain.models import DocumentProgress, DocumentScore, DocumentStarted
+from src.domain.models import DocumentProgress, DocumentScore, DocumentStarted, HighlightSpan
 from src.adapters.inbound.grpc.servicers import AIService
 
 
@@ -18,7 +18,12 @@ async def test_detect_success(grpc_context):
     analysis_service = MagicMock()
     analysis_service.engines = {"spark": object()}
     analysis_service.analyze = AsyncMock(
-        return_value=DocumentScore(ai_probability=0.95, total_chunks=1, total_chars=120)
+        return_value=DocumentScore(
+            ai_probability=0.95,
+            total_chunks=1,
+            total_chars=120,
+            highlight_spans=[HighlightSpan(char_start=0, char_end=20, ai_probability=0.95)],
+        )
     )
     servicer = AIService(analysis_service)
 
@@ -29,6 +34,10 @@ async def test_detect_success(grpc_context):
     assert response.label == "AI"
     assert response.is_ai_generated is True
     assert response.confidence_score == 95.0
+    assert len(response.highlight_spans) == 1
+    assert response.highlight_spans[0].char_start == 0
+    assert response.highlight_spans[0].char_end == 20
+    assert response.highlight_spans[0].ai_confidence == 95.0
     analysis_service.analyze.assert_awaited_once()
 
 
@@ -75,7 +84,12 @@ async def test_analyze_document_streams_events(grpc_context):
         yield DocumentStarted(total_chars=120, total_chunks=2)
         yield DocumentProgress(processed_chunks=1, total_chunks=2)
         yield DocumentProgress(processed_chunks=2, total_chunks=2)
-        yield DocumentScore(ai_probability=0.85, total_chunks=2, total_chars=120)
+        yield DocumentScore(
+            ai_probability=0.85,
+            total_chunks=2,
+            total_chars=120,
+            highlight_spans=[HighlightSpan(char_start=10, char_end=30, ai_probability=0.85)],
+        )
 
     analysis_service.stream = stream
     servicer = AIService(analysis_service)
@@ -92,6 +106,9 @@ async def test_analyze_document_streams_events(grpc_context):
     assert events[2].progress.processed_chunks == 2
     assert events[3].final.model_name == "Spark"
     assert events[3].final.ai_confidence == 85.0
+    assert len(events[3].final.highlight_spans) == 1
+    assert events[3].final.highlight_spans[0].char_start == 10
+    assert events[3].final.highlight_spans[0].char_end == 30
 
 
 @pytest.mark.asyncio

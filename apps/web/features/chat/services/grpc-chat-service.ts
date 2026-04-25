@@ -2,13 +2,13 @@
 import "server-only"
 import { AssistantAnalysisMessageInput, IChatService } from "./chat-service.interface"
 import { AnalysisResult, ChatSession, ChatHistoryItem, Message, ModelType } from "../types"
-import { getChatGrpcClient } from "@/lib/grpc/chat-client"
+import { getChatGrpcClient } from "@/lib/shared/grpc/chat-client"
 import { inferenceService } from "./inference-service"
 import { mapGrpcMessageToDomain, mapDomainAnalysisToGrpc } from "../utils/mappers"
 import { buildAnalysisMessageMetadata } from "../utils/analysis-message-metadata"
 import { orderMessagesForDisplay } from "../utils/order-messages-for-display"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth-options"
+import { authOptions } from "@/lib/config/auth-options"
 
 interface GrpcChatSummary {
   id: string
@@ -107,12 +107,16 @@ export class GrpcChatService implements IChatService {
   async sendMessage(chatId: string, content: string, model: ModelType): Promise<Message> {
     const userId = await this.getUserId()
 
-    const [, analysisResult] = await Promise.all([
+    const [userMessage, analysisResult] = await Promise.all([
       this.saveUserMessage(chatId, userId, content),
-      inferenceService.detect(content, model)
+      inferenceService.detect(content, model),
     ])
-
-    const assistantMessage = await this.saveAssistantAnalysis(chatId, userId, analysisResult)
+    const assistantMessage = await this.saveAssistantAnalysisMessage(chatId, userId, {
+      state: "completed",
+      model,
+      sourceMessageId: userMessage.id,
+      analysis: analysisResult,
+    })
 
     return assistantMessage
   }
@@ -144,6 +148,7 @@ export class GrpcChatService implements IChatService {
           model: input.model,
           sourceMessageId: input.sourceMessageId,
           error: input.error,
+          highlights: input.analysis?.highlights,
         }),
       },
     )

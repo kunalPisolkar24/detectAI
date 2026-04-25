@@ -3,8 +3,8 @@
 import { memo } from "react"
 import { m } from "framer-motion"
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { cn } from "@/lib/utils"
-import { merriweather } from "@/lib/fonts"
+import { cn } from "@/lib/core/utils"
+import { merriweather } from "@/lib/core/fonts"
 
 interface FaqItemProps {
   question: string

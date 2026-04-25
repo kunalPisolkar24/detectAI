@@ -1,5 +1,5 @@
-import { env } from "@/lib/env"
-import { registry } from "@/lib/metrics"
+import { env } from "@/lib/config/env"
+import { registry } from "@/lib/infrastructure/metrics"
 import { NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
