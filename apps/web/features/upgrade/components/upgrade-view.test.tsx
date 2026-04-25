@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@/test/test-utils'
+import { render, screen, waitFor, act } from '@/test/test-utils'
 import { UpgradeView } from './upgrade-view'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
@@ -90,5 +90,46 @@ describe('UpgradeView', () => {
     render(<UpgradeView />)
     expect(screen.getByTestId('pricing-component')).toBeInTheDocument()
     expect(screen.getByText('Back')).toBeInTheDocument()
+  })
+
+  it('initializes paddle on mount', async () => {
+    render(<UpgradeView />)
+    
+    await waitFor(() => {
+      expect(initializePaddle).toHaveBeenCalledWith({
+        token: 'test-token',
+        environment: 'sandbox',
+        eventCallback: expect.any(Function),
+      })
+    })
+  })
+
+  it('shows error toast if paddle initialization fails', async () => {
+    vi.mocked(initializePaddle).mockRejectedValue(new Error('Init failed'))
+    render(<UpgradeView />)
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Failed to load payment system')
+    })
+  })
+
+  it('sets processing state during paddle initialization', async () => {
+    let resolvePaddle: any
+    const paddlePromise = new Promise((resolve) => {
+      resolvePaddle = resolve
+    })
+    vi.mocked(initializePaddle).mockReturnValue(paddlePromise as any)
+
+    render(<UpgradeView />)
+
+    expect(screen.getByText('Loading Paddle...')).toBeInTheDocument()
+
+    await act(async () => {
+      resolvePaddle(mockPaddle)
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading Paddle...')).not.toBeInTheDocument()
+    })
   })
 })
