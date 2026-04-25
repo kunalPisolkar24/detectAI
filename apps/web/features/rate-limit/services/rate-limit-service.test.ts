@@ -75,4 +75,59 @@ describe('RedisRateLimitService', () => {
       }))
     })
   })
+
+  describe('trackUsage', () => {
+    it('executes pipeline with correct keys and increments', async () => {
+      mockPipeline.exec.mockResolvedValue([])
+      await service.trackUsage('user-1')
+
+      const dailyKey = 'rate_limit:{user-1}:daily:2026-04-25'
+      const pendingKey = 'usage:{user-1}:pending'
+
+      expect(mockPipeline.incr).toHaveBeenCalledWith(dailyKey)
+      expect(mockPipeline.expire).toHaveBeenCalledWith(dailyKey, 86400)
+      expect(mockPipeline.incr).toHaveBeenCalledWith(pendingKey)
+      expect(mockPipeline.expire).toHaveBeenCalledWith(pendingKey, 86400)
+      expect(mockPipeline.exec).toHaveBeenCalled()
+      expect(usageRedis.sadd).toHaveBeenCalledWith('usage:dirty_users', 'user-1')
+    })
+
+    it('logs error if pipeline execution fails', async () => {
+      mockPipeline.exec.mockRejectedValue(new Error('Pipeline failed'))
+      await service.trackUsage('user-1')
+
+      expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({
+        msg: 'Failed to track usage metrics',
+        userId: 'user-1'
+      }))
+    })
+  })
+
+  describe('getRealTimeUsage', () => {
+    it('returns parsed counts from redis', async () => {
+      vi.mocked(usageRedis.get)
+        .mockResolvedValueOnce('50') // daily
+        .mockResolvedValueOnce('5')  // pending
+
+      const result = await service.getRealTimeUsage('user-1')
+      expect(result).toEqual({ dailyCount: 50, pendingCount: 5 })
+    })
+
+    it('returns zeros if keys do not exist', async () => {
+      vi.mocked(usageRedis.get).mockResolvedValue(null)
+      const result = await service.getRealTimeUsage('user-1')
+      expect(result).toEqual({ dailyCount: 0, pendingCount: 0 })
+    })
+
+    it('logs error and returns zeros if redis fails', async () => {
+      vi.mocked(usageRedis.get).mockRejectedValue(new Error('Redis error'))
+      const result = await service.getRealTimeUsage('user-1')
+
+      expect(result).toEqual({ dailyCount: 0, pendingCount: 0 })
+      expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({
+        msg: 'Failed to retrieve real-time usage',
+        userId: 'user-1'
+      }))
+    })
+  })
 })
