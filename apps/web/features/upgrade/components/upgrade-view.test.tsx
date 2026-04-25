@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, act } from '@/test/test-utils'
 import { UpgradeView } from './upgrade-view'
 import { useRouter } from 'next/navigation'
@@ -225,6 +225,84 @@ describe('UpgradeView', () => {
       customer: { email: 'test@example.com' },
       customData: { userId: 'user-123' },
       settings: { theme: 'dark', displayMode: 'overlay' },
+    })
+  })
+
+  describe.skip('checkout lifecycle', () => {
+    let originalSetTimeout: typeof setTimeout
+
+    beforeEach(() => {
+      originalSetTimeout = global.setTimeout
+      vi.spyOn(global, 'setTimeout').mockImplementation((cb: any) => {
+        cb()
+        return 0 as any
+      })
+    })
+
+    afterEach(() => {
+      global.setTimeout = originalSetTimeout
+    })
+
+    it('polls and redirects on successful premium activation', async () => {
+      let eventCallback: any
+      vi.mocked(initializePaddle).mockImplementation(async (options: any) => {
+        eventCallback = options.eventCallback
+        return mockPaddle as any
+      })
+
+      vi.mocked(useSession).mockReturnValue({
+        data: { user: { id: 'user-123', isPremium: false } },
+        status: 'authenticated',
+        update: mockUpdate,
+      } as any)
+
+      render(<UpgradeView />)
+      
+      await waitFor(() => {
+        expect(eventCallback).toBeDefined()
+      })
+
+      mockUpdate.mockResolvedValueOnce({ user: { isPremium: false } })
+      mockUpdate.mockResolvedValueOnce({ user: { isPremium: true } })
+
+      await act(async () => {
+        await eventCallback({ name: 'checkout.completed' })
+      })
+
+      expect(toast.success).toHaveBeenCalledWith('Payment received! Activating your Premium access…')
+      expect(toast.success).toHaveBeenCalledWith('Premium activated! Welcome to Flare.')
+      expect(mockPush).toHaveBeenCalledWith('/chat')
+    })
+
+    it('handles polling timeout gracefully', async () => {
+      let eventCallback: any
+      vi.mocked(initializePaddle).mockImplementation(async (options: any) => {
+        eventCallback = options.eventCallback
+        return mockPaddle as any
+      })
+
+      vi.mocked(useSession).mockReturnValue({
+        data: { user: { id: 'user-123', isPremium: false } },
+        status: 'authenticated',
+        update: mockUpdate,
+      } as any)
+
+      render(<UpgradeView />)
+      
+      await waitFor(() => {
+        expect(eventCallback).toBeDefined()
+      })
+
+      mockUpdate.mockResolvedValue({ user: { isPremium: false } })
+
+      await act(async () => {
+        await eventCallback({ name: 'checkout.completed' })
+      })
+
+      expect(toast.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Your subscription is being processed')
+      )
+      expect(mockPush).toHaveBeenCalledWith('/chat')
     })
   })
 })
