@@ -25,12 +25,14 @@ const baseUserMessage: Message = {
   id: 'msg-1',
   role: 'user',
   content: 'Hello, world!',
+  createdAt: new Date('2024-01-01'),
 }
 
 const baseAssistantMessage: Message = {
   id: 'msg-2',
   role: 'assistant',
   content: '',
+  createdAt: new Date('2024-01-01'),
 }
 
 describe('MessageItem', () => {
@@ -81,6 +83,7 @@ describe('MessageItem', () => {
         model: 'spark',
         state: 'failed',
         error: 'Something went wrong',
+        sourceMessageId: 'msg-2',
       },
     }
     render(<MessageItem message={message} />)
