@@ -130,3 +130,10 @@ vi.mock('@/lib/infrastructure/metrics', () => ({
   },
 }))
 
+vi.mock('next/font/google', () => ({
+  Merriweather: () => ({ className: 'merriweather' }),
+  Inter: () => ({ className: 'inter' }),
+  Teko: () => ({ className: 'teko' }),
+  Outfit: () => ({ className: 'outfit' }),
+  Roboto: () => ({ className: 'roboto' }),
+}))
