@@ -1,7 +1,6 @@
-import { render } from '@testing-library/react'
-import { describe, it, vi, beforeEach } from 'vitest'
+import { render, fireEvent } from '@testing-library/react'
+import { describe, it, vi } from 'vitest'
 import { ChatView } from './chat-view'
-import { MessageList } from './message-list'
 import { MessageItem } from './message-item'
 import { ChatHeader } from './layout/chat-header'
 import { MobileHeader } from './layout/mobile-header'
@@ -12,24 +11,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
 
 // Mock dependencies
-vi.mock('../stores/ui-store', () => ({
-  useChatUIStore: vi.fn((selector) => selector ? selector({
+vi.mock('../stores/ui-store', () => {
+  const state = {
     selectedModel: 'spark',
     isSidebarOpen: true,
     currentChatId: 'chat-1',
     setCurrentChatId: vi.fn(),
     toggleSidebar: vi.fn(),
     setSidebarOpen: vi.fn(),
-  }) : {
-    selectedModel: 'spark',
-    isSidebarOpen: true,
-    currentChatId: 'chat-1',
-  }),
-}))
-
-vi.mock('./message-list', () => ({
-  MessageList: () => <div data-testid="message-list" />
-}))
+  }
+  return {
+    useChatUIStore: vi.fn((selector) => selector ? selector(state) : state)
+  }
+})
 
 vi.mock('./chat-input', () => ({
   ChatInput: () => <div data-testid="chat-input" />
@@ -60,24 +54,46 @@ describe('Chat UI Structural Rendering', () => {
     render(<MessageItem message={mockMessage as any} />)
   })
 
-  it('renders ChatHeader without crashing', () => {
-    render(<ChatHeader />, { wrapper })
+  it('renders ChatHeader and handles interactions', () => {
+    const { getAllByRole } = render(<ChatHeader />, { wrapper })
+    const buttons = getAllByRole('button')
+    if (buttons.length > 0) {
+      fireEvent.click(buttons[0])
+    }
   })
 
-  it('renders MobileHeader without crashing', () => {
-    render(<MobileHeader />, { wrapper })
+  it('renders MobileHeader and handles toggle', () => {
+    const { getAllByRole } = render(<MobileHeader />, { wrapper })
+    const buttons = getAllByRole('button')
+    if (buttons.length > 0) {
+      fireEvent.click(buttons[0])
+    }
   })
 
-  it('renders Sidebar without crashing', () => {
-    render(<Sidebar />, { wrapper })
+  it('renders Sidebar and handles toggle', () => {
+    const { getAllByRole } = render(<Sidebar />, { wrapper })
+    const buttons = getAllByRole('button')
+    if (buttons.length > 0) {
+      fireEvent.click(buttons[0])
+    }
   })
 
-  it('renders SidebarItem without crashing', () => {
+  it('renders SidebarItem and handles interactions', async () => {
     const mockChat = { id: '1', title: 'Test', createdAt: new Date() }
-    render(<SidebarItem chat={mockChat as any} />)
+    const { getByText, getAllByRole } = render(<SidebarItem chat={mockChat as any} />)
+    
+    const item = getByText('Test')
+    fireEvent.click(item)
+    
+    const buttons = getAllByRole('button')
+    if (buttons.length > 0) {
+      fireEvent.click(buttons[0])
+    }
   })
 
-  it('renders UserMenu without crashing', () => {
-    render(<UserMenu isCollapsed={false} />)
+  it('renders UserMenu and handles interactions', async () => {
+    const { getByRole } = render(<UserMenu isCollapsed={false} />)
+    const trigger = getByRole('button')
+    fireEvent.click(trigger)
   })
 })
