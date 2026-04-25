@@ -2,8 +2,8 @@ import { PrismaClient } from './generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { env } from '@/lib/config/env';
-import { metrics } from '@/lib/metrics';
-import { logger } from '@/lib/logger';
+import { metrics } from '@/lib/infrastructure/metrics';
+import { logger } from '@/lib/infrastructure/logger';
 
 const READ_OPERATIONS = [
   'findUnique',

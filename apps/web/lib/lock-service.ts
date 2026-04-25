@@ -1,5 +1,5 @@
 import Redlock, { ExecutionError } from "redlock"
-import { redisWriter } from "@/lib/redis"
+import { redisWriter } from "@/lib/infrastructure/redis"
 
 const redlock = new Redlock(
   [redisWriter],

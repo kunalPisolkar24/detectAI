@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { inferenceService, InferenceStreamAbortedError } from './inference-service'
-import { getGrpcClient, getGrpcMetadata } from '@/lib/grpc-client'
-import { metrics } from '@/lib/metrics'
-import { logger } from '@/lib/logger'
+import { getGrpcClient, getGrpcMetadata } from '@/lib/infrastructure/grpc-client'
+import { metrics } from '@/lib/infrastructure/metrics'
+import { logger } from '@/lib/infrastructure/logger'
 
-vi.mock('@/lib/grpc-client')
-vi.mock('@/lib/metrics', () => ({ metrics: { aiInferenceDuration: { observe: vi.fn() } } }))
-vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }))
+vi.mock('@/lib/infrastructure/grpc-client')
+vi.mock('@/lib/infrastructure/metrics', () => ({ metrics: { aiInferenceDuration: { observe: vi.fn() } } }))
+vi.mock('@/lib/infrastructure/logger', () => ({ logger: { error: vi.fn() } }))
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import "server-only"
 
-import { getGrpcClient, getGrpcMetadata } from "@/lib/grpc-client"
-import { metrics } from "@/lib/metrics"
-import { logger } from "@/lib/logger"
+import { getGrpcClient, getGrpcMetadata } from "@/lib/infrastructure/grpc-client"
+import { metrics } from "@/lib/infrastructure/metrics"
+import { logger } from "@/lib/infrastructure/logger"
 import { AnalysisHighlightSpan, AnalysisResult, ModelType } from "../types"
 
 interface ProtoResponse {

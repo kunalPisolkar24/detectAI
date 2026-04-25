@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { RedisRateLimitService } from './rate-limit-service'
-import { usageRedis } from '@/lib/redis-limit'
-import { metrics } from '@/lib/metrics'
-import { logger } from '@/lib/logger'
+import { usageRedis } from '@/lib/infrastructure/redis-limit'
+import { metrics } from '@/lib/infrastructure/metrics'
+import { logger } from '@/lib/infrastructure/logger'
 
-vi.mock('@/lib/redis-limit', () => ({
+vi.mock('@/lib/infrastructure/redis-limit', () => ({
   usageRedis: {
     get: vi.fn(),
     pipeline: vi.fn(),

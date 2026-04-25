@@ -110,7 +110,7 @@ vi.mock('sonner', () => ({
   },
 }))
 
-vi.mock('@/lib/logger', () => ({
+vi.mock('@/lib/infrastructure/logger', () => ({
   logger: {
     info: vi.fn(),
     error: vi.fn(),
@@ -119,7 +119,7 @@ vi.mock('@/lib/logger', () => ({
   },
 }))
 
-vi.mock('@/lib/metrics', () => ({
+vi.mock('@/lib/infrastructure/metrics', () => ({
   metrics: {
     rateLimitHits: {
       inc: vi.fn(),

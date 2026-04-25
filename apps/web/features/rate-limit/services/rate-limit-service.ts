@@ -1,7 +1,7 @@
-import { usageRedis } from "@/lib/redis-limit"
+import { usageRedis } from "@/lib/infrastructure/redis-limit"
 import { startOfDay, format } from "date-fns"
-import { metrics } from "@/lib/metrics"
-import { logger } from "@/lib/logger"
+import { metrics } from "@/lib/infrastructure/metrics"
+import { logger } from "@/lib/infrastructure/logger"
 
 export interface IRateLimitService {
   checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }>

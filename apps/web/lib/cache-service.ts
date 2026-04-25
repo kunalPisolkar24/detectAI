@@ -1,7 +1,7 @@
-import { redisReader, redisWriter } from "@/lib/redis"
+import { redisReader, redisWriter } from "@/lib/infrastructure/redis"
 import { JsonSerializer } from "@/lib/core/serialization"
-import { metrics } from "@/lib/metrics"
-import { logger } from "@/lib/logger"
+import { metrics } from "@/lib/infrastructure/metrics"
+import { logger } from "@/lib/infrastructure/logger"
 
 export const TTL = {
   USER: 3600,
