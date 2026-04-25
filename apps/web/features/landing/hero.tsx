@@ -1,12 +1,12 @@
 import Link from "next/link"
 import { ArrowRight, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import { HeroBackground } from "./components/hero-background"
 import { TextDetectionVisualizer } from "./components/text-detection-visualizer"
 import { FadeIn } from "@/components/ui/fade-in"
 import { HERO_TEXT } from "./constants"
-import { merriweather, teko } from "@/lib/fonts"
+import { merriweather, teko } from "@/lib/core/fonts"
 
 export const HeroSection = () => {
   return (

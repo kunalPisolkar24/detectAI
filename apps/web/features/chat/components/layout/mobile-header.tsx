@@ -33,8 +33,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { SidebarItem } from "./sidebar-item"
 import { UserMenu } from "./user-menu"
-import { cn } from "@/lib/utils"
-import { teko, inter } from "@/lib/fonts"
+import { cn } from "@/lib/core/utils"
+import { teko, inter } from "@/lib/core/fonts"
 import { useState } from "react"
 
 export const MobileHeader = () => {

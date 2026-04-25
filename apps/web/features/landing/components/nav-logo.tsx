@@ -3,8 +3,8 @@
 import Link from "next/link"
 import { m } from "framer-motion"
 import { BotIcon } from "lucide-react"
-import { teko } from "@/lib/fonts"
-import { cn } from "@/lib/utils"
+import { teko } from "@/lib/core/fonts"
+import { cn } from "@/lib/core/utils"
 
 export const NavLogo = () => {
   return (

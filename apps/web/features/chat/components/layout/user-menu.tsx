@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import {
   User,
   LogOut,
@@ -22,7 +22,7 @@ import {
   ChevronsUpDown,
   CircleFadingArrowUp
 } from "lucide-react"
-import { inter } from "@/lib/fonts"
+import { inter } from "@/lib/core/fonts"
 
 interface UserMenuProps {
   isCollapsed: boolean

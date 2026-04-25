@@ -1,10 +1,10 @@
 "use client"
 
 import { m } from "framer-motion"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import { AnalysisResult } from "../types"
 import { Fingerprint, Bot } from "lucide-react"
-import { teko, inter } from "@/lib/fonts"
+import { teko, inter } from "@/lib/core/fonts"
 import { formatPercentage, getAnalysisConfig, getModelDisplayName } from "../utils/formatting"
 
 interface AnalysisCardProps {

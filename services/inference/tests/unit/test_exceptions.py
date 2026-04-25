@@ -1,8 +1,9 @@
-from src.core.exceptions import (
+from src.domain.exceptions import (
     AIServiceException,
-    ModelLoadError,
     InferenceError,
-    InvalidInputError
+    InvalidInputError,
+    ModelLoadError,
+    ServiceOverloadedError,
 )
 
 def test_exceptions_inheritance():

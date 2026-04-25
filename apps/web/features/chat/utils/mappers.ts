@@ -1,4 +1,9 @@
 import { Message, AnalysisResult } from "@/features/chat/types"
+import {
+  parseAnalysisHighlightsMetadata,
+  parseAnalysisLinkMetadata,
+  parseAnalysisMessageMetadata,
+} from "./analysis-message-metadata"
 
 interface GrpcMessage {
   id: string
@@ -25,6 +30,7 @@ export const mapGrpcMessageToDomain = (grpcMsg: GrpcMessage): Message => {
     content: grpcMsg.content,
     createdAt: new Date(parseInt(grpcMsg.created_at) * 1000), 
   }
+  const highlights = parseAnalysisHighlightsMetadata(grpcMsg.metadata) ?? []
 
   if (grpcMsg.analysis) {
     message.analysis = {
@@ -35,8 +41,19 @@ export const mapGrpcMessageToDomain = (grpcMsg: GrpcMessage): Message => {
         human: grpcMsg.analysis.human_score,
         ai: grpcMsg.analysis.ai_score
       },
+      highlights,
       raw: grpcMsg.analysis
     }
+  }
+
+  const analysisLink = parseAnalysisLinkMetadata(grpcMsg.metadata)
+  if (analysisLink) {
+    message.analysisLink = analysisLink
+  }
+
+  const analysisStatus = parseAnalysisMessageMetadata(grpcMsg.metadata)
+  if (analysisStatus) {
+    message.analysisStatus = analysisStatus
   }
 
   return message

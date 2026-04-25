@@ -1,58 +1,209 @@
+import asyncio
+import gc
+import threading
 import time
+from unittest.mock import patch
+
 import pytest
-from concurrent import futures
-from src.inference.batcher import BatchingProxy
 
-def test_batcher_predict_single(mock_engine):
-    batcher = BatchingProxy(mock_engine, batch_size=1, timeout=0.1, model_name="test")
-    result = batcher.predict("test input")
-    
+from src.application.ports.outbound.inference import ISyncBatchInferenceEngine
+from src.domain.exceptions import ServiceOverloadedError
+from src.domain.models import BatcherHealthSnapshot, BatcherHealthStatus
+from src.adapters.outbound.inference.batcher import BatchingProxy
+
+
+class PredictBatchEngine:
+    def __init__(self, results=None):
+        self.calls = []
+        self.results = results or [0.8, 0.2, 0.5, 0.9]
+
+    def predict_batch(self, texts):
+        self.calls.append(list(texts))
+        return self.results[: len(texts)]
+
+
+class FailingBatchEngine:
+    def __init__(self):
+        self.calls = 0
+
+    def predict_batch(self, texts):
+        self.calls += 1
+        raise ValueError("Inference failed")
+
+
+class BlockingBatchEngine:
+    def __init__(self):
+        self.started = threading.Event()
+        self.release = threading.Event()
+        self.calls = []
+
+    def predict_batch(self, texts):
+        self.calls.append(list(texts))
+        self.started.set()
+        self.release.wait(timeout=2)
+        return [0.8 for _ in texts]
+
+
+@pytest.mark.asyncio
+async def test_batcher_predict_single():
+    engine = PredictBatchEngine()
+    batcher = BatchingProxy(engine, batch_size=1, timeout=0.1, model_name="test", queue_max_size=8)
+    await batcher.start()
+
+    result = await batcher.predict("test input")
+
     assert result == 0.8
-    mock_engine.predict_batch.assert_called_once()
-    args = mock_engine.predict_batch.call_args[0][0]
-    assert args == ["test input"]
-    
-    batcher.shutdown_flag = True
+    assert engine.calls == [["test input"]]
 
-def test_batcher_groups_requests(mock_engine):
-    batcher = BatchingProxy(mock_engine, batch_size=2, timeout=0.5, model_name="test")
-    
-    future1 = futures.Future()
-    future2 = futures.Future()
-    
-    batcher.queue.put(("text1", future1))
-    batcher.queue.put(("text2", future2))
-    
-    time.sleep(0.2)
-    
-    assert future1.result() == 0.8
-    assert future2.result() == 0.2
-    
-    mock_engine.predict_batch.assert_called_once()
-    args = mock_engine.predict_batch.call_args[0][0]
-    assert len(args) == 2
-    assert args == ["text1", "text2"]
-    
-    batcher.shutdown_flag = True
+    await batcher.shutdown()
 
-def test_batcher_respects_timeout(mock_engine):
-    batcher = BatchingProxy(mock_engine, batch_size=5, timeout=0.1, model_name="test")
-    
+
+@pytest.mark.asyncio
+async def test_batcher_groups_requests():
+    engine = PredictBatchEngine()
+    batcher = BatchingProxy(engine, batch_size=2, timeout=0.5, model_name="test", queue_max_size=8)
+    await batcher.start()
+
+    result1, result2 = await asyncio.gather(
+        batcher.predict("text1"),
+        batcher.predict("text2"),
+    )
+
+    assert result1 == 0.8
+    assert result2 == 0.2
+    assert engine.calls == [["text1", "text2"]]
+
+    await batcher.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_batcher_respects_timeout():
+    engine = PredictBatchEngine()
+    batcher = BatchingProxy(engine, batch_size=5, timeout=0.1, model_name="test", queue_max_size=8)
+    await batcher.start()
+
     start = time.monotonic()
-    result = batcher.predict("wait for me")
+    result = await batcher.predict("wait for me")
     duration = time.monotonic() - start
-    
+
     assert duration >= 0.1
     assert result == 0.8
-    mock_engine.predict_batch.assert_called_once()
-    
-    batcher.shutdown_flag = True
+    assert engine.calls == [["wait for me"]]
 
-def test_batcher_handles_exception(mock_engine):
-    mock_engine.predict_batch.side_effect = ValueError("Inference failed")
-    batcher = BatchingProxy(mock_engine, batch_size=1, timeout=0.1, model_name="test")
-    
+    await batcher.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_batcher_handles_engine_exception():
+    batcher = BatchingProxy(FailingBatchEngine(), batch_size=1, timeout=0.1, model_name="test", queue_max_size=8)
+    await batcher.start()
+
     with pytest.raises(ValueError, match="Inference failed"):
-        batcher.predict("boom")
-        
-    batcher.shutdown_flag = True
+        await batcher.predict("boom")
+
+    await batcher.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_batcher_rejects_when_queue_is_full():
+    engine = PredictBatchEngine()
+    batcher = BatchingProxy(engine, batch_size=1, timeout=0.1, model_name="test", queue_max_size=1)
+    await batcher.start()
+
+    with patch.object(batcher.queue, "put_nowait", side_effect=asyncio.QueueFull):
+        with pytest.raises(ServiceOverloadedError, match="queue is full"):
+            await batcher.predict("boom")
+
+    await batcher.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_batcher_opens_circuit_after_repeated_failures():
+    batcher = BatchingProxy(FailingBatchEngine(), batch_size=1, timeout=0.01, model_name="test", queue_max_size=8)
+    await batcher.start()
+
+    for _ in range(3):
+        with pytest.raises(ValueError, match="Inference failed"):
+            await batcher.predict("boom")
+
+    with pytest.raises(ServiceOverloadedError, match="circuit is open"):
+        await batcher.predict("boom")
+
+    await batcher.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_batcher_reports_open_circuit_in_health_snapshot():
+    batcher = BatchingProxy(FailingBatchEngine(), batch_size=1, timeout=0.01, model_name="test", queue_max_size=8)
+    await batcher.start()
+
+    for _ in range(3):
+        with pytest.raises(ValueError, match="Inference failed"):
+            await batcher.predict("boom")
+
+    snapshot = batcher.health_snapshot()
+
+    assert snapshot.status == BatcherHealthStatus.CIRCUIT_OPEN
+    assert snapshot.circuit_open_remaining is not None
+
+    await batcher.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_batcher_fails_queued_requests_during_shutdown():
+    engine = BlockingBatchEngine()
+    batcher = BatchingProxy(engine, batch_size=1, timeout=0.01, model_name="test", queue_max_size=8)
+    await batcher.start()
+
+    first_request = asyncio.create_task(batcher.predict("text1"))
+
+    await asyncio.to_thread(engine.started.wait, 1)
+
+    second_request = asyncio.create_task(batcher.predict("text2"))
+    shutdown_task = asyncio.create_task(batcher.shutdown())
+
+    engine.release.set()
+
+    assert await first_request == 0.8
+    with pytest.raises(ServiceOverloadedError, match="shutting down"):
+        await second_request
+
+    await shutdown_task
+    assert engine.calls == [["text1"]]
+
+
+@pytest.mark.asyncio
+async def test_batcher_shutdown_does_not_leave_unretrieved_future_exceptions():
+    engine = BlockingBatchEngine()
+    batcher = BatchingProxy(engine, batch_size=1, timeout=0.01, model_name="test", queue_max_size=8)
+    await batcher.start()
+
+    loop = asyncio.get_running_loop()
+    contexts = []
+    previous_handler = loop.get_exception_handler()
+    loop.set_exception_handler(lambda _loop, context: contexts.append(context))
+
+    try:
+        first_request = asyncio.create_task(batcher.predict("text1"))
+
+        await asyncio.to_thread(engine.started.wait, 1)
+
+        second_request = asyncio.create_task(batcher.predict("text2"))
+        shutdown_task = asyncio.create_task(batcher.shutdown())
+
+        engine.release.set()
+
+        assert await first_request == 0.8
+        with pytest.raises(ServiceOverloadedError, match="shutting down"):
+            await second_request
+
+        await shutdown_task
+        gc.collect()
+        await asyncio.sleep(0)
+
+        assert not any(
+            context.get("message") == "Future exception was never retrieved"
+            for context in contexts
+        )
+    finally:
+        loop.set_exception_handler(previous_handler)

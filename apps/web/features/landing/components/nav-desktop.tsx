@@ -5,10 +5,10 @@ import Link from "next/link"
 import { m } from "framer-motion"
 import { LogIn } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import { NAV_LINKS } from "../constants"
 import { ModeToggle } from "./mode-toggle"
-import { teko } from "@/lib/fonts"
+import { teko } from "@/lib/core/fonts"
 
 export const NavDesktop = () => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)

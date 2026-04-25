@@ -2,13 +2,13 @@
 
 import { useChatUIStore } from "../../stores/ui-store"
 import { useChatHistory } from "../../hooks/use-chat-history"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import { Button } from "@/components/ui/button"
 import { m, AnimatePresence } from "framer-motion"
 import { PanelLeftClose, PanelLeftOpen, CircleFadingPlus, BotIcon } from "lucide-react"
 import { SidebarItem } from "./sidebar-item"
 import { UserMenu } from "./user-menu"
-import { teko } from "@/lib/fonts"
+import { teko } from "@/lib/core/fonts"
 import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
 

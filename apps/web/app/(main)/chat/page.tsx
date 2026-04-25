@@ -1,7 +1,7 @@
 import { ChatView } from "@/features/chat/components/chat-view"
 import type { Metadata } from "next"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth-options"
+import { authOptions } from "@/lib/config/auth-options"
 import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
 
 export const metadata: Metadata = {

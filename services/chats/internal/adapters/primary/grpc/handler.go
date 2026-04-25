@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"time"
 
 	pb "github.com/kunalPisolkar24/detectAI/services/chats/api/proto"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
@@ -88,6 +89,11 @@ func (h *Handler) SaveMessage(ctx context.Context, req *pb.SaveMessageRequest) (
 		Role:     req.Role,
 		Content:  req.Content,
 		Metadata: req.Metadata,
+		ID:       req.MessageId,
+	}
+
+	if req.CreatedAt > 0 {
+		msg.CreatedAt = time.Unix(req.CreatedAt, 0).UTC()
 	}
 
 	if req.Analysis != nil {

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
-import { env } from "@/lib/env"
+import { env } from "@/lib/config/env"
 
 const PLACEHOLDER_SITE_KEYS = new Set(["dummy"])
 

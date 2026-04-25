@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth-options"
-import { prisma } from "@/lib/prisma"
-import { SubscriptionStatus } from "@/lib/generated/prisma/client"
-import { env } from "@/lib/env"
+import { authOptions } from "@/lib/config/auth-options"
+import { prisma } from "@/lib/infrastructure/prisma"
+import { SubscriptionStatus } from "@/lib/shared/generated/prisma/client"
+import { env } from "@/lib/config/env"
 import { userService } from "@/features/auth/services/user-service"
 
 type ActionState = {

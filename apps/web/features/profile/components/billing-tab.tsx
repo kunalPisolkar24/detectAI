@@ -6,8 +6,8 @@ import { format } from "date-fns"
 import { toast } from "sonner"
 import { CreditCard, Sparkles, Loader2, AlertTriangle, Clock } from "lucide-react"
 
-import { cn } from "@/lib/utils"
-import { teko, inter } from "@/lib/fonts"
+import { cn } from "@/lib/core/utils"
+import { teko, inter } from "@/lib/core/fonts"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,

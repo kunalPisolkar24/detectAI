@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -107,9 +108,21 @@ func (s *ChatService) GetHistory(ctx context.Context, chatID string, page, pageS
 
 	if page == 1 {
 		hotMessages, err := s.cache.GetRecentMessages(ctx, chatID)
-		if err == nil && len(hotMessages) >= limit {
+		if err == nil && len(hotMessages) > 0 {
 			metrics.CacheHits.Inc()
-			return hotMessages[:limit], true, nil
+
+			dbMessages, dbErr := s.persistence.GetHistory(ctx, chatID, offset, limit)
+			if dbErr != nil {
+				return nil, false, dbErr
+			}
+
+			merged := mergeMessages(hotMessages, dbMessages)
+			if len(merged) > limit {
+				return merged[:limit], true, nil
+			}
+
+			hasMore := len(dbMessages) == limit
+			return merged, hasMore, nil
 		}
 		metrics.CacheMisses.Inc()
 		
@@ -137,4 +150,39 @@ func (s *ChatService) GetHistory(ctx context.Context, chatID string, page, pageS
 
 	hasMore := len(coldMessages) == limit
 	return coldMessages, hasMore, nil
+}
+
+func mergeMessages(primary []*domain.Message, secondary []*domain.Message) []*domain.Message {
+	seen := make(map[string]struct{}, len(primary)+len(secondary))
+	merged := make([]*domain.Message, 0, len(primary)+len(secondary))
+
+	for _, msg := range primary {
+		if msg == nil {
+			continue
+		}
+		if _, exists := seen[msg.ID]; exists {
+			continue
+		}
+
+		seen[msg.ID] = struct{}{}
+		merged = append(merged, msg)
+	}
+
+	for _, msg := range secondary {
+		if msg == nil {
+			continue
+		}
+		if _, exists := seen[msg.ID]; exists {
+			continue
+		}
+
+		seen[msg.ID] = struct{}{}
+		merged = append(merged, msg)
+	}
+
+	sort.SliceStable(merged, func(i, j int) bool {
+		return merged[i].CreatedAt.After(merged[j].CreatedAt)
+	})
+
+	return merged
 }

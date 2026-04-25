@@ -5,6 +5,7 @@ import (
 	"errors"
 	"gateway/internal/logger"
 	"gateway/internal/mocks"
+	"gateway/internal/monitoring"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,7 +19,10 @@ func setupTestRouter(mp *mocks.MockEventProducer, mv *mocks.MockSignatureValidat
 	gin.SetMode(gin.TestMode)
 	log := logger.New()
 	handler := NewHandler(mp, mv, "test-secret", log)
+	monitor := monitoring.New("payment-gateway")
 	r := gin.New()
+	r.Use(monitor.Middleware())
+	r.GET("/metrics", gin.WrapH(monitor.Handler()))
 	handler.RegisterRoutes(r)
 	return r
 }
@@ -108,7 +112,7 @@ func TestHandler_HandleInternalEvent(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("POST", "/internal/events", bytes.NewBuffer(body))
-		
+
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -120,10 +124,30 @@ func TestHandler_HandleInternalEvent(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("POST", "/internal/events", bytes.NewBuffer(body))
-		
+
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 		mp.AssertExpectations(t)
 	})
+}
+
+func TestHandler_Metrics(t *testing.T) {
+	mp := new(mocks.MockEventProducer)
+	mv := new(mocks.MockSignatureValidator)
+	router := setupTestRouter(mp, mv)
+
+	mp.On("IsConnected").Return(true).Once()
+
+	healthRecorder := httptest.NewRecorder()
+	healthRequest, _ := http.NewRequest("GET", "/health", nil)
+	router.ServeHTTP(healthRecorder, healthRequest)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/metrics", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "http_requests_total")
+	assert.Contains(t, w.Body.String(), "http_request_duration_seconds")
 }

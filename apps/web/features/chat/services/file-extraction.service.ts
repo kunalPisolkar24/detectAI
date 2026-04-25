@@ -1,4 +1,4 @@
-import { env } from "@/lib/env"
+import { env } from "@/lib/config/env"
 
 export class FileExtractionService {
   private baseUrl: string
