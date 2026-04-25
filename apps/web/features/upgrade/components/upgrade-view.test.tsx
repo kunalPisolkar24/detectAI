@@ -132,4 +132,99 @@ describe('UpgradeView', () => {
       expect(screen.queryByText('Loading Paddle...')).not.toBeInTheDocument()
     })
   })
+
+  it('redirects to login if selecting plan while unauthenticated', async () => {
+    vi.mocked(useSession).mockReturnValue({
+      data: null,
+      status: 'unauthenticated',
+      update: mockUpdate,
+    } as any)
+
+    render(<UpgradeView />)
+    
+    await waitFor(() => {
+      expect(initializePaddle).toHaveBeenCalled()
+    })
+
+    const selectBtn = screen.getByTestId('select-monthly')
+    await act(async () => {
+      selectBtn.click()
+    })
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Please log in to upgrade.')
+      expect(mockPush).toHaveBeenCalledWith('/login?callbackUrl=/upgrade')
+    })
+  })
+
+  it('shows error if paddle is not initialized when selecting plan', async () => {
+    vi.mocked(initializePaddle).mockResolvedValue(undefined as any)
+    
+    render(<UpgradeView />)
+
+    await waitFor(() => {
+      expect(initializePaddle).toHaveBeenCalled()
+    })
+    
+    const selectBtn = screen.getByTestId('select-monthly')
+    await act(async () => {
+      selectBtn.click()
+    })
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Payment system is still loading. Please try again.')
+    })
+  })
+
+  it('opens monthly checkout for authenticated user', async () => {
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: 'user-123', email: 'test@example.com' } },
+      status: 'authenticated',
+      update: mockUpdate,
+    } as any)
+
+    render(<UpgradeView />)
+    
+    await waitFor(() => {
+      expect(initializePaddle).toHaveBeenCalled()
+    })
+
+    const selectBtn = screen.getByTestId('select-monthly')
+    await act(async () => {
+      selectBtn.click()
+    })
+
+    expect(mockPaddle.Checkout.open).toHaveBeenCalledWith({
+      items: [{ priceId: 'pri_01jr2gqggwjakpc1hd9xzym7fy', quantity: 1 }],
+      customer: { email: 'test@example.com' },
+      customData: { userId: 'user-123' },
+      settings: { theme: 'dark', displayMode: 'overlay' },
+    })
+  })
+
+  it('opens yearly checkout for authenticated user', async () => {
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: 'user-123', email: 'test@example.com' } },
+      status: 'authenticated',
+      update: mockUpdate,
+    } as any)
+
+    render(<UpgradeView />)
+    
+    await waitFor(() => {
+      expect(initializePaddle).toHaveBeenCalled()
+    })
+
+    const selectBtn = screen.getByTestId('select-yearly')
+    await act(async () => {
+      selectBtn.click()
+    })
+
+    expect(mockPaddle.Checkout.open).toHaveBeenCalledWith({
+      items: [{ priceId: 'pri_01jr2gs8ckz66srr8sd1byh7n4', quantity: 1 }],
+      customer: { email: 'test@example.com' },
+      customData: { userId: 'user-123' },
+      settings: { theme: 'dark', displayMode: 'overlay' },
+    })
+  })
 })
