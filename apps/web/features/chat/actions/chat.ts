@@ -3,7 +3,7 @@
 import { chatService } from "@/features/chat/services"
 import { MAX_LIVE_ANALYSIS_CHARS } from "@/features/chat/constants"
 import { ModelType, ChatSession, Message, ChatHistoryItem } from "@/features/chat/types"
-import { authOptions } from "@/lib/auth-options"
+import { authOptions } from "@/lib/config/auth-options"
 import { getServerSession } from "next-auth"
 import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
 

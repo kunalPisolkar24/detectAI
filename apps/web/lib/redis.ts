@@ -1,5 +1,5 @@
 import Redis, { RedisOptions } from "ioredis"
-import { env } from "@/lib/env"
+import { env } from "@/lib/config/env"
 
 const globalForRedis = global as unknown as {
   redisWriter: Redis

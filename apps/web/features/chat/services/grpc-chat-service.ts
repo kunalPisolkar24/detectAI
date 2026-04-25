@@ -8,7 +8,7 @@ import { mapGrpcMessageToDomain, mapDomainAnalysisToGrpc } from "../utils/mapper
 import { buildAnalysisMessageMetadata } from "../utils/analysis-message-metadata"
 import { orderMessagesForDisplay } from "../utils/order-messages-for-display"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth-options"
+import { authOptions } from "@/lib/config/auth-options"
 
 interface GrpcChatSummary {
   id: string

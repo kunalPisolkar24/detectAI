@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { validateTurnstileToken } from './turnstile.server'
 
-vi.mock('@/lib/env', () => ({
+vi.mock('@/lib/config/env', () => ({
   env: {
     TURNSTILE_SECRET_KEY: 'test-secret'
   }

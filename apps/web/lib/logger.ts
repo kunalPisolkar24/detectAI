@@ -1,5 +1,5 @@
 import pino from "pino"
-import { env } from "@/lib/env"
+import { env } from "@/lib/config/env"
 
 const isDev = env.NODE_ENV === "development"
 

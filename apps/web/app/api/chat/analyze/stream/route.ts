@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { z } from "zod"
 
-import { authOptions } from "@/lib/auth-options"
+import { authOptions } from "@/lib/config/auth-options"
 import { MAX_LIVE_ANALYSIS_CHARS } from "@/features/chat/constants"
 import { chatService } from "@/features/chat/services"
 import { inferenceService, InferenceStreamAbortedError } from "@/features/chat/services/inference-service"

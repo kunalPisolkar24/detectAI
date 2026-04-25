@@ -7,7 +7,7 @@ import { getServerSession } from 'next-auth'
 vi.mock('@/lib/grpc/chat-client')
 vi.mock('./inference-service')
 vi.mock('next-auth')
-vi.mock('@/lib/auth-options', () => ({ authOptions: {} }))
+vi.mock('@/lib/config/auth-options', () => ({ authOptions: {} }))
 
 // ── Shared fixtures ────────────────────────────────────────────────────────────
 const MOCK_USER_ID = 'user-1'

@@ -2,7 +2,7 @@
 import * as grpc from "@grpc/grpc-js"
 import * as protoLoader from "@grpc/proto-loader"
 import path from "path"
-import { env } from "@/lib/env"
+import { env } from "@/lib/config/env"
 
 const PROTO_PATH = path.join(process.cwd(), "lib/proto/chat_service.proto")
 

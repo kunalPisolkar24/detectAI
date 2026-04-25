@@ -30,7 +30,7 @@ vi.mock('sonner', () => ({
   },
 }))
 
-vi.mock('@/lib/env', () => ({
+vi.mock('@/lib/config/env', () => ({
   env: {
     NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: 'test-token',
   },

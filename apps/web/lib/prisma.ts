@@ -1,7 +1,7 @@
 import { PrismaClient } from './generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import { env } from '@/lib/env';
+import { env } from '@/lib/config/env';
 import { metrics } from '@/lib/metrics';
 import { logger } from '@/lib/logger';
 

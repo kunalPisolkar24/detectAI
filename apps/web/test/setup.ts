@@ -30,7 +30,7 @@ afterAll(() => server.close())
 
 vi.mock('server-only', () => ({}))
 
-vi.mock('@/lib/env', () => ({
+vi.mock('@/lib/config/env', () => ({
   env: {
     DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: 'test-site-key',

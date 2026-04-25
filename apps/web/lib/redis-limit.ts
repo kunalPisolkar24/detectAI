@@ -1,5 +1,5 @@
 import Redis, { Cluster, ClusterNode, RedisOptions } from "ioredis"
-import { env } from "@/lib/env"
+import { env } from "@/lib/config/env"
 
 type RedisClient = Redis | Cluster
 

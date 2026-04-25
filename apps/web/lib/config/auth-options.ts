@@ -7,7 +7,7 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
 import { SubscriptionStatus } from "@/lib/generated/prisma/client"
 import { LoginSchema } from "@/schemas/auth"
-import { env } from "@/lib/env"
+import { env } from "@/lib/config/env"
 import { userService } from "@/features/auth/services/user-service"
 
 interface ExtendedProfile extends Profile {
