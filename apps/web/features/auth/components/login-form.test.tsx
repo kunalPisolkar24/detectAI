@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
@@ -26,6 +27,15 @@ vi.mock('@/lib/core/fonts', () => ({
   teko: { className: 'teko' },
   merriweather: { className: 'merriweather' },
 }))
+
+// Mock React.useTransition to bypass async issues in JSDOM
+vi.mock('react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react')>()
+  return {
+    ...actual,
+    useTransition: vi.fn().mockReturnValue([false, (fn: any) => fn()]),
+  }
+})
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
@@ -65,14 +75,6 @@ beforeEach(() => {
   vi.mocked(verifyTurnstileAction).mockResolvedValue({ success: true })
 })
 
-vi.mock('react', async () => {
-  const actual = await vi.importActual<typeof import('react')>('react')
-  return {
-    ...actual,
-    useTransition: () => [false, (fn: () => void) => fn()],
-  }
-})
-
 const fillAndSubmitLoginForm = async (user: ReturnType<typeof userEvent.setup>, email: string, pass: string) => {
   const emailInput = await screen.findByLabelText(/^email$/i)
   const passwordInput = await screen.findByLabelText(/^password$/i)
@@ -81,7 +83,6 @@ const fillAndSubmitLoginForm = async (user: ReturnType<typeof userEvent.setup>, 
   await user.type(emailInput, email)
   await user.type(passwordInput, pass)
   await user.click(submitButton)
-  await new Promise(r => setTimeout(r, 0))
 }
 
 describe('LoginForm', () => {
