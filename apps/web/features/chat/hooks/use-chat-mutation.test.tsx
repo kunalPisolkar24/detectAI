@@ -90,7 +90,7 @@ describe('useSendMessage', () => {
     const { result } = renderHook(() => useSendMessage(), { wrapper: createWrapper() })
 
     await act(async () => {
-      result.current.sendMessage('Hello')
+      await result.current.sendMessage('Hello')
     })
 
     expect(createChatAction).toHaveBeenCalledWith('Hello')
@@ -121,6 +121,76 @@ describe('useSendMessage', () => {
     })
 
     expect(mockStore.clearActiveAnalysis).toHaveBeenCalled()
+  })
+
+  it('uses existing chatId if present', async () => {
+    Object.assign(mockStore, { currentChatId: 'chat-existing' })
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(JSON.stringify({ type: 'final', message: { id: 'msg-1', content: 'AI response', createdAt: new Date().toISOString() } }) + '\n'))
+          controller.close()
+        }
+      }),
+    } as any)
+
+    const { result } = renderHook(() => useSendMessage(), { wrapper: createWrapper() })
+
+    await act(async () => {
+      await result.current.sendMessage('Hello')
+    })
+
+    expect(createChatAction).not.toHaveBeenCalled()
+  })
+
+  it('handles retryAnalysis', async () => {
+    Object.assign(mockStore, { currentChatId: 'chat-1' })
+    const createdAt = new Date()
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(JSON.stringify({ type: 'final', message: { id: 'msg-1', content: 'AI response', createdAt: new Date().toISOString() } }) + '\n'))
+          controller.close()
+        }
+      }),
+    } as any)
+
+    const { result } = renderHook(() => useSendMessage(), { wrapper: createWrapper() })
+
+    await act(async () => {
+      await result.current.retryAnalysis({
+        assistantMessageId: 'msg-old',
+        assistantCreatedAt: createdAt,
+        sourceMessageId: 'msg-source',
+        content: 'Original user text',
+        model: 'flare',
+      })
+    })
+
+    expect(fetch).toHaveBeenCalledWith('/api/chat/analyze/stream', expect.objectContaining({
+      body: expect.stringContaining('"model":"flare"')
+    }))
+  })
+
+  it('sets rate limited state on 429 error', async () => {
+    vi.mocked(createChatAction).mockResolvedValue({ success: true, data: { id: 'chat-1' } } as any)
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: () => Promise.resolve({ error: 'Rate limit exceeded' }),
+    } as any)
+
+    const { result } = renderHook(() => useSendMessage(), { wrapper: createWrapper() })
+
+    await act(async () => {
+      try {
+        await result.current.sendMessage('Hello')
+      } catch (e) {}
+    })
+
+    expect(mockStore.setRateLimited).toHaveBeenCalledWith(true)
   })
 })
 
