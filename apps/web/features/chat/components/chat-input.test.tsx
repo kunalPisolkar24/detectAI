@@ -135,7 +135,8 @@ describe('ChatInput', () => {
       
       // Minimum 100 words required
       const validText = ("word " + "a ").repeat(50) + "word" // 101 words
-      await user.type(input, validText)
+      await user.click(input)
+      await user.paste(validText)
       await user.click(submitBtn)
       
       expect(mockSendMessage).toHaveBeenCalledWith(validText)
@@ -148,7 +149,8 @@ describe('ChatInput', () => {
       const input = screen.getByPlaceholderText(/paste your text here/i)
       const validText = ("word " + "a ").repeat(50) + "word" // 101 words
       
-      await user.type(input, validText)
+      await user.click(input)
+      await user.paste(validText)
       await user.keyboard('{Enter}')
       
       expect(mockSendMessage).toHaveBeenCalledWith(validText)
