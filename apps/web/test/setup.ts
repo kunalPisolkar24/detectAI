@@ -101,3 +101,32 @@ vi.mock('next-auth/react', () => ({
   SessionProvider: ({ children }: { children: React.ReactNode }) => children,
 }))
 
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+  },
+}))
+
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  },
+}))
+
+vi.mock('@/lib/metrics', () => ({
+  metrics: {
+    rateLimitHits: {
+      inc: vi.fn(),
+    },
+    apiCalls: {
+      inc: vi.fn(),
+    },
+  },
+}))
+
