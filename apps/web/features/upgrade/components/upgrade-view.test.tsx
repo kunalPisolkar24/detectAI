@@ -41,7 +41,7 @@ describe('UpgradeView', () => {
   it('renders correctly and handles back button', async () => {
     render(<UpgradeView />)
     expect(await screen.findByRole('heading', { name: /Choose The Plan/i })).toBeInTheDocument()
-    
+
     const backButton = screen.getByText(/back/i)
     fireEvent.click(backButton)
     expect(mockBack).toHaveBeenCalled()
@@ -54,13 +54,11 @@ describe('UpgradeView', () => {
     } as any)
 
     render(<UpgradeView />)
-    
-    // Wait for paddle to initialize (isLoading becomes false)
+
     await waitFor(() => {
       expect(initializePaddle).toHaveBeenCalled()
     })
 
-    // Find the button and click it
     const upgradeButton = await screen.findByRole('button', { name: /Upgrade Now/i })
     fireEvent.click(upgradeButton)
 
@@ -71,17 +69,11 @@ describe('UpgradeView', () => {
 
   it('redirects to login if not authenticated', async () => {
     vi.mocked(useSession).mockReturnValue({
-      data: null,
-      status: 'unauthenticated',
-      update: mockUpdate,
+      data: null, status: 'unauthenticated', update: mockUpdate,
     } as any)
 
     render(<UpgradeView />)
-    
-    // Wait for paddle to initialize
-    await waitFor(() => {
-      expect(initializePaddle).toHaveBeenCalled()
-    })
+    await waitFor(() => expect(initializePaddle).toHaveBeenCalled())
 
     const upgradeButton = await screen.findByRole('button', { name: /Upgrade Now/i })
     fireEvent.click(upgradeButton)
