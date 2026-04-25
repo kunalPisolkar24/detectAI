@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { useChatUIStore } from "../../stores/ui-store"
 import { useChatMutations } from "../../hooks/use-chat-mutation"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import { MoreHorizontal, Trash2, Pencil } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { ChatHistoryItem } from "../../types"
-import { inter, teko } from "@/lib/fonts"
+import { inter, teko } from "@/lib/core/fonts"
 
 interface SidebarItemProps {
   chat: ChatHistoryItem

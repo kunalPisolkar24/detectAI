@@ -3,8 +3,8 @@
 import { m } from "framer-motion"
 import { AlertTriangle, Ban, Loader2, RotateCcw } from "lucide-react"
 
-import { cn } from "@/lib/utils"
-import { inter, teko } from "@/lib/fonts"
+import { cn } from "@/lib/core/utils"
+import { inter, teko } from "@/lib/core/fonts"
 import { Button } from "@/components/ui/button"
 import { StreamingAnalysisProgress } from "../types"
 import { getModelDisplayName } from "../utils/formatting"

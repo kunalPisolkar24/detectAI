@@ -1,7 +1,7 @@
 "use client"
 
 import { m, HTMLMotionProps } from "framer-motion"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 
 interface FadeInProps extends HTMLMotionProps<"div"> {
   delay?: number

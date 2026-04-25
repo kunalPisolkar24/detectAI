@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 
 export function AuthCardSkeleton() {
   return (

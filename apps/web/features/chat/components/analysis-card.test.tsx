@@ -4,7 +4,7 @@ import { axe } from 'jest-axe'
 import { AnalysisCard } from './analysis-card'
 import { AnalysisResult } from '../types'
 
-vi.mock('@/lib/fonts', () => ({
+vi.mock('@/lib/core/fonts', () => ({
   teko: { className: 'teko' },
   merriweather: { className: 'merriweather' },
   inter: { className: 'inter' },

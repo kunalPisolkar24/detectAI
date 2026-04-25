@@ -3,8 +3,8 @@
 import { useChatUIStore } from "../../stores/ui-store"
 import { useChatSession } from "../../hooks/use-chat-history"
 import { useChatMutations } from "../../hooks/use-chat-mutation"
-import { cn } from "@/lib/utils"
-import { teko, inter } from "@/lib/fonts"
+import { cn } from "@/lib/core/utils"
+import { teko, inter } from "@/lib/core/fonts"
 import {
   DropdownMenu,
   DropdownMenuContent,

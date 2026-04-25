@@ -20,7 +20,7 @@ vi.mock('@/features/auth/components/turnstile', () => ({
   TurnstileComponent: () => <div data-testid="mock-turnstile" />,
 }))
 
-vi.mock('@/lib/fonts', () => ({
+vi.mock('@/lib/core/fonts', () => ({
   teko: { className: 'teko' },
   merriweather: { className: 'merriweather' },
 }))

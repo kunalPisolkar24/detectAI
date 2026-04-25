@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { AnalysisHighlightPanel } from './analysis-highlight-panel'
 import { AnalysisHighlightSpan } from '../types'
 
-vi.mock('@/lib/fonts', () => ({
+vi.mock('@/lib/core/fonts', () => ({
   teko: { className: 'teko' },
   merriweather: { className: 'merriweather' },
   inter: { className: 'inter' },

@@ -36,7 +36,7 @@ vi.mock('@/lib/config/env', () => ({
   },
 }))
 
-vi.mock('@/lib/fonts', () => ({
+vi.mock('@/lib/core/fonts', () => ({
   teko: { className: 'teko' },
 }))
 

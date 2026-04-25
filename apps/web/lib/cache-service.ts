@@ -1,5 +1,5 @@
 import { redisReader, redisWriter } from "@/lib/redis"
-import { JsonSerializer } from "@/lib/serialization"
+import { JsonSerializer } from "@/lib/core/serialization"
 import { metrics } from "@/lib/metrics"
 import { logger } from "@/lib/logger"
 

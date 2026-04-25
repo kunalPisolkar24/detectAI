@@ -1,8 +1,8 @@
 "use client"
 
 import { m } from "framer-motion"
-import { cn } from "@/lib/utils"
-import { merriweather } from "@/lib/fonts"
+import { cn } from "@/lib/core/utils"
+import { merriweather } from "@/lib/core/fonts"
 import { Message } from "../types"
 import { AnalysisCard } from "./analysis-card"
 import { AnalysisHighlightPanel } from "./analysis-highlight-panel"

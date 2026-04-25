@@ -3,7 +3,7 @@
 import { memo } from "react"
 import Image from "next/image"
 import { m } from "framer-motion"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 
 interface ReviewCardProps {
   img: string

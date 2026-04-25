@@ -49,7 +49,7 @@ vi.mock('../actions/extract-file', () => ({
   extractTextFromFile: vi.fn(),
 }))
 
-vi.mock('@/lib/fonts', () => ({
+vi.mock('@/lib/core/fonts', () => ({
   teko: { className: 'teko' },
   merriweather: { className: 'merriweather' },
   inter: { className: 'inter' },

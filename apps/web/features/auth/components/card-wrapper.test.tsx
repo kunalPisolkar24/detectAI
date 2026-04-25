@@ -6,7 +6,7 @@ import { CardWrapper } from './card-wrapper'
 
 vi.mocked(signIn)
 
-vi.mock('@/lib/fonts', () => ({
+vi.mock('@/lib/core/fonts', () => ({
   teko: { className: 'teko' },
 }))
 
