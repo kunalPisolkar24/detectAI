@@ -93,8 +93,11 @@ describe('Chat Actions', () => {
       vi.mocked(chatService.sendMessage).mockRejectedValue(new Error('Rate limit 429'))
 
       const result = await sendMessageAction('chat-1', 'content', 'model' as any)
-      expect(result.success).toBe(false)
-      expect(result.isRateLimit).toBe(true)
+      expect(result).toEqual({
+        success: false,
+        error: 'Rate limit 429',
+        isRateLimit: true
+      })
     })
   })
 
