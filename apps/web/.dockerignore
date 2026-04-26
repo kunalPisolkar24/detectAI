@@ -10,3 +10,9 @@ dist
 .vercel
 .env
 .env.*
+coverage
+test
+.pytest_cache
+.vscode
+.idea
+*.log
