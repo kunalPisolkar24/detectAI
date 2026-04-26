@@ -13,7 +13,7 @@ export default defineConfig({
       provider: 'v8',
       include: ['features/**/*.{ts,tsx}'],
       exclude: [
-        'features/**/*.test.{ts,tsx}',
+        'features/**/__tests__/**/*.{ts,tsx}',
         'features/**/*.d.ts',
         'features/**/types.ts',
         'features/**/constants.ts',
