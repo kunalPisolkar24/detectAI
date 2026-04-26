@@ -1,14 +1,10 @@
 import { setupServer } from 'msw/node'
-import { http, HttpResponse } from 'msw'
+import { authHandlers } from './handlers/auth-handlers'
+import { chatHandlers } from './handlers/chat-handlers'
 
 export const handlers = [
-  http.post('https://challenges.cloudflare.com/turnstile/v0/siteverify', () =>
-    HttpResponse.json({ success: true }),
-  ),
-
-  http.post('/api/auth/callback/credentials', () =>
-    HttpResponse.json({ url: '/chat?login_success=true' }),
-  ),
+  ...authHandlers,
+  ...chatHandlers
 ]
 
 export const server = setupServer(...handlers)

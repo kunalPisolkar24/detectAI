@@ -13,6 +13,32 @@ if (typeof window !== 'undefined') {
       super(type, init)
     }
   } as unknown as typeof PointerEvent
+
+  window.HTMLElement.prototype.scrollIntoView = vi.fn()
+
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(), // deprecated
+      removeListener: vi.fn(), // deprecated
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  })
+
+  if (!global.crypto) {
+    // @ts-ignore
+    global.crypto = {}
+  }
+  if (!global.crypto.randomUUID) {
+    global.crypto.randomUUID = () => {
+      return 'test-uuid-' + Math.random().toString(36).substring(7)
+    }
+  }
 }
 
 import '@testing-library/jest-dom'
@@ -24,8 +50,15 @@ import { server } from './msw-server'
 expect.extend(toHaveNoViolations)
 
 
+import { useChatUIStore } from '@/features/chat/stores/ui-store'
+
+const initialChatUIState = useChatUIStore.getState()
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
-afterEach(() => server.resetHandlers())
+afterEach(() => {
+  server.resetHandlers()
+  useChatUIStore.setState(initialChatUIState, true)
+})
 afterAll(() => server.close())
 
 vi.mock('server-only', () => ({}))
@@ -139,18 +172,14 @@ vi.mock('next/font/google', () => ({
 }))
 
 vi.mock('ioredis', () => {
+  class MockRedis {
+    get = vi.fn()
+    set = vi.fn()
+    del = vi.fn()
+    on = vi.fn()
+  }
   return {
-    default: vi.fn(() => ({
-      get: vi.fn(),
-      set: vi.fn(),
-      del: vi.fn(),
-      on: vi.fn(),
-    })),
-    Redis: vi.fn(() => ({
-      get: vi.fn(),
-      set: vi.fn(),
-      del: vi.fn(),
-      on: vi.fn(),
-    })),
+    default: MockRedis,
+    Redis: MockRedis,
   }
 })
