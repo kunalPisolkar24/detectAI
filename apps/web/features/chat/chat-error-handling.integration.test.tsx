@@ -32,15 +32,6 @@ describe('Chat Error Handling Integration', () => {
     vi.clearAllMocks()
     window.localStorage.clear()
 
-    useChatUIStore.setState({
-      isRateLimited: false,
-      currentChatId: null,
-      activeAnalysisChatId: null,
-      activeAnalysisMessageId: null,
-      activeAnalysisCancel: null,
-      isCancellingAnalysis: false,
-    })
-
     vi.mocked(useSession).mockReturnValue({
       data: {
         user: { id: 'user-123', name: 'Test User', email: 'test@example.com', isPremium: false },

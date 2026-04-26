@@ -50,8 +50,15 @@ import { server } from './msw-server'
 expect.extend(toHaveNoViolations)
 
 
+import { useChatUIStore } from '@/features/chat/stores/ui-store'
+
+const initialChatUIState = useChatUIStore.getState()
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
-afterEach(() => server.resetHandlers())
+afterEach(() => {
+  server.resetHandlers()
+  useChatUIStore.setState(initialChatUIState, true)
+})
 afterAll(() => server.close())
 
 vi.mock('server-only', () => ({}))
