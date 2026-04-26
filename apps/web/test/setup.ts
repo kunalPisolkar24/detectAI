@@ -14,6 +14,8 @@ if (typeof window !== 'undefined') {
     }
   } as unknown as typeof PointerEvent
 
+  window.HTMLElement.prototype.scrollIntoView = vi.fn()
+
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     value: vi.fn().mockImplementation((query) => ({
@@ -27,6 +29,16 @@ if (typeof window !== 'undefined') {
       dispatchEvent: vi.fn(),
     })),
   })
+
+  if (!global.crypto) {
+    // @ts-ignore
+    global.crypto = {}
+  }
+  if (!global.crypto.randomUUID) {
+    global.crypto.randomUUID = () => {
+      return 'test-uuid-' + Math.random().toString(36).substring(7)
+    }
+  }
 }
 
 import '@testing-library/jest-dom'
@@ -153,18 +165,14 @@ vi.mock('next/font/google', () => ({
 }))
 
 vi.mock('ioredis', () => {
+  class MockRedis {
+    get = vi.fn()
+    set = vi.fn()
+    del = vi.fn()
+    on = vi.fn()
+  }
   return {
-    default: vi.fn(() => ({
-      get: vi.fn(),
-      set: vi.fn(),
-      del: vi.fn(),
-      on: vi.fn(),
-    })),
-    Redis: vi.fn(() => ({
-      get: vi.fn(),
-      set: vi.fn(),
-      del: vi.fn(),
-      on: vi.fn(),
-    })),
+    default: MockRedis,
+    Redis: MockRedis,
   }
 })
