@@ -1,26 +1,23 @@
 FROM node:20-alpine AS base
 
 RUN apk add --no-cache libc6-compat
-
 WORKDIR /app
-
 RUN npm install -g pnpm
 
 FROM base AS deps
-
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
 FROM deps AS source
-
 COPY . .
-
 RUN pnpm exec prisma generate
 
-FROM source AS migrate
-
-CMD ["pnpm", "run", "db:migrate:deploy"]
+FROM base AS migrate
+WORKDIR /app
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+RUN npm install prisma@7.2.0 tsx dotenv
+CMD ["npx", "prisma", "migrate", "deploy"]
 
 FROM source AS builder
 
@@ -49,10 +46,19 @@ RUN test -n "$NEXT_PUBLIC_TURNSTILE_SITE_KEY" && test "$NEXT_PUBLIC_TURNSTILE_SI
 
 RUN pnpm build
 
-FROM source AS runner
+FROM base AS runner
 
-COPY --from=builder /app/.next ./.next
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+
+USER node
 
 EXPOSE 3000
 
-CMD ["pnpm", "start"]
+CMD HOSTNAME="0.0.0.0" node server.js
