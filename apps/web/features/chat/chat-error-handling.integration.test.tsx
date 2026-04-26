@@ -99,9 +99,7 @@ describe('Chat Error Handling Integration', () => {
       expect(useChatUIStore.getState().isRateLimited).toBe(true)
     })
 
-    await waitFor(() => {
-      expect(screen.getByText(/usage limit reached/i)).toBeInTheDocument()
-    })
+    expect(await screen.findByText(/usage limit reached/i)).toBeInTheDocument()
   })
 
   it('handles file extraction failures gracefully', async () => {

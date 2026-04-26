@@ -78,12 +78,7 @@ describe('Chat Interaction Integration', () => {
       { timeout: 3000 },
     )
 
-    await waitFor(
-      () => {
-        expect(screen.getByText(/ai-generated/i)).toBeInTheDocument()
-      },
-      { timeout: 5000 },
-    )
+    expect(await screen.findByText(/ai-generated/i, {}, { timeout: 5000 })).toBeInTheDocument()
   }, 15000)
 
   it('shows rate limit banner when rate limited', () => {
