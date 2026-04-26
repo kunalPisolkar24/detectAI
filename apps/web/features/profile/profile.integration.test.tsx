@@ -1,5 +1,5 @@
 import React from 'react'
-import { screen, fireEvent } from '@testing-library/react'
+import { screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { ProfileView } from './components/profile-view'
 import { render } from '@/test/custom-renderer'
@@ -63,7 +63,9 @@ describe('Profile Integration', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /SAVE/i }))
 
-    expect(await screen.findByText(/Profile updated successfully/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('Profile updated successfully')
+    })
     expect(updateProfileAction).toHaveBeenCalledWith({
       firstName: 'Jane',
       lastName: 'Smith',
@@ -76,7 +78,7 @@ describe('Profile Integration', () => {
     const billingButton = screen.getAllByRole('button', { name: /Billing/i })[0]
     fireEvent.click(billingButton)
 
-    expect(screen.getByText(/Current Plan/i)).toBeInTheDocument()
+    expect(screen.getByText(/Subscription/i)).toBeInTheDocument()
     expect(screen.queryByText(/Account Details/i)).not.toBeInTheDocument()
 
     const generalButton = screen.getAllByRole('button', { name: /General/i })[0]
@@ -93,7 +95,26 @@ describe('Profile Integration', () => {
     fireEvent.click(screen.getByRole('button', { name: /Edit Profile/i }))
     fireEvent.click(screen.getByRole('button', { name: /SAVE/i }))
 
-    expect(await screen.findByText(/Update failed/i)).toBeInTheDocument()
-    expect(toast.error).toHaveBeenCalledWith('Update failed')
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Update failed')
+    })
+  })
+
+  it('handles subscription cancellation', async () => {
+    const { cancelSubscriptionAction } = await import('./actions/cancel-subscription')
+    vi.mocked(cancelSubscriptionAction).mockResolvedValue({ success: true })
+
+    render(<ProfileView user={{ ...mockUser, isPremium: true }} />)
+
+    const billingButton = screen.getAllByRole('button', { name: /Billing/i })[0]
+    fireEvent.click(billingButton)
+
+    fireEvent.click(screen.getByRole('button', { name: /CANCEL SUBSCRIPTION/i }))
+    fireEvent.click(screen.getByRole('button', { name: /YES, CANCEL PLAN/i }))
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('Subscription cancellation scheduled successfully.')
+    })
+    expect(cancelSubscriptionAction).toHaveBeenCalled()
   })
 })
