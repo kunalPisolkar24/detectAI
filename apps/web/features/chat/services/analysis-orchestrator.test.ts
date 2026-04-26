@@ -2,18 +2,33 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { AnalysisOrchestrator } from "./analysis-orchestrator"
 import { InferenceStreamAbortedError } from "./inference-service"
 
-const mockChatService = {
-  saveUserMessage: vi.fn(),
-  saveAssistantAnalysisMessage: vi.fn(),
-}
+vi.mock("./index", () => ({
+  chatService: {
+    saveUserMessage: vi.fn(),
+    saveAssistantAnalysisMessage: vi.fn(),
+  }
+}))
 
-const mockInferenceService = {
-  streamDocument: vi.fn(),
-}
+vi.mock("./inference-service", () => ({
+  inferenceService: {
+    streamDocument: vi.fn(),
+  },
+  InferenceStreamAbortedError: class extends Error {
+    constructor() {
+      super("AI analysis request was canceled")
+    }
+  }
+}))
 
-const mockRateLimitService = {
-  trackUsage: vi.fn(),
-}
+vi.mock("@/features/rate-limit/services/rate-limit-service", () => ({
+  rateLimitService: {
+    trackUsage: vi.fn(),
+  }
+}))
+
+import { chatService as mockChatService } from "./index"
+import { inferenceService as mockInferenceService } from "./inference-service"
+import { rateLimitService as mockRateLimitService } from "@/features/rate-limit/services/rate-limit-service"
 
 describe("AnalysisOrchestrator", () => {
   let orchestrator: AnalysisOrchestrator
@@ -37,13 +52,13 @@ describe("AnalysisOrchestrator", () => {
       model: "spark" as const,
     }
 
-    mockChatService.saveUserMessage.mockResolvedValue({ id: "msg-user" })
-    mockChatService.saveAssistantAnalysisMessage.mockResolvedValue({
+    vi.mocked(mockChatService.saveUserMessage).mockResolvedValue({ id: "msg-user" } as any)
+    vi.mocked(mockChatService.saveAssistantAnalysisMessage).mockResolvedValue({
       id: "msg-asst",
       createdAt: new Date(),
-    })
+    } as any)
 
-    mockInferenceService.streamDocument.mockImplementation(async (text, model, handlers) => {
+    vi.mocked(mockInferenceService.streamDocument).mockImplementation(async (_text: string, _model: string, handlers: any) => {
       handlers.onEvent({ type: "started", totalChars: 100, totalChunks: 10 })
       handlers.onEvent({ type: "progress", processedChunks: 5, totalChunks: 10 })
       handlers.onEvent({ type: "final", result: { label: "AI" } as any })
@@ -80,12 +95,12 @@ describe("AnalysisOrchestrator", () => {
       sourceMessageId: "msg-user-source",
     }
 
-    mockChatService.saveAssistantAnalysisMessage.mockResolvedValue({
+    vi.mocked(mockChatService.saveAssistantAnalysisMessage).mockResolvedValue({
       id: "msg-asst-retry",
       createdAt: new Date(),
-    })
+    } as any)
 
-    mockInferenceService.streamDocument.mockImplementation(async (text, model, handlers) => {
+    vi.mocked(mockInferenceService.streamDocument).mockImplementation(async (_text: string, _model: string, handlers: any) => {
       handlers.onEvent({ type: "final", result: { label: "AI" } as any })
     })
 
@@ -107,13 +122,13 @@ describe("AnalysisOrchestrator", () => {
       model: "spark" as const,
     }
 
-    mockChatService.saveUserMessage.mockResolvedValue({ id: "msg-user" })
-    mockChatService.saveAssistantAnalysisMessage.mockResolvedValue({
+    vi.mocked(mockChatService.saveUserMessage).mockResolvedValue({ id: "msg-user" } as any)
+    vi.mocked(mockChatService.saveAssistantAnalysisMessage).mockResolvedValue({
       id: "msg-asst",
       createdAt: new Date(),
-    })
+    } as any)
 
-    mockInferenceService.streamDocument.mockRejectedValue(new Error("inference failed"))
+    vi.mocked(mockInferenceService.streamDocument).mockRejectedValue(new Error("inference failed"))
 
     const stream = await orchestrator.execute(params, abortController.signal)
     const reader = stream.getReader()
@@ -143,13 +158,13 @@ describe("AnalysisOrchestrator", () => {
       model: "spark" as const,
     }
 
-    mockChatService.saveUserMessage.mockResolvedValue({ id: "msg-user" })
-    mockChatService.saveAssistantAnalysisMessage.mockResolvedValue({
+    vi.mocked(mockChatService.saveUserMessage).mockResolvedValue({ id: "msg-user" } as any)
+    vi.mocked(mockChatService.saveAssistantAnalysisMessage).mockResolvedValue({
       id: "msg-asst",
       createdAt: new Date(),
-    })
+    } as any)
 
-    mockInferenceService.streamDocument.mockImplementation(async (text, model, handlers) => {
+    vi.mocked(mockInferenceService.streamDocument).mockImplementation(async (_text: string, _model: string, handlers: any) => {
       abortController.abort()
       throw new InferenceStreamAbortedError()
     })
@@ -177,13 +192,13 @@ describe("AnalysisOrchestrator", () => {
       model: "spark" as const,
     }
 
-    mockChatService.saveUserMessage.mockResolvedValue({ id: "msg-user" })
-    mockChatService.saveAssistantAnalysisMessage.mockResolvedValue({
+    vi.mocked(mockChatService.saveUserMessage).mockResolvedValue({ id: "msg-user" } as any)
+    vi.mocked(mockChatService.saveAssistantAnalysisMessage).mockResolvedValue({
       id: "msg-asst",
       createdAt: new Date(),
-    })
+    } as any)
 
-    mockInferenceService.streamDocument.mockResolvedValue(undefined)
+    vi.mocked(mockInferenceService.streamDocument).mockResolvedValue(undefined as any)
 
     const stream = await orchestrator.execute(params, abortController.signal)
     const reader = stream.getReader()
@@ -212,17 +227,17 @@ describe("AnalysisOrchestrator", () => {
       model: "spark" as const,
     }
 
-    mockChatService.saveUserMessage.mockResolvedValue({ id: "msg-user" })
-    mockChatService.saveAssistantAnalysisMessage.mockResolvedValue({
+    vi.mocked(mockChatService.saveUserMessage).mockResolvedValue({ id: "msg-user" } as any)
+    vi.mocked(mockChatService.saveAssistantAnalysisMessage).mockResolvedValue({
       id: "msg-asst",
       createdAt: new Date(),
-    })
+    } as any)
 
-    mockInferenceService.streamDocument.mockImplementation(async (text, model, handlers) => {
+    vi.mocked(mockInferenceService.streamDocument).mockImplementation(async (_text: string, _model: string, handlers: any) => {
       handlers.onEvent({ type: "final", result: { label: "AI" } as any })
     })
 
-    mockRateLimitService.trackUsage.mockRejectedValue(new Error("rate limit track failed"))
+    vi.mocked(mockRateLimitService.trackUsage).mockRejectedValue(new Error("rate limit track failed"))
 
     const stream = await orchestrator.execute(params, abortController.signal)
     const reader = stream.getReader()
