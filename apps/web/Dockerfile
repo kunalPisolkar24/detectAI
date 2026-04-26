@@ -15,7 +15,8 @@ RUN pnpm exec prisma generate
 FROM base AS migrate
 WORKDIR /app
 COPY prisma ./prisma
-RUN npm install prisma@7.2.0
+COPY prisma.config.ts ./
+RUN npm install prisma@7.2.0 tsx dotenv
 CMD ["npx", "prisma", "migrate", "deploy"]
 
 FROM source AS builder
