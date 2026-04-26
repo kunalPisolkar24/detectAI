@@ -5,6 +5,7 @@ import { ChatView } from './components/chat-view'
 import { render } from '@/test/custom-renderer'
 import { useSession } from 'next-auth/react'
 import { createChatAction, getChatHistoryAction } from './actions/chat'
+import { useChatUIStore } from './stores/ui-store'
 
 vi.mock('./actions/chat', async () => {
   const actual = await vi.importActual<any>('./actions/chat')
@@ -26,6 +27,17 @@ const LONG_MESSAGE =
 describe('Chat Interaction Integration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.localStorage.clear()
+
+    useChatUIStore.setState({
+      isRateLimited: false,
+      currentChatId: null,
+      activeAnalysisChatId: null,
+      activeAnalysisMessageId: null,
+      activeAnalysisCancel: null,
+      isCancellingAnalysis: false,
+    })
+
     vi.mocked(useSession).mockReturnValue({
       data: {
         user: { id: 'user-123', name: 'Test User', email: 'test@example.com', isPremium: false },
