@@ -12,8 +12,11 @@ FROM deps AS source
 COPY . .
 RUN pnpm exec prisma generate
 
-FROM source AS migrate
-CMD ["pnpm", "run", "db:migrate:deploy"]
+FROM base AS migrate
+WORKDIR /app
+COPY prisma ./prisma
+RUN npm install prisma@7.2.0
+CMD ["npx", "prisma", "migrate", "deploy"]
 
 FROM source AS builder
 
