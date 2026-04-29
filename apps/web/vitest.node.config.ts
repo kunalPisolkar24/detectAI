@@ -3,6 +3,11 @@ import tsconfigPaths from 'vite-tsconfig-paths'
 
 export default defineConfig({
   plugins: [tsconfigPaths()],
+  resolve: {
+    alias: {
+      'server-only': 'test/mocks/empty.ts',
+    },
+  },
   test: {
     environment: 'node',
     setupFiles: ['./test/setup-node.ts'],

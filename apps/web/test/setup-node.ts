@@ -1,6 +1,7 @@
 import { vi, beforeAll, afterAll, afterEach } from 'vitest'
 import { server } from './msw-server'
 
+
 // Mock environment variables
 vi.mock('@/lib/config/env', () => ({
   env: {
@@ -11,6 +12,7 @@ vi.mock('@/lib/config/env', () => ({
     FILE_EXTRACTOR_API_URL: 'http://localhost:8000',
     INFERENCE_SERVICE_URL: 'localhost:50051',
     REDIS_MODE: 'standalone',
+    REDIS_URL: 'redis://localhost:6379',
     REDIS_PASSWORD: 'test-password',
   },
 }))
@@ -41,9 +43,10 @@ vi.mock('@/lib/infrastructure/metrics', () => ({
 // Mock ioredis
 vi.mock('ioredis', () => {
   class MockRedis {
-    get = vi.fn()
-    set = vi.fn()
-    del = vi.fn()
+    get = vi.fn().mockResolvedValue(null)
+    set = vi.fn().mockResolvedValue('OK')
+    setex = vi.fn().mockResolvedValue('OK')
+    del = vi.fn().mockResolvedValue(0)
     on = vi.fn()
     pipeline = vi.fn(() => ({
       get: vi.fn().mockReturnThis(),
@@ -51,7 +54,9 @@ vi.mock('ioredis', () => {
       expire: vi.fn().mockReturnThis(),
       exec: vi.fn().mockResolvedValue([]),
     }))
-    sadd = vi.fn()
+    sadd = vi.fn().mockResolvedValue(1)
+    smembers = vi.fn().mockResolvedValue([])
+    srem = vi.fn().mockResolvedValue(1)
   }
   return {
     default: MockRedis,
@@ -59,9 +64,16 @@ vi.mock('ioredis', () => {
   }
 })
 
+// Mock lock service
+vi.mock('@/lib/services/lock-service', () => ({
+  lockService: {
+    execute: vi.fn((_keys, task) => task()),
+  },
+}))
+
 // Mock Prisma for integration tests (using vitest-mock-extended)
-vi.mock('@/lib/infrastructure/prisma', () => {
-  const { mockDeep } = require('vitest-mock-extended')
+vi.mock('@/lib/infrastructure/prisma', async () => {
+  const { mockDeep } = await import('vitest-mock-extended')
   return {
     prisma: mockDeep(),
   }
