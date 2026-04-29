@@ -14,6 +14,7 @@ vi.mock('@/lib/config/env', () => ({
     REDIS_MODE: 'standalone',
     REDIS_URL: 'redis://localhost:6379',
     REDIS_PASSWORD: 'test-password',
+    PAYMENT_GATEWAY_URL: 'http://localhost:8080',
   },
 }))
 
@@ -36,25 +37,30 @@ vi.mock('@/lib/infrastructure/logger', () => ({
 vi.mock('@/lib/infrastructure/metrics', () => ({
   metrics: {
     rateLimitHits: { inc: vi.fn() },
-    apiCalls: { inc: vi.fn() },
+    cacheOperations: { inc: vi.fn() },
+    aiInferenceDuration: { observe: vi.fn() },
+    httpRequestDuration: { observe: vi.fn() },
+    dbQueryDuration: { observe: vi.fn() },
   },
 }))
 
 // Mock ioredis
 vi.mock('ioredis', () => {
+  const mockPipeline = {
+    get: vi.fn().mockReturnThis(),
+    set: vi.fn().mockReturnThis(),
+    incr: vi.fn().mockReturnThis(),
+    expire: vi.fn().mockReturnThis(),
+    exec: vi.fn().mockResolvedValue([]),
+  }
+
   const mockRedis = {
     get: vi.fn().mockResolvedValue(null),
     set: vi.fn().mockResolvedValue('OK'),
     setex: vi.fn().mockResolvedValue('OK'),
     del: vi.fn().mockResolvedValue(0),
     on: vi.fn(),
-    pipeline: vi.fn(() => ({
-      get: vi.fn().mockReturnThis(),
-      set: vi.fn().mockReturnThis(),
-      incr: vi.fn().mockReturnThis(),
-      expire: vi.fn().mockReturnThis(),
-      exec: vi.fn().mockResolvedValue([]),
-    })),
+    pipeline: vi.fn(() => mockPipeline),
     sadd: vi.fn().mockResolvedValue(1),
     smembers: vi.fn().mockResolvedValue([]),
     srem: vi.fn().mockResolvedValue(1),
@@ -66,6 +72,12 @@ vi.mock('ioredis', () => {
   class MockRedis {
     constructor() { return mockRedis }
     static Cluster = class { constructor() { return mockRedis } }
+    pipeline() { return mockPipeline }
+    get(key: string) { return mockRedis.get(key) }
+    set(key: string, val: string) { return mockRedis.set(key, val) }
+    setex(key: string, ttl: number, val: string) { return mockRedis.setex(key, ttl, val) }
+    del(...args: any[]) { return mockRedis.del(...args) }
+    sadd(...args: any[]) { return mockRedis.sadd(...args) }
   }
 
   return {
