@@ -42,27 +42,51 @@ vi.mock('@/lib/infrastructure/metrics', () => ({
 
 // Mock ioredis
 vi.mock('ioredis', () => {
-  class MockRedis {
-    get = vi.fn().mockResolvedValue(null)
-    set = vi.fn().mockResolvedValue('OK')
-    setex = vi.fn().mockResolvedValue('OK')
-    del = vi.fn().mockResolvedValue(0)
-    on = vi.fn()
-    pipeline = vi.fn(() => ({
+  const mockRedis = {
+    get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue('OK'),
+    setex: vi.fn().mockResolvedValue('OK'),
+    del: vi.fn().mockResolvedValue(0),
+    on: vi.fn(),
+    pipeline: vi.fn(() => ({
       get: vi.fn().mockReturnThis(),
       set: vi.fn().mockReturnThis(),
+      incr: vi.fn().mockReturnThis(),
       expire: vi.fn().mockReturnThis(),
       exec: vi.fn().mockResolvedValue([]),
-    }))
-    sadd = vi.fn().mockResolvedValue(1)
-    smembers = vi.fn().mockResolvedValue([])
-    srem = vi.fn().mockResolvedValue(1)
+    })),
+    sadd: vi.fn().mockResolvedValue(1),
+    smembers: vi.fn().mockResolvedValue([]),
+    srem: vi.fn().mockResolvedValue(1),
+    incr: vi.fn().mockResolvedValue(1),
+    expire: vi.fn().mockResolvedValue(1),
+    quit: vi.fn().mockResolvedValue('OK'),
   }
+
+  class MockRedis {
+    constructor() { return mockRedis }
+    static Cluster = class { constructor() { return mockRedis } }
+  }
+
   return {
     default: MockRedis,
     Redis: MockRedis,
+    Cluster: MockRedis.Cluster,
   }
 })
+
+// Centralized Redis Mocks
+import Redis from 'ioredis'
+const mockRedisInstance = new Redis()
+
+vi.mock('@/lib/infrastructure/redis', () => ({
+  redisReader: mockRedisInstance,
+  redisWriter: mockRedisInstance,
+}))
+
+vi.mock('@/lib/infrastructure/redis-limit', () => ({
+  usageRedis: mockRedisInstance,
+}))
 
 // Mock lock service
 vi.mock('@/lib/services/lock-service', () => ({

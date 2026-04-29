@@ -43,14 +43,28 @@ describe('AnalysisOrchestrator Integration', () => {
       role: 'assistant',
       content: '',
       createdAt: new Date(),
-      state: 'running',
-      model: 'spark',
+      analysisStatus: {
+        state: 'running',
+        model: 'spark',
+        sourceMessageId: 'msg-1',
+      },
     }
 
     const assistantCompletedMessage: Message = {
       ...assistantRunningMessage,
-      state: 'completed',
-      analysis: { score: 0.5, label: 'human' } as any,
+      analysisLink: {
+        state: 'completed',
+        model: 'spark',
+        sourceMessageId: 'msg-1',
+      },
+      analysis: {
+        model: 'spark',
+        label: 'Human',
+        confidence: 0.5,
+        scores: { ai: 0.5, human: 0.5 },
+        highlights: [],
+        raw: {},
+      } as any,
     }
 
     mockChatService.saveUserMessage.mockResolvedValue(userMessage)
@@ -102,8 +116,11 @@ describe('AnalysisOrchestrator Integration', () => {
       role: 'assistant',
       content: '',
       createdAt: new Date(),
-      state: 'running',
-      model: 'spark',
+      analysisStatus: {
+        state: 'running',
+        model: 'spark',
+        sourceMessageId: 'msg-1',
+      },
     }
 
     mockChatService.saveUserMessage.mockResolvedValue(userMessage)
