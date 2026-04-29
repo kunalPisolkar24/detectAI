@@ -15,7 +15,10 @@ export default defineConfig({
     include: ['features/**/__tests__/integration-backend/**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      include: ['features/**/*.ts'],
+      include: [
+        'features/**/*.ts',
+        'app/api/**/*.ts'
+      ],
       exclude: [
         'features/**/__tests__/**',
         'features/**/*.d.ts',
@@ -24,6 +27,7 @@ export default defineConfig({
         'features/**/components/**',
         'features/**/hooks/**',
         'features/**/stores/**',
+        'features/**/utils/**',
       ],
     },
   },
