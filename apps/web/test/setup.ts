@@ -35,23 +35,35 @@ if (typeof window !== 'undefined') {
     global.crypto = {}
   }
   if (!global.crypto.randomUUID) {
-    global.crypto.randomUUID = () => {
+    global.crypto.randomUUID = (() => {
       return 'test-uuid-' + Math.random().toString(36).substring(7)
-    }
+    }) as any
   }
 }
 
 import '@testing-library/jest-dom'
 import { expect, vi, afterAll, afterEach, beforeAll } from 'vitest'
 import { toHaveNoViolations } from 'jest-axe'
-import './prisma-mock'
 import { server } from './msw-server'
+import { setupEnvMocks } from './infrastructure/env'
+import { setupCommonMocks } from './infrastructure/common'
+import { setupMetricsMocks } from './infrastructure/metrics'
+import { setupRedisMocks } from './infrastructure/redis'
+import { setupPrismaMocks } from './infrastructure/prisma'
+import { setupUIMocks } from './infrastructure/ui'
+import { useChatUIStore } from '@/features/chat/stores/ui-store'
 
 expect.extend(toHaveNoViolations)
 
+// Apply modular mocks
+setupEnvMocks()
+setupCommonMocks()
+setupMetricsMocks()
+setupRedisMocks()
+setupPrismaMocks()
+setupUIMocks()
 
-import { useChatUIStore } from '@/features/chat/stores/ui-store'
-
+// MSW & Store Lifecycle
 const initialChatUIState = useChatUIStore.getState()
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
@@ -62,124 +74,3 @@ afterEach(() => {
 afterAll(() => server.close())
 
 vi.mock('server-only', () => ({}))
-
-vi.mock('@/lib/config/env', () => ({
-  env: {
-    DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
-    NEXT_PUBLIC_TURNSTILE_SITE_KEY: 'test-site-key',
-    NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: 'test-paddle-token',
-    TURNSTILE_SECRET_KEY: 'test-secret-key',
-    FILE_EXTRACTOR_API_URL: 'http://localhost:8000',
-    INFERENCE_SERVICE_URL: 'localhost:50051',
-  },
-}))
-
-vi.mock('framer-motion', async () => {
-  const actual = await vi.importActual<typeof import('framer-motion')>('framer-motion')
-  
-  const motionProps = [
-    'initial', 'animate', 'exit', 'transition', 'variants', 
-    'whileHover', 'whileTap', 'whileDrag', 'whileFocus', 'whileInView',
-    'onAnimationStart', 'onAnimationComplete', 'onUpdate', 'onDragStart', 'onDragEnd', 'onDrag',
-    'layout', 'layoutId'
-  ]
-
-  const filterProps = (props: any) => {
-    const filtered = { ...props }
-    motionProps.forEach(prop => delete filtered[prop])
-    return filtered
-  }
-
-  const componentCache = new Map()
-
-  const m: any = new Proxy({} as any, {
-    get: (_target, tag: string) => {
-      if (tag === '$$typeof') return undefined
-      if (!componentCache.has(tag)) {
-        const Component = React.forwardRef(({ children, ...props }: any, ref: any) =>
-          React.createElement(tag, { ...filterProps(props), ref }, children)
-        )
-        Component.displayName = `m.${tag}`
-        componentCache.set(tag, Component)
-      }
-      return componentCache.get(tag)
-    }
-  })
-
-  return {
-    ...actual,
-    m,
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-    LazyMotion: ({ children }: { children: React.ReactNode }) => children,
-    domAnimation: {},
-  }
-})
-
-vi.mock('next/navigation', () => ({
-  useRouter: vi.fn(() => ({
-    push: vi.fn(),
-    replace: vi.fn(),
-    refresh: vi.fn(),
-    back: vi.fn(),
-    prefetch: vi.fn(),
-  })),
-  usePathname: vi.fn(() => '/'),
-  useSearchParams: vi.fn(() => new URLSearchParams()),
-}))
-
-vi.mock('next-auth/react', () => ({
-  signIn: vi.fn(),
-  signOut: vi.fn(),
-  useSession: vi.fn(() => ({ data: null, status: 'unauthenticated' })),
-  SessionProvider: ({ children }: { children: React.ReactNode }) => children,
-}))
-
-vi.mock('sonner', () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-    warning: vi.fn(),
-    info: vi.fn(),
-  },
-}))
-
-vi.mock('@/lib/infrastructure/logger', () => ({
-  logger: {
-    info: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
-  },
-}))
-
-vi.mock('@/lib/infrastructure/metrics', () => ({
-  metrics: {
-    rateLimitHits: {
-      inc: vi.fn(),
-    },
-    apiCalls: {
-      inc: vi.fn(),
-    },
-  },
-}))
-
-vi.mock('next/font/google', () => ({
-  Merriweather: () => ({ className: 'merriweather' }),
-  Inter: () => ({ className: 'inter' }),
-  Teko: () => ({ className: 'teko' }),
-  Outfit: () => ({ className: 'outfit' }),
-  Roboto: () => ({ className: 'roboto' }),
-}))
-
-vi.mock('ioredis', () => {
-  class MockRedis {
-    get = vi.fn()
-    set = vi.fn()
-    del = vi.fn()
-    on = vi.fn()
-  }
-  return {
-    default: MockRedis,
-    Redis: MockRedis,
-  }
-})

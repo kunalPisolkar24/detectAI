@@ -17,6 +17,8 @@
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:integration:backend": "vitest run -c vitest.node.config.ts",
+    "test:integration:backend:coverage": "vitest run -c vitest.node.config.ts --coverage",
     "test:e2e": "playwright test"
   },
   "dependencies": {
