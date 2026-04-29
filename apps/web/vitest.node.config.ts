@@ -15,12 +15,15 @@ export default defineConfig({
     include: ['features/**/__tests__/integration-backend/**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      include: ['features/**/*.{ts,tsx}'],
+      include: ['features/**/*.ts'],
       exclude: [
-        'features/**/__tests__/**/*.{ts,tsx}',
+        'features/**/__tests__/**',
         'features/**/*.d.ts',
         'features/**/types.ts',
         'features/**/constants.ts',
+        'features/**/components/**',
+        'features/**/hooks/**',
+        'features/**/stores/**',
       ],
     },
   },
