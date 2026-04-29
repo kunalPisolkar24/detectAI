@@ -1,15 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { registerAction } from '../../actions/register'
-import { userService } from '@/features/auth/services/user-service'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/msw-server'
-
-vi.mock('@/features/auth/services/user-service', () => ({
-  userService: {
-    getUserByEmail: vi.fn(),
-    createUser: vi.fn(),
-  },
-}))
+import { prisma } from '@/lib/infrastructure/prisma'
 
 describe('registerAction Integration', () => {
   beforeEach(() => {
@@ -31,8 +24,9 @@ describe('registerAction Integration', () => {
     }
     const token = 'valid-token'
 
-    vi.mocked(userService.getUserByEmail).mockResolvedValue(null)
-    vi.mocked(userService.createUser).mockResolvedValue({
+    // Mock prisma responses
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.user.create).mockResolvedValue({
       id: 'user-123',
       email: signupData.email,
       name: 'John Doe',
@@ -41,10 +35,12 @@ describe('registerAction Integration', () => {
     const result = await registerAction(signupData, token)
 
     expect(result).toEqual({ success: true })
-    expect(userService.createUser).toHaveBeenCalledWith(
+    expect(prisma.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        email: signupData.email,
-        firstName: signupData.firstName,
+        data: expect.objectContaining({
+          email: signupData.email,
+          firstName: signupData.firstName,
+        })
       })
     )
   })
@@ -67,7 +63,7 @@ describe('registerAction Integration', () => {
     const result = await registerAction(signupData, 'invalid-token')
 
     expect(result).toEqual({ error: 'Security check failed. Please try again.' })
-    expect(userService.createUser).not.toHaveBeenCalled()
+    expect(prisma.user.create).not.toHaveBeenCalled()
   })
 
   it('fails if email is already in use', async () => {
@@ -79,12 +75,12 @@ describe('registerAction Integration', () => {
       confirmPassword: 'Password123!',
     }
 
-    vi.mocked(userService.getUserByEmail).mockResolvedValue({ id: 'existing-123' } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: 'existing-123', email: 'john@example.com' } as any)
 
     const result = await registerAction(signupData, 'valid-token')
 
     expect(result).toEqual({ error: 'Email already in use' })
-    expect(userService.createUser).not.toHaveBeenCalled()
+    expect(prisma.user.create).not.toHaveBeenCalled()
   })
 
   it('fails if input validation fails', async () => {
