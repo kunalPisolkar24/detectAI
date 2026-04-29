@@ -71,6 +71,13 @@ vi.mock('@/lib/config/env', () => ({
     TURNSTILE_SECRET_KEY: 'test-secret-key',
     FILE_EXTRACTOR_API_URL: 'http://localhost:8000',
     INFERENCE_SERVICE_URL: 'localhost:50051',
+    PAYMENT_GATEWAY_URL: 'http://localhost:8080',
+  },
+}))
+
+vi.mock('@/lib/services/lock-service', () => ({
+  lockService: {
+    execute: vi.fn((_keys, task) => task()),
   },
 }))
 
