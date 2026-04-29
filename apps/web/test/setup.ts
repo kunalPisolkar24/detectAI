@@ -35,9 +35,9 @@ if (typeof window !== 'undefined') {
     global.crypto = {}
   }
   if (!global.crypto.randomUUID) {
-    global.crypto.randomUUID = () => {
+    global.crypto.randomUUID = (() => {
       return 'test-uuid-' + Math.random().toString(36).substring(7)
-    }
+    }) as any
   }
 }
 
