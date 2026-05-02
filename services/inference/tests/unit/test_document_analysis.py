@@ -193,31 +193,29 @@ async def test_document_analysis_records_metrics_for_stream(mocker):
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_cancels_inflight_tasks_when_request_is_inactive():
+async def test_dispatcher_cancels_inflight_tasks_when_task_is_cancelled():
     engine = SlowAsyncEngine()
     dispatcher = ConcurrencyDispatcher(2)
-    request_active = True
-
-    async def stop_request():
-        nonlocal request_active
-        await asyncio.sleep(0.05)
-        request_active = False
 
     chunks = [
         DocumentChunk(index=0, text="one", token_count=1, char_start=0, char_end=3),
         DocumentChunk(index=1, text="two", token_count=1, char_start=4, char_end=7),
     ]
 
-    asyncio.create_task(stop_request())
-
-    with pytest.raises(asyncio.CancelledError, match="Client disconnected"):
+    async def run_dispatcher():
         async for _ in dispatcher.execute_progressively(
             engine,
             chunks,
-            request_is_active=lambda: request_active,
             telemetry=MagicMock(),
         ):
             pass
+
+    task = asyncio.create_task(run_dispatcher())
+    await asyncio.sleep(0.05)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
 
     assert engine.cancelled == 2
 
