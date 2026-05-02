@@ -2,8 +2,8 @@
 	load-smoke-local load-smoke-prod load-detect-local load-detect-prod \
 	load-analyze-local load-analyze-prod load-soak-local load-soak-prod
 
-LOCAL_LOAD_ENV=../../infra/docker/local/.env
-PROD_LOAD_ENV=../../infra/docker/prod/.env
+LOCAL_LOAD_ENV=infra/docker/local/.env
+PROD_LOAD_ENV=infra/docker/prod/.env
 LOAD_ARGS ?=
 
 install:
