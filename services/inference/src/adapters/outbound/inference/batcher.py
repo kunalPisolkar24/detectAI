@@ -2,8 +2,6 @@ import asyncio
 import time
 from dataclasses import dataclass
 from typing import List
-from circuitbreaker import CircuitBreaker, CircuitBreakerError
-
 from src.domain.exceptions import ServiceOverloadedError
 from src.domain.models import (
     BatcherHealthSnapshot,
@@ -43,13 +41,7 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
         self.queue = asyncio.Queue(maxsize=queue_max_size)
         self.shutdown_flag = False
         self.worker_task: asyncio.Task | None = None
-        self._circuit_breaker = CircuitBreaker(
-            failure_threshold=15,
-            recovery_timeout=10,
-            expected_exception=Exception,
-            name=f"{model_name}-batch",
-        )
-        self._guarded_predict_batch = self._circuit_breaker.decorate(self.engine.predict_batch)
+        self._guarded_predict_batch = self.engine.predict_batch
 
     async def start(self) -> None:
         if self.shutdown_flag:
@@ -88,8 +80,6 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
             status = BatcherHealthStatus.SHUTTING_DOWN
         elif self.worker_task is None or self.worker_task.done():
             status = BatcherHealthStatus.WORKER_UNAVAILABLE
-        elif self._circuit_breaker.opened:
-            status = BatcherHealthStatus.CIRCUIT_OPEN
         elif self.queue.full():
             status = BatcherHealthStatus.QUEUE_FULL
         else:
@@ -99,7 +89,7 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
             status=status,
             queue_size=self.queue.qsize(),
             queue_capacity=self.queue.maxsize,
-            circuit_open_remaining=self._circuit_breaker.open_remaining if self._circuit_breaker.opened else None,
+            circuit_open_remaining=None,
         )
 
     async def shutdown(self):
@@ -177,12 +167,6 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
                 if not future.done():
                     future.set_result(results[i])
                 
-        except CircuitBreakerError as exc:
-            error = ServiceOverloadedError(f"{self.model_name} inference circuit is open")
-            for future in futures_list:
-                if not future.done():
-                    future.set_exception(error)
-            logger.warning("batch_circuit_open", model=self.model_name, error=str(exc))
         except Exception as e:
             for future in futures_list:
                 if not future.done():
