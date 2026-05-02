@@ -44,8 +44,8 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
         self.shutdown_flag = False
         self.worker_task: asyncio.Task | None = None
         self._circuit_breaker = CircuitBreaker(
-            failure_threshold=3,
-            recovery_timeout=30,
+            failure_threshold=15,
+            recovery_timeout=10,
             expected_exception=Exception,
             name=f"{model_name}-batch",
         )

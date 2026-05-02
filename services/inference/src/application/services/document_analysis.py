@@ -47,6 +47,7 @@ class ConcurrencyDispatcher:
 
         while pending_index < len(chunks) and len(pending_futures) < self.max_inflight:
             if request_is_active and not request_is_active():
+                await self._cancel_and_await(pending_futures.keys())
                 raise asyncio.CancelledError("Client disconnected")
             future = asyncio.create_task(
                 self._predict_chunk(engine, chunks[pending_index].text, operation, model_key, telemetry)
