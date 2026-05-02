@@ -1,7 +1,8 @@
 import asyncio
 import time
+import concurrent.futures
 from dataclasses import dataclass
-from typing import List
+from typing import List, Set
 from src.domain.exceptions import ServiceOverloadedError
 from src.domain.models import (
     BatcherHealthSnapshot,
@@ -33,6 +34,8 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
         timeout: float,
         model_name: str,
         queue_max_size: int,
+        executor: concurrent.futures.Executor,
+        max_concurrent_batches: int = 4,
     ):
         self.engine = engine
         self.batch_size = batch_size
@@ -42,6 +45,9 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
         self.shutdown_flag = False
         self.worker_task: asyncio.Task | None = None
         self._guarded_predict_batch = self.engine.predict_batch
+        self.executor = executor
+        self.semaphore = asyncio.Semaphore(max_concurrent_batches)
+        self.active_batches: Set[asyncio.Task] = set()
 
     async def start(self) -> None:
         if self.shutdown_flag:
@@ -107,6 +113,9 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
             except Exception as exc:
                 worker_error = exc
 
+        if self.active_batches:
+            await asyncio.gather(*self.active_batches, return_exceptions=True)
+
         while not self.queue.empty():
             item = self.queue.get_nowait()
             if item is _SHUTDOWN_SENTINEL:
@@ -119,37 +128,47 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
             raise worker_error
 
     async def _worker_loop(self):
-        loop = asyncio.get_running_loop()
         while not self.shutdown_flag:
-            batch: list[PendingPrediction] = []
             try:
-                item = await asyncio.wait_for(self.queue.get(), timeout=0.01)
+                item = await self.queue.get()
                 if item is _SHUTDOWN_SENTINEL:
                     break
                 BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
-                batch.append(item)
-            except asyncio.TimeoutError:
-                continue
-
-            start_time = time.monotonic()
-            
-            while len(batch) < self.batch_size:
-                remaining = self.timeout - (time.monotonic() - start_time)
-                if remaining <= 0:
-                    break
-                try:
-                    item = await asyncio.wait_for(self.queue.get(), timeout=remaining)
-                    if item is _SHUTDOWN_SENTINEL:
+                batch: List[PendingPrediction] = [item]
+                
+                start_time = time.monotonic()
+                while len(batch) < self.batch_size:
+                    remaining = self.timeout - (time.monotonic() - start_time)
+                    if remaining <= 0:
                         break
-                    BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
-                    batch.append(item)
-                except asyncio.TimeoutError:
-                    break
+                    try:
+                        item = await asyncio.wait_for(self.queue.get(), timeout=remaining)
+                        if item is _SHUTDOWN_SENTINEL:
+                            try:
+                                self.queue.put_nowait(_SHUTDOWN_SENTINEL)
+                            except asyncio.QueueFull:
+                                pass
+                            break
+                        BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
+                        batch.append(item)
+                    except asyncio.TimeoutError:
+                        break
 
-            if batch:
-                await self._process_batch(batch, loop)
+                if batch:
+                    task = asyncio.create_task(self._process_batch_with_semaphore(batch))
+                    self.active_batches.add(task)
+                    task.add_done_callback(self.active_batches.discard)
 
-    async def _process_batch(self, batch: List[PendingPrediction], loop: asyncio.AbstractEventLoop):
+            except Exception as e:
+                logger.error("batch_worker_loop_error", model=self.model_name, error=str(e))
+                await asyncio.sleep(0.1)
+
+    async def _process_batch_with_semaphore(self, batch: List[PendingPrediction]):
+        async with self.semaphore:
+            await self._process_batch(batch)
+
+    async def _process_batch(self, batch: List[PendingPrediction]):
+        loop = asyncio.get_running_loop()
         BATCH_SIZE_DISTRIBUTION.labels(model=self.model_name).observe(len(batch))
         
         texts = [item.text for item in batch]
@@ -157,7 +176,7 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
 
         try:
             with BATCH_PROCESSING_TIME.labels(model=self.model_name).time():
-                results = await loop.run_in_executor(None, self._guarded_predict_batch, texts)
+                results = await loop.run_in_executor(self.executor, self._guarded_predict_batch, texts)
             
             if len(results) != len(futures_list):
                 raise RuntimeError("Batch results length mismatch")
