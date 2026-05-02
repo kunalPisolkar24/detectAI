@@ -16,7 +16,12 @@ class GRPCServer:
         self.port = settings.GRPC_PORT
         self.analysis_service = analysis_service
         self.server = aio.server(
-            interceptors=[AuthInterceptor(), MonitoringInterceptor()]
+            interceptors=[AuthInterceptor(), MonitoringInterceptor()],
+            options=[
+                ("grpc.max_concurrent_streams", 1000),
+                ("grpc.max_send_message_length", 1024 * 1024 * 64),
+                ("grpc.max_receive_message_length", 1024 * 1024 * 64),
+            ]
         )
 
         servicer = AIService(analysis_service)
