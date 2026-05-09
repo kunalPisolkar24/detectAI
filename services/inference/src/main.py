@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 from prometheus_client import start_http_server
 from src.infrastructure.config import settings
 from src.application.services.aggregation import ResultAggregator
@@ -22,6 +23,11 @@ async def main():
         start_http_server(settings.METRICS_PORT)
         logger.info("metrics_server_started", port=settings.METRICS_PORT)
         
+        executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=settings.INFERENCE_MAX_WORKERS,
+            thread_name_prefix="inference-pool",
+        )
+        
         loader = HuggingFaceLoader(
             settings.MODEL_CACHE_DIR,
             settings.INFERENCE_PROVIDERS,
@@ -42,6 +48,8 @@ async def main():
             settings.BATCH_TIMEOUT, 
             "spark",
             settings.BATCH_QUEUE_MAX_SIZE,
+            executor=executor,
+            max_concurrent_batches=settings.MAX_CONCURRENT_BATCHES,
         )
         flare_batched = BatchingProxy(
             flare_raw, 
@@ -49,6 +57,8 @@ async def main():
             settings.BATCH_TIMEOUT, 
             "flare",
             settings.BATCH_QUEUE_MAX_SIZE,
+            executor=executor,
+            max_concurrent_batches=settings.MAX_CONCURRENT_BATCHES,
         )
         await spark_batched.start()
         await flare_batched.start()
@@ -78,6 +88,9 @@ async def main():
     except Exception as e:
         logger.critical("startup_failed", error=str(e))
         exit(1)
+    finally:
+        if 'executor' in locals():
+            executor.shutdown(wait=True)
 
 if __name__ == "__main__":
     asyncio.run(main())

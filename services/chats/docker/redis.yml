@@ -92,11 +92,13 @@ services:
       chat-redis-3:
         condition: service_healthy
     command: >
-      redis-cli --cluster create
-      chat_redis_1:7010
-      chat_redis_2:7011
-      chat_redis_3:7012
-      --cluster-replicas 0 --cluster-yes
+      sh -c "
+      if redis-cli -h chat_redis_1 -p 7010 cluster info | grep -q 'cluster_state:ok'; then
+        echo 'Cluster already initialized';
+      else
+        redis-cli --cluster create chat_redis_1:7010 chat_redis_2:7011 chat_redis_3:7012 --cluster-replicas 0 --cluster-yes;
+      fi
+      "
     networks:
       - detectai_net
 

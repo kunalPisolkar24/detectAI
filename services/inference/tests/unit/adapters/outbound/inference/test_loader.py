@@ -9,6 +9,7 @@ def mock_loader_env(tmp_path):
          patch("src.adapters.outbound.inference.loader.pickle.load") as mock_pickle, \
          patch("src.adapters.outbound.inference.loader.hf_hub_download") as mock_dl, \
          patch("src.adapters.outbound.inference.loader.snapshot_download") as mock_snap, \
+         patch("src.adapters.outbound.inference.loader.time.sleep") as mock_sleep, \
          patch("src.adapters.outbound.inference.loader.BertTokenizerFast.from_pretrained") as mock_tok:
         
         mock_session.return_value = MagicMock()

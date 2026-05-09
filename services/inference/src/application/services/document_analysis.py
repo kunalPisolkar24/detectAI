@@ -30,7 +30,6 @@ class TextPreparationPipeline:
 class ConcurrencyDispatcher:
     def __init__(self, max_inflight: int):
         self.max_inflight = max(1, max_inflight)
-        self._poll_interval = 0.05
 
     async def execute_progressively(
         self, 
@@ -41,63 +40,30 @@ class ConcurrencyDispatcher:
         model_key: str = "unknown",
         telemetry: ITelemetryReporter = None,
     ) -> AsyncGenerator[Tuple[int, float], None]:
-        
-        pending_futures = {}
-        pending_index = 0
+        semaphore = asyncio.Semaphore(self.max_inflight)
 
-        while pending_index < len(chunks) and len(pending_futures) < self.max_inflight:
-            if request_is_active and not request_is_active():
-                raise asyncio.CancelledError("Client disconnected")
-            future = asyncio.create_task(
-                self._predict_chunk(engine, chunks[pending_index].text, operation, model_key, telemetry)
-            )
-            pending_futures[future] = pending_index
-            pending_index += 1
+        async def _worker(chunk_index: int, chunk: DocumentChunk) -> Tuple[int, float]:
+            async with semaphore:
+                if request_is_active and not request_is_active():
+                    raise asyncio.CancelledError("Client disconnected")
+                result = await self._predict_chunk(engine, chunk.text, operation, model_key, telemetry)
+                return chunk_index, result
 
-        while pending_futures:
-            if request_is_active and not request_is_active():
-                await self._cancel_and_await(pending_futures.keys())
-                raise asyncio.CancelledError("Client disconnected")
+        tasks = [
+            asyncio.create_task(_worker(i, chunk))
+            for i, chunk in enumerate(chunks)
+        ]
 
-            completed, _ = await asyncio.wait(
-                pending_futures.keys(),
-                return_when=asyncio.FIRST_COMPLETED,
-                timeout=self._poll_interval,
-            )
-            if not completed:
-                continue
-            for future in completed:
-                chunk_index = pending_futures.pop(future)
-                try:
-                    result = float(await future)
-                except BaseException:
-                    other_completed = [task for task in completed if task is not future]
-                    await self._cancel_and_await(pending_futures.keys())
-                    await self._await_all(other_completed)
-                    raise
-
-                yield chunk_index, result
-
-                if pending_index < len(chunks):
-                    if request_is_active and not request_is_active():
-                        await self._cancel_and_await(pending_futures.keys())
-                        raise asyncio.CancelledError("Client disconnected")
-                    next_future = asyncio.create_task(
-                        self._predict_chunk(engine, chunks[pending_index].text, operation, model_key, telemetry)
-                    )
-                    pending_futures[next_future] = pending_index
-                    pending_index += 1
-
-    async def _cancel_and_await(self, tasks) -> None:
-        task_list = list(tasks)
-        for task in task_list:
-            task.cancel()
-        await self._await_all(task_list)
-
-    async def _await_all(self, tasks) -> None:
-        task_list = list(tasks)
-        if task_list:
-            await asyncio.gather(*task_list, return_exceptions=True)
+        try:
+            for future in asyncio.as_completed(tasks):
+                yield await future
+        except BaseException:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
     async def _predict_chunk(self, engine: IAsyncInferenceEngine, text: str, operation: str, model_key: str, telemetry: ITelemetryReporter) -> float:
         telemetry.track_document_chunk_started(operation, model_key)

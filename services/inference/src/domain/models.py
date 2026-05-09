@@ -3,6 +3,7 @@ from enum import Enum
 
 
 class BatcherHealthStatus(str, Enum):
+    INITIALIZING = "initializing"
     SERVING = "serving"
     SHUTTING_DOWN = "shutting_down"
     WORKER_UNAVAILABLE = "worker_unavailable"
@@ -21,6 +22,8 @@ class BatcherHealthSnapshot:
     def failure_reason(self) -> str | None:
         if self.status == BatcherHealthStatus.SERVING:
             return None
+        if self.status == BatcherHealthStatus.INITIALIZING:
+            return "service_initializing"
         if self.status == BatcherHealthStatus.SHUTTING_DOWN:
             return "shutdown_in_progress"
         if self.status == BatcherHealthStatus.WORKER_UNAVAILABLE:

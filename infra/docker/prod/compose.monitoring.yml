@@ -69,7 +69,6 @@ services:
     devices:
       - /dev/kmsg
     volumes:
-      - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker:/var/lib/docker:ro
@@ -88,8 +87,6 @@ services:
       - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($|/)
     network_mode: host
     pid: host
-    volumes:
-      - /:/host:ro,rslave
 
   postgres-exporter-primary:
     image: prometheuscommunity/postgres-exporter:v0.17.1

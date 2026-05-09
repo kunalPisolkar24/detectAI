@@ -37,8 +37,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 8G
-          cpus: "4.0"
+          memory: 16G
+          cpus: "8.0"
         reservations:
           devices:
             - driver: nvidia

@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     BATCH_SIZE: int = Field(default=32, gt=0)
     BATCH_TIMEOUT: float = Field(default=0.05, gt=0)
     BATCH_QUEUE_MAX_SIZE: int = Field(default=1024, gt=0)
+    INFERENCE_MAX_WORKERS: int = Field(default=32, gt=0)
+    MAX_CONCURRENT_BATCHES: int = Field(default=4, gt=0)
     MAX_INFLIGHT_DOC_CHUNKS: int = Field(default=8, gt=0)
     MAX_TEXT_CHARS: int = Field(default=50000, validation_alias="MAX_TEXT_LENGTH", gt=0)
     MAX_GLOBAL_TOKENS: int = Field(default=10000, gt=0)

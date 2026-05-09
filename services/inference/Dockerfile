@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -7,12 +7,18 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
+    python3.11 \
+    python3.11-venv \
+    python3.11-dev \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir poetry
+RUN wget -q https://bootstrap.pypa.io/get-pip.py && python3.11 get-pip.py && rm get-pip.py
+
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+RUN pip install --no-cache-dir poetry
 
 RUN wget -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.19/grpc_health_probe-linux-amd64 && \
     chmod +x /bin/grpc_health_probe
