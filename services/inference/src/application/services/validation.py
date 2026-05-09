@@ -1,3 +1,4 @@
+import unicodedata
 from src.domain.exceptions import InvalidInputError
 
 
@@ -9,7 +10,13 @@ class InputValidator:
         if not text or not text.strip():
             raise InvalidInputError("Text cannot be empty")
 
-        if len(text) > self.max_text_chars:
+        sanitized = "".join(ch for ch in text if not unicodedata.category(ch).startswith("C"))
+        sanitized = sanitized.strip()
+
+        if not sanitized:
+            raise InvalidInputError("Text cannot be only control characters")
+
+        if len(sanitized) > self.max_text_chars:
             raise InvalidInputError(f"Text exceeds maximum length of {self.max_text_chars} characters")
 
-        return text
+        return sanitized

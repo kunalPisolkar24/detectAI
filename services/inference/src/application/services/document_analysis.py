@@ -57,7 +57,7 @@ class ConcurrencyDispatcher:
         try:
             for future in asyncio.as_completed(tasks):
                 yield await future
-        except Exception:
+        except BaseException:
             for task in tasks:
                 if not task.done():
                     task.cancel()
