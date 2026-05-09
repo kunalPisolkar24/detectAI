@@ -31,19 +31,12 @@ describe("RabbitMQWorker", () => {
 
     test("should acknowledge message on successful processing", async () => {
         await worker.start();
-
-        // Ensure consume was called before accessing args
         expect(mockChannel.consume).toHaveBeenCalled();
-
-        // Use non-null assertion (!) because we asserted strictly above
         const onMessageCallback = mockChannel.consume.mock.calls[0]![1];
-
         const fakeMsg = {
             content: Buffer.from(JSON.stringify({ event_type: "test" })),
         };
-
         await onMessageCallback(fakeMsg);
-
         expect(mockHandler).toHaveBeenCalled();
         expect(mockAck).toHaveBeenCalledWith(fakeMsg);
         expect(mockNack).not.toHaveBeenCalled();
@@ -52,38 +45,33 @@ describe("RabbitMQWorker", () => {
     test("should negative acknowledge message on failure", async () => {
         const failingHandler = mock(() => Promise.reject(new Error("Fail")));
         worker = new RabbitMQWorker("amqp://localhost", "test_queue", failingHandler);
-
         await worker.start();
-
         expect(mockChannel.consume).toHaveBeenCalled();
-
-        // Use non-null assertion (!)
         const onMessageCallback = mockChannel.consume.mock.calls[0]![1];
-
         const fakeMsg = {
             content: Buffer.from(JSON.stringify({ event_type: "test" })),
         };
-
         await onMessageCallback(fakeMsg);
-
         expect(failingHandler).toHaveBeenCalled();
         expect(mockNack).toHaveBeenCalledWith(fakeMsg, false, false);
     });
 
-    test("should handle connection close event", async () => {
+    test("should declare queue as quorum when specified", async () => {
+        worker = new RabbitMQWorker("amqp://localhost", "test_queue", mockHandler, "quorum");
         await worker.start();
+        expect(mockChannel.assertQueue).toHaveBeenCalledWith("test_queue", expect.objectContaining({
+            arguments: expect.objectContaining({
+                "x-queue-type": "quorum"
+            })
+        }));
+    });
 
+    test("should handle connection close event without exiting", async () => {
+        await worker.start();
         expect(mockOn).toHaveBeenCalledWith("close", expect.any(Function));
-
         const closeCallback = mockOn.mock.calls.find(call => call[0] === "close")?.[1];
         expect(closeCallback).toBeDefined();
-
-        try {
-            closeCallback();
-        } catch (e: any) {
-            expect(e.message).toBe("process.exit called");
-        }
-
-        expect(mockExit).toHaveBeenCalledWith(1);
+        closeCallback();
+        expect(mockExit).not.toHaveBeenCalled();
     });
 });
