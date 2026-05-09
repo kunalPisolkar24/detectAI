@@ -1,6 +1,11 @@
 import { RabbitMQWorker } from "../../shared/infrastructure/RabbitMQWorker";
 import { PaymentService } from "./services/PaymentService";
-import { prisma } from "@shared/db";
+import { PrismaUserRepository } from "@shared/repositories/UserRepository";
+import { PaddleClient } from "./gateways/PaddleClient";
+import { SubscriptionUpdatedHandler } from "./handlers/SubscriptionUpdatedHandler";
+import { SubscriptionCanceledHandler } from "./handlers/SubscriptionCanceledHandler";
+import { UserCancelHandler } from "./handlers/UserCancelHandler";
+import { prisma, prismaPrimary } from "@shared/db";
 import { RedisFactory } from "@shared/redis";
 import { LockService } from "@shared/cache/lock";
 import { MetricsService } from "@shared/monitoring/MetricsService";
@@ -9,20 +14,34 @@ import { config } from "./config";
 
 const QUEUE_NAME = "payment_events";
 
-const redisClient = RedisFactory.createClient(
-    {
-        mode: config.REDIS_MODE,
-        name: "PaymentsRedis",
-        url: config.REDIS_URL,
-        sentinels: config.REDIS_SENTINELS,
-        masterName: config.REDIS_MASTER_NAME,
-        password: process.env.REDIS_PASSWORD,
-    }
-);
+const redisClient = RedisFactory.createClient({
+    mode: config.REDIS_MODE,
+    name: "PaymentsRedis",
+    url: config.REDIS_URL,
+    sentinels: config.REDIS_SENTINELS,
+    masterName: config.REDIS_MASTER_NAME,
+    password: process.env.REDIS_PASSWORD,
+});
 
 const metricsService = new MetricsService("worker-payments");
 const lockService = new LockService(redisClient);
-const paymentService = new PaymentService(redisClient, lockService, metricsService);
+
+const userRepository = new PrismaUserRepository(prismaPrimary, prisma);
+const paddleClient = new PaddleClient(config.PADDLE_API_KEY, config.PADDLE_ENVIRONMENT);
+
+const subscriptionUpdatedHandler = new SubscriptionUpdatedHandler(userRepository, redisClient, lockService, metricsService);
+const subscriptionCanceledHandler = new SubscriptionCanceledHandler(userRepository, redisClient, metricsService);
+const userCancelHandler = new UserCancelHandler(paddleClient);
+
+const paymentService = new PaymentService(
+    {
+        "subscription.created": subscriptionUpdatedHandler,
+        "subscription.updated": subscriptionUpdatedHandler,
+        "subscription.canceled": subscriptionCanceledHandler,
+        "user.cancel_subscription": userCancelHandler,
+    },
+    metricsService
+);
 
 const worker = new RabbitMQWorker(
     config.RABBITMQ_URL,
