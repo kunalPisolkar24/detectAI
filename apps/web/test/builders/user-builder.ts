@@ -1,4 +1,4 @@
-import { User, SubscriptionStatus } from "@/lib/generated/prisma"
+import { User, SubscriptionStatus } from "@/lib/shared/generated/prisma/client"
 
 export const createUser = (overrides: Partial<User> = {}): User => ({
   id: "test-user-id",
@@ -12,13 +12,5 @@ export const createUser = (overrides: Partial<User> = {}): User => ({
   createdAt: new Date(),
   updatedAt: new Date(),
   paddleCustomerId: null,
-  paddleSubscriptionId: null,
-  paddlePlanId: null,
-  paddleSubscriptionStatus: null,
-  subscriptionEndsAt: null,
-  paddleCancellationScheduled: false,
-  apiCallCountDaily: 0,
-  lastApiCallReset: null,
-  apiCallCountTotal: 0,
   ...overrides,
 })

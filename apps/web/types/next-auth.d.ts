@@ -13,7 +13,6 @@ declare module "next-auth" {
   interface User extends DefaultUser {
     firstName?: string | null
     lastName?: string | null
-    paddleSubscriptionStatus?: string | null
     isPremium?: boolean
   }
 

@@ -63,7 +63,10 @@ export const authOptions: NextAuthOptions = {
           return null
         }
         const { email, password } = loginValidated.data
-        const user = await prisma.user.findUnique({ where: { email } })
+        const user = await prisma.user.findUnique({ 
+          where: { email },
+          include: { subscription: true }
+        })
         if (!user || !user.password) {
           return null
         }
@@ -71,7 +74,7 @@ export const authOptions: NextAuthOptions = {
         if (!passwordsMatch) {
           return null
         }
-        const isPremium = user.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE
+        const isPremium = user.subscription?.status === SubscriptionStatus.ACTIVE
         return {
           id: user.id,
           name: user.name ?? undefined,
@@ -97,13 +100,13 @@ export const authOptions: NextAuthOptions = {
 
       if (token.id) {
         try {
-          const dbUser = await userService.getUserById(token.id)
+          const dbUser = await userService.getUserById(token.id) as any
 
           if (dbUser) {
             token.name = dbUser.name ?? token.name
             token.email = dbUser.email ?? token.email
             token.picture = dbUser.image ?? token.picture
-            token.isPremium = dbUser.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE
+            token.isPremium = dbUser.subscription?.status === SubscriptionStatus.ACTIVE
           }
         } catch (error) {
           console.error("JWT Callback error:", error)
