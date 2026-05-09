@@ -1,4 +1,4 @@
-.PHONY: install install-prod proto run docker-build docker-build-local test \
+.PHONY: install install-prod proto run docker-build docker-build-local test test-integration integration \
 	load-smoke-local load-smoke-prod load-detect-local load-detect-prod \
 	load-analyze-local load-analyze-prod load-soak-local load-soak-prod
 
@@ -28,7 +28,12 @@ docker-build-local:
 	docker build -f Dockerfile.local -t ai-service:local .
 
 test:
-	poetry run python -m pytest tests/ -v --cov=src --cov-report=term-missing
+	poetry run python -m pytest tests/unit -v --cov=src --cov-report=term-missing
+
+test-integration:
+	poetry run python -m pytest tests/integration -v
+
+integration: test-integration
 
 load-smoke-local:
 	python3 load/scripts/run_k6.py --env-file $(LOCAL_LOAD_ENV) --script services/inference/load/scenarios/smoke.js -- $(LOAD_ARGS)
