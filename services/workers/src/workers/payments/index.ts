@@ -27,7 +27,8 @@ const paymentService = new PaymentService(redisClient, lockService, metricsServi
 const worker = new RabbitMQWorker(
     config.RABBITMQ_URL,
     QUEUE_NAME,
-    async (event: any) => await paymentService.handleEvent(event)
+    async (event: any) => await paymentService.handleEvent(event),
+    "quorum"
 );
 
 worker.start();
