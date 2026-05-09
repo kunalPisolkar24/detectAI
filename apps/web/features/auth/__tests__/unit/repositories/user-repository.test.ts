@@ -26,6 +26,10 @@ describe('userRepository', () => {
 
       expect(prisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: '1' },
+        include: {
+          subscription: true,
+          usage: true
+        }
       })
       expect(result).toEqual(mockUser)
     })
@@ -48,6 +52,10 @@ describe('userRepository', () => {
 
       expect(prisma.user.findUnique).toHaveBeenCalledWith({
         where: { email: 'test@example.com' },
+        include: {
+          subscription: true,
+          usage: true
+        }
       })
       expect(result).toEqual(mockUser)
     })

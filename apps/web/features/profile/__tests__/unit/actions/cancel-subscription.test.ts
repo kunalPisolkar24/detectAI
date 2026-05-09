@@ -52,8 +52,10 @@ describe('cancelSubscriptionAction', () => {
     prismaMock.user.findUnique.mockResolvedValue({
       id: mockUserId,
       email: mockEmail,
-      paddleSubscriptionId: 'sub-1',
-      paddleSubscriptionStatus: SubscriptionStatus.PAST_DUE,
+      subscription: {
+        paddleSubscriptionId: 'sub-1',
+        status: SubscriptionStatus.PAST_DUE,
+      }
     } as any)
 
     const result = await cancelSubscriptionAction()
@@ -65,8 +67,10 @@ describe('cancelSubscriptionAction', () => {
     prismaMock.user.findUnique.mockResolvedValue({
       id: mockUserId,
       email: mockEmail,
-      paddleSubscriptionId: 'sub-1',
-      paddleSubscriptionStatus: SubscriptionStatus.ACTIVE,
+      subscription: {
+        paddleSubscriptionId: 'sub-1',
+        status: SubscriptionStatus.ACTIVE,
+      }
     } as any)
 
     vi.mocked(fetch).mockResolvedValue({
@@ -75,9 +79,9 @@ describe('cancelSubscriptionAction', () => {
 
     const result = await cancelSubscriptionAction()
 
-    expect(prismaMock.user.update).toHaveBeenCalledWith({
-      where: { id: mockUserId },
-      data: { paddleCancellationScheduled: true }
+    expect(prismaMock.subscription.update).toHaveBeenCalledWith({
+      where: { userId: mockUserId },
+      data: { cancellationScheduled: true }
     })
     expect(userService.invalidateUserCache).toHaveBeenCalledWith(mockUserId, mockEmail)
     expect(fetch).toHaveBeenCalled()
@@ -90,8 +94,10 @@ describe('cancelSubscriptionAction', () => {
     prismaMock.user.findUnique.mockResolvedValue({
       id: mockUserId,
       email: mockEmail,
-      paddleSubscriptionId: 'sub-1',
-      paddleSubscriptionStatus: SubscriptionStatus.ACTIVE,
+      subscription: {
+        paddleSubscriptionId: 'sub-1',
+        status: SubscriptionStatus.ACTIVE,
+      }
     } as any)
 
     vi.mocked(fetch).mockResolvedValue({
@@ -101,9 +107,9 @@ describe('cancelSubscriptionAction', () => {
 
     const result = await cancelSubscriptionAction()
 
-    expect(prismaMock.user.update).toHaveBeenCalledWith({
-      where: { id: mockUserId },
-      data: { paddleCancellationScheduled: false }
+    expect(prismaMock.subscription.update).toHaveBeenCalledWith({
+      where: { userId: mockUserId },
+      data: { cancellationScheduled: false }
     })
     expect(result).toEqual({ error: 'Failed to communicate with payment provider. Please try again.' })
   })

@@ -61,8 +61,10 @@ describe('Profile Actions Integration', () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
         id: mockUserId,
         email: 'test@example.com',
-        paddleSubscriptionId: 'sub-123',
-        paddleSubscriptionStatus: SubscriptionStatus.ACTIVE
+        subscription: {
+          paddleSubscriptionId: 'sub-123',
+          status: SubscriptionStatus.ACTIVE
+        }
       } as any)
 
       server.use(
@@ -74,8 +76,8 @@ describe('Profile Actions Integration', () => {
       const result = await cancelSubscriptionAction()
 
       expect(result).toEqual({ success: true })
-      expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
-        data: { paddleCancellationScheduled: true }
+      expect(prisma.subscription.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: { cancellationScheduled: true }
       }))
       expect(redisWriter.del).toHaveBeenCalled()
     })
@@ -84,8 +86,10 @@ describe('Profile Actions Integration', () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
         id: mockUserId,
         email: 'test@example.com',
-        paddleSubscriptionId: 'sub-123',
-        paddleSubscriptionStatus: SubscriptionStatus.ACTIVE
+        subscription: {
+          paddleSubscriptionId: 'sub-123',
+          status: SubscriptionStatus.ACTIVE
+        }
       } as any)
 
       server.use(
@@ -98,8 +102,8 @@ describe('Profile Actions Integration', () => {
 
       expect(result.error).toBeDefined()
       // Should have been called twice: once to set true, once to revert to false
-      expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
-        data: { paddleCancellationScheduled: false }
+      expect(prisma.subscription.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: { cancellationScheduled: false }
       }))
     })
   })
