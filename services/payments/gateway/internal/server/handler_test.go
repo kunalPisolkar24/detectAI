@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"errors"
+	"gateway/internal/domain"
 	"gateway/internal/logger"
 	"gateway/internal/mocks"
 	"gateway/internal/monitoring"
@@ -18,7 +19,13 @@ import (
 func setupTestRouter(mp *mocks.MockEventProducer, mv *mocks.MockSignatureValidator) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	log := logger.New()
-	handler := NewHandler(mp, mv, "test-secret", log)
+	service := domain.NewPaymentService(mp, mv, "test-secret")
+	handler := NewHandler(HandlerConfig{
+		Service:     service,
+		Health:      mp,
+		InternalKey: "internal-secret",
+		Logger:      log,
+	})
 	monitor := monitoring.New("payment-gateway")
 	r := gin.New()
 	r.Use(monitor.Middleware())

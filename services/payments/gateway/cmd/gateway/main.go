@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"gateway/internal/config"
+	"gateway/internal/domain"
 	"gateway/internal/logger"
 	"gateway/internal/monitoring"
 	"gateway/internal/queue"
@@ -28,10 +29,15 @@ func main() {
 	}
 
 	rabbitMQ := queue.NewRabbitMQProducer(cfg.RabbitMQURL, QueueName, log)
-
 	paddleValidator := validator.NewPaddleValidator()
 
-	handler := server.NewHandler(rabbitMQ, paddleValidator, cfg.WebhookSecret, cfg.InternalAPIKey, log)
+	paymentService := domain.NewPaymentService(rabbitMQ, paddleValidator, cfg.WebhookSecret)
+	handler := server.NewHandler(server.HandlerConfig{
+		Service:     paymentService,
+		Health:      rabbitMQ,
+		InternalKey: cfg.InternalAPIKey,
+		Logger:      log,
+	})
 	monitor := monitoring.New("payment-gateway")
 
 	r := gin.New()

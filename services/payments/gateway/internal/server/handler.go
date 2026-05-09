@@ -15,6 +15,13 @@ type HealthChecker interface {
 	IsConnected() bool
 }
 
+type HandlerConfig struct {
+	Service     *domain.PaymentService
+	Health      HealthChecker
+	InternalKey string
+	Logger      logger.Logger
+}
+
 type Handler struct {
 	service     *domain.PaymentService
 	health      HealthChecker
@@ -22,12 +29,12 @@ type Handler struct {
 	logger      logger.Logger
 }
 
-func NewHandler(service *domain.PaymentService, health HealthChecker, internalKey string, log logger.Logger) *Handler {
+func NewHandler(cfg HandlerConfig) *Handler {
 	return &Handler{
-		service:     service,
-		health:      health,
-		internalKey: internalKey,
-		logger:      log,
+		service:     cfg.Service,
+		health:      cfg.Health,
+		internalKey: cfg.InternalKey,
+		logger:      cfg.Logger,
 	}
 }
 
