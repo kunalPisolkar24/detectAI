@@ -1,28 +1,30 @@
 import { SubscriptionSweeper } from "./services/SubscriptionSweeper";
-import { prisma } from "@shared/db";
+import { prisma, prismaPrimary } from "@shared/db";
 import { RedisFactory } from "@shared/redis";
 import { Logger } from "@shared/logger";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
+import { LockService } from "@shared/cache/lock";
+import { PrismaUserRepository } from "@shared/repositories/UserRepository";
 import { config } from "./config";
 
-const CHECK_INTERVAL_MS = 1000 * 60 * 60; 
-const BATCH_COOLDOWN_MS = 5000; 
-const ERROR_COOLDOWN_MS = 60000; 
+const CHECK_INTERVAL_MS = 1000 * 60 * 60;
+const BATCH_COOLDOWN_MS = 5000;
+const ERROR_COOLDOWN_MS = 60000;
 
-const redisClient = RedisFactory.createClient(
-    {
-        mode: config.REDIS_MODE,
-        name: "CronRedis",
-        url: config.REDIS_URL,
-        sentinels: config.REDIS_SENTINELS,
-        masterName: config.REDIS_MASTER_NAME,
-        password: process.env.REDIS_PASSWORD,
-    }
-);
+const redisClient = RedisFactory.createClient({
+    mode: config.REDIS_MODE,
+    name: "CronRedis",
+    url: config.REDIS_URL,
+    sentinels: config.REDIS_SENTINELS,
+    masterName: config.REDIS_MASTER_NAME,
+    password: process.env.REDIS_PASSWORD,
+});
 
 const metricsService = new MetricsService("worker-cron");
-const sweeper = new SubscriptionSweeper(redisClient, metricsService);
+const lockService = new LockService(redisClient);
+const userRepository = new PrismaUserRepository(prismaPrimary, prisma);
+const sweeper = new SubscriptionSweeper(userRepository, redisClient, lockService, metricsService);
 
 const server = new WorkerServer(
     metricsService,
