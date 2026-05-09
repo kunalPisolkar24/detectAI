@@ -18,7 +18,7 @@ test-integration:
 
 # Generic load test command: make load-test SCENARIO=spike ARGS="-e TARGET_VUS=100"
 load-test:
-	docker run --rm -i --network=detectai_prod_network \
+	docker run --rm -i --network=detect_ai_network \
 		-v $(CURDIR)/test/load:/test \
 		-e BASE_URL=http://payment-gateway:8080 \
 		-e PADDLE_WEBHOOK_SECRET=$(PADDLE_WEBHOOK_SECRET) \
