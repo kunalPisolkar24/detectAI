@@ -1,6 +1,7 @@
 package mocks
 
 import (
+	"context"
 	"gateway/internal/queue"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/mock"
@@ -74,7 +75,7 @@ func (m *MockAMQPChannel) ExchangeDeclare(name, kind string, durable, autoDelete
 	return callArgs.Error(0)
 }
 
-func (m *MockAMQPChannel) PublishWithDeferredConfirmWithContext(ctx any, exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (*amqp.DeferredConfirmation, error) {
+func (m *MockAMQPChannel) PublishWithDeferredConfirmWithContext(ctx context.Context, exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (*amqp.DeferredConfirmation, error) {
 	callArgs := m.Called(ctx, exchange, key, mandatory, immediate, msg)
 	if callArgs.Get(0) == nil {
 		return nil, callArgs.Error(1)
