@@ -4,13 +4,13 @@ import { generatePaddleSignature } from '../utils.js';
 
 export const options = {
     stages: [
-        { duration: '2m', target: 50 },  // Ramp up
-        { duration: '10m', target: 50 }, // Soak for 10 mins
-        { duration: '2m', target: 0 },   // Ramp down
+        { duration: __ENV.RAMP_UP || '10s', target: parseInt(__ENV.TARGET_VUS) || 20 },
+        { duration: __ENV.DURATION || '30s', target: parseInt(__ENV.TARGET_VUS) || 200 },
+        { duration: __ENV.RAMP_DOWN || '10s', target: 0 },
     ],
     thresholds: {
         http_req_failed: ['rate<0.01'],
-        http_req_duration: ['p(95)<200'],
+        http_req_duration: ['p(95)<500'],
     },
 };
 

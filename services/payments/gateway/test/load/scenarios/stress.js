@@ -4,15 +4,15 @@ import { generatePaddleSignature } from '../utils.js';
 
 export const options = {
     stages: [
-        { duration: '1m', target: 50 },  // Normal load
-        { duration: '2m', target: 100 }, // Heavy load
-        { duration: '2m', target: 200 }, // Stress
-        { duration: '2m', target: 300 }, // Breaking point?
-        { duration: '1m', target: 0 },   // Scale down
+        { duration: __ENV.RAMP_UP || '1m', target: parseInt(__ENV.VUS_LOW) || 50 },
+        { duration: __ENV.RAMP_MED || '2m', target: parseInt(__ENV.VUS_MED) || 100 },
+        { duration: __ENV.RAMP_HIGH || '2m', target: parseInt(__ENV.VUS_HIGH) || 200 },
+        { duration: __ENV.RAMP_MAX || '2m', target: parseInt(__ENV.VUS_MAX) || 300 },
+        { duration: __ENV.RAMP_DOWN || '1m', target: 0 },
     ],
     thresholds: {
-        http_req_failed: ['rate<0.05'],   // Less than 5% errors
-        http_req_duration: ['p(99)<1000'], // 99% of requests should be below 1s
+        http_req_failed: ['rate<0.05'],
+        http_req_duration: ['p(99)<1000'],
     },
 };
 

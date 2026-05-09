@@ -16,14 +16,24 @@ test-coverage:
 test-integration:
 	go test -v -tags=integration ./test/integration/...
 
+# Generic load test command: make load-test SCENARIO=spike ARGS="-e TARGET_VUS=100"
+load-test:
+	docker run --rm -i --network=detectai_prod_network \
+		-v $(CURDIR)/test/load:/test \
+		-e BASE_URL=http://payment-gateway:8080 \
+		-e PADDLE_WEBHOOK_SECRET=$(PADDLE_WEBHOOK_SECRET) \
+		-e INTERNAL_API_KEY=$(INTERNAL_API_KEY) \
+		$(ARGS) \
+		grafana/k6 run /test/scenarios/$(SCENARIO).js
+
 load-test-spike:
-	docker run --rm -i --network=detectai_prod_network -v $(CURDIR)/test/load:/test -e BASE_URL=http://payment-gateway:8080 grafana/k6 run /test/scenarios/spike.js
+	@$(MAKE) load-test SCENARIO=spike
 
 load-test-stress:
-	docker run --rm -i --network=detectai_prod_network -v $(CURDIR)/test/load:/test -e BASE_URL=http://payment-gateway:8080 grafana/k6 run /test/scenarios/stress.js
+	@$(MAKE) load-test SCENARIO=stress
 
 load-test-soak:
-	docker run --rm -i --network=detectai_prod_network -v $(CURDIR)/test/load:/test -e BASE_URL=http://payment-gateway:8080 grafana/k6 run /test/scenarios/soak.js
+	@$(MAKE) load-test SCENARIO=soak
 
 deps:
 	go mod tidy
