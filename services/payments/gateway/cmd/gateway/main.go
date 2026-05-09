@@ -23,7 +23,7 @@ func main() {
 
 	paddleValidator := validator.NewPaddleValidator()
 
-	handler := server.NewHandler(rabbitMQ, paddleValidator, cfg.WebhookSecret, log)
+	handler := server.NewHandler(rabbitMQ, paddleValidator, cfg.WebhookSecret, cfg.InternalAPIKey, log)
 	monitor := monitoring.New("payment-gateway")
 
 	r := gin.New()

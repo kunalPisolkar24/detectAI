@@ -112,6 +112,7 @@ func TestHandler_HandleInternalEvent(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("POST", "/internal/events", bytes.NewBuffer(body))
+		req.Header.Set("X-Internal-Key", "internal-secret")
 
 		router.ServeHTTP(w, req)
 
@@ -119,11 +120,22 @@ func TestHandler_HandleInternalEvent(t *testing.T) {
 		mp.AssertExpectations(t)
 	})
 
+	t.Run("Unauthorized", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/internal/events", bytes.NewBuffer(body))
+		req.Header.Set("X-Internal-Key", "wrong-key")
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
 	t.Run("Queue Error", func(t *testing.T) {
 		mp.On("Publish", mock.Anything, body).Return(errors.New("queue full")).Once()
 
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("POST", "/internal/events", bytes.NewBuffer(body))
+		req.Header.Set("X-Internal-Key", "internal-secret")
 
 		router.ServeHTTP(w, req)
 

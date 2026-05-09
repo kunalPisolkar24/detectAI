@@ -16,14 +16,16 @@ type Handler struct {
 	producer      queue.EventProducer
 	validator     validator.SignatureValidator
 	webhookSecret string
+	internalKey   string
 	logger        logger.Logger
 }
 
-func NewHandler(prod queue.EventProducer, val validator.SignatureValidator, secret string, log logger.Logger) *Handler {
+func NewHandler(prod queue.EventProducer, val validator.SignatureValidator, secret string, internalKey string, log logger.Logger) *Handler {
 	return &Handler{
 		producer:      prod,
 		validator:     val,
 		webhookSecret: secret,
+		internalKey:   internalKey,
 		logger:        log,
 	}
 }
@@ -73,6 +75,13 @@ func (h *Handler) handleWebhook(c *gin.Context) {
 }
 
 func (h *Handler) handleInternalEvent(c *gin.Context) {
+	key := c.GetHeader("X-Internal-Key")
+	if key == "" || key != h.internalKey {
+		h.logger.Warn("Unauthorized internal event attempt", "ip", c.ClientIP())
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
