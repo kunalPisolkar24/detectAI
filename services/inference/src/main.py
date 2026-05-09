@@ -28,7 +28,7 @@ async def main():
             thread_name_prefix="inference-pool",
         )
         
-        try:
+        loader = HuggingFaceLoader(
             settings.MODEL_CACHE_DIR,
             settings.INFERENCE_PROVIDERS,
             settings.SPARK_MODEL_REVISION,
