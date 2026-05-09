@@ -1,3 +1,4 @@
-from .extractor import FileExtractor
+from .strategies import ExtractionStrategy, ExtractorFactory
+from .orchestrator import ExtractionOrchestrator
 
-__all__ = ["FileExtractor"]
+__all__ = ["ExtractionStrategy", "ExtractorFactory", "ExtractionOrchestrator"]
