@@ -17,18 +17,17 @@ type EventProducer interface {
 }
 
 type RabbitMQProducer struct {
-	url           string
-	conn          *amqp.Connection
-	channel       *amqp.Channel
-	queueName     string
-	logger        logger.Logger
-	mu            sync.RWMutex
-	done          chan bool
-	closeOnce     sync.Once
-	notifyConnClose  chan *amqp.Error
-	notifyChanClose  chan *amqp.Error
-	notifyConfirm    chan amqp.Confirmation
-	isConnected   bool
+	url             string
+	conn            *amqp.Connection
+	channel         *amqp.Channel
+	queueName       string
+	logger          logger.Logger
+	mu              sync.RWMutex
+	done            chan bool
+	closeOnce       sync.Once
+	notifyConnClose chan *amqp.Error
+	notifyChanClose chan *amqp.Error
+	isConnected     bool
 }
 
 func NewRabbitMQProducer(url string, queueName string, log logger.Logger) *RabbitMQProducer {
@@ -103,10 +102,8 @@ func (p *RabbitMQProducer) connect() error {
 	p.channel = ch
 	p.notifyConnClose = make(chan *amqp.Error, 1)
 	p.notifyChanClose = make(chan *amqp.Error, 1)
-	p.notifyConfirm = make(chan amqp.Confirmation, 1)
 	p.conn.NotifyClose(p.notifyConnClose)
 	p.channel.NotifyClose(p.notifyChanClose)
-	p.channel.NotifyPublish(p.notifyConfirm)
 	p.mu.Unlock()
 
 	if err := p.setupTopology(ch); err != nil {
@@ -160,10 +157,9 @@ func (p *RabbitMQProducer) Publish(ctx context.Context, body []byte) error {
 		return fmt.Errorf("not connected to RabbitMQ")
 	}
 	ch := p.channel
-	confirmCh := p.notifyConfirm
 	p.mu.RUnlock()
 
-	err := ch.PublishWithContext(ctx,
+	conf, err := ch.PublishWithDeferredConfirmWithContext(ctx,
 		"",
 		p.queueName,
 		false,
@@ -177,15 +173,11 @@ func (p *RabbitMQProducer) Publish(ctx context.Context, body []byte) error {
 		return err
 	}
 
-	select {
-	case confirm := <-confirmCh:
-		if confirm.Ack {
-			return nil
-		}
+	if ack := conf.Wait(); !ack {
 		return fmt.Errorf("message nacked by broker")
-	case <-ctx.Done():
-		return ctx.Err()
 	}
+
+	return nil
 }
 
 func (p *RabbitMQProducer) Close() {
