@@ -52,6 +52,8 @@ export const AnyNull = runtime.AnyNull
 
 export const ModelName = {
   User: 'User',
+  Subscription: 'Subscription',
+  Usage: 'Usage',
   Account: 'Account',
   Session: 'Session',
   VerificationToken: 'VerificationToken'
@@ -63,12 +65,12 @@ export type ModelName = (typeof ModelName)[keyof typeof ModelName]
  * Enums
  */
 
-export const TransactionIsolationLevel = {
+export const TransactionIsolationLevel = runtime.makeStrictEnum({
   ReadUncommitted: 'ReadUncommitted',
   ReadCommitted: 'ReadCommitted',
   RepeatableRead: 'RepeatableRead',
   Serializable: 'Serializable'
-} as const
+} as const)
 
 export type TransactionIsolationLevel = (typeof TransactionIsolationLevel)[keyof typeof TransactionIsolationLevel]
 
@@ -84,18 +86,38 @@ export const UserScalarFieldEnum = {
   password: 'password',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
-  paddleCustomerId: 'paddleCustomerId',
-  paddleSubscriptionId: 'paddleSubscriptionId',
-  paddlePlanId: 'paddlePlanId',
-  paddleSubscriptionStatus: 'paddleSubscriptionStatus',
-  subscriptionEndsAt: 'subscriptionEndsAt',
-  paddleCancellationScheduled: 'paddleCancellationScheduled',
-  apiCallCountDaily: 'apiCallCountDaily',
-  lastApiCallReset: 'lastApiCallReset',
-  apiCallCountTotal: 'apiCallCountTotal'
+  paddleCustomerId: 'paddleCustomerId'
 } as const
 
 export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
+
+
+export const SubscriptionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  paddleSubscriptionId: 'paddleSubscriptionId',
+  paddlePlanId: 'paddlePlanId',
+  status: 'status',
+  endsAt: 'endsAt',
+  cancellationScheduled: 'cancellationScheduled',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type SubscriptionScalarFieldEnum = (typeof SubscriptionScalarFieldEnum)[keyof typeof SubscriptionScalarFieldEnum]
+
+
+export const UsageScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  apiCallCountDaily: 'apiCallCountDaily',
+  lastApiCallReset: 'lastApiCallReset',
+  apiCallCountTotal: 'apiCallCountTotal',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type UsageScalarFieldEnum = (typeof UsageScalarFieldEnum)[keyof typeof UsageScalarFieldEnum]
 
 
 export const AccountScalarFieldEnum = {

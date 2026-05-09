@@ -20,20 +20,8 @@ export type UserModel = runtime.Types.Result.DefaultSelection<Prisma.$UserPayloa
 
 export type AggregateUser = {
   _count: UserCountAggregateOutputType | null
-  _avg: UserAvgAggregateOutputType | null
-  _sum: UserSumAggregateOutputType | null
   _min: UserMinAggregateOutputType | null
   _max: UserMaxAggregateOutputType | null
-}
-
-export type UserAvgAggregateOutputType = {
-  apiCallCountDaily: number | null
-  apiCallCountTotal: number | null
-}
-
-export type UserSumAggregateOutputType = {
-  apiCallCountDaily: number | null
-  apiCallCountTotal: number | null
 }
 
 export type UserMinAggregateOutputType = {
@@ -48,14 +36,6 @@ export type UserMinAggregateOutputType = {
   createdAt: Date | null
   updatedAt: Date | null
   paddleCustomerId: string | null
-  paddleSubscriptionId: string | null
-  paddlePlanId: string | null
-  paddleSubscriptionStatus: $Enums.SubscriptionStatus | null
-  subscriptionEndsAt: Date | null
-  paddleCancellationScheduled: boolean | null
-  apiCallCountDaily: number | null
-  lastApiCallReset: Date | null
-  apiCallCountTotal: number | null
 }
 
 export type UserMaxAggregateOutputType = {
@@ -70,14 +50,6 @@ export type UserMaxAggregateOutputType = {
   createdAt: Date | null
   updatedAt: Date | null
   paddleCustomerId: string | null
-  paddleSubscriptionId: string | null
-  paddlePlanId: string | null
-  paddleSubscriptionStatus: $Enums.SubscriptionStatus | null
-  subscriptionEndsAt: Date | null
-  paddleCancellationScheduled: boolean | null
-  apiCallCountDaily: number | null
-  lastApiCallReset: Date | null
-  apiCallCountTotal: number | null
 }
 
 export type UserCountAggregateOutputType = {
@@ -92,27 +64,9 @@ export type UserCountAggregateOutputType = {
   createdAt: number
   updatedAt: number
   paddleCustomerId: number
-  paddleSubscriptionId: number
-  paddlePlanId: number
-  paddleSubscriptionStatus: number
-  subscriptionEndsAt: number
-  paddleCancellationScheduled: number
-  apiCallCountDaily: number
-  lastApiCallReset: number
-  apiCallCountTotal: number
   _all: number
 }
 
-
-export type UserAvgAggregateInputType = {
-  apiCallCountDaily?: true
-  apiCallCountTotal?: true
-}
-
-export type UserSumAggregateInputType = {
-  apiCallCountDaily?: true
-  apiCallCountTotal?: true
-}
 
 export type UserMinAggregateInputType = {
   id?: true
@@ -126,14 +80,6 @@ export type UserMinAggregateInputType = {
   createdAt?: true
   updatedAt?: true
   paddleCustomerId?: true
-  paddleSubscriptionId?: true
-  paddlePlanId?: true
-  paddleSubscriptionStatus?: true
-  subscriptionEndsAt?: true
-  paddleCancellationScheduled?: true
-  apiCallCountDaily?: true
-  lastApiCallReset?: true
-  apiCallCountTotal?: true
 }
 
 export type UserMaxAggregateInputType = {
@@ -148,14 +94,6 @@ export type UserMaxAggregateInputType = {
   createdAt?: true
   updatedAt?: true
   paddleCustomerId?: true
-  paddleSubscriptionId?: true
-  paddlePlanId?: true
-  paddleSubscriptionStatus?: true
-  subscriptionEndsAt?: true
-  paddleCancellationScheduled?: true
-  apiCallCountDaily?: true
-  lastApiCallReset?: true
-  apiCallCountTotal?: true
 }
 
 export type UserCountAggregateInputType = {
@@ -170,14 +108,6 @@ export type UserCountAggregateInputType = {
   createdAt?: true
   updatedAt?: true
   paddleCustomerId?: true
-  paddleSubscriptionId?: true
-  paddlePlanId?: true
-  paddleSubscriptionStatus?: true
-  subscriptionEndsAt?: true
-  paddleCancellationScheduled?: true
-  apiCallCountDaily?: true
-  lastApiCallReset?: true
-  apiCallCountTotal?: true
   _all?: true
 }
 
@@ -219,18 +149,6 @@ export type UserAggregateArgs<ExtArgs extends runtime.Types.Extensions.InternalA
   /**
    * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
    * 
-   * Select which fields to average
-  **/
-  _avg?: UserAvgAggregateInputType
-  /**
-   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-   * 
-   * Select which fields to sum
-  **/
-  _sum?: UserSumAggregateInputType
-  /**
-   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-   * 
    * Select which fields to find the minimum value
   **/
   _min?: UserMinAggregateInputType
@@ -261,8 +179,6 @@ export type UserGroupByArgs<ExtArgs extends runtime.Types.Extensions.InternalArg
   take?: number
   skip?: number
   _count?: UserCountAggregateInputType | true
-  _avg?: UserAvgAggregateInputType
-  _sum?: UserSumAggregateInputType
   _min?: UserMinAggregateInputType
   _max?: UserMaxAggregateInputType
 }
@@ -279,22 +195,12 @@ export type UserGroupByOutputType = {
   createdAt: Date
   updatedAt: Date
   paddleCustomerId: string | null
-  paddleSubscriptionId: string | null
-  paddlePlanId: string | null
-  paddleSubscriptionStatus: $Enums.SubscriptionStatus | null
-  subscriptionEndsAt: Date | null
-  paddleCancellationScheduled: boolean
-  apiCallCountDaily: number
-  lastApiCallReset: Date | null
-  apiCallCountTotal: number
   _count: UserCountAggregateOutputType | null
-  _avg: UserAvgAggregateOutputType | null
-  _sum: UserSumAggregateOutputType | null
   _min: UserMinAggregateOutputType | null
   _max: UserMaxAggregateOutputType | null
 }
 
-type GetUserGroupByPayload<T extends UserGroupByArgs> = Prisma.PrismaPromise<
+export type GetUserGroupByPayload<T extends UserGroupByArgs> = Prisma.PrismaPromise<
   Array<
     Prisma.PickEnumerable<UserGroupByOutputType, T['by']> &
       {
@@ -324,16 +230,10 @@ export type UserWhereInput = {
   createdAt?: Prisma.DateTimeFilter<"User"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"User"> | Date | string
   paddleCustomerId?: Prisma.StringNullableFilter<"User"> | string | null
-  paddleSubscriptionId?: Prisma.StringNullableFilter<"User"> | string | null
-  paddlePlanId?: Prisma.StringNullableFilter<"User"> | string | null
-  paddleSubscriptionStatus?: Prisma.EnumSubscriptionStatusNullableFilter<"User"> | $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Prisma.DateTimeNullableFilter<"User"> | Date | string | null
-  paddleCancellationScheduled?: Prisma.BoolFilter<"User"> | boolean
-  apiCallCountDaily?: Prisma.IntFilter<"User"> | number
-  lastApiCallReset?: Prisma.DateTimeNullableFilter<"User"> | Date | string | null
-  apiCallCountTotal?: Prisma.IntFilter<"User"> | number
   accounts?: Prisma.AccountListRelationFilter
   sessions?: Prisma.SessionListRelationFilter
+  subscription?: Prisma.XOR<Prisma.SubscriptionNullableScalarRelationFilter, Prisma.SubscriptionWhereInput> | null
+  usage?: Prisma.XOR<Prisma.UsageNullableScalarRelationFilter, Prisma.UsageWhereInput> | null
 }
 
 export type UserOrderByWithRelationInput = {
@@ -348,23 +248,16 @@ export type UserOrderByWithRelationInput = {
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   paddleCustomerId?: Prisma.SortOrderInput | Prisma.SortOrder
-  paddleSubscriptionId?: Prisma.SortOrderInput | Prisma.SortOrder
-  paddlePlanId?: Prisma.SortOrderInput | Prisma.SortOrder
-  paddleSubscriptionStatus?: Prisma.SortOrderInput | Prisma.SortOrder
-  subscriptionEndsAt?: Prisma.SortOrderInput | Prisma.SortOrder
-  paddleCancellationScheduled?: Prisma.SortOrder
-  apiCallCountDaily?: Prisma.SortOrder
-  lastApiCallReset?: Prisma.SortOrderInput | Prisma.SortOrder
-  apiCallCountTotal?: Prisma.SortOrder
   accounts?: Prisma.AccountOrderByRelationAggregateInput
   sessions?: Prisma.SessionOrderByRelationAggregateInput
+  subscription?: Prisma.SubscriptionOrderByWithRelationInput
+  usage?: Prisma.UsageOrderByWithRelationInput
 }
 
 export type UserWhereUniqueInput = Prisma.AtLeast<{
   id?: string
   email?: string
   paddleCustomerId?: string
-  paddleSubscriptionId?: string
   AND?: Prisma.UserWhereInput | Prisma.UserWhereInput[]
   OR?: Prisma.UserWhereInput[]
   NOT?: Prisma.UserWhereInput | Prisma.UserWhereInput[]
@@ -376,16 +269,11 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   password?: Prisma.StringNullableFilter<"User"> | string | null
   createdAt?: Prisma.DateTimeFilter<"User"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"User"> | Date | string
-  paddlePlanId?: Prisma.StringNullableFilter<"User"> | string | null
-  paddleSubscriptionStatus?: Prisma.EnumSubscriptionStatusNullableFilter<"User"> | $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Prisma.DateTimeNullableFilter<"User"> | Date | string | null
-  paddleCancellationScheduled?: Prisma.BoolFilter<"User"> | boolean
-  apiCallCountDaily?: Prisma.IntFilter<"User"> | number
-  lastApiCallReset?: Prisma.DateTimeNullableFilter<"User"> | Date | string | null
-  apiCallCountTotal?: Prisma.IntFilter<"User"> | number
   accounts?: Prisma.AccountListRelationFilter
   sessions?: Prisma.SessionListRelationFilter
-}, "id" | "email" | "paddleCustomerId" | "paddleSubscriptionId">
+  subscription?: Prisma.XOR<Prisma.SubscriptionNullableScalarRelationFilter, Prisma.SubscriptionWhereInput> | null
+  usage?: Prisma.XOR<Prisma.UsageNullableScalarRelationFilter, Prisma.UsageWhereInput> | null
+}, "id" | "email" | "paddleCustomerId">
 
 export type UserOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
@@ -399,19 +287,9 @@ export type UserOrderByWithAggregationInput = {
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   paddleCustomerId?: Prisma.SortOrderInput | Prisma.SortOrder
-  paddleSubscriptionId?: Prisma.SortOrderInput | Prisma.SortOrder
-  paddlePlanId?: Prisma.SortOrderInput | Prisma.SortOrder
-  paddleSubscriptionStatus?: Prisma.SortOrderInput | Prisma.SortOrder
-  subscriptionEndsAt?: Prisma.SortOrderInput | Prisma.SortOrder
-  paddleCancellationScheduled?: Prisma.SortOrder
-  apiCallCountDaily?: Prisma.SortOrder
-  lastApiCallReset?: Prisma.SortOrderInput | Prisma.SortOrder
-  apiCallCountTotal?: Prisma.SortOrder
   _count?: Prisma.UserCountOrderByAggregateInput
-  _avg?: Prisma.UserAvgOrderByAggregateInput
   _max?: Prisma.UserMaxOrderByAggregateInput
   _min?: Prisma.UserMinOrderByAggregateInput
-  _sum?: Prisma.UserSumOrderByAggregateInput
 }
 
 export type UserScalarWhereWithAggregatesInput = {
@@ -429,14 +307,6 @@ export type UserScalarWhereWithAggregatesInput = {
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"User"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"User"> | Date | string
   paddleCustomerId?: Prisma.StringNullableWithAggregatesFilter<"User"> | string | null
-  paddleSubscriptionId?: Prisma.StringNullableWithAggregatesFilter<"User"> | string | null
-  paddlePlanId?: Prisma.StringNullableWithAggregatesFilter<"User"> | string | null
-  paddleSubscriptionStatus?: Prisma.EnumSubscriptionStatusNullableWithAggregatesFilter<"User"> | $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Prisma.DateTimeNullableWithAggregatesFilter<"User"> | Date | string | null
-  paddleCancellationScheduled?: Prisma.BoolWithAggregatesFilter<"User"> | boolean
-  apiCallCountDaily?: Prisma.IntWithAggregatesFilter<"User"> | number
-  lastApiCallReset?: Prisma.DateTimeNullableWithAggregatesFilter<"User"> | Date | string | null
-  apiCallCountTotal?: Prisma.IntWithAggregatesFilter<"User"> | number
 }
 
 export type UserCreateInput = {
@@ -451,16 +321,10 @@ export type UserCreateInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   paddleCustomerId?: string | null
-  paddleSubscriptionId?: string | null
-  paddlePlanId?: string | null
-  paddleSubscriptionStatus?: $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Date | string | null
-  paddleCancellationScheduled?: boolean
-  apiCallCountDaily?: number
-  lastApiCallReset?: Date | string | null
-  apiCallCountTotal?: number
   accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  subscription?: Prisma.SubscriptionCreateNestedOneWithoutUserInput
+  usage?: Prisma.UsageCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateInput = {
@@ -475,16 +339,10 @@ export type UserUncheckedCreateInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   paddleCustomerId?: string | null
-  paddleSubscriptionId?: string | null
-  paddlePlanId?: string | null
-  paddleSubscriptionStatus?: $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Date | string | null
-  paddleCancellationScheduled?: boolean
-  apiCallCountDaily?: number
-  lastApiCallReset?: Date | string | null
-  apiCallCountTotal?: number
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  subscription?: Prisma.SubscriptionUncheckedCreateNestedOneWithoutUserInput
+  usage?: Prisma.UsageUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserUpdateInput = {
@@ -499,16 +357,10 @@ export type UserUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   paddleCustomerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddlePlanId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionStatus?: Prisma.NullableEnumSubscriptionStatusFieldUpdateOperationsInput | $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  paddleCancellationScheduled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  apiCallCountDaily?: Prisma.IntFieldUpdateOperationsInput | number
-  lastApiCallReset?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  apiCallCountTotal?: Prisma.IntFieldUpdateOperationsInput | number
   accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  subscription?: Prisma.SubscriptionUpdateOneWithoutUserNestedInput
+  usage?: Prisma.UsageUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateInput = {
@@ -523,16 +375,10 @@ export type UserUncheckedUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   paddleCustomerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddlePlanId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionStatus?: Prisma.NullableEnumSubscriptionStatusFieldUpdateOperationsInput | $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  paddleCancellationScheduled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  apiCallCountDaily?: Prisma.IntFieldUpdateOperationsInput | number
-  lastApiCallReset?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  apiCallCountTotal?: Prisma.IntFieldUpdateOperationsInput | number
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  subscription?: Prisma.SubscriptionUncheckedUpdateOneWithoutUserNestedInput
+  usage?: Prisma.UsageUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateManyInput = {
@@ -547,14 +393,6 @@ export type UserCreateManyInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   paddleCustomerId?: string | null
-  paddleSubscriptionId?: string | null
-  paddlePlanId?: string | null
-  paddleSubscriptionStatus?: $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Date | string | null
-  paddleCancellationScheduled?: boolean
-  apiCallCountDaily?: number
-  lastApiCallReset?: Date | string | null
-  apiCallCountTotal?: number
 }
 
 export type UserUpdateManyMutationInput = {
@@ -569,14 +407,6 @@ export type UserUpdateManyMutationInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   paddleCustomerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddlePlanId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionStatus?: Prisma.NullableEnumSubscriptionStatusFieldUpdateOperationsInput | $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  paddleCancellationScheduled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  apiCallCountDaily?: Prisma.IntFieldUpdateOperationsInput | number
-  lastApiCallReset?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  apiCallCountTotal?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 export type UserUncheckedUpdateManyInput = {
@@ -591,14 +421,6 @@ export type UserUncheckedUpdateManyInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   paddleCustomerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddlePlanId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionStatus?: Prisma.NullableEnumSubscriptionStatusFieldUpdateOperationsInput | $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  paddleCancellationScheduled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  apiCallCountDaily?: Prisma.IntFieldUpdateOperationsInput | number
-  lastApiCallReset?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  apiCallCountTotal?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 export type UserCountOrderByAggregateInput = {
@@ -613,19 +435,6 @@ export type UserCountOrderByAggregateInput = {
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   paddleCustomerId?: Prisma.SortOrder
-  paddleSubscriptionId?: Prisma.SortOrder
-  paddlePlanId?: Prisma.SortOrder
-  paddleSubscriptionStatus?: Prisma.SortOrder
-  subscriptionEndsAt?: Prisma.SortOrder
-  paddleCancellationScheduled?: Prisma.SortOrder
-  apiCallCountDaily?: Prisma.SortOrder
-  lastApiCallReset?: Prisma.SortOrder
-  apiCallCountTotal?: Prisma.SortOrder
-}
-
-export type UserAvgOrderByAggregateInput = {
-  apiCallCountDaily?: Prisma.SortOrder
-  apiCallCountTotal?: Prisma.SortOrder
 }
 
 export type UserMaxOrderByAggregateInput = {
@@ -640,14 +449,6 @@ export type UserMaxOrderByAggregateInput = {
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   paddleCustomerId?: Prisma.SortOrder
-  paddleSubscriptionId?: Prisma.SortOrder
-  paddlePlanId?: Prisma.SortOrder
-  paddleSubscriptionStatus?: Prisma.SortOrder
-  subscriptionEndsAt?: Prisma.SortOrder
-  paddleCancellationScheduled?: Prisma.SortOrder
-  apiCallCountDaily?: Prisma.SortOrder
-  lastApiCallReset?: Prisma.SortOrder
-  apiCallCountTotal?: Prisma.SortOrder
 }
 
 export type UserMinOrderByAggregateInput = {
@@ -662,19 +463,6 @@ export type UserMinOrderByAggregateInput = {
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   paddleCustomerId?: Prisma.SortOrder
-  paddleSubscriptionId?: Prisma.SortOrder
-  paddlePlanId?: Prisma.SortOrder
-  paddleSubscriptionStatus?: Prisma.SortOrder
-  subscriptionEndsAt?: Prisma.SortOrder
-  paddleCancellationScheduled?: Prisma.SortOrder
-  apiCallCountDaily?: Prisma.SortOrder
-  lastApiCallReset?: Prisma.SortOrder
-  apiCallCountTotal?: Prisma.SortOrder
-}
-
-export type UserSumOrderByAggregateInput = {
-  apiCallCountDaily?: Prisma.SortOrder
-  apiCallCountTotal?: Prisma.SortOrder
 }
 
 export type UserScalarRelationFilter = {
@@ -698,20 +486,32 @@ export type DateTimeFieldUpdateOperationsInput = {
   set?: Date | string
 }
 
-export type NullableEnumSubscriptionStatusFieldUpdateOperationsInput = {
-  set?: $Enums.SubscriptionStatus | null
+export type UserCreateNestedOneWithoutSubscriptionInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutSubscriptionInput, Prisma.UserUncheckedCreateWithoutSubscriptionInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutSubscriptionInput
+  connect?: Prisma.UserWhereUniqueInput
 }
 
-export type BoolFieldUpdateOperationsInput = {
-  set?: boolean
+export type UserUpdateOneRequiredWithoutSubscriptionNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutSubscriptionInput, Prisma.UserUncheckedCreateWithoutSubscriptionInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutSubscriptionInput
+  upsert?: Prisma.UserUpsertWithoutSubscriptionInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutSubscriptionInput, Prisma.UserUpdateWithoutSubscriptionInput>, Prisma.UserUncheckedUpdateWithoutSubscriptionInput>
 }
 
-export type IntFieldUpdateOperationsInput = {
-  set?: number
-  increment?: number
-  decrement?: number
-  multiply?: number
-  divide?: number
+export type UserCreateNestedOneWithoutUsageInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutUsageInput, Prisma.UserUncheckedCreateWithoutUsageInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutUsageInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutUsageNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutUsageInput, Prisma.UserUncheckedCreateWithoutUsageInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutUsageInput
+  upsert?: Prisma.UserUpsertWithoutUsageInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutUsageInput, Prisma.UserUpdateWithoutUsageInput>, Prisma.UserUncheckedUpdateWithoutUsageInput>
 }
 
 export type UserCreateNestedOneWithoutAccountsInput = {
@@ -742,6 +542,174 @@ export type UserUpdateOneRequiredWithoutSessionsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutSessionsInput, Prisma.UserUpdateWithoutSessionsInput>, Prisma.UserUncheckedUpdateWithoutSessionsInput>
 }
 
+export type UserCreateWithoutSubscriptionInput = {
+  id?: string
+  name?: string | null
+  email: string
+  emailVerified?: Date | string | null
+  image?: string | null
+  firstName?: string | null
+  lastName?: string | null
+  password?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  paddleCustomerId?: string | null
+  accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
+  sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  usage?: Prisma.UsageCreateNestedOneWithoutUserInput
+}
+
+export type UserUncheckedCreateWithoutSubscriptionInput = {
+  id?: string
+  name?: string | null
+  email: string
+  emailVerified?: Date | string | null
+  image?: string | null
+  firstName?: string | null
+  lastName?: string | null
+  password?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  paddleCustomerId?: string | null
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
+  sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  usage?: Prisma.UsageUncheckedCreateNestedOneWithoutUserInput
+}
+
+export type UserCreateOrConnectWithoutSubscriptionInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutSubscriptionInput, Prisma.UserUncheckedCreateWithoutSubscriptionInput>
+}
+
+export type UserUpsertWithoutSubscriptionInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutSubscriptionInput, Prisma.UserUncheckedUpdateWithoutSubscriptionInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutSubscriptionInput, Prisma.UserUncheckedCreateWithoutSubscriptionInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutSubscriptionInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutSubscriptionInput, Prisma.UserUncheckedUpdateWithoutSubscriptionInput>
+}
+
+export type UserUpdateWithoutSubscriptionInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  firstName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  lastName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  password?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  paddleCustomerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
+  sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  usage?: Prisma.UsageUpdateOneWithoutUserNestedInput
+}
+
+export type UserUncheckedUpdateWithoutSubscriptionInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  firstName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  lastName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  password?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  paddleCustomerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
+  sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  usage?: Prisma.UsageUncheckedUpdateOneWithoutUserNestedInput
+}
+
+export type UserCreateWithoutUsageInput = {
+  id?: string
+  name?: string | null
+  email: string
+  emailVerified?: Date | string | null
+  image?: string | null
+  firstName?: string | null
+  lastName?: string | null
+  password?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  paddleCustomerId?: string | null
+  accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
+  sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  subscription?: Prisma.SubscriptionCreateNestedOneWithoutUserInput
+}
+
+export type UserUncheckedCreateWithoutUsageInput = {
+  id?: string
+  name?: string | null
+  email: string
+  emailVerified?: Date | string | null
+  image?: string | null
+  firstName?: string | null
+  lastName?: string | null
+  password?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  paddleCustomerId?: string | null
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
+  sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  subscription?: Prisma.SubscriptionUncheckedCreateNestedOneWithoutUserInput
+}
+
+export type UserCreateOrConnectWithoutUsageInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutUsageInput, Prisma.UserUncheckedCreateWithoutUsageInput>
+}
+
+export type UserUpsertWithoutUsageInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutUsageInput, Prisma.UserUncheckedUpdateWithoutUsageInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutUsageInput, Prisma.UserUncheckedCreateWithoutUsageInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutUsageInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutUsageInput, Prisma.UserUncheckedUpdateWithoutUsageInput>
+}
+
+export type UserUpdateWithoutUsageInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  firstName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  lastName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  password?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  paddleCustomerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
+  sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  subscription?: Prisma.SubscriptionUpdateOneWithoutUserNestedInput
+}
+
+export type UserUncheckedUpdateWithoutUsageInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  firstName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  lastName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  password?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  paddleCustomerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
+  sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  subscription?: Prisma.SubscriptionUncheckedUpdateOneWithoutUserNestedInput
+}
+
 export type UserCreateWithoutAccountsInput = {
   id?: string
   name?: string | null
@@ -754,15 +722,9 @@ export type UserCreateWithoutAccountsInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   paddleCustomerId?: string | null
-  paddleSubscriptionId?: string | null
-  paddlePlanId?: string | null
-  paddleSubscriptionStatus?: $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Date | string | null
-  paddleCancellationScheduled?: boolean
-  apiCallCountDaily?: number
-  lastApiCallReset?: Date | string | null
-  apiCallCountTotal?: number
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  subscription?: Prisma.SubscriptionCreateNestedOneWithoutUserInput
+  usage?: Prisma.UsageCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutAccountsInput = {
@@ -777,15 +739,9 @@ export type UserUncheckedCreateWithoutAccountsInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   paddleCustomerId?: string | null
-  paddleSubscriptionId?: string | null
-  paddlePlanId?: string | null
-  paddleSubscriptionStatus?: $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Date | string | null
-  paddleCancellationScheduled?: boolean
-  apiCallCountDaily?: number
-  lastApiCallReset?: Date | string | null
-  apiCallCountTotal?: number
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  subscription?: Prisma.SubscriptionUncheckedCreateNestedOneWithoutUserInput
+  usage?: Prisma.UsageUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutAccountsInput = {
@@ -816,15 +772,9 @@ export type UserUpdateWithoutAccountsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   paddleCustomerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddlePlanId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionStatus?: Prisma.NullableEnumSubscriptionStatusFieldUpdateOperationsInput | $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  paddleCancellationScheduled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  apiCallCountDaily?: Prisma.IntFieldUpdateOperationsInput | number
-  lastApiCallReset?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  apiCallCountTotal?: Prisma.IntFieldUpdateOperationsInput | number
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  subscription?: Prisma.SubscriptionUpdateOneWithoutUserNestedInput
+  usage?: Prisma.UsageUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutAccountsInput = {
@@ -839,15 +789,9 @@ export type UserUncheckedUpdateWithoutAccountsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   paddleCustomerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddlePlanId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionStatus?: Prisma.NullableEnumSubscriptionStatusFieldUpdateOperationsInput | $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  paddleCancellationScheduled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  apiCallCountDaily?: Prisma.IntFieldUpdateOperationsInput | number
-  lastApiCallReset?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  apiCallCountTotal?: Prisma.IntFieldUpdateOperationsInput | number
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  subscription?: Prisma.SubscriptionUncheckedUpdateOneWithoutUserNestedInput
+  usage?: Prisma.UsageUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutSessionsInput = {
@@ -862,15 +806,9 @@ export type UserCreateWithoutSessionsInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   paddleCustomerId?: string | null
-  paddleSubscriptionId?: string | null
-  paddlePlanId?: string | null
-  paddleSubscriptionStatus?: $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Date | string | null
-  paddleCancellationScheduled?: boolean
-  apiCallCountDaily?: number
-  lastApiCallReset?: Date | string | null
-  apiCallCountTotal?: number
   accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
+  subscription?: Prisma.SubscriptionCreateNestedOneWithoutUserInput
+  usage?: Prisma.UsageCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutSessionsInput = {
@@ -885,15 +823,9 @@ export type UserUncheckedCreateWithoutSessionsInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   paddleCustomerId?: string | null
-  paddleSubscriptionId?: string | null
-  paddlePlanId?: string | null
-  paddleSubscriptionStatus?: $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Date | string | null
-  paddleCancellationScheduled?: boolean
-  apiCallCountDaily?: number
-  lastApiCallReset?: Date | string | null
-  apiCallCountTotal?: number
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
+  subscription?: Prisma.SubscriptionUncheckedCreateNestedOneWithoutUserInput
+  usage?: Prisma.UsageUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutSessionsInput = {
@@ -924,15 +856,9 @@ export type UserUpdateWithoutSessionsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   paddleCustomerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddlePlanId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionStatus?: Prisma.NullableEnumSubscriptionStatusFieldUpdateOperationsInput | $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  paddleCancellationScheduled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  apiCallCountDaily?: Prisma.IntFieldUpdateOperationsInput | number
-  lastApiCallReset?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  apiCallCountTotal?: Prisma.IntFieldUpdateOperationsInput | number
   accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
+  subscription?: Prisma.SubscriptionUpdateOneWithoutUserNestedInput
+  usage?: Prisma.UsageUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutSessionsInput = {
@@ -947,15 +873,9 @@ export type UserUncheckedUpdateWithoutSessionsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   paddleCustomerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddlePlanId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  paddleSubscriptionStatus?: Prisma.NullableEnumSubscriptionStatusFieldUpdateOperationsInput | $Enums.SubscriptionStatus | null
-  subscriptionEndsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  paddleCancellationScheduled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  apiCallCountDaily?: Prisma.IntFieldUpdateOperationsInput | number
-  lastApiCallReset?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  apiCallCountTotal?: Prisma.IntFieldUpdateOperationsInput | number
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
+  subscription?: Prisma.SubscriptionUncheckedUpdateOneWithoutUserNestedInput
+  usage?: Prisma.UsageUncheckedUpdateOneWithoutUserNestedInput
 }
 
 
@@ -1010,16 +930,10 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   createdAt?: boolean
   updatedAt?: boolean
   paddleCustomerId?: boolean
-  paddleSubscriptionId?: boolean
-  paddlePlanId?: boolean
-  paddleSubscriptionStatus?: boolean
-  subscriptionEndsAt?: boolean
-  paddleCancellationScheduled?: boolean
-  apiCallCountDaily?: boolean
-  lastApiCallReset?: boolean
-  apiCallCountTotal?: boolean
   accounts?: boolean | Prisma.User$accountsArgs<ExtArgs>
   sessions?: boolean | Prisma.User$sessionsArgs<ExtArgs>
+  subscription?: boolean | Prisma.User$subscriptionArgs<ExtArgs>
+  usage?: boolean | Prisma.User$usageArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["user"]>
 
@@ -1035,14 +949,6 @@ export type UserSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   createdAt?: boolean
   updatedAt?: boolean
   paddleCustomerId?: boolean
-  paddleSubscriptionId?: boolean
-  paddlePlanId?: boolean
-  paddleSubscriptionStatus?: boolean
-  subscriptionEndsAt?: boolean
-  paddleCancellationScheduled?: boolean
-  apiCallCountDaily?: boolean
-  lastApiCallReset?: boolean
-  apiCallCountTotal?: boolean
 }, ExtArgs["result"]["user"]>
 
 export type UserSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -1057,14 +963,6 @@ export type UserSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   createdAt?: boolean
   updatedAt?: boolean
   paddleCustomerId?: boolean
-  paddleSubscriptionId?: boolean
-  paddlePlanId?: boolean
-  paddleSubscriptionStatus?: boolean
-  subscriptionEndsAt?: boolean
-  paddleCancellationScheduled?: boolean
-  apiCallCountDaily?: boolean
-  lastApiCallReset?: boolean
-  apiCallCountTotal?: boolean
 }, ExtArgs["result"]["user"]>
 
 export type UserSelectScalar = {
@@ -1079,20 +977,14 @@ export type UserSelectScalar = {
   createdAt?: boolean
   updatedAt?: boolean
   paddleCustomerId?: boolean
-  paddleSubscriptionId?: boolean
-  paddlePlanId?: boolean
-  paddleSubscriptionStatus?: boolean
-  subscriptionEndsAt?: boolean
-  paddleCancellationScheduled?: boolean
-  apiCallCountDaily?: boolean
-  lastApiCallReset?: boolean
-  apiCallCountTotal?: boolean
 }
 
-export type UserOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "email" | "emailVerified" | "image" | "firstName" | "lastName" | "password" | "createdAt" | "updatedAt" | "paddleCustomerId" | "paddleSubscriptionId" | "paddlePlanId" | "paddleSubscriptionStatus" | "subscriptionEndsAt" | "paddleCancellationScheduled" | "apiCallCountDaily" | "lastApiCallReset" | "apiCallCountTotal", ExtArgs["result"]["user"]>
+export type UserOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "email" | "emailVerified" | "image" | "firstName" | "lastName" | "password" | "createdAt" | "updatedAt" | "paddleCustomerId", ExtArgs["result"]["user"]>
 export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   accounts?: boolean | Prisma.User$accountsArgs<ExtArgs>
   sessions?: boolean | Prisma.User$sessionsArgs<ExtArgs>
+  subscription?: boolean | Prisma.User$subscriptionArgs<ExtArgs>
+  usage?: boolean | Prisma.User$usageArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type UserIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -1103,6 +995,8 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
   objects: {
     accounts: Prisma.$AccountPayload<ExtArgs>[]
     sessions: Prisma.$SessionPayload<ExtArgs>[]
+    subscription: Prisma.$SubscriptionPayload<ExtArgs> | null
+    usage: Prisma.$UsagePayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1116,14 +1010,6 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     createdAt: Date
     updatedAt: Date
     paddleCustomerId: string | null
-    paddleSubscriptionId: string | null
-    paddlePlanId: string | null
-    paddleSubscriptionStatus: $Enums.SubscriptionStatus | null
-    subscriptionEndsAt: Date | null
-    paddleCancellationScheduled: boolean
-    apiCallCountDaily: number
-    lastApiCallReset: Date | null
-    apiCallCountTotal: number
   }, ExtArgs["result"]["user"]>
   composites: {}
 }
@@ -1520,6 +1406,8 @@ export interface Prisma__UserClient<T, Null = never, ExtArgs extends runtime.Typ
   readonly [Symbol.toStringTag]: "PrismaPromise"
   accounts<T extends Prisma.User$accountsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$accountsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AccountPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   sessions<T extends Prisma.User$sessionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$sessionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$SessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  subscription<T extends Prisma.User$subscriptionArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$subscriptionArgs<ExtArgs>>): Prisma.Prisma__SubscriptionClient<runtime.Types.Result.GetResult<Prisma.$SubscriptionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  usage<T extends Prisma.User$usageArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$usageArgs<ExtArgs>>): Prisma.Prisma__UsageClient<runtime.Types.Result.GetResult<Prisma.$UsagePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1560,14 +1448,6 @@ export interface UserFieldRefs {
   readonly createdAt: Prisma.FieldRef<"User", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"User", 'DateTime'>
   readonly paddleCustomerId: Prisma.FieldRef<"User", 'String'>
-  readonly paddleSubscriptionId: Prisma.FieldRef<"User", 'String'>
-  readonly paddlePlanId: Prisma.FieldRef<"User", 'String'>
-  readonly paddleSubscriptionStatus: Prisma.FieldRef<"User", 'SubscriptionStatus'>
-  readonly subscriptionEndsAt: Prisma.FieldRef<"User", 'DateTime'>
-  readonly paddleCancellationScheduled: Prisma.FieldRef<"User", 'Boolean'>
-  readonly apiCallCountDaily: Prisma.FieldRef<"User", 'Int'>
-  readonly lastApiCallReset: Prisma.FieldRef<"User", 'DateTime'>
-  readonly apiCallCountTotal: Prisma.FieldRef<"User", 'Int'>
 }
     
 
@@ -1764,6 +1644,11 @@ export type UserFindManyArgs<ExtArgs extends runtime.Types.Extensions.InternalAr
    * Skip the first `n` Users.
    */
   skip?: number
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+   * 
+   * Filter by unique combinations of Users.
+   */
   distinct?: Prisma.UserScalarFieldEnum | Prisma.UserScalarFieldEnum[]
 }
 
@@ -2001,6 +1886,44 @@ export type User$sessionsArgs<ExtArgs extends runtime.Types.Extensions.InternalA
   take?: number
   skip?: number
   distinct?: Prisma.SessionScalarFieldEnum | Prisma.SessionScalarFieldEnum[]
+}
+
+/**
+ * User.subscription
+ */
+export type User$subscriptionArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Subscription
+   */
+  select?: Prisma.SubscriptionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Subscription
+   */
+  omit?: Prisma.SubscriptionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.SubscriptionInclude<ExtArgs> | null
+  where?: Prisma.SubscriptionWhereInput
+}
+
+/**
+ * User.usage
+ */
+export type User$usageArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Usage
+   */
+  select?: Prisma.UsageSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Usage
+   */
+  omit?: Prisma.UsageOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.UsageInclude<ExtArgs> | null
+  where?: Prisma.UsageWhereInput
 }
 
 /**
