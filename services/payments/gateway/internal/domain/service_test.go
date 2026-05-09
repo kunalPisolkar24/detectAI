@@ -12,16 +12,18 @@ import (
 
 func TestPaymentService_ProcessWebhook(t *testing.T) {
 	secret := "test-secret"
-	body := []byte(`{"event":"test"}`)
+	body := []byte(`{"event_type":"test"}`)
 	signature := "valid-sig"
 
 	t.Run("Success", func(t *testing.T) {
 		mp := new(mocks.MockEventProducer)
 		mv := new(mocks.MockSignatureValidator)
-		s := NewPaymentService(mp, mv, secret)
+		mr := new(mocks.MockMetricsRecorder)
+		s := NewPaymentService(mp, mv, mr, secret)
 
 		mv.On("Validate", signature, body, secret).Return(true).Once()
 		mp.On("Publish", mock.Anything, body).Return(nil).Once()
+		mr.On("RecordPublish", "test", "success").Once()
 
 		err := s.ProcessWebhook(context.Background(), signature, body)
 		assert.NoError(t, err)
@@ -32,9 +34,11 @@ func TestPaymentService_ProcessWebhook(t *testing.T) {
 	t.Run("Invalid Signature", func(t *testing.T) {
 		mp := new(mocks.MockEventProducer)
 		mv := new(mocks.MockSignatureValidator)
-		s := NewPaymentService(mp, mv, secret)
+		mr := new(mocks.MockMetricsRecorder)
+		s := NewPaymentService(mp, mv, mr, secret)
 
 		mv.On("Validate", signature, body, secret).Return(false).Once()
+		mr.On("RecordInvalidSignature").Once()
 
 		err := s.ProcessWebhook(context.Background(), signature, body)
 		assert.Error(t, err)
@@ -45,10 +49,12 @@ func TestPaymentService_ProcessWebhook(t *testing.T) {
 	t.Run("Publish Error", func(t *testing.T) {
 		mp := new(mocks.MockEventProducer)
 		mv := new(mocks.MockSignatureValidator)
-		s := NewPaymentService(mp, mv, secret)
+		mr := new(mocks.MockMetricsRecorder)
+		s := NewPaymentService(mp, mv, mr, secret)
 
 		mv.On("Validate", signature, body, secret).Return(true).Once()
 		mp.On("Publish", mock.Anything, body).Return(errors.New("publish failed")).Once()
+		mr.On("RecordPublish", "test", "error").Once()
 
 		err := s.ProcessWebhook(context.Background(), signature, body)
 		assert.Error(t, err)
@@ -57,13 +63,15 @@ func TestPaymentService_ProcessWebhook(t *testing.T) {
 }
 
 func TestPaymentService_ProcessInternalEvent(t *testing.T) {
-	body := []byte(`{"event":"internal"}`)
+	body := []byte(`{"event_type":"internal"}`)
 
 	t.Run("Success", func(t *testing.T) {
 		mp := new(mocks.MockEventProducer)
-		s := NewPaymentService(mp, nil, "")
+		mr := new(mocks.MockMetricsRecorder)
+		s := NewPaymentService(mp, nil, mr, "")
 
 		mp.On("Publish", mock.Anything, body).Return(nil).Once()
+		mr.On("RecordPublish", "internal", "success").Once()
 
 		err := s.ProcessInternalEvent(context.Background(), body)
 		assert.NoError(t, err)
@@ -72,9 +80,11 @@ func TestPaymentService_ProcessInternalEvent(t *testing.T) {
 
 	t.Run("Publish Error", func(t *testing.T) {
 		mp := new(mocks.MockEventProducer)
-		s := NewPaymentService(mp, nil, "")
+		mr := new(mocks.MockMetricsRecorder)
+		s := NewPaymentService(mp, nil, mr, "")
 
 		mp.On("Publish", mock.Anything, body).Return(errors.New("publish failed")).Once()
+		mr.On("RecordPublish", "internal", "error").Once()
 
 		err := s.ProcessInternalEvent(context.Background(), body)
 		assert.Error(t, err)

@@ -40,6 +40,14 @@ type HealthChecker interface {
 	IsConnected() bool
 }
 
+type MetricsRecorder interface {
+	RecordPublish(eventType, status string)
+	RecordInvalidSignature()
+	SetRabbitMQStatus(connected bool)
+	RecordRabbitMQPublishDuration(duration float64)
+	RecordRabbitMQReconnection()
+}
+
 // Service Ports (Inbound)
 
 type PaymentService interface {

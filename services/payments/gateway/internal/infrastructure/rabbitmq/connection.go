@@ -14,6 +14,7 @@ type ConnectionManager struct {
 	url             string
 	logger          logger.Logger
 	dialer          ports.AMQPDialer
+	metrics         ports.MetricsRecorder
 	mu              sync.RWMutex
 	conn            ports.AMQPConnection
 	channel         ports.AMQPChannel
@@ -25,15 +26,16 @@ type ConnectionManager struct {
 	onConnect       func(ports.AMQPChannel) error
 }
 
-func NewConnectionManager(url string, log logger.Logger, onConnect func(ports.AMQPChannel) error) *ConnectionManager {
-	return NewConnectionManagerWithDialer(url, log, onConnect, &RealDialer{})
+func NewConnectionManager(url string, log logger.Logger, metrics ports.MetricsRecorder, onConnect func(ports.AMQPChannel) error) *ConnectionManager {
+	return NewConnectionManagerWithDialer(url, log, metrics, onConnect, &RealDialer{})
 }
 
-func NewConnectionManagerWithDialer(url string, log logger.Logger, onConnect func(ports.AMQPChannel) error, dialer ports.AMQPDialer) *ConnectionManager {
+func NewConnectionManagerWithDialer(url string, log logger.Logger, metrics ports.MetricsRecorder, onConnect func(ports.AMQPChannel) error, dialer ports.AMQPDialer) *ConnectionManager {
 	cm := &ConnectionManager{
 		url:       url,
 		logger:    log,
 		dialer:    dialer,
+		metrics:   metrics,
 		onConnect: onConnect,
 		done:      make(chan bool),
 	}
@@ -45,6 +47,7 @@ func (cm *ConnectionManager) handleReconnect() {
 	for {
 		cm.mu.Lock()
 		cm.isConnected = false
+		cm.metrics.SetRabbitMQStatus(false)
 		cm.mu.Unlock()
 
 		for {
@@ -71,8 +74,10 @@ func (cm *ConnectionManager) handleReconnect() {
 			return
 		case err := <-cm.notifyConnClose:
 			cm.logger.Error("Connection closed, reconnecting", "error", err)
+			cm.metrics.RecordRabbitMQReconnection()
 		case err := <-cm.notifyChanClose:
 			cm.logger.Error("Channel closed, reconnecting", "error", err)
+			cm.metrics.RecordRabbitMQReconnection()
 		}
 	}
 }
@@ -111,6 +116,7 @@ func (cm *ConnectionManager) connect() error {
 	cm.conn.NotifyClose(cm.notifyConnClose)
 	cm.channel.NotifyClose(cm.notifyChanClose)
 	cm.isConnected = true
+	cm.metrics.SetRabbitMQStatus(true)
 	cm.mu.Unlock()
 
 	cm.logger.Info("RabbitMQ connected and initialized")

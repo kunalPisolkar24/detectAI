@@ -28,17 +28,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	rabbitMQ := rabbitmq.NewRabbitMQProducer(cfg.RabbitMQURL, QueueName, cfg.RabbitMQQueueType, log)
+	monitor := monitoring.New("payment-gateway")
+	rabbitMQ := rabbitmq.NewRabbitMQProducer(cfg.RabbitMQURL, QueueName, cfg.RabbitMQQueueType, log, monitor)
 	paddleValidator := paddle.NewPaddleValidator()
 
-	paymentService := domain.NewPaymentService(rabbitMQ, paddleValidator, cfg.WebhookSecret)
+	paymentService := domain.NewPaymentService(rabbitMQ, paddleValidator, monitor, cfg.WebhookSecret)
 	handler := http.NewHandler(http.HandlerConfig{
 		Service:     paymentService,
 		Health:      rabbitMQ,
 		InternalKey: cfg.InternalAPIKey,
 		Logger:      log,
 	})
-	monitor := monitoring.New("payment-gateway")
 
 	r := gin.New()
 	r.Use(gin.Recovery())

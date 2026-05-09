@@ -19,6 +19,7 @@ func TestConnectionManager_Connect(t *testing.T) {
 		md := new(mocks.MockAMQPDialer)
 		mc := new(mocks.MockAMQPConnection)
 		mch := new(mocks.MockAMQPChannel)
+		mr := new(mocks.MockMetricsRecorder)
 
 		md.On("Dial", url).Return(mc, nil).Once()
 		mc.On("Channel").Return(mch, nil).Once()
@@ -27,8 +28,10 @@ func TestConnectionManager_Connect(t *testing.T) {
 		mch.On("NotifyClose", mock.Anything).Return(nil).Once()
 		mch.On("Close").Return(nil).Once()
 		mc.On("Close").Return(nil).Once()
+		mr.On("SetRabbitMQStatus", false).Return().Once() // Start of loop
+		mr.On("SetRabbitMQStatus", true).Return().Once()  // On success
 
-		cm := NewConnectionManagerWithDialer(url, log, nil, md)
+		cm := NewConnectionManagerWithDialer(url, log, mr, nil, md)
 		defer cm.Close()
 
 		// Wait for connection loop
@@ -45,6 +48,7 @@ func TestConnectionManager_Connect(t *testing.T) {
 		md := new(mocks.MockAMQPDialer)
 		mc := new(mocks.MockAMQPConnection)
 		mch := new(mocks.MockAMQPChannel)
+		mr := new(mocks.MockMetricsRecorder)
 
 		// First dial fails
 		md.On("Dial", url).Return(nil, errors.New("connection refused")).Once()
@@ -56,9 +60,11 @@ func TestConnectionManager_Connect(t *testing.T) {
 		mch.On("NotifyClose", mock.Anything).Return(nil).Once()
 		mch.On("Close").Return(nil).Once()
 		mc.On("Close").Return(nil).Once()
+		mr.On("SetRabbitMQStatus", false).Return().Run(func(args mock.Arguments) {}).Maybe()
+		mr.On("SetRabbitMQStatus", true).Return().Once()
 
 		// Speed up retries for testing
-		cm := NewConnectionManagerWithDialer(url, log, nil, md)
+		cm := NewConnectionManagerWithDialer(url, log, mr, nil, md)
 		defer cm.Close()
 
 		// Wait for connection loop to succeed eventually

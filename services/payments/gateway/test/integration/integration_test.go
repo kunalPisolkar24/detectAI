@@ -17,6 +17,7 @@ import (
 	"gateway/internal/infrastructure/rabbitmq"
 	"gateway/internal/transport/http"
 	"gateway/internal/infrastructure/paddle"
+	"gateway/internal/monitoring"
 
 	"github.com/gin-gonic/gin"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -28,6 +29,7 @@ import (
 func TestGatewayIntegration(t *testing.T) {
 	ctx := context.Background()
 	log := logger.New()
+	monitor := monitoring.New("payment-gateway-test")
 
 	// 1. Start RabbitMQ Container
 	rabbitmqContainer, err := containerRabbitmq.Run(ctx, "rabbitmq:3-management-alpine",
@@ -53,7 +55,7 @@ func TestGatewayIntegration(t *testing.T) {
 	webhookSecret := "test_webhook_secret"
 	internalKey := "test_internal_key"
 
-	prod := rabbitmq.NewRabbitMQProducer(amqpURL, queueName, "classic", log)
+	prod := rabbitmq.NewRabbitMQProducer(amqpURL, queueName, "classic", log, monitor)
 	defer prod.Close()
 
 	// Wait for producer to connect and setup topology
@@ -62,7 +64,7 @@ func TestGatewayIntegration(t *testing.T) {
 	}, 10*time.Second, 100*time.Millisecond)
 
 	val := paddle.NewPaddleValidator()
-	svc := domain.NewPaymentService(prod, val, webhookSecret)
+	svc := domain.NewPaymentService(prod, val, monitor, webhookSecret)
 	
 	handler := http.NewHandler(http.HandlerConfig{
 		Service:     svc,

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"gateway/internal/domain/ports"
 	"gateway/internal/logger"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -14,16 +15,18 @@ type RabbitMQProducer struct {
 	queueName string
 	queueType string
 	logger    logger.Logger
+	metrics   ports.MetricsRecorder
 }
 
-func NewRabbitMQProducer(url string, queueName string, queueType string, log logger.Logger) *RabbitMQProducer {
+func NewRabbitMQProducer(url string, queueName string, queueType string, log logger.Logger, metrics ports.MetricsRecorder) *RabbitMQProducer {
 	p := &RabbitMQProducer{
 		queueName: queueName,
 		queueType: queueType,
 		logger:    log,
+		metrics:   metrics,
 	}
 
-	p.cm = NewConnectionManager(url, log, p.setupTopology)
+	p.cm = NewConnectionManager(url, log, metrics, p.setupTopology)
 	return p
 }
 
@@ -65,6 +68,7 @@ func (p *RabbitMQProducer) Publish(ctx context.Context, body []byte) error {
 		return err
 	}
 
+	start := time.Now()
 	conf, err := ch.PublishWithDeferredConfirmWithContext(ctx,
 		"",
 		p.queueName,
@@ -81,6 +85,7 @@ func (p *RabbitMQProducer) Publish(ctx context.Context, body []byte) error {
 
 	select {
 	case <-conf.Done():
+		p.metrics.RecordRabbitMQPublishDuration(time.Since(start).Seconds())
 		if conf.Acked() {
 			return nil
 		}
