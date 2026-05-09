@@ -49,7 +49,9 @@ class HuggingFaceLoader(IModelLoader):
                 elif model_key == "flare":
                     return self._load_flare(local_only=True)
             except Exception as fallback_error:
-                raise ModelLoadError(f"Failed to load {model_key} even with offline fallback: {str(fallback_error)}") from fallback_error
+                raise ModelLoadError(
+                    f"Failed to load {model_key}: {str(e)} (Offline fallback also failed: {str(fallback_error)})"
+                ) from fallback_error
             raise ModelLoadError(f"Failed to load {model_key}: {str(e)}")
 
     def _load_spark(self, local_only: bool = False):
