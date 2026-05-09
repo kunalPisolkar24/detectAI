@@ -60,6 +60,13 @@ func TestPaddleValidator_Validate(t *testing.T) {
 			wantValid: false,
 		},
 		{
+			name:      "Expired Timestamp",
+			header:    generateTestSignature(fmt.Sprintf("%d", time.Now().Unix()-600), body, secret),
+			body:      []byte(body),
+			secret:    secret,
+			wantValid: false,
+		},
+		{
 			name:      "Empty Inputs",
 			header:    "",
 			body:      nil,

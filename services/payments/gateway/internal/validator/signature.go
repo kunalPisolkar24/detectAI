@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"regexp"
+	"strconv"
+	"time"
 )
 
 type SignatureValidator interface {
@@ -35,10 +37,19 @@ func (v *PaddleValidator) Validate(signatureHeader string, body []byte, secret s
 		return false
 	}
 
-	ts := tsMatch[1]
+	tsStr := tsMatch[1]
 	h1 := h1Match[1]
 
-	payload := ts + ":" + string(body)
+	ts, err := strconv.ParseInt(tsStr, 10, 64)
+	if err != nil {
+		return false
+	}
+
+	if time.Since(time.Unix(ts, 0)) > 5*time.Minute || time.Until(time.Unix(ts, 0)) > 5*time.Minute {
+		return false
+	}
+
+	payload := tsStr + ":" + string(body)
 
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(payload))
