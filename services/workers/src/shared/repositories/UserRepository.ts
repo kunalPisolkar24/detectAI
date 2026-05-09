@@ -23,14 +23,34 @@ export class PrismaUserRepository implements IUserRepository {
     async updateById(userId: string, data: PaymentUpdatePayload, select: { email: true }): Promise<UserRecord> {
         return this.prismaWriter.user.update({
             where: { id: userId },
-            data,
+            data: {
+                paddleCustomerId: data.paddleCustomerId,
+                subscription: {
+                    upsert: {
+                        create: {
+                            paddleSubscriptionId: data.paddleSubscriptionId,
+                            paddlePlanId: data.paddlePlanId,
+                            status: data.status,
+                            endsAt: data.endsAt,
+                            cancellationScheduled: data.cancellationScheduled ?? false,
+                        },
+                        update: {
+                            paddleSubscriptionId: data.paddleSubscriptionId,
+                            paddlePlanId: data.paddlePlanId,
+                            status: data.status,
+                            endsAt: data.endsAt,
+                            cancellationScheduled: data.cancellationScheduled ?? false,
+                        }
+                    }
+                }
+            },
             select,
         });
     }
 
     async updateManyByIdAndSubscription(userId: string, subscriptionId: string, data: object): Promise<{ count: number }> {
-        return this.prismaWriter.user.updateMany({
-            where: { id: userId, paddleSubscriptionId: subscriptionId },
+        return this.prismaWriter.subscription.updateMany({
+            where: { userId, paddleSubscriptionId: subscriptionId },
             data,
         });
     }
@@ -43,34 +63,41 @@ export class PrismaUserRepository implements IUserRepository {
     }
 
     async bulkUpdateStatus(userIds: string[], data: object): Promise<{ count: number }> {
-        return this.prismaWriter.user.updateMany({
-            where: { id: { in: userIds } },
+        return this.prismaWriter.subscription.updateMany({
+            where: { userId: { in: userIds } },
             data,
         });
     }
 
     async findExpiredSubscriptions(now: Date, limit: number): Promise<{ id: string; email: string }[]> {
-        return this.prismaReader.user.findMany({
+        const subscriptions = await this.prismaReader.subscription.findMany({
             where: {
                 OR: [
-                    { paddleSubscriptionStatus: SubscriptionStatus.ACTIVE },
-                    { paddleSubscriptionStatus: SubscriptionStatus.TRIALING },
+                    { status: SubscriptionStatus.ACTIVE },
+                    { status: SubscriptionStatus.TRIALING },
                 ],
-                subscriptionEndsAt: { lt: now },
+                endsAt: { lt: now },
             },
             take: limit,
-            select: { id: true, email: true },
+            select: { 
+                user: {
+                    select: { id: true, email: true }
+                }
+            },
         });
+
+        return subscriptions.map((s: any) => s.user);
     }
 
     async incrementUsage(userId: string, count: number): Promise<void> {
         await this.prismaWriter.$executeRaw`
-            UPDATE "User"
-            SET
-                "apiCallCountTotal" = "apiCallCountTotal" + ${count},
-                "apiCallCountDaily" = "apiCallCountDaily" + ${count},
-                "lastApiCallReset" = NOW()
-            WHERE id = ${userId}
+            INSERT INTO "Usage" ("id", "userId", "apiCallCountTotal", "apiCallCountDaily", "lastApiCallReset", "updatedAt", "createdAt")
+            VALUES (gen_random_uuid(), ${userId}, ${count}, ${count}, NOW(), NOW(), NOW())
+            ON CONFLICT ("userId") DO UPDATE SET
+                "apiCallCountTotal" = "Usage"."apiCallCountTotal" + ${count},
+                "apiCallCountDaily" = "Usage"."apiCallCountDaily" + ${count},
+                "lastApiCallReset" = NOW(),
+                "updatedAt" = NOW()
         `;
     }
 }

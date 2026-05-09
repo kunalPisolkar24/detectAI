@@ -74,7 +74,7 @@ describe("SubscriptionSweeper", () => {
         expect(count).toBe(2);
         expect(mockUserRepository.bulkUpdateStatus).toHaveBeenCalledWith(
             ["u1", "u2"],
-            expect.objectContaining({ paddleSubscriptionStatus: "CANCELED" })
+            expect.objectContaining({ status: "CANCELED" })
         );
 
         const delArgs = mockRedisClient.del.mock.calls[0] as string[];

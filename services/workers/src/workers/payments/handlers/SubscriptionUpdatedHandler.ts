@@ -30,12 +30,12 @@ export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
             paddleCustomerId: customerId,
             paddleSubscriptionId: subId,
             paddlePlanId: planId,
-            paddleSubscriptionStatus: status,
-            subscriptionEndsAt: endsAt,
+            status,
+            endsAt,
         };
 
         if (data?.scheduled_change) {
-            updateData.paddleCancellationScheduled = data.scheduled_change.action === "cancel";
+            updateData.cancellationScheduled = data.scheduled_change.action === "cancel";
         }
 
         const updatedUser = await this.userRepository.updateById(userId, updateData, { email: true });

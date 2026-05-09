@@ -25,9 +25,9 @@ export class SubscriptionCanceledHandler implements IPaymentEventHandler {
         const endsAt = data.canceled_at ? new Date(data.canceled_at) : null;
 
         await this.userRepository.updateManyByIdAndSubscription(userId, subId, {
-            paddleSubscriptionStatus: SubscriptionStatus.CANCELED,
-            subscriptionEndsAt: endsAt,
-            paddleCancellationScheduled: false,
+            status: SubscriptionStatus.CANCELED,
+            endsAt: endsAt,
+            cancellationScheduled: false,
             paddleSubscriptionId: null,
             paddlePlanId: null,
         });

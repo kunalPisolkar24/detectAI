@@ -57,8 +57,8 @@ export class SubscriptionSweeper {
         const userIds = users.map(u => u.id);
 
         await this.userRepository.bulkUpdateStatus(userIds, {
-            paddleSubscriptionStatus: SubscriptionStatus.CANCELED,
-            paddleCancellationScheduled: false,
+            status: SubscriptionStatus.CANCELED,
+            cancellationScheduled: false,
             paddleSubscriptionId: null,
             paddlePlanId: null,
         });

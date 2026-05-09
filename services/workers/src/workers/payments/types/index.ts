@@ -20,7 +20,7 @@ export interface PaymentUpdatePayload {
   paddleCustomerId: string;
   paddleSubscriptionId: string;
   paddlePlanId: string;
-  paddleSubscriptionStatus: SubscriptionStatus;
-  subscriptionEndsAt: Date | null;
-  paddleCancellationScheduled?: boolean;
+  status: SubscriptionStatus;
+  endsAt: Date | null;
+  cancellationScheduled?: boolean;
 }
