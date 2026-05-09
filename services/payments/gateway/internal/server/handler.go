@@ -44,10 +44,11 @@ func (h *Handler) healthCheck(c *gin.Context) {
 }
 
 func (h *Handler) handleWebhook(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		h.logger.Error("Failed to read request body", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot read body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Request body too large or unreadable"})
 		return
 	}
 
@@ -58,7 +59,7 @@ func (h *Handler) handleWebhook(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
 	if err := h.producer.Publish(ctx, bodyBytes); err != nil {
@@ -72,14 +73,15 @@ func (h *Handler) handleWebhook(c *gin.Context) {
 }
 
 func (h *Handler) handleInternalEvent(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		h.logger.Error("Failed to read internal event body", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot read body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Request body too large or unreadable"})
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
 	if err := h.producer.Publish(ctx, bodyBytes); err != nil {
