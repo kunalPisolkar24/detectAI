@@ -13,6 +13,7 @@ export const mockChannel = {
     consume: mockConsume,
     ack: mockAck,
     nack: mockNack,
+    on: mock(() => {}),
 };
 
 export const mockConnection = {
