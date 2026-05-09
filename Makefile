@@ -57,9 +57,6 @@ help:
 	@printf "  make local-rebuild     Rebuild local images without cache\n"
 	@printf "  make local-config      Render local compose config\n"
 	@printf "  make local-ps          Show local containers\n\n"
-	@printf "Testing\n"
-	@printf "  make test              Run all unit tests\n"
-	@printf "  make test-integration  Run integration tests (requires Docker)\n\n"
 	@printf "Generic\n"
 	@printf "  make build STACK=prod|local [SERVICE=name]\n"
 	@printf "  make rebuild STACK=prod|local [SERVICE=name]\n"
@@ -165,11 +162,3 @@ local-ps:
 
 shell-web:
 	$(PROD_COMPOSE) exec frontend /bin/sh
-
-test:
-	@echo "Running unit tests..."
-	cd services/payments/gateway && go test -v ./...
-
-test-integration:
-	@echo "Running integration tests..."
-	cd services/payments/gateway && go test -v -tags=integration ./internal/integration/...
