@@ -2,7 +2,7 @@ package mocks
 
 import (
 	"context"
-	"gateway/internal/queue"
+	"gateway/internal/domain/ports"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/mock"
 )
@@ -11,24 +11,24 @@ type MockAMQPDialer struct {
 	mock.Mock
 }
 
-func (m *MockAMQPDialer) Dial(url string) (queue.AMQPConnection, error) {
+func (m *MockAMQPDialer) Dial(url string) (ports.AMQPConnection, error) {
 	args := m.Called(url)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(queue.AMQPConnection), args.Error(1)
+	return args.Get(0).(ports.AMQPConnection), args.Error(1)
 }
 
 type MockAMQPConnection struct {
 	mock.Mock
 }
 
-func (m *MockAMQPConnection) Channel() (queue.AMQPChannel, error) {
+func (m *MockAMQPConnection) Channel() (ports.AMQPChannel, error) {
 	args := m.Called()
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(queue.AMQPChannel), args.Error(1)
+	return args.Get(0).(ports.AMQPChannel), args.Error(1)
 }
 
 func (m *MockAMQPConnection) NotifyClose(receiver chan *amqp.Error) chan *amqp.Error {

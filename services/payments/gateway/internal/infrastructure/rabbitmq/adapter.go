@@ -1,34 +1,13 @@
-package queue
+package rabbitmq
 
 import (
-	"context"
+	"gateway/internal/domain/ports"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-type AMQPDialer interface {
-	Dial(url string) (AMQPConnection, error)
-}
-
-type AMQPConnection interface {
-	Channel() (AMQPChannel, error)
-	NotifyClose(receiver chan *amqp.Error) chan *amqp.Error
-	Close() error
-}
-
-type AMQPChannel interface {
-	Confirm(noWait bool) error
-	NotifyClose(receiver chan *amqp.Error) chan *amqp.Error
-	NotifyPublish(confirm chan amqp.Confirmation) chan amqp.Confirmation
-	QueueDeclare(name string, durable, autoDelete, exclusive, noWait bool, args amqp.Table) (amqp.Queue, error)
-	QueueBind(name, key, exchange string, noWait bool, args amqp.Table) error
-	ExchangeDeclare(name, kind string, durable, autoDelete, internal, noWait bool, args amqp.Table) error
-	PublishWithDeferredConfirmWithContext(ctx context.Context, exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (*amqp.DeferredConfirmation, error)
-	Close() error
-}
-
 type RealDialer struct{}
 
-func (d *RealDialer) Dial(url string) (AMQPConnection, error) {
+func (d *RealDialer) Dial(url string) (ports.AMQPConnection, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
 		return nil, err
@@ -40,7 +19,7 @@ type RealConnection struct {
 	conn *amqp.Connection
 }
 
-func (c *RealConnection) Channel() (AMQPChannel, error) {
+func (c *RealConnection) Channel() (ports.AMQPChannel, error) {
 	ch, err := c.conn.Channel()
 	if err != nil {
 		return nil, err

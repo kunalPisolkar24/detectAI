@@ -3,28 +3,16 @@ package domain
 import (
 	"context"
 	"fmt"
+	"gateway/internal/domain/ports"
 )
 
-type Publisher interface {
-	Publish(ctx context.Context, body []byte) error
-}
-
-type SignatureValidator interface {
-	Validate(signatureHeader string, body []byte, secret string) bool
-}
-
-type PaymentServiceInterface interface {
-	ProcessWebhook(ctx context.Context, signature string, body []byte) error
-	ProcessInternalEvent(ctx context.Context, body []byte) error
-}
-
 type PaymentService struct {
-	publisher     Publisher
-	validator     SignatureValidator
+	publisher     ports.Publisher
+	validator     ports.SignatureValidator
 	webhookSecret string
 }
 
-func NewPaymentService(pub Publisher, val SignatureValidator, secret string) *PaymentService {
+func NewPaymentService(pub ports.Publisher, val ports.SignatureValidator, secret string) ports.PaymentService {
 	return &PaymentService{
 		publisher:     pub,
 		validator:     val,

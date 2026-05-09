@@ -14,15 +14,15 @@ import (
 
 	"gateway/internal/domain"
 	"gateway/internal/logger"
-	"gateway/internal/queue"
-	"gateway/internal/server"
-	"gateway/internal/validator"
+	"gateway/internal/infrastructure/rabbitmq"
+	"gateway/internal/transport/http"
+	"gateway/internal/infrastructure/paddle"
 
 	"github.com/gin-gonic/gin"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/rabbitmq"
+	containerRabbitmq "github.com/testcontainers/testcontainers-go/modules/rabbitmq"
 )
 
 func TestGatewayIntegration(t *testing.T) {
@@ -30,9 +30,9 @@ func TestGatewayIntegration(t *testing.T) {
 	log := logger.New()
 
 	// 1. Start RabbitMQ Container
-	rabbitmqContainer, err := rabbitmq.Run(ctx, "rabbitmq:3-management-alpine",
-		rabbitmq.WithUser("guest"),
-		rabbitmq.WithPassword("guest"),
+	rabbitmqContainer, err := containerRabbitmq.Run(ctx, "rabbitmq:3-management-alpine",
+		containerRabbitmq.WithUser("guest"),
+		containerRabbitmq.WithPassword("guest"),
 	)
 	if err != nil {
 		t.Fatalf("failed to start rabbitmq container: %s", err)
@@ -53,7 +53,7 @@ func TestGatewayIntegration(t *testing.T) {
 	webhookSecret := "test_webhook_secret"
 	internalKey := "test_internal_key"
 
-	prod := queue.NewRabbitMQProducer(amqpURL, queueName, "classic", log)
+	prod := rabbitmq.NewRabbitMQProducer(amqpURL, queueName, "classic", log)
 	defer prod.Close()
 
 	// Wait for producer to connect and setup topology
@@ -61,10 +61,10 @@ func TestGatewayIntegration(t *testing.T) {
 		return prod.IsConnected()
 	}, 10*time.Second, 100*time.Millisecond)
 
-	val := validator.NewPaddleValidator()
+	val := paddle.NewPaddleValidator()
 	svc := domain.NewPaymentService(prod, val, webhookSecret)
 	
-	handler := server.NewHandler(server.HandlerConfig{
+	handler := http.NewHandler(http.HandlerConfig{
 		Service:     svc,
 		Health:      prod,
 		InternalKey: internalKey,

@@ -1,8 +1,8 @@
-package server
+package http
 
 import (
 	"context"
-	"gateway/internal/domain"
+	"gateway/internal/domain/ports"
 	"gateway/internal/logger"
 	"io"
 	"net/http"
@@ -11,20 +11,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type HealthChecker interface {
-	IsConnected() bool
-}
-
 type HandlerConfig struct {
-	Service     domain.PaymentServiceInterface
-	Health      HealthChecker
+	Service     ports.PaymentService
+	Health      ports.HealthChecker
 	InternalKey string
 	Logger      logger.Logger
 }
 
 type Handler struct {
-	service     domain.PaymentServiceInterface
-	health      HealthChecker
+	service     ports.PaymentService
+	health      ports.HealthChecker
 	internalKey string
 	logger      logger.Logger
 }

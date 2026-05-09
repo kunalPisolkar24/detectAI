@@ -1,9 +1,9 @@
-package queue
+package rabbitmq
 
 import (
 	"errors"
 	"gateway/internal/logger"
-	"gateway/internal/mocks"
+	"gateway/test/mocks"
 	"testing"
 	"time"
 

@@ -1,7 +1,8 @@
-package queue
+package rabbitmq
 
 import (
 	"fmt"
+	"gateway/internal/domain/ports"
 	"gateway/internal/logger"
 	"sync"
 	"time"
@@ -12,23 +13,23 @@ import (
 type ConnectionManager struct {
 	url             string
 	logger          logger.Logger
-	dialer          AMQPDialer
+	dialer          ports.AMQPDialer
 	mu              sync.RWMutex
-	conn            AMQPConnection
-	channel         AMQPChannel
+	conn            ports.AMQPConnection
+	channel         ports.AMQPChannel
 	notifyConnClose chan *amqp.Error
 	notifyChanClose chan *amqp.Error
 	done            chan bool
 	closeOnce       sync.Once
 	isConnected     bool
-	onConnect       func(AMQPChannel) error
+	onConnect       func(ports.AMQPChannel) error
 }
 
-func NewConnectionManager(url string, log logger.Logger, onConnect func(AMQPChannel) error) *ConnectionManager {
+func NewConnectionManager(url string, log logger.Logger, onConnect func(ports.AMQPChannel) error) *ConnectionManager {
 	return NewConnectionManagerWithDialer(url, log, onConnect, &RealDialer{})
 }
 
-func NewConnectionManagerWithDialer(url string, log logger.Logger, onConnect func(AMQPChannel) error, dialer AMQPDialer) *ConnectionManager {
+func NewConnectionManagerWithDialer(url string, log logger.Logger, onConnect func(ports.AMQPChannel) error, dialer ports.AMQPDialer) *ConnectionManager {
 	cm := &ConnectionManager{
 		url:       url,
 		logger:    log,
@@ -116,7 +117,7 @@ func (cm *ConnectionManager) connect() error {
 	return nil
 }
 
-func (cm *ConnectionManager) GetChannel() (AMQPChannel, error) {
+func (cm *ConnectionManager) GetChannel() (ports.AMQPChannel, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	if !cm.isConnected {

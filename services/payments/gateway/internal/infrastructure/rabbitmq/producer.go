@@ -1,18 +1,13 @@
-package queue
+package rabbitmq
 
 import (
 	"context"
 	"fmt"
+	"gateway/internal/domain/ports"
 	"gateway/internal/logger"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
-
-type EventProducer interface {
-	Publish(ctx context.Context, body []byte) error
-	Close()
-	IsConnected() bool
-}
 
 type RabbitMQProducer struct {
 	cm        *ConnectionManager
@@ -32,7 +27,7 @@ func NewRabbitMQProducer(url string, queueName string, queueType string, log log
 	return p
 }
 
-func (p *RabbitMQProducer) setupTopology(ch AMQPChannel) error {
+func (p *RabbitMQProducer) setupTopology(ch ports.AMQPChannel) error {
 	dlxName := p.queueName + "_dlx"
 	dlqName := p.queueName + "_dlq"
 

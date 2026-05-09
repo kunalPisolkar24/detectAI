@@ -1,12 +1,11 @@
-package server
+package http
 
 import (
 	"bytes"
 	"errors"
-	"gateway/internal/domain"
 	"gateway/internal/logger"
-	"gateway/internal/mocks"
 	"gateway/internal/monitoring"
+	"gateway/test/mocks"
 	"net/http"
 	"net/http/httptest"
 	"testing"

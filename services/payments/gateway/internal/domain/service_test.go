@@ -3,7 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
-	"gateway/internal/mocks"
+	"gateway/test/mocks"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
