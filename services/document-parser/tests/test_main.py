@@ -27,6 +27,13 @@ def test_invalid_mime_type(client):
     response = client.post("/extract", files=files)
     assert response.status_code == 415
 
+def test_invalid_magic_number(client):
+    # Spoof PDF content type but provide wrong magic number
+    files = {"file": ("spoof.pdf", b"This is not a PDF", "application/pdf")}
+    response = client.post("/extract", files=files)
+    assert response.status_code == 422
+    assert "Invalid file signature" in response.json()["detail"]
+
 def test_file_too_large(client, mocker):
     from app.core.exceptions import FileTooLargeError
     mocker.patch("app.api.v1.endpoints.extract.validate_upload", side_effect=FileTooLargeError(20, 10))

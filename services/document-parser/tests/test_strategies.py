@@ -30,6 +30,33 @@ def test_extract_txt_utf8():
         result = strategy.extract("dummy.txt")
         assert result == "Hello World"
 
+def test_extract_txt_latin1():
+    strategy = TxtExtractionStrategy()
+    with patch("builtins.open", MagicMock(return_value=MagicMock(__enter__=lambda s: MagicMock(read=lambda: b"Caf\xe9")))):
+        result = strategy.extract("dummy.txt")
+        assert result == "Café"
+
+def test_extract_txt_exception():
+    strategy = TxtExtractionStrategy()
+    with patch("builtins.open", side_effect=Exception("File not found")):
+        with pytest.raises(ExtractionError) as exc_info:
+            strategy.extract("dummy.txt")
+        assert "Text decoding failed" in str(exc_info.value)
+
+def test_extract_pdf_exception():
+    strategy = PdfExtractionStrategy()
+    with patch("fitz.open", side_effect=Exception("Corrupted PDF")):
+        with pytest.raises(ExtractionError) as exc_info:
+            strategy.extract("dummy.pdf")
+        assert "PDF processing failed" in str(exc_info.value)
+
+def test_extract_docx_exception():
+    strategy = DocxExtractionStrategy()
+    with patch("docx.Document", side_effect=Exception("Corrupted DOCX")):
+        with pytest.raises(ExtractionError) as exc_info:
+            strategy.extract("dummy.docx")
+        assert "DOCX processing failed" in str(exc_info.value)
+
 def test_factory_returns_correct_strategy():
     assert isinstance(ExtractorFactory.get_strategy("application/pdf"), PdfExtractionStrategy)
     assert isinstance(ExtractorFactory.get_strategy("text/plain"), TxtExtractionStrategy)
