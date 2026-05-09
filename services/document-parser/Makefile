@@ -9,10 +9,11 @@ build:
 	docker build -t detectai-document-parser .
 
 run:
-	docker compose up -d
+	PORT_DOC_PARSER=8000 detect_ai_network=detectai_net docker network create detectai_net || true
+	PORT_DOC_PARSER=8000 detect_ai_network=detectai_net docker compose up -d
 
 stop:
-	docker compose down
+	PORT_DOC_PARSER=8000 detect_ai_network=detectai_net docker compose down
 
 load-test:
 	@echo "Running k6 load test with $(VUS) VUs for $(DURATION) (Ramp: $(RAMP_TIME)) against $(API_URL)..."
