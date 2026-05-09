@@ -17,12 +17,14 @@ type EventProducer interface {
 type RabbitMQProducer struct {
 	cm        *ConnectionManager
 	queueName string
+	queueType string
 	logger    logger.Logger
 }
 
-func NewRabbitMQProducer(url string, queueName string, log logger.Logger) *RabbitMQProducer {
+func NewRabbitMQProducer(url string, queueName string, queueType string, log logger.Logger) *RabbitMQProducer {
 	p := &RabbitMQProducer{
 		queueName: queueName,
+		queueType: queueType,
 		logger:    log,
 	}
 
@@ -49,6 +51,10 @@ func (p *RabbitMQProducer) setupTopology(ch AMQPChannel) error {
 	args := amqp.Table{
 		"x-dead-letter-exchange":    dlxName,
 		"x-dead-letter-routing-key": p.queueName,
+	}
+
+	if p.queueType == "quorum" {
+		args["x-queue-type"] = "quorum"
 	}
 
 	if _, err := ch.QueueDeclare(p.queueName, true, false, false, false, args); err != nil {

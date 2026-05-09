@@ -19,7 +19,7 @@ func TestRabbitMQIntegration(t *testing.T) {
 	log := logger.New()
 	queueName := "test_queue_" + time.Now().Format("20060102150405")
 	
-	p := NewRabbitMQProducer(rabbitURL, queueName, log)
+	p := NewRabbitMQProducer(rabbitURL, queueName, "classic", log)
 	defer p.Close()
 
 	assert.True(t, p.IsConnected())

@@ -28,7 +28,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	rabbitMQ := queue.NewRabbitMQProducer(cfg.RabbitMQURL, QueueName, log)
+	rabbitMQ := queue.NewRabbitMQProducer(cfg.RabbitMQURL, QueueName, cfg.RabbitMQQueueType, log)
 	paddleValidator := validator.NewPaddleValidator()
 
 	paymentService := domain.NewPaymentService(rabbitMQ, paddleValidator, cfg.WebhookSecret)
