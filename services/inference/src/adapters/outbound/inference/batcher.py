@@ -84,7 +84,9 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
     def health_snapshot(self) -> BatcherHealthSnapshot:
         if self.shutdown_flag:
             status = BatcherHealthStatus.SHUTTING_DOWN
-        elif self.worker_task is None or self.worker_task.done():
+        elif self.worker_task is None:
+            status = BatcherHealthStatus.INITIALIZING
+        elif self.worker_task.done():
             status = BatcherHealthStatus.WORKER_UNAVAILABLE
         elif self.queue.full():
             status = BatcherHealthStatus.QUEUE_FULL
