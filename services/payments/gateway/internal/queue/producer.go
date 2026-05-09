@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"gateway/internal/logger"
-	"sync"
-	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -17,109 +15,19 @@ type EventProducer interface {
 }
 
 type RabbitMQProducer struct {
-	url             string
-	conn            *amqp.Connection
-	channel         *amqp.Channel
-	queueName       string
-	logger          logger.Logger
-	mu              sync.RWMutex
-	done            chan bool
-	closeOnce       sync.Once
-	notifyConnClose chan *amqp.Error
-	notifyChanClose chan *amqp.Error
-	isConnected     bool
+	cm        *ConnectionManager
+	queueName string
+	logger    logger.Logger
 }
 
 func NewRabbitMQProducer(url string, queueName string, log logger.Logger) *RabbitMQProducer {
 	p := &RabbitMQProducer{
-		url:       url,
 		queueName: queueName,
 		logger:    log,
-		done:      make(chan bool),
 	}
-	go p.handleReconnect()
+
+	p.cm = NewConnectionManager(url, log, p.setupTopology)
 	return p
-}
-
-func (p *RabbitMQProducer) handleReconnect() {
-	for {
-		p.mu.Lock()
-		p.isConnected = false
-		p.mu.Unlock()
-
-		p.logger.Info("Attempting to connect to RabbitMQ")
-		connected := false
-		for !connected {
-			select {
-			case <-p.done:
-				return
-			default:
-				err := p.connect()
-				if err == nil {
-					connected = true
-				} else {
-					p.logger.Error("Failed to connect to RabbitMQ, retrying...", "error", err)
-					select {
-					case <-p.done:
-						return
-					case <-time.After(5 * time.Second):
-					}
-				}
-			}
-		}
-
-		select {
-		case <-p.done:
-			return
-		case err := <-p.notifyConnClose:
-			p.logger.Error("Connection closed, reconnecting", "error", err)
-		case err := <-p.notifyChanClose:
-			p.logger.Error("Channel closed, reconnecting", "error", err)
-		}
-	}
-}
-
-func (p *RabbitMQProducer) connect() error {
-	conn, err := amqp.Dial(p.url)
-	if err != nil {
-		return err
-	}
-
-	ch, err := conn.Channel()
-	if err != nil {
-		conn.Close()
-		return err
-	}
-
-	if err := ch.Confirm(false); err != nil {
-		ch.Close()
-		conn.Close()
-		return err
-	}
-
-	p.mu.Lock()
-	p.conn = conn
-	p.channel = ch
-	p.notifyConnClose = make(chan *amqp.Error, 1)
-	p.notifyChanClose = make(chan *amqp.Error, 1)
-	p.conn.NotifyClose(p.notifyConnClose)
-	p.channel.NotifyClose(p.notifyChanClose)
-	p.mu.Unlock()
-
-	if err := p.setupTopology(ch); err != nil {
-		p.mu.Lock()
-		p.channel.Close()
-		p.conn.Close()
-		p.mu.Unlock()
-		return err
-	}
-
-	p.mu.Lock()
-	p.isConnected = true
-	p.mu.Unlock()
-
-	p.logger.Info("RabbitMQ connected and topology configured")
-	return nil
 }
 
 func (p *RabbitMQProducer) setupTopology(ch *amqp.Channel) error {
@@ -151,13 +59,10 @@ func (p *RabbitMQProducer) setupTopology(ch *amqp.Channel) error {
 }
 
 func (p *RabbitMQProducer) Publish(ctx context.Context, body []byte) error {
-	p.mu.RLock()
-	if !p.isConnected {
-		p.mu.RUnlock()
-		return fmt.Errorf("not connected to RabbitMQ")
+	ch, err := p.cm.GetChannel()
+	if err != nil {
+		return err
 	}
-	ch := p.channel
-	p.mu.RUnlock()
 
 	conf, err := ch.PublishWithDeferredConfirmWithContext(ctx,
 		"",
@@ -185,24 +90,9 @@ func (p *RabbitMQProducer) Publish(ctx context.Context, body []byte) error {
 }
 
 func (p *RabbitMQProducer) Close() {
-	p.closeOnce.Do(func() {
-		close(p.done)
-	})
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.channel != nil {
-		p.channel.Close()
-	}
-	if p.conn != nil {
-		p.conn.Close()
-	}
-	p.isConnected = false
+	p.cm.Close()
 }
 
 func (p *RabbitMQProducer) IsConnected() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.isConnected
+	return p.cm.IsConnected()
 }
