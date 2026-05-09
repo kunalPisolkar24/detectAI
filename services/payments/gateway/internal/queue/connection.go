@@ -12,21 +12,27 @@ import (
 type ConnectionManager struct {
 	url             string
 	logger          logger.Logger
+	dialer          AMQPDialer
 	mu              sync.RWMutex
-	conn            *amqp.Connection
-	channel         *amqp.Channel
+	conn            AMQPConnection
+	channel         AMQPChannel
 	notifyConnClose chan *amqp.Error
 	notifyChanClose chan *amqp.Error
 	done            chan bool
 	closeOnce       sync.Once
 	isConnected     bool
-	onConnect       func(*amqp.Channel) error
+	onConnect       func(AMQPChannel) error
 }
 
-func NewConnectionManager(url string, log logger.Logger, onConnect func(*amqp.Channel) error) *ConnectionManager {
+func NewConnectionManager(url string, log logger.Logger, onConnect func(AMQPChannel) error) *ConnectionManager {
+	return NewConnectionManagerWithDialer(url, log, onConnect, &RealDialer{})
+}
+
+func NewConnectionManagerWithDialer(url string, log logger.Logger, onConnect func(AMQPChannel) error, dialer AMQPDialer) *ConnectionManager {
 	cm := &ConnectionManager{
 		url:       url,
 		logger:    log,
+		dialer:    dialer,
 		onConnect: onConnect,
 		done:      make(chan bool),
 	}
@@ -71,7 +77,7 @@ func (cm *ConnectionManager) handleReconnect() {
 }
 
 func (cm *ConnectionManager) connect() error {
-	conn, err := amqp.Dial(cm.url)
+	conn, err := cm.dialer.Dial(cm.url)
 	if err != nil {
 		return err
 	}
@@ -110,7 +116,7 @@ func (cm *ConnectionManager) connect() error {
 	return nil
 }
 
-func (cm *ConnectionManager) GetChannel() (*amqp.Channel, error) {
+func (cm *ConnectionManager) GetChannel() (AMQPChannel, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	if !cm.isConnected {

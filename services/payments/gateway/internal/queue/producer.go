@@ -30,7 +30,7 @@ func NewRabbitMQProducer(url string, queueName string, log logger.Logger) *Rabbi
 	return p
 }
 
-func (p *RabbitMQProducer) setupTopology(ch *amqp.Channel) error {
+func (p *RabbitMQProducer) setupTopology(ch AMQPChannel) error {
 	dlxName := p.queueName + "_dlx"
 	dlqName := p.queueName + "_dlq"
 
