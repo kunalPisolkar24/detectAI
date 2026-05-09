@@ -1,23 +1,42 @@
 import os
 import tempfile
 from fastapi import UploadFile
+from app.core.metrics import record_extraction, record_extraction_failure
 from app.domain.extraction.strategies import ExtractorFactory
 from app.domain.extraction.cleaner import TextCleaner
+
 
 class ExtractionService:
     @staticmethod
     def process_file(file: UploadFile) -> str:
         suffix = os.path.splitext(file.filename or "")[1]
+        mime_type = file.content_type or "unknown"
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp_path = tmp.name
             try:
                 content = file.file.read()
+                file_size_bytes = len(content)
                 tmp.write(content)
                 tmp.flush()
 
-                strategy = ExtractorFactory.get_strategy(file.content_type or "")
+                strategy = ExtractorFactory.get_strategy(mime_type)
                 raw_text = strategy.extract(tmp_path)
-                return TextCleaner.clean(raw_text)
+                cleaned_text = TextCleaner.clean(raw_text)
+
+                record_extraction(
+                    mime_type=mime_type,
+                    file_size_bytes=file_size_bytes,
+                    text_bytes=len(cleaned_text.encode("utf-8")),
+                )
+
+                return cleaned_text
+            except Exception:
+                record_extraction_failure(
+                    mime_type=mime_type,
+                    file_size_bytes=len(content) if "content" in dir() else 0,
+                )
+                raise
             finally:
                 if os.path.exists(tmp_path):
                     os.unlink(tmp_path)
