@@ -173,11 +173,15 @@ func (p *RabbitMQProducer) Publish(ctx context.Context, body []byte) error {
 		return err
 	}
 
-	if ack := conf.Wait(); !ack {
+	select {
+	case <-conf.Done():
+		if conf.Acked() {
+			return nil
+		}
 		return fmt.Errorf("message nacked by broker")
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-
-	return nil
 }
 
 func (p *RabbitMQProducer) Close() {
