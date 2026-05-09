@@ -11,9 +11,13 @@ RUN go build -o gateway ./cmd/gateway/main.go
 
 FROM alpine:latest
 
-WORKDIR /root/
+RUN adduser -D -u 10001 appuser
+
+WORKDIR /app
 
 COPY --from=builder /app/gateway .
+
+USER appuser
 
 EXPOSE 8080
 
