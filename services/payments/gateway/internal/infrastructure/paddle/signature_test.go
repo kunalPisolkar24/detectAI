@@ -1,4 +1,4 @@
-package validator
+package paddle
 
 import (
 	"crypto/hmac"
@@ -55,6 +55,13 @@ func TestPaddleValidator_Validate(t *testing.T) {
 		{
 			name:      "Malformed Header",
 			header:    "ts=123;h1=invalid",
+			body:      []byte(body),
+			secret:    secret,
+			wantValid: false,
+		},
+		{
+			name:      "Expired Timestamp",
+			header:    generateTestSignature(fmt.Sprintf("%d", time.Now().Unix()-600), body, secret),
 			body:      []byte(body),
 			secret:    secret,
 			wantValid: false,

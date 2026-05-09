@@ -11,19 +11,23 @@ func TestLoad(t *testing.T) {
 	origPort := os.Getenv("PORT")
 	defer func() { os.Setenv("PORT", origPort) }()
 
-	t.Run("Defaults", func(t *testing.T) {
+	t.Run("Fails if missing required", func(t *testing.T) {
 		os.Clearenv()
-		cfg := Load()
-		assert.Equal(t, "8080", cfg.Port)
-		assert.Contains(t, cfg.RabbitMQURL, "amqp://")
+		cfg, err := Load()
+		assert.Error(t, err)
+		assert.Nil(t, cfg)
 	})
 
-	t.Run("Env Overrides", func(t *testing.T) {
+	t.Run("Success with overrides", func(t *testing.T) {
+		os.Clearenv()
 		os.Setenv("PORT", "9090")
 		os.Setenv("PADDLE_WEBHOOK_SECRET", "supersecret")
+		os.Setenv("INTERNAL_API_KEY", "internalsecret")
 		
-		cfg := Load()
+		cfg, err := Load()
+		assert.NoError(t, err)
 		assert.Equal(t, "9090", cfg.Port)
 		assert.Equal(t, "supersecret", cfg.WebhookSecret)
+		assert.Equal(t, "internalsecret", cfg.InternalAPIKey)
 	})
 }

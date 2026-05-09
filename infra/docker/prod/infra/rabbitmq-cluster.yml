@@ -1,0 +1,78 @@
+services:
+  rabbitmq-1:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq_1
+    hostname: rabbitmq-1
+    restart: always
+    environment:
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-detectai_cookie}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - detectai_net
+
+  rabbitmq-2:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq_2
+    hostname: rabbitmq-2
+    restart: always
+    environment:
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-detectai_cookie}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    depends_on:
+      rabbitmq-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - detectai_net
+
+  rabbitmq-3:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq_3
+    hostname: rabbitmq-3
+    restart: always
+    environment:
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-detectai_cookie}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    depends_on:
+      rabbitmq-2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - detectai_net
+
+  rabbitmq:
+    image: haproxy:2.9-alpine
+    container_name: rabbitmq_lb
+    restart: always
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "${RABBITMQ_PORT}:5672"
+      - "${RABBITMQ_UI_PORT}:15672"
+    depends_on:
+      - rabbitmq-1
+      - rabbitmq-2
+      - rabbitmq-3
+    networks:
+      - detectai_net
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network}
+    external: true

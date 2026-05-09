@@ -1,22 +1,21 @@
-package validator
+package paddle
 
 import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"gateway/internal/domain/ports"
 	"regexp"
+	"strconv"
+	"time"
 )
-
-type SignatureValidator interface {
-	Validate(signatureHeader string, body []byte, secret string) bool
-}
 
 type PaddleValidator struct {
 	tsRegex *regexp.Regexp
 	h1Regex *regexp.Regexp
 }
 
-func NewPaddleValidator() *PaddleValidator {
+func NewPaddleValidator() ports.SignatureValidator {
 	return &PaddleValidator{
 		tsRegex: regexp.MustCompile(`ts=(\d+)`),
 		h1Regex: regexp.MustCompile(`h1=([a-f0-9]+)`),
@@ -35,10 +34,19 @@ func (v *PaddleValidator) Validate(signatureHeader string, body []byte, secret s
 		return false
 	}
 
-	ts := tsMatch[1]
+	tsStr := tsMatch[1]
 	h1 := h1Match[1]
 
-	payload := ts + ":" + string(body)
+	ts, err := strconv.ParseInt(tsStr, 10, 64)
+	if err != nil {
+		return false
+	}
+
+	if time.Since(time.Unix(ts, 0)) > 5*time.Minute || time.Until(time.Unix(ts, 0)) > 5*time.Minute {
+		return false
+	}
+
+	payload := tsStr + ":" + string(body)
 
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(payload))

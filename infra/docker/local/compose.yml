@@ -153,6 +153,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       PORT: "8080"
       GIN_MODE: ${GIN_MODE}
     ports:

@@ -1,0 +1,23 @@
+# Go
+vendor/
+*.test
+*.out
+
+# Binaries
+gateway
+
+# Environment
+.env
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+compose.yml
+.dockerignore
+
+# IDEs
+.vscode/
+.idea/

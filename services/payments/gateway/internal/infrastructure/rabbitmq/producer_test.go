@@ -1,13 +1,15 @@
-package queue
+package rabbitmq
 
 import (
 	"context"
 	"gateway/internal/logger"
+	"gateway/test/mocks"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestRabbitMQIntegration(t *testing.T) {
@@ -17,9 +19,13 @@ func TestRabbitMQIntegration(t *testing.T) {
 	}
 
 	log := logger.New()
+	mr := new(mocks.MockMetricsRecorder)
 	queueName := "test_queue_" + time.Now().Format("20060102150405")
 	
-	p := NewRabbitMQProducer(rabbitURL, queueName, log)
+	mr.On("SetRabbitMQStatus", mock.Anything).Return().Maybe()
+	mr.On("RecordRabbitMQPublishDuration", mock.Anything).Return().Maybe()
+
+	p := NewRabbitMQProducer(rabbitURL, queueName, "classic", log, mr)
 	defer p.Close()
 
 	assert.True(t, p.IsConnected())

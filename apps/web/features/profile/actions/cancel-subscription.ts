@@ -55,6 +55,7 @@ export async function cancelSubscriptionAction(): Promise<ActionState> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Internal-Key": env.INTERNAL_API_KEY || "",
       },
       body: JSON.stringify({
         event_type: "user.cancel_subscription",
