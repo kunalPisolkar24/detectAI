@@ -1,3 +1,8 @@
+VUS ?= 20
+DURATION ?= 1m
+RAMP_TIME ?= 30s
+API_URL ?= http://localhost:8000
+
 .PHONY: load-test build run stop
 
 build:
@@ -10,8 +15,12 @@ stop:
 	docker compose down
 
 load-test:
-	@echo "Running k6 load test..."
+	@echo "Running k6 load test with $(VUS) VUs for $(DURATION) (Ramp: $(RAMP_TIME)) against $(API_URL)..."
 	docker run --rm -i \
 		--network host \
 		-v $(PWD)/load-tests:/load-tests \
-		grafana/k6 run -e API_URL=http://localhost:8000 /load-tests/script.js
+		-e VUS=$(VUS) \
+		-e DURATION=$(DURATION) \
+		-e RAMP_TIME=$(RAMP_TIME) \
+		-e API_URL=$(API_URL) \
+		grafana/k6 run /load-tests/script.js

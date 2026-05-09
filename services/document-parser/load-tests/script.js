@@ -8,6 +8,10 @@ const extractionTime = new Trend('extraction_duration');
 const errorRate = new Rate('errors');
 
 // Test Configuration
+const targetVUs = parseInt(__ENV.VUS) || 20;
+const holdDuration = __ENV.DURATION || '1m';
+const rampTime = __ENV.RAMP_TIME || '30s';
+
 export const options = {
   scenarios: {
     health_check: {
@@ -20,9 +24,9 @@ export const options = {
       executor: 'ramping-vus',
       startVUs: 0,
       stages: [
-        { duration: '30s', target: 20 }, // Ramp up to 20 VUs
-        { duration: '1m', target: 20 },  // Hold at 20 VUs
-        { duration: '30s', target: 0 },  // Ramp down to 0 VUs
+        { duration: rampTime, target: targetVUs },   // Ramp up
+        { duration: holdDuration, target: targetVUs },// Hold peak load
+        { duration: rampTime, target: 0 },           // Ramp down
       ],
       exec: 'extract',
     },
