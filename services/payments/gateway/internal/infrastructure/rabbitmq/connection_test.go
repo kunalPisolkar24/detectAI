@@ -25,6 +25,8 @@ func TestConnectionManager_Connect(t *testing.T) {
 		mch.On("Confirm", false).Return(nil).Once()
 		mc.On("NotifyClose", mock.Anything).Return(nil).Once()
 		mch.On("NotifyClose", mock.Anything).Return(nil).Once()
+		mch.On("Close").Return(nil).Once()
+		mc.On("Close").Return(nil).Once()
 
 		cm := NewConnectionManagerWithDialer(url, log, nil, md)
 		defer cm.Close()
@@ -52,6 +54,8 @@ func TestConnectionManager_Connect(t *testing.T) {
 		mch.On("Confirm", false).Return(nil).Once()
 		mc.On("NotifyClose", mock.Anything).Return(nil).Once()
 		mch.On("NotifyClose", mock.Anything).Return(nil).Once()
+		mch.On("Close").Return(nil).Once()
+		mc.On("Close").Return(nil).Once()
 
 		// Speed up retries for testing
 		cm := NewConnectionManagerWithDialer(url, log, nil, md)
