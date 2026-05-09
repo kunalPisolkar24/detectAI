@@ -8,27 +8,26 @@ import { config } from "./config";
 
 const FLUSH_INTERVAL_MS = 5000;
 
-const usageClient = RedisFactory.createClient(
-    {
-        mode: config.REDIS_USAGE_MODE,
-        name: "AnalyticsUsage",
-        url: config.REDIS_USAGE_URL,
-    }
-);
+import { PrismaUserRepository } from "@shared/repositories/UserRepository";
 
-const mainClient = RedisFactory.createClient(
-    {
-        mode: config.REDIS_MODE,
-        name: "AnalyticsMain",
-        url: config.REDIS_URL,
-        sentinels: config.REDIS_SENTINELS,
-        masterName: config.REDIS_MASTER_NAME,
-        password: process.env.REDIS_PASSWORD,
-    }
-);
+const usageClient = RedisFactory.createClient({
+    mode: config.REDIS_USAGE_MODE,
+    name: "AnalyticsUsage",
+    url: config.REDIS_USAGE_URL,
+});
+
+const mainClient = RedisFactory.createClient({
+    mode: config.REDIS_MODE,
+    name: "AnalyticsMain",
+    url: config.REDIS_URL,
+    sentinels: config.REDIS_SENTINELS,
+    masterName: config.REDIS_MASTER_NAME,
+    password: process.env.REDIS_PASSWORD,
+});
 
 const metricsService = new MetricsService("worker-analytics");
-const analyticsService = new AnalyticsService(usageClient, mainClient, metricsService);
+const userRepository = new PrismaUserRepository(prisma, prisma);
+const analyticsService = new AnalyticsService(userRepository, usageClient, mainClient, metricsService);
 
 const server = new WorkerServer(
     metricsService,

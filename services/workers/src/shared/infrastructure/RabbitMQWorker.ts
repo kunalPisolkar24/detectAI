@@ -83,7 +83,7 @@ export class RabbitMQWorker {
     private async setupTopology(): Promise<void> {
         if (!this.channel) return;
 
-        const args: any = {
+        const args: Record<string, unknown> = {
             "x-dead-letter-exchange": `${this.queueName}_dlx`,
             "x-dead-letter-routing-key": this.queueName
         };

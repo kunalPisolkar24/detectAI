@@ -1,10 +1,6 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
-import { prismaMock, mockExecuteRaw } from "../../mocks/db";
 import { redisFactoryMock, mockUsageClient, mockMainClient } from "../../mocks/redis";
 import { MetricsService } from "@shared/monitoring/MetricsService";
-
-mock.module("@shared/db", () => prismaMock);
-mock.module("@shared/redis", () => redisFactoryMock);
 const mockLogger = { info: mock(), error: mock(), warn: mock() };
 mock.module("@shared/logger", () => ({
   Logger: mockLogger
@@ -15,14 +11,17 @@ const { AnalyticsService } = await import("../../../services/AnalyticsService");
 describe("AnalyticsService", () => {
   let service: InstanceType<typeof AnalyticsService>;
   let metricsMock: MetricsService;
+  let mockUserRepository: { incrementUsage: ReturnType<typeof mock> };
 
   beforeEach(() => {
+    mockUserRepository = {
+      incrementUsage: mock(() => Promise.resolve())
+    };
     mockUsageClient.spop.mockClear();
     mockUsageClient.get.mockClear();
     mockUsageClient.decrby.mockClear();
     mockUsageClient.sadd.mockClear();
     mockMainClient.del.mockClear();
-    mockExecuteRaw.mockClear();
     mockLogger.info.mockClear();
     mockLogger.error.mockClear();
     mockLogger.warn.mockClear();
@@ -35,6 +34,7 @@ describe("AnalyticsService", () => {
     } as unknown as MetricsService;
 
     service = new AnalyticsService(
+      mockUserRepository as any,
       mockUsageClient as any,
       mockMainClient as any,
       metricsMock
@@ -46,7 +46,7 @@ describe("AnalyticsService", () => {
     const count = await service.processBatch();
     expect(count).toBe(0);
     expect(mockUsageClient.spop).toHaveBeenCalledWith("usage:dirty_users", 50);
-    expect(mockExecuteRaw).not.toHaveBeenCalled();
+    expect(mockUserRepository.incrementUsage).not.toHaveBeenCalled();
   });
 
   test("should process batch: fetch usage, update db, decrement redis, invalidate cache", async () => {
@@ -56,13 +56,14 @@ describe("AnalyticsService", () => {
     (mockUsageClient.get as any)
       .mockResolvedValueOnce("10")
       .mockResolvedValueOnce("5");
-    (mockExecuteRaw as any).mockResolvedValue(1);
     (mockUsageClient.decrby as any).mockResolvedValue(0);
 
     const count = await service.processBatch();
 
     expect(count).toBe(2);
-    expect(mockExecuteRaw).toHaveBeenCalledTimes(2);
+    expect(mockUserRepository.incrementUsage).toHaveBeenCalledTimes(2);
+    expect(mockUserRepository.incrementUsage).toHaveBeenCalledWith("user_1", 10);
+    expect(mockUserRepository.incrementUsage).toHaveBeenCalledWith("user_2", 5);
     expect(mockUsageClient.decrby).toHaveBeenCalledTimes(2);
     expect(mockUsageClient.decrby).toHaveBeenCalledWith("usage:{user_1}:pending", 10);
     expect(mockUsageClient.decrby).toHaveBeenCalledWith("usage:{user_2}:pending", 5);
@@ -73,7 +74,6 @@ describe("AnalyticsService", () => {
   test("should requeue user if decrby returns a remaining positive count", async () => {
     (mockUsageClient.spop as any).mockResolvedValue(["user_1"]);
     (mockUsageClient.get as any).mockResolvedValueOnce("20");
-    (mockExecuteRaw as any).mockResolvedValue(1);
     (mockUsageClient.decrby as any).mockResolvedValue(5);
 
     await service.processBatch();
@@ -86,7 +86,7 @@ describe("AnalyticsService", () => {
   test("should requeue users if database update fails", async () => {
     (mockUsageClient.spop as any).mockResolvedValue(["user_1"]);
     (mockUsageClient.get as any).mockResolvedValue("10");
-    (mockExecuteRaw as any).mockRejectedValue(new Error("DB Connection Error"));
+    mockUserRepository.incrementUsage.mockRejectedValue(new Error("DB Connection Error"));
 
     try {
       await service.processBatch();
@@ -100,7 +100,7 @@ describe("AnalyticsService", () => {
   test("should handle requeue failure gracefully (log error)", async () => {
     (mockUsageClient.spop as any).mockResolvedValue(["user_1"]);
     (mockUsageClient.get as any).mockResolvedValue("10");
-    (mockExecuteRaw as any).mockRejectedValue(new Error("DB Error"));
+    mockUserRepository.incrementUsage.mockRejectedValue(new Error("DB Error"));
     (mockUsageClient.sadd as any).mockRejectedValue(new Error("Redis Error"));
 
     try {

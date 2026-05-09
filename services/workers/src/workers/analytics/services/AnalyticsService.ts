@@ -1,4 +1,4 @@
-import { prisma } from "@shared/db";
+import { type IUserRepository } from "@shared/repositories/UserRepository";
 import { Logger } from "@shared/logger";
 import { CacheKeys } from "@shared/cache/keys";
 import { type RedisClient } from "@shared/redis";
@@ -14,6 +14,7 @@ export class AnalyticsService {
     private readonly DIRTY_SET_KEY = "usage:dirty_users";
 
     constructor(
+        private readonly userRepository: IUserRepository,
         private readonly usageClient: RedisClient,
         private readonly mainClient: RedisClient,
         private readonly metrics: MetricsService
@@ -93,14 +94,7 @@ export class AnalyticsService {
             }
 
             for (const { userId, count } of updates) {
-                await prisma.$executeRaw`
-                    UPDATE "User"
-                    SET
-                        "apiCallCountTotal" = "apiCallCountTotal" + ${count},
-                        "apiCallCountDaily" = "apiCallCountDaily" + ${count},
-                        "lastApiCallReset" = NOW()
-                    WHERE id = ${userId}
-                `;
+                await this.userRepository.incrementUsage(userId, count);
             }
 
             dbTimer({ status: "success" });

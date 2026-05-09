@@ -11,6 +11,7 @@ export interface IUserRepository {
     findUniqueById(userId: string): Promise<UserRecord | null>;
     bulkUpdateStatus(userIds: string[], data: object): Promise<{ count: number }>;
     findExpiredSubscriptions(now: Date, limit: number): Promise<{ id: string; email: string }[]>;
+    incrementUsage(userId: string, count: number): Promise<void>;
 }
 
 export class PrismaUserRepository implements IUserRepository {
@@ -60,5 +61,16 @@ export class PrismaUserRepository implements IUserRepository {
             take: limit,
             select: { id: true, email: true },
         });
+    }
+
+    async incrementUsage(userId: string, count: number): Promise<void> {
+        await this.prismaWriter.$executeRaw`
+            UPDATE "User"
+            SET
+                "apiCallCountTotal" = "apiCallCountTotal" + ${count},
+                "apiCallCountDaily" = "apiCallCountDaily" + ${count},
+                "lastApiCallReset" = NOW()
+            WHERE id = ${userId}
+        `;
     }
 }
