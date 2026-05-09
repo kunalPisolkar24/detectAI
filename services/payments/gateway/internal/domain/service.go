@@ -13,6 +13,11 @@ type SignatureValidator interface {
 	Validate(signatureHeader string, body []byte, secret string) bool
 }
 
+type PaymentServiceInterface interface {
+	ProcessWebhook(ctx context.Context, signature string, body []byte) error
+	ProcessInternalEvent(ctx context.Context, body []byte) error
+}
+
 type PaymentService struct {
 	publisher     Publisher
 	validator     SignatureValidator

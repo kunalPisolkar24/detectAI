@@ -16,14 +16,14 @@ type HealthChecker interface {
 }
 
 type HandlerConfig struct {
-	Service     *domain.PaymentService
+	Service     domain.PaymentServiceInterface
 	Health      HealthChecker
 	InternalKey string
 	Logger      logger.Logger
 }
 
 type Handler struct {
-	service     *domain.PaymentService
+	service     domain.PaymentServiceInterface
 	health      HealthChecker
 	internalKey string
 	logger      logger.Logger
