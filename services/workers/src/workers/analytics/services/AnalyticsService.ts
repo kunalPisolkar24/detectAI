@@ -17,7 +17,7 @@ export class AnalyticsService {
         private readonly usageClient: RedisClient,
         private readonly mainClient: RedisClient,
         private readonly metrics: MetricsService
-    ) { }
+    ) {}
 
     public async processBatch(): Promise<number> {
         const timer = this.metrics.jobDuration.startTimer({ job_type: "process_batch" });
@@ -59,11 +59,9 @@ export class AnalyticsService {
         const updates: UsageUpdate[] = [];
 
         try {
-            const promises = userIds.map(id =>
-                this.usageClient.get(`usage:{${id}}:pending`)
+            const results = await Promise.all(
+                userIds.map(id => this.usageClient.get(`usage:{${id}}:pending`))
             );
-
-            const results = await Promise.all(promises);
 
             results.forEach((countStr, index) => {
                 const count = countStr ? parseInt(countStr, 10) : 0;
@@ -89,24 +87,21 @@ export class AnalyticsService {
     private async flushToDatabase(updates: UsageUpdate[]): Promise<boolean> {
         const dbTimer = this.metrics.jobDuration.startTimer({ job_type: "db_flush" });
         try {
-            const values = updates
-                .map(({ userId, count }) => `('${userId}', ${count}, NOW())`)
-                .join(",");
-
-            if (!values) {
+            if (updates.length === 0) {
                 dbTimer({ status: "empty" });
                 return true;
             }
 
-            await prisma.$executeRawUnsafe(`
-                UPDATE "User" as u
-                SET 
-                    "apiCallCountTotal" = u."apiCallCountTotal" + v.count,
-                    "apiCallCountDaily" = u."apiCallCountDaily" + v.count,
-                    "lastApiCallReset" = v.reset_time
-                FROM (VALUES ${values}) as v(user_id, count, reset_time)
-                WHERE u.id = v.user_id
-            `);
+            for (const { userId, count } of updates) {
+                await prisma.$executeRaw`
+                    UPDATE "User"
+                    SET
+                        "apiCallCountTotal" = "apiCallCountTotal" + ${count},
+                        "apiCallCountDaily" = "apiCallCountDaily" + ${count},
+                        "lastApiCallReset" = NOW()
+                    WHERE id = ${userId}
+                `;
+            }
 
             dbTimer({ status: "success" });
             Logger.info(`Successfully flushed usage for ${updates.length} users`);
@@ -129,27 +124,15 @@ export class AnalyticsService {
     }
 
     private async decrementPendingCounts(updates: UsageUpdate[]): Promise<void> {
-        const promises = updates.map(({ userId, count }) =>
-            this.usageClient.decrby(`usage:{${userId}}:pending`, count)
+        const results = await Promise.all(
+            updates.map(({ userId, count }) =>
+                this.usageClient.decrby(`usage:{${userId}}:pending`, count)
+            )
         );
 
-        await Promise.all(promises);
-
-        const stillDirtyUsers: string[] = [];
-        const checkPromises = updates.map(({ userId }) =>
-            this.usageClient.get(`usage:{${userId}}:pending`)
-        );
-
-        const results = await Promise.all(checkPromises);
-
-        results.forEach((val, index) => {
-            const remaining = val ? parseInt(val, 10) : 0;
-            const update = updates[index];
-
-            if (remaining > 0 && update) {
-                stillDirtyUsers.push(update.userId);
-            }
-        });
+        const stillDirtyUsers = updates
+            .filter((_, i) => (results[i] ?? 0) > 0)
+            .map(({ userId }) => userId);
 
         if (stillDirtyUsers.length > 0) {
             await this.usageClient.sadd(this.DIRTY_SET_KEY, ...stillDirtyUsers);
@@ -159,9 +142,7 @@ export class AnalyticsService {
     private async bulkInvalidateCache(updates: UsageUpdate[]): Promise<void> {
         if (updates.length === 0) return;
 
-        const keys = updates.flatMap(({ userId }) => [
-            CacheKeys.user(userId)
-        ]);
+        const keys = updates.map(({ userId }) => CacheKeys.user(userId));
 
         try {
             await this.mainClient.del(...keys);
@@ -182,6 +163,5 @@ export class AnalyticsService {
         }
     }
 
-    public async shutdown(): Promise<void> {
-    }
+    public async shutdown(): Promise<void> {}
 }

@@ -1,5 +1,5 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
-import { prismaMock, mockExecuteRawUnsafe } from "../../mocks/db";
+import { prismaMock, mockExecuteRaw } from "../../mocks/db";
 import { redisFactoryMock, mockUsageClient, mockMainClient } from "../../mocks/redis";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 
@@ -9,7 +9,6 @@ const mockLogger = { info: mock(), error: mock(), warn: mock() };
 mock.module("@shared/logger", () => ({
   Logger: mockLogger
 }));
-
 
 const { AnalyticsService } = await import("../../../services/AnalyticsService");
 
@@ -23,11 +22,10 @@ describe("AnalyticsService", () => {
     mockUsageClient.decrby.mockClear();
     mockUsageClient.sadd.mockClear();
     mockMainClient.del.mockClear();
-    mockExecuteRawUnsafe.mockClear();
+    mockExecuteRaw.mockClear();
     mockLogger.info.mockClear();
     mockLogger.error.mockClear();
     mockLogger.warn.mockClear();
-
 
     metricsMock = {
       jobDuration: { startTimer: mock(() => mock()) },
@@ -47,68 +45,52 @@ describe("AnalyticsService", () => {
     (mockUsageClient.spop as any).mockResolvedValue([]);
     const count = await service.processBatch();
     expect(count).toBe(0);
-
     expect(mockUsageClient.spop).toHaveBeenCalledWith("usage:dirty_users", 50);
-    expect(mockExecuteRawUnsafe).not.toHaveBeenCalled();
+    expect(mockExecuteRaw).not.toHaveBeenCalled();
   });
 
   test("should process batch: fetch usage, update db, decrement redis, invalidate cache", async () => {
     const userIds = ["user_1", "user_2"];
 
     (mockUsageClient.spop as any).mockResolvedValue(userIds);
-
     (mockUsageClient.get as any)
-      .mockResolvedValueOnce("10") // user_1
-      .mockResolvedValueOnce("5");  // user_2
-
-    (mockExecuteRawUnsafe as any).mockResolvedValue(2);
-
+      .mockResolvedValueOnce("10")
+      .mockResolvedValueOnce("5");
+    (mockExecuteRaw as any).mockResolvedValue(1);
     (mockUsageClient.decrby as any).mockResolvedValue(0);
-
-    (mockUsageClient.get as any)
-      .mockResolvedValueOnce("0")
-      .mockResolvedValueOnce("0");
 
     const count = await service.processBatch();
 
     expect(count).toBe(2);
-
-    expect(mockExecuteRawUnsafe).toHaveBeenCalled();
-    const dbCallArg = (mockExecuteRawUnsafe as any).mock.calls[0][0] as string;
-
-    expect(dbCallArg).toContain("'user_1', 10");
-    expect(dbCallArg).toContain("'user_2', 5");
-
+    expect(mockExecuteRaw).toHaveBeenCalledTimes(2);
     expect(mockUsageClient.decrby).toHaveBeenCalledTimes(2);
+    expect(mockUsageClient.decrby).toHaveBeenCalledWith("usage:{user_1}:pending", 10);
+    expect(mockUsageClient.decrby).toHaveBeenCalledWith("usage:{user_2}:pending", 5);
     expect(mockMainClient.del).toHaveBeenCalledWith("user:id:user_1", "user:id:user_2");
     expect(mockUsageClient.sadd).not.toHaveBeenCalled();
   });
 
-  test("should requeue user if they still have pending counts after decrement", async () => {
+  test("should requeue user if decrby returns a remaining positive count", async () => {
     (mockUsageClient.spop as any).mockResolvedValue(["user_1"]);
-    (mockUsageClient.get as any).mockResolvedValueOnce("20"); // Initial fetch
-    (mockExecuteRawUnsafe as any).mockResolvedValue(1);
-
-    (mockUsageClient.get as any).mockResolvedValueOnce("5");
+    (mockUsageClient.get as any).mockResolvedValueOnce("20");
+    (mockExecuteRaw as any).mockResolvedValue(1);
+    (mockUsageClient.decrby as any).mockResolvedValue(5);
 
     await service.processBatch();
 
     expect(mockUsageClient.decrby).toHaveBeenCalledWith("usage:{user_1}:pending", 20);
     expect(mockUsageClient.sadd).toHaveBeenCalledWith("usage:dirty_users", "user_1");
-    expect(mockMainClient.del).toHaveBeenCalled(); // Should still invalidate
+    expect(mockMainClient.del).toHaveBeenCalled();
   });
 
   test("should requeue users if database update fails", async () => {
     (mockUsageClient.spop as any).mockResolvedValue(["user_1"]);
     (mockUsageClient.get as any).mockResolvedValue("10");
-    (mockExecuteRawUnsafe as any).mockRejectedValue(new Error("DB Connection Error"));
-
+    (mockExecuteRaw as any).mockRejectedValue(new Error("DB Connection Error"));
 
     try {
       await service.processBatch();
-    } catch (e) {
-      // expected
-    }
+    } catch (e) {}
 
     expect(mockUsageClient.sadd).toHaveBeenCalledWith("usage:dirty_users", "user_1");
     expect(mockUsageClient.decrby).not.toHaveBeenCalled();
@@ -118,13 +100,12 @@ describe("AnalyticsService", () => {
   test("should handle requeue failure gracefully (log error)", async () => {
     (mockUsageClient.spop as any).mockResolvedValue(["user_1"]);
     (mockUsageClient.get as any).mockResolvedValue("10");
-    (mockExecuteRawUnsafe as any).mockRejectedValue(new Error("DB Error"));
-
+    (mockExecuteRaw as any).mockRejectedValue(new Error("DB Error"));
     (mockUsageClient.sadd as any).mockRejectedValue(new Error("Redis Error"));
 
     try {
       await service.processBatch();
-    } catch { }
+    } catch {}
 
     expect(mockLogger.error).toHaveBeenCalledWith("CRITICAL: Failed to requeue users", expect.any(Error));
   });
