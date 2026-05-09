@@ -1,3 +1,24 @@
+# Stage 1: Builder
+FROM python:3.11-slim AS builder
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -sSL https://install.python-poetry.org | python3 -
+ENV PATH="/root/.local/bin:$PATH"
+
+RUN poetry self add poetry-plugin-export
+
+COPY pyproject.toml poetry.lock ./
+
+RUN poetry export -f requirements.txt --output requirements.txt --without-hashes
+
+# Stage 2: Production
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -12,7 +33,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libpq-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY --from=builder /app/requirements.txt .
 
 RUN pip install -r requirements.txt
 

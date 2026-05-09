@@ -1,4 +1,4 @@
-from app.utils.cleaner import TextCleaner
+from app.domain.extraction.cleaner import TextCleaner
 
 def test_clean_empty_string():
     result = TextCleaner.clean("")
