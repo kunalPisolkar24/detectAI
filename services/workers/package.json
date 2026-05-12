@@ -11,7 +11,8 @@
     "dev:analytics": "bun --watch src/workers/analytics/index.ts",
     "start:cron": "bun run src/workers/cron/index.ts",
     "dev:cron": "bun --watch src/workers/cron/index.ts",
-    "test": "bun test",
+    "test": "bun test --preload ./src/tests/preload.ts **/*.unit.test.ts",
+    "test:integration": "bun test --preload ./src/tests/setup-integration.ts **/*.integration.test.ts",
     "coverage": "bun test --coverage",
     "postinstall": "bunx --bun prisma generate"
   },
