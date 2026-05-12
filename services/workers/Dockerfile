@@ -19,11 +19,13 @@ ENV NODE_ENV=production
 
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-COPY package.json bun.lock* ./
+COPY --chown=bun:bun package.json bun.lock* ./
+
+USER bun
 
 RUN bun install --production --frozen-lockfile
 
-COPY --from=builder /app/generated ./generated
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/prisma.config.ts ./
-COPY --from=builder /app/bunfig.toml ./
+COPY --from=builder --chown=bun:bun /app/generated ./generated
+COPY --from=builder --chown=bun:bun /app/src ./src
+COPY --from=builder --chown=bun:bun /app/prisma.config.ts ./
+COPY --from=builder --chown=bun:bun /app/bunfig.toml ./
