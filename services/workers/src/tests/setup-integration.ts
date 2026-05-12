@@ -1,48 +1,55 @@
-import { afterAll, beforeEach } from "bun:test";
+import { beforeAll, afterAll, beforeEach } from "bun:test";
 import { GenericContainer, type StartedTestContainer } from "testcontainers";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { RabbitMQContainer, type StartedRabbitMQContainer } from "@testcontainers/rabbitmq";
 import { execSync } from "node:child_process";
 import { Pool } from "pg";
 
-console.log("Starting integration test infrastructure...");
+let postgres: StartedTestContainer;
+let redis: StartedRedisContainer;
+let rabbitmq: StartedRabbitMQContainer;
 
-const postgresPromise = new GenericContainer("postgres:16-alpine")
-    .withEnvironment({
-        POSTGRES_DB: "detectai_test",
-        POSTGRES_USER: "test",
-        POSTGRES_PASSWORD: "test",
-    })
-    .withExposedPorts(5432)
-    .start();
+beforeAll(async () => {
+    console.log("Starting integration test infrastructure...");
 
-const redisPromise = new RedisContainer("redis:7-alpine").start();
-const rabbitmqPromise = new RabbitMQContainer("rabbitmq:3-management-alpine").start();
+    const postgresPromise = new GenericContainer("postgres:16-alpine")
+        .withEnvironment({
+            POSTGRES_DB: "detectai_test",
+            POSTGRES_USER: "test",
+            POSTGRES_PASSWORD: "test",
+        })
+        .withExposedPorts(5432)
+        .start();
 
-const [postgres, redis, rabbitmq] = await Promise.all([
-    postgresPromise,
-    redisPromise,
-    rabbitmqPromise
-]);
+    const redisPromise = new RedisContainer("redis:7-alpine").start();
+    const rabbitmqPromise = new RabbitMQContainer("rabbitmq:3-management-alpine").start();
 
-console.log("Infrastructure started successfully");
+    [postgres, redis, rabbitmq] = await Promise.all([
+        postgresPromise,
+        redisPromise,
+        rabbitmqPromise
+    ]);
 
-const dbUrl = `postgresql://test:test@${postgres.getHost()}:${postgres.getMappedPort(5432)}/detectai_test`;
-const redisUrl = `redis://${redis.getHost()}:${redis.getMappedPort(6379)}`;
-const amqpUrl = rabbitmq.getAmqpUrl();
+    console.log("Infrastructure started successfully");
 
-process.env.DATABASE_URL = dbUrl;
-process.env.DATABASE_URL_REPLICA = dbUrl;
-process.env.REDIS_URL = redisUrl;
-process.env.RABBITMQ_URL = amqpUrl;
-process.env.NODE_ENV = "test";
+    const dbUrl = `postgresql://test:test@${postgres.getHost()}:${postgres.getMappedPort(5432)}/detectai_test`;
+    const redisUrl = `redis://${redis.getHost()}:${redis.getMappedPort(6379)}`;
+    const amqpUrl = rabbitmq.getAmqpUrl();
 
-console.log(`Running prisma db push...`);
-execSync("bunx prisma db push --skip-generate", {
-    env: { ...process.env, DATABASE_URL: dbUrl },
-    stdio: "inherit",
-});
-console.log("Prisma db push complete");
+    process.env.DATABASE_URL = dbUrl;
+    process.env.DATABASE_URL_REPLICA = dbUrl;
+    process.env.REDIS_URL = redisUrl;
+    process.env.RABBITMQ_URL = amqpUrl;
+    process.env.NODE_ENV = "test";
+
+    console.log(`Running prisma db push...`);
+    execSync("bunx prisma db push --skip-generate", {
+        env: { ...process.env, DATABASE_URL: dbUrl },
+        stdio: "inherit",
+    });
+    console.log("Prisma db push complete");
+}, 180000);
+
 
 beforeEach(async () => {
     const dbUrl = process.env.DATABASE_URL;
