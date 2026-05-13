@@ -8,7 +8,12 @@ export class MetricsService {
     public readonly cacheOperations: Counter;
     public readonly activeWorkers: Gauge;
     public readonly domainOperationsVolume: Counter;
-
+    public readonly rabbitmqConnectionStatus: Gauge;
+    public readonly rabbitmqReconnections: Counter;
+    public readonly redisConnectionStatus: Gauge;
+    public readonly activeJobs: Gauge;
+    public readonly messageSizeBytes: Histogram;
+    public readonly deadLetteredTotal: Counter;
 
     constructor(private readonly serviceName: string) {
         this.registry = new Registry();
@@ -55,6 +60,47 @@ export class MetricsService {
             name: "worker_domain_operations_volume_total",
             help: "Total volume or monetary value of domain operations",
             labelNames: ["operation_type"],
+            registers: [this.registry]
+        });
+
+        this.rabbitmqConnectionStatus = new Gauge({
+            name: "rabbitmq_connection_status",
+            help: "Status of RabbitMQ connection (1 = connected, 0 = disconnected)",
+            registers: [this.registry]
+        });
+
+        this.rabbitmqReconnections = new Counter({
+            name: "rabbitmq_reconnections_total",
+            help: "Total number of RabbitMQ reconnection attempts",
+            registers: [this.registry]
+        });
+
+        this.redisConnectionStatus = new Gauge({
+            name: "redis_connection_status",
+            help: "Status of Redis connection (1 = connected, 0 = disconnected)",
+            labelNames: ["client_name"],
+            registers: [this.registry]
+        });
+
+        this.activeJobs = new Gauge({
+            name: "worker_active_jobs",
+            help: "Number of jobs currently being processed",
+            labelNames: ["job_type"],
+            registers: [this.registry]
+        });
+
+        this.messageSizeBytes = new Histogram({
+            name: "worker_message_size_bytes",
+            help: "Size of incoming messages in bytes",
+            labelNames: ["job_type"],
+            buckets: [128, 512, 1024, 4096, 16384, 65536, 262144],
+            registers: [this.registry]
+        });
+
+        this.deadLetteredTotal = new Counter({
+            name: "worker_dead_lettered_total",
+            help: "Total number of messages sent to Dead Letter Queue",
+            labelNames: ["job_type"],
             registers: [this.registry]
         });
     }
