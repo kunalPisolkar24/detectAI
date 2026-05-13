@@ -43,6 +43,9 @@ export class AnalyticsService {
             if (success) {
                 await this.finalizeUpdates(updates);
                 this.metrics.jobTotal.inc({ job_type: "usage_flush" }, updates.length);
+                
+                const totalVolume = updates.reduce((sum, u) => sum + u.count, 0);
+                this.metrics.domainOperationsVolume.inc({ operation_type: "usage_flushed" }, totalVolume);
             } else {
                 await this.requeueFailedUsers(userIds);
                 this.metrics.jobErrors.inc({ job_type: "usage_flush", error_type: "db_error" });
