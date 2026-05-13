@@ -11,9 +11,9 @@
     "dev:analytics": "bun --watch src/workers/analytics/index.ts",
     "start:cron": "bun run src/workers/cron/index.ts",
     "dev:cron": "bun --watch src/workers/cron/index.ts",
-    "test": "bun test --preload ./src/tests/preload.ts ./**/*.unit.test.ts",
-    "test:integration": "PRISMA_CLIENT_ENGINE_TYPE=binary bun test --preload ./src/tests/setup-integration.ts ./**/*Integration.test.ts",
-    "coverage": "bun test --coverage",
+    "test": "bun test --preload ./src/tests/preload.ts $(find src -name '*.unit.test.ts')",
+    "test:integration": "PRISMA_CLIENT_ENGINE_TYPE=binary bun test --preload ./src/tests/setup-integration.ts $(find src -name '*Integration.test.ts')",
+    "coverage": "bun test --coverage $(find src -name '*.unit.test.ts')",
     "postinstall": "bunx --bun prisma generate"
   },
   "devDependencies": {
