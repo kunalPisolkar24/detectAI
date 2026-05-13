@@ -1,10 +1,10 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
 import { amqpMock, mockChannel, mockAck, mockNack, mockOn } from "../../mocks/amqplib";
+import { MetricsService } from "@shared/monitoring/MetricsService";
 
 const originalExit = process.exit;
 const mockExit = mock(() => { throw new Error("process.exit called"); });
 process.exit = mockExit as any;
-
 
 mock.module("amqplib", () => amqpMock);
 
@@ -13,13 +13,14 @@ const { RabbitMQWorker } = await import("@shared/infrastructure/RabbitMQWorker")
 describe("RabbitMQWorker", () => {
     let worker: any;
     let mockHandler: any;
+    const metrics = new MetricsService("test");
 
     beforeEach(() => {
         mockHandler = mock(() => Promise.resolve());
         mockAck.mockClear();
         mockNack.mockClear();
         mockChannel.consume.mockClear();
-        worker = new RabbitMQWorker("amqp://localhost", "test_queue", mockHandler);
+        worker = new RabbitMQWorker("amqp://localhost", "test_queue", mockHandler, metrics);
     });
 
     test("should establish connection and setup queue", async () => {
@@ -44,7 +45,7 @@ describe("RabbitMQWorker", () => {
 
     test("should negative acknowledge message on failure", async () => {
         const failingHandler = mock(() => Promise.reject(new Error("Fail")));
-        worker = new RabbitMQWorker("amqp://localhost", "test_queue", failingHandler);
+        worker = new RabbitMQWorker("amqp://localhost", "test_queue", failingHandler, metrics);
         await worker.start();
         expect(mockChannel.consume).toHaveBeenCalled();
         const onMessageCallback = mockChannel.consume.mock.calls[0]![1];
@@ -57,7 +58,7 @@ describe("RabbitMQWorker", () => {
     });
 
     test("should declare queue as quorum when specified", async () => {
-        worker = new RabbitMQWorker("amqp://localhost", "test_queue", mockHandler, "quorum");
+        worker = new RabbitMQWorker("amqp://localhost", "test_queue", mockHandler, metrics, "quorum");
         await worker.start();
         expect(mockChannel.assertQueue).toHaveBeenCalledWith("test_queue", expect.objectContaining({
             arguments: expect.objectContaining({
