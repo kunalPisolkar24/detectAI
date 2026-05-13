@@ -31,6 +31,13 @@ describe("AnalyticsService", () => {
       jobTotal: { inc: mock() },
       jobErrors: { inc: mock() },
       cacheOperations: { inc: mock() },
+      domainOperationsVolume: { inc: mock() },
+      activeJobs: { inc: mock(), dec: mock() },
+      rabbitmqConnectionStatus: { set: mock() },
+      rabbitmqReconnections: { inc: mock() },
+      redisConnectionStatus: { set: mock() },
+      messageSizeBytes: { observe: mock() },
+      deadLetteredTotal: { inc: mock() },
     } as unknown as MetricsService;
 
     service = new AnalyticsService(
