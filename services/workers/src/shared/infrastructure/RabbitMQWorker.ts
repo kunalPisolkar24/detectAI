@@ -116,4 +116,14 @@ export class RabbitMQWorker {
             this.channel.nack(msg, false, false);
         }
     }
+
+    public async shutdown(): Promise<void> {
+        this.isConnected = false;
+        try {
+            if (this.channel) await this.channel.close();
+            if (this.connection) await this.connection.close();
+        } catch (e) {
+            Logger.error("Error during RabbitMQWorker shutdown", e);
+        }
+    }
 }
