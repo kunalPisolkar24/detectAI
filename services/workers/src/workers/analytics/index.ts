@@ -26,6 +26,18 @@ const mainClient = RedisFactory.createClient({
 });
 
 const metricsService = new MetricsService("worker-analytics");
+metricsService.registerPool("primary", prisma);
+
+usageClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsUsage" }, 1));
+usageClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsUsage" }, 1));
+usageClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsUsage" }, 0));
+usageClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsUsage" }, 0));
+
+mainClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 1));
+mainClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 1));
+mainClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 0));
+mainClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 0));
+
 const userRepository = new PrismaUserRepository(prisma, prisma);
 const analyticsService = new AnalyticsService(userRepository, usageClient, mainClient, metricsService);
 

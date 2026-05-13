@@ -24,7 +24,15 @@ const redisClient = RedisFactory.createClient({
 });
 
 const metricsService = new MetricsService("worker-payments");
+metricsService.registerPool("primary", prismaPrimary);
+metricsService.registerPool("replica", prisma);
+
 const lockService = new LockService(redisClient);
+
+redisClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 1));
+redisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 1));
+redisClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 0));
+redisClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 0));
 
 const userRepository = new PrismaUserRepository(prismaPrimary, prisma);
 const paddleClient = new PaddleClient(config.PADDLE_API_KEY, config.PADDLE_ENVIRONMENT);
@@ -47,6 +55,7 @@ const worker = new RabbitMQWorker(
     config.RABBITMQ_URL,
     QUEUE_NAME,
     async (event: any) => await paymentService.handleEvent(event),
+    metricsService,
     "quorum"
 );
 

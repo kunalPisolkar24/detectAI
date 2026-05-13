@@ -22,6 +22,14 @@ const redisClient = RedisFactory.createClient({
 });
 
 const metricsService = new MetricsService("worker-cron");
+metricsService.registerPool("primary", prismaPrimary);
+metricsService.registerPool("replica", prisma);
+
+redisClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 1));
+redisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 1));
+redisClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 0));
+redisClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 0));
+
 const lockService = new LockService(redisClient);
 const userRepository = new PrismaUserRepository(prismaPrimary, prisma);
 const sweeper = new SubscriptionSweeper(userRepository, redisClient, lockService, metricsService);
