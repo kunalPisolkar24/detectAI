@@ -1,9 +1,11 @@
 import { expect, test, describe, beforeEach, afterEach } from "bun:test";
 import { RabbitMQWorker } from "../RabbitMQWorker";
+import { MetricsService } from "../../monitoring/MetricsService";
 import amqp from "amqplib";
 
 describe("RabbitMQWorker Integration", () => {
     let worker: RabbitMQWorker;
+    const metrics = new MetricsService("test-worker");
     const queueName = "test_queue";
     const rabbitUrl = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 
@@ -19,7 +21,7 @@ describe("RabbitMQWorker Integration", () => {
             processedData = msg;
         };
 
-        worker = new RabbitMQWorker(rabbitUrl, queueName, handler);
+        worker = new RabbitMQWorker(rabbitUrl, queueName, handler, metrics);
         await worker.start();
 
         // Give it a moment to connect
@@ -46,7 +48,7 @@ describe("RabbitMQWorker Integration", () => {
             throw new Error("Processing failed");
         };
 
-        worker = new RabbitMQWorker(rabbitUrl, "test_failure_queue", handler);
+        worker = new RabbitMQWorker(rabbitUrl, "test_failure_queue", handler, metrics);
         await worker.start();
 
         await new Promise(r => setTimeout(r, 1000));
