@@ -28,6 +28,7 @@ export class SubscriptionSweeper {
 
         const timer = this.metrics.jobDuration.startTimer({ job_type: "sweep_expired" });
 
+        this.metrics.activeJobs.inc({ job_type: "sweep_expired" });
         try {
             const now = new Date();
             const expiredUsers = await this.userRepository.findExpiredSubscriptions(now, this.BATCH_SIZE);
@@ -49,6 +50,7 @@ export class SubscriptionSweeper {
             this.metrics.jobErrors.inc({ job_type: "sweep_expired", error_type: "db_error" });
             throw error;
         } finally {
+            this.metrics.activeJobs.dec({ job_type: "sweep_expired" });
             await release();
         }
     }
