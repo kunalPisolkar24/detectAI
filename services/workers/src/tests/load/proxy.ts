@@ -6,6 +6,7 @@ import { Logger } from "../../shared/logger";
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+const REDIS_MODE = (process.env.REDIS_MODE as any) || "standalone";
 const PORT = 9999;
 const MOCK_MODE = process.env.MOCK_MODE === "true";
 
@@ -14,9 +15,12 @@ let amqpConn: ChannelModel | null = null;
 let amqpChannel: Channel | null = null;
 
 const redisClient = MOCK_MODE ? null : RedisFactory.createClient({
-    mode: "standalone",
+    mode: REDIS_MODE,
     name: "LoadProxyRedis",
     url: REDIS_URL,
+    sentinels: process.env.REDIS_SENTINELS ? JSON.parse(process.env.REDIS_SENTINELS) : undefined,
+    masterName: process.env.REDIS_MASTER_NAME,
+    password: process.env.REDIS_PASSWORD,
 });
 
 async function initAmqp() {
