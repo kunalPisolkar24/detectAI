@@ -1,5 +1,6 @@
 import amqp, { type Channel, type ConsumeMessage, type ChannelModel } from "amqplib";
 import { Logger } from "@shared/logger";
+import { MetricsService } from "../monitoring/MetricsService";
 
 type MessageHandler = (msg: any) => Promise<void>;
 
@@ -13,6 +14,7 @@ export class RabbitMQWorker {
         private readonly queueUrl: string,
         private readonly queueName: string,
         private readonly handler: MessageHandler,
+        private readonly metrics: MetricsService,
         private readonly queueType: "classic" | "quorum" = "classic"
     ) { }
 
@@ -62,10 +64,12 @@ export class RabbitMQWorker {
                 
                 this.isConnected = true;
                 this.isConnecting = false;
+                this.metrics.rabbitmqConnectionStatus.set(1);
                 Logger.info("Connected to RabbitMQ and topology initialized", { queue: this.queueName, type: this.queueType });
                 break;
             } catch (e) {
                 this.isConnected = false;
+                this.metrics.rabbitmqConnectionStatus.set(0);
                 const backoff = Math.min(Math.pow(2, attempt) * 1000, maxBackoff);
                 Logger.warn("Failed to connect to RabbitMQ, retrying...", { attempt, nextRetryIn: `${backoff}ms`, error: e });
                 await new Promise((r) => setTimeout(r, backoff));
@@ -75,6 +79,8 @@ export class RabbitMQWorker {
 
     private handleDisconnect() {
         this.isConnected = false;
+        this.metrics.rabbitmqConnectionStatus.set(0);
+        this.metrics.rabbitmqReconnections.inc();
         this.connection = null;
         this.channel = null;
         this.connect();
@@ -104,15 +110,20 @@ export class RabbitMQWorker {
     private async onMessage(msg: ConsumeMessage | null) {
         if (!msg || !this.channel) return;
 
+        let jobType = "unknown";
         try {
             const content = msg.content.toString();
             const event = JSON.parse(content);
+            jobType = event.event_type || event.type || "unknown";
+
+            this.metrics.messageSizeBytes.observe({ job_type: jobType }, msg.content.length);
             
             await this.handler(event);
             
             this.channel.ack(msg);
         } catch (error) {
             Logger.error("Failed to process message, sending to DLQ", error);
+            this.metrics.deadLetteredTotal.inc({ job_type: jobType });
             this.channel.nack(msg, false, false);
         }
     }
