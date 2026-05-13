@@ -23,6 +23,7 @@ export class AnalyticsService {
     public async processBatch(): Promise<number> {
         const timer = this.metrics.jobDuration.startTimer({ job_type: "process_batch" });
 
+        this.metrics.activeJobs.inc({ job_type: "process_batch" });
         try {
             const userIds = await this.usageClient.spop(this.DIRTY_SET_KEY, this.BATCH_SIZE);
 
@@ -56,6 +57,8 @@ export class AnalyticsService {
         } catch (error) {
             timer({ status: "error" });
             throw error;
+        } finally {
+            this.metrics.activeJobs.dec({ job_type: "process_batch" });
         }
     }
 
