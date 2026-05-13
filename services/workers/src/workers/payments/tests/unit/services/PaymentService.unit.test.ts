@@ -10,6 +10,12 @@ const createMetricsMock = () => ({
     jobTotal: { inc: mock() },
     jobErrors: { inc: mock() },
     cacheOperations: { inc: mock() },
+    activeJobs: { inc: mock(), dec: mock() },
+    rabbitmqConnectionStatus: { set: mock() },
+    rabbitmqReconnections: { inc: mock() },
+    redisConnectionStatus: { set: mock() },
+    messageSizeBytes: { observe: mock() },
+    deadLetteredTotal: { inc: mock() },
 });
 
 describe("PaymentService", () => {
