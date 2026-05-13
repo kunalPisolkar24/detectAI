@@ -32,6 +32,7 @@ export class PaymentService {
             return;
         }
 
+        this.metrics.activeJobs.inc({ job_type: event_type });
         try {
             await handler.handle(userId, data);
             this.metrics.jobTotal.inc({ job_type: event_type });
@@ -41,6 +42,8 @@ export class PaymentService {
             this.metrics.jobErrors.inc({ job_type: event_type, error_type: "process_failure" });
             timer({ status: "error" });
             throw error;
+        } finally {
+            this.metrics.activeJobs.dec({ job_type: event_type });
         }
     }
 }
