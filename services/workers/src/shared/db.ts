@@ -12,12 +12,12 @@ const poolConfig = {
   connectionTimeoutMillis: 5000,
 };
 
-const poolPrimary = new Pool({
+export const poolPrimary = new Pool({
   connectionString: primaryUrl,
   ...poolConfig
 });
 
-const poolReplica = new Pool({
+export const poolReplica = new Pool({
   connectionString: replicaUrl,
   ...poolConfig
 });

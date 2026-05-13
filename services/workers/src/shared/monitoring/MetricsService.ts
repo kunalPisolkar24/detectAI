@@ -14,6 +14,7 @@ export class MetricsService {
     public readonly activeJobs: Gauge;
     public readonly messageSizeBytes: Histogram;
     public readonly deadLetteredTotal: Counter;
+    public readonly dbPoolStatus: Gauge;
 
     constructor(private readonly serviceName: string) {
         this.registry = new Registry();
@@ -103,6 +104,13 @@ export class MetricsService {
             labelNames: ["job_type"],
             registers: [this.registry]
         });
+
+        this.dbPoolStatus = new Gauge({
+            name: "db_pool_connections",
+            help: "Current status of database connection pool",
+            labelNames: ["pool_name", "state"],
+            registers: [this.registry]
+        });
     }
 
 
@@ -112,5 +120,19 @@ export class MetricsService {
 
     public getContentType(): string {
         return this.registry.contentType;
+    }
+
+    public registerPool(name: string, pool: any): void {
+        this.registry.registerMetric(new Gauge({
+            name: `db_pool_${name}_connections`,
+            help: `Connections in ${name} pool`,
+            labelNames: ["state"],
+            registers: [this.registry],
+            collect: () => {
+                this.dbPoolStatus.set({ pool_name: name, state: "total" }, pool.totalCount);
+                this.dbPoolStatus.set({ pool_name: name, state: "idle" }, pool.idleCount);
+                this.dbPoolStatus.set({ pool_name: name, state: "waiting" }, pool.waitingCount);
+            }
+        }));
     }
 }
