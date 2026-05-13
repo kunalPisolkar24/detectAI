@@ -2,11 +2,16 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 
 export const options = {
-    stages: [
-        { duration: '30s', target: __ENV.RPS || 200 },
-        { duration: '1m', target: __ENV.RPS || 200 },
-        { duration: '30s', target: 0 },
-    ],
+    scenarios: {
+        constant_request_rate: {
+            executor: 'constant-arrival-rate',
+            rate: __ENV.RPS || 20,
+            timeUnit: '1s',
+            duration: __ENV.DURATION || '30s',
+            preAllocatedVUs: 10,
+            maxVUs: 100,
+        },
+    },
 };
 
 export default function () {

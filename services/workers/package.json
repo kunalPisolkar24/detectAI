@@ -15,6 +15,7 @@
     "test:integration": "PRISMA_CLIENT_ENGINE_TYPE=binary bun test --preload ./src/tests/setup-integration.ts $(find src -name '*Integration.test.ts')",
     "coverage": "bun test --coverage $(find src -name '*.unit.test.ts')",
     "load:proxy": "bun run src/tests/load/proxy.ts",
+    "load:proxy:mock": "MOCK_MODE=true bun run src/tests/load/proxy.ts",
     "load:payments": "./bin/k6 run src/tests/load/payments.k6.js",
     "load:analytics": "./bin/k6 run src/tests/load/analytics.k6.js",
     "load:cron": "./bin/k6 run src/tests/load/cron.k6.js",

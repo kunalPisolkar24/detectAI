@@ -7,18 +7,23 @@ import { Logger } from "../../shared/logger";
 const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const PORT = 9999;
+const MOCK_MODE = process.env.MOCK_MODE === "true";
 
 // Connections
-let amqpConn: ChannelModel;
-let amqpChannel: Channel;
+let amqpConn: ChannelModel | null = null;
+let amqpChannel: Channel | null = null;
 
-const redisClient = RedisFactory.createClient({
+const redisClient = MOCK_MODE ? null : RedisFactory.createClient({
     mode: "standalone",
     name: "LoadProxyRedis",
     url: REDIS_URL,
 });
 
 async function initAmqp() {
+    if (MOCK_MODE) {
+        Logger.info("Proxy running in MOCK_MODE (No real infrastructure connections)");
+        return;
+    }
     try {
         amqpConn = await amqp.connect(RABBITMQ_URL);
         amqpChannel = await amqpConn.createChannel();
@@ -52,7 +57,9 @@ const server = serve({
                     }
                 };
 
-                if (amqpChannel) {
+                if (MOCK_MODE) {
+                    Logger.info(`[MOCK] Payments event: ${payload.event_type} for ${payload.data.custom_data.userId}`);
+                } else if (amqpChannel) {
                     amqpChannel.sendToQueue("payment_events", Buffer.from(JSON.stringify(payload)), { persistent: true });
                 }
                 return new Response(JSON.stringify({ success: true }), { status: 200 });
@@ -67,8 +74,12 @@ const server = serve({
                 const userId = body.userId || `user_${Math.floor(Math.random() * 10000)}`;
                 const count = body.count || 1;
 
-                await redisClient.sadd("usage:dirty_users", userId);
-                await redisClient.incrby(`usage:{${userId}}:pending`, count);
+                if (MOCK_MODE) {
+                    Logger.info(`[MOCK] Analytics usage: ${userId} +${count}`);
+                } else if (redisClient) {
+                    await redisClient.sadd("usage:dirty_users", userId);
+                    await redisClient.incrby(`usage:{${userId}}:pending`, count);
+                }
 
                 return new Response(JSON.stringify({ success: true }), { status: 200 });
             } catch (error) {
@@ -90,17 +101,21 @@ const server = serve({
                     name: `Load Test User ${i}`,
                 }));
 
-                await prisma.user.createMany({ data: users });
+                if (MOCK_MODE) {
+                    Logger.info(`[MOCK] Seeding ${count} users`);
+                } else {
+                    await prisma.user.createMany({ data: users });
 
-                const subscriptions = users.map(user => ({
-                    userId: user.id,
-                    paddleSubscriptionId: `sub_load_${user.id}`,
-                    paddlePlanId: "pro_monthly",
-                    status: "ACTIVE" as any, // Use proper case or cast to any for tests
-                    endsAt: expiredDate,
-                }));
+                    const subscriptions = users.map(user => ({
+                        userId: user.id,
+                        paddleSubscriptionId: `sub_load_${user.id}`,
+                        paddlePlanId: "pro_monthly",
+                        status: "ACTIVE" as any,
+                        endsAt: expiredDate,
+                    }));
 
-                await prisma.subscription.createMany({ data: subscriptions });
+                    await prisma.subscription.createMany({ data: subscriptions });
+                }
 
                 return new Response(JSON.stringify({ success: true, count }), { status: 200 });
             } catch (error) {
