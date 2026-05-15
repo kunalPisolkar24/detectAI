@@ -11,6 +11,7 @@ export const baseEnvSchema = z.object({
   REDIS_MASTER_NAME: z.string().optional(),
   REDIS_USAGE_MODE: z.enum(["standalone", "cluster"]).default("cluster"),
   RABBITMQ_URL: z.string().url().default("amqp://guest:guest@localhost:5672"),
+  RABBITMQ_QUEUE_TYPE: z.enum(["classic", "quorum"]).default("classic"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().default(7777),
 });

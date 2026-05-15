@@ -56,7 +56,7 @@ const worker = new RabbitMQWorker(
     QUEUE_NAME,
     async (event: any) => await paymentService.handleEvent(event),
     metricsService,
-    "classic"
+    config.RABBITMQ_QUEUE_TYPE ?? "classic"
 );
 
 worker.start();
