@@ -33,3 +33,4 @@ COPY --from=builder --chown=bun:bun /app/generated ./generated
 COPY --from=builder --chown=bun:bun /app/src ./src
 COPY --from=builder --chown=bun:bun /app/prisma.config.ts ./
 COPY --from=builder --chown=bun:bun /app/bunfig.toml ./
+COPY --from=builder --chown=bun:bun /app/tsconfig.json ./
