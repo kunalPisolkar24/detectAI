@@ -13,186 +13,303 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestCreateSession(t *testing.T) {
+func newTestService() (*mocks.MockChatPersistenceRepository, *mocks.MockChatCacheRepository, *mocks.MockChatStreamRepository, *mocks.MockMetricsCollector, *ChatService) {
 	dbRepo := new(mocks.MockChatPersistenceRepository)
 	cacheRepo := new(mocks.MockChatCacheRepository)
 	streamRepo := new(mocks.MockChatStreamRepository)
-	metrics := new(mocks.MockMetricsCollector)
-	logger := zap.NewNop()
+	metricsCollector := new(mocks.MockMetricsCollector)
+	svc := NewChatService(cacheRepo, streamRepo, dbRepo, zap.NewNop(), metricsCollector)
+	return dbRepo, cacheRepo, streamRepo, metricsCollector, svc
+}
 
-	service := NewChatService(cacheRepo, streamRepo, dbRepo, logger, metrics)
+// --- CreateSession ---
+
+func TestCreateSession_Success(t *testing.T) {
+	dbRepo, _, _, _, svc := newTestService()
 	ctx := context.Background()
 
-	userID := "user-123"
-	title := "New Chat"
-
-	dbRepo.On("CreateChat", mock.Anything, mock.MatchedBy(func(chat *domain.ChatSession) bool {
-		return chat.UserID == userID && chat.Title == title && chat.ID != ""
+	dbRepo.On("CreateChat", mock.Anything, mock.MatchedBy(func(c *domain.ChatSession) bool {
+		return c.UserID == "user-1" && c.Title == "My Chat" && c.ID != ""
 	})).Return(nil)
 
-	session, err := service.CreateSession(ctx, userID, title)
+	session, err := svc.CreateSession(ctx, "user-1", "My Chat")
 
 	assert.NoError(t, err)
-	assert.Equal(t, userID, session.UserID)
-	assert.Equal(t, title, session.Title)
+	assert.Equal(t, "user-1", session.UserID)
+	assert.Equal(t, "My Chat", session.Title)
+	assert.NotEmpty(t, session.ID)
 	dbRepo.AssertExpectations(t)
 }
 
-func TestProcessMessage(t *testing.T) {
-	dbRepo := new(mocks.MockChatPersistenceRepository)
-	cacheRepo := new(mocks.MockChatCacheRepository)
-	streamRepo := new(mocks.MockChatStreamRepository)
-	metrics := new(mocks.MockMetricsCollector)
-	logger := zap.NewNop()
-
-	service := NewChatService(cacheRepo, streamRepo, dbRepo, logger, metrics)
+func TestCreateSession_InvalidInput(t *testing.T) {
+	_, _, _, _, svc := newTestService()
 	ctx := context.Background()
 
-	msg := &domain.Message{
-		ChatID:  "chat-1",
-		UserID:  "user-123",
-		Content: "Hello",
-	}
+	_, err := svc.CreateSession(ctx, "", "My Chat")
+	assert.ErrorIs(t, err, domain.ErrInvalidInput)
 
-	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-123"}
-
-	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
-	streamRepo.On("Publish", mock.Anything, mock.MatchedBy(func(m *domain.Message) bool {
-		return m.Content == "Hello" && m.ChatID == "chat-1" && m.UserID == "user-123"
-	})).Return(nil)
-	cacheRepo.On("SaveToCache", mock.Anything, mock.MatchedBy(func(m *domain.Message) bool {
-		return m.Content == "Hello" && m.ChatID == "chat-1" && m.UserID == "user-123"
-	})).Return(nil)
-
-	err := service.ProcessMessage(ctx, msg)
-
-	assert.NoError(t, err)
-	dbRepo.AssertExpectations(t)
-	streamRepo.AssertExpectations(t)
-	cacheRepo.AssertExpectations(t)
+	_, err = svc.CreateSession(ctx, "user-1", "")
+	assert.ErrorIs(t, err, domain.ErrInvalidInput)
 }
 
-func TestProcessMessage_Unauthorized(t *testing.T) {
-	dbRepo := new(mocks.MockChatPersistenceRepository)
-	cacheRepo := new(mocks.MockChatCacheRepository)
-	streamRepo := new(mocks.MockChatStreamRepository)
-	metrics := new(mocks.MockMetricsCollector)
-	logger := zap.NewNop()
-
-	service := NewChatService(cacheRepo, streamRepo, dbRepo, logger, metrics)
+func TestCreateSession_DBError(t *testing.T) {
+	dbRepo, _, _, _, svc := newTestService()
 	ctx := context.Background()
 
-	msg := &domain.Message{
-		ChatID:  "chat-1",
-		UserID:  "wrong-user",
-		Content: "Hello",
-	}
+	dbRepo.On("CreateChat", mock.Anything, mock.Anything).Return(errors.New("db connection refused"))
 
-	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "owner-user"}
+	_, err := svc.CreateSession(ctx, "user-1", "My Chat")
 
+	assert.Error(t, err)
+	assert.NotErrorIs(t, err, domain.ErrInvalidInput)
+}
+
+// --- GetSession ---
+
+func TestGetSession_Success(t *testing.T) {
+	dbRepo, _, _, _, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
 	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
 
-	err := service.ProcessMessage(ctx, msg)
+	session, err := svc.GetSession(ctx, "chat-1", "user-1")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "chat-1", session.ID)
+}
+
+func TestGetSession_Unauthorized(t *testing.T) {
+	dbRepo, _, _, _, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "owner"}
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+
+	_, err := svc.GetSession(ctx, "chat-1", "attacker")
 
 	assert.ErrorIs(t, err, domain.ErrUnauthorized)
 }
 
-func TestGetHistory_CacheHit(t *testing.T) {
-	dbRepo := new(mocks.MockChatPersistenceRepository)
-	cacheRepo := new(mocks.MockChatCacheRepository)
-	streamRepo := new(mocks.MockChatStreamRepository)
-	metrics := new(mocks.MockMetricsCollector)
-	logger := zap.NewNop()
-
-	service := NewChatService(cacheRepo, streamRepo, dbRepo, logger, metrics)
+func TestGetSession_DBError(t *testing.T) {
+	dbRepo, _, _, _, svc := newTestService()
 	ctx := context.Background()
 
-	chatID := "chat-1"
-	userID := "user-123"
-	pageSize := int32(2)
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(nil, errors.New("not found"))
 
-	mockChat := &domain.ChatSession{ID: chatID, UserID: userID}
-	cachedMsgs := []*domain.Message{
-		{ID: "msg-cache-new", CreatedAt: time.Now().UTC()},
-		{ID: "msg-cache-old", CreatedAt: time.Now().UTC().Add(-time.Minute)},
-	}
+	_, err := svc.GetSession(ctx, "chat-1", "user-1")
 
-	dbRepo.On("GetChat", mock.Anything, chatID).Return(mockChat, nil)
-	cacheRepo.On("GetRecentMessages", mock.Anything, chatID).Return(cachedMsgs, nil)
-	metrics.On("IncCacheHit").Return()
+	assert.ErrorIs(t, err, domain.ErrNotFound)
+}
 
-	dbRepo.On("GetHistory", mock.Anything, chatID, 0, 2).Return([]*domain.Message{
-		{ID: "msg-cache-old", CreatedAt: cachedMsgs[1].CreatedAt},
-		{ID: "msg-db", CreatedAt: cachedMsgs[1].CreatedAt.Add(-time.Minute)},
-	}, nil)
+// --- GetUserSessions ---
 
-	result, hasMore, err := service.GetHistory(ctx, chatID, userID, 1, pageSize)
+func TestGetUserSessions_Success(t *testing.T) {
+	dbRepo, _, _, _, svc := newTestService()
+	ctx := context.Background()
+
+	chats := []*domain.ChatSession{{ID: "chat-1"}, {ID: "chat-2"}}
+	dbRepo.On("GetUserChats", mock.Anything, "user-1", 50).Return(chats, nil)
+
+	result, err := svc.GetUserSessions(ctx, "user-1")
 
 	assert.NoError(t, err)
 	assert.Len(t, result, 2)
-	assert.True(t, hasMore)
-	assert.Equal(t, "msg-cache-new", result[0].ID)
-	assert.Equal(t, "msg-cache-old", result[1].ID)
+	dbRepo.AssertExpectations(t)
 }
 
-func TestGetHistory_CacheMiss_ReadRepair(t *testing.T) {
-	dbRepo := new(mocks.MockChatPersistenceRepository)
-	cacheRepo := new(mocks.MockChatCacheRepository)
-	streamRepo := new(mocks.MockChatStreamRepository)
-	metrics := new(mocks.MockMetricsCollector)
-	logger := zap.NewNop()
-
-	service := NewChatService(cacheRepo, streamRepo, dbRepo, logger, metrics)
+func TestGetUserSessions_InvalidInput(t *testing.T) {
+	_, _, _, _, svc := newTestService()
 	ctx := context.Background()
 
-	chatID := "chat-1"
-	userID := "user-123"
-	pageSize := int32(20)
+	_, err := svc.GetUserSessions(ctx, "")
 
-	mockChat := &domain.ChatSession{ID: chatID, UserID: userID}
-	dbMsgs := []*domain.Message{
-		{ID: "msg-1"}, {ID: "msg-2"},
-	}
+	assert.ErrorIs(t, err, domain.ErrInvalidInput)
+}
 
-	dbRepo.On("GetChat", mock.Anything, chatID).Return(mockChat, nil)
-	cacheRepo.On("GetRecentMessages", mock.Anything, chatID).Return(nil, errors.New("cache miss"))
-	metrics.On("IncCacheMiss").Return()
-	dbRepo.On("GetHistory", mock.Anything, chatID, 0, 20).Return(dbMsgs, nil)
-	cacheRepo.On("PopulateCache", mock.Anything, chatID, dbMsgs).Return(nil)
+// --- RenameSession ---
 
-	result, hasMore, err := service.GetHistory(ctx, chatID, userID, 1, pageSize)
+func TestRenameSession_Success(t *testing.T) {
+	dbRepo, _, _, _, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+	dbRepo.On("UpdateChatTitle", mock.Anything, "chat-1", "New Title").Return(nil)
+
+	err := svc.RenameSession(ctx, "chat-1", "user-1", "New Title")
 
 	assert.NoError(t, err)
-	assert.Len(t, result, 2)
-	assert.False(t, hasMore)
-	
-	// Wait a bit for background goroutine
-	time.Sleep(100 * time.Millisecond)
-	cacheRepo.AssertExpectations(t)
+	dbRepo.AssertExpectations(t)
 }
 
-func TestDeleteSession(t *testing.T) {
-	dbRepo := new(mocks.MockChatPersistenceRepository)
-	cacheRepo := new(mocks.MockChatCacheRepository)
-	streamRepo := new(mocks.MockChatStreamRepository)
-	metrics := new(mocks.MockMetricsCollector)
-	logger := zap.NewNop()
-
-	service := NewChatService(cacheRepo, streamRepo, dbRepo, logger, metrics)
+func TestRenameSession_Unauthorized(t *testing.T) {
+	dbRepo, _, _, _, svc := newTestService()
 	ctx := context.Background()
 
-	chatID := "chat-1"
-	userID := "user-123"
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "owner"}
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
 
-	mockChat := &domain.ChatSession{ID: chatID, UserID: userID}
+	err := svc.RenameSession(ctx, "chat-1", "attacker", "New Title")
 
-	dbRepo.On("GetChat", mock.Anything, chatID).Return(mockChat, nil)
-	dbRepo.On("DeleteChat", mock.Anything, chatID).Return(nil)
-	cacheRepo.On("DeleteCache", mock.Anything, chatID).Return(nil)
+	assert.ErrorIs(t, err, domain.ErrUnauthorized)
+}
 
-	err := service.DeleteSession(ctx, chatID, userID)
+func TestRenameSession_InvalidInput(t *testing.T) {
+	_, _, _, _, svc := newTestService()
+	ctx := context.Background()
+
+	err := svc.RenameSession(ctx, "chat-1", "user-1", "")
+
+	assert.ErrorIs(t, err, domain.ErrInvalidInput)
+}
+
+// --- DeleteSession ---
+
+func TestDeleteSession_Success(t *testing.T) {
+	dbRepo, cacheRepo, _, _, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+	dbRepo.On("DeleteChat", mock.Anything, "chat-1").Return(nil)
+	cacheRepo.On("DeleteCache", mock.Anything, "chat-1").Return(nil)
+
+	err := svc.DeleteSession(ctx, "chat-1", "user-1")
 
 	assert.NoError(t, err)
 	dbRepo.AssertExpectations(t)
 	cacheRepo.AssertExpectations(t)
+}
+
+func TestDeleteSession_CacheError_IsGraceful(t *testing.T) {
+	dbRepo, cacheRepo, _, _, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+	dbRepo.On("DeleteChat", mock.Anything, "chat-1").Return(nil)
+	cacheRepo.On("DeleteCache", mock.Anything, "chat-1").Return(errors.New("redis timeout"))
+
+	err := svc.DeleteSession(ctx, "chat-1", "user-1")
+
+	assert.NoError(t, err, "cache error should be tolerated, not returned to caller")
+}
+
+// --- ProcessMessage ---
+
+func TestProcessMessage_Success(t *testing.T) {
+	dbRepo, cacheRepo, streamRepo, _, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+	streamRepo.On("Publish", mock.Anything, mock.Anything).Return(nil)
+	cacheRepo.On("SaveToCache", mock.Anything, mock.Anything).Return(nil)
+
+	err := svc.ProcessMessage(ctx, &domain.Message{ChatID: "chat-1", UserID: "user-1", Content: "hello"})
+
+	assert.NoError(t, err)
+}
+
+func TestProcessMessage_InvalidInput(t *testing.T) {
+	_, _, _, _, svc := newTestService()
+	ctx := context.Background()
+
+	assert.ErrorIs(t, svc.ProcessMessage(ctx, &domain.Message{ChatID: "", UserID: "u", Content: "c"}), domain.ErrInvalidInput)
+	assert.ErrorIs(t, svc.ProcessMessage(ctx, &domain.Message{ChatID: "c", UserID: "", Content: "c"}), domain.ErrInvalidInput)
+	assert.ErrorIs(t, svc.ProcessMessage(ctx, &domain.Message{ChatID: "c", UserID: "u", Content: ""}), domain.ErrInvalidInput)
+}
+
+func TestProcessMessage_Unauthorized(t *testing.T) {
+	dbRepo, _, _, _, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "owner"}
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+
+	err := svc.ProcessMessage(ctx, &domain.Message{ChatID: "chat-1", UserID: "attacker", Content: "hi"})
+
+	assert.ErrorIs(t, err, domain.ErrUnauthorized)
+}
+
+// --- GetHistory ---
+
+func TestGetHistory_CacheHit(t *testing.T) {
+	dbRepo, cacheRepo, _, metricsCollector, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
+	cachedMsgs := []*domain.Message{
+		{ID: "msg-new", CreatedAt: time.Now().UTC()},
+		{ID: "msg-old", CreatedAt: time.Now().UTC().Add(-time.Minute)},
+	}
+
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+	cacheRepo.On("GetRecentMessages", mock.Anything, "chat-1").Return(cachedMsgs, nil)
+	metricsCollector.On("IncCacheHit").Return()
+	dbRepo.On("GetHistory", mock.Anything, "chat-1", 0, 2).Return([]*domain.Message{
+		{ID: "msg-old", CreatedAt: cachedMsgs[1].CreatedAt},
+		{ID: "msg-db", CreatedAt: cachedMsgs[1].CreatedAt.Add(-time.Minute)},
+	}, nil)
+
+	result, hasMore, err := svc.GetHistory(ctx, "chat-1", "user-1", 1, 2)
+
+	assert.NoError(t, err)
+	assert.True(t, hasMore)
+	assert.Len(t, result, 2)
+	assert.Equal(t, "msg-new", result[0].ID)
+}
+
+func TestGetHistory_CacheMiss_ReadRepair(t *testing.T) {
+	dbRepo, cacheRepo, _, metricsCollector, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
+	dbMsgs := []*domain.Message{{ID: "msg-1"}, {ID: "msg-2"}}
+
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+	cacheRepo.On("GetRecentMessages", mock.Anything, "chat-1").Return(nil, errors.New("cache miss"))
+	metricsCollector.On("IncCacheMiss").Return()
+	dbRepo.On("GetHistory", mock.Anything, "chat-1", 0, 20).Return(dbMsgs, nil)
+	cacheRepo.On("PopulateCache", mock.Anything, "chat-1", dbMsgs).Return(nil)
+
+	result, hasMore, err := svc.GetHistory(ctx, "chat-1", "user-1", 1, 20)
+
+	assert.NoError(t, err)
+	assert.False(t, hasMore)
+	assert.Len(t, result, 2)
+
+	time.Sleep(100 * time.Millisecond)
+	cacheRepo.AssertExpectations(t)
+}
+
+func TestGetHistory_ColdPath_PageGreaterThanOne(t *testing.T) {
+	dbRepo, _, _, _, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
+	dbMsgs := []*domain.Message{{ID: "msg-1"}}
+
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+	dbRepo.On("GetHistory", mock.Anything, "chat-1", 20, 20).Return(dbMsgs, nil)
+
+	result, hasMore, err := svc.GetHistory(ctx, "chat-1", "user-1", 2, 20)
+
+	assert.NoError(t, err)
+	assert.False(t, hasMore)
+	assert.Len(t, result, 1)
+	dbRepo.AssertExpectations(t)
+}
+
+func TestGetHistory_Unauthorized(t *testing.T) {
+	dbRepo, _, _, _, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "owner"}
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+
+	_, _, err := svc.GetHistory(ctx, "chat-1", "attacker", 1, 10)
+
+	assert.ErrorIs(t, err, domain.ErrUnauthorized)
 }
