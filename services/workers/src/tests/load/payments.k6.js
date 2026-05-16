@@ -15,10 +15,18 @@ export const options = {
 };
 
 export default function () {
+    const eventTypes = [
+        'subscription.created',
+        'subscription.updated',
+        'subscription.canceled',
+        'subscription.activated'
+    ];
+    const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
+
     const url = 'http://localhost:9999/payments';
     const payload = JSON.stringify({
-        event_type: 'subscription.updated',
-        userId: `user_k6_${__VU}_${__ITER}`,
+        event_type: eventType,
+        userId: `user_k6_${Math.floor(Math.random() * 10000)}`,
     });
 
     const params = {
