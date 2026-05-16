@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -11,6 +10,9 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 func TestCreateChat(t *testing.T) {
@@ -33,17 +35,22 @@ func TestCreateChat(t *testing.T) {
 	mockService.AssertExpectations(t)
 }
 
-func TestCreateChat_MissingUserID(t *testing.T) {
+func TestGetChat_Unauthorized(t *testing.T) {
 	mockService := new(mocks.MockChatService)
 	handler := NewHandler(mockService)
-	ctx := context.Background()
+	
+	md := metadata.Pairs("x-user-id", "intruder-id")
+	ctx := metadata.NewIncomingContext(context.Background(), md)
 
-	req := &pb.CreateChatRequest{Title: "Test Chat"}
+	req := &pb.GetChatRequest{ChatId: "chat-1"}
 
-	_, err := handler.CreateChat(ctx, req)
+	mockService.On("GetSession", ctx, "chat-1", "intruder-id").Return(nil, domain.ErrUnauthorized)
+
+	_, err := handler.GetChat(ctx, req)
 
 	assert.Error(t, err)
-	mockService.AssertNotCalled(t, "CreateSession")
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
 }
 
 func TestSaveMessage(t *testing.T) {
@@ -85,7 +92,9 @@ func TestSaveMessage(t *testing.T) {
 func TestGetChatHistory(t *testing.T) {
 	mockService := new(mocks.MockChatService)
 	handler := NewHandler(mockService)
-	ctx := context.Background()
+	
+	md := metadata.Pairs("x-user-id", "user-1")
+	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	req := &pb.GetChatHistoryRequest{
 		ChatId:   "chat-1",
@@ -104,7 +113,7 @@ func TestGetChatHistory(t *testing.T) {
 		},
 	}
 
-	mockService.On("GetHistory", ctx, "chat-1", int32(1), int32(10)).Return(msgs, true, nil)
+	mockService.On("GetHistory", ctx, "chat-1", "user-1", int32(1), int32(10)).Return(msgs, true, nil)
 
 	resp, err := handler.GetChatHistory(ctx, req)
 
@@ -116,17 +125,21 @@ func TestGetChatHistory(t *testing.T) {
 	mockService.AssertExpectations(t)
 }
 
-func TestGetChatHistory_Error(t *testing.T) {
+func TestGetChatHistory_NotFound(t *testing.T) {
 	mockService := new(mocks.MockChatService)
 	handler := NewHandler(mockService)
-	ctx := context.Background()
+	
+	md := metadata.Pairs("x-user-id", "user-1")
+	ctx := metadata.NewIncomingContext(context.Background(), md)
 
-	req := &pb.GetChatHistoryRequest{ChatId: "chat-1"}
+	req := &pb.GetChatHistoryRequest{ChatId: "non-existent"}
 
-	mockService.On("GetHistory", ctx, "chat-1", int32(0), int32(0)).Return(nil, false, errors.New("db error"))
+	mockService.On("GetHistory", ctx, "non-existent", "user-1", int32(0), int32(0)).Return(nil, false, domain.ErrNotFound)
 
 	_, err := handler.GetChatHistory(ctx, req)
 
 	assert.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.NotFound, st.Code())
 	mockService.AssertExpectations(t)
 }
