@@ -26,3 +26,12 @@ test-coverage:
 
 docker-build:
 	docker compose up --build
+
+load-test-smoke:
+	k6 run tests/load/scenarios/smoke.js
+
+load-test:
+	k6 run tests/load/scenarios/load.js
+
+load-test-stress:
+	k6 run tests/load/scenarios/stress.js
