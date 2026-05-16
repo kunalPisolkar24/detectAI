@@ -16,3 +16,6 @@ test
 .vscode
 .idea
 *.log
+
+# Ignore host generated prisma client
+lib/shared/generated/prisma
