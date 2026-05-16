@@ -75,6 +75,12 @@ jobs:
           TURNSTILE_SECRET_KEY: "dummy"
         run: pnpm build
 
+      - name: Run Unit & UI Integration Tests
+        run: pnpm test:run
+
+      - name: Run Backend Integration Tests
+        run: pnpm test:integration:backend
+
   build-and-push:
     name: Build & Push Docker Image
     needs: quality-assurance
