@@ -6,8 +6,6 @@ import (
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/ports"
-	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/logger"
-	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/metrics"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
