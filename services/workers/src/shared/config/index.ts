@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Logger } from "../logger";
+import { Logger } from "@shared/logging/Logger";
 
 export const baseEnvSchema = z.object({
   DATABASE_URL: z.string().url(),
