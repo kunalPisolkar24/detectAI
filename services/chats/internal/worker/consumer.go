@@ -109,6 +109,7 @@ func (c *Consumer) runWorker(ctx context.Context, partitionID int, consumerName 
 			if err != nil {
 				if err != redis.Nil {
 					c.logger.Error("XReadGroup failed", zap.String("stream", stream), zap.Error(err))	
+					c.metrics.IncStreamErrors("read")
 					if strings.HasPrefix(err.Error(), "NOGROUP") {
 						ensureGroup()
 					}
@@ -150,6 +151,7 @@ func (c *Consumer) runRecovery(ctx context.Context, consumerName string) {
 				if err != nil && err != redis.Nil {
 					if !strings.HasPrefix(err.Error(), "NOGROUP") {
 						c.logger.Error("Recovery failed", zap.String("stream", stream), zap.Error(err))
+						c.metrics.IncStreamErrors("autoclaim")
 					}
 					continue
 				}

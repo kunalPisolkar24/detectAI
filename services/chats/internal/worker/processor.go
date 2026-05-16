@@ -61,6 +61,7 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 
 	if err := p.repo.BulkUpsertMessages(ctx, messages); err != nil {
 		p.logger.Error("Bulk upsert failed, moving to DLQ", zap.Error(err))
+		p.metrics.IncDatabaseErrors("bulk_upsert")
 		p.handleFailure(ctx, msgIDs, client, group)
 		return
 	}
@@ -74,6 +75,7 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 	_, err := pipe.Exec(ctx)
 	if err != nil {
 		p.logger.Error("Failed to ack messages", zap.Error(err))
+		p.metrics.IncStreamErrors("ack")
 	}
 }
 
@@ -89,5 +91,12 @@ func (p *Processor) handleFailure(ctx context.Context, msgIDs map[string][]strin
 	}
 	if _, err := pipe.Exec(ctx); err != nil {
 		p.logger.Error("Failed to move messages to DLQ", zap.Error(err))
+		p.metrics.IncStreamErrors("dlq_push")
 	}
+
+	total := 0
+	for _, ids := range msgIDs {
+		total += len(ids)
+	}
+	p.metrics.IncDLQMessages(float64(total))
 }
