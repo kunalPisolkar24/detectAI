@@ -27,6 +27,8 @@ services:
     build:
       context: .
       dockerfile: test/load/mock-server/Dockerfile
+    environment:
+      - PROTO_DIR=/app/lib/shared/proto
     ports:
       - "8001:8000"
       - "50052:50051"

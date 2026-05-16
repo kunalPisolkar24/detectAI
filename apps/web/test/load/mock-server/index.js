@@ -38,7 +38,7 @@ app.listen(HTTP_PORT, () => {
 });
 
 // --- gRPC Mocks ---
-const PROTO_DIR = path.resolve(__dirname, '../../../../lib/shared/proto');
+const PROTO_DIR = process.env.PROTO_DIR || path.resolve(__dirname, '../../../../lib/shared/proto');
 
 const loadProto = (filename) => {
   const packageDefinition = protoLoader.loadSync(path.join(PROTO_DIR, filename), {

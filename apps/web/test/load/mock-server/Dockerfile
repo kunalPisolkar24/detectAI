@@ -2,15 +2,13 @@ FROM node:20-slim
 
 WORKDIR /app
 
-COPY package.json ./
+COPY test/load/mock-server/package.json ./
 RUN npm install --production
 
-COPY . .
-
-# Copy protos from the web app directory (will be handled by docker context or volume)
-# For simplicity in this plan, we assume the protos are copied into the image context
-# or available via a relative path if the context is root.
-# However, for a standalone mock-server, we'll expect them at a specific path.
+COPY test/load/mock-server/index.js ./
+# Protos are accessed via relative path from the app dir in the container
+# or we can copy them in. Let's copy them for reliability.
+COPY lib/shared/proto ./lib/shared/proto
 
 EXPOSE 8000 50051
 
