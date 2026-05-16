@@ -7,7 +7,7 @@ COPY prisma ./prisma
 
 RUN bun install --frozen-lockfile
 
-RUN DATABASE_URL=postgresql://127.0.0.1:5432/dummy bunx prisma generate
+RUN DATABASE_URL=postgresql://127.0.0.1:5432/dummy bun prisma generate
 
 COPY . .
 
@@ -23,11 +23,9 @@ RUN chown bun:bun /app
 
 COPY --chown=bun:bun package.json bun.lock* ./
 
+COPY --from=builder --chown=bun:bun /app/node_modules /app/node_modules
+
 USER bun
-
-
-
-RUN bun install --production --frozen-lockfile --ignore-scripts
 
 COPY --from=builder --chown=bun:bun /app/generated ./generated
 COPY --from=builder --chown=bun:bun /app/src ./src

@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "generate": "bunx --bun prisma generate",
+    "generate": "bun prisma generate",
     "start:payments": "bun run src/workers/payments/index.ts",
     "dev:payments": "bun --watch src/workers/payments/index.ts",
     "start:analytics": "bun run src/workers/analytics/index.ts",
@@ -19,7 +19,7 @@
     "load:payments": "./bin/k6 run src/tests/load/payments.k6.js",
     "load:analytics": "./bin/k6 run src/tests/load/analytics.k6.js",
     "load:cron": "./bin/k6 run src/tests/load/cron.k6.js",
-    "postinstall": "bunx --bun prisma generate"
+    "postinstall": "bun prisma generate"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^11.14.0",
