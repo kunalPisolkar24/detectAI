@@ -12,6 +12,7 @@ dist
 .env.*
 coverage
 test
+!test/load/mock-server
 .pytest_cache
 .vscode
 .idea
