@@ -45,6 +45,10 @@ func main() {
 	defer redisClient.Close()
 
 	mongoDB := mongoClient.Database(cfg.MongoDatabase)
+	if err := mongoRepo.EnsureIndexes(ctx, mongoDB); err != nil {
+		logger.Log.Error("Failed to ensure mongo indexes", zap.Error(err))
+	}
+
 	persistenceRepo := mongoRepo.NewMongoRepository(mongoDB)
 	streamRepo := redisRepo.NewStreamRepository(redisClient, cfg.StreamPartitionCount)
 	cacheRepo := redisRepo.NewCacheRepository(redisClient, cfg.CacheTTL)

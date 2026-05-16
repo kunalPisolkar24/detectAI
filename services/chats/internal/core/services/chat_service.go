@@ -35,7 +35,14 @@ func NewChatService(
 	}
 }
 
+func (s *ChatService) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, 10*time.Second)
+}
+
 func (s *ChatService) CreateSession(ctx context.Context, userID, title string) (*domain.ChatSession, error) {
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+
 	if userID == "" || title == "" {
 		return nil, domain.ErrInvalidInput
 	}
@@ -57,6 +64,9 @@ func (s *ChatService) CreateSession(ctx context.Context, userID, title string) (
 }
 
 func (s *ChatService) GetSession(ctx context.Context, chatID, userID string) (*domain.ChatSession, error) {
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+
 	session, err := s.persistence.GetChat(ctx, chatID)
 	if err != nil {
 		return nil, domain.ErrNotFound
@@ -70,6 +80,9 @@ func (s *ChatService) GetSession(ctx context.Context, chatID, userID string) (*d
 }
 
 func (s *ChatService) GetUserSessions(ctx context.Context, userID string) ([]*domain.ChatSession, error) {
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+
 	if userID == "" {
 		return nil, domain.ErrInvalidInput
 	}
@@ -77,6 +90,9 @@ func (s *ChatService) GetUserSessions(ctx context.Context, userID string) ([]*do
 }
 
 func (s *ChatService) RenameSession(ctx context.Context, chatID, userID, newTitle string) error {
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+
 	if newTitle == "" {
 		return domain.ErrInvalidInput
 	}
@@ -89,6 +105,9 @@ func (s *ChatService) RenameSession(ctx context.Context, chatID, userID, newTitl
 }
 
 func (s *ChatService) DeleteSession(ctx context.Context, chatID, userID string) error {
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+
 	if _, err := s.GetSession(ctx, chatID, userID); err != nil {
 		return err
 	}
@@ -106,6 +125,9 @@ func (s *ChatService) DeleteSession(ctx context.Context, chatID, userID string) 
 }
 
 func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) error {
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+
 	if msg.ChatID == "" || msg.UserID == "" || msg.Content == "" {
 		return domain.ErrInvalidInput
 	}
@@ -134,6 +156,9 @@ func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) e
 }
 
 func (s *ChatService) GetHistory(ctx context.Context, chatID, userID string, page, pageSize int32) ([]*domain.Message, bool, error) {
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+
 	if _, err := s.GetSession(ctx, chatID, userID); err != nil {
 		return nil, false, err
 	}

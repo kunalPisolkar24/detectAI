@@ -60,7 +60,8 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 	}
 
 	if err := p.repo.BulkUpsertMessages(ctx, messages); err != nil {
-		p.logger.Error("Bulk upsert failed, messages will retry", zap.Error(err))
+		p.logger.Error("Bulk upsert failed, moving to DLQ", zap.Error(err))
+		p.handleFailure(ctx, msgIDs, client, group)
 		return
 	}
 
@@ -73,5 +74,20 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 	_, err := pipe.Exec(ctx)
 	if err != nil {
 		p.logger.Error("Failed to ack messages", zap.Error(err))
+	}
+}
+
+func (p *Processor) handleFailure(ctx context.Context, msgIDs map[string][]string, client redis.UniversalClient, group string) {
+	pipe := client.Pipeline()
+	for stream, ids := range msgIDs {
+		// Store in DLQ for manual inspection
+		for _, id := range ids {
+			pipe.SAdd(ctx, "chat:dlq:messages", id)
+		}
+		// ACK so they don't block the stream
+		pipe.XAck(ctx, stream, group, ids...)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		p.logger.Error("Failed to move messages to DLQ", zap.Error(err))
 	}
 }

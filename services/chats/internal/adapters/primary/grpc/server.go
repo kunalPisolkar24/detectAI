@@ -37,7 +37,10 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	grpcServer := grpc.NewServer(
-		grpc.UnaryInterceptor(LoggingInterceptor),
+		grpc.ChainUnaryInterceptor(
+			RecoveryInterceptor,
+			LoggingInterceptor,
+		),
 	)
 
 	handler := NewHandler(s.service)
