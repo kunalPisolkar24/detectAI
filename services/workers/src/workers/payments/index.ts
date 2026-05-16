@@ -45,6 +45,7 @@ const paymentService = new PaymentService(
     {
         "subscription.created": subscriptionUpdatedHandler,
         "subscription.updated": subscriptionUpdatedHandler,
+        "subscription.activated": subscriptionUpdatedHandler,
         "subscription.canceled": subscriptionCanceledHandler,
         "user.cancel_subscription": userCancelHandler,
     },
