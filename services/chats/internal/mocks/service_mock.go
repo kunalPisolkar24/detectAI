@@ -19,8 +19,8 @@ func (m *MockChatService) CreateSession(ctx context.Context, userID, title strin
 	return args.Get(0).(*domain.ChatSession), args.Error(1)
 }
 
-func (m *MockChatService) GetSession(ctx context.Context, chatID string) (*domain.ChatSession, error) {
-	args := m.Called(ctx, chatID)
+func (m *MockChatService) GetSession(ctx context.Context, chatID, userID string) (*domain.ChatSession, error) {
+	args := m.Called(ctx, chatID, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -35,13 +35,13 @@ func (m *MockChatService) GetUserSessions(ctx context.Context, userID string) ([
 	return args.Get(0).([]*domain.ChatSession), args.Error(1)
 }
 
-func (m *MockChatService) RenameSession(ctx context.Context, chatID, newTitle string) error {
-	args := m.Called(ctx, chatID, newTitle)
+func (m *MockChatService) RenameSession(ctx context.Context, chatID, userID, newTitle string) error {
+	args := m.Called(ctx, chatID, userID, newTitle)
 	return args.Error(0)
 }
 
-func (m *MockChatService) DeleteSession(ctx context.Context, chatID string) error {
-	args := m.Called(ctx, chatID)
+func (m *MockChatService) DeleteSession(ctx context.Context, chatID, userID string) error {
+	args := m.Called(ctx, chatID, userID)
 	return args.Error(0)
 }
 
@@ -50,8 +50,8 @@ func (m *MockChatService) ProcessMessage(ctx context.Context, msg *domain.Messag
 	return args.Error(0)
 }
 
-func (m *MockChatService) GetHistory(ctx context.Context, chatID string, page, pageSize int32) ([]*domain.Message, bool, error) {
-	args := m.Called(ctx, chatID, page, pageSize)
+func (m *MockChatService) GetHistory(ctx context.Context, chatID, userID string, page, pageSize int32) ([]*domain.Message, bool, error) {
+	args := m.Called(ctx, chatID, userID, page, pageSize)
 	if args.Get(0) == nil {
 		return nil, false, args.Error(2)
 	}

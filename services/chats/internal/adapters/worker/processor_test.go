@@ -8,21 +8,18 @@ import (
 	"github.com/go-redis/redismock/v9"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/mocks"
-	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/logger"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"go.uber.org/zap"
 )
-
-func init() {
-	logger.Init("test")
-}
 
 func TestProcessBatch_EndToEnd(t *testing.T) {
 	db, mockRedis := redismock.NewClusterMock()
 	mockRepo := new(mocks.MockChatPersistenceRepository)
+	mockMetrics := new(mocks.MockMetricsCollector)
 
-	processor := NewProcessor(mockRepo, 50)
+	processor := NewProcessor(mockRepo, 50, zap.NewNop(), mockMetrics)
 	ctx := context.Background()
 
 	msg := domain.Message{ID: "msg-1", ChatID: "chat-1", Content: "Test"}
@@ -42,11 +39,14 @@ func TestProcessBatch_EndToEnd(t *testing.T) {
 		return len(msgs) == 1 && msgs[0].ID == "msg-1"
 	})).Return(nil)
 
+	mockMetrics.On("AddIngestedMessages", 1.0).Return()
+
 	mockRedis.ExpectXAck("stream-1", "test-group", "1-0", "2-0").SetVal(2)
 
 	processor.ProcessBatch(ctx, streams, db, "test-group")
 
 	mockRepo.AssertExpectations(t)
+	mockMetrics.AssertExpectations(t)
 	if err := mockRedis.ExpectationsWereMet(); err != nil {
 		t.Error(err)
 	}
@@ -55,7 +55,8 @@ func TestProcessBatch_EndToEnd(t *testing.T) {
 func TestProcessBatch_DBFailure_NoAck(t *testing.T) {
 	db, mockRedis := redismock.NewClusterMock()
 	mockRepo := new(mocks.MockChatPersistenceRepository)
-	processor := NewProcessor(mockRepo, 50)
+	mockMetrics := new(mocks.MockMetricsCollector)
+	processor := NewProcessor(mockRepo, 50, zap.NewNop(), mockMetrics)
 	ctx := context.Background()
 
 	msg := domain.Message{ID: "msg-1"}
@@ -75,6 +76,7 @@ func TestProcessBatch_DBFailure_NoAck(t *testing.T) {
 	processor.ProcessBatch(ctx, streams, db, "test-group")
 
 	mockRepo.AssertExpectations(t)
+	mockMetrics.AssertNotCalled(t, "AddIngestedMessages", mock.Anything)
 	if err := mockRedis.ExpectationsWereMet(); err != nil {
 		t.Error(err)
 	}
