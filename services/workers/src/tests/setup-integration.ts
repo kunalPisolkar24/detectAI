@@ -1,60 +1,52 @@
 import { beforeAll, afterAll, beforeEach } from "bun:test";
-import { GenericContainer, type StartedTestContainer } from "testcontainers";
-import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
-import { RabbitMQContainer, type StartedRabbitMQContainer } from "@testcontainers/rabbitmq";
 import { execSync } from "node:child_process";
 import { Pool } from "pg";
 
-let postgres: StartedTestContainer;
-let redis: StartedRedisContainer;
-let rabbitmq: StartedRabbitMQContainer;
+let initPromise: Promise<void> | null = null;
+
+async function ensureInfrastructure() {
+    if (initPromise) return initPromise;
+
+    initPromise = (async () => {
+        console.log("Starting integration test infrastructure (using local dev containers)...");
+        try {
+            const dbUrl = `postgresql://user:password@localhost:5432/detectai_test`;
+            // Use DB index 1 to avoid clearing dev cache
+            const redisUrl = `redis://:user_cache_password@localhost:6379/1`;
+            const amqpUrl = `amqp://guest:guest@localhost:5672/detectai_test`;
+
+            process.env.DATABASE_URL = dbUrl;
+            process.env.DATABASE_URL_REPLICA = dbUrl;
+            process.env.REDIS_URL = redisUrl;
+            process.env.RABBITMQ_URL = amqpUrl;
+            process.env.NODE_ENV = "test";
+
+            console.log(`Running prisma db push... URL: ${dbUrl}`);
+            execSync("bunx prisma db push", {
+                env: { ...process.env, DATABASE_URL: dbUrl },
+                stdio: "inherit",
+            });
+            console.log("Prisma db push complete");
+        } catch (error) {
+            console.error("Failed to start infrastructure:", error);
+            initPromise = null; // Allow retry
+            throw error;
+        }
+    })();
+
+    return initPromise;
+}
 
 beforeAll(async () => {
-    console.log("Starting integration test infrastructure...");
-
-    const postgresPromise = new GenericContainer("postgres:16-alpine")
-        .withEnvironment({
-            POSTGRES_DB: "detectai_test",
-            POSTGRES_USER: "test",
-            POSTGRES_PASSWORD: "test",
-        })
-        .withExposedPorts(5432)
-        .start();
-
-    const redisPromise = new RedisContainer("redis:7-alpine").start();
-    const rabbitmqPromise = new RabbitMQContainer("rabbitmq:3-management-alpine").start();
-
-    [postgres, redis, rabbitmq] = await Promise.all([
-        postgresPromise,
-        redisPromise,
-        rabbitmqPromise
-    ]);
-
-    console.log("Infrastructure started successfully");
-
-    const dbUrl = `postgresql://test:test@${postgres.getHost()}:${postgres.getMappedPort(5432)}/detectai_test`;
-    const redisUrl = `redis://${redis.getHost()}:${redis.getMappedPort(6379)}`;
-    const amqpUrl = rabbitmq.getAmqpUrl();
-
-    process.env.DATABASE_URL = dbUrl;
-    process.env.DATABASE_URL_REPLICA = dbUrl;
-    process.env.REDIS_URL = redisUrl;
-    process.env.RABBITMQ_URL = amqpUrl;
-    process.env.NODE_ENV = "test";
-
-    console.log(`Running prisma db push...`);
-    execSync("bunx prisma db push --skip-generate", {
-        env: { ...process.env, DATABASE_URL: dbUrl },
-        stdio: "inherit",
-    });
-    console.log("Prisma db push complete");
-}, 180000);
+    await ensureInfrastructure();
+}, 300000); // 5 minutes
 
 
 beforeEach(async () => {
     const dbUrl = process.env.DATABASE_URL;
     if (!dbUrl) return;
 
+    console.log("Cleaning up database...");
     const pool = new Pool({ connectionString: dbUrl });
     const client = await pool.connect();
     try {
@@ -66,20 +58,26 @@ beforeEach(async () => {
         client.release();
         await pool.end();
     }
+    console.log("Database clean");
 
     const redisUrl = process.env.REDIS_URL;
     if (redisUrl) {
+        console.log("Flushing Redis...");
         const Redis = (await import("ioredis")).default;
         const redisClient = new Redis(redisUrl);
         await redisClient.flushall();
         await redisClient.quit();
+        console.log("Redis flushed");
     }
 }, 30000);
 
+// We don't stop containers between files in bun test if we want them to persist
+// But bun test doesn't have a global afterAll easily.
+// Testcontainers will clean up via Ryuk anyway.
+/*
 afterAll(async () => {
-    await Promise.all([
-        postgres.stop(),
-        redis.stop(),
-        rabbitmq.stop()
-    ]);
+    if (postgres) await postgres.stop();
+    if (redis) await redis.stop();
+    if (rabbitmq) await rabbitmq.stop();
 });
+*/
