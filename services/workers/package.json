@@ -5,12 +5,12 @@
   "private": true,
   "scripts": {
     "generate": "bun prisma generate",
-    "start:payments": "bun run src/workers/payments/index.ts",
-    "dev:payments": "bun --watch src/workers/payments/index.ts",
-    "start:analytics": "bun run src/workers/analytics/index.ts",
-    "dev:analytics": "bun --watch src/workers/analytics/index.ts",
-    "start:cron": "bun run src/workers/cron/index.ts",
-    "dev:cron": "bun --watch src/workers/cron/index.ts",
+    "start:payments": "bun run src/cmd/payments/index.ts",
+    "dev:payments": "bun --watch src/cmd/payments/index.ts",
+    "start:analytics": "bun run src/cmd/analytics/index.ts",
+    "dev:analytics": "bun --watch src/cmd/analytics/index.ts",
+    "start:cron": "bun run src/cmd/cron/index.ts",
+    "dev:cron": "bun --watch src/cmd/cron/index.ts",
     "test": "bun test --preload ./src/tests/preload.ts $(find src -name '*.unit.test.ts')",
     "test:integration": "PRISMA_CLIENT_ENGINE_TYPE=binary bun test --preload ./src/tests/setup-integration.ts $(find src -name '*Integration.test.ts')",
     "coverage": "bun test --coverage $(find src -name '*.unit.test.ts')",
@@ -29,7 +29,8 @@
     "@types/bun": "latest",
     "@types/pg": "^8.16.0",
     "prisma": "^7.1.0",
-    "testcontainers": "^11.14.0"
+    "testcontainers": "^11.14.0",
+    "@types/node": "^22.0.0"
   },
   "peerDependencies": {
     "typescript": "^5"
