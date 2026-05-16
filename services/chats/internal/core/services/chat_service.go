@@ -57,6 +57,7 @@ func (s *ChatService) CreateSession(ctx context.Context, userID, title string) (
 
 	if err := s.persistence.CreateChat(ctx, session); err != nil {
 		s.logger.Error("failed to create chat session", zap.Error(err), zap.String("user_id", userID))
+		s.metrics.IncDatabaseErrors("create_chat")
 		return nil, err
 	}
 
@@ -114,6 +115,7 @@ func (s *ChatService) DeleteSession(ctx context.Context, chatID, userID string) 
 
 	if err := s.persistence.DeleteChat(ctx, chatID); err != nil {
 		s.logger.Error("failed to delete chat session", zap.Error(err), zap.String("chat_id", chatID))
+		s.metrics.IncDatabaseErrors("delete_chat")
 		return err
 	}
 
@@ -145,6 +147,7 @@ func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) e
 
 	if err := s.stream.Publish(ctx, msg); err != nil {
 		s.logger.Error("failed to publish message to stream", zap.Error(err), zap.String("chat_id", msg.ChatID))
+		s.metrics.IncStreamErrors("publish")
 		return err
 	}
 
@@ -177,6 +180,7 @@ func (s *ChatService) GetHistory(ctx context.Context, chatID, userID string, pag
 
 			dbMessages, dbErr := s.persistence.GetHistory(ctx, chatID, offset, limit)
 			if dbErr != nil {
+				s.metrics.IncDatabaseErrors("get_history")
 				return nil, false, dbErr
 			}
 
@@ -192,6 +196,7 @@ func (s *ChatService) GetHistory(ctx context.Context, chatID, userID string, pag
 		
 		dbMessages, err := s.persistence.GetHistory(ctx, chatID, offset, limit)
 		if err != nil {
+			s.metrics.IncDatabaseErrors("get_history")
 			return nil, false, err
 		}
 
