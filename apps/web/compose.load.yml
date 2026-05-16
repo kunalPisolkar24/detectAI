@@ -1,0 +1,69 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=detectai_load
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mock-server:
+    build:
+      context: .
+      dockerfile: test/load/mock-server/Dockerfile
+    ports:
+      - "8001:8000"
+      - "50052:50051"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/detectai_load
+      - REDIS_URL=redis://redis:6379
+      - REDIS_MODE=standalone
+      - NEXTAUTH_SECRET=load-test-secret
+      - NEXTAUTH_URL=http://frontend:3000
+      - AI_SERVICE_URL=mock-server:50051
+      - CHAT_SERVICE_URL=mock-server:50051
+      - FILE_EXTRACTOR_API_URL=http://mock-server:8000
+      - PAYMENT_GATEWAY_URL=http://mock-server:8000
+      - INTERNAL_API_KEY=load-test-key
+      - NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+      - TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+
+  k6:
+    image: grafana/k6
+    volumes:
+      - ./test/load/scripts:/scripts
+    environment:
+      - BASE_URL=http://frontend:3000
+    depends_on:
+      frontend:
+        condition: service_started
+    command: run /scripts/landing.k6.js
