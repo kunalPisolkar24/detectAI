@@ -37,6 +37,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+        - NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=load-test-token
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/detectai_load
@@ -50,6 +53,7 @@ services:
       - PAYMENT_GATEWAY_URL=http://mock-server:8000
       - INTERNAL_API_KEY=load-test-key
       - NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+      - NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=load-test-token
       - TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
     depends_on:
       postgres:
