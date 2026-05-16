@@ -21,9 +21,7 @@ export default function () {
   const params = {
     headers: {
       'Content-Type': 'application/json',
-      // In a real scenario, we'd need a Session cookie here.
-      // For this isolated test, we can configure the server to allow a "test-session" cookie
-      'Cookie': 'next-auth.session-token=mock-token',
+      'X-Internal-Key': 'load-test-key',
     },
   };
 
