@@ -1,8 +1,8 @@
 import { serve } from "bun";
 import amqp, { type Channel, type ConsumeMessage, type ChannelModel } from "amqplib";
-import { RedisFactory } from "../../shared/redis";
-import { prismaPrimary as prisma } from "../../shared/db";
-import { Logger } from "../../shared/logger";
+import { RedisFactory } from "@shared/cache/RedisClient";
+import { prismaPrimary as prisma } from "@shared/database/PrismaService";
+import { Logger } from "@shared/logging/Logger";
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
@@ -31,7 +31,6 @@ async function initAmqp() {
     try {
         amqpConn = await amqp.connect(RABBITMQ_URL);
         amqpChannel = await amqpConn.createChannel();
-        await amqpChannel.assertQueue("payment_events", { durable: true });
         Logger.info("Connected to RabbitMQ for load testing");
     } catch (error) {
         Logger.error("Failed to connect to RabbitMQ", error);
