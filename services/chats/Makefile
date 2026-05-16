@@ -28,10 +28,13 @@ docker-build:
 	docker compose up --build
 
 load-test-smoke:
-	k6 run tests/load/scenarios/smoke.js
+	SMOKE_VUS=$(SMOKE_VUS) SMOKE_DURATION=$(SMOKE_DURATION) k6 run tests/load/scenarios/smoke.js
 
 load-test:
-	k6 run tests/load/scenarios/load.js
+	LOAD_VUS=$(LOAD_VUS) LOAD_DURATION=$(LOAD_DURATION) k6 run tests/load/scenarios/load.js
 
 load-test-stress:
-	k6 run tests/load/scenarios/stress.js
+	STRESS_VUS=$(STRESS_VUS) STRESS_DURATION=$(STRESS_DURATION) k6 run tests/load/scenarios/stress.js
+
+load-test-soak:
+	SOAK_VUS=$(SOAK_VUS) SOAK_DURATION=$(SOAK_DURATION) k6 run tests/load/scenarios/soak.js

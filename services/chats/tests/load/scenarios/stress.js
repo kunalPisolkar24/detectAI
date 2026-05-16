@@ -1,15 +1,16 @@
 import { sleep } from 'k6';
 import { generateUserId, generateChatTitle, generateMessage, generateUUID } from '../lib/data.js';
+import { config } from '../lib/config.js';
 import { createChat, saveMessage } from '../lib/chat.js';
 import { closeClient } from '../lib/grpc.js';
 
 export const options = {
     stages: [
-        { duration: '2m', target: 50 },
-        { duration: '2m', target: 100 },
-        { duration: '2m', target: 150 },
-        { duration: '2m', target: 200 },
-        { duration: '2m', target: 0 },
+        { duration: '1m', target: Math.floor(config.stressVUs * 0.2) },
+        { duration: '1m', target: Math.floor(config.stressVUs * 0.5) },
+        { duration: '2m', target: config.stressVUs },
+        { duration: config.stressDuration, target: config.stressVUs },
+        { duration: '1m', target: 0 },
     ],
 };
 

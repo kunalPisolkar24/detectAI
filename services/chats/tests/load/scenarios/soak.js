@@ -1,11 +1,15 @@
 import { sleep } from 'k6';
+import { config, thresholds } from '../lib/config.js';
 import { generateUserId, generateChatTitle, generateMessage, generateUUID } from '../lib/data.js';
 import { createChat, saveMessage, getChatHistory } from '../lib/chat.js';
 import { closeClient } from '../lib/grpc.js';
 
 export const options = {
-    vus: 20,
-    duration: '2h',
+    vus: config.soakVUs,
+    duration: config.soakDuration,
+    thresholds: {
+        'chat_rpc_success_rate': [`rate>=${thresholds.successRate}`],
+    },
 };
 
 export function teardown() {
@@ -29,6 +33,6 @@ export default function () {
         sleep(10);
     }
 
-    getChatHistory(chatId);
+    getChatHistory(chatId, userId);
     sleep(30);
 }

@@ -16,8 +16,10 @@ export function closeClient() {
     client.close();
 }
 
-export function getMetadata() {
-    return {
-        // Add auth headers here if needed in future
-    };
+export function getMetadata(userId) {
+    const meta = {};
+    if (userId) {
+        meta['x-user-id'] = userId;
+    }
+    return meta;
 }

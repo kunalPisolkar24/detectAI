@@ -1,14 +1,14 @@
 import { sleep, check } from 'k6';
 import { generateUserId, generateChatTitle, generateMessage, generateUUID } from '../lib/data.js';
 import { createChat, saveMessage, getChatHistory, getUserChats } from '../lib/chat.js';
-import { thresholds } from '../lib/config.js';
+import { thresholds, config } from '../lib/config.js';
 import { closeClient } from '../lib/grpc.js';
 
 export const options = {
     stages: [
-        { duration: '1m', target: 20 },
-        { duration: '3m', target: 20 },
-        { duration: '1m', target: 0 },
+        { duration: '30s', target: config.loadVUs }, // Ramp up
+        { duration: config.loadDuration, target: config.loadVUs }, // Steady state
+        { duration: '30s', target: 0 }, // Ramp down
     ],
     thresholds: {
         'chat_rpc_success_rate': [`rate>=${thresholds.successRate}`],
@@ -36,7 +36,7 @@ export default function () {
         sleep(Math.random() * 2 + 1);
     }
 
-    getChatHistory(chatId);
+    getChatHistory(chatId, userId);
     getUserChats(userId);
 
     sleep(1);

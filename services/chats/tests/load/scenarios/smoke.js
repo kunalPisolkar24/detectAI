@@ -1,12 +1,12 @@
 import { sleep, check } from 'k6';
 import { generateUserId, generateChatTitle, generateMessage, generateUUID } from '../lib/data.js';
 import { createChat, verifyE2ELatency, getUserChats } from '../lib/chat.js';
-import { thresholds } from '../lib/config.js';
+import { thresholds, config } from '../lib/config.js';
 import { closeClient } from '../lib/grpc.js';
 
 export const options = {
-    vus: 1,
-    duration: '10s',
+    vus: config.smokeVUs,
+    duration: config.smokeDuration,
     thresholds: {
         'chat_rpc_success_rate': ['rate>=1.0'],
     },
