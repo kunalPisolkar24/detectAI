@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/config/auth-options"
 import { MAX_LIVE_ANALYSIS_CHARS } from "@/features/chat/constants"
 import { analysisOrchestrator } from "@/features/chat/services/analysis-orchestrator"
 import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
+import { env } from "@/lib/config/env"
 
 export const runtime = "nodejs"
 
@@ -29,8 +30,22 @@ const requestSchema = z.object({
 })
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
+  const internalKey = request.headers.get("X-Internal-Key")
+  const isLoadTest = internalKey && env.INTERNAL_API_KEY && internalKey === env.INTERNAL_API_KEY
+  
+  let userId: string | undefined
+  let isPremium = false
+
+  if (isLoadTest) {
+    userId = "load-test-user-id"
+    isPremium = true
+  } else {
+    const session = await getServerSession(authOptions)
+    userId = session?.user?.id
+    isPremium = session?.user?.isPremium ?? false
+  }
+
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -49,14 +64,14 @@ export async function POST(request: Request) {
       )
     }
 
-    const { allowed } = await rateLimitService.checkLimit(session.user.id, session.user.isPremium ?? false)
+    const { allowed } = await rateLimitService.checkLimit(userId, isPremium)
     if (!allowed) {
       return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 })
     }
 
     const stream = await analysisOrchestrator.execute({
       ...parsed.data,
-      userId: session.user.id,
+      userId: userId!,
     }, request.signal)
 
     return new Response(stream, {
