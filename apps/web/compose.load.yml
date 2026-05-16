@@ -55,6 +55,13 @@ services:
       - NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
       - NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=load-test-token
       - TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+      - GITHUB_ID=dummy
+      - GITHUB_SECRET=dummy
+      - GOOGLE_ID=dummy
+      - GOOGLE_SECRET=dummy
+      - REDIS_USAGE_URL=redis://redis:6379
+      - REDIS_MASTER_NAME=mymaster
+      - AI_SERVICE_API_KEY=dummy
     depends_on:
       postgres:
         condition: service_healthy
