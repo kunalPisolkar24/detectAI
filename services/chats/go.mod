@@ -1,6 +1,6 @@
 module github.com/kunalPisolkar24/detectAI/services/chats
 
-go 1.25.0
+go 1.24.0
 
 require (
 	github.com/go-redis/redismock/v9 v9.2.0
