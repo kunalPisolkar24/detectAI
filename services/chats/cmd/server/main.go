@@ -50,7 +50,8 @@ func main() {
 	cacheRepo := redisRepo.NewCacheRepository(redisClient, cfg.CacheTTL)
 
 	if cfg.ServiceRole == "api" {
-		svc := services.NewChatService(cacheRepo, streamRepo, persistenceRepo)
+		promMetrics := metrics.NewPrometheusMetrics()
+		svc := services.NewChatService(cacheRepo, streamRepo, persistenceRepo, logger.Log, promMetrics)
 		server := grpc.NewServer(cfg, svc)
 
 		go func() {
