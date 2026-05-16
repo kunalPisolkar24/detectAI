@@ -47,6 +47,9 @@ load-test: load-down load-up
 		printf '.'; \
 		sleep 2; \
 	done
-	@echo "\nRunning k6 load tests..."
-	docker compose -f compose.load.yml run --rm k6
+	@echo "\nRunning k6 load tests (VUS=$(VUS), DURATION=$(DURATION), SCRIPT=$(SCRIPT))..."
+	docker compose -f compose.load.yml run --rm \
+		-e VUS=$(VUS) \
+		-e DURATION=$(DURATION) \
+		k6 run /scripts/$(or $(SCRIPT),landing.k6.js)
 	@$(MAKE) load-down
