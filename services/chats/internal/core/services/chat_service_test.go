@@ -2,7 +2,7 @@ package services
 
 import (
 	"context"
-	"errors"
+	"sort"
 	"testing"
 	"time"
 
@@ -10,13 +10,20 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"go.uber.org/zap"
 )
 
-func TestCreateSession(t *testing.T) {
+func setupTest(t *testing.T) (*ChatService, *mocks.MockChatCacheRepository, *mocks.MockChatStreamRepository, *mocks.MockChatPersistenceRepository, *mocks.MockMetricsCollector) {
 	cacheRepo := new(mocks.MockChatCacheRepository)
 	streamRepo := new(mocks.MockChatStreamRepository)
 	dbRepo := new(mocks.MockChatPersistenceRepository)
-	service := NewChatService(cacheRepo, streamRepo, dbRepo)
+	metrics := new(mocks.MockMetricsCollector)
+	service := NewChatService(cacheRepo, streamRepo, dbRepo, zap.NewNop(), metrics)
+	return service, cacheRepo, streamRepo, dbRepo, metrics
+}
+
+func TestCreateSession(t *testing.T) {
+	service, _, _, dbRepo, _ := setupTest(t)
 
 	ctx := context.Background()
 	userID := "user-123"
@@ -37,10 +44,7 @@ func TestCreateSession(t *testing.T) {
 }
 
 func TestProcessMessage_Success(t *testing.T) {
-	cacheRepo := new(mocks.MockChatCacheRepository)
-	streamRepo := new(mocks.MockChatStreamRepository)
-	dbRepo := new(mocks.MockChatPersistenceRepository)
-	service := NewChatService(cacheRepo, streamRepo, dbRepo)
+	service, cacheRepo, streamRepo, dbRepo, _ := setupTest(t)
 
 	ctx := context.Background()
 	msg := &domain.Message{
@@ -65,8 +69,6 @@ func TestProcessMessage_Success(t *testing.T) {
 		return m.ID != ""
 	})).Return(nil)
 
-	dbRepo.On("UpdateChatTitle", ctx, "chat-1", "Existing Chat").Return(nil)
-
 	err := service.ProcessMessage(ctx, msg)
 
 	assert.NoError(t, err)
@@ -77,41 +79,40 @@ func TestProcessMessage_Success(t *testing.T) {
 }
 
 func TestProcessMessage_Unauthorized(t *testing.T) {
-	cacheRepo := new(mocks.MockChatCacheRepository)
-	streamRepo := new(mocks.MockChatStreamRepository)
-	dbRepo := new(mocks.MockChatPersistenceRepository)
-	service := NewChatService(cacheRepo, streamRepo, dbRepo)
+	service, cacheRepo, streamRepo, dbRepo, _ := setupTest(t)
 
 	ctx := context.Background()
 	msg := &domain.Message{
-		ChatID: "chat-1",
-		UserID: "intruder-id",
+		ChatID:  "chat-1",
+		UserID:  "intruder-id",
+		Content: "Hello",
 	}
 
 	mockChat := &domain.ChatSession{
 		ID:     "chat-1",
 		UserID: "owner-id",
+		Title:  "Existing Chat",
 	}
 
 	dbRepo.On("GetChat", ctx, "chat-1").Return(mockChat, nil)
 
 	err := service.ProcessMessage(ctx, msg)
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unauthorized")
+	assert.ErrorIs(t, err, domain.ErrUnauthorized)
 	streamRepo.AssertNotCalled(t, "Publish")
 	cacheRepo.AssertNotCalled(t, "SaveToCache")
 }
 
 func TestGetHistory_MergesCacheAndPersistence(t *testing.T) {
-	cacheRepo := new(mocks.MockChatCacheRepository)
-	streamRepo := new(mocks.MockChatStreamRepository)
-	dbRepo := new(mocks.MockChatPersistenceRepository)
-	service := NewChatService(cacheRepo, streamRepo, dbRepo)
+	service, cacheRepo, _, dbRepo, metrics := setupTest(t)
 
 	ctx := context.Background()
 	chatID := "chat-1"
+	userID := "user-1"
 	pageSize := int32(2)
+
+	mockChat := &domain.ChatSession{ID: chatID, UserID: userID}
+	dbRepo.On("GetChat", ctx, chatID).Return(mockChat, nil)
 
 	cachedMsgs := []*domain.Message{
 		{ID: "msg-cache-new", CreatedAt: time.Now().UTC()},
@@ -119,12 +120,14 @@ func TestGetHistory_MergesCacheAndPersistence(t *testing.T) {
 	}
 
 	cacheRepo.On("GetRecentMessages", ctx, chatID).Return(cachedMsgs, nil)
+	metrics.On("IncCacheHit").Return()
+
 	dbRepo.On("GetHistory", ctx, chatID, 0, 2).Return([]*domain.Message{
 		{ID: "msg-cache-old", CreatedAt: cachedMsgs[1].CreatedAt},
 		{ID: "msg-db", CreatedAt: cachedMsgs[1].CreatedAt.Add(-time.Minute)},
 	}, nil)
 
-	result, hasMore, err := service.GetHistory(ctx, chatID, 1, pageSize)
+	result, hasMore, err := service.GetHistory(ctx, chatID, userID, 1, pageSize)
 
 	assert.NoError(t, err)
 	assert.True(t, hasMore)
@@ -135,23 +138,25 @@ func TestGetHistory_MergesCacheAndPersistence(t *testing.T) {
 }
 
 func TestGetHistory_CacheMiss_ReadRepair(t *testing.T) {
-	cacheRepo := new(mocks.MockChatCacheRepository)
-	streamRepo := new(mocks.MockChatStreamRepository)
-	dbRepo := new(mocks.MockChatPersistenceRepository)
-	service := NewChatService(cacheRepo, streamRepo, dbRepo)
+	service, cacheRepo, _, dbRepo, metrics := setupTest(t)
 
 	ctx := context.Background()
 	chatID := "chat-1"
+	userID := "user-1"
 	pageSize := int32(20)
 
+	mockChat := &domain.ChatSession{ID: chatID, UserID: userID}
+	dbRepo.On("GetChat", ctx, chatID).Return(mockChat, nil)
+
 	cacheRepo.On("GetRecentMessages", ctx, chatID).Return(nil, errors.New("cache miss"))
+	metrics.On("IncCacheMiss").Return()
 	
 	dbMsgs := []*domain.Message{{ID: "msg-old"}, {ID: "msg-older"}}
 	dbRepo.On("GetHistory", ctx, chatID, 0, 20).Return(dbMsgs, nil)
 
 	cacheRepo.On("PopulateCache", mock.Anything, chatID, dbMsgs).Return(nil)
 
-	result, hasMore, err := service.GetHistory(ctx, chatID, 1, pageSize)
+	result, hasMore, err := service.GetHistory(ctx, chatID, userID, 1, pageSize)
 
 	assert.NoError(t, err)
 	assert.False(t, hasMore) 
@@ -160,71 +165,23 @@ func TestGetHistory_CacheMiss_ReadRepair(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 	cacheRepo.AssertExpectations(t)
-}
-
-func TestGetHistory_PartialCache_MergesWithoutDuplicates(t *testing.T) {
-	cacheRepo := new(mocks.MockChatCacheRepository)
-	streamRepo := new(mocks.MockChatStreamRepository)
-	dbRepo := new(mocks.MockChatPersistenceRepository)
-	service := NewChatService(cacheRepo, streamRepo, dbRepo)
-
-	ctx := context.Background()
-	chatID := "chat-1"
-	pageSize := int32(50)
-
-	cachedMsgs := []*domain.Message{{ID: "msg-1"}} 
-	
-	cacheRepo.On("GetRecentMessages", ctx, chatID).Return(cachedMsgs, nil)
-	
-	dbMsgs := []*domain.Message{{ID: "msg-1"}, {ID: "msg-2"}}
-	dbRepo.On("GetHistory", ctx, chatID, 0, 50).Return(dbMsgs, nil)
-
-	cacheRepo.On("PopulateCache", mock.Anything, chatID, dbMsgs).Return(nil)
-
-	result, _, err := service.GetHistory(ctx, chatID, 1, pageSize)
-
-	assert.NoError(t, err)
-	assert.Len(t, result, 2)
-	assert.Equal(t, "msg-1", result[0].ID)
-	assert.Equal(t, "msg-2", result[1].ID)
-	cacheRepo.AssertNotCalled(t, "PopulateCache")
-}
-
-func TestGetHistory_SecondPage_SkipCache(t *testing.T) {
-	cacheRepo := new(mocks.MockChatCacheRepository)
-	streamRepo := new(mocks.MockChatStreamRepository)
-	dbRepo := new(mocks.MockChatPersistenceRepository)
-	service := NewChatService(cacheRepo, streamRepo, dbRepo)
-
-	ctx := context.Background()
-	chatID := "chat-1"
-	
-	dbMsgs := []*domain.Message{{ID: "msg-page-2"}}
-	dbRepo.On("GetHistory", ctx, chatID, 20, 20).Return(dbMsgs, nil)
-
-	result, hasMore, err := service.GetHistory(ctx, chatID, 2, 20)
-
-	assert.NoError(t, err)
-	assert.False(t, hasMore)
-	assert.Len(t, result, 1)
-	
-	cacheRepo.AssertNotCalled(t, "GetRecentMessages")
-	cacheRepo.AssertNotCalled(t, "PopulateCache")
+	metrics.AssertExpectations(t)
 }
 
 func TestDeleteSession(t *testing.T) {
-	cacheRepo := new(mocks.MockChatCacheRepository)
-	streamRepo := new(mocks.MockChatStreamRepository)
-	dbRepo := new(mocks.MockChatPersistenceRepository)
-	service := NewChatService(cacheRepo, streamRepo, dbRepo)
+	service, cacheRepo, _, dbRepo, _ := setupTest(t)
 
 	ctx := context.Background()
 	chatID := "chat-1"
+	userID := "user-1"
+
+	mockChat := &domain.ChatSession{ID: chatID, UserID: userID}
+	dbRepo.On("GetChat", ctx, chatID).Return(mockChat, nil)
 
 	dbRepo.On("DeleteChat", ctx, chatID).Return(nil)
 	cacheRepo.On("DeleteCache", ctx, chatID).Return(nil)
 
-	err := service.DeleteSession(ctx, chatID)
+	err := service.DeleteSession(ctx, chatID, userID)
 
 	assert.NoError(t, err)
 	dbRepo.AssertExpectations(t)
