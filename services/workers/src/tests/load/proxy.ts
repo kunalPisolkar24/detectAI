@@ -62,8 +62,22 @@ const server = serve({
 
                 if (MOCK_MODE) {
                     Logger.info(`[MOCK] Payments event: ${payload.event_type} for ${payload.data.custom_data.userId}`);
-                } else if (amqpChannel) {
-                    amqpChannel.sendToQueue("payment_events", Buffer.from(JSON.stringify(payload)), { persistent: true });
+                } else {
+                    const userId = payload.data.custom_data.userId;
+                    // Ensure user exists so the worker can actually update something
+                    await prisma.user.upsert({
+                        where: { id: userId },
+                        create: { 
+                            id: userId, 
+                            email: `${userId}@example.com`,
+                            name: "Load Test User"
+                        },
+                        update: {}
+                    });
+
+                    if (amqpChannel) {
+                        amqpChannel.sendToQueue("payment_events", Buffer.from(JSON.stringify(payload)), { persistent: true });
+                    }
                 }
                 return new Response(JSON.stringify({ success: true }), { status: 200 });
             } catch (error) {
