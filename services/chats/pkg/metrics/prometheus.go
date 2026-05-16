@@ -37,6 +37,20 @@ var (
 	}, []string{"method", "status"})
 )
 
+type PrometheusMetrics struct{}
+
+func NewPrometheusMetrics() *PrometheusMetrics {
+	return &PrometheusMetrics{}
+}
+
+func (p *PrometheusMetrics) IncCacheHit() {
+	CacheHits.Inc()
+}
+
+func (p *PrometheusMetrics) IncCacheMiss() {
+	CacheMisses.Inc()
+}
+
 func Init() {
 	prometheus.MustRegister(MessagesIngested, StreamLag, CacheHits, CacheMisses, RequestLatency)
 }
