@@ -2,12 +2,14 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	pb "github.com/kunalPisolkar24/detectAI/services/chats/api/proto"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/ports"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -21,22 +23,19 @@ func NewHandler(service ports.ChatService) *Handler {
 }
 
 func (h *Handler) CreateChat(ctx context.Context, req *pb.CreateChatRequest) (*pb.CreateChatResponse, error) {
-	if req.UserId == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
-	}
-
 	session, err := h.service.CreateSession(ctx, req.UserId, req.Title)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, h.mapError(err)
 	}
 
 	return &pb.CreateChatResponse{ChatId: session.ID}, nil
 }
 
 func (h *Handler) GetChat(ctx context.Context, req *pb.GetChatRequest) (*pb.GetChatResponse, error) {
-	session, err := h.service.GetSession(ctx, req.ChatId)
+	userID := h.extractUserID(ctx)
+	session, err := h.service.GetSession(ctx, req.ChatId, userID)
 	if err != nil {
-		return nil, status.Error(codes.NotFound, "Chat not found")
+		return nil, h.mapError(err)
 	}
 
 	return &pb.GetChatResponse{
@@ -51,7 +50,7 @@ func (h *Handler) GetChat(ctx context.Context, req *pb.GetChatRequest) (*pb.GetC
 func (h *Handler) GetUserChats(ctx context.Context, req *pb.GetUserChatsRequest) (*pb.GetUserChatsResponse, error) {
 	chats, err := h.service.GetUserSessions(ctx, req.UserId)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, h.mapError(err)
 	}
 
 	summaries := make([]*pb.ChatSummary, len(chats))
@@ -67,17 +66,19 @@ func (h *Handler) GetUserChats(ctx context.Context, req *pb.GetUserChatsRequest)
 }
 
 func (h *Handler) RenameChat(ctx context.Context, req *pb.RenameChatRequest) (*pb.RenameChatResponse, error) {
-	err := h.service.RenameSession(ctx, req.ChatId, req.NewTitle)
+	userID := h.extractUserID(ctx)
+	err := h.service.RenameSession(ctx, req.ChatId, userID, req.NewTitle)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, h.mapError(err)
 	}
 	return &pb.RenameChatResponse{Success: true}, nil
 }
 
 func (h *Handler) DeleteChat(ctx context.Context, req *pb.DeleteChatRequest) (*pb.DeleteChatResponse, error) {
-	err := h.service.DeleteSession(ctx, req.ChatId)
+	userID := h.extractUserID(ctx)
+	err := h.service.DeleteSession(ctx, req.ChatId, userID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, h.mapError(err)
 	}
 	return &pb.DeleteChatResponse{Success: true}, nil
 }
@@ -106,7 +107,7 @@ func (h *Handler) SaveMessage(ctx context.Context, req *pb.SaveMessageRequest) (
 	}
 
 	if err := h.service.ProcessMessage(ctx, msg); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, h.mapError(err)
 	}
 
 	return &pb.SaveMessageResponse{
@@ -116,9 +117,10 @@ func (h *Handler) SaveMessage(ctx context.Context, req *pb.SaveMessageRequest) (
 }
 
 func (h *Handler) GetChatHistory(ctx context.Context, req *pb.GetChatHistoryRequest) (*pb.GetChatHistoryResponse, error) {
-	messages, hasMore, err := h.service.GetHistory(ctx, req.ChatId, req.Page, req.PageSize)
+	userID := h.extractUserID(ctx)
+	messages, hasMore, err := h.service.GetHistory(ctx, req.ChatId, userID, req.Page, req.PageSize)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, h.mapError(err)
 	}
 
 	pbMessages := make([]*pb.Message, len(messages))
@@ -149,4 +151,29 @@ func (h *Handler) GetChatHistory(ctx context.Context, req *pb.GetChatHistoryRequ
 		Messages: pbMessages,
 		HasMore:  hasMore,
 	}, nil
+}
+
+func (h *Handler) mapError(err error) error {
+	if errors.Is(err, domain.ErrNotFound) {
+		return status.Error(codes.NotFound, err.Error())
+	}
+	if errors.Is(err, domain.ErrUnauthorized) {
+		return status.Error(codes.PermissionDenied, err.Error())
+	}
+	if errors.Is(err, domain.ErrInvalidInput) {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	return status.Error(codes.Internal, "internal server error")
+}
+
+func (h *Handler) extractUserID(ctx context.Context) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	ids := md.Get("x-user-id")
+	if len(ids) > 0 {
+		return ids[0]
+	}
+	return ""
 }
