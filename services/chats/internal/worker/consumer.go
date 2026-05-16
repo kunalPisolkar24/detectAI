@@ -21,18 +21,24 @@ type Consumer struct {
 	repo      ports.ChatPersistenceRepository
 	cfg       *config.Config
 	processor *Processor
+	logger    *zap.Logger
+	metrics   ports.MetricsCollector
 }
 
 func NewConsumer(
 	client redis.UniversalClient,
 	repo ports.ChatPersistenceRepository,
 	cfg *config.Config,
+	logger *zap.Logger,
+	metrics ports.MetricsCollector,
 ) *Consumer {
 	return &Consumer{
 		client:    client,
 		repo:      repo,
 		cfg:       cfg,
-		processor: NewProcessor(repo, cfg.BatchSize),
+		processor: NewProcessor(repo, cfg.BatchSize, logger, metrics),
+		logger:    logger,
+		metrics:   metrics,
 	}
 }
 
@@ -72,7 +78,7 @@ func (c *Consumer) runWorker(ctx context.Context, partitionID int, consumerName 
 
 	for {
 		if err := ensureGroup(); err != nil {
-			logger.Log.Error("Failed to create XGroup, retrying...", zap.String("stream", stream), zap.Error(err))
+			c.logger.Error("Failed to create XGroup, retrying...", zap.String("stream", stream), zap.Error(err))
 			select {
 			case <-ctx.Done():
 				return
@@ -104,7 +110,7 @@ func (c *Consumer) runWorker(ctx context.Context, partitionID int, consumerName 
 
 			if err != nil {
 				if err != redis.Nil {
-					logger.Log.Error("XReadGroup failed", zap.String("stream", stream), zap.Error(err))	
+					c.logger.Error("XReadGroup failed", zap.String("stream", stream), zap.Error(err))	
 					if strings.HasPrefix(err.Error(), "NOGROUP") {
 						ensureGroup()
 					}
@@ -145,7 +151,7 @@ func (c *Consumer) runRecovery(ctx context.Context, consumerName string) {
 
 				if err != nil && err != redis.Nil {
 					if !strings.HasPrefix(err.Error(), "NOGROUP") {
-						logger.Log.Error("Recovery failed", zap.String("stream", stream), zap.Error(err))
+						c.logger.Error("Recovery failed", zap.String("stream", stream), zap.Error(err))
 					}
 					continue
 				}
@@ -169,7 +175,7 @@ func (c *Consumer) updateSingleLag(ctx context.Context, stream, group string) {
 	}
 	for _, grp := range info {
 		if grp.Name == group {
-			metrics.StreamLag.WithLabelValues(stream).Set(float64(grp.Lag))
+			c.metrics.SetStreamLag(stream, float64(grp.Lag))
 		}
 	}
 }

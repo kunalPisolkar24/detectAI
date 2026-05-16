@@ -51,6 +51,14 @@ func (p *PrometheusMetrics) IncCacheMiss() {
 	CacheMisses.Inc()
 }
 
+func (p *PrometheusMetrics) AddIngestedMessages(count float64) {
+	MessagesIngested.Add(count)
+}
+
+func (p *PrometheusMetrics) SetStreamLag(partition string, lag float64) {
+	StreamLag.WithLabelValues(partition).Set(lag)
+}
+
 func Init() {
 	prometheus.MustRegister(MessagesIngested, StreamLag, CacheHits, CacheMisses, RequestLatency)
 }

@@ -77,7 +77,8 @@ func main() {
 			logger.Log.Fatal("Server crashed", zap.Error(err))
 		}
 	} else if cfg.ServiceRole == "worker" {
-		consumer := worker.NewConsumer(redisClient, persistenceRepo, cfg)
+		promMetrics := metrics.NewPrometheusMetrics()
+		consumer := worker.NewConsumer(redisClient, persistenceRepo, cfg, logger.Log, promMetrics)
 		consumer.Start(ctx)
 	} else {
 		logger.Log.Fatal("Invalid ServiceRole")
