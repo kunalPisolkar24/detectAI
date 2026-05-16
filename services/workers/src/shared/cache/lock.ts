@@ -1,6 +1,6 @@
 import Redlock, { ExecutionError } from "redlock";
-import { type RedisClient } from "../redis";
-import { Logger } from "../logger";
+import { type RedisClient } from "./RedisClient";
+import { Logger } from "../logging/Logger";
 
 export class LockService {
   private redlock: Redlock;

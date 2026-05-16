@@ -28,15 +28,16 @@ export default async function ProfilePage() {
     redirect("/login")
   }
 
-  const isPremium = user.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE
+  const isPremium = user.subscription?.status === SubscriptionStatus.ACTIVE
 
   const userData = {
     ...user,
     isPremium,
-    paddleSubscriptionStatus: user.paddleSubscriptionStatus as string | null,
-    paddleCancellationScheduled: user.paddleCancellationScheduled,
+    subscriptionEndsAt: user.subscription?.endsAt ?? null,
+    paddleSubscriptionStatus: user.subscription?.status as string | null,
+    paddleCancellationScheduled: user.subscription?.cancellationScheduled ?? false,
     apiCallCountDaily: realTimeUsage.dailyCount,
-    apiCallCountTotal: user.apiCallCountTotal + realTimeUsage.pendingCount
+    apiCallCountTotal: (user.usage?.apiCallCountTotal ?? 0) + realTimeUsage.pendingCount
   }
 
   return (

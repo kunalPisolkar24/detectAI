@@ -28,8 +28,11 @@
       "@shared/*": [
         "./src/shared/*"
       ],
-      "@workers/*": [
-        "./src/workers/*"
+      "@modules/*": [
+        "./src/modules/*"
+      ],
+      "@cmd/*": [
+        "./src/cmd/*"
       ]
     }
   },

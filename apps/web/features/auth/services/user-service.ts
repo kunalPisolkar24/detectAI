@@ -15,14 +15,14 @@ export class UserService {
     return UserService.instance
   }
 
-  public async getUserById(id: string): Promise<User | null> {
+  public async getUserById(id: string) {
     return this.fetchThroughCache(
       cacheService.keys.user(id),
       () => userRepository.findById(id)
     )
   }
 
-  public async getUserByEmail(email: string): Promise<User | null> {
+  public async getUserByEmail(email: string) {
     const emailKey = cacheService.keys.userByEmail(email)
     
     return this.fetchThroughCache(

@@ -43,4 +43,7 @@ yarn-error.log*
 next-env.d.ts
 
 /lib/generated/prisma
+/lib/shared/generated
 lint_output.txt
+
+# Prisma Generation

@@ -21,7 +21,13 @@ describe('UserService Integration', () => {
     const user = await userService.getUserById('user-1')
 
     expect(user).toEqual(mockUser)
-    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'user-1' } })
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ 
+      where: { id: 'user-1' },
+      include: {
+        subscription: true,
+        usage: true
+      }
+    })
     expect(redisWriter.setex).toHaveBeenCalledWith(
       expect.stringContaining('user:id:user-1'),
       expect.any(Number),
