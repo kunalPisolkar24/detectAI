@@ -31,3 +31,22 @@ clean:
 	docker compose -f compose.yml -f compose.dev.yml down -v --remove-orphans
 
 restart: down dev
+
+# Load Testing
+.PHONY: load-up load-down load-test
+
+load-up:
+	docker compose -f compose.load.yml up -d --build
+
+load-down:
+	docker compose -f compose.load.yml down --remove-orphans
+
+load-test: load-down load-up
+	@echo "Waiting for frontend to be ready..."
+	@until $$(curl --output /dev/null --silent --head --fail http://localhost:3001); do \
+		printf '.'; \
+		sleep 2; \
+	done
+	@echo "\nRunning k6 load tests..."
+	docker compose -f compose.load.yml run --rm k6
+	@$(MAKE) load-down
