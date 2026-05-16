@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	redisrepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/secondary/repository/redis"
+	redisrepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/redis"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/testutil"
 	goredis "github.com/redis/go-redis/v9"

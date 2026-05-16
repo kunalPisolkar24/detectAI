@@ -7,12 +7,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/primary/grpc"
-	mongoRepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/secondary/repository/mongo"
-	redisRepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/secondary/repository/redis"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/grpc"
+	mongoRepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/mongo"
+	redisRepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/redis"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/services"
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/worker"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/usecase"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/worker"
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/database"
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/logger"
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/metrics"
@@ -55,7 +55,7 @@ func main() {
 
 	if cfg.ServiceRole == "api" {
 		promMetrics := metrics.NewPrometheusMetrics()
-		svc := services.NewChatService(cacheRepo, streamRepo, persistenceRepo, logger.Log, promMetrics)
+		svc := usecase.NewChatService(cacheRepo, streamRepo, persistenceRepo, logger.Log, promMetrics)
 		server := grpc.NewServer(cfg, svc)
 
 		go func() {

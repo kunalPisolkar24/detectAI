@@ -9,16 +9,16 @@ import (
 	"time"
 
 	pb "github.com/kunalPisolkar24/detectAI/services/chats/api/proto"
-	mongorepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/secondary/repository/mongo"
-	redisrepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/secondary/repository/redis"
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/services"
+	mongorepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/mongo"
+	redisrepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/redis"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/usecase"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	grpchandler "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/primary/grpc"
+	grpchandler "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -27,6 +27,9 @@ func (n *noopMetrics) IncCacheHit()                     {}
 func (n *noopMetrics) IncCacheMiss()                    {}
 func (n *noopMetrics) AddIngestedMessages(_ float64)    {}
 func (n *noopMetrics) SetStreamLag(_ string, _ float64) {}
+func (n *noopMetrics) IncDLQMessages(_ float64)         {}
+func (n *noopMetrics) IncStreamErrors(_ string)         {}
+func (n *noopMetrics) IncDatabaseErrors(_ string)       {}
 
 func startTestServer(t *testing.T) (pb.ChatServiceClient, context.CancelFunc) {
 	t.Helper()
@@ -43,7 +46,7 @@ func startTestServer(t *testing.T) (pb.ChatServiceClient, context.CancelFunc) {
 	logger := zap.NewNop()
 	metrics := &noopMetrics{}
 
-	svc := services.NewChatService(cache, stream, persistence, logger, metrics)
+	svc := usecase.NewChatService(cache, stream, persistence, logger, metrics)
 	handler := grpchandler.NewHandler(svc)
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")

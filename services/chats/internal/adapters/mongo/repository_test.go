@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	mongoclient "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/secondary/repository/mongo"
+	mongoclient "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/mongo"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/testutil"
 	"github.com/stretchr/testify/assert"

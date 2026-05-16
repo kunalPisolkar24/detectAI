@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	mongorepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/secondary/repository/mongo"
+	mongorepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/mongo"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/testutil"
@@ -132,3 +132,6 @@ func (n *noopMetrics) IncCacheHit()                         {}
 func (n *noopMetrics) IncCacheMiss()                        {}
 func (n *noopMetrics) AddIngestedMessages(_ float64)        {}
 func (n *noopMetrics) SetStreamLag(_ string, _ float64)     {}
+func (n *noopMetrics) IncDLQMessages(_ float64)             {}
+func (n *noopMetrics) IncStreamErrors(_ string)             {}
+func (n *noopMetrics) IncDatabaseErrors(_ string)           {}
