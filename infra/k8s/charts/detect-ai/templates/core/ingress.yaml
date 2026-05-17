@@ -9,7 +9,17 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: {{ .Values.ingress.className | quote }}
     nginx.ingress.kubernetes.io/client-max-body-size: "10m"
+    {{- if and .Values.ingress.tls .Values.ingress.tls.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.clusterIssuer | default "letsencrypt-prod" | quote }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    {{- end }}
 spec:
+  {{- if and .Values.ingress.tls .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ include "detect-ai.fullname" . }}-tls-secret
+  {{- end }}
   rules:
     - host: {{ .Values.ingress.host | quote }}
       http:

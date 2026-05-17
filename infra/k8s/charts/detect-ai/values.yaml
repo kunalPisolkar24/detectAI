@@ -2,7 +2,16 @@ global:
   environment: "production"
   secretName: "detect-ai-secrets"
   detectAiNetwork: "detect-ai-network"
-
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
 # Frontend Next.js Web App
 web:
   replicaCount: 2
@@ -210,6 +219,10 @@ ingress:
   enabled: true
   className: "nginx"
   host: "detect-ai.local"
+  tls:
+    # Set to true in production with a cert-manager ClusterIssuer configured
+    enabled: false
+    clusterIssuer: "letsencrypt-prod"
 
 # LGTM Observability Stack Integration
 monitoring:
@@ -233,3 +246,8 @@ monitoring:
     storageSize: "5Gi"
   promtail:
     enabled: true
+
+# Zero-Trust Network Policies
+networkPolicies:
+  # Set to true once you have confirmed the ingress-nginx namespace label is correct
+  enabled: false

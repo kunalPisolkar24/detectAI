@@ -26,8 +26,16 @@ spec:
         - name: {{ .Values.global.secretName }}
       {{- end }}
       terminationGracePeriodSeconds: 30
+      {{- with .Values.global.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: document-parser
+          {{- with .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: "{{ .Values.documentParser.image.repository }}:{{ .Values.documentParser.image.tag }}"
           imagePullPolicy: {{ .Values.documentParser.image.pullPolicy }}
           ports:

@@ -27,8 +27,16 @@ spec:
         - name: {{ .Values.global.secretName }}
       {{- end }}
       terminationGracePeriodSeconds: 30
+      {{- with .Values.global.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: chats-api
+          {{- with .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: "{{ .Values.chats.image.repository }}:{{ .Values.chats.image.tag }}"
           imagePullPolicy: {{ .Values.chats.image.pullPolicy }}
           command: ["/app/chats"]
@@ -105,8 +113,16 @@ spec:
         - name: {{ .Values.global.secretName }}
       {{- end }}
       terminationGracePeriodSeconds: 30
+      {{- with .Values.global.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: chats-worker
+          {{- with .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: "{{ .Values.chats.image.repository }}:{{ .Values.chats.image.tag }}"
           imagePullPolicy: {{ .Values.chats.image.pullPolicy }}
           command: ["/app/chats"]

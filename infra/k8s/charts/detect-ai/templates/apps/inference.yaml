@@ -44,8 +44,18 @@ spec:
                     operator: "In"
                     values: ["true"]
       {{- end }}
+      {{- with .Values.global.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: inference
+          {{- if not .Values.inference.gpu.enabled }}
+          {{- with .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
           image: "{{ .Values.inference.image.repository }}:{{ .Values.inference.image.tag }}"
           imagePullPolicy: {{ .Values.inference.image.pullPolicy }}
           ports:

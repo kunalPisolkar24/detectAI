@@ -27,8 +27,16 @@ spec:
         - name: {{ .Values.global.secretName }}
       {{- end }}
       terminationGracePeriodSeconds: 30
+      {{- with .Values.global.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: worker-analytics
+          {{- with .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: "{{ .Values.workers.image.repository }}:{{ .Values.workers.image.tag }}"
           imagePullPolicy: {{ .Values.workers.image.pullPolicy }}
           command: ["bun", "run", "src/modules/analytics/index.ts"]
@@ -78,8 +86,16 @@ spec:
         - name: {{ .Values.global.secretName }}
       {{- end }}
       terminationGracePeriodSeconds: 30
+      {{- with .Values.global.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: worker-cron
+          {{- with .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: "{{ .Values.workers.image.repository }}:{{ .Values.workers.image.tag }}"
           imagePullPolicy: {{ .Values.workers.image.pullPolicy }}
           command: ["bun", "run", "src/modules/cron/index.ts"]
@@ -131,8 +147,16 @@ spec:
         - name: {{ .Values.global.secretName }}
       {{- end }}
       terminationGracePeriodSeconds: 45
+      {{- with .Values.global.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: worker-payments
+          {{- with .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: "{{ .Values.workers.image.repository }}:{{ .Values.workers.image.tag }}"
           imagePullPolicy: {{ .Values.workers.image.pullPolicy }}
           command: ["bun", "run", "src/modules/payments/index.ts"]
