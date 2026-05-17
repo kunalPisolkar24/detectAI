@@ -39,7 +39,7 @@ spec:
           {{- end }}
           image: "{{ .Values.workers.image.repository }}:{{ .Values.workers.image.tag }}"
           imagePullPolicy: {{ .Values.workers.image.pullPolicy }}
-          command: ["bun", "run", "src/modules/analytics/index.ts"]
+          command: ["bun", "run", "src/cmd/analytics/index.ts"]
           ports:
             - name: metrics
               containerPort: {{ .Values.workers.analytics.port }}
@@ -103,7 +103,7 @@ spec:
           {{- end }}
           image: "{{ .Values.workers.image.repository }}:{{ .Values.workers.image.tag }}"
           imagePullPolicy: {{ .Values.workers.image.pullPolicy }}
-          command: ["bun", "run", "src/modules/cron/index.ts"]
+          command: ["bun", "run", "src/cmd/cron/index.ts"]
           ports:
             - name: metrics
               containerPort: {{ .Values.workers.cron.port }}
@@ -169,7 +169,7 @@ spec:
           {{- end }}
           image: "{{ .Values.workers.image.repository }}:{{ .Values.workers.image.tag }}"
           imagePullPolicy: {{ .Values.workers.image.pullPolicy }}
-          command: ["bun", "run", "src/modules/payments/index.ts"]
+          command: ["bun", "run", "src/cmd/payments/index.ts"]
           ports:
             - name: metrics
               containerPort: {{ .Values.workers.payments.port }}
