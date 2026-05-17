@@ -113,6 +113,10 @@ K8S_REPO_WORKERS=$(get_env_val "K8S_IMAGE_REPO_WORKERS")
 K8S_TAG_WORKERS=$(get_env_val "K8S_IMAGE_TAG_WORKERS")
 
 # Step 5: Perform Helm Upgrade / Install with dynamic values injection
+echo "--> Adding required Helm repositories..."
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
+helm repo update
+
 echo "--> Building Helm Chart dependencies..."
 helm dependency build "$CHART_DIR"
 
