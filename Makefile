@@ -184,10 +184,17 @@ k8s-prod-down:
 	@helm uninstall prod -n detect-ai-prod
 
 k8s-cluster-up:
-	@echo "Creating Kind cluster with NGINX Ingress support..."
-	@kind create cluster --name detect-ai --config infra/k8s/kind-cluster-config.yaml
+	@echo "Checking if Kind cluster 'detect-ai' already exists..."
+	@if kind get clusters | grep -q "^detect-ai$$"; then \
+		echo "Cluster 'detect-ai' already exists. Skipping creation."; \
+	else \
+		echo "Creating Kind cluster with NGINX Ingress support..."; \
+		kind create cluster --name detect-ai --config infra/k8s/kind-cluster-config.yaml; \
+	fi
 	@echo "Installing NGINX Ingress Controller..."
 	@kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	@echo "Sleeping 10s to let Kubernetes register Ingress Controller pods..."
+	@sleep 10
 	@echo "Waiting for Ingress Controller to be ready..."
 	@kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
 	@echo "Cluster is ready! You can now run 'make k8s-dev-up'."
