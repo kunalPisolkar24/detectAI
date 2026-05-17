@@ -402,8 +402,9 @@ spec:
                 - "27017"
                 - "--eval"
                 - "db.adminCommand('ping')"
-            failureThreshold: 15
-            periodSeconds: 2
+            failureThreshold: 20
+            periodSeconds: 5
+            timeoutSeconds: 5
           readinessProbe:
             exec:
               command:
@@ -414,6 +415,7 @@ spec:
                 - "db.adminCommand('ping')"
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             exec:
               command:
@@ -424,6 +426,7 @@ spec:
                 - "db.adminCommand('ping')"
             initialDelaySeconds: 10
             periodSeconds: 20
+            timeoutSeconds: 5
           resources:
             {{- toYaml .Values.databases.mongo.resources | nindent 12 }}
           volumeMounts:
