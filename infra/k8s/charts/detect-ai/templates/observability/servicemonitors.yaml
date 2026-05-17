@@ -1,0 +1,47 @@
+{{- if .Values.monitoring.enabled }}
+
+# Helper template to generate ServiceMonitors dynamically
+{{- $releaseName := .Release.Name }}
+{{- $namespace := .Release.Namespace }}
+{{- $prometheusRelease := .Values.monitoring.prometheus.release | default "prometheus" }}
+
+# 1. Stateless App & Worker Monitors
+{{- range $app := list "web" "chats-api" "chats-worker" "payments-gateway" "inference" "worker-analytics" "worker-cron" "worker-payments" }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $releaseName }}-{{ $app }}-monitor
+  namespace: {{ $namespace }}
+  labels:
+    release: {{ $prometheusRelease }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ $app }}
+      release: {{ $releaseName }}
+  endpoints:
+    - port: {{ if eq $app "web" }}http{{ else if eq $app "payments-gateway" }}http{{ else if eq $app "chats-api" }}metrics{{ else }}metrics{{ end }}
+      interval: 15s
+{{- end }}
+
+# 2. Database Exporter Monitors
+{{- range $db := list "postgres" "rabbitmq" "mongodb-router" "mongodb-standalone" "redis-cluster" "redis-sentinel" "redis-standalone" }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $releaseName }}-{{ $db }}-monitor
+  namespace: {{ $namespace }}
+  labels:
+    release: {{ $prometheusRelease }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ if contains "mongodb" $db }}mongodb{{ else if contains "redis" $db }}redis{{ else }}{{ $db }}{{ end }}
+  endpoints:
+    - port: metrics
+      interval: 15s
+{{- end }}
+
+{{- end }}
