@@ -72,6 +72,9 @@ func TestProcessBatch_DBFailure_NoAck(t *testing.T) {
 	}
 
 	mockRepo.On("BulkUpsertMessages", ctx, mock.Anything).Return(assert.AnError)
+	mockMetrics.On("IncDatabaseErrors", mock.Anything).Return()
+	mockMetrics.On("IncStreamErrors", mock.Anything).Return()
+	mockMetrics.On("IncDLQMessages", mock.Anything).Return()
 
 	processor.ProcessBatch(ctx, streams, db, "test-group")
 

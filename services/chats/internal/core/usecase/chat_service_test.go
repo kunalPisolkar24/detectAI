@@ -53,10 +53,11 @@ func TestCreateSession_InvalidInput(t *testing.T) {
 }
 
 func TestCreateSession_DBError(t *testing.T) {
-	dbRepo, _, _, _, svc := newTestService()
+	dbRepo, _, _, metricsCollector, svc := newTestService()
 	ctx := context.Background()
 
 	dbRepo.On("CreateChat", mock.Anything, mock.Anything).Return(errors.New("db connection refused"))
+	metricsCollector.On("IncDatabaseErrors", mock.Anything).Return()
 
 	_, err := svc.CreateSession(ctx, "user-1", "My Chat")
 
