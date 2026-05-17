@@ -1,19 +1,22 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Release.Name }}-rabbitmq
+  name: {{ include "detect-ai.fullname" . }}-rabbitmq
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: rabbitmq
 spec:
-  serviceName: {{ .Release.Name }}-rabbitmq
+  serviceName: {{ include "detect-ai.fullname" . }}-rabbitmq
   replicas: {{ .Values.databases.rabbitmq.replicaCount | default 1 }}
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: rabbitmq
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: rabbitmq
       annotations:
         prometheus.io/scrape: "true"
@@ -41,6 +44,31 @@ spec:
             # Enable built-in prometheus metrics plugin natively
             - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
               value: "-rabbitmq_prometheus prometheus_port 15692"
+          # Robust RabbitMQ diagnostic probes
+          startupProbe:
+            exec:
+              command:
+                - "rabbitmq-diagnostics"
+                - "-q"
+                - "check_running"
+            failureThreshold: 20
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - "rabbitmq-diagnostics"
+                - "-q"
+                - "check_running"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - "rabbitmq-diagnostics"
+                - "-q"
+                - "check_local_alarms"
+            initialDelaySeconds: 15
+            periodSeconds: 20
           resources:
             {{- toYaml .Values.databases.rabbitmq.resources | nindent 12 }}
           volumeMounts:
@@ -59,9 +87,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-rabbitmq
+  name: {{ include "detect-ai.fullname" . }}-rabbitmq
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: rabbitmq
 spec:
   ports:
@@ -78,4 +107,5 @@ spec:
       protocol: TCP
       name: metrics
   selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: rabbitmq

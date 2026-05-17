@@ -4,19 +4,22 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Release.Name }}-mongodb-config
+  name: {{ include "detect-ai.fullname" . }}-mongodb-config
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: mongodb-config
 spec:
-  serviceName: {{ .Release.Name }}-mongodb-config
+  serviceName: {{ include "detect-ai.fullname" . }}-mongodb-config
   replicas: 1
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: mongodb-config
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: mongodb-config
     spec:
       containers:
@@ -27,6 +30,36 @@ spec:
             - name: mongo
               containerPort: 27017
               protocol: TCP
+          startupProbe:
+            exec:
+              command:
+                - "mongosh"
+                - "--port"
+                - "27017"
+                - "--eval"
+                - "db.adminCommand('ping')"
+            failureThreshold: 15
+            periodSeconds: 2
+          readinessProbe:
+            exec:
+              command:
+                - "mongosh"
+                - "--port"
+                - "27017"
+                - "--eval"
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - "mongosh"
+                - "--port"
+                - "27017"
+                - "--eval"
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 10
+            periodSeconds: 20
           resources:
             {{- toYaml .Values.databases.mongo.resources | nindent 12 }}
           volumeMounts:
@@ -46,8 +79,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-mongodb-config
+  name: {{ include "detect-ai.fullname" . }}-mongodb-config
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: mongodb-config
 spec:
   clusterIP: None
   ports:
@@ -55,193 +91,125 @@ spec:
       targetPort: mongo
       name: mongo
   selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: mongodb-config
 
 ---
-# 2. MongoDB Shard 1
+# 2. MongoDB Shards (1, 2, and 3)
+{{- range $shard := list 1 2 3 }}
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Release.Name }}-mongodb-shard1
-  namespace: {{ .Release.Namespace }}
+  name: {{ include "detect-ai.fullname" $ }}-mongodb-shard{{ $shard }}
+  namespace: {{ $.Release.Namespace }}
   labels:
-    app: mongodb-shard1
+    {{- include "detect-ai.labels" $ | nindent 4 }}
+    app: mongodb-shard{{ $shard }}
 spec:
-  serviceName: {{ .Release.Name }}-mongodb-shard1
+  serviceName: {{ include "detect-ai.fullname" $ }}-mongodb-shard{{ $shard }}
   replicas: 1
   selector:
     matchLabels:
-      app: mongodb-shard1
+      {{- include "detect-ai.selectorLabels" $ | nindent 6 }}
+      app: mongodb-shard{{ $shard }}
   template:
     metadata:
       labels:
-        app: mongodb-shard1
+        {{- include "detect-ai.selectorLabels" $ | nindent 8 }}
+        app: mongodb-shard{{ $shard }}
     spec:
       containers:
-        - name: mongodb-shard1
+        - name: mongodb-shard{{ $shard }}
           image: "mongo:6.0"
-          command: ["mongod", "--shardsvr", "--replSet", "shardRS1", "--bind_ip_all", "--port", "27017"]
+          command: ["mongod", "--shardsvr", "--replSet", "shardRS{{ $shard }}", "--bind_ip_all", "--port", "27017"]
           ports:
             - name: mongo
               containerPort: 27017
               protocol: TCP
+          startupProbe:
+            exec:
+              command:
+                - "mongosh"
+                - "--port"
+                - "27017"
+                - "--eval"
+                - "db.adminCommand('ping')"
+            failureThreshold: 15
+            periodSeconds: 2
+          readinessProbe:
+            exec:
+              command:
+                - "mongosh"
+                - "--port"
+                - "27017"
+                - "--eval"
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - "mongosh"
+                - "--port"
+                - "27017"
+                - "--eval"
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 10
+            periodSeconds: 20
           resources:
-            {{- toYaml .Values.databases.mongo.resources | nindent 12 }}
+            {{- toYaml $.Values.databases.mongo.resources | nindent 12 }}
           volumeMounts:
-            - name: mongo-shard1-data
+            - name: mongo-shard{{ $shard }}-data
               mountPath: /data/db
   volumeClaimTemplates:
     - metadata:
-        name: mongo-shard1-data
+        name: mongo-shard{{ $shard }}-data
       spec:
         accessModes: [ "ReadWriteOnce" ]
-        storageClassName: {{ .Values.databases.storageClass | quote }}
+        storageClassName: {{ $.Values.databases.storageClass | quote }}
         resources:
           requests:
-            storage: {{ .Values.databases.mongo.storageSize }}
+            storage: {{ $.Values.databases.mongo.storageSize }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-mongodb-shard1
-  namespace: {{ .Release.Namespace }}
+  name: {{ include "detect-ai.fullname" $ }}-mongodb-shard{{ $shard }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" $ | nindent 4 }}
+    app: mongodb-shard{{ $shard }}
 spec:
   clusterIP: None
   ports:
     - port: 27017
       targetPort: mongo
   selector:
-    app: mongodb-shard1
-
----
-# MongoDB Shard 2
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: {{ .Release.Name }}-mongodb-shard2
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app: mongodb-shard2
-spec:
-  serviceName: {{ .Release.Name }}-mongodb-shard2
-  replicas: 1
-  selector:
-    matchLabels:
-      app: mongodb-shard2
-  template:
-    metadata:
-      labels:
-        app: mongodb-shard2
-    spec:
-      containers:
-        - name: mongodb-shard2
-          image: "mongo:6.0"
-          command: ["mongod", "--shardsvr", "--replSet", "shardRS2", "--bind_ip_all", "--port", "27017"]
-          ports:
-            - name: mongo
-              containerPort: 27017
-              protocol: TCP
-          resources:
-            {{- toYaml .Values.databases.mongo.resources | nindent 12 }}
-          volumeMounts:
-            - name: mongo-shard2-data
-              mountPath: /data/db
-  volumeClaimTemplates:
-    - metadata:
-        name: mongo-shard2-data
-      spec:
-        accessModes: [ "ReadWriteOnce" ]
-        storageClassName: {{ .Values.databases.storageClass | quote }}
-        resources:
-          requests:
-            storage: {{ .Values.databases.mongo.storageSize }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ .Release.Name }}-mongodb-shard2
-  namespace: {{ .Release.Namespace }}
-spec:
-  clusterIP: None
-  ports:
-    - port: 27017
-      targetPort: mongo
-  selector:
-    app: mongodb-shard2
-
----
-# MongoDB Shard 3
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: {{ .Release.Name }}-mongodb-shard3
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app: mongodb-shard3
-spec:
-  serviceName: {{ .Release.Name }}-mongodb-shard3
-  replicas: 1
-  selector:
-    matchLabels:
-      app: mongodb-shard3
-  template:
-    metadata:
-      labels:
-        app: mongodb-shard3
-    spec:
-      containers:
-        - name: mongodb-shard3
-          image: "mongo:6.0"
-          command: ["mongod", "--shardsvr", "--replSet", "shardRS3", "--bind_ip_all", "--port", "27017"]
-          ports:
-            - name: mongo
-              containerPort: 27017
-              protocol: TCP
-          resources:
-            {{- toYaml .Values.databases.mongo.resources | nindent 12 }}
-          volumeMounts:
-            - name: mongo-shard3-data
-              mountPath: /data/db
-  volumeClaimTemplates:
-    - metadata:
-        name: mongo-shard3-data
-      spec:
-        accessModes: [ "ReadWriteOnce" ]
-        storageClassName: {{ .Values.databases.storageClass | quote }}
-        resources:
-          requests:
-            storage: {{ .Values.databases.mongo.storageSize }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ .Release.Name }}-mongodb-shard3
-  namespace: {{ .Release.Namespace }}
-spec:
-  clusterIP: None
-  ports:
-    - port: 27017
-      targetPort: mongo
-  selector:
-    app: mongodb-shard3
+    {{- include "detect-ai.selectorLabels" $ | nindent 4 }}
+    app: mongodb-shard{{ $shard }}
+{{- end }}
 
 ---
 # 3. MongoDB Router Deployment (mongos)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-mongodb-router
+  name: {{ include "detect-ai.fullname" . }}-mongodb-router
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: mongodb-router
 spec:
   replicas: 2
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: mongodb-router
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: mongodb-router
       annotations:
         prometheus.io/scrape: "true"
@@ -250,11 +218,42 @@ spec:
       containers:
         - name: mongodb-router
           image: "mongo:6.0"
-          command: ["mongos", "--configdb", "configRS/{{ .Release.Name }}-mongodb-config-0.{{ .Release.Name }}-mongodb-config.{{ .Release.Namespace }}.svc.cluster.local:27017", "--bind_ip_all", "--port", "27017"]
+          command: ["mongos", "--configdb", "configRS/{{ include "detect-ai.fullname" . }}-mongodb-config-0.{{ include "detect-ai.fullname" . }}-mongodb-config.{{ .Release.Namespace }}.svc.cluster.local:27017", "--bind_ip_all", "--port", "27017"]
           ports:
             - name: mongo
               containerPort: 27017
               protocol: TCP
+          # mongos router readiness checks
+          startupProbe:
+            exec:
+              command:
+                - "mongosh"
+                - "--port"
+                - "27017"
+                - "--eval"
+                - "db.adminCommand('ping')"
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            exec:
+              command:
+                - "mongosh"
+                - "--port"
+                - "27017"
+                - "--eval"
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - "mongosh"
+                - "--port"
+                - "27017"
+                - "--eval"
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 10
+            periodSeconds: 20
           resources:
             limits:
               cpu: "1.0"
@@ -284,9 +283,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-mongodb-router-service
+  name: {{ include "detect-ai.fullname" . }}-mongodb-router-service
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: mongodb-router
 spec:
   ports:
@@ -297,15 +297,18 @@ spec:
       targetPort: metrics
       name: metrics
   selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: mongodb-router
 
 ---
-# 4. Bootstrap Sharding Init Job
+# 4. Bootstrap Sharding Init Job with Dynamic Polling Loops
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Release.Name }}-mongodb-sharding-init
+  name: {{ include "detect-ai.fullname" . }}-mongodb-sharding-init
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-delete-policy": before-hook-creation
@@ -317,24 +320,43 @@ spec:
         - name: mongo-init
           image: "mongo:6.0"
           command:
-            - "bin/bash"
+            - "/bin/bash"
             - "-c"
             - |
-              echo "Waiting for config server and router..."
-              sleep 15
+              # Standardized active polling helper
+              wait_for_mongo() {
+                local host=$1
+                echo "Actively polling host: $host..."
+                until mongosh --host "$host" --eval "db.adminCommand('ping')" &>/dev/null; do
+                  sleep 2
+                done
+                echo "Host $host is fully responsive!"
+              }
+
+              # 1. Wait for Config replica host
+              wait_for_mongo "{{ include "detect-ai.fullname" . }}-mongodb-config-0.{{ include "detect-ai.fullname" . }}-mongodb-config.{{ .Release.Namespace }}.svc.cluster.local:27017"
               
-              mongosh --host {{ .Release.Name }}-mongodb-config-0.{{ .Release.Name }}-mongodb-config.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'rs.initiate({_id: "configRS", configsvr: true, members: [{_id: 0, host: "{{ .Release.Name }}-mongodb-config-0.{{ .Release.Name }}-mongodb-config.{{ .Release.Namespace }}.svc.cluster.local:27017"}]})' || true
+              # 2. Wait for each of the 3 shards
+              {{- range $shard := list 1 2 3 }}
+              wait_for_mongo "{{ include "detect-ai.fullname" $ }}-mongodb-shard{{ $shard }}-0.{{ include "detect-ai.fullname" $ }}-mongodb-shard{{ $shard }}.{{ $.Release.Namespace }}.svc.cluster.local:27017"
+              {{- end }}
               
-              mongosh --host {{ .Release.Name }}-mongodb-shard1-0.{{ .Release.Name }}-mongodb-shard1.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'rs.initiate({_id: "shardRS1", members: [{_id: 0, host: "{{ .Release.Name }}-mongodb-shard1-0.{{ .Release.Name }}-mongodb-shard1.{{ .Release.Namespace }}.svc.cluster.local:27017"}]})' || true
+              # 3. Wait for the primary router
+              wait_for_mongo "{{ include "detect-ai.fullname" . }}-mongodb-router-service.{{ .Release.Namespace }}.svc.cluster.local:27017"
+
+              echo "All database hosts online! Initializing replica sets and routing tables..."
               
-              mongosh --host {{ .Release.Name }}-mongodb-shard2-0.{{ .Release.Name }}-mongodb-shard2.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'rs.initiate({_id: "shardRS2", members: [{_id: 0, host: "{{ .Release.Name }}-mongodb-shard2-0.{{ .Release.Name }}-mongodb-shard2.{{ .Release.Namespace }}.svc.cluster.local:27017"}]})' || true
+              mongosh --host {{ include "detect-ai.fullname" . }}-mongodb-config-0.{{ include "detect-ai.fullname" . }}-mongodb-config.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'rs.initiate({_id: "configRS", configsvr: true, members: [{_id: 0, host: "{{ include "detect-ai.fullname" . }}-mongodb-config-0.{{ include "detect-ai.fullname" . }}-mongodb-config.{{ .Release.Namespace }}.svc.cluster.local:27017"}]})' || true
               
-              mongosh --host {{ .Release.Name }}-mongodb-shard3-0.{{ .Release.Name }}-mongodb-shard3.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'rs.initiate({_id: "shardRS3", members: [{_id: 0, host: "{{ .Release.Name }}-mongodb-shard3-0.{{ .Release.Name }}-mongodb-shard3.{{ .Release.Namespace }}.svc.cluster.local:27017"}]})' || true
+              {{- range $shard := list 1 2 3 }}
+              mongosh --host {{ include "detect-ai.fullname" $ }}-mongodb-shard{{ $shard }}-0.{{ include "detect-ai.fullname" $ }}-mongodb-shard{{ $shard }}.{{ $.Release.Namespace }}.svc.cluster.local:27017 --eval 'rs.initiate({_id: "shardRS{{ $shard }}", members: [{_id: 0, host: "{{ include "detect-ai.fullname" $ }}-mongodb-shard{{ $shard }}-0.{{ include "detect-ai.fullname" $ }}-mongodb-shard{{ $shard }}.{{ $.Release.Namespace }}.svc.cluster.local:27017"}]})' || true
+              {{- end }}
               
-              sleep 10
-              mongosh --host {{ .Release.Name }}-mongodb-router-service.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'sh.addShard("shardRS1/{{ .Release.Name }}-mongodb-shard1-0.{{ .Release.Name }}-mongodb-shard1.{{ .Release.Namespace }}.svc.cluster.local:27017")' || true
-              mongosh --host {{ .Release.Name }}-mongodb-router-service.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'sh.addShard("shardRS2/{{ .Release.Name }}-mongodb-shard2-0.{{ .Release.Name }}-mongodb-shard2.{{ .Release.Namespace }}.svc.cluster.local:27017")' || true
-              mongosh --host {{ .Release.Name }}-mongodb-router-service.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'sh.addShard("shardRS3/{{ .Release.Name }}-mongodb-shard3-0.{{ .Release.Name }}-mongodb-shard3.{{ .Release.Namespace }}.svc.cluster.local:27017")' || true
+              sleep 5
+              
+              {{- range $shard := list 1 2 3 }}
+              mongosh --host {{ include "detect-ai.fullname" $ }}-mongodb-router-service.{{ $.Release.Namespace }}.svc.cluster.local:27017 --eval 'sh.addShard("shardRS{{ $shard }}/{{ include "detect-ai.fullname" $ }}-mongodb-shard{{ $shard }}-0.{{ include "detect-ai.fullname" $ }}-mongodb-shard{{ $shard }}.{{ $.Release.Namespace }}.svc.cluster.local:27017")' || true
+              {{- end }}
               
               echo "MongoDB sharding initialization complete!"
 
@@ -344,19 +366,22 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Release.Name }}-mongodb-standalone
+  name: {{ include "detect-ai.fullname" . }}-mongodb-standalone
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: mongodb-standalone
 spec:
-  serviceName: {{ .Release.Name }}-mongodb-standalone
+  serviceName: {{ include "detect-ai.fullname" . }}-mongodb-standalone
   replicas: 1
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: mongodb-standalone
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: mongodb-standalone
       annotations:
         prometheus.io/scrape: "true"
@@ -369,6 +394,36 @@ spec:
             - name: mongo
               containerPort: 27017
               protocol: TCP
+          startupProbe:
+            exec:
+              command:
+                - "mongosh"
+                - "--port"
+                - "27017"
+                - "--eval"
+                - "db.adminCommand('ping')"
+            failureThreshold: 15
+            periodSeconds: 2
+          readinessProbe:
+            exec:
+              command:
+                - "mongosh"
+                - "--port"
+                - "27017"
+                - "--eval"
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - "mongosh"
+                - "--port"
+                - "27017"
+                - "--eval"
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 10
+            periodSeconds: 20
           resources:
             {{- toYaml .Values.databases.mongo.resources | nindent 12 }}
           volumeMounts:
@@ -404,9 +459,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-mongodb-standalone-service
+  name: {{ include "detect-ai.fullname" . }}-mongodb-standalone-service
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: mongodb-standalone
 spec:
   ports:
@@ -417,6 +473,7 @@ spec:
       targetPort: metrics
       name: metrics
   selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: mongodb-standalone
 
 {{- end }}

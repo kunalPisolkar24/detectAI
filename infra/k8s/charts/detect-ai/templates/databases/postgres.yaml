@@ -1,19 +1,22 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Release.Name }}-postgres
+  name: {{ include "detect-ai.fullname" . }}-postgres
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: postgres
 spec:
-  serviceName: {{ .Release.Name }}-postgres
+  serviceName: {{ include "detect-ai.fullname" . }}-postgres
   replicas: 1
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: postgres
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: postgres
       annotations:
         prometheus.io/scrape: "true"
@@ -38,6 +41,31 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.global.secretName | default .Values.secretName }}
                   key: POSTGRES_PASSWORD
+          # Native Liveness, Readiness and Startup probes
+          startupProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - "pg_isready -U postgres -d detect-ai"
+            failureThreshold: 15
+            periodSeconds: 2
+          readinessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - "pg_isready -U postgres -d detect-ai"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - "pg_isready -U postgres -d detect-ai"
+            initialDelaySeconds: 10
+            periodSeconds: 20
           resources:
             {{- toYaml .Values.databases.postgres.resources | nindent 12 }}
           volumeMounts:
@@ -79,9 +107,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-postgres
+  name: {{ include "detect-ai.fullname" . }}-postgres
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: postgres
 spec:
   ports:
@@ -94,4 +123,5 @@ spec:
       protocol: TCP
       name: metrics
   selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: postgres
