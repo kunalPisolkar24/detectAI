@@ -15,6 +15,8 @@ inference:
   gpu:
     enabled: false # Disabled for local Kind CPU deployment
     limit: 1
+  podSecurityContext:
+    runAsNonRoot: true
   resources:
     limits:
       cpu: "2.0"
