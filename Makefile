@@ -25,7 +25,7 @@ PROD_NETWORK := $(if $(PROD_NETWORK),$(PROD_NETWORK),detect_ai_network)
 	prod-up prod-down prod-logs prod-clean prod-build prod-rebuild prod-config prod-ps prod-migrate \
 	prod-monitoring-up prod-monitoring-down prod-monitoring-logs prod-monitoring-config prod-monitoring-ps \
 	local-up local-down local-logs local-clean local-build local-rebuild local-config local-ps \
-	k8s-dev-up k8s-dev-down k8s-prod-up k8s-prod-down
+	k8s-dev-up k8s-dev-down k8s-prod-up k8s-prod-down k8s-cluster-up k8s-cluster-down
 
 help:
 	@printf "\nDetect AI Docker commands\n\n"
@@ -59,6 +59,8 @@ help:
 	@printf "  make local-config      Render local compose config\n"
 	@printf "  make local-ps          Show local containers\n\n"
 	@printf "Kubernetes\n"
+	@printf "  make k8s-cluster-up    Create local Kind cluster and ingress controller\n"
+	@printf "  make k8s-cluster-down  Delete local Kind cluster\n"
 	@printf "  make k8s-dev-up        Deploy the dev environment to k8s using envs/.env.dev\n"
 	@printf "  make k8s-dev-down      Tear down the dev environment in k8s\n"
 	@printf "  make k8s-prod-up       Deploy the prod environment to k8s using envs/.env.prod\n"
@@ -180,3 +182,15 @@ k8s-prod-up:
 
 k8s-prod-down:
 	@helm uninstall prod -n detect-ai-prod
+
+k8s-cluster-up:
+	@echo "Creating Kind cluster with NGINX Ingress support..."
+	@kind create cluster --name detect-ai --config infra/k8s/kind-cluster-config.yaml
+	@echo "Installing NGINX Ingress Controller..."
+	@kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	@echo "Waiting for Ingress Controller to be ready..."
+	@kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
+	@echo "Cluster is ready! You can now run 'make k8s-dev-up'."
+
+k8s-cluster-down:
+	@kind delete cluster --name detect-ai
