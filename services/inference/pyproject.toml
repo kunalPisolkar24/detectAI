@@ -45,3 +45,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+
+[tool.coverage.run]
+omit = [
+    "src/main.py",
+    "src/generated/*",
+]
