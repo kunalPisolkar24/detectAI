@@ -2,28 +2,46 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Release.Name }}-migration-job
+  name: {{ include "detect-ai.fullname" . }}-migration-job
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
-    app.kubernetes.io/instance: {{ .Release.Name | quote }}
-    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-  annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-weight": "-5"
-    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: migration-job
 spec:
   template:
     metadata:
-      name: "{{ .Release.Name }}-migration"
+      name: "{{ include "detect-ai.fullname" . }}-migration"
       labels:
-        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
+        app: migration-job
     spec:
-      restartPolicy: Never
+      restartPolicy: OnFailure
       {{- if .Values.global.secretName }}
       imagePullSecrets:
         - name: {{ .Values.global.secretName }}
       {{- end }}
+      initContainers:
+        # Actively poll and wait until Postgres is fully ready to accept traffic
+        - name: wait-for-postgres
+          image: "postgres:16-alpine"
+          imagePullPolicy: IfNotPresent
+          command:
+            - "sh"
+            - "-c"
+            - |
+              echo "Waiting for PostgreSQL at {{ include "detect-ai.fullname" . }}-postgres:5432..."
+              until pg_isready -h {{ include "detect-ai.fullname" . }}-postgres -p 5432 -U postgres; do
+                echo "Postgres is not ready yet. Retrying in 2 seconds..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready!"
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
       containers:
         - name: prisma-migrate
           image: "{{ .Values.web.image.repository }}-migrate:{{ .Values.web.image.tag | default "latest" }}"
@@ -38,5 +56,5 @@ spec:
             requests:
               cpu: "100m"
               memory: "256Mi"
-  backoffLimit: 2
+  backoffLimit: 5
 {{- end }}
