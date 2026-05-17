@@ -7,7 +7,7 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
     app: rabbitmq
 spec:
-  serviceName: {{ include "detect-ai.fullname" . }}-rabbitmq
+  serviceName: {{ include "detect-ai.fullname" . }}-rabbitmq-headless
   replicas: {{ .Values.databases.rabbitmq.replicaCount | default 1 }}
   selector:
     matchLabels:
@@ -38,9 +38,15 @@ spec:
               protocol: TCP
           env:
             - name: RABBITMQ_DEFAULT_USER
-              value: "guest"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.secretName | default .Values.secretName }}
+                  key: RABBITMQ_DEFAULT_USER
             - name: RABBITMQ_DEFAULT_PASS
-              value: "guest"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.secretName | default .Values.secretName }}
+                  key: RABBITMQ_DEFAULT_PASS
             # Enable built-in prometheus metrics plugin natively
             - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
               value: "-rabbitmq_prometheus prometheus_port 15692"
@@ -93,6 +99,34 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
     app: rabbitmq
 spec:
+  ports:
+    - port: 5672
+      targetPort: amqp
+      protocol: TCP
+      name: amqp
+    - port: 15672
+      targetPort: management
+      protocol: TCP
+      name: management
+    - port: 15692
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
+    app: rabbitmq
+---
+# Headless service for stable pod DNS identities (required by StatefulSet clustering)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-rabbitmq-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: rabbitmq
+spec:
+  clusterIP: None
   ports:
     - port: 5672
       targetPort: amqp

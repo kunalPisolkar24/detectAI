@@ -372,7 +372,7 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
     app: mongodb-standalone
 spec:
-  serviceName: {{ include "detect-ai.fullname" . }}-mongodb-standalone
+  serviceName: {{ include "detect-ai.fullname" . }}-mongodb-standalone-headless
   replicas: 1
   selector:
     matchLabels:
@@ -472,6 +472,25 @@ spec:
     - port: 9216
       targetPort: metrics
       name: metrics
+  selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
+    app: mongodb-standalone
+---
+# Headless service for stable pod DNS identities (required by StatefulSet)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-mongodb-standalone-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: mongodb-standalone
+spec:
+  clusterIP: None
+  ports:
+    - port: 27017
+      targetPort: mongo
+      name: mongo
   selector:
     {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: mongodb-standalone

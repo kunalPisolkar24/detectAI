@@ -84,6 +84,7 @@ spec:
               port: {{ .Values.inference.service.metricsPort }}
             initialDelaySeconds: 10
             periodSeconds: 20
+            timeoutSeconds: 5
           lifecycle:
             preStop:
               exec:

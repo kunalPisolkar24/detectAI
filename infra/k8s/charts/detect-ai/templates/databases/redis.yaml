@@ -173,7 +173,7 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
     app: redis-sentinel
 spec:
-  serviceName: {{ include "detect-ai.fullname" . }}-redis-sentinel
+  serviceName: {{ include "detect-ai.fullname" . }}-redis-sentinel-headless
   replicas: 3
   selector:
     matchLabels:
@@ -360,6 +360,28 @@ spec:
   selector:
     {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: redis-sentinel
+---
+# Headless service for stable pod DNS identities (required by sentinel peer discovery)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-redis-sentinel-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: redis-sentinel
+spec:
+  clusterIP: None
+  ports:
+    - port: 6379
+      targetPort: redis
+      name: redis
+    - port: 26379
+      targetPort: sentinel
+      name: sentinel
+  selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
+    app: redis-sentinel
 
 {{- else }}
 
@@ -373,7 +395,7 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
     app: redis-standalone
 spec:
-  serviceName: {{ include "detect-ai.fullname" . }}-redis-standalone
+  serviceName: {{ include "detect-ai.fullname" . }}-redis-standalone-headless
   replicas: 1
   selector:
     matchLabels:
@@ -469,6 +491,25 @@ spec:
     - port: 9121
       targetPort: metrics
       name: metrics
+  selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
+    app: redis-standalone
+---
+# Headless service for stable pod DNS identities
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-redis-standalone-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: redis-standalone
+spec:
+  clusterIP: None
+  ports:
+    - port: 6379
+      targetPort: redis
+      name: redis
   selector:
     {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: redis-standalone

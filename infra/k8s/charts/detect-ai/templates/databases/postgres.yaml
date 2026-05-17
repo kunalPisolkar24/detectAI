@@ -7,7 +7,7 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
     app: postgres
 spec:
-  serviceName: {{ include "detect-ai.fullname" . }}-postgres
+  serviceName: {{ include "detect-ai.fullname" . }}-postgres-headless
   replicas: 1
   selector:
     matchLabels:
@@ -122,6 +122,26 @@ spec:
       targetPort: metrics
       protocol: TCP
       name: metrics
+  selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
+    app: postgres
+---
+# Headless service for stable pod DNS identities (required by StatefulSet)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-postgres-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: postgres
+spec:
+  clusterIP: None
+  ports:
+    - port: 5432
+      targetPort: postgres
+      protocol: TCP
+      name: postgres
   selector:
     {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: postgres
