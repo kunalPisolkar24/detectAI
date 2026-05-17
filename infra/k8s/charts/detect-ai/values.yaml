@@ -256,6 +256,14 @@ monitoring:
     grafana:
       enabled: true
       adminPassword: "prom-operator"
+      sidecar:
+        dashboards:
+          enabled: true
+          label: grafana_dashboard
+          labelValue: "1"
+          searchNamespace: ALL
+          provider:
+            foldersFromFilesStructure: true
       additionalDataSources:
         - name: Tempo
           type: tempo
