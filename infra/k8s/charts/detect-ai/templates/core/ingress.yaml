@@ -13,6 +13,10 @@ metadata:
     cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.clusterIssuer | default "letsencrypt-prod" | quote }}
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     {{- end }}
+    {{- if and .Values.ingress.rateLimit .Values.ingress.rateLimit.enabled }}
+    nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.rateLimit.rps | default "50" | quote }}
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: {{ .Values.ingress.rateLimit.burstMultiplier | default "2" | quote }}
+    {{- end }}
 spec:
   {{- if and .Values.ingress.tls .Values.ingress.tls.enabled }}
   tls:

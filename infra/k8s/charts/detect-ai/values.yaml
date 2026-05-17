@@ -53,6 +53,11 @@ documentParser:
     requests:
       cpu: "200m"
       memory: "256Mi"
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 75
 
 # ML Inference Service (Python + GPU Option)
 inference:
@@ -100,6 +105,11 @@ chats:
       requests:
         cpu: "200m"
         memory: "256Mi"
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 75
   worker:
     replicaCount: 1
     metricsPort: 9099
@@ -223,6 +233,11 @@ ingress:
     # Set to true in production with a cert-manager ClusterIssuer configured
     enabled: false
     clusterIssuer: "letsencrypt-prod"
+  rateLimit:
+    # Enable in production to protect against DDoS and endpoint abuse
+    enabled: false
+    rps: "50"
+    burstMultiplier: "2"
 
 # LGTM Observability Stack Integration
 monitoring:

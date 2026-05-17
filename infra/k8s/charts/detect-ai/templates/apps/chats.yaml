@@ -31,6 +31,16 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "detect-ai.selectorLabels" . | nindent 20 }}
+                    app: chats-api
+                topologyKey: "kubernetes.io/hostname"
       containers:
         - name: chats-api
           {{- with .Values.global.containerSecurityContext }}
@@ -142,3 +152,29 @@ spec:
                 name: {{ .Values.global.secretName | default .Values.secretName }}
           resources:
             {{- toYaml .Values.chats.worker.resources | nindent 12 }}
+
+---
+# 3. Chats API Optional HPA
+{{- if .Values.chats.api.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-chats-api-hpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "detect-ai.fullname" . }}-chats-api
+  minReplicas: {{ .Values.chats.api.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.chats.api.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.chats.api.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}

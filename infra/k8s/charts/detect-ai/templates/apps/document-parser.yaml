@@ -30,6 +30,16 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "detect-ai.selectorLabels" . | nindent 20 }}
+                    app: document-parser
+                topologyKey: "kubernetes.io/hostname"
       containers:
         - name: document-parser
           {{- with .Values.global.containerSecurityContext }}
@@ -68,3 +78,29 @@ spec:
   selector:
     {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: document-parser
+
+---
+# Optional HPA for document-parser
+{{- if .Values.documentParser.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-document-parser-hpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "detect-ai.fullname" . }}-document-parser
+  minReplicas: {{ .Values.documentParser.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.documentParser.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.documentParser.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
