@@ -62,11 +62,13 @@ spec:
             preStop:
               exec:
                 command: ["/bin/sh", "-c", "sleep 10"]
-          {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
           env:
+            - name: SERVICE_ROLE
+              value: "api"
+            {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
             - name: OTEL_SERVICE_NAME
               value: "{{ include "detect-ai.fullname" . }}-chats-api"
-          {{- end }}
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
@@ -150,11 +152,13 @@ spec:
             preStop:
               exec:
                 command: ["/bin/sh", "-c", "sleep 10"]
-          {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
           env:
+            - name: SERVICE_ROLE
+              value: "worker"
+            {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
             - name: OTEL_SERVICE_NAME
               value: "{{ include "detect-ai.fullname" . }}-chats-worker"
-          {{- end }}
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
