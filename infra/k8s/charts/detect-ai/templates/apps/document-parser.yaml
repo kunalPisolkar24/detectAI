@@ -52,6 +52,11 @@ spec:
             - name: http
               containerPort: 8000
               protocol: TCP
+          {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "{{ include "detect-ai.fullname" . }}-document-parser"
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config

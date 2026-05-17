@@ -38,3 +38,9 @@ data:
   POSTGRES_PORT: "5432"
   # NOTE: RABBITMQ_URL must be injected via the detect-ai-secrets Secret (key: RABBITMQ_URL)
   # to avoid leaking credentials in plaintext via the ConfigMap.
+
+  # OpenTelemetry Distributed Tracing Configs
+  {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://{{ include "detect-ai.fullname" . }}-otel-collector:4318"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
+  {{- end }}

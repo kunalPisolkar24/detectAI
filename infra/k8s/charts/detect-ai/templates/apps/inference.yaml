@@ -89,6 +89,11 @@ spec:
             preStop:
               exec:
                 command: ["/bin/sh", "-c", "sleep 15"]
+          {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "{{ include "detect-ai.fullname" . }}-inference"
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config

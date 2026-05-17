@@ -48,6 +48,11 @@ spec:
             preStop:
               exec:
                 command: ["/bin/sh", "-c", "sleep 10"]
+          {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "{{ include "detect-ai.fullname" . }}-worker-analytics"
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
@@ -107,6 +112,11 @@ spec:
             preStop:
               exec:
                 command: ["/bin/sh", "-c", "sleep 10"]
+          {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "{{ include "detect-ai.fullname" . }}-worker-cron"
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
@@ -168,6 +178,11 @@ spec:
             preStop:
               exec:
                 command: ["/bin/sh", "-c", "sleep 15"]
+          {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "{{ include "detect-ai.fullname" . }}-worker-payments"
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
