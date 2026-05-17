@@ -196,7 +196,7 @@ k8s-cluster-up:
 	@echo "Sleeping 10s to let Kubernetes register Ingress Controller pods..."
 	@sleep 10
 	@echo "Waiting for Ingress Controller to be ready..."
-	@kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
+	@kubectl wait --namespace ingress-nginx --for=condition=available deployment/ingress-nginx-controller --timeout=90s
 	@echo "Cluster is ready! You can now run 'make k8s-dev-up'."
 
 k8s-cluster-down:

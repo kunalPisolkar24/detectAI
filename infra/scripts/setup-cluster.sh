@@ -16,8 +16,7 @@ docker network connect "kind" "${reg_name}"
 echo "Waiting for Ingress controller to be ready..."
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 kubectl wait --namespace ingress-nginx \
-  --for=condition=ready pod \
-  --selector=app.kubernetes.io/component=controller \
+  --for=condition=available deployment/ingress-nginx-controller \
   --timeout=90s
 
 echo "✅ Cluster 'detectai-cluster' is ready."
