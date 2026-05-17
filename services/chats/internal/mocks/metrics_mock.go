@@ -21,3 +21,15 @@ func (m *MockMetricsCollector) AddIngestedMessages(count float64) {
 func (m *MockMetricsCollector) SetStreamLag(partition string, lag float64) {
 	m.Called(partition, lag)
 }
+
+func (m *MockMetricsCollector) IncDLQMessages(count float64) {
+	m.Called(count)
+}
+
+func (m *MockMetricsCollector) IncStreamErrors(operation string) {
+	m.Called(operation)
+}
+
+func (m *MockMetricsCollector) IncDatabaseErrors(operation string) {
+	m.Called(operation)
+}
