@@ -80,7 +80,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"node\",mode=\"idle\"}[5m])) * 100)",
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{${jobSelector(\"node\")},mode=\"idle\"}[5m])) * 100)",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -146,7 +146,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "node_load1{job=\"node\"} / scalar(count(count(node_cpu_seconds_total{job=\"node\",mode=\"system\"}) by (cpu)))",
+          "expr": "node_load1{${jobSelector(\"node\")}} / scalar(count(count(node_cpu_seconds_total{${jobSelector(\"node\")},mode=\"system\"}) by (cpu)))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -214,7 +214,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{job=\"node\"} / node_memory_MemTotal_bytes{job=\"node\"}))",
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{${jobSelector(\"node\")}} / node_memory_MemTotal_bytes{${jobSelector(\"node\")}}))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -282,7 +282,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "max(100 * (1 - (max by (device) (node_filesystem_avail_bytes{job=\"node\",fstype=~\"ext4|xfs\"}) / max by (device) (node_filesystem_size_bytes{job=\"node\",fstype=~\"ext4|xfs\"}))))",
+          "expr": "max(100 * (1 - (max by (device) (node_filesystem_avail_bytes{${jobSelector(\"node\")},fstype=~\"ext4|xfs\"}) / max by (device) (node_filesystem_size_bytes{${jobSelector(\"node\")},fstype=~\"ext4|xfs\"}))))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -327,7 +327,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(node_cpu_seconds_total{job=\"node\",mode!~\"idle|guest.*\"}[5m])) by (mode)",
+          "expr": "sum(rate(node_cpu_seconds_total{${jobSelector(\"node\")},mode!~\"idle|guest.*\"}[5m])) by (mode)",
           "legendFormat": "{{mode}}",
           "range": true,
           "refId": "A"
@@ -372,21 +372,21 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "node_load1{job=\"node\"}",
+          "expr": "node_load1{${jobSelector(\"node\")}}",
           "legendFormat": "load1",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "node_load5{job=\"node\"}",
+          "expr": "node_load5{${jobSelector(\"node\")}}",
           "legendFormat": "load5",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "node_load15{job=\"node\"}",
+          "expr": "node_load15{${jobSelector(\"node\")}}",
           "legendFormat": "load15",
           "range": true,
           "refId": "C"
@@ -431,14 +431,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "node_memory_MemTotal_bytes{job=\"node\"} - node_memory_MemAvailable_bytes{job=\"node\"}",
+          "expr": "node_memory_MemTotal_bytes{${jobSelector(\"node\")}} - node_memory_MemAvailable_bytes{${jobSelector(\"node\")}}",
           "legendFormat": "used",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "node_memory_MemAvailable_bytes{job=\"node\"}",
+          "expr": "node_memory_MemAvailable_bytes{${jobSelector(\"node\")}}",
           "legendFormat": "available",
           "range": true,
           "refId": "B"
@@ -485,7 +485,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * (1 - (max by (device) (node_filesystem_avail_bytes{job=\"node\",fstype=~\"ext4|xfs\"}) / max by (device) (node_filesystem_size_bytes{job=\"node\",fstype=~\"ext4|xfs\"})))",
+          "expr": "100 * (1 - (max by (device) (node_filesystem_avail_bytes{${jobSelector(\"node\")},fstype=~\"ext4|xfs\"}) / max by (device) (node_filesystem_size_bytes{${jobSelector(\"node\")},fstype=~\"ext4|xfs\"})))",
           "legendFormat": "{{device}}",
           "range": true,
           "refId": "A"
@@ -530,14 +530,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(node_disk_read_bytes_total{job=\"node\",device!~\"loop.*|ram.*\"}[5m])) by (device)",
+          "expr": "sum(rate(node_disk_read_bytes_total{${jobSelector(\"node\")},device!~\"loop.*|ram.*\"}[5m])) by (device)",
           "legendFormat": "{{device}} read",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(node_disk_written_bytes_total{job=\"node\",device!~\"loop.*|ram.*\"}[5m])) by (device)",
+          "expr": "sum(rate(node_disk_written_bytes_total{${jobSelector(\"node\")},device!~\"loop.*|ram.*\"}[5m])) by (device)",
           "legendFormat": "{{device}} write",
           "range": true,
           "refId": "B"
@@ -582,14 +582,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(node_network_receive_bytes_total{job=\"node\",device!~\"lo|docker0|br-.*|veth.*\"}[5m])) by (device)",
+          "expr": "sum(rate(node_network_receive_bytes_total{device!~\"lo|docker0|br-.*|veth.*\"}[5m])) by (device)",
           "legendFormat": "{{device}} rx",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(node_network_transmit_bytes_total{job=\"node\",device!~\"lo|docker0|br-.*|veth.*\"}[5m])) by (device)",
+          "expr": "sum(rate(node_network_transmit_bytes_total{device!~\"lo|docker0|br-.*|veth.*\"}[5m])) by (device)",
           "legendFormat": "{{device}} tx",
           "range": true,
           "refId": "B"

@@ -80,7 +80,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * avg(up{job=\"frontend\"})",
+          "expr": "100 * avg(up{${jobSelector(\"frontend\")}})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -146,7 +146,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(http_request_duration_seconds_count{job=\"frontend\"}[5m]))",
+          "expr": "sum(rate(http_request_duration_seconds_count{job=~\".*(frontend|web).*\"}[5m]))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -214,7 +214,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * sum(rate(http_request_duration_seconds_count{job=\"frontend\",status_code=~\"4..|5..\"}[5m])) / clamp_min(sum(rate(http_request_duration_seconds_count{job=\"frontend\"}[5m])), 0.001)",
+          "expr": "100 * sum(rate(http_request_duration_seconds_count{job=~\".*(frontend|web).*\",status_code=~\"4..|5..\"}[5m])) / clamp_min(sum(rate(http_request_duration_seconds_count{job=~\".*(frontend|web).*\"}[5m])), 0.001)",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -280,7 +280,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"frontend\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~\".*(frontend|web).*\"}[5m])) by (le))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -325,7 +325,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(http_request_duration_seconds_count{job=\"frontend\"}[5m])) by (route, status_code)",
+          "expr": "sum(rate(http_request_duration_seconds_count{${jobSelector(\"frontend\")}}[5m])) by (route, status_code)",
           "legendFormat": "{{route}} {{status_code}}",
           "range": true,
           "refId": "A"
@@ -370,7 +370,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"frontend\"}[5m])) by (route, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{${jobSelector(\"frontend\")}}[5m])) by (route, le))",
           "legendFormat": "{{route}}",
           "range": true,
           "refId": "A"
@@ -415,7 +415,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(db_query_duration_seconds_count{job=\"frontend\"}[5m])) by (operation, status)",
+          "expr": "sum(rate(db_query_duration_seconds_count{${jobSelector(\"frontend\")}}[5m])) by (operation, status)",
           "legendFormat": "{{operation}} {{status}}",
           "range": true,
           "refId": "A"
@@ -460,7 +460,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket{job=\"frontend\"}[5m])) by (operation, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket{${jobSelector(\"frontend\")}}[5m])) by (operation, le))",
           "legendFormat": "{{operation}}",
           "range": true,
           "refId": "A"
@@ -505,7 +505,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(ai_inference_duration_seconds_count{job=\"frontend\"}[5m])) by (model, status)",
+          "expr": "sum(rate(ai_inference_duration_seconds_count{${jobSelector(\"frontend\")}}[5m])) by (model, status)",
           "legendFormat": "{{model}} {{status}}",
           "range": true,
           "refId": "A"
@@ -550,7 +550,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(ai_inference_duration_seconds_bucket{job=\"frontend\"}[5m])) by (model, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(ai_inference_duration_seconds_bucket{${jobSelector(\"frontend\")}}[5m])) by (model, le))",
           "legendFormat": "{{model}}",
           "range": true,
           "refId": "A"
@@ -595,7 +595,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(cache_operations_total{job=\"frontend\"}[5m])) by (operation, status)",
+          "expr": "sum(rate(cache_operations_total{${jobSelector(\"frontend\")}}[5m])) by (operation, status)",
           "legendFormat": "{{operation}} {{status}}",
           "range": true,
           "refId": "A"
@@ -640,7 +640,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(rate_limit_hits_total{job=\"frontend\"}[5m])) by (tier)",
+          "expr": "sum(rate(rate_limit_hits_total{${jobSelector(\"frontend\")}}[5m])) by (tier)",
           "legendFormat": "{{tier}}",
           "range": true,
           "refId": "A"
@@ -685,21 +685,21 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "nodejs_eventloop_lag_p99_seconds{job=\"frontend\"}",
+          "expr": "nodejs_eventloop_lag_p99_seconds{${jobSelector(\"frontend\")}}",
           "legendFormat": "event loop p99",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "nodejs_heap_size_used_bytes{job=\"frontend\"}",
+          "expr": "nodejs_heap_size_used_bytes{${jobSelector(\"frontend\")}}",
           "legendFormat": "heap used",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "nodejs_active_handles{job=\"frontend\"}",
+          "expr": "nodejs_active_handles{${jobSelector(\"frontend\")}}",
           "legendFormat": "active handles",
           "range": true,
           "refId": "C"
@@ -744,14 +744,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"frontend\",id!=\"/\"}[5m]))",
+          "expr": "100 * (sum(rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service=\"frontend\",id!=\"/\"}[5m])) or sum(rate(container_cpu_usage_seconds_total{container=~\"(detect-ai-)?frontend\",id!=\"/\"}[5m])))",
           "legendFormat": "cpu %",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"frontend\",id!=\"/\"})",
+          "expr": "(sum(container_memory_working_set_bytes{container_label_com_docker_compose_service=\"frontend\",id!=\"/\"}) or sum(container_memory_working_set_bytes{container=~\"(detect-ai-)?frontend\",id!=\"/\"}))",
           "legendFormat": "memory",
           "range": true,
           "refId": "B"
@@ -796,21 +796,21 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_fs_usage_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"frontend\",id!=\"/\"})",
+          "expr": "(sum(container_fs_usage_bytes{container_label_com_docker_compose_service=\"frontend\",id!=\"/\"}) or sum(container_fs_usage_bytes{container=~\"(detect-ai-)?frontend\",id!=\"/\"}))",
           "legendFormat": "fs used",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(container_network_receive_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"frontend\",id!=\"/\"}[5m]))",
+          "expr": "(sum(rate(container_network_receive_bytes_total{container_label_com_docker_compose_service=\"frontend\",id!=\"/\"}[5m])) or sum(rate(container_network_receive_bytes_total{container=~\"(detect-ai-)?frontend\",id!=\"/\"}[5m])))",
           "legendFormat": "net rx",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(container_network_transmit_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"frontend\",id!=\"/\"}[5m]))",
+          "expr": "(sum(rate(container_network_transmit_bytes_total{container_label_com_docker_compose_service=\"frontend\",id!=\"/\"}[5m])) or sum(rate(container_network_transmit_bytes_total{container=~\"(detect-ai-)?frontend\",id!=\"/\"}[5m])))",
           "legendFormat": "net tx",
           "range": true,
           "refId": "C"

@@ -80,7 +80,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * avg(up{job=\"payment-gateway\"})",
+          "expr": "100 * avg(up{${jobSelector(\"payment-gateway\")}})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -146,7 +146,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(http_request_duration_seconds_count{job=\"payment-gateway\"}[5m]))",
+          "expr": "sum(rate(http_request_duration_seconds_count{job=~\".*(payment-gateway|payments-gateway).*\"}[5m]))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -214,7 +214,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * sum(rate(http_request_duration_seconds_count{job=\"payment-gateway\",status_code=~\"4..|5..\"}[5m])) / clamp_min(sum(rate(http_request_duration_seconds_count{job=\"payment-gateway\"}[5m])), 0.001)",
+          "expr": "100 * sum(rate(http_request_duration_seconds_count{job=~\".*(payment-gateway|payments-gateway).*\",status_code=~\"4..|5..\"}[5m])) / clamp_min(sum(rate(http_request_duration_seconds_count{job=~\".*(payment-gateway|payments-gateway).*\"}[5m])), 0.001)",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -280,7 +280,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"payment-gateway\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~\".*(payment-gateway|payments-gateway).*\"}[5m])) by (le))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -325,7 +325,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(http_request_duration_seconds_count{job=\"payment-gateway\"}[5m])) by (route, status_code)",
+          "expr": "sum(rate(http_request_duration_seconds_count{${jobSelector(\"payment-gateway\")}}[5m])) by (route, status_code)",
           "legendFormat": "{{route}} {{status_code}}",
           "range": true,
           "refId": "A"
@@ -370,7 +370,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"payment-gateway\"}[5m])) by (route, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{${jobSelector(\"payment-gateway\")}}[5m])) by (route, le))",
           "legendFormat": "{{route}}",
           "range": true,
           "refId": "A"
@@ -415,14 +415,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "go_goroutines{job=\"payment-gateway\"}",
+          "expr": "go_goroutines{${jobSelector(\"payment-gateway\")}}",
           "legendFormat": "goroutines",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "go_memstats_heap_alloc_bytes{job=\"payment-gateway\"}",
+          "expr": "go_memstats_heap_alloc_bytes{${jobSelector(\"payment-gateway\")}}",
           "legendFormat": "heap alloc",
           "range": true,
           "refId": "B"
@@ -467,21 +467,21 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(process_cpu_seconds_total{job=\"payment-gateway\"}[5m])",
+          "expr": "rate(process_cpu_seconds_total{${jobSelector(\"payment-gateway\")}}[5m])",
           "legendFormat": "cpu cores",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "process_resident_memory_bytes{job=\"payment-gateway\"}",
+          "expr": "process_resident_memory_bytes{${jobSelector(\"payment-gateway\")}}",
           "legendFormat": "resident memory",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "process_open_fds{job=\"payment-gateway\"}",
+          "expr": "process_open_fds{${jobSelector(\"payment-gateway\")}}",
           "legendFormat": "open fds",
           "range": true,
           "refId": "C"
@@ -526,14 +526,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"payment-gateway\",id!=\"/\"}[5m]))",
+          "expr": "100 * (sum(rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service=\"payment-gateway\",id!=\"/\"}[5m])) or sum(rate(container_cpu_usage_seconds_total{container=~\"(detect-ai-)?payment-gateway\",id!=\"/\"}[5m])))",
           "legendFormat": "cpu %",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"payment-gateway\",id!=\"/\"})",
+          "expr": "(sum(container_memory_working_set_bytes{container_label_com_docker_compose_service=\"payment-gateway\",id!=\"/\"}) or sum(container_memory_working_set_bytes{container=~\"(detect-ai-)?payment-gateway\",id!=\"/\"}))",
           "legendFormat": "memory",
           "range": true,
           "refId": "B"
@@ -578,27 +578,138 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_fs_usage_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"payment-gateway\",id!=\"/\"})",
+          "expr": "(sum(container_fs_usage_bytes{container_label_com_docker_compose_service=\"payment-gateway\",id!=\"/\"}) or sum(container_fs_usage_bytes{container=~\"(detect-ai-)?payment-gateway\",id!=\"/\"}))",
           "legendFormat": "fs used",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(container_network_receive_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"payment-gateway\",id!=\"/\"}[5m]))",
+          "expr": "(sum(rate(container_network_receive_bytes_total{container_label_com_docker_compose_service=\"payment-gateway\",id!=\"/\"}[5m])) or sum(rate(container_network_receive_bytes_total{container=~\"(detect-ai-)?payment-gateway\",id!=\"/\"}[5m])))",
           "legendFormat": "net rx",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(container_network_transmit_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"payment-gateway\",id!=\"/\"}[5m]))",
+          "expr": "(sum(rate(container_network_transmit_bytes_total{container_label_com_docker_compose_service=\"payment-gateway\",id!=\"/\"}[5m])) or sum(rate(container_network_transmit_bytes_total{container=~\"(detect-ai-)?payment-gateway\",id!=\"/\"}[5m])))",
           "legendFormat": "net tx",
           "range": true,
           "refId": "C"
         }
       ],
       "title": "Container Filesystem and Network",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(payment_events_published_total{${jobSelector(\"payment-gateway\")}}[5m])) by (event_type, status)",
+          "legendFormat": "Event published {{event_type}} {{status}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(payment_webhook_signatures_invalid_total{${jobSelector(\"payment-gateway\")}}[5m]))",
+          "legendFormat": "Invalid Signatures Rate",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Payment Events & Webhook Validity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "rabbitmq_connection_status{${jobSelector(\"payment-gateway\")}}",
+          "legendFormat": "Connection Status (1=Connected)",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(rabbitmq_reconnections_total{${jobSelector(\"payment-gateway\")}}[5m]))",
+          "legendFormat": "Reconnections Rate",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(rabbitmq_publish_duration_seconds_bucket{${jobSelector(\"payment-gateway\")}}[5m])) by (le))",
+          "legendFormat": "Publish Latency p95",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "RabbitMQ Broker Connection & Publish Latency",
       "type": "timeseries"
     }
   ],

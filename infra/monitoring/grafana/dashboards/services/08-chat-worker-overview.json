@@ -80,7 +80,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * avg(up{job=\"chat-worker\"})",
+          "expr": "100 * avg(up{${jobSelector(\"chat-worker\")}})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -146,7 +146,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(chat_messages_ingested_total{job=\"chat-worker\"}[5m]))",
+          "expr": "sum(rate(chat_messages_ingested_total{${jobSelector(\"chat-worker\")}}[5m]))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -212,7 +212,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "max(chat_redis_stream_lag{job=\"chat-worker\"})",
+          "expr": "max(chat_redis_stream_lag{${jobSelector(\"chat-worker\")}})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -278,7 +278,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(process_cpu_seconds_total{job=\"chat-worker\"}[5m])",
+          "expr": "rate(process_cpu_seconds_total{${jobSelector(\"chat-worker\")}}[5m])",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -323,7 +323,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(chat_messages_ingested_total{job=\"chat-worker\"}[5m])",
+          "expr": "rate(chat_messages_ingested_total{${jobSelector(\"chat-worker\")}}[5m])",
           "legendFormat": "ingested",
           "range": true,
           "refId": "A"
@@ -368,7 +368,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "chat_redis_stream_lag{job=\"chat-worker\"}",
+          "expr": "chat_redis_stream_lag{${jobSelector(\"chat-worker\")}}",
           "legendFormat": "{{partition}}",
           "range": true,
           "refId": "A"
@@ -413,14 +413,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "go_goroutines{job=\"chat-worker\"}",
+          "expr": "go_goroutines{${jobSelector(\"chat-worker\")}}",
           "legendFormat": "goroutines",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "go_memstats_heap_alloc_bytes{job=\"chat-worker\"}",
+          "expr": "go_memstats_heap_alloc_bytes{${jobSelector(\"chat-worker\")}}",
           "legendFormat": "heap alloc",
           "range": true,
           "refId": "B"
@@ -465,21 +465,21 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(process_cpu_seconds_total{job=\"chat-worker\"}[5m])",
+          "expr": "rate(process_cpu_seconds_total{${jobSelector(\"chat-worker\")}}[5m])",
           "legendFormat": "cpu cores",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "process_resident_memory_bytes{job=\"chat-worker\"}",
+          "expr": "process_resident_memory_bytes{${jobSelector(\"chat-worker\")}}",
           "legendFormat": "resident memory",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "process_open_fds{job=\"chat-worker\"}",
+          "expr": "process_open_fds{${jobSelector(\"chat-worker\")}}",
           "legendFormat": "open fds",
           "range": true,
           "refId": "C"
@@ -524,14 +524,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"chat-worker\",id!=\"/\"}[5m]))",
+          "expr": "100 * (sum(rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service=\"chat-worker\",id!=\"/\"}[5m])) or sum(rate(container_cpu_usage_seconds_total{container=~\"(detect-ai-)?chat-worker\",id!=\"/\"}[5m])))",
           "legendFormat": "cpu %",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"chat-worker\",id!=\"/\"})",
+          "expr": "(sum(container_memory_working_set_bytes{container_label_com_docker_compose_service=\"chat-worker\",id!=\"/\"}) or sum(container_memory_working_set_bytes{container=~\"(detect-ai-)?chat-worker\",id!=\"/\"}))",
           "legendFormat": "memory",
           "range": true,
           "refId": "B"
@@ -576,27 +576,86 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_fs_usage_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"chat-worker\",id!=\"/\"})",
+          "expr": "(sum(container_fs_usage_bytes{container_label_com_docker_compose_service=\"chat-worker\",id!=\"/\"}) or sum(container_fs_usage_bytes{container=~\"(detect-ai-)?chat-worker\",id!=\"/\"}))",
           "legendFormat": "fs used",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(container_network_receive_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"chat-worker\",id!=\"/\"}[5m]))",
+          "expr": "(sum(rate(container_network_receive_bytes_total{container_label_com_docker_compose_service=\"chat-worker\",id!=\"/\"}[5m])) or sum(rate(container_network_receive_bytes_total{container=~\"(detect-ai-)?chat-worker\",id!=\"/\"}[5m])))",
           "legendFormat": "net rx",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(container_network_transmit_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"chat-worker\",id!=\"/\"}[5m]))",
+          "expr": "(sum(rate(container_network_transmit_bytes_total{container_label_com_docker_compose_service=\"chat-worker\",id!=\"/\"}[5m])) or sum(rate(container_network_transmit_bytes_total{container=~\"(detect-ai-)?chat-worker\",id!=\"/\"}[5m])))",
           "legendFormat": "net tx",
           "range": true,
           "refId": "C"
         }
       ],
       "title": "Container Network and Filesystem",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(chat_stream_errors_total{${jobSelector(\"chat-worker\")}}[5m])) by (operation)",
+          "legendFormat": "Stream Errors {{operation}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(chat_database_errors_total{${jobSelector(\"chat-worker\")}}[5m])) by (operation)",
+          "legendFormat": "DB Errors {{operation}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(chat_dlq_messages_total{${jobSelector(\"chat-worker\")}}[5m]))",
+          "legendFormat": "DLQ Messages",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Stream Errors, DB Errors & DLQ",
       "type": "timeseries"
     }
   ],

@@ -80,7 +80,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * avg(up{job=\"document-parser\"})",
+          "expr": "100 * avg(up{${jobSelector(\"document-parser\")}})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -146,7 +146,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(http_request_duration_seconds_count{job=\"document-parser\"}[5m]))",
+          "expr": "sum(rate(http_request_duration_seconds_count{job=~\".*document-parser.*\"}[5m]))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -214,7 +214,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * sum(rate(http_request_duration_seconds_count{job=\"document-parser\",status_code=~\"4..|5..\"}[5m])) / clamp_min(sum(rate(http_request_duration_seconds_count{job=\"document-parser\"}[5m])), 0.001)",
+          "expr": "100 * sum(rate(http_request_duration_seconds_count{job=~\".*document-parser.*\",status_code=~\"4..|5..\"}[5m])) / clamp_min(sum(rate(http_request_duration_seconds_count{job=~\".*document-parser.*\"}[5m])), 0.001)",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -280,7 +280,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"document-parser\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~\".*document-parser.*\"}[5m])) by (le))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -325,7 +325,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(http_request_duration_seconds_count{job=\"document-parser\"}[5m])) by (route, status_code)",
+          "expr": "sum(rate(http_request_duration_seconds_count{${jobSelector(\"document-parser\")}}[5m])) by (route, status_code)",
           "legendFormat": "{{route}} {{status_code}}",
           "range": true,
           "refId": "A"
@@ -370,7 +370,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"document-parser\"}[5m])) by (route, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{${jobSelector(\"document-parser\")}}[5m])) by (route, le))",
           "legendFormat": "{{route}}",
           "range": true,
           "refId": "A"
@@ -415,7 +415,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(http_request_duration_seconds_count{job=\"document-parser\"}[5m])) by (status_code)",
+          "expr": "sum(rate(http_request_duration_seconds_count{${jobSelector(\"document-parser\")}}[5m])) by (status_code)",
           "legendFormat": "{{status_code}}",
           "range": true,
           "refId": "A"
@@ -460,14 +460,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"document-parser\",id!=\"/\"}[5m]))",
+          "expr": "100 * (sum(rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service=\"document-parser\",id!=\"/\"}[5m])) or sum(rate(container_cpu_usage_seconds_total{container=~\"(detect-ai-)?document-parser\",id!=\"/\"}[5m])))",
           "legendFormat": "cpu %",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"document-parser\",id!=\"/\"})",
+          "expr": "(sum(container_memory_working_set_bytes{container_label_com_docker_compose_service=\"document-parser\",id!=\"/\"}) or sum(container_memory_working_set_bytes{container=~\"(detect-ai-)?document-parser\",id!=\"/\"}))",
           "legendFormat": "memory",
           "range": true,
           "refId": "B"
@@ -512,7 +512,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(container_fs_usage_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"document-parser\",id!=\"/\"})",
+          "expr": "(sum(container_fs_usage_bytes{container_label_com_docker_compose_service=\"document-parser\",id!=\"/\"}) or sum(container_fs_usage_bytes{container=~\"(detect-ai-)?document-parser\",id!=\"/\"}))",
           "legendFormat": "fs used",
           "range": true,
           "refId": "A"
@@ -557,20 +557,117 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(container_network_receive_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"document-parser\",id!=\"/\"}[5m]))",
+          "expr": "(sum(rate(container_network_receive_bytes_total{container_label_com_docker_compose_service=\"document-parser\",id!=\"/\"}[5m])) or sum(rate(container_network_receive_bytes_total{container=~\"(detect-ai-)?document-parser\",id!=\"/\"}[5m])))",
           "legendFormat": "net rx",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(container_network_transmit_bytes_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"document-parser\",id!=\"/\"}[5m]))",
+          "expr": "(sum(rate(container_network_transmit_bytes_total{container_label_com_docker_compose_service=\"document-parser\",id!=\"/\"}[5m])) or sum(rate(container_network_transmit_bytes_total{container=~\"(detect-ai-)?document-parser\",id!=\"/\"}[5m])))",
           "legendFormat": "net tx",
           "range": true,
           "refId": "B"
         }
       ],
       "title": "Container Network",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(parsed_documents_total{${jobSelector(\"document-parser\")}}[5m])) by (mime_type, status)",
+          "legendFormat": "{{mime_type}} {{status}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Parsed Documents Status by MIME-Type",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(extracted_text_bytes_total{${jobSelector(\"document-parser\")}}[5m])) by (mime_type)",
+          "legendFormat": "{{mime_type}} text bytes/s",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(parsed_file_size_bytes_bucket{${jobSelector(\"document-parser\")}}[5m])) by (mime_type, le))",
+          "legendFormat": "{{mime_type}} size p95 bytes",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Extracted Text Volume & Ingested File Size p95",
       "type": "timeseries"
     }
   ],

@@ -80,7 +80,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * avg(up{job=\"rabbitmq\"})",
+          "expr": "100 * avg(up{${jobSelector(\"rabbitmq\")}})",
           "legendFormat": "",
           "range": true,
           "refId": "A"

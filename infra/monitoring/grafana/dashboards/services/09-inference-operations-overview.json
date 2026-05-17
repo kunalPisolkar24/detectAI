@@ -80,7 +80,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * max(inference_service_health_status{job=\"inference\",status=\"serving\"})",
+          "expr": "100 * max(inference_service_health_status{${jobSelector(\"inference\")},status=\"serving\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -148,7 +148,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * avg(inference_engine_health_status{job=\"inference\",status=\"serving\"})",
+          "expr": "100 * avg(inference_engine_health_status{${jobSelector(\"inference\")},status=\"serving\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -216,7 +216,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * max(model_batch_queue_size{job=\"inference\"} / clamp_min(inference_engine_queue_capacity{job=\"inference\"}, 1))",
+          "expr": "100 * max(model_batch_queue_size{${jobSelector(\"inference\")}} / clamp_min(inference_engine_queue_capacity{${jobSelector(\"inference\")}}, 1))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -283,7 +283,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "max(inference_engine_circuit_open_seconds{job=\"inference\"})",
+          "expr": "max(inference_engine_circuit_open_seconds{${jobSelector(\"inference\")}})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -341,7 +341,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "inference_service_health_status{job=\"inference\"}",
+          "expr": "inference_service_health_status{${jobSelector(\"inference\")}}",
           "legendFormat": "{{status}}",
           "range": true,
           "refId": "A"
@@ -399,7 +399,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "inference_service_health_reason{job=\"inference\",reason!=\"none\"}",
+          "expr": "inference_service_health_reason{${jobSelector(\"inference\")},reason!=\"none\"}",
           "legendFormat": "{{reason}}",
           "range": true,
           "refId": "A"
@@ -457,7 +457,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "inference_engine_health_status{job=\"inference\"}",
+          "expr": "inference_engine_health_status{${jobSelector(\"inference\")}}",
           "legendFormat": "{{model}} {{status}}",
           "range": true,
           "refId": "A"
@@ -502,14 +502,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "model_batch_queue_size{job=\"inference\"}",
+          "expr": "model_batch_queue_size{${jobSelector(\"inference\")}}",
           "legendFormat": "{{model}} queued",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "inference_engine_queue_capacity{job=\"inference\"}",
+          "expr": "inference_engine_queue_capacity{${jobSelector(\"inference\")}}",
           "legendFormat": "{{model}} capacity",
           "range": true,
           "refId": "B"
@@ -573,7 +573,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * model_batch_queue_size{job=\"inference\"} / clamp_min(inference_engine_queue_capacity{job=\"inference\"}, 1)",
+          "expr": "100 * model_batch_queue_size{${jobSelector(\"inference\")}} / clamp_min(inference_engine_queue_capacity{${jobSelector(\"inference\")}}, 1)",
           "legendFormat": "{{model}}",
           "range": true,
           "refId": "A"
@@ -619,7 +619,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "inference_engine_circuit_open_seconds{job=\"inference\"}",
+          "expr": "inference_engine_circuit_open_seconds{${jobSelector(\"inference\")}}",
           "legendFormat": "{{model}}",
           "range": true,
           "refId": "A"
@@ -664,14 +664,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(process_cpu_seconds_total{job=\"inference\"}[5m])",
+          "expr": "rate(process_cpu_seconds_total{${jobSelector(\"inference\")}}[5m])",
           "legendFormat": "cpu cores",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "process_resident_memory_bytes{job=\"inference\"}",
+          "expr": "process_resident_memory_bytes{${jobSelector(\"inference\")}}",
           "legendFormat": "resident memory",
           "range": true,
           "refId": "B"
@@ -716,14 +716,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",container_label_com_docker_compose_service=\"ai-service\",id!=\"/\"}[5m]))",
+          "expr": "100 * (sum(rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service=\"ai-service\",id!=\"/\"}[5m])) or sum(rate(container_cpu_usage_seconds_total{container=~\"(detect-ai-)?ai-service\",id!=\"/\"}[5m])))",
           "legendFormat": "cpu %",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"ai-service\",id!=\"/\"})",
+          "expr": "(sum(container_memory_working_set_bytes{container_label_com_docker_compose_service=\"ai-service\",id!=\"/\"}) or sum(container_memory_working_set_bytes{container=~\"(detect-ai-)?ai-service\",id!=\"/\"}))",
           "legendFormat": "memory",
           "range": true,
           "refId": "B"
