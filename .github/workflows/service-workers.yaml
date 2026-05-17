@@ -25,12 +25,48 @@ jobs:
   quality-assurance:
     name: Run Tests & Lint
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: postgresql://127.0.0.1:5432/dummy
-      DATABASE_URL_REPLICA: postgresql://127.0.0.1:5432/dummy
     defaults:
       run:
         working-directory: ${{ env.SERVICE_PATH }}
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: detectai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d detectai_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli -a user_cache_password ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+      rabbitmq:
+        image: rabbitmq:3.12-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+          RABBITMQ_DEFAULT_VHOST: detectai_test
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Checkout Repository
@@ -42,13 +78,30 @@ jobs:
           bun-version: latest
 
       - name: Install Dependencies
+        env:
+          DATABASE_URL: postgresql://user:password@localhost:5432/detectai_test
+          DATABASE_URL_REPLICA: postgresql://user:password@localhost:5432/detectai_test
         run: bun install --frozen-lockfile
 
-      - name: Generate Prisma Client
-        run: bunx prisma generate
+      - name: Run Unit Tests
+        env:
+          DATABASE_URL: postgresql://user:password@localhost:5432/detectai_test
+          DATABASE_URL_REPLICA: postgresql://user:password@localhost:5432/detectai_test
+        run: bun run test
 
-      - name: Run Tests
-        run: bun test
+      - name: Run Schema Migration for Integration Tests
+        env:
+          DATABASE_URL: postgresql://user:password@localhost:5432/detectai_test
+          DATABASE_URL_REPLICA: postgresql://user:password@localhost:5432/detectai_test
+        run: bunx prisma db push --skip-generate
+
+      - name: Run Integration Tests
+        env:
+          DATABASE_URL: postgresql://user:password@localhost:5432/detectai_test
+          DATABASE_URL_REPLICA: postgresql://user:password@localhost:5432/detectai_test
+          REDIS_URL: redis://:user_cache_password@localhost:6379
+          RABBITMQ_URL: amqp://guest:guest@localhost:5672/detectai_test
+        run: bun run test:integration
 
   build-and-push:
     name: Build & Push Docker Image
