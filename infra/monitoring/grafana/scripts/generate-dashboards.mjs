@@ -11,14 +11,28 @@ const datasource = {
   uid: "prometheus",
 };
 
-const appJobs = "frontend|worker-analytics|worker-cron|worker-payments|inference|chat-service|chat-worker|document-parser|payment-gateway";
-const infraJobs = "cadvisor|node|postgres-primary|postgres-replica|rabbitmq|redis-.*|mongodb";
-const httpJobs = "frontend|document-parser|payment-gateway";
-const workerJobs = "worker-analytics|worker-cron|worker-payments";
-const redisJobs = "redis-master|redis-slave-1|redis-slave-2|redis-ratelimit|redis-usage-0|redis-usage-1|redis-usage-2|redis-chat-1|redis-chat-2|redis-chat-3";
-const mongoContainerJobs = "chat-mongo-config|chat-mongo-router|chat-mongo-shard-1|chat-mongo-shard-2|chat-mongo-shard-3";
-const cadvisorServiceFilter = 'job="cadvisor",container_label_com_docker_compose_service!="",id!="/"';
-const nodeDeviceFilter = 'job="node",device!~"lo|docker0|br-.*|veth.*"';
+const appJobs = ".*(frontend|web|worker-analytics|worker-cron|worker-payments|inference|chat-service|chats-api|chat-worker|chats-worker|document-parser|payment-gateway|payments-gateway).*";
+const infraJobs = ".*(cadvisor|node|postgres|rabbitmq|redis|mongodb).*";
+const httpJobs = ".*(frontend|web|document-parser|payment-gateway|payments-gateway).*";
+const workerJobs = ".*(worker-analytics|worker-cron|worker-payments).*";
+const redisJobs = ".*redis.*";
+const mongoContainerJobs = ".*mongo.*";
+const cadvisorServiceFilter = 'container_label_com_docker_compose_service!="",id!="/"';
+const nodeDeviceFilter = 'device!~"lo|docker0|br-.*|veth.*"';
+
+function jobSelector(job) {
+  if (job === "frontend") return `job=~".*(frontend|web).*"`;
+  if (job === "chat-service") return `job=~".*(chat-service|chats-api).*"`;
+  if (job === "chat-worker") return `job=~".*(chat-worker|chats-worker).*"`;
+  if (job === "payment-gateway") return `job=~".*(payment-gateway|payments-gateway).*"`;
+  if (job === "inference") return `job=~".*inference.*"`;
+  if (job === "document-parser") return `job=~".*document-parser.*"`;
+  if (job === "rabbitmq") return `job=~".*rabbitmq.*"`;
+  if (job === "mongodb") return `job=~".*mongodb.*"`;
+  if (job === "node") return `job=~".*node.*"`;
+  if (job === "cadvisor") return `job=~".*(cadvisor|kubelet).*"`;
+  return `job=~".*${job}.*"`;
+}
 
 let panelId = 1;
 
@@ -240,35 +254,35 @@ function availabilityStat(title, expr, gridPos) {
 }
 
 function containerCpuExpr(service) {
-  return `100 * sum(rate(container_cpu_usage_seconds_total{job="cadvisor",container_label_com_docker_compose_service="${service}",id!="/"}[5m]))`;
+  return `100 * (sum(rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service="${service}",id!="/"}[5m])) or sum(rate(container_cpu_usage_seconds_total{container=~"(detect-ai-)?${service}",id!="/"}[5m])))`;
 }
 
 function containerMemoryExpr(service) {
-  return `sum(container_memory_working_set_bytes{job="cadvisor",container_label_com_docker_compose_service="${service}",id!="/"})`;
+  return `(sum(container_memory_working_set_bytes{container_label_com_docker_compose_service="${service}",id!="/"}) or sum(container_memory_working_set_bytes{container=~"(detect-ai-)?${service}",id!="/"}))`;
 }
 
 function containerFsExpr(service) {
-  return `sum(container_fs_usage_bytes{job="cadvisor",container_label_com_docker_compose_service="${service}",id!="/"})`;
+  return `(sum(container_fs_usage_bytes{container_label_com_docker_compose_service="${service}",id!="/"}) or sum(container_fs_usage_bytes{container=~"(detect-ai-)?${service}",id!="/"}))`;
 }
 
 function containerRxExpr(service) {
-  return `sum(rate(container_network_receive_bytes_total{job="cadvisor",container_label_com_docker_compose_service="${service}",id!="/"}[5m]))`;
+  return `(sum(rate(container_network_receive_bytes_total{container_label_com_docker_compose_service="${service}",id!="/"}[5m])) or sum(rate(container_network_receive_bytes_total{container=~"(detect-ai-)?${service}",id!="/"}[5m])))`;
 }
 
 function containerTxExpr(service) {
-  return `sum(rate(container_network_transmit_bytes_total{job="cadvisor",container_label_com_docker_compose_service="${service}",id!="/"}[5m]))`;
+  return `(sum(rate(container_network_transmit_bytes_total{container_label_com_docker_compose_service="${service}",id!="/"}[5m])) or sum(rate(container_network_transmit_bytes_total{container=~"(detect-ai-)?${service}",id!="/"}[5m])))`;
 }
 
 function httpRateExpr(job) {
-  return `sum(rate(http_request_duration_seconds_count{job="${job}"}[5m]))`;
+  return `sum(rate(http_request_duration_seconds_count{${jobSelector(job)}}[5m]))`;
 }
 
 function httpErrorRateExpr(job) {
-  return `100 * sum(rate(http_request_duration_seconds_count{job="${job}",status_code=~"4..|5.."}[5m])) / clamp_min(sum(rate(http_request_duration_seconds_count{job="${job}"}[5m])), 0.001)`;
+  return `100 * sum(rate(http_request_duration_seconds_count{${jobSelector(job)},status_code=~"4..|5.."}[5m])) / clamp_min(sum(rate(http_request_duration_seconds_count{${jobSelector(job)}}[5m])), 0.001)`;
 }
 
 function httpP95Expr(job) {
-  return `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="${job}"}[5m])) by (le))`;
+  return `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{${jobSelector(job)}}[5m])) by (le))`;
 }
 
 function buildPlatformOverview() {
@@ -283,7 +297,7 @@ function buildPlatformOverview() {
       availabilityStat("Infra Availability", `100 * avg(up{job=~"${infraJobs}"})`, { h: 4, w: 6, x: 6, y: 0 }),
       stat({
         title: "Host CPU Busy",
-        expr: '100 - (avg(rate(node_cpu_seconds_total{job="node",mode="idle"}[5m])) * 100)',
+        expr: '100 - (avg(rate(node_cpu_seconds_total{${jobSelector("node")},mode="idle"}[5m])) * 100)',
         gridPos: { h: 4, w: 6, x: 12, y: 0 },
         unit: "percent",
         decimals: 1,
@@ -292,7 +306,7 @@ function buildPlatformOverview() {
       }),
       stat({
         title: "Host Memory Used",
-        expr: '100 * (1 - (node_memory_MemAvailable_bytes{job="node"} / node_memory_MemTotal_bytes{job="node"}))',
+        expr: '100 * (1 - (node_memory_MemAvailable_bytes{${jobSelector("node")}} / node_memory_MemTotal_bytes{${jobSelector("node")}}))',
         gridPos: { h: 4, w: 6, x: 18, y: 0 },
         unit: "percent",
         decimals: 1,
@@ -337,7 +351,7 @@ function buildPlatformOverview() {
       timeseries({
         title: "Inference Batch Queue Size",
         gridPos: { h: 8, w: 12, x: 12, y: 20 },
-        targets: [query('sum(model_batch_queue_size{job="inference"}) by (model)', "{{model}}")],
+        targets: [query('sum(model_batch_queue_size{${jobSelector("inference")}}) by (model)', "{{model}}")],
         unit: "short",
       }),
       timeseries({
@@ -383,7 +397,7 @@ function buildServiceOverview() {
       }),
       stat({
         title: "Inference gRPC Rate",
-        expr: 'sum(rate(grpc_requests_total{job="inference"}[5m]))',
+        expr: 'sum(rate(grpc_requests_total{${jobSelector("inference")}}[5m]))',
         gridPos: { h: 4, w: 6, x: 18, y: 0 },
         unit: "reqps",
         decimals: 2,
@@ -422,13 +436,13 @@ function buildServiceOverview() {
       timeseries({
         title: "Chat gRPC Rate",
         gridPos: { h: 8, w: 12, x: 0, y: 20 },
-        targets: [query('sum(rate(grpc_request_duration_seconds_count{job="chat-service"}[5m])) by (method, status)', "{{method}} {{status}}")],
+        targets: [query('sum(rate(grpc_request_duration_seconds_count{${jobSelector("chat-service")}}[5m])) by (method, status)', "{{method}} {{status}}")],
         unit: "reqps",
       }),
       timeseries({
         title: "Inference gRPC Rate",
         gridPos: { h: 8, w: 12, x: 12, y: 20 },
-        targets: [query('sum(rate(grpc_requests_total{job="inference"}[5m])) by (method, model, code)', "{{method}} {{model}} {{code}}")],
+        targets: [query('sum(rate(grpc_requests_total{${jobSelector("inference")}}[5m])) by (method, model, code)', "{{method}} {{model}} {{code}}")],
         unit: "reqps",
       }),
       timeseries({
@@ -440,7 +454,7 @@ function buildServiceOverview() {
       timeseries({
         title: "Top Application Containers by Memory",
         gridPos: { h: 8, w: 12, x: 12, y: 28 },
-        targets: [query('topk(10, sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{job="cadvisor",container_label_com_docker_compose_service=~"frontend|worker-analytics|worker-cron|worker-payments|ai-service|chat-service|chat-worker|document-parser|payment-gateway",id!="/"}))', "{{container_label_com_docker_compose_service}}")],
+        targets: [query('topk(10, sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{${jobSelector("cadvisor")},container_label_com_docker_compose_service=~"frontend|worker-analytics|worker-cron|worker-payments|ai-service|chat-service|chat-worker|document-parser|payment-gateway",id!="/"}))', "{{container_label_com_docker_compose_service}}")],
         unit: "bytes",
       }),
     ],
@@ -455,65 +469,65 @@ function buildFrontendOverview() {
     uid: "detect-ai-frontend-overview",
     tags: ["detect-ai", "service", "frontend", "detailed"],
     panels: [
-      availabilityStat("Availability", '100 * avg(up{job="frontend"})', { h: 4, w: 6, x: 0, y: 0 }),
+      availabilityStat("Availability", '100 * avg(up{${jobSelector("frontend")}})', { h: 4, w: 6, x: 0, y: 0 }),
       stat({ title: "Request Rate", expr: httpRateExpr("frontend"), gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "reqps", decimals: 2 }),
       stat({ title: "Error Rate", expr: httpErrorRateExpr("frontend"), gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "percent", decimals: 2, min: 0, max: 100 }),
       stat({ title: "p95 Latency", expr: httpP95Expr("frontend"), gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "s", decimals: 3 }),
       timeseries({
         title: "Request Rate by Route",
         gridPos: { h: 8, w: 12, x: 0, y: 4 },
-        targets: [query('sum(rate(http_request_duration_seconds_count{job="frontend"}[5m])) by (route, status_code)', "{{route}} {{status_code}}")],
+        targets: [query('sum(rate(http_request_duration_seconds_count{${jobSelector("frontend")}}[5m])) by (route, status_code)', "{{route}} {{status_code}}")],
         unit: "reqps",
       }),
       timeseries({
         title: "p95 Latency by Route",
         gridPos: { h: 8, w: 12, x: 12, y: 4 },
-        targets: [query('histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="frontend"}[5m])) by (route, le))', "{{route}}")],
+        targets: [query('histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{${jobSelector("frontend")}}[5m])) by (route, le))', "{{route}}")],
         unit: "s",
       }),
       timeseries({
         title: "DB Query Throughput",
         gridPos: { h: 8, w: 12, x: 0, y: 12 },
-        targets: [query('sum(rate(db_query_duration_seconds_count{job="frontend"}[5m])) by (operation, status)', "{{operation}} {{status}}")],
+        targets: [query('sum(rate(db_query_duration_seconds_count{${jobSelector("frontend")}}[5m])) by (operation, status)', "{{operation}} {{status}}")],
         unit: "ops",
       }),
       timeseries({
         title: "DB Query p95",
         gridPos: { h: 8, w: 12, x: 12, y: 12 },
-        targets: [query('histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket{job="frontend"}[5m])) by (operation, le))', "{{operation}}")],
+        targets: [query('histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket{${jobSelector("frontend")}}[5m])) by (operation, le))', "{{operation}}")],
         unit: "s",
       }),
       timeseries({
         title: "AI Inference Throughput",
         gridPos: { h: 8, w: 12, x: 0, y: 20 },
-        targets: [query('sum(rate(ai_inference_duration_seconds_count{job="frontend"}[5m])) by (model, status)', "{{model}} {{status}}")],
+        targets: [query('sum(rate(ai_inference_duration_seconds_count{${jobSelector("frontend")}}[5m])) by (model, status)', "{{model}} {{status}}")],
         unit: "ops",
       }),
       timeseries({
         title: "AI Inference p95",
         gridPos: { h: 8, w: 12, x: 12, y: 20 },
-        targets: [query('histogram_quantile(0.95, sum(rate(ai_inference_duration_seconds_bucket{job="frontend"}[5m])) by (model, le))', "{{model}}")],
+        targets: [query('histogram_quantile(0.95, sum(rate(ai_inference_duration_seconds_bucket{${jobSelector("frontend")}}[5m])) by (model, le))', "{{model}}")],
         unit: "s",
       }),
       timeseries({
         title: "Cache Operations",
         gridPos: { h: 8, w: 8, x: 0, y: 28 },
-        targets: [query('sum(rate(cache_operations_total{job="frontend"}[5m])) by (operation, status)', "{{operation}} {{status}}")],
+        targets: [query('sum(rate(cache_operations_total{${jobSelector("frontend")}}[5m])) by (operation, status)', "{{operation}} {{status}}")],
         unit: "ops",
       }),
       timeseries({
         title: "Rate Limit Hits",
         gridPos: { h: 8, w: 8, x: 8, y: 28 },
-        targets: [query('sum(rate(rate_limit_hits_total{job="frontend"}[5m])) by (tier)', "{{tier}}")],
+        targets: [query('sum(rate(rate_limit_hits_total{${jobSelector("frontend")}}[5m])) by (tier)', "{{tier}}")],
         unit: "ops",
       }),
       timeseries({
         title: "Node.js Runtime",
         gridPos: { h: 8, w: 8, x: 16, y: 28 },
         targets: [
-          query('nodejs_eventloop_lag_p99_seconds{job="frontend"}', "event loop p99", "A"),
-          query('nodejs_heap_size_used_bytes{job="frontend"}', "heap used", "B"),
-          query('nodejs_active_handles{job="frontend"}', "active handles", "C"),
+          query('nodejs_eventloop_lag_p99_seconds{${jobSelector("frontend")}}', "event loop p99", "A"),
+          query('nodejs_heap_size_used_bytes{${jobSelector("frontend")}}', "heap used", "B"),
+          query('nodejs_active_handles{${jobSelector("frontend")}}', "active handles", "C"),
         ],
         unit: "short",
       }),
@@ -548,28 +562,28 @@ function buildPaymentsOverview() {
     uid: "detect-ai-payments-overview",
     tags: ["detect-ai", "service", "payments", "detailed"],
     panels: [
-      availabilityStat("Availability", '100 * avg(up{job="payment-gateway"})', { h: 4, w: 6, x: 0, y: 0 }),
+      availabilityStat("Availability", '100 * avg(up{${jobSelector("payment-gateway")}})', { h: 4, w: 6, x: 0, y: 0 }),
       stat({ title: "Request Rate", expr: httpRateExpr("payment-gateway"), gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "reqps", decimals: 2 }),
       stat({ title: "Error Rate", expr: httpErrorRateExpr("payment-gateway"), gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "percent", decimals: 2, min: 0, max: 100 }),
       stat({ title: "p95 Latency", expr: httpP95Expr("payment-gateway"), gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "s", decimals: 3 }),
       timeseries({
         title: "Request Rate by Route",
         gridPos: { h: 8, w: 12, x: 0, y: 4 },
-        targets: [query('sum(rate(http_request_duration_seconds_count{job="payment-gateway"}[5m])) by (route, status_code)', "{{route}} {{status_code}}")],
+        targets: [query('sum(rate(http_request_duration_seconds_count{${jobSelector("payment-gateway")}}[5m])) by (route, status_code)', "{{route}} {{status_code}}")],
         unit: "reqps",
       }),
       timeseries({
         title: "p95 Latency by Route",
         gridPos: { h: 8, w: 12, x: 12, y: 4 },
-        targets: [query('histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="payment-gateway"}[5m])) by (route, le))', "{{route}}")],
+        targets: [query('histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{${jobSelector("payment-gateway")}}[5m])) by (route, le))', "{{route}}")],
         unit: "s",
       }),
       timeseries({
         title: "Go Runtime",
         gridPos: { h: 8, w: 12, x: 0, y: 12 },
         targets: [
-          query('go_goroutines{job="payment-gateway"}', "goroutines", "A"),
-          query('go_memstats_heap_alloc_bytes{job="payment-gateway"}', "heap alloc", "B"),
+          query('go_goroutines{${jobSelector("payment-gateway")}}', "goroutines", "A"),
+          query('go_memstats_heap_alloc_bytes{${jobSelector("payment-gateway")}}', "heap alloc", "B"),
         ],
         unit: "short",
       }),
@@ -577,9 +591,9 @@ function buildPaymentsOverview() {
         title: "Process Runtime",
         gridPos: { h: 8, w: 12, x: 12, y: 12 },
         targets: [
-          query('rate(process_cpu_seconds_total{job="payment-gateway"}[5m])', "cpu cores", "A"),
-          query('process_resident_memory_bytes{job="payment-gateway"}', "resident memory", "B"),
-          query('process_open_fds{job="payment-gateway"}', "open fds", "C"),
+          query('rate(process_cpu_seconds_total{${jobSelector("payment-gateway")}}[5m])', "cpu cores", "A"),
+          query('process_resident_memory_bytes{${jobSelector("payment-gateway")}}', "resident memory", "B"),
+          query('process_open_fds{${jobSelector("payment-gateway")}}', "open fds", "C"),
         ],
         unit: "short",
       }),
@@ -602,6 +616,25 @@ function buildPaymentsOverview() {
         ],
         unit: "short",
       }),
+      timeseries({
+        title: "Payment Events & Webhook Validity",
+        gridPos: { h: 8, w: 12, x: 0, y: 28 },
+        targets: [
+          query('sum(rate(payment_events_published_total{${jobSelector("payment-gateway")}}[5m])) by (event_type, status)', "Event published {{event_type}} {{status}}", "A"),
+          query('sum(rate(payment_webhook_signatures_invalid_total{${jobSelector("payment-gateway")}}[5m]))', "Invalid Signatures Rate", "B"),
+        ],
+        unit: "ops",
+      }),
+      timeseries({
+        title: "RabbitMQ Broker Connection & Publish Latency",
+        gridPos: { h: 8, w: 12, x: 12, y: 28 },
+        targets: [
+          query('rabbitmq_connection_status{${jobSelector("payment-gateway")}}', "Connection Status (1=Connected)", "A"),
+          query('sum(rate(rabbitmq_reconnections_total{${jobSelector("payment-gateway")}}[5m]))', "Reconnections Rate", "B"),
+          query('histogram_quantile(0.95, sum(rate(rabbitmq_publish_duration_seconds_bucket{${jobSelector("payment-gateway")}}[5m])) by (le))', "Publish Latency p95", "C"),
+        ],
+        unit: "short",
+      }),
     ],
   });
 }
@@ -614,34 +647,34 @@ function buildInferenceOverview() {
     uid: "detect-ai-inference-overview",
     tags: ["detect-ai", "service", "inference", "detailed"],
     panels: [
-      availabilityStat("Availability", '100 * avg(up{job="inference"})', { h: 4, w: 6, x: 0, y: 0 }),
-      stat({ title: "gRPC Rate", expr: 'sum(rate(grpc_requests_total{job="inference"}[5m]))', gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "reqps", decimals: 2 }),
-      stat({ title: "Error Rate", expr: '100 * sum(rate(grpc_requests_total{job="inference",code!="OK"}[5m])) / clamp_min(sum(rate(grpc_requests_total{job="inference"}[5m])), 0.001)', gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "percent", decimals: 2, min: 0, max: 100 }),
-      stat({ title: "gRPC p95", expr: 'histogram_quantile(0.95, sum(rate(grpc_latency_seconds_bucket{job="inference"}[5m])) by (le))', gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "s", decimals: 3 }),
+      availabilityStat("Availability", '100 * avg(up{${jobSelector("inference")}})', { h: 4, w: 6, x: 0, y: 0 }),
+      stat({ title: "gRPC Rate", expr: 'sum(rate(grpc_requests_total{${jobSelector("inference")}}[5m]))', gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "reqps", decimals: 2 }),
+      stat({ title: "Error Rate", expr: '100 * sum(rate(grpc_requests_total{${jobSelector("inference")},code!="OK"}[5m])) / clamp_min(sum(rate(grpc_requests_total{${jobSelector("inference")}}[5m])), 0.001)', gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "percent", decimals: 2, min: 0, max: 100 }),
+      stat({ title: "gRPC p95", expr: 'histogram_quantile(0.95, sum(rate(grpc_latency_seconds_bucket{${jobSelector("inference")}}[5m])) by (le))', gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "s", decimals: 3 }),
       timeseries({
         title: "gRPC Request Rate",
         gridPos: { h: 8, w: 12, x: 0, y: 4 },
-        targets: [query('sum(rate(grpc_requests_total{job="inference"}[5m])) by (method, model, code)', "{{method}} {{model}} {{code}}")],
+        targets: [query('sum(rate(grpc_requests_total{${jobSelector("inference")}}[5m])) by (method, model, code)', "{{method}} {{model}} {{code}}")],
         unit: "reqps",
       }),
       timeseries({
         title: "gRPC p95 Latency",
         gridPos: { h: 8, w: 12, x: 12, y: 4 },
-        targets: [query('histogram_quantile(0.95, sum(rate(grpc_latency_seconds_bucket{job="inference"}[5m])) by (method, model, le))', "{{method}} {{model}}")],
+        targets: [query('histogram_quantile(0.95, sum(rate(grpc_latency_seconds_bucket{${jobSelector("inference")}}[5m])) by (method, model, le))', "{{method}} {{model}}")],
         unit: "s",
       }),
       timeseries({
         title: "Batch Queue Size",
         gridPos: { h: 8, w: 12, x: 0, y: 12 },
-        targets: [query('sum(model_batch_queue_size{job="inference"}) by (model)', "{{model}}")],
+        targets: [query('sum(model_batch_queue_size{${jobSelector("inference")}}) by (model)', "{{model}}")],
         unit: "short",
       }),
       timeseries({
         title: "Batch Size and Processing p95",
         gridPos: { h: 8, w: 12, x: 12, y: 12 },
         targets: [
-          query('histogram_quantile(0.95, sum(rate(model_batch_size_bucket{job="inference"}[5m])) by (model, le))', "{{model}} size p95", "A"),
-          query('histogram_quantile(0.95, sum(rate(model_batch_processing_seconds_bucket{job="inference"}[5m])) by (model, le))', "{{model}} processing p95", "B"),
+          query('histogram_quantile(0.95, sum(rate(model_batch_size_bucket{${jobSelector("inference")}}[5m])) by (model, le))', "{{model}} size p95", "A"),
+          query('histogram_quantile(0.95, sum(rate(model_batch_processing_seconds_bucket{${jobSelector("inference")}}[5m])) by (model, le))', "{{model}} processing p95", "B"),
         ],
         unit: "short",
       }),
@@ -649,8 +682,8 @@ function buildInferenceOverview() {
         title: "AI Confidence Distribution",
         gridPos: { h: 8, w: 12, x: 0, y: 20 },
         targets: [
-          query('histogram_quantile(0.50, sum(rate(model_ai_confidence_score_bucket{job="inference"}[5m])) by (model, le))', "{{model}} p50", "A"),
-          query('histogram_quantile(0.95, sum(rate(model_ai_confidence_score_bucket{job="inference"}[5m])) by (model, le))', "{{model}} p95", "B"),
+          query('histogram_quantile(0.50, sum(rate(model_ai_confidence_score_bucket{${jobSelector("inference")}}[5m])) by (model, le))', "{{model}} p50", "A"),
+          query('histogram_quantile(0.95, sum(rate(model_ai_confidence_score_bucket{${jobSelector("inference")}}[5m])) by (model, le))', "{{model}} p95", "B"),
         ],
         unit: "percentunit",
         min: 0,
@@ -660,8 +693,8 @@ function buildInferenceOverview() {
         title: "Process Runtime",
         gridPos: { h: 8, w: 12, x: 12, y: 20 },
         targets: [
-          query('rate(process_cpu_seconds_total{job="inference"}[5m])', "cpu cores", "A"),
-          query('process_resident_memory_bytes{job="inference"}', "resident memory", "B"),
+          query('rate(process_cpu_seconds_total{${jobSelector("inference")}}[5m])', "cpu cores", "A"),
+          query('process_resident_memory_bytes{${jobSelector("inference")}}', "resident memory", "B"),
         ],
         unit: "short",
       }),
@@ -743,23 +776,60 @@ function buildWorkersOverview() {
       timeseries({
         title: "Container CPU",
         gridPos: { h: 8, w: 12, x: 12, y: 20 },
-        targets: [query('100 * sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{job="cadvisor",container_label_com_docker_compose_service=~"worker-analytics|worker-cron|worker-payments",id!="/"}[5m]))', "{{container_label_com_docker_compose_service}}")],
+        targets: [query('100 * (sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service=~"worker-analytics|worker-cron|worker-payments",id!="/"}[5m])) or sum by (container) (rate(container_cpu_usage_seconds_total{container=~"(detect-ai-)?(worker-analytics|worker-cron|worker-payments)",id!="/"}[5m])))', "{{container_label_com_docker_compose_service}} {{container}}")],
         unit: "percent",
       }),
       timeseries({
         title: "Container Memory",
         gridPos: { h: 8, w: 12, x: 0, y: 28 },
-        targets: [query('sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{job="cadvisor",container_label_com_docker_compose_service=~"worker-analytics|worker-cron|worker-payments",id!="/"})', "{{container_label_com_docker_compose_service}}")],
+        targets: [query('(sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{container_label_com_docker_compose_service=~"worker-analytics|worker-cron|worker-payments",id!="/"}) or sum by (container) (container_memory_working_set_bytes{container=~"(detect-ai-)?(worker-analytics|worker-cron|worker-payments)",id!="/"}))', "{{container_label_com_docker_compose_service}} {{container}}")],
         unit: "bytes",
       }),
       timeseries({
         title: "Container Network",
         gridPos: { h: 8, w: 12, x: 12, y: 28 },
         targets: [
-          query('sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{job="cadvisor",container_label_com_docker_compose_service=~"worker-analytics|worker-cron|worker-payments",id!="/"}[5m]))', "{{container_label_com_docker_compose_service}} rx", "A"),
-          query('sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{job="cadvisor",container_label_com_docker_compose_service=~"worker-analytics|worker-cron|worker-payments",id!="/"}[5m]))', "{{container_label_com_docker_compose_service}} tx", "B"),
+          query('(sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{container_label_com_docker_compose_service=~"worker-analytics|worker-cron|worker-payments",id!="/"}[5m])) or sum by (container) (rate(container_network_receive_bytes_total{container=~"(detect-ai-)?(worker-analytics|worker-cron|worker-payments)",id!="/"}[5m])))', "{{container_label_com_docker_compose_service}} {{container}} rx", "A"),
+          query('(sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{container_label_com_docker_compose_service=~"worker-analytics|worker-cron|worker-payments",id!="/"}[5m])) or sum by (container) (rate(container_network_transmit_bytes_total{container=~"(detect-ai-)?(worker-analytics|worker-cron|worker-payments)",id!="/"}[5m])))', "{{container_label_com_docker_compose_service}} {{container}} tx", "B"),
         ],
         unit: "Bps",
+      }),
+      timeseries({
+        title: "Broker & Cache Connection Reliability",
+        gridPos: { h: 8, w: 12, x: 0, y: 36 },
+        targets: [
+          query('rabbitmq_connection_status{job=~"${workerJobs}"}', "{{job}} RabbitMQ status", "A"),
+          query('sum(rate(rabbitmq_reconnections_total{job=~"${workerJobs}"}[5m])) by (job)', "{{job}} RabbitMQ reconns", "B"),
+          query('redis_connection_status{job=~"${workerJobs}"}', "{{job}} Redis status", "C"),
+        ],
+        unit: "short",
+      }),
+      timeseries({
+        title: "Database Connection Pool Status",
+        gridPos: { h: 8, w: 12, x: 12, y: 36 },
+        targets: [
+          query('db_pool_connections{job=~"${workerJobs}"}', "{{job}} pool {{pool_name}} {{state}}", "A"),
+        ],
+        unit: "short",
+      }),
+      timeseries({
+        title: "Active Jobs & Message Payload Size p95",
+        gridPos: { h: 8, w: 12, x: 0, y: 44 },
+        targets: [
+          query('sum(worker_active_jobs{job=~"${workerJobs}"}) by (job_type)', "{{job_type}} active", "A"),
+          query('histogram_quantile(0.95, sum(rate(worker_message_size_bytes_bucket{job=~"${workerJobs}"}[5m])) by (job_type, le))', "{{job_type}} size p95 bytes", "B"),
+        ],
+        unit: "short",
+      }),
+      timeseries({
+        title: "Job Failure Errors & DLQ Messages",
+        gridPos: { h: 8, w: 12, x: 12, y: 44 },
+        targets: [
+          query('sum(rate(worker_job_errors_total{job=~"${workerJobs}"}[5m])) by (job_type, error_type)', "{{job_type}} error {{error_type}}", "A"),
+          query('sum(rate(worker_dead_lettered_total{job=~"${workerJobs}"}[5m])) by (job_type)', "{{job_type}} dead lettered", "B"),
+          query('sum(rate(worker_domain_operations_volume_total{job=~"${workerJobs}"}[5m])) by (domain_op)', "Domain op {{domain_op}}", "C"),
+        ],
+        unit: "ops",
       }),
     ],
   });
@@ -773,11 +843,11 @@ function buildInferenceOperationsOverview() {
     uid: "detect-ai-inference-operations-overview",
     tags: ["detect-ai", "service", "inference", "operations"],
     panels: [
-      availabilityStat("Service Health", '100 * max(inference_service_health_status{job="inference",status="serving"})', { h: 4, w: 6, x: 0, y: 0 }),
-      availabilityStat("Engines Serving", '100 * avg(inference_engine_health_status{job="inference",status="serving"})', { h: 4, w: 6, x: 6, y: 0 }),
+      availabilityStat("Service Health", '100 * max(inference_service_health_status{${jobSelector("inference")},status="serving"})', { h: 4, w: 6, x: 0, y: 0 }),
+      availabilityStat("Engines Serving", '100 * avg(inference_engine_health_status{${jobSelector("inference")},status="serving"})', { h: 4, w: 6, x: 6, y: 0 }),
       stat({
         title: "Max Queue Fill",
-        expr: '100 * max(model_batch_queue_size{job="inference"} / clamp_min(inference_engine_queue_capacity{job="inference"}, 1))',
+        expr: '100 * max(model_batch_queue_size{${jobSelector("inference")}} / clamp_min(inference_engine_queue_capacity{${jobSelector("inference")}}, 1))',
         gridPos: { h: 4, w: 6, x: 12, y: 0 },
         unit: "percent",
         decimals: 1,
@@ -786,7 +856,7 @@ function buildInferenceOperationsOverview() {
       }),
       stat({
         title: "Max Circuit Open",
-        expr: 'max(inference_engine_circuit_open_seconds{job="inference"})',
+        expr: 'max(inference_engine_circuit_open_seconds{${jobSelector("inference")}})',
         gridPos: { h: 4, w: 6, x: 18, y: 0 },
         unit: "s",
         decimals: 1,
@@ -800,7 +870,7 @@ function buildInferenceOperationsOverview() {
       timeseries({
         title: "Service Health State",
         gridPos: { h: 8, w: 12, x: 0, y: 4 },
-        targets: [query('inference_service_health_status{job="inference"}', "{{status}}")],
+        targets: [query('inference_service_health_status{${jobSelector("inference")}}', "{{status}}")],
         unit: "short",
         legendMode: "list",
         tooltipMode: "single",
@@ -812,7 +882,7 @@ function buildInferenceOperationsOverview() {
       timeseries({
         title: "Service Health Reason",
         gridPos: { h: 8, w: 12, x: 12, y: 4 },
-        targets: [query('inference_service_health_reason{job="inference",reason!="none"}', "{{reason}}")],
+        targets: [query('inference_service_health_reason{${jobSelector("inference")},reason!="none"}', "{{reason}}")],
         unit: "short",
         legendMode: "list",
         tooltipMode: "single",
@@ -824,7 +894,7 @@ function buildInferenceOperationsOverview() {
       timeseries({
         title: "Engine Health State",
         gridPos: { h: 8, w: 12, x: 0, y: 12 },
-        targets: [query('inference_engine_health_status{job="inference"}', "{{model}} {{status}}")],
+        targets: [query('inference_engine_health_status{${jobSelector("inference")}}', "{{model}} {{status}}")],
         unit: "short",
         legendMode: "list",
         tooltipMode: "single",
@@ -837,15 +907,15 @@ function buildInferenceOperationsOverview() {
         title: "Queue Depth and Capacity",
         gridPos: { h: 8, w: 12, x: 12, y: 12 },
         targets: [
-          query('model_batch_queue_size{job="inference"}', "{{model}} queued", "A"),
-          query('inference_engine_queue_capacity{job="inference"}', "{{model}} capacity", "B"),
+          query('model_batch_queue_size{${jobSelector("inference")}}', "{{model}} queued", "A"),
+          query('inference_engine_queue_capacity{${jobSelector("inference")}}', "{{model}} capacity", "B"),
         ],
         unit: "short",
       }),
       timeseries({
         title: "Queue Utilization",
         gridPos: { h: 8, w: 12, x: 0, y: 20 },
-        targets: [query('100 * model_batch_queue_size{job="inference"} / clamp_min(inference_engine_queue_capacity{job="inference"}, 1)', "{{model}}")],
+        targets: [query('100 * model_batch_queue_size{${jobSelector("inference")}} / clamp_min(inference_engine_queue_capacity{${jobSelector("inference")}}, 1)', "{{model}}")],
         unit: "percent",
         min: 0,
         max: 100,
@@ -854,7 +924,7 @@ function buildInferenceOperationsOverview() {
       timeseries({
         title: "Circuit Open Seconds",
         gridPos: { h: 8, w: 12, x: 12, y: 20 },
-        targets: [query('inference_engine_circuit_open_seconds{job="inference"}', "{{model}}")],
+        targets: [query('inference_engine_circuit_open_seconds{${jobSelector("inference")}}', "{{model}}")],
         unit: "s",
         min: 0,
       }),
@@ -862,8 +932,8 @@ function buildInferenceOperationsOverview() {
         title: "Process Runtime",
         gridPos: { h: 8, w: 12, x: 0, y: 28 },
         targets: [
-          query('rate(process_cpu_seconds_total{job="inference"}[5m])', "cpu cores", "A"),
-          query('process_resident_memory_bytes{job="inference"}', "resident memory", "B"),
+          query('rate(process_cpu_seconds_total{${jobSelector("inference")}}[5m])', "cpu cores", "A"),
+          query('process_resident_memory_bytes{${jobSelector("inference")}}', "resident memory", "B"),
         ],
         unit: "short",
       }),
@@ -888,10 +958,10 @@ function buildInferenceTrafficOverview() {
     uid: "detect-ai-inference-traffic-overview",
     tags: ["detect-ai", "service", "inference", "traffic"],
     panels: [
-      stat({ title: "gRPC Rate", expr: 'sum(rate(grpc_requests_total{job="inference"}[5m]))', gridPos: { h: 4, w: 6, x: 0, y: 0 }, unit: "reqps", decimals: 2 }),
+      stat({ title: "gRPC Rate", expr: 'sum(rate(grpc_requests_total{${jobSelector("inference")}}[5m]))', gridPos: { h: 4, w: 6, x: 0, y: 0 }, unit: "reqps", decimals: 2 }),
       stat({
         title: "Auth Reject Rate",
-        expr: 'sum(rate(grpc_auth_failures_total{job="inference"}[5m]))',
+        expr: 'sum(rate(grpc_auth_failures_total{${jobSelector("inference")}}[5m]))',
         gridPos: { h: 4, w: 6, x: 6, y: 0 },
         unit: "reqps",
         decimals: 2,
@@ -900,7 +970,7 @@ function buildInferenceTrafficOverview() {
       }),
       stat({
         title: "p95 Input Size",
-        expr: 'histogram_quantile(0.95, sum(rate(inference_document_input_chars_bucket{job="inference"}[5m])) by (le))',
+        expr: 'histogram_quantile(0.95, sum(rate(inference_document_input_chars_bucket{${jobSelector("inference")}}[5m])) by (le))',
         gridPos: { h: 4, w: 6, x: 12, y: 0 },
         unit: "short",
         decimals: 0,
@@ -908,7 +978,7 @@ function buildInferenceTrafficOverview() {
       }),
       stat({
         title: "p95 Chunk Count",
-        expr: 'histogram_quantile(0.95, sum(rate(inference_document_chunk_count_bucket{job="inference"}[5m])) by (le))',
+        expr: 'histogram_quantile(0.95, sum(rate(inference_document_chunk_count_bucket{${jobSelector("inference")}}[5m])) by (le))',
         gridPos: { h: 4, w: 6, x: 18, y: 0 },
         unit: "short",
         decimals: 1,
@@ -917,33 +987,33 @@ function buildInferenceTrafficOverview() {
       timeseries({
         title: "gRPC Response Rate",
         gridPos: { h: 8, w: 12, x: 0, y: 4 },
-        targets: [query('sum(rate(grpc_requests_total{job="inference"}[5m])) by (code, method, model)', "{{code}} {{method}} {{model}}")],
+        targets: [query('sum(rate(grpc_requests_total{${jobSelector("inference")}}[5m])) by (code, method, model)', "{{code}} {{method}} {{model}}")],
         unit: "reqps",
       }),
       timeseries({
         title: "Auth Failures",
         gridPos: { h: 8, w: 12, x: 12, y: 4 },
-        targets: [query('sum(rate(grpc_auth_failures_total{job="inference"}[5m])) by (method, reason)', "{{method}} {{reason}}")],
+        targets: [query('sum(rate(grpc_auth_failures_total{${jobSelector("inference")}}[5m])) by (method, reason)', "{{method}} {{reason}}")],
         unit: "reqps",
       }),
       timeseries({
         title: "Document Request Rate",
         gridPos: { h: 8, w: 12, x: 0, y: 12 },
-        targets: [query('sum(rate(inference_document_input_chars_count{job="inference"}[5m])) by (operation, model)', "{{operation}} {{model}}")],
+        targets: [query('sum(rate(inference_document_input_chars_count{${jobSelector("inference")}}[5m])) by (operation, model)', "{{operation}} {{model}}")],
         unit: "reqps",
       }),
       timeseries({
         title: "Chunk Throughput",
         gridPos: { h: 8, w: 12, x: 12, y: 12 },
-        targets: [query('sum(rate(inference_document_chunks_processed_total{job="inference"}[5m])) by (operation, model)', "{{operation}} {{model}}")],
+        targets: [query('sum(rate(inference_document_chunks_processed_total{${jobSelector("inference")}}[5m])) by (operation, model)', "{{operation}} {{model}}")],
         unit: "ops",
       }),
       timeseries({
         title: "Input Size Distribution",
         gridPos: { h: 8, w: 12, x: 0, y: 20 },
         targets: [
-          query('histogram_quantile(0.50, sum(rate(inference_document_input_chars_bucket{job="inference"}[5m])) by (operation, model, le))', "{{operation}} {{model}} p50", "A"),
-          query('histogram_quantile(0.95, sum(rate(inference_document_input_chars_bucket{job="inference"}[5m])) by (operation, model, le))', "{{operation}} {{model}} p95", "B"),
+          query('histogram_quantile(0.50, sum(rate(inference_document_input_chars_bucket{${jobSelector("inference")}}[5m])) by (operation, model, le))', "{{operation}} {{model}} p50", "A"),
+          query('histogram_quantile(0.95, sum(rate(inference_document_input_chars_bucket{${jobSelector("inference")}}[5m])) by (operation, model, le))', "{{operation}} {{model}} p95", "B"),
         ],
         unit: "short",
         min: 0,
@@ -952,8 +1022,8 @@ function buildInferenceTrafficOverview() {
         title: "Chunk Count Distribution",
         gridPos: { h: 8, w: 12, x: 12, y: 20 },
         targets: [
-          query('histogram_quantile(0.50, sum(rate(inference_document_chunk_count_bucket{job="inference"}[5m])) by (operation, model, le))', "{{operation}} {{model}} p50", "A"),
-          query('histogram_quantile(0.95, sum(rate(inference_document_chunk_count_bucket{job="inference"}[5m])) by (operation, model, le))', "{{operation}} {{model}} p95", "B"),
+          query('histogram_quantile(0.50, sum(rate(inference_document_chunk_count_bucket{${jobSelector("inference")}}[5m])) by (operation, model, le))', "{{operation}} {{model}} p50", "A"),
+          query('histogram_quantile(0.95, sum(rate(inference_document_chunk_count_bucket{${jobSelector("inference")}}[5m])) by (operation, model, le))', "{{operation}} {{model}} p95", "B"),
         ],
         unit: "short",
         min: 0,
@@ -961,14 +1031,14 @@ function buildInferenceTrafficOverview() {
       timeseries({
         title: "In-Flight Chunk Concurrency",
         gridPos: { h: 8, w: 12, x: 0, y: 28 },
-        targets: [query('sum(inference_document_inflight_chunks{job="inference"}) by (operation, model)', "{{operation}} {{model}}")],
+        targets: [query('sum(inference_document_inflight_chunks{${jobSelector("inference")}}) by (operation, model)', "{{operation}} {{model}}")],
         unit: "short",
         min: 0,
       }),
       timeseries({
         title: "Cancelled and Failure Rate",
         gridPos: { h: 8, w: 12, x: 12, y: 28 },
-        targets: [query('sum(rate(grpc_requests_total{job="inference",code=~"CANCELLED|INTERNAL|RESOURCE_EXHAUSTED|INVALID_ARGUMENT|UNKNOWN"}[5m])) by (code, method, model)', "{{code}} {{method}} {{model}}")],
+        targets: [query('sum(rate(grpc_requests_total{${jobSelector("inference")},code=~"CANCELLED|INTERNAL|RESOURCE_EXHAUSTED|INVALID_ARGUMENT|UNKNOWN"}[5m])) by (code, method, model)', "{{code}} {{method}} {{model}}")],
         unit: "reqps",
       }),
     ],
@@ -983,26 +1053,26 @@ function buildDocumentParserOverview() {
     uid: "detect-ai-document-parser-overview",
     tags: ["detect-ai", "service", "document-parser", "detailed"],
     panels: [
-      availabilityStat("Availability", '100 * avg(up{job="document-parser"})', { h: 4, w: 6, x: 0, y: 0 }),
+      availabilityStat("Availability", '100 * avg(up{${jobSelector("document-parser")}})', { h: 4, w: 6, x: 0, y: 0 }),
       stat({ title: "Request Rate", expr: httpRateExpr("document-parser"), gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "reqps", decimals: 2 }),
       stat({ title: "Error Rate", expr: httpErrorRateExpr("document-parser"), gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "percent", decimals: 2, min: 0, max: 100 }),
       stat({ title: "p95 Latency", expr: httpP95Expr("document-parser"), gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "s", decimals: 3 }),
       timeseries({
         title: "Request Rate by Route",
         gridPos: { h: 8, w: 12, x: 0, y: 4 },
-        targets: [query('sum(rate(http_request_duration_seconds_count{job="document-parser"}[5m])) by (route, status_code)', "{{route}} {{status_code}}")],
+        targets: [query('sum(rate(http_request_duration_seconds_count{${jobSelector("document-parser")}}[5m])) by (route, status_code)', "{{route}} {{status_code}}")],
         unit: "reqps",
       }),
       timeseries({
         title: "p95 Latency by Route",
         gridPos: { h: 8, w: 12, x: 12, y: 4 },
-        targets: [query('histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="document-parser"}[5m])) by (route, le))', "{{route}}")],
+        targets: [query('histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{${jobSelector("document-parser")}}[5m])) by (route, le))', "{{route}}")],
         unit: "s",
       }),
       timeseries({
         title: "Request Volume by Status",
         gridPos: { h: 8, w: 12, x: 0, y: 12 },
-        targets: [query('sum(rate(http_request_duration_seconds_count{job="document-parser"}[5m])) by (status_code)', "{{status_code}}")],
+        targets: [query('sum(rate(http_request_duration_seconds_count{${jobSelector("document-parser")}}[5m])) by (status_code)', "{{status_code}}")],
         unit: "reqps",
       }),
       timeseries({
@@ -1029,6 +1099,21 @@ function buildDocumentParserOverview() {
         ],
         unit: "Bps",
       }),
+      timeseries({
+        title: "Parsed Documents Status by MIME-Type",
+        gridPos: { h: 8, w: 12, x: 0, y: 28 },
+        targets: [query('sum(rate(parsed_documents_total{${jobSelector("document-parser")}}[5m])) by (mime_type, status)', "{{mime_type}} {{status}}")],
+        unit: "ops",
+      }),
+      timeseries({
+        title: "Extracted Text Volume & Ingested File Size p95",
+        gridPos: { h: 8, w: 12, x: 12, y: 28 },
+        targets: [
+          query('sum(rate(extracted_text_bytes_total{${jobSelector("document-parser")}}[5m])) by (mime_type)', "{{mime_type}} text bytes/s", "A"),
+          query('histogram_quantile(0.95, sum(rate(parsed_file_size_bytes_bucket{${jobSelector("document-parser")}}[5m])) by (mime_type, le))', "{{mime_type}} size p95 bytes", "B"),
+        ],
+        unit: "bytes",
+      }),
     ],
   });
 }
@@ -1041,35 +1126,35 @@ function buildChatServiceOverview() {
     uid: "detect-ai-chat-service-overview",
     tags: ["detect-ai", "service", "chat-service", "detailed"],
     panels: [
-      availabilityStat("Availability", '100 * avg(up{job="chat-service"})', { h: 4, w: 6, x: 0, y: 0 }),
-      stat({ title: "gRPC Rate", expr: 'sum(rate(grpc_request_duration_seconds_count{job="chat-service"}[5m]))', gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "reqps", decimals: 2 }),
-      stat({ title: "Error Rate", expr: '100 * sum(rate(grpc_request_duration_seconds_count{job="chat-service",status!="OK"}[5m])) / clamp_min(sum(rate(grpc_request_duration_seconds_count{job="chat-service"}[5m])), 0.001)', gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "percent", decimals: 2, min: 0, max: 100 }),
-      stat({ title: "gRPC p95", expr: 'histogram_quantile(0.95, sum(rate(grpc_request_duration_seconds_bucket{job="chat-service"}[5m])) by (le))', gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "s", decimals: 3 }),
+      availabilityStat("Availability", '100 * avg(up{${jobSelector("chat-service")}})', { h: 4, w: 6, x: 0, y: 0 }),
+      stat({ title: "gRPC Rate", expr: 'sum(rate(grpc_request_duration_seconds_count{${jobSelector("chat-service")}}[5m]))', gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "reqps", decimals: 2 }),
+      stat({ title: "Error Rate", expr: '100 * sum(rate(grpc_request_duration_seconds_count{${jobSelector("chat-service")},status!="OK"}[5m])) / clamp_min(sum(rate(grpc_request_duration_seconds_count{${jobSelector("chat-service")}}[5m])), 0.001)', gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "percent", decimals: 2, min: 0, max: 100 }),
+      stat({ title: "gRPC p95", expr: 'histogram_quantile(0.95, sum(rate(grpc_request_duration_seconds_bucket{${jobSelector("chat-service")}}[5m])) by (le))', gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "s", decimals: 3 }),
       timeseries({
         title: "gRPC Request Rate by Method",
         gridPos: { h: 8, w: 12, x: 0, y: 4 },
-        targets: [query('sum(rate(grpc_request_duration_seconds_count{job="chat-service"}[5m])) by (method, status)', "{{method}} {{status}}")],
+        targets: [query('sum(rate(grpc_request_duration_seconds_count{${jobSelector("chat-service")}}[5m])) by (method, status)', "{{method}} {{status}}")],
         unit: "reqps",
       }),
       timeseries({
         title: "gRPC p95 by Method",
         gridPos: { h: 8, w: 12, x: 12, y: 4 },
-        targets: [query('histogram_quantile(0.95, sum(rate(grpc_request_duration_seconds_bucket{job="chat-service"}[5m])) by (method, le))', "{{method}}")],
+        targets: [query('histogram_quantile(0.95, sum(rate(grpc_request_duration_seconds_bucket{${jobSelector("chat-service")}}[5m])) by (method, le))', "{{method}}")],
         unit: "s",
       }),
       timeseries({
         title: "Chat Cache Activity",
         gridPos: { h: 8, w: 12, x: 0, y: 12 },
         targets: [
-          query('rate(chat_cache_hits_total{job="chat-service"}[5m])', "hits", "A"),
-          query('rate(chat_cache_misses_total{job="chat-service"}[5m])', "misses", "B"),
+          query('rate(chat_cache_hits_total{${jobSelector("chat-service")}}[5m])', "hits", "A"),
+          query('rate(chat_cache_misses_total{${jobSelector("chat-service")}}[5m])', "misses", "B"),
         ],
         unit: "ops",
       }),
       timeseries({
         title: "Cache Hit Ratio",
         gridPos: { h: 8, w: 12, x: 12, y: 12 },
-        targets: [query('100 * rate(chat_cache_hits_total{job="chat-service"}[5m]) / clamp_min(rate(chat_cache_hits_total{job="chat-service"}[5m]) + rate(chat_cache_misses_total{job="chat-service"}[5m]), 0.001)', "hit ratio")],
+        targets: [query('100 * rate(chat_cache_hits_total{${jobSelector("chat-service")}}[5m]) / clamp_min(rate(chat_cache_hits_total{${jobSelector("chat-service")}}[5m]) + rate(chat_cache_misses_total{${jobSelector("chat-service")}}[5m]), 0.001)', "hit ratio")],
         unit: "percent",
         min: 0,
         max: 100,
@@ -1078,8 +1163,8 @@ function buildChatServiceOverview() {
         title: "Go Runtime",
         gridPos: { h: 8, w: 12, x: 0, y: 20 },
         targets: [
-          query('go_goroutines{job="chat-service"}', "goroutines", "A"),
-          query('go_memstats_heap_alloc_bytes{job="chat-service"}', "heap alloc", "B"),
+          query('go_goroutines{${jobSelector("chat-service")}}', "goroutines", "A"),
+          query('go_memstats_heap_alloc_bytes{${jobSelector("chat-service")}}', "heap alloc", "B"),
         ],
         unit: "short",
       }),
@@ -1087,9 +1172,9 @@ function buildChatServiceOverview() {
         title: "Process Runtime",
         gridPos: { h: 8, w: 12, x: 12, y: 20 },
         targets: [
-          query('rate(process_cpu_seconds_total{job="chat-service"}[5m])', "cpu cores", "A"),
-          query('process_resident_memory_bytes{job="chat-service"}', "resident memory", "B"),
-          query('process_open_fds{job="chat-service"}', "open fds", "C"),
+          query('rate(process_cpu_seconds_total{${jobSelector("chat-service")}}[5m])', "cpu cores", "A"),
+          query('process_resident_memory_bytes{${jobSelector("chat-service")}}', "resident memory", "B"),
+          query('process_open_fds{${jobSelector("chat-service")}}', "open fds", "C"),
         ],
         unit: "short",
       }),
@@ -1112,6 +1197,15 @@ function buildChatServiceOverview() {
         ],
         unit: "short",
       }),
+      timeseries({
+        title: "Database Errors & DLQ",
+        gridPos: { h: 8, w: 12, x: 0, y: 36 },
+        targets: [
+          query('sum(rate(chat_dlq_messages_total{${jobSelector("chat-service")}}[5m]))', "DLQ Messages", "A"),
+          query('sum(rate(chat_database_errors_total{${jobSelector("chat-service")}}[5m])) by (operation)', "DB Errors {{operation}}", "B"),
+        ],
+        unit: "ops",
+      }),
     ],
   });
 }
@@ -1124,28 +1218,28 @@ function buildChatWorkerOverview() {
     uid: "detect-ai-chat-worker-overview",
     tags: ["detect-ai", "service", "chat-worker", "detailed"],
     panels: [
-      availabilityStat("Availability", '100 * avg(up{job="chat-worker"})', { h: 4, w: 6, x: 0, y: 0 }),
-      stat({ title: "Ingest Rate", expr: 'sum(rate(chat_messages_ingested_total{job="chat-worker"}[5m]))', gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "ops", decimals: 2 }),
-      stat({ title: "Max Stream Lag", expr: 'max(chat_redis_stream_lag{job="chat-worker"})', gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "short", decimals: 0 }),
-      stat({ title: "CPU Cores", expr: 'rate(process_cpu_seconds_total{job="chat-worker"}[5m])', gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "short", decimals: 3 }),
+      availabilityStat("Availability", '100 * avg(up{${jobSelector("chat-worker")}})', { h: 4, w: 6, x: 0, y: 0 }),
+      stat({ title: "Ingest Rate", expr: 'sum(rate(chat_messages_ingested_total{${jobSelector("chat-worker")}}[5m]))', gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "ops", decimals: 2 }),
+      stat({ title: "Max Stream Lag", expr: 'max(chat_redis_stream_lag{${jobSelector("chat-worker")}})', gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "short", decimals: 0 }),
+      stat({ title: "CPU Cores", expr: 'rate(process_cpu_seconds_total{${jobSelector("chat-worker")}}[5m])', gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "short", decimals: 3 }),
       timeseries({
         title: "Messages Ingested",
         gridPos: { h: 8, w: 12, x: 0, y: 4 },
-        targets: [query('rate(chat_messages_ingested_total{job="chat-worker"}[5m])', "ingested")],
+        targets: [query('rate(chat_messages_ingested_total{${jobSelector("chat-worker")}}[5m])', "ingested")],
         unit: "ops",
       }),
       timeseries({
         title: "Redis Stream Lag by Partition",
         gridPos: { h: 8, w: 12, x: 12, y: 4 },
-        targets: [query('chat_redis_stream_lag{job="chat-worker"}', "{{partition}}")],
+        targets: [query('chat_redis_stream_lag{${jobSelector("chat-worker")}}', "{{partition}}")],
         unit: "short",
       }),
       timeseries({
         title: "Go Runtime",
         gridPos: { h: 8, w: 12, x: 0, y: 12 },
         targets: [
-          query('go_goroutines{job="chat-worker"}', "goroutines", "A"),
-          query('go_memstats_heap_alloc_bytes{job="chat-worker"}', "heap alloc", "B"),
+          query('go_goroutines{${jobSelector("chat-worker")}}', "goroutines", "A"),
+          query('go_memstats_heap_alloc_bytes{${jobSelector("chat-worker")}}', "heap alloc", "B"),
         ],
         unit: "short",
       }),
@@ -1153,9 +1247,9 @@ function buildChatWorkerOverview() {
         title: "Process Runtime",
         gridPos: { h: 8, w: 12, x: 12, y: 12 },
         targets: [
-          query('rate(process_cpu_seconds_total{job="chat-worker"}[5m])', "cpu cores", "A"),
-          query('process_resident_memory_bytes{job="chat-worker"}', "resident memory", "B"),
-          query('process_open_fds{job="chat-worker"}', "open fds", "C"),
+          query('rate(process_cpu_seconds_total{${jobSelector("chat-worker")}}[5m])', "cpu cores", "A"),
+          query('process_resident_memory_bytes{${jobSelector("chat-worker")}}', "resident memory", "B"),
+          query('process_open_fds{${jobSelector("chat-worker")}}', "open fds", "C"),
         ],
         unit: "short",
       }),
@@ -1177,6 +1271,16 @@ function buildChatWorkerOverview() {
           query(containerTxExpr("chat-worker"), "net tx", "C"),
         ],
         unit: "short",
+      }),
+      timeseries({
+        title: "Stream Errors, DB Errors & DLQ",
+        gridPos: { h: 8, w: 12, x: 0, y: 28 },
+        targets: [
+          query('sum(rate(chat_stream_errors_total{${jobSelector("chat-worker")}}[5m])) by (operation)', "Stream Errors {{operation}}", "A"),
+          query('sum(rate(chat_database_errors_total{${jobSelector("chat-worker")}}[5m])) by (operation)', "DB Errors {{operation}}", "B"),
+          query('sum(rate(chat_dlq_messages_total{${jobSelector("chat-worker")}}[5m]))', "DLQ Messages", "C"),
+        ],
+        unit: "ops",
       }),
     ],
   });
@@ -1230,8 +1334,8 @@ function buildInfrastructureOverview() {
         title: "Host CPU and Memory",
         gridPos: { h: 8, w: 12, x: 0, y: 20 },
         targets: [
-          query('100 - (avg(rate(node_cpu_seconds_total{job="node",mode="idle"}[5m])) * 100)', "cpu busy", "A"),
-          query('100 * (1 - (node_memory_MemAvailable_bytes{job="node"} / node_memory_MemTotal_bytes{job="node"}))', "memory used", "B"),
+          query('100 - (avg(rate(node_cpu_seconds_total{${jobSelector("node")},mode="idle"}[5m])) * 100)', "cpu busy", "A"),
+          query('100 * (1 - (node_memory_MemAvailable_bytes{${jobSelector("node")}} / node_memory_MemTotal_bytes{${jobSelector("node")}}))', "memory used", "B"),
         ],
         unit: "percent",
       }),
@@ -1256,23 +1360,23 @@ function buildHostOverview() {
     uid: "detect-ai-host-overview",
     tags: ["detect-ai", "infrastructure", "host", "detailed"],
     panels: [
-      stat({ title: "CPU Busy", expr: '100 - (avg(rate(node_cpu_seconds_total{job="node",mode="idle"}[5m])) * 100)', gridPos: { h: 4, w: 6, x: 0, y: 0 }, unit: "percent", decimals: 1, min: 0, max: 100 }),
-      stat({ title: "Load per Core", expr: 'node_load1{job="node"} / scalar(count(count(node_cpu_seconds_total{job="node",mode="system"}) by (cpu)))', gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "short", decimals: 2 }),
-      stat({ title: "Memory Used", expr: '100 * (1 - (node_memory_MemAvailable_bytes{job="node"} / node_memory_MemTotal_bytes{job="node"}))', gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "percent", decimals: 1, min: 0, max: 100 }),
-      stat({ title: "Most Full Disk", expr: 'max(100 * (1 - (max by (device) (node_filesystem_avail_bytes{job="node",fstype=~"ext4|xfs"}) / max by (device) (node_filesystem_size_bytes{job="node",fstype=~"ext4|xfs"}))))', gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "percent", decimals: 1, min: 0, max: 100 }),
+      stat({ title: "CPU Busy", expr: '100 - (avg(rate(node_cpu_seconds_total{${jobSelector("node")},mode="idle"}[5m])) * 100)', gridPos: { h: 4, w: 6, x: 0, y: 0 }, unit: "percent", decimals: 1, min: 0, max: 100 }),
+      stat({ title: "Load per Core", expr: 'node_load1{${jobSelector("node")}} / scalar(count(count(node_cpu_seconds_total{${jobSelector("node")},mode="system"}) by (cpu)))', gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "short", decimals: 2 }),
+      stat({ title: "Memory Used", expr: '100 * (1 - (node_memory_MemAvailable_bytes{${jobSelector("node")}} / node_memory_MemTotal_bytes{${jobSelector("node")}}))', gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "percent", decimals: 1, min: 0, max: 100 }),
+      stat({ title: "Most Full Disk", expr: 'max(100 * (1 - (max by (device) (node_filesystem_avail_bytes{${jobSelector("node")},fstype=~"ext4|xfs"}) / max by (device) (node_filesystem_size_bytes{${jobSelector("node")},fstype=~"ext4|xfs"}))))', gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "percent", decimals: 1, min: 0, max: 100 }),
       timeseries({
         title: "CPU by Mode",
         gridPos: { h: 8, w: 12, x: 0, y: 4 },
-        targets: [query('sum(rate(node_cpu_seconds_total{job="node",mode!~"idle|guest.*"}[5m])) by (mode)', "{{mode}}")],
+        targets: [query('sum(rate(node_cpu_seconds_total{${jobSelector("node")},mode!~"idle|guest.*"}[5m])) by (mode)', "{{mode}}")],
         unit: "short",
       }),
       timeseries({
         title: "Load Averages",
         gridPos: { h: 8, w: 12, x: 12, y: 4 },
         targets: [
-          query('node_load1{job="node"}', "load1", "A"),
-          query('node_load5{job="node"}', "load5", "B"),
-          query('node_load15{job="node"}', "load15", "C"),
+          query('node_load1{${jobSelector("node")}}', "load1", "A"),
+          query('node_load5{${jobSelector("node")}}', "load5", "B"),
+          query('node_load15{${jobSelector("node")}}', "load15", "C"),
         ],
         unit: "short",
       }),
@@ -1280,15 +1384,15 @@ function buildHostOverview() {
         title: "Memory Used vs Available",
         gridPos: { h: 8, w: 12, x: 0, y: 12 },
         targets: [
-          query('node_memory_MemTotal_bytes{job="node"} - node_memory_MemAvailable_bytes{job="node"}', "used", "A"),
-          query('node_memory_MemAvailable_bytes{job="node"}', "available", "B"),
+          query('node_memory_MemTotal_bytes{${jobSelector("node")}} - node_memory_MemAvailable_bytes{${jobSelector("node")}}', "used", "A"),
+          query('node_memory_MemAvailable_bytes{${jobSelector("node")}}', "available", "B"),
         ],
         unit: "bytes",
       }),
       timeseries({
         title: "Filesystem Used by Device",
         gridPos: { h: 8, w: 12, x: 12, y: 12 },
-        targets: [query('100 * (1 - (max by (device) (node_filesystem_avail_bytes{job="node",fstype=~"ext4|xfs"}) / max by (device) (node_filesystem_size_bytes{job="node",fstype=~"ext4|xfs"})))', "{{device}}")],
+        targets: [query('100 * (1 - (max by (device) (node_filesystem_avail_bytes{${jobSelector("node")},fstype=~"ext4|xfs"}) / max by (device) (node_filesystem_size_bytes{${jobSelector("node")},fstype=~"ext4|xfs"})))', "{{device}}")],
         unit: "percent",
         min: 0,
         max: 100,
@@ -1297,8 +1401,8 @@ function buildHostOverview() {
         title: "Disk Read and Write Throughput",
         gridPos: { h: 8, w: 12, x: 0, y: 20 },
         targets: [
-          query('sum(rate(node_disk_read_bytes_total{job="node",device!~"loop.*|ram.*"}[5m])) by (device)', "{{device}} read", "A"),
-          query('sum(rate(node_disk_written_bytes_total{job="node",device!~"loop.*|ram.*"}[5m])) by (device)', "{{device}} write", "B"),
+          query('sum(rate(node_disk_read_bytes_total{${jobSelector("node")},device!~"loop.*|ram.*"}[5m])) by (device)', "{{device}} read", "A"),
+          query('sum(rate(node_disk_written_bytes_total{${jobSelector("node")},device!~"loop.*|ram.*"}[5m])) by (device)', "{{device}} write", "B"),
         ],
         unit: "Bps",
       }),
@@ -1530,7 +1634,7 @@ function buildRabbitmqOverview() {
     uid: "detect-ai-rabbitmq-overview",
     tags: ["detect-ai", "infrastructure", "rabbitmq", "detailed"],
     panels: [
-      availabilityStat("Availability", '100 * avg(up{job="rabbitmq"})', { h: 4, w: 6, x: 0, y: 0 }),
+      availabilityStat("Availability", '100 * avg(up{${jobSelector("rabbitmq")}})', { h: 4, w: 6, x: 0, y: 0 }),
       stat({ title: "Ready Messages", expr: "sum(rabbitmq_queue_messages_ready)", gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "short" }),
       stat({ title: "Consumers", expr: "sum(rabbitmq_queue_consumers)", gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "short" }),
       stat({ title: "Connections", expr: "sum(rabbitmq_connections)", gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "short" }),
@@ -1605,21 +1709,21 @@ function buildMongodbOverview() {
     tags: ["detect-ai", "infrastructure", "mongodb", "detailed"],
     panels: [
       availabilityStat("Availability", '100 * avg(mongodb_up)', { h: 4, w: 6, x: 0, y: 0 }),
-      stat({ title: "Chat DB Data Size", expr: 'sum(mongodb_dbstats_dataSize{job="mongodb",database="chat_db"})', gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "bytes" }),
-      stat({ title: "Chat DB Index Size", expr: 'sum(mongodb_dbstats_indexSize{job="mongodb",database="chat_db"})', gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "bytes" }),
-      stat({ title: "Chat DB Objects", expr: 'sum(mongodb_dbstats_objects{job="mongodb",database="chat_db"})', gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "short" }),
+      stat({ title: "Chat DB Data Size", expr: 'sum(mongodb_dbstats_dataSize{${jobSelector("mongodb")},database="chat_db"})', gridPos: { h: 4, w: 6, x: 6, y: 0 }, unit: "bytes" }),
+      stat({ title: "Chat DB Index Size", expr: 'sum(mongodb_dbstats_indexSize{${jobSelector("mongodb")},database="chat_db"})', gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "bytes" }),
+      stat({ title: "Chat DB Objects", expr: 'sum(mongodb_dbstats_objects{${jobSelector("mongodb")},database="chat_db"})', gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "short" }),
       timeseries({
         title: "Data Size by Database",
         gridPos: { h: 8, w: 12, x: 0, y: 4 },
-        targets: [query('sum(mongodb_dbstats_dataSize{job="mongodb"}) by (database)', "{{database}}")],
+        targets: [query('sum(mongodb_dbstats_dataSize{${jobSelector("mongodb")}}) by (database)', "{{database}}")],
         unit: "bytes",
       }),
       timeseries({
         title: "Storage and Index Size by Database",
         gridPos: { h: 8, w: 12, x: 12, y: 4 },
         targets: [
-          query('sum(mongodb_dbstats_storageSize{job="mongodb"}) by (database)', "{{database}} storage", "A"),
-          query('sum(mongodb_dbstats_indexSize{job="mongodb"}) by (database)', "{{database}} index", "B"),
+          query('sum(mongodb_dbstats_storageSize{${jobSelector("mongodb")}}) by (database)', "{{database}} storage", "A"),
+          query('sum(mongodb_dbstats_indexSize{${jobSelector("mongodb")}}) by (database)', "{{database}} index", "B"),
         ],
         unit: "bytes",
       }),
@@ -1627,41 +1731,41 @@ function buildMongodbOverview() {
         title: "Objects and Index Count by Database",
         gridPos: { h: 8, w: 12, x: 0, y: 12 },
         targets: [
-          query('sum(mongodb_dbstats_objects{job="mongodb"}) by (database)', "{{database}} objects", "A"),
-          query('sum(mongodb_dbstats_indexes{job="mongodb"}) by (database)', "{{database}} indexes", "B"),
+          query('sum(mongodb_dbstats_objects{${jobSelector("mongodb")}}) by (database)', "{{database}} objects", "A"),
+          query('sum(mongodb_dbstats_indexes{${jobSelector("mongodb")}}) by (database)', "{{database}} indexes", "B"),
         ],
         unit: "short",
       }),
       timeseries({
         title: "Average Object Size",
         gridPos: { h: 8, w: 12, x: 12, y: 12 },
-        targets: [query('avg(mongodb_dbstats_avgObjSize{job="mongodb"}) by (database)', "{{database}}")],
+        targets: [query('avg(mongodb_dbstats_avgObjSize{${jobSelector("mongodb")}}) by (database)', "{{database}}")],
         unit: "bytes",
       }),
       timeseries({
         title: "Mongo Cluster Containers CPU",
         gridPos: { h: 8, w: 12, x: 0, y: 20 },
-        targets: [query(`100 * sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{job="cadvisor",container_label_com_docker_compose_service=~"${mongoContainerJobs}",id!="/"}[5m]))`, "{{container_label_com_docker_compose_service}}")],
+        targets: [query(`100 * sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{${jobSelector("cadvisor")},container_label_com_docker_compose_service=~"${mongoContainerJobs}",id!="/"}[5m]))`, "{{container_label_com_docker_compose_service}}")],
         unit: "percent",
       }),
       timeseries({
         title: "Mongo Cluster Containers Memory",
         gridPos: { h: 8, w: 12, x: 12, y: 20 },
-        targets: [query(`sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{job="cadvisor",container_label_com_docker_compose_service=~"${mongoContainerJobs}",id!="/"})`, "{{container_label_com_docker_compose_service}}")],
+        targets: [query(`sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{${jobSelector("cadvisor")},container_label_com_docker_compose_service=~"${mongoContainerJobs}",id!="/"})`, "{{container_label_com_docker_compose_service}}")],
         unit: "bytes",
       }),
       timeseries({
         title: "Mongo Cluster Containers Filesystem",
         gridPos: { h: 8, w: 12, x: 0, y: 28 },
-        targets: [query(`sum by (container_label_com_docker_compose_service) (container_fs_usage_bytes{job="cadvisor",container_label_com_docker_compose_service=~"${mongoContainerJobs}",id!="/"})`, "{{container_label_com_docker_compose_service}}")],
+        targets: [query(`sum by (container_label_com_docker_compose_service) (container_fs_usage_bytes{${jobSelector("cadvisor")},container_label_com_docker_compose_service=~"${mongoContainerJobs}",id!="/"})`, "{{container_label_com_docker_compose_service}}")],
         unit: "bytes",
       }),
       timeseries({
         title: "Mongo Cluster Containers Network",
         gridPos: { h: 8, w: 12, x: 12, y: 28 },
         targets: [
-          query(`sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{job="cadvisor",container_label_com_docker_compose_service=~"${mongoContainerJobs}",id!="/"}[5m]))`, "{{container_label_com_docker_compose_service}} rx", "A"),
-          query(`sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{job="cadvisor",container_label_com_docker_compose_service=~"${mongoContainerJobs}",id!="/"}[5m]))`, "{{container_label_com_docker_compose_service}} tx", "B"),
+          query(`sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{${jobSelector("cadvisor")},container_label_com_docker_compose_service=~"${mongoContainerJobs}",id!="/"}[5m]))`, "{{container_label_com_docker_compose_service}} rx", "A"),
+          query(`sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{${jobSelector("cadvisor")},container_label_com_docker_compose_service=~"${mongoContainerJobs}",id!="/"}[5m]))`, "{{container_label_com_docker_compose_service}} tx", "B"),
         ],
         unit: "Bps",
       }),
@@ -1669,16 +1773,44 @@ function buildMongodbOverview() {
   });
 }
 
+const k8sDashboardsRoot = path.resolve(__dirname, "../../../k8s/charts/detect-ai/templates/observability/dashboards");
+
 async function writeDashboard(folder, filename, spec) {
   const dir = path.join(dashboardsRoot, folder);
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, filename), `${JSON.stringify(spec, null, 2)}\n`);
+  
+  const cleanName = filename.replace(/\.json$/, "").replace(/^\d+-/, "");
+  const yamlFilename = `detect-ai-dashboard-${cleanName}.yaml`;
+  const specJsonStr = JSON.stringify(spec, null, 2);
+  const indentedJson = specJsonStr.split("\n").map(line => `    ${line}`).join("\n");
+  
+  const content = `{{- if and .Values.monitoring.enabled .Values.monitoring.kube-prometheus-stack.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-db-${cleanName}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana_dashboard_folder: "${folder.charAt(0).toUpperCase() + folder.slice(1)}"
+data:
+  ${filename}: |
+${indentedJson}
+{{- end }}
+`;
+  
+  await mkdir(k8sDashboardsRoot, { recursive: true });
+  await writeFile(path.join(k8sDashboardsRoot, yamlFilename), content);
 }
 
 async function main() {
   await mkdir(dashboardsRoot, { recursive: true });
   await rm(path.join(dashboardsRoot, "app-overview.json"), { force: true });
   await rm(path.join(dashboardsRoot, "infra-overview.json"), { force: true });
+  await rm(k8sDashboardsRoot, { recursive: true, force: true });
 
   const dashboards = [
     ["overview", "01-platform-overview.json", buildPlatformOverview()],
