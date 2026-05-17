@@ -100,6 +100,7 @@ export const authOptions: NextAuthOptions = {
 
       if (token.id) {
         try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const dbUser = await userService.getUserById(token.id) as any
 
           if (dbUser) {
