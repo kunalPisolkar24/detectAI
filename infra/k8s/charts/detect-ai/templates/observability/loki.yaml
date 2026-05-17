@@ -2,19 +2,22 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Release.Name }}-loki
+  name: {{ include "detect-ai.fullname" . }}-loki
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: loki
 spec:
-  serviceName: {{ .Release.Name }}-loki
+  serviceName: {{ include "detect-ai.fullname" . }}-loki
   replicas: 1
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: loki
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: loki
     spec:
       containers:
@@ -50,9 +53,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-loki-service
+  name: {{ include "detect-ai.fullname" . }}-loki-service
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: loki
 spec:
   ports:
@@ -61,5 +65,6 @@ spec:
       protocol: TCP
       name: http
   selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: loki
 {{- end }}

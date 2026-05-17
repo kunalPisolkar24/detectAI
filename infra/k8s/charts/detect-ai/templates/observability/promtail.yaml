@@ -2,20 +2,23 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: {{ .Release.Name }}-promtail
+  name: {{ include "detect-ai.fullname" . }}-promtail
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: promtail
 spec:
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: promtail
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: promtail
     spec:
-      serviceAccountName: {{ .Release.Name }}-promtail
+      serviceAccountName: {{ include "detect-ai.fullname" . }}-promtail
       containers:
         - name: promtail
           image: "grafana/promtail:2.9.2"
@@ -52,7 +55,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ .Release.Name }}-promtail-config
+            name: {{ include "detect-ai.fullname" . }}-promtail-config
         - name: run
           hostPath:
             path: /run/promtail
@@ -66,8 +69,10 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Release.Name }}-promtail-config
+  name: {{ include "detect-ai.fullname" . }}-promtail-config
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
 data:
   promtail.yaml: |
     server:
@@ -78,7 +83,7 @@ data:
       filename: /run/promtail/positions.yaml
 
     clients:
-      - url: http://{{ .Release.Name }}-loki-service:3100/loki/api/v1/push
+      - url: http://{{ include "detect-ai.fullname" . }}-loki-service:3100/loki/api/v1/push
 
     scrape_configs:
       - job_name: kubernetes-pods

@@ -1,8 +1,7 @@
 {{- if .Values.monitoring.enabled }}
 
 # Helper template to generate ServiceMonitors dynamically
-{{- $releaseName := .Release.Name }}
-{{- $namespace := .Release.Namespace }}
+{{- $fullname := include "detect-ai.fullname" . }}
 {{- $prometheusRelease := .Values.monitoring.prometheus.release | default "prometheus" }}
 
 # 1. Stateless App & Worker Monitors
@@ -11,15 +10,16 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ $releaseName }}-{{ $app }}-monitor
-  namespace: {{ $namespace }}
+  name: {{ $fullname }}-{{ $app }}-monitor
+  namespace: {{ $.Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" $ | nindent 4 }}
     release: {{ $prometheusRelease }}
 spec:
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" $ | nindent 6 }}
       app: {{ $app }}
-      release: {{ $releaseName }}
   endpoints:
     - port: {{ if eq $app "web" }}http{{ else if eq $app "payments-gateway" }}http{{ else if eq $app "chats-api" }}metrics{{ else }}metrics{{ end }}
       interval: 15s
@@ -31,13 +31,15 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ $releaseName }}-{{ $db }}-monitor
-  namespace: {{ $namespace }}
+  name: {{ $fullname }}-{{ $db }}-monitor
+  namespace: {{ $.Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" $ | nindent 4 }}
     release: {{ $prometheusRelease }}
 spec:
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" $ | nindent 6 }}
       app: {{ if contains "mongodb" $db }}mongodb{{ else if contains "redis" $db }}redis{{ else }}{{ $db }}{{ end }}
   endpoints:
     - port: metrics
