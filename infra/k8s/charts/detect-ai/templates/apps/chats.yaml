@@ -2,21 +2,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-chats-api
+  name: {{ include "detect-ai.fullname" . }}-chats-api
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: chats-api
 spec:
   replicas: {{ .Values.chats.api.replicaCount }}
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: chats-api
-      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: chats-api
-        release: {{ .Release.Name }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.chats.api.service.metricsPort }}"
@@ -45,7 +46,7 @@ spec:
                 command: ["/bin/sh", "-c", "sleep 10"]
           envFrom:
             - configMapRef:
-                name: {{ .Release.Name }}-config
+                name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
                 name: {{ .Values.global.secretName | default .Values.secretName }}
           resources:
@@ -54,9 +55,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-chats-service
+  name: {{ include "detect-ai.fullname" . }}-chats-service
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: chats-api
 spec:
   type: {{ .Values.chats.api.service.type | default "ClusterIP" }}
@@ -70,29 +72,30 @@ spec:
       protocol: TCP
       name: metrics
   selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: chats-api
-    release: {{ .Release.Name }}
 
 ---
 # 2. Chats Background Event Worker
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-chats-worker
+  name: {{ include "detect-ai.fullname" . }}-chats-worker
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: chats-worker
 spec:
   replicas: {{ .Values.chats.worker.replicaCount }}
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: chats-worker
-      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: chats-worker
-        release: {{ .Release.Name }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.chats.worker.metricsPort }}"
@@ -118,7 +121,7 @@ spec:
                 command: ["/bin/sh", "-c", "sleep 10"]
           envFrom:
             - configMapRef:
-                name: {{ .Release.Name }}-config
+                name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
                 name: {{ .Values.global.secretName | default .Values.secretName }}
           resources:

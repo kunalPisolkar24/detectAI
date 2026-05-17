@@ -1,9 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-inference
+  name: {{ include "detect-ai.fullname" . }}-inference
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: inference
 spec:
   {{- if not .Values.inference.autoscaling.enabled }}
@@ -11,13 +12,13 @@ spec:
   {{- end }}
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: inference
-      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: inference
-        release: {{ .Release.Name }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.inference.service.metricsPort }}"
@@ -79,7 +80,7 @@ spec:
                 command: ["/bin/sh", "-c", "sleep 15"]
           envFrom:
             - configMapRef:
-                name: {{ .Release.Name }}-config
+                name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
                 name: {{ .Values.global.secretName | default .Values.secretName }}
           resources:
@@ -96,9 +97,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-inference-service
+  name: {{ include "detect-ai.fullname" . }}-inference-service
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: inference
 spec:
   type: {{ .Values.inference.service.type | default "ClusterIP" }}
@@ -112,5 +114,5 @@ spec:
       protocol: TCP
       name: metrics
   selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: inference
-    release: {{ .Release.Name }}

@@ -2,21 +2,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-worker-analytics
+  name: {{ include "detect-ai.fullname" . }}-worker-analytics
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: worker-analytics
 spec:
   replicas: {{ .Values.workers.analytics.replicaCount }}
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: worker-analytics
-      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: worker-analytics
-        release: {{ .Release.Name }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.workers.analytics.port }}"
@@ -41,7 +42,7 @@ spec:
                 command: ["/bin/sh", "-c", "sleep 10"]
           envFrom:
             - configMapRef:
-                name: {{ .Release.Name }}-config
+                name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
                 name: {{ .Values.global.secretName | default .Values.secretName }}
           resources:
@@ -52,21 +53,22 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-worker-cron
+  name: {{ include "detect-ai.fullname" . }}-worker-cron
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: worker-cron
 spec:
   replicas: {{ .Values.workers.cron.replicaCount }}
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: worker-cron
-      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: worker-cron
-        release: {{ .Release.Name }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.workers.cron.port }}"
@@ -91,7 +93,7 @@ spec:
                 command: ["/bin/sh", "-c", "sleep 10"]
           envFrom:
             - configMapRef:
-                name: {{ .Release.Name }}-config
+                name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
                 name: {{ .Values.global.secretName | default .Values.secretName }}
           resources:
@@ -102,9 +104,10 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-worker-payments
+  name: {{ include "detect-ai.fullname" . }}-worker-payments
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: worker-payments
 spec:
   {{- if not .Values.workers.payments.keda.enabled }}
@@ -112,13 +115,13 @@ spec:
   {{- end }}
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: worker-payments
-      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: worker-payments
-        release: {{ .Release.Name }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.workers.payments.port }}"
@@ -143,7 +146,7 @@ spec:
                 command: ["/bin/sh", "-c", "sleep 15"]
           envFrom:
             - configMapRef:
-                name: {{ .Release.Name }}-config
+                name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
                 name: {{ .Values.global.secretName | default .Values.secretName }}
           resources:
@@ -155,15 +158,16 @@ spec:
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: {{ .Release.Name }}-worker-payments-scaler
+  name: {{ include "detect-ai.fullname" . }}-worker-payments-scaler
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: worker-payments
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ .Release.Name }}-worker-payments
+    name: {{ include "detect-ai.fullname" . }}-worker-payments
   minReplicaCount: {{ .Values.workers.payments.keda.minReplicas | default 1 }}
   maxReplicaCount: {{ .Values.workers.payments.keda.maxReplicas | default 10 }}
   cooldownPeriod: 300

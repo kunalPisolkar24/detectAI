@@ -1,21 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-document-parser
+  name: {{ include "detect-ai.fullname" . }}-document-parser
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: document-parser
 spec:
   replicas: {{ .Values.documentParser.replicaCount }}
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: document-parser
-      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: document-parser
-        release: {{ .Release.Name }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
@@ -35,7 +36,7 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ .Release.Name }}-config
+                name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
                 name: {{ .Values.global.secretName | default .Values.secretName }}
           resources:
@@ -44,9 +45,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-document-parser-service
+  name: {{ include "detect-ai.fullname" . }}-document-parser-service
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: document-parser
 spec:
   type: {{ .Values.documentParser.service.type | default "ClusterIP" }}
@@ -56,5 +58,5 @@ spec:
       protocol: TCP
       name: http
   selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: document-parser
-    release: {{ .Release.Name }}

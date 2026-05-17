@@ -1,21 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-payments-gateway
+  name: {{ include "detect-ai.fullname" . }}-payments-gateway
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: payments-gateway
 spec:
   replicas: {{ .Values.payments.replicaCount }}
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: payments-gateway
-      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: payments-gateway
-        release: {{ .Release.Name }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.payments.service.port }}"
@@ -39,7 +40,7 @@ spec:
                 command: ["/bin/sh", "-c", "sleep 10"]
           envFrom:
             - configMapRef:
-                name: {{ .Release.Name }}-config
+                name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
                 name: {{ .Values.global.secretName | default .Values.secretName }}
           resources:
@@ -48,9 +49,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-payments-service
+  name: {{ include "detect-ai.fullname" . }}-payments-service
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: payments-gateway
 spec:
   type: {{ .Values.payments.service.type | default "ClusterIP" }}
@@ -60,5 +62,5 @@ spec:
       protocol: TCP
       name: http
   selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: payments-gateway
-    release: {{ .Release.Name }}

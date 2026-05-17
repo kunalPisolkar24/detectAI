@@ -1,9 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-web
+  name: {{ include "detect-ai.fullname" . }}-web
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: web
 spec:
   {{- if not .Values.web.autoscaling.enabled }}
@@ -11,13 +12,13 @@ spec:
   {{- end }}
   selector:
     matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
       app: web
-      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
         app: web
-        release: {{ .Release.Name }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.web.service.targetPort }}"
@@ -41,7 +42,7 @@ spec:
                 command: ["/bin/sh", "-c", "sleep 10"]
           envFrom:
             - configMapRef:
-                name: {{ .Release.Name }}-config
+                name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
                 name: {{ .Values.global.secretName | default .Values.secretName }}
           resources:
@@ -50,9 +51,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-web-service
+  name: {{ include "detect-ai.fullname" . }}-web-service
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
     app: web
 spec:
   type: {{ .Values.web.service.type }}
@@ -62,20 +64,22 @@ spec:
       protocol: TCP
       name: http
   selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
     app: web
-    release: {{ .Release.Name }}
 ---
 {{- if .Values.web.autoscaling.enabled }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ .Release.Name }}-web-hpa
+  name: {{ include "detect-ai.fullname" . }}-web-hpa
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ .Release.Name }}-web
+    name: {{ include "detect-ai.fullname" . }}-web
   minReplicas: {{ .Values.web.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.web.autoscaling.maxReplicas }}
   metrics:
@@ -86,4 +90,3 @@ spec:
           type: Utilization
           averageUtilization: {{ .Values.web.autoscaling.targetCPUUtilizationPercentage }}
 {{- end }}
-
