@@ -2,8 +2,10 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ .Release.Name }}-ingress
+  name: {{ include "detect-ai.fullname" . }}-ingress
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
   annotations:
     kubernetes.io/ingress.class: {{ .Values.ingress.className | quote }}
     nginx.ingress.kubernetes.io/client-max-body-size: "10m"
@@ -17,7 +19,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ .Release.Name }}-web-service
+                name: {{ include "detect-ai.fullname" . }}-web-service
                 port:
                   name: http
           # Payment Gateway (Paddle Webhook Receiver)
@@ -25,7 +27,7 @@ spec:
             pathType: Exact
             backend:
               service:
-                name: {{ .Release.Name }}-payments-service
+                name: {{ include "detect-ai.fullname" . }}-payments-service
                 port:
                   number: 8080
           # Grafana Dashboard (In-house monitoring)

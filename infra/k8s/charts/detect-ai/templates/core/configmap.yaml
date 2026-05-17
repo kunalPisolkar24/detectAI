@@ -1,39 +1,39 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Release.Name }}-config
+  name: {{ include "detect-ai.fullname" . }}-config
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    {{- include "detect-ai.labels" . | nindent 4 }}
 data:
   NODE_ENV: {{ .Values.global.environment | quote }}
   SKIP_ENV_VALIDATION: "true"
   
   # Service Inter-communication Endpoints
-  AI_SERVICE_URL: "{{ .Release.Name }}-inference-service:50051"
-  FILE_EXTRACTOR_API_URL: "http://{{ .Release.Name }}-document-parser-service:8000"
+  AI_SERVICE_URL: "{{ include "detect-ai.fullname" . }}-inference-service:50051"
+  FILE_EXTRACTOR_API_URL: "http://{{ include "detect-ai.fullname" . }}-document-parser-service:8000"
   
   # Databases and Broker Endpoints
   {{- if .Values.databases.redis.cluster.enabled }}
-  REDIS_USAGE_URL: "redis://{{ .Release.Name }}-redis-cluster-0.{{ .Release.Name }}-redis-cluster:6379,{{ .Release.Name }}-redis-cluster-1.{{ .Release.Name }}-redis-cluster:6379,{{ .Release.Name }}-redis-cluster-2.{{ .Release.Name }}-redis-cluster:6379"
+  REDIS_USAGE_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-cluster-0.{{ include "detect-ai.fullname" . }}-redis-cluster:6379,{{ include "detect-ai.fullname" . }}-redis-cluster-1.{{ include "detect-ai.fullname" . }}-redis-cluster:6379,{{ include "detect-ai.fullname" . }}-redis-cluster-2.{{ include "detect-ai.fullname" . }}-redis-cluster:6379"
   {{- else }}
-  REDIS_USAGE_URL: "redis://{{ .Release.Name }}-redis-standalone-service:6379"
+  REDIS_USAGE_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-standalone-service:6379"
   {{- end }}
   
   {{- if .Values.databases.redis.sentinel.enabled }}
   REDIS_MASTER_NAME: "mymaster"
-  REDIS_SENTINELS: "{{ .Release.Name }}-redis-sentinel-0.{{ .Release.Name }}-redis-sentinel:26379,{{ .Release.Name }}-redis-sentinel-1.{{ .Release.Name }}-redis-sentinel:26379,{{ .Release.Name }}-redis-sentinel-2.{{ .Release.Name }}-redis-sentinel:26379"
+  REDIS_SENTINELS: "{{ include "detect-ai.fullname" . }}-redis-sentinel-0.{{ include "detect-ai.fullname" . }}-redis-sentinel:26379,{{ include "detect-ai.fullname" . }}-redis-sentinel-1.{{ include "detect-ai.fullname" . }}-redis-sentinel:26379,{{ include "detect-ai.fullname" . }}-redis-sentinel-2.{{ include "detect-ai.fullname" . }}-redis-sentinel:26379"
   {{- else }}
-  REDIS_SENTINEL_URL: "redis://{{ .Release.Name }}-redis-standalone-service:6379"
+  REDIS_SENTINEL_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-standalone-service:6379"
   {{- end }}
   
   {{- if .Values.databases.mongo.sharded }}
-  MONGO_URL: "mongodb://{{ .Release.Name }}-mongodb-router-service:27017/chats"
+  MONGO_URL: "mongodb://{{ include "detect-ai.fullname" . }}-mongodb-router-service:27017/chats"
   {{- else }}
-  MONGO_URL: "mongodb://{{ .Release.Name }}-mongodb-standalone-service:27017/chats"
+  MONGO_URL: "mongodb://{{ include "detect-ai.fullname" . }}-mongodb-standalone-service:27017/chats"
   {{- end }}
 
-  RABBITMQ_URL: "amqp://guest:guest@{{ .Release.Name }}-rabbitmq:5672/"
-  POSTGRES_HOST: "{{ .Release.Name }}-postgres"
+  RABBITMQ_URL: "amqp://guest:guest@{{ include "detect-ai.fullname" . }}-rabbitmq:5672/"
+  POSTGRES_HOST: "{{ include "detect-ai.fullname" . }}-postgres"
   POSTGRES_DB: "detect-ai"
   POSTGRES_PORT: "5432"
