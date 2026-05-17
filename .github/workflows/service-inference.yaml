@@ -37,21 +37,36 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
+
+      - name: Install Poetry
+        run: pipx install poetry
 
       - name: Install Dependencies
-        run: pip install -r requirements.local.txt ruff
+        run: poetry install --extras cpu --no-interaction
 
-      - name: Generate Protos
-        run: make proto
+      - name: Generate Protobuf Stubs
+        run: |
+          mkdir -p src/generated
+          poetry run python -m grpc_tools.protoc \
+            -I./protos \
+            --python_out=./src/generated \
+            --grpc_python_out=./src/generated \
+            ./protos/ai_service.proto
+          sed -i 's/import ai_service_pb2/from . import ai_service_pb2/' src/generated/ai_service_pb2_grpc.py
+          touch src/generated/__init__.py
 
       - name: Lint with Ruff
-        run: ruff check . --select F,E --ignore E501
+        run: poetry run ruff check . --select F,E --ignore E501
 
-      - name: Run Tests & Coverage
+      - name: Run Unit Tests & Coverage
         env:
           API_KEY: "ci-dummy-key"
-        run: python -m pytest --cov=src --cov-fail-under=80 tests/
+        run: poetry run pytest tests/unit --cov=src --cov-fail-under=80 -v
+
+      - name: Run Integration Tests
+        env:
+          API_KEY: "ci-dummy-key"
+        run: poetry run pytest tests/integration -v
 
   build-and-push:
     name: Build & Push Docker Image
