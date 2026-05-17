@@ -6,7 +6,9 @@ metadata:
   labels:
     app: web
 spec:
+  {{- if not .Values.web.autoscaling.enabled }}
   replicas: {{ .Values.web.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
       app: web
@@ -20,6 +22,11 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.web.service.targetPort }}"
     spec:
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30
       containers:
         - name: web
           image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
@@ -28,11 +35,14 @@ spec:
             - name: http
               containerPort: {{ .Values.web.service.targetPort }}
               protocol: TCP
-          env:
-            - name: NEXT_PUBLIC_MODEL_URL
-              value: "http://{{ .Release.Name }}-api-service:{{ .Values.api.service.port }}"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
           envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
             - secretRef:
-                name: {{ .Values.secretName }}
+                name: {{ .Values.global.secretName | default .Values.secretName }}
           resources:
             {{- toYaml .Values.web.resources | nindent 12 }}
