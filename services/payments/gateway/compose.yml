@@ -1,0 +1,25 @@
+services:
+  payment-gateway:
+    container_name: payment_gateway
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - PADDLE_WEBHOOK_SECRET=${PADDLE_WEBHOOK_SECRET}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - PORT=8080
+      - GIN_MODE=${GIN_MODE:-release}
+    ports:
+      - "${PORT_GATEWAY}:8080"
+    networks:
+      - detectai_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network}
+    external: true

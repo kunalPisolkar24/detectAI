@@ -1,0 +1,92 @@
+services:
+  db-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    restart: "no"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+    networks:
+      - detectai_net
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+
+  frontend:
+    container_name: detect_ai_frontend
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+        NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
+    restart: always
+    environment:
+      # Environment
+      - NODE_ENV=${NODE_ENV}
+      - LOG_LEVEL=${LOG_LEVEL}
+      # OAuth
+      - GITHUB_ID=${GITHUB_ID}
+      - GITHUB_SECRET=${GITHUB_SECRET}
+      - GOOGLE_ID=${GOOGLE_ID}
+      - GOOGLE_SECRET=${GOOGLE_SECRET}
+      # Next Auth
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      # Postgres DB
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      # Redis User Cache Sentinel
+      - REDIS_MODE=${REDIS_MODE:-sentinel}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_MASTER_NAME=${REDIS_MASTER_NAME:-mymaster}
+      - REDIS_SENTINELS=${REDIS_SENTINELS:-redis-sentinel-1:26379}
+      # Redis Analytics Cluster
+      - REDIS_USAGE_MODE=${REDIS_USAGE_MODE}
+      - USE_REDIS_CLUSTER=${USE_REDIS_CLUSTER:-true}
+      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
+      - REDIS_USAGE_PASSWORD=${REDIS_USAGE_PASSWORD}
+      # Cloudflare Turnstile
+      - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}
+      # Paddle
+      - NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
+      - PADDLE_WEBHOOK_SECRET=${PADDLE_WEBHOOK_SECRET}
+      - PADDLE_API_KEY=${PADDLE_API_KEY}
+      # Payment Gateway
+      - PAYMENT_GATEWAY_URL=${PAYMENT_GATEWAY_URL}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - PROMETHEUS_WEB_SCRAPE_TOKEN=${PROMETHEUS_WEB_SCRAPE_TOKEN:-}
+      # Inference Service
+      - AI_SERVICE_URL=${AI_SERVICE_URL}
+      - AI_SERVICE_API_KEY=${AI_SERVICE_API_KEY}
+      # Chat Service
+      - CHAT_SERVICE_URL=${CHAT_SERVICE_URL}
+      # File Processing Service
+      - FILE_EXTRACTOR_API_URL=${FILE_EXTRACTOR_API_URL}
+    ports:
+      - "${PORT_FRONTEND}:3000"
+    networks:
+      - detectai_net
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      postgres-primary:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+      document-parser:
+        condition: service_started
+      ai-service:
+        condition: service_started
+      payment-gateway:
+        condition: service_started
+      chat-service:
+        condition: service_started
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network}
+    external: true

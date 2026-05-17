@@ -1,10 +1,10 @@
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/shared/generated/prisma"
 }
 
-generator client {
-  provider = "prisma-client-js"
+datasource db {
+  provider = "postgresql"
 }
 
 enum SubscriptionStatus {
@@ -30,16 +30,37 @@ model User {
   accounts Account[]
   sessions Session[]
 
-  paddleCustomerId         String?            @unique
-  paddleSubscriptionId     String?            @unique
-  paddlePlanId             String?
-  paddleSubscriptionStatus SubscriptionStatus?
-  subscriptionEndsAt       DateTime?
-  paddleCancellationScheduled Boolean @default(false)
+  paddleCustomerId String?   @unique
+  subscription     Subscription?
+  usage            Usage?
+}
 
+model Subscription {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  paddleSubscriptionId     String?  @unique
+  paddlePlanId             String?
+  status                   SubscriptionStatus?
+  endsAt                   DateTime?
+  cancellationScheduled    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Usage {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
   apiCallCountDaily Int      @default(0)
   lastApiCallReset  DateTime?
   apiCallCountTotal Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Account {
@@ -48,12 +69,12 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String?
-  access_token      String?
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String?
+  id_token          String? @db.Text
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

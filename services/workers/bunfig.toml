@@ -1,0 +1,14 @@
+[test]
+coverage = true
+coveragePathIgnorePatterns = [
+  "generated/**",
+  "**/*.d.ts"
+]
+
+coverageSkipTestFiles = true
+
+[resolve]
+# Path aliases for module resolution
+# These map @shared/* and @workers/* to the local src directories
+@shared = "./src/shared"
+@workers = "./src/workers"

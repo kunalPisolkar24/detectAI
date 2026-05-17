@@ -1,0 +1,49 @@
+{
+  "name": "worker-bun",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "generate": "bun prisma generate",
+    "start:payments": "bun run src/cmd/payments/index.ts",
+    "dev:payments": "bun --watch src/cmd/payments/index.ts",
+    "start:analytics": "bun run src/cmd/analytics/index.ts",
+    "dev:analytics": "bun --watch src/cmd/analytics/index.ts",
+    "start:cron": "bun run src/cmd/cron/index.ts",
+    "dev:cron": "bun --watch src/cmd/cron/index.ts",
+    "test": "bun test --preload ./src/tests/preload.ts $(find src -name '*.unit.test.ts')",
+    "test:integration": "PRISMA_CLIENT_ENGINE_TYPE=binary bun test --preload ./src/tests/setup-integration.ts $(find src -name '*Integration.test.ts')",
+    "coverage": "bun test --coverage $(find src -name '*.unit.test.ts')",
+    "load:proxy": "bun run src/tests/load/proxy.ts",
+    "load:proxy:mock": "MOCK_MODE=true bun run src/tests/load/proxy.ts",
+    "load:payments": "./bin/k6 run src/tests/load/payments.k6.js",
+    "load:analytics": "./bin/k6 run src/tests/load/analytics.k6.js",
+    "load:cron": "./bin/k6 run src/tests/load/cron.k6.js",
+    "postinstall": "bun prisma generate"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^11.14.0",
+    "@testcontainers/rabbitmq": "^11.14.0",
+    "@testcontainers/redis": "^11.14.0",
+    "@types/amqplib": "^0.10.8",
+    "@types/bun": "latest",
+    "@types/pg": "^8.16.0",
+    "prisma": "^7.1.0",
+    "testcontainers": "^11.14.0",
+    "@types/node": "^22.0.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.1.0",
+    "@prisma/client": "^7.1.0",
+    "amqplib": "^0.10.9",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.9.0",
+    "pg": "^8.16.3",
+    "prom-client": "^15.1.3",
+    "redlock": "^5.0.0-beta.2",
+    "zod": "^4.3.5"
+  }
+}

@@ -1,18 +1,16 @@
-import { Geist, Geist_Mono } from "next/font/google";
-import "@workspace/ui/styles/globals.css";
-import { Providers } from "@/components/providers";
-import { Toaster } from "sonner";
-import { CustomSessionProvider } from "@/lib/custom-session-provider";
+import type { Metadata } from "next";
+import { ThemeProvider } from "@/providers";
+import { LazyMotionProvider } from "@/components/providers/lazy-motion-provider";
+import { QueryProvider } from "@/components/providers/query-provider";
+import { SessionProvider } from "@/components/providers/session-provider";
+import { Toaster } from "@/components/ui/sonner";
+import { inter } from "@/lib/core/fonts";
+import "./globals.css";
 
-const fontSans = Geist({
-  subsets: ["latin"],
-  variable: "--font-sans",
-});
-
-const fontMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
-});
+export const metadata: Metadata = {
+  title: "Detect AI",
+  description: "AI Text Detection",
+}
 
 export default function RootLayout({
   children,
@@ -21,13 +19,22 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${fontSans.variable} ${fontMono.variable} font-sans antialiased `}
-      >
-        <Providers>
-          <CustomSessionProvider>{children}</CustomSessionProvider>
-        </Providers>
-        <Toaster richColors />
+      <body className={`${inter.className} antialiased min-h-screen flex flex-col`}>
+        <SessionProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="dark"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <QueryProvider>
+              <LazyMotionProvider>
+                {children}
+                <Toaster position="top-right" />
+              </LazyMotionProvider>
+            </QueryProvider>
+          </ThemeProvider>
+        </SessionProvider>
       </body>
     </html>
   );

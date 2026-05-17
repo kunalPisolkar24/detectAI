@@ -1,0 +1,136 @@
+name: Service - Web App
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - staging
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/service-web.yaml"
+  pull_request:
+    branches:
+      - main
+      - staging
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/service-web.yaml"
+
+env:
+  DOCKER_IMAGE_NAME: kunalpisolkar/detect-ai-web
+  SERVICE_PATH: apps/web
+
+jobs:
+  quality-assurance:
+    name: Run Tests & Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.SERVICE_PATH }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ env.SERVICE_PATH }}/pnpm-lock.yaml
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm db:generate
+
+      - name: Run Linting
+        run: pnpm lint
+
+      - name: Build Application
+        env:
+          SKIP_ENV_VALIDATION: true
+          DATABASE_URL: "postgresql://localhost:5432/dummy"
+          DATABASE_URL_REPLICA: "postgresql://localhost:5432/dummy"
+          NEXTAUTH_SECRET: "dummy-secret"
+          NEXTAUTH_URL: "http://localhost:3000"
+          REDIS_USAGE_URL: "redis://localhost:6379"
+          REDIS_MASTER_NAME: "mymaster"
+          FILE_EXTRACTOR_API_URL: "http://localhost:8080"
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: "dummy"
+          NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: "dummy"
+          AI_SERVICE_URL: "localhost:50051"
+          AI_SERVICE_API_KEY: "dummy"
+          GOOGLE_ID: "dummy"
+          GOOGLE_SECRET: "dummy"
+          GITHUB_ID: "dummy"
+          GITHUB_SECRET: "dummy"
+          TURNSTILE_SECRET_KEY: "dummy"
+        run: pnpm build
+
+      - name: Run Unit & UI Integration Tests
+        run: pnpm test:run
+
+      - name: Run Backend Integration Tests
+        run: pnpm test:integration:backend
+
+  build-and-push:
+    name: Build & Push Docker Image
+    needs: quality-assurance
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate public build variables
+        if: github.ref_name == 'main'
+        env:
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY || vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+          NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${{ secrets.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN || vars.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN }}
+        run: |
+          test -n "$NEXT_PUBLIC_TURNSTILE_SITE_KEY"
+          test "$NEXT_PUBLIC_TURNSTILE_SITE_KEY" != "dummy"
+          test -n "$NEXT_PUBLIC_PADDLE_CLIENT_TOKEN"
+          test "$NEXT_PUBLIC_PADDLE_CLIENT_TOKEN" != "dummy"
+
+      - name: Build and Push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ env.SERVICE_PATH }}
+          file: ${{ env.SERVICE_PATH }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY=${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY || vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+            NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=${{ secrets.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN || vars.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN }}
+          cache-from: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:buildcache,mode=max

@@ -1,0 +1,81 @@
+services:
+  redis-master:
+    image: redis:7.2-alpine
+    container_name: detect_ai_redis_master
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD}" --masterauth "${REDIS_PASSWORD}"
+    networks:
+      - detectai_net
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_master_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-slave-1:
+    image: redis:7.2-alpine
+    container_name: detect_ai_redis_slave_1
+    restart: unless-stopped
+    command: redis-server --replicaof redis-master 6379 --masterauth "${REDIS_PASSWORD}" --requirepass "${REDIS_PASSWORD}"
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      - detectai_net
+
+  redis-slave-2:
+    image: redis:7.2-alpine
+    container_name: detect_ai_redis_slave_2
+    restart: unless-stopped
+    command: redis-server --replicaof redis-master 6379 --masterauth "${REDIS_PASSWORD}" --requirepass "${REDIS_PASSWORD}"
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      - detectai_net
+
+  redis-sentinel-1:
+    image: redis:7.2-alpine
+    container_name: detect_ai_redis_sentinel_1
+    restart: unless-stopped
+    ports:
+      - "${REDIS_SENTINEL_PORT}:26379"
+    command: >
+      sh -c "echo 'Waiting for master...' && sleep 10 &&
+      echo 'sentinel resolve-hostnames yes' > /tmp/sentinel.conf &&
+      echo 'sentinel monitor mymaster redis-master 6379 2' >> /tmp/sentinel.conf &&
+      echo 'sentinel down-after-milliseconds mymaster 5000' >> /tmp/sentinel.conf &&
+      echo 'sentinel failover-timeout mymaster 60000' >> /tmp/sentinel.conf &&
+      echo 'sentinel parallel-syncs mymaster 1' >> /tmp/sentinel.conf &&
+      echo 'sentinel auth-pass mymaster ${REDIS_PASSWORD}' >> /tmp/sentinel.conf &&
+      redis-sentinel /tmp/sentinel.conf"
+    networks:
+      - detectai_net
+    depends_on:
+      redis-master:
+        condition: service_healthy
+
+  redis-ratelimit:
+    image: redis:7.2-alpine
+    container_name: detect_ai_redis_ratelimit
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no --requirepass "${REDIS_PASSWORD}" --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_RATELIMIT_PORT}:6379"
+    networks:
+      - detectai_net
+    volumes:
+      - redis_worker_data:/data
+
+volumes:
+  redis_master_data:
+  redis_worker_data:
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network}
+    external: true

@@ -1,0 +1,96 @@
+import asyncio
+import concurrent.futures
+from prometheus_client import start_http_server
+from src.infrastructure.config import settings
+from src.application.services.aggregation import ResultAggregator
+from src.application.services.chunking import build_chunk_planner
+from src.application.services.document_analysis import DocumentAnalysisService
+from src.application.services.validation import InputValidator
+from src.infrastructure.log_setup import configure_logger
+from src.adapters.outbound.inference.loader import HuggingFaceLoader
+from src.adapters.outbound.inference.engines.spark import SparkEngine
+from src.adapters.outbound.inference.engines.flare import FlareEngine
+from src.adapters.outbound.inference.batcher import BatchingProxy
+from src.adapters.inbound.grpc.grpc_server import GRPCServer
+from src.infrastructure.metrics import PrometheusTelemetryReporter
+import structlog
+
+configure_logger()
+logger = structlog.get_logger()
+
+async def main():
+    try:
+        start_http_server(settings.METRICS_PORT)
+        logger.info("metrics_server_started", port=settings.METRICS_PORT)
+        
+        executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=settings.INFERENCE_MAX_WORKERS,
+            thread_name_prefix="inference-pool",
+        )
+        
+        loader = HuggingFaceLoader(
+            settings.MODEL_CACHE_DIR,
+            settings.INFERENCE_PROVIDERS,
+            settings.SPARK_MODEL_REVISION,
+            settings.FLARE_MODEL_REVISION,
+        )
+        
+        logger.info("loading_models")
+        spark_resources = loader.load("spark")
+        flare_resources = loader.load("flare")
+
+        spark_raw = SparkEngine(spark_resources)
+        flare_raw = FlareEngine(flare_resources)
+        
+        spark_batched = BatchingProxy(
+            spark_raw, 
+            settings.BATCH_SIZE, 
+            settings.BATCH_TIMEOUT, 
+            "spark",
+            settings.BATCH_QUEUE_MAX_SIZE,
+            executor=executor,
+            max_concurrent_batches=settings.MAX_CONCURRENT_BATCHES,
+        )
+        flare_batched = BatchingProxy(
+            flare_raw, 
+            settings.BATCH_SIZE, 
+            settings.BATCH_TIMEOUT, 
+            "flare",
+            settings.BATCH_QUEUE_MAX_SIZE,
+            executor=executor,
+            max_concurrent_batches=settings.MAX_CONCURRENT_BATCHES,
+        )
+        await spark_batched.start()
+        await flare_batched.start()
+
+        analysis_service = DocumentAnalysisService(
+            engines={
+                "spark": spark_batched,
+                "flare": flare_batched,
+            },
+            health_reporters={
+                "spark": spark_batched,
+                "flare": flare_batched,
+            },
+            planners={
+                "spark": build_chunk_planner(spark_resources[1], settings.CHUNK_TOKEN_LIMIT, settings.CHUNK_TOKEN_STRIDE, settings.MAX_GLOBAL_TOKENS),
+                "flare": build_chunk_planner(flare_resources[1], settings.CHUNK_TOKEN_LIMIT, settings.CHUNK_TOKEN_STRIDE, settings.MAX_GLOBAL_TOKENS),
+            },
+            validator=InputValidator(settings.MAX_TEXT_CHARS),
+            aggregator=ResultAggregator(settings.CHUNK_TOKEN_STRIDE),
+            max_inflight_chunks=settings.MAX_INFLIGHT_DOC_CHUNKS,
+            telemetry=PrometheusTelemetryReporter(),
+        )
+        
+        server = GRPCServer(analysis_service)
+        await server.start()
+        
+    except Exception as e:
+        logger.critical("startup_failed", error=str(e))
+        exit(1)
+    finally:
+        if 'executor' in locals():
+            executor.shutdown(wait=True)
+
+if __name__ == "__main__":
+    asyncio.run(main())

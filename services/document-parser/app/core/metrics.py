@@ -1,0 +1,75 @@
+import os
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    REGISTRY,
+    CollectorRegistry,
+    Counter,
+    Histogram,
+    generate_latest,
+    multiprocess,
+)
+
+HTTP_REQUESTS_TOTAL = Counter(
+    "http_requests_total",
+    "Total number of HTTP requests",
+    ["method", "route", "status_code"],
+)
+
+HTTP_REQUEST_ERRORS_TOTAL = Counter(
+    "http_request_errors_total",
+    "Total number of HTTP requests resulting in errors",
+    ["method", "route", "status_code"],
+)
+
+HTTP_REQUEST_DURATION_SECONDS = Histogram(
+    "http_request_duration_seconds",
+    "Duration of HTTP requests in seconds",
+    ["method", "route", "status_code"],
+    buckets=(0.01, 0.05, 0.1, 0.3, 0.5, 1.0, 2.5, 5.0, 10.0),
+)
+
+PARSED_FILE_SIZE_BYTES = Histogram(
+    "parsed_file_size_bytes",
+    "Distribution of uploaded file sizes in bytes",
+    ["mime_type"],
+    buckets=(1024, 10240, 102400, 524288, 1048576, 5242880, 10485760),
+)
+
+PARSED_DOCUMENTS_TOTAL = Counter(
+    "parsed_documents_total",
+    "Total number of documents processed",
+    ["mime_type", "status"],
+)
+
+EXTRACTED_TEXT_BYTES_TOTAL = Counter(
+    "extracted_text_bytes_total",
+    "Total volume of text extracted in bytes",
+    ["mime_type"],
+)
+
+
+def record_request(method: str, route: str, status_code: int, duration: float) -> None:
+    status_code_label = str(status_code)
+    HTTP_REQUESTS_TOTAL.labels(method=method, route=route, status_code=status_code_label).inc()
+    HTTP_REQUEST_DURATION_SECONDS.labels(method=method, route=route, status_code=status_code_label).observe(duration)
+    if status_code >= 400:
+        HTTP_REQUEST_ERRORS_TOTAL.labels(method=method, route=route, status_code=status_code_label).inc()
+
+
+def record_extraction(mime_type: str, file_size_bytes: int, text_bytes: int) -> None:
+    PARSED_FILE_SIZE_BYTES.labels(mime_type=mime_type).observe(file_size_bytes)
+    PARSED_DOCUMENTS_TOTAL.labels(mime_type=mime_type, status="success").inc()
+    EXTRACTED_TEXT_BYTES_TOTAL.labels(mime_type=mime_type).inc(text_bytes)
+
+
+def record_extraction_failure(mime_type: str, file_size_bytes: int) -> None:
+    PARSED_FILE_SIZE_BYTES.labels(mime_type=mime_type).observe(file_size_bytes)
+    PARSED_DOCUMENTS_TOTAL.labels(mime_type=mime_type, status="error").inc()
+
+
+def render_metrics() -> tuple[bytes, str]:
+    registry = REGISTRY
+    if os.getenv("PROMETHEUS_MULTIPROC_DIR"):
+        registry = CollectorRegistry()
+        multiprocess.MultiProcessCollector(registry)
+    return generate_latest(registry), CONTENT_TYPE_LATEST
