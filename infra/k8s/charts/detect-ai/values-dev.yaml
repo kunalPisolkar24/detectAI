@@ -1,0 +1,83 @@
+# Development Profile: Optimized for L4 GPU + 8 CPU + 32GB RAM Single Node
+global:
+  environment: "development"
+
+web:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+
+documentParser:
+  replicaCount: 1
+
+inference:
+  replicaCount: 1
+  gpu:
+    enabled: true # Uses NVIDIA L4 GPU
+    limit: 1
+  resources:
+    limits:
+      cpu: "2.0"
+      memory: "4Gi"
+    requests:
+      cpu: "1.0"
+      memory: "2Gi"
+
+chats:
+  api:
+    replicaCount: 1
+  worker:
+    replicaCount: 1
+
+payments:
+  replicaCount: 1
+
+workers:
+  analytics:
+    replicaCount: 1
+  cron:
+    replicaCount: 1
+  payments:
+    replicaCount: 1
+    keda:
+      enabled: false
+
+databases:
+  storageClass: "local-path"
+  postgres:
+    storageSize: "2Gi"
+  mongo:
+    sharded: false # Standalone MongoDB
+    replicaCount: 1
+    storageSize: "2Gi"
+  rabbitmq:
+    replicaCount: 1
+    storageSize: "2Gi"
+  redis:
+    sentinel:
+      enabled: false # Standalone Redis for dev
+    cluster:
+      enabled: false
+
+ingress:
+  enabled: true
+  host: "detect-ai.local"
+
+# Monitoring scaled down for dev node memory preservation
+monitoring:
+  enabled: true
+  kube-prometheus-stack:
+    enabled: true
+    prometheus:
+      prometheusSpec:
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 2Gi
+  loki:
+    enabled: false # Disable Loki in dev to save 3GB RAM
+  promtail:
+    enabled: false

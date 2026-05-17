@@ -1,0 +1,100 @@
+# Production Profile: Optimized for A100 GPU (40GB VRAM) + 30 CPU + 220GB RAM
+global:
+  environment: "production"
+
+web:
+  replicaCount: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+documentParser:
+  replicaCount: 2
+
+inference:
+  replicaCount: 2
+  gpu:
+    enabled: true # Uses NVIDIA A100 GPU
+    limit: 1
+  resources:
+    limits:
+      cpu: "6.0"
+      memory: "12Gi"
+    requests:
+      cpu: "4.0"
+      memory: "8Gi"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+chats:
+  api:
+    replicaCount: 3
+  worker:
+    replicaCount: 2
+
+payments:
+  replicaCount: 2
+
+workers:
+  analytics:
+    replicaCount: 1 # Analytical processor
+  cron:
+    replicaCount: 1 # Must remain at 1 to prevent double crons
+  payments:
+    replicaCount: 2
+    keda:
+      enabled: true # Autoscales based on RabbitMQ billing queue depth
+      minReplicas: 2
+      maxReplicas: 10
+      queueLength: 50
+
+# Clustered / Sharded In-House Databases
+databases:
+  storageClass: "local-path"
+  postgres:
+    storageSize: "20Gi"
+  mongo:
+    sharded: true # Sharding enabled
+    replicaCount: 3 # ShardRS1, ShardRS2, ShardRS3
+    storageSize: "20Gi"
+  rabbitmq:
+    replicaCount: 3 # Clustered RabbitMQ
+    storageSize: "10Gi"
+  redis:
+    sentinel:
+      enabled: true # Redis Sentinel HA
+      replicaCount: 3
+      storageSize: "5Gi"
+    cluster:
+      enabled: true # Redis Analytics Cluster
+      replicaCount: 6
+      storageSize: "5Gi"
+
+ingress:
+  enabled: true
+  host: "detect-ai.local"
+
+# Fully enabled production LGTM stack
+monitoring:
+  enabled: true
+  kube-prometheus-stack:
+    enabled: true
+    prometheus:
+      prometheusSpec:
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 20Gi
+  loki:
+    enabled: true
+    storageSize: "20Gi"
+  promtail:
+    enabled: true
