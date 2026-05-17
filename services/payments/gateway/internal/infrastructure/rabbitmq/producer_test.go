@@ -28,7 +28,9 @@ func TestRabbitMQIntegration(t *testing.T) {
 	p := NewRabbitMQProducer(rabbitURL, queueName, "classic", log, mr)
 	defer p.Close()
 
-	assert.True(t, p.IsConnected())
+	assert.Eventually(t, func() bool {
+		return p.IsConnected()
+	}, 10*time.Second, 100*time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
