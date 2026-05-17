@@ -33,10 +33,6 @@ data:
           path: /var/tempo/traces
         wal:
           path: /var/tempo/wal
-    overrides:
-      defaults:
-        ingestion:
-          max_bytes_per_trace: 5000000
     memberlist:
       abort_if_cluster_join_fails: false
       bind_port: 7946
