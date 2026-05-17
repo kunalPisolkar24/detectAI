@@ -341,7 +341,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(node_cpu_seconds_total{${jobSelector(\"node\")},mode!~\"idle|guest.*\"}[5m])) by (mode)",
-              "legendFormat": "{{mode}}",
+              "legendFormat": "{{ "{{" }}mode{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -499,7 +499,7 @@ data:
             {
               "editorMode": "code",
               "expr": "100 * (1 - (max by (device) (node_filesystem_avail_bytes{${jobSelector(\"node\")},fstype=~\"ext4|xfs\"}) / max by (device) (node_filesystem_size_bytes{${jobSelector(\"node\")},fstype=~\"ext4|xfs\"})))",
-              "legendFormat": "{{device}}",
+              "legendFormat": "{{ "{{" }}device{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -544,14 +544,14 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(node_disk_read_bytes_total{${jobSelector(\"node\")},device!~\"loop.*|ram.*\"}[5m])) by (device)",
-              "legendFormat": "{{device}} read",
+              "legendFormat": "{{ "{{" }}device{{ "}}" }} read",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum(rate(node_disk_written_bytes_total{${jobSelector(\"node\")},device!~\"loop.*|ram.*\"}[5m])) by (device)",
-              "legendFormat": "{{device}} write",
+              "legendFormat": "{{ "{{" }}device{{ "}}" }} write",
               "range": true,
               "refId": "B"
             }
@@ -596,14 +596,14 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(node_network_receive_bytes_total{device!~\"lo|docker0|br-.*|veth.*\"}[5m])) by (device)",
-              "legendFormat": "{{device}} rx",
+              "legendFormat": "{{ "{{" }}device{{ "}}" }} rx",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum(rate(node_network_transmit_bytes_total{device!~\"lo|docker0|br-.*|veth.*\"}[5m])) by (device)",
-              "legendFormat": "{{device}} tx",
+              "legendFormat": "{{ "{{" }}device{{ "}}" }} tx",
               "range": true,
               "refId": "B"
             }

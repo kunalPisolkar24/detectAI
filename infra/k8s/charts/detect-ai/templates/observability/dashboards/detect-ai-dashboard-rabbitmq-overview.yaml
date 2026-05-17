@@ -337,21 +337,21 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rabbitmq_queue_messages_ready) by (queue)",
-              "legendFormat": "{{queue}} ready",
+              "legendFormat": "{{ "{{" }}queue{{ "}}" }} ready",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum(rabbitmq_queue_messages_unacknowledged) by (queue)",
-              "legendFormat": "{{queue}} unacked",
+              "legendFormat": "{{ "{{" }}queue{{ "}}" }} unacked",
               "range": true,
               "refId": "B"
             },
             {
               "editorMode": "code",
               "expr": "sum(rabbitmq_queue_messages) by (queue)",
-              "legendFormat": "{{queue}} total",
+              "legendFormat": "{{ "{{" }}queue{{ "}}" }} total",
               "range": true,
               "refId": "C"
             }
@@ -396,21 +396,21 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(rabbitmq_queue_messages_published_total[5m])) by (queue)",
-              "legendFormat": "{{queue}} published",
+              "legendFormat": "{{ "{{" }}queue{{ "}}" }} published",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum(rate(rabbitmq_queue_messages_delivered_total[5m])) by (queue)",
-              "legendFormat": "{{queue}} delivered",
+              "legendFormat": "{{ "{{" }}queue{{ "}}" }} delivered",
               "range": true,
               "refId": "B"
             },
             {
               "editorMode": "code",
               "expr": "sum(rate(rabbitmq_queue_messages_ack_total[5m])) by (queue)",
-              "legendFormat": "{{queue}} ack",
+              "legendFormat": "{{ "{{" }}queue{{ "}}" }} ack",
               "range": true,
               "refId": "C"
             }
@@ -455,14 +455,14 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rabbitmq_queue_consumers) by (queue)",
-              "legendFormat": "{{queue}} consumers",
+              "legendFormat": "{{ "{{" }}queue{{ "}}" }} consumers",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "avg(rabbitmq_queue_consumer_utilisation) by (queue)",
-              "legendFormat": "{{queue}} utilisation",
+              "legendFormat": "{{ "{{" }}queue{{ "}}" }} utilisation",
               "range": true,
               "refId": "B"
             }

@@ -339,7 +339,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(grpc_request_duration_seconds_count{${jobSelector(\"chat-service\")}}[5m])) by (method, status)",
-              "legendFormat": "{{method}} {{status}}",
+              "legendFormat": "{{ "{{" }}method{{ "}}" }} {{ "{{" }}status{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -384,7 +384,7 @@ data:
             {
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(grpc_request_duration_seconds_bucket{${jobSelector(\"chat-service\")}}[5m])) by (method, le))",
-              "legendFormat": "{{method}}",
+              "legendFormat": "{{ "{{" }}method{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -757,7 +757,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(chat_database_errors_total{${jobSelector(\"chat-service\")}}[5m])) by (operation)",
-              "legendFormat": "DB Errors {{operation}}",
+              "legendFormat": "DB Errors {{ "{{" }}operation{{ "}}" }}",
               "range": true,
               "refId": "B"
             }

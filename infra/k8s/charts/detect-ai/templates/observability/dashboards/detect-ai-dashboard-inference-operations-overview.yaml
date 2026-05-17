@@ -355,7 +355,7 @@ data:
             {
               "editorMode": "code",
               "expr": "inference_service_health_status{${jobSelector(\"inference\")}}",
-              "legendFormat": "{{status}}",
+              "legendFormat": "{{ "{{" }}status{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -413,7 +413,7 @@ data:
             {
               "editorMode": "code",
               "expr": "inference_service_health_reason{${jobSelector(\"inference\")},reason!=\"none\"}",
-              "legendFormat": "{{reason}}",
+              "legendFormat": "{{ "{{" }}reason{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -471,7 +471,7 @@ data:
             {
               "editorMode": "code",
               "expr": "inference_engine_health_status{${jobSelector(\"inference\")}}",
-              "legendFormat": "{{model}} {{status}}",
+              "legendFormat": "{{ "{{" }}model{{ "}}" }} {{ "{{" }}status{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -516,14 +516,14 @@ data:
             {
               "editorMode": "code",
               "expr": "model_batch_queue_size{${jobSelector(\"inference\")}}",
-              "legendFormat": "{{model}} queued",
+              "legendFormat": "{{ "{{" }}model{{ "}}" }} queued",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "inference_engine_queue_capacity{${jobSelector(\"inference\")}}",
-              "legendFormat": "{{model}} capacity",
+              "legendFormat": "{{ "{{" }}model{{ "}}" }} capacity",
               "range": true,
               "refId": "B"
             }
@@ -587,7 +587,7 @@ data:
             {
               "editorMode": "code",
               "expr": "100 * model_batch_queue_size{${jobSelector(\"inference\")}} / clamp_min(inference_engine_queue_capacity{${jobSelector(\"inference\")}}, 1)",
-              "legendFormat": "{{model}}",
+              "legendFormat": "{{ "{{" }}model{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -633,7 +633,7 @@ data:
             {
               "editorMode": "code",
               "expr": "inference_engine_circuit_open_seconds{${jobSelector(\"inference\")}}",
-              "legendFormat": "{{model}}",
+              "legendFormat": "{{ "{{" }}model{{ "}}" }}",
               "range": true,
               "refId": "A"
             }

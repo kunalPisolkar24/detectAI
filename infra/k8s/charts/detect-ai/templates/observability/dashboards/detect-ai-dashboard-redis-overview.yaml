@@ -337,7 +337,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(redis_memory_used_bytes{job=~\".*redis.*\"}) by (job)",
-              "legendFormat": "{{job}}",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -382,7 +382,7 @@ data:
             {
               "editorMode": "code",
               "expr": "avg(redis_mem_fragmentation_ratio{job=~\".*redis.*\"}) by (job)",
-              "legendFormat": "{{job}}",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -427,14 +427,14 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(redis_connected_clients{job=~\".*redis.*\"}) by (job)",
-              "legendFormat": "{{job}} connected",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} connected",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum(redis_blocked_clients{job=~\".*redis.*\"}) by (job)",
-              "legendFormat": "{{job}} blocked",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} blocked",
               "range": true,
               "refId": "B"
             }
@@ -479,7 +479,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(redis_commands_processed_total{job=~\".*redis.*\"}[5m])) by (job)",
-              "legendFormat": "{{job}}",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -526,7 +526,7 @@ data:
             {
               "editorMode": "code",
               "expr": "100 * sum by (job) (rate(redis_keyspace_hits_total{job=~\".*redis.*\"}[5m])) / clamp_min(sum by (job) (rate(redis_keyspace_hits_total{job=~\".*redis.*\"}[5m]) + rate(redis_keyspace_misses_total{job=~\".*redis.*\"}[5m])), 0.001)",
-              "legendFormat": "{{job}}",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -571,14 +571,14 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(redis_expired_keys_total{job=~\".*redis.*\"}[5m])) by (job)",
-              "legendFormat": "{{job}} expired",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} expired",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum(rate(redis_evicted_keys_total{job=~\".*redis.*\"}[5m])) by (job)",
-              "legendFormat": "{{job}} evicted",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} evicted",
               "range": true,
               "refId": "B"
             }
@@ -623,14 +623,14 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(redis_net_input_bytes_total{job=~\".*redis.*\"}[5m])) by (job)",
-              "legendFormat": "{{job}} in",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} in",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum(rate(redis_net_output_bytes_total{job=~\".*redis.*\"}[5m])) by (job)",
-              "legendFormat": "{{job}} out",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} out",
               "range": true,
               "refId": "B"
             }
@@ -675,14 +675,14 @@ data:
             {
               "editorMode": "code",
               "expr": "redis_master_link_up{job=~\"redis-slave-1|redis-slave-2\"}",
-              "legendFormat": "{{job}} master link",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} master link",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "redis_cluster_state{job=~\"redis-usage-0|redis-usage-1|redis-usage-2\"}",
-              "legendFormat": "{{job}} cluster state",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} cluster state",
               "range": true,
               "refId": "B"
             }

@@ -339,7 +339,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(http_request_duration_seconds_count{${jobSelector(\"payment-gateway\")}}[5m])) by (route, status_code)",
-              "legendFormat": "{{route}} {{status_code}}",
+              "legendFormat": "{{ "{{" }}route{{ "}}" }} {{ "{{" }}status_code{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -384,7 +384,7 @@ data:
             {
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{${jobSelector(\"payment-gateway\")}}[5m])) by (route, le))",
-              "legendFormat": "{{route}}",
+              "legendFormat": "{{ "{{" }}route{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -651,7 +651,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(payment_events_published_total{${jobSelector(\"payment-gateway\")}}[5m])) by (event_type, status)",
-              "legendFormat": "Event published {{event_type}} {{status}}",
+              "legendFormat": "Event published {{ "{{" }}event_type{{ "}}" }} {{ "{{" }}status{{ "}}" }}",
               "range": true,
               "refId": "A"
             },

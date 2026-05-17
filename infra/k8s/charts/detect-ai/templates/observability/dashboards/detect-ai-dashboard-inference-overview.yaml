@@ -339,7 +339,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(grpc_requests_total{${jobSelector(\"inference\")}}[5m])) by (method, model, code)",
-              "legendFormat": "{{method}} {{model}} {{code}}",
+              "legendFormat": "{{ "{{" }}method{{ "}}" }} {{ "{{" }}model{{ "}}" }} {{ "{{" }}code{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -384,7 +384,7 @@ data:
             {
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(grpc_latency_seconds_bucket{${jobSelector(\"inference\")}}[5m])) by (method, model, le))",
-              "legendFormat": "{{method}} {{model}}",
+              "legendFormat": "{{ "{{" }}method{{ "}}" }} {{ "{{" }}model{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -429,7 +429,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(model_batch_queue_size{${jobSelector(\"inference\")}}) by (model)",
-              "legendFormat": "{{model}}",
+              "legendFormat": "{{ "{{" }}model{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -474,14 +474,14 @@ data:
             {
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(model_batch_size_bucket{${jobSelector(\"inference\")}}[5m])) by (model, le))",
-              "legendFormat": "{{model}} size p95",
+              "legendFormat": "{{ "{{" }}model{{ "}}" }} size p95",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(model_batch_processing_seconds_bucket{${jobSelector(\"inference\")}}[5m])) by (model, le))",
-              "legendFormat": "{{model}} processing p95",
+              "legendFormat": "{{ "{{" }}model{{ "}}" }} processing p95",
               "range": true,
               "refId": "B"
             }
@@ -528,14 +528,14 @@ data:
             {
               "editorMode": "code",
               "expr": "histogram_quantile(0.50, sum(rate(model_ai_confidence_score_bucket{${jobSelector(\"inference\")}}[5m])) by (model, le))",
-              "legendFormat": "{{model}} p50",
+              "legendFormat": "{{ "{{" }}model{{ "}}" }} p50",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(model_ai_confidence_score_bucket{${jobSelector(\"inference\")}}[5m])) by (model, le))",
-              "legendFormat": "{{model}} p95",
+              "legendFormat": "{{ "{{" }}model{{ "}}" }} p95",
               "range": true,
               "refId": "B"
             }

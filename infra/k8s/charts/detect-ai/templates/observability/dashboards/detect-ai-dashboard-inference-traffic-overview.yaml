@@ -338,7 +338,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(grpc_requests_total{${jobSelector(\"inference\")}}[5m])) by (code, method, model)",
-              "legendFormat": "{{code}} {{method}} {{model}}",
+              "legendFormat": "{{ "{{" }}code{{ "}}" }} {{ "{{" }}method{{ "}}" }} {{ "{{" }}model{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -383,7 +383,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(grpc_auth_failures_total{${jobSelector(\"inference\")}}[5m])) by (method, reason)",
-              "legendFormat": "{{method}} {{reason}}",
+              "legendFormat": "{{ "{{" }}method{{ "}}" }} {{ "{{" }}reason{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -428,7 +428,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(inference_document_input_chars_count{${jobSelector(\"inference\")}}[5m])) by (operation, model)",
-              "legendFormat": "{{operation}} {{model}}",
+              "legendFormat": "{{ "{{" }}operation{{ "}}" }} {{ "{{" }}model{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -473,7 +473,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(inference_document_chunks_processed_total{${jobSelector(\"inference\")}}[5m])) by (operation, model)",
-              "legendFormat": "{{operation}} {{model}}",
+              "legendFormat": "{{ "{{" }}operation{{ "}}" }} {{ "{{" }}model{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -519,14 +519,14 @@ data:
             {
               "editorMode": "code",
               "expr": "histogram_quantile(0.50, sum(rate(inference_document_input_chars_bucket{${jobSelector(\"inference\")}}[5m])) by (operation, model, le))",
-              "legendFormat": "{{operation}} {{model}} p50",
+              "legendFormat": "{{ "{{" }}operation{{ "}}" }} {{ "{{" }}model{{ "}}" }} p50",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(inference_document_input_chars_bucket{${jobSelector(\"inference\")}}[5m])) by (operation, model, le))",
-              "legendFormat": "{{operation}} {{model}} p95",
+              "legendFormat": "{{ "{{" }}operation{{ "}}" }} {{ "{{" }}model{{ "}}" }} p95",
               "range": true,
               "refId": "B"
             }
@@ -572,14 +572,14 @@ data:
             {
               "editorMode": "code",
               "expr": "histogram_quantile(0.50, sum(rate(inference_document_chunk_count_bucket{${jobSelector(\"inference\")}}[5m])) by (operation, model, le))",
-              "legendFormat": "{{operation}} {{model}} p50",
+              "legendFormat": "{{ "{{" }}operation{{ "}}" }} {{ "{{" }}model{{ "}}" }} p50",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(inference_document_chunk_count_bucket{${jobSelector(\"inference\")}}[5m])) by (operation, model, le))",
-              "legendFormat": "{{operation}} {{model}} p95",
+              "legendFormat": "{{ "{{" }}operation{{ "}}" }} {{ "{{" }}model{{ "}}" }} p95",
               "range": true,
               "refId": "B"
             }
@@ -625,7 +625,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(inference_document_inflight_chunks{${jobSelector(\"inference\")}}) by (operation, model)",
-              "legendFormat": "{{operation}} {{model}}",
+              "legendFormat": "{{ "{{" }}operation{{ "}}" }} {{ "{{" }}model{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -670,7 +670,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(grpc_requests_total{${jobSelector(\"inference\")},code=~\"CANCELLED|INTERNAL|RESOURCE_EXHAUSTED|INVALID_ARGUMENT|UNKNOWN\"}[5m])) by (code, method, model)",
-              "legendFormat": "{{code}} {{method}} {{model}}",
+              "legendFormat": "{{ "{{" }}code{{ "}}" }} {{ "{{" }}method{{ "}}" }} {{ "{{" }}model{{ "}}" }}",
               "range": true,
               "refId": "A"
             }

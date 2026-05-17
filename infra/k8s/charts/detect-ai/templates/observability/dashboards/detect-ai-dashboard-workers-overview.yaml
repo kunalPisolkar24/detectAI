@@ -337,7 +337,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(worker_jobs_processed_total{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}[5m])) by (service, job_type)",
-              "legendFormat": "{{service}} {{job_type}}",
+              "legendFormat": "{{ "{{" }}service{{ "}}" }} {{ "{{" }}job_type{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -382,7 +382,7 @@ data:
             {
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(worker_job_duration_seconds_bucket{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}[5m])) by (service, job_type, le))",
-              "legendFormat": "{{service}} {{job_type}}",
+              "legendFormat": "{{ "{{" }}service{{ "}}" }} {{ "{{" }}job_type{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -427,7 +427,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(worker_active_instances{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}) by (service, job)",
-              "legendFormat": "{{service}} {{job}}",
+              "legendFormat": "{{ "{{" }}service{{ "}}" }} {{ "{{" }}job{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -472,7 +472,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(cache_operations_total{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}[5m])) by (service, cache_type, operation)",
-              "legendFormat": "{{service}} {{cache_type}} {{operation}}",
+              "legendFormat": "{{ "{{" }}service{{ "}}" }} {{ "{{" }}cache_type{{ "}}" }} {{ "{{" }}operation{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -517,21 +517,21 @@ data:
             {
               "editorMode": "code",
               "expr": "nodejs_eventloop_lag_p99_seconds{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}",
-              "legendFormat": "{{job}} lag",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} lag",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "nodejs_heap_size_used_bytes{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}",
-              "legendFormat": "{{job}} heap",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} heap",
               "range": true,
               "refId": "B"
             },
             {
               "editorMode": "code",
               "expr": "nodejs_active_handles{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}",
-              "legendFormat": "{{job}} handles",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} handles",
               "range": true,
               "refId": "C"
             }
@@ -576,7 +576,7 @@ data:
             {
               "editorMode": "code",
               "expr": "100 * (sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service=~\"worker-analytics|worker-cron|worker-payments\",id!=\"/\"}[5m])) or sum by (container) (rate(container_cpu_usage_seconds_total{container=~\"(detect-ai-)?(worker-analytics|worker-cron|worker-payments)\",id!=\"/\"}[5m])))",
-              "legendFormat": "{{container_label_com_docker_compose_service}} {{container}}",
+              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }} {{ "{{" }}container{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -621,7 +621,7 @@ data:
             {
               "editorMode": "code",
               "expr": "(sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{container_label_com_docker_compose_service=~\"worker-analytics|worker-cron|worker-payments\",id!=\"/\"}) or sum by (container) (container_memory_working_set_bytes{container=~\"(detect-ai-)?(worker-analytics|worker-cron|worker-payments)\",id!=\"/\"}))",
-              "legendFormat": "{{container_label_com_docker_compose_service}} {{container}}",
+              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }} {{ "{{" }}container{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -666,14 +666,14 @@ data:
             {
               "editorMode": "code",
               "expr": "(sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{container_label_com_docker_compose_service=~\"worker-analytics|worker-cron|worker-payments\",id!=\"/\"}[5m])) or sum by (container) (rate(container_network_receive_bytes_total{container=~\"(detect-ai-)?(worker-analytics|worker-cron|worker-payments)\",id!=\"/\"}[5m])))",
-              "legendFormat": "{{container_label_com_docker_compose_service}} {{container}} rx",
+              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }} {{ "{{" }}container{{ "}}" }} rx",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "(sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{container_label_com_docker_compose_service=~\"worker-analytics|worker-cron|worker-payments\",id!=\"/\"}[5m])) or sum by (container) (rate(container_network_transmit_bytes_total{container=~\"(detect-ai-)?(worker-analytics|worker-cron|worker-payments)\",id!=\"/\"}[5m])))",
-              "legendFormat": "{{container_label_com_docker_compose_service}} {{container}} tx",
+              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }} {{ "{{" }}container{{ "}}" }} tx",
               "range": true,
               "refId": "B"
             }
@@ -718,21 +718,21 @@ data:
             {
               "editorMode": "code",
               "expr": "rabbitmq_connection_status{job=~\"${workerJobs}\"}",
-              "legendFormat": "{{job}} RabbitMQ status",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} RabbitMQ status",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum(rate(rabbitmq_reconnections_total{job=~\"${workerJobs}\"}[5m])) by (job)",
-              "legendFormat": "{{job}} RabbitMQ reconns",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} RabbitMQ reconns",
               "range": true,
               "refId": "B"
             },
             {
               "editorMode": "code",
               "expr": "redis_connection_status{job=~\"${workerJobs}\"}",
-              "legendFormat": "{{job}} Redis status",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} Redis status",
               "range": true,
               "refId": "C"
             }
@@ -777,7 +777,7 @@ data:
             {
               "editorMode": "code",
               "expr": "db_pool_connections{job=~\"${workerJobs}\"}",
-              "legendFormat": "{{job}} pool {{pool_name}} {{state}}",
+              "legendFormat": "{{ "{{" }}job{{ "}}" }} pool {{ "{{" }}pool_name{{ "}}" }} {{ "{{" }}state{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -822,14 +822,14 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(worker_active_jobs{job=~\"${workerJobs}\"}) by (job_type)",
-              "legendFormat": "{{job_type}} active",
+              "legendFormat": "{{ "{{" }}job_type{{ "}}" }} active",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(worker_message_size_bytes_bucket{job=~\"${workerJobs}\"}[5m])) by (job_type, le))",
-              "legendFormat": "{{job_type}} size p95 bytes",
+              "legendFormat": "{{ "{{" }}job_type{{ "}}" }} size p95 bytes",
               "range": true,
               "refId": "B"
             }
@@ -874,21 +874,21 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(worker_job_errors_total{job=~\"${workerJobs}\"}[5m])) by (job_type, error_type)",
-              "legendFormat": "{{job_type}} error {{error_type}}",
+              "legendFormat": "{{ "{{" }}job_type{{ "}}" }} error {{ "{{" }}error_type{{ "}}" }}",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum(rate(worker_dead_lettered_total{job=~\"${workerJobs}\"}[5m])) by (job_type)",
-              "legendFormat": "{{job_type}} dead lettered",
+              "legendFormat": "{{ "{{" }}job_type{{ "}}" }} dead lettered",
               "range": true,
               "refId": "B"
             },
             {
               "editorMode": "code",
               "expr": "sum(rate(worker_domain_operations_volume_total{job=~\"${workerJobs}\"}[5m])) by (domain_op)",
-              "legendFormat": "Domain op {{domain_op}}",
+              "legendFormat": "Domain op {{ "{{" }}domain_op{{ "}}" }}",
               "range": true,
               "refId": "C"
             }

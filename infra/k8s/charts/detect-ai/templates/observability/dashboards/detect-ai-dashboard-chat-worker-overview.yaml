@@ -382,7 +382,7 @@ data:
             {
               "editorMode": "code",
               "expr": "chat_redis_stream_lag{${jobSelector(\"chat-worker\")}}",
-              "legendFormat": "{{partition}}",
+              "legendFormat": "{{ "{{" }}partition{{ "}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -649,14 +649,14 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(chat_stream_errors_total{${jobSelector(\"chat-worker\")}}[5m])) by (operation)",
-              "legendFormat": "Stream Errors {{operation}}",
+              "legendFormat": "Stream Errors {{ "{{" }}operation{{ "}}" }}",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum(rate(chat_database_errors_total{${jobSelector(\"chat-worker\")}}[5m])) by (operation)",
-              "legendFormat": "DB Errors {{operation}}",
+              "legendFormat": "DB Errors {{ "{{" }}operation{{ "}}" }}",
               "range": true,
               "refId": "B"
             },
