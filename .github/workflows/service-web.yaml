@@ -113,8 +113,8 @@ jobs:
       - name: Validate public build variables
         if: github.ref_name == 'main'
         env:
-          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
-          NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${{ vars.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN }}
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY || vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+          NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${{ secrets.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN || vars.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN }}
         run: |
           test -n "$NEXT_PUBLIC_TURNSTILE_SITE_KEY"
           test "$NEXT_PUBLIC_TURNSTILE_SITE_KEY" != "dummy"
@@ -130,7 +130,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            NEXT_PUBLIC_TURNSTILE_SITE_KEY=${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
-            NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=${{ vars.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN }}
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY=${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY || vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+            NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=${{ secrets.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN || vars.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN }}
           cache-from: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:buildcache,mode=max

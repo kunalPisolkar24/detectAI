@@ -41,9 +41,6 @@ ENV GITHUB_ID="dummy"
 ENV GITHUB_SECRET="dummy"
 ENV TURNSTILE_SECRET_KEY="dummy"
 
-RUN test -n "$NEXT_PUBLIC_TURNSTILE_SITE_KEY" && test "$NEXT_PUBLIC_TURNSTILE_SITE_KEY" != "dummy" \
- && test -n "$NEXT_PUBLIC_PADDLE_CLIENT_TOKEN" && test "$NEXT_PUBLIC_PADDLE_CLIENT_TOKEN" != "dummy"
-
 RUN pnpm build
 
 FROM base AS runner
