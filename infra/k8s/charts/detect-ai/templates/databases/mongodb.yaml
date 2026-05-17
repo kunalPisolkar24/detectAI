@@ -1,0 +1,422 @@
+{{- if .Values.databases.mongo.sharded }}
+
+# 1. MongoDB Config Server StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-mongodb-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb-config
+spec:
+  serviceName: {{ .Release.Name }}-mongodb-config
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-config
+  template:
+    metadata:
+      labels:
+        app: mongodb-config
+    spec:
+      containers:
+        - name: mongodb-config
+          image: "mongo:6.0"
+          command: ["mongod", "--configsvr", "--replSet", "configRS", "--bind_ip_all", "--port", "27017"]
+          ports:
+            - name: mongo
+              containerPort: 27017
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.databases.mongo.resources | nindent 12 }}
+          volumeMounts:
+            - name: mongo-config-data
+              mountPath: /data/db
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-config-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ .Values.databases.storageClass | quote }}
+        resources:
+          requests:
+            storage: "2Gi"
+---
+# Config Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mongodb-config
+  namespace: {{ .Release.Namespace }}
+spec:
+  clusterIP: None
+  ports:
+    - port: 27017
+      targetPort: mongo
+      name: mongo
+  selector:
+    app: mongodb-config
+
+---
+# 2. MongoDB Shard 1
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-mongodb-shard1
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb-shard1
+spec:
+  serviceName: {{ .Release.Name }}-mongodb-shard1
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-shard1
+  template:
+    metadata:
+      labels:
+        app: mongodb-shard1
+    spec:
+      containers:
+        - name: mongodb-shard1
+          image: "mongo:6.0"
+          command: ["mongod", "--shardsvr", "--replSet", "shardRS1", "--bind_ip_all", "--port", "27017"]
+          ports:
+            - name: mongo
+              containerPort: 27017
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.databases.mongo.resources | nindent 12 }}
+          volumeMounts:
+            - name: mongo-shard1-data
+              mountPath: /data/db
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-shard1-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ .Values.databases.storageClass | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.databases.mongo.storageSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mongodb-shard1
+  namespace: {{ .Release.Namespace }}
+spec:
+  clusterIP: None
+  ports:
+    - port: 27017
+      targetPort: mongo
+  selector:
+    app: mongodb-shard1
+
+---
+# MongoDB Shard 2
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-mongodb-shard2
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb-shard2
+spec:
+  serviceName: {{ .Release.Name }}-mongodb-shard2
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-shard2
+  template:
+    metadata:
+      labels:
+        app: mongodb-shard2
+    spec:
+      containers:
+        - name: mongodb-shard2
+          image: "mongo:6.0"
+          command: ["mongod", "--shardsvr", "--replSet", "shardRS2", "--bind_ip_all", "--port", "27017"]
+          ports:
+            - name: mongo
+              containerPort: 27017
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.databases.mongo.resources | nindent 12 }}
+          volumeMounts:
+            - name: mongo-shard2-data
+              mountPath: /data/db
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-shard2-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ .Values.databases.storageClass | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.databases.mongo.storageSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mongodb-shard2
+  namespace: {{ .Release.Namespace }}
+spec:
+  clusterIP: None
+  ports:
+    - port: 27017
+      targetPort: mongo
+  selector:
+    app: mongodb-shard2
+
+---
+# MongoDB Shard 3
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-mongodb-shard3
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb-shard3
+spec:
+  serviceName: {{ .Release.Name }}-mongodb-shard3
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-shard3
+  template:
+    metadata:
+      labels:
+        app: mongodb-shard3
+    spec:
+      containers:
+        - name: mongodb-shard3
+          image: "mongo:6.0"
+          command: ["mongod", "--shardsvr", "--replSet", "shardRS3", "--bind_ip_all", "--port", "27017"]
+          ports:
+            - name: mongo
+              containerPort: 27017
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.databases.mongo.resources | nindent 12 }}
+          volumeMounts:
+            - name: mongo-shard3-data
+              mountPath: /data/db
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-shard3-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ .Values.databases.storageClass | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.databases.mongo.storageSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mongodb-shard3
+  namespace: {{ .Release.Namespace }}
+spec:
+  clusterIP: None
+  ports:
+    - port: 27017
+      targetPort: mongo
+  selector:
+    app: mongodb-shard3
+
+---
+# 3. MongoDB Router Deployment (mongos)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-mongodb-router
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb-router
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mongodb-router
+  template:
+    metadata:
+      labels:
+        app: mongodb-router
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9216"
+    spec:
+      containers:
+        - name: mongodb-router
+          image: "mongo:6.0"
+          command: ["mongos", "--configdb", "configRS/{{ .Release.Name }}-mongodb-config-0.{{ .Release.Name }}-mongodb-config.{{ .Release.Namespace }}.svc.cluster.local:27017", "--bind_ip_all", "--port", "27017"]
+          ports:
+            - name: mongo
+              containerPort: 27017
+              protocol: TCP
+          resources:
+            limits:
+              cpu: "1.0"
+              memory: "1Gi"
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+        # sidecar mongo-exporter for scraping database metrics
+        - name: mongo-exporter
+          image: "percona/mongodb_exporter:0.40"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9216
+              protocol: TCP
+          env:
+            - name: MONGODB_URI
+              value: "mongodb://localhost:27017"
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mongodb-router-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb-router
+spec:
+  ports:
+    - port: 27017
+      targetPort: mongo
+      name: mongo
+    - port: 9216
+      targetPort: metrics
+      name: metrics
+  selector:
+    app: mongodb-router
+
+---
+# 4. Bootstrap Sharding Init Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-mongodb-sharding-init
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mongo-init
+          image: "mongo:6.0"
+          command:
+            - "bin/bash"
+            - "-c"
+            - |
+              echo "Waiting for config server and router..."
+              sleep 15
+              
+              mongosh --host {{ .Release.Name }}-mongodb-config-0.{{ .Release.Name }}-mongodb-config.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'rs.initiate({_id: "configRS", configsvr: true, members: [{_id: 0, host: "{{ .Release.Name }}-mongodb-config-0.{{ .Release.Name }}-mongodb-config.{{ .Release.Namespace }}.svc.cluster.local:27017"}]})' || true
+              
+              mongosh --host {{ .Release.Name }}-mongodb-shard1-0.{{ .Release.Name }}-mongodb-shard1.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'rs.initiate({_id: "shardRS1", members: [{_id: 0, host: "{{ .Release.Name }}-mongodb-shard1-0.{{ .Release.Name }}-mongodb-shard1.{{ .Release.Namespace }}.svc.cluster.local:27017"}]})' || true
+              
+              mongosh --host {{ .Release.Name }}-mongodb-shard2-0.{{ .Release.Name }}-mongodb-shard2.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'rs.initiate({_id: "shardRS2", members: [{_id: 0, host: "{{ .Release.Name }}-mongodb-shard2-0.{{ .Release.Name }}-mongodb-shard2.{{ .Release.Namespace }}.svc.cluster.local:27017"}]})' || true
+              
+              mongosh --host {{ .Release.Name }}-mongodb-shard3-0.{{ .Release.Name }}-mongodb-shard3.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'rs.initiate({_id: "shardRS3", members: [{_id: 0, host: "{{ .Release.Name }}-mongodb-shard3-0.{{ .Release.Name }}-mongodb-shard3.{{ .Release.Namespace }}.svc.cluster.local:27017"}]})' || true
+              
+              sleep 10
+              mongosh --host {{ .Release.Name }}-mongodb-router-service.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'sh.addShard("shardRS1/{{ .Release.Name }}-mongodb-shard1-0.{{ .Release.Name }}-mongodb-shard1.{{ .Release.Namespace }}.svc.cluster.local:27017")' || true
+              mongosh --host {{ .Release.Name }}-mongodb-router-service.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'sh.addShard("shardRS2/{{ .Release.Name }}-mongodb-shard2-0.{{ .Release.Name }}-mongodb-shard2.{{ .Release.Namespace }}.svc.cluster.local:27017")' || true
+              mongosh --host {{ .Release.Name }}-mongodb-router-service.{{ .Release.Namespace }}.svc.cluster.local:27017 --eval 'sh.addShard("shardRS3/{{ .Release.Name }}-mongodb-shard3-0.{{ .Release.Name }}-mongodb-shard3.{{ .Release.Namespace }}.svc.cluster.local:27017")' || true
+              
+              echo "MongoDB sharding initialization complete!"
+
+{{- else }}
+
+# Standalone MongoDB Setup (Dev/Testing Profile)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-mongodb-standalone
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb-standalone
+spec:
+  serviceName: {{ .Release.Name }}-mongodb-standalone
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-standalone
+  template:
+    metadata:
+      labels:
+        app: mongodb-standalone
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9216"
+    spec:
+      containers:
+        - name: mongodb
+          image: "mongo:6.0"
+          ports:
+            - name: mongo
+              containerPort: 27017
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.databases.mongo.resources | nindent 12 }}
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+        # sidecar mongo-exporter
+        - name: mongo-exporter
+          image: "percona/mongodb_exporter:0.40"
+          ports:
+            - name: metrics
+              containerPort: 9216
+              protocol: TCP
+          env:
+            - name: MONGODB_URI
+              value: "mongodb://localhost:27017"
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ .Values.databases.storageClass | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.databases.mongo.storageSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mongodb-standalone-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb-standalone
+spec:
+  ports:
+    - port: 27017
+      targetPort: mongo
+      name: mongo
+    - port: 9216
+      targetPort: metrics
+      name: metrics
+  selector:
+    app: mongodb-standalone
+
+{{- end }}
