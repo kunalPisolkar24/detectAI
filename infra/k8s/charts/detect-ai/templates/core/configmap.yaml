@@ -33,7 +33,8 @@ data:
   MONGO_URL: "mongodb://{{ include "detect-ai.fullname" . }}-mongodb-standalone-service:27017/chats"
   {{- end }}
 
-  RABBITMQ_URL: "amqp://guest:guest@{{ include "detect-ai.fullname" . }}-rabbitmq:5672/"
   POSTGRES_HOST: "{{ include "detect-ai.fullname" . }}-postgres"
   POSTGRES_DB: "detect-ai"
   POSTGRES_PORT: "5432"
+  # NOTE: RABBITMQ_URL must be injected via the detect-ai-secrets Secret (key: RABBITMQ_URL)
+  # to avoid leaking credentials in plaintext via the ConfigMap.
