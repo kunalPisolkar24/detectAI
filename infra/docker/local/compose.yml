@@ -1,0 +1,429 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST_AUTH_METHOD: md5
+      POSTGRES_INITDB_ARGS: --auth-host=md5
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    ports:
+      - "${RABBITMQ_PORT}:5672"
+      - "${RABBITMQ_UI_PORT}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redis-app:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_app_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis-usage:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_USAGE_PASSWORD}
+    ports:
+      - "${REDIS_RATELIMIT_PORT}:6379"
+    volumes:
+      - redis_usage_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_USAGE_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis-chat:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_chat_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  chat-mongo:
+    image: mongo:6.0
+    restart: unless-stopped
+    command: mongod --bind_ip_all --port 27017
+    ports:
+      - "27018:27017"
+    volumes:
+      - chat_mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  document-parser:
+    build:
+      context: ../../../services/document-parser
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PORT: ${PORT_DOC_PARSER}
+      WORKERS: ${DOC_PARSER_WORKERS}
+      API_TITLE: ${DOC_PARSER_API_TITLE}
+      API_VERSION: ${DOC_PARSER_API_VERSION}
+      MAX_UPLOAD_SIZE_BYTES: ${DOC_PARSER_MAX_UPLOAD_SIZE}
+      MAX_TEXT_LENGTH: ${DOC_PARSER_MAX_TEXT_LENGTH}
+    ports:
+      - "${PORT_DOC_PARSER}:${PORT_DOC_PARSER}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT_DOC_PARSER}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  ai-service:
+    build:
+      context: ../../../services/inference
+      dockerfile: Dockerfile.local
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: "1"
+      ENV: local
+      GRPC_PORT: 50051
+      METRICS_PORT: 8333
+      API_KEY: ${AI_SERVICE_API_KEY}
+      MODEL_CACHE_DIR: ${INFERENCE_MODEL_CACHE_DIR}
+      SPARK_MODEL_REVISION: ${INFERENCE_SPARK_MODEL_REVISION:-9a48004391c71272d6fb1d164ed7c56e1fbfe360}
+      FLARE_MODEL_REVISION: ${INFERENCE_FLARE_MODEL_REVISION:-e1911c0be59f4e10f0d120f639d1358e46bc2086}
+      BATCH_SIZE: ${INFERENCE_BATCH_SIZE}
+      BATCH_TIMEOUT: ${INFERENCE_BATCH_TIMEOUT}
+      MAX_TEXT_LENGTH: ${INFERENCE_MAX_TEXT_CHARS}
+      BATCH_QUEUE_MAX_SIZE: ${INFERENCE_BATCH_QUEUE_MAX_SIZE}
+      MAX_INFLIGHT_DOC_CHUNKS: ${INFERENCE_MAX_INFLIGHT_DOC_CHUNKS}
+      CHUNK_TOKEN_LIMIT: ${INFERENCE_CHUNK_TOKEN_LIMIT}
+      CHUNK_TOKEN_STRIDE: ${INFERENCE_CHUNK_TOKEN_STRIDE}
+      INFERENCE_PROVIDERS: ${INFERENCE_PROVIDERS}
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+    ports:
+      - "${PORT_INFERENCE}:50051"
+      - "${PORT_INFERENCE_METRICS}:8333"
+    volumes:
+      - inference_model_cache:/app/models
+    healthcheck:
+      test: ["CMD", "/bin/grpc_health_probe", "-addr=127.0.0.1:50051", "-connect-timeout=5s", "-rpc-timeout=5s"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10m
+
+  payment-gateway:
+    build:
+      context: ../../../services/payments/gateway
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      PORT: "8080"
+      GIN_MODE: ${GIN_MODE}
+    ports:
+      - "${PORT_GATEWAY}:8080"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  db-migrate:
+    build:
+      context: ../../../apps/web
+      dockerfile: Dockerfile
+      target: migrate
+    restart: "no"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker-analytics:
+    build:
+      context: ../../../services/workers
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["bun", "run", "start:analytics"]
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL_REPLICA: ${DATABASE_URL_REPLICA}
+      REDIS_URL: ${REDIS_URL}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_MODE: ${REDIS_MODE}
+      REDIS_SENTINELS: ${REDIS_SENTINELS}
+      REDIS_MASTER_NAME: ${REDIS_MASTER_NAME}
+      REDIS_USAGE_URL: ${REDIS_USAGE_URL}
+      REDIS_USAGE_MODE: ${REDIS_USAGE_MODE}
+      PORT: ${WORKER_ANALYTICS_PORT}
+    ports:
+      - "${WORKER_ANALYTICS_PORT}:7001"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis-app:
+        condition: service_healthy
+      redis-usage:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  worker-cron:
+    build:
+      context: ../../../services/workers
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["bun", "run", "start:cron"]
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL_REPLICA: ${DATABASE_URL_REPLICA}
+      REDIS_URL: ${REDIS_URL}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_MODE: ${REDIS_MODE}
+      REDIS_SENTINELS: ${REDIS_SENTINELS}
+      REDIS_MASTER_NAME: ${REDIS_MASTER_NAME}
+      PORT: ${WORKER_CRON_PORT}
+    ports:
+      - "${WORKER_CRON_PORT}:7002"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis-app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  worker-payments:
+    build:
+      context: ../../../services/workers
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["bun", "run", "start:payments"]
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL_REPLICA: ${DATABASE_URL_REPLICA}
+      REDIS_URL: ${REDIS_URL}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_MODE: ${REDIS_MODE}
+      REDIS_SENTINELS: ${REDIS_SENTINELS}
+      REDIS_MASTER_NAME: ${REDIS_MASTER_NAME}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      PADDLE_API_KEY: ${PADDLE_API_KEY}
+      PADDLE_ENVIRONMENT: ${PADDLE_ENVIRONMENT}
+      PORT: ${WORKER_PAYMENTS_PORT}
+    ports:
+      - "${WORKER_PAYMENTS_PORT}:7003"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis-app:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  chat-service:
+    build:
+      context: ../../../services/chats
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${CHAT_APP_ENV}
+      SERVICE_ROLE: api
+      GRPC_PORT: ${CHAT_GRPC_PORT}
+      METRICS_PORT: ${CHAT_METRICS_PORT}
+      MONGO_URI: ${CHAT_MONGO_URI}
+      MONGO_DATABASE: ${CHAT_MONGO_DB}
+      CHAT_REDIS_MODE: ${CHAT_REDIS_MODE}
+      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_POOL_SIZE: ${CHAT_REDIS_POOL_SIZE}
+      WORKER_CONCURRENCY: ${CHAT_WORKER_CONCURRENCY}
+      STREAM_PARTITION_COUNT: ${CHAT_STREAM_PARTITION_COUNT}
+      CACHE_TTL: ${CHAT_CACHE_TTL}
+      BATCH_SIZE: ${CHAT_BATCH_SIZE}
+    ports:
+      - "50052:50051"
+      - "9095:9091"
+    depends_on:
+      chat-mongo:
+        condition: service_healthy
+      redis-chat:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  chat-worker:
+    build:
+      context: ../../../services/chats
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${CHAT_APP_ENV}
+      SERVICE_ROLE: worker
+      GRPC_PORT: ${CHAT_GRPC_PORT}
+      METRICS_PORT: ${CHAT_WORKER_METRICS_PORT}
+      MONGO_URI: ${CHAT_MONGO_URI}
+      MONGO_DATABASE: ${CHAT_MONGO_DB}
+      CHAT_REDIS_MODE: ${CHAT_REDIS_MODE}
+      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_POOL_SIZE: ${CHAT_REDIS_POOL_SIZE}
+      WORKER_CONCURRENCY: ${CHAT_WORKER_CONCURRENCY}
+      STREAM_PARTITION_COUNT: ${CHAT_STREAM_PARTITION_COUNT}
+      CACHE_TTL: ${CHAT_CACHE_TTL}
+      BATCH_SIZE: ${CHAT_BATCH_SIZE}
+    ports:
+      - "9099:9099"
+    depends_on:
+      chat-mongo:
+        condition: service_healthy
+      redis-chat:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9099/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ../../../apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+        NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      DOCKER_LOCAL: ${DOCKER_LOCAL}
+      GITHUB_ID: ${GITHUB_ID}
+      GITHUB_SECRET: ${GITHUB_SECRET}
+      GOOGLE_ID: ${GOOGLE_ID}
+      GOOGLE_SECRET: ${GOOGLE_SECRET}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL_REPLICA: ${DATABASE_URL_REPLICA}
+      REDIS_MODE: ${REDIS_MODE}
+      REDIS_URL: ${REDIS_URL}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_MASTER_NAME: ${REDIS_MASTER_NAME}
+      REDIS_SENTINELS: ${REDIS_SENTINELS}
+      REDIS_USAGE_MODE: ${REDIS_USAGE_MODE}
+      REDIS_USAGE_URL: ${REDIS_USAGE_URL}
+      REDIS_USAGE_PASSWORD: ${REDIS_USAGE_PASSWORD}
+      USE_REDIS_CLUSTER: ${USE_REDIS_CLUSTER}
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY}
+      NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
+      PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET}
+      PADDLE_API_KEY: ${PADDLE_API_KEY}
+      PAYMENT_GATEWAY_URL: ${PAYMENT_GATEWAY_URL}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      AI_SERVICE_URL: ${AI_SERVICE_URL}
+      AI_SERVICE_API_KEY: ${AI_SERVICE_API_KEY}
+      CHAT_SERVICE_URL: ${CHAT_SERVICE_URL}
+      FILE_EXTRACTOR_API_URL: ${FILE_EXTRACTOR_API_URL}
+    ports:
+      - "${PORT_FRONTEND}:3000"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis-app:
+        condition: service_healthy
+      redis-usage:
+        condition: service_healthy
+      document-parser:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+      payment-gateway:
+        condition: service_healthy
+      chat-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/metrics').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  postgres_data:
+  redis_app_data:
+  redis_usage_data:
+  redis_chat_data:
+  chat_mongo_data:
+  inference_model_cache:

@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
 
 # next.js
 /.next/
@@ -41,4 +43,7 @@ yarn-error.log*
 next-env.d.ts
 
 /lib/generated/prisma
+/lib/shared/generated
 lint_output.txt
+
+# Prisma Generation

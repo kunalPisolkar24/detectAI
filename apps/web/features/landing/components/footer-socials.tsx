@@ -1,7 +1,7 @@
 "use client"
 
 import { m } from "framer-motion"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import { SOCIAL_LINKS } from "../constants"
 
 export const FooterSocials = () => {

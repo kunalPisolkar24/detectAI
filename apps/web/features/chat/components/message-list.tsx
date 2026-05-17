@@ -4,6 +4,7 @@ import { useEffect, useRef, useMemo } from "react"
 import { m } from "framer-motion"
 import { useChatUIStore } from "../stores/ui-store"
 import { useChatSession } from "../hooks/use-chat-history"
+import { useSendMessage } from "../hooks/use-chat-mutation"
 import { MessageItem } from "./message-item"
 import { Message } from "../types"
 
@@ -12,8 +13,13 @@ export const MessageList = () => {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const { data: chat } = useChatSession(currentChatId)
+  const { retryAnalysis, isAnalyzing } = useSendMessage()
 
   const messages = useMemo(() => chat?.messages || [], [chat?.messages])
+  const contentById = useMemo(
+    () => new Map(messages.map((message) => [message.id, message.content])),
+    [messages],
+  )
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -47,7 +53,43 @@ export const MessageList = () => {
     <div className="pt-4">
       <div className="w-full max-w-4xl mx-auto px-4 pb-48 space-y-8">
         {messages.map((msg: Message) => (
-          <MessageItem key={msg.id} message={msg} />
+          (() => {
+            const sourceMessageId = msg.analysisLink?.sourceMessageId
+              ?? msg.streamingProgress?.sourceMessageId
+              ?? msg.analysisStatus?.sourceMessageId
+            const sourceText = sourceMessageId ? contentById.get(sourceMessageId) : undefined
+
+            return (
+              <MessageItem
+                key={msg.id}
+                message={msg}
+                sourceText={sourceText}
+                onRetry={(() => {
+                  if (msg.role !== "assistant") {
+                    return undefined
+                  }
+
+                  const retryContent = msg.streamingProgress?.retryContent ?? sourceText
+                  const model = msg.streamingProgress?.model ?? msg.analysisStatus?.model
+
+                  if (!sourceMessageId || !retryContent || !model) {
+                    return undefined
+                  }
+
+                  return () => {
+                    retryAnalysis({
+                      assistantMessageId: msg.id,
+                      assistantCreatedAt: msg.createdAt,
+                      sourceMessageId,
+                      content: retryContent,
+                      model,
+                    })
+                  }
+                })()}
+                isRetryDisabled={isAnalyzing}
+              />
+            )
+          })()
         ))}
         <div ref={scrollRef} className="h-1" />
       </div>

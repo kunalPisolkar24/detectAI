@@ -1,12 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import "server-only"
-import { IChatService } from "./chat-service.interface"
-import { ChatSession, ChatHistoryItem, Message, ModelType } from "../types"
-import { getChatGrpcClient } from "@/lib/grpc/chat-client"
+import { AssistantAnalysisMessageInput, IChatService } from "./chat-service.interface"
+import { AnalysisResult, ChatSession, ChatHistoryItem, Message, ModelType } from "../types"
+import { getChatGrpcClient } from "@/lib/shared/grpc/chat-client"
 import { inferenceService } from "./inference-service"
 import { mapGrpcMessageToDomain, mapDomainAnalysisToGrpc } from "../utils/mappers"
+import { buildAnalysisMessageMetadata } from "../utils/analysis-message-metadata"
+import { orderMessagesForDisplay } from "../utils/order-messages-for-display"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth-options"
+import { authOptions } from "@/lib/config/auth-options"
 
 interface GrpcChatSummary {
   id: string
@@ -76,7 +78,7 @@ export class GrpcChatService implements IChatService {
     return {
       id: meta.id,
       title: meta.title,
-      messages: messages.reverse(),
+      messages: orderMessagesForDisplay(messages),
       updatedAt: new Date(parseInt(meta.updated_at) * 1000)
     }
   }
@@ -105,20 +107,51 @@ export class GrpcChatService implements IChatService {
   async sendMessage(chatId: string, content: string, model: ModelType): Promise<Message> {
     const userId = await this.getUserId()
 
-    const [, analysisResult] = await Promise.all([
-      this.saveToBackend(chatId, userId, "user", content),
-      inferenceService.detect(content, model)
+    const [userMessage, analysisResult] = await Promise.all([
+      this.saveUserMessage(chatId, userId, content),
+      inferenceService.detect(content, model),
     ])
+    const assistantMessage = await this.saveAssistantAnalysisMessage(chatId, userId, {
+      state: "completed",
+      model,
+      sourceMessageId: userMessage.id,
+      analysis: analysisResult,
+    })
 
-    const assistantMessage = await this.saveToBackend(
+    return assistantMessage
+  }
+
+  async saveUserMessage(chatId: string, userId: string, content: string): Promise<Message> {
+    return this.saveToBackend(chatId, userId, "user", content)
+  }
+
+  async saveAssistantAnalysis(chatId: string, userId: string, analysisResult: AnalysisResult): Promise<Message> {
+    return this.saveToBackend(chatId, userId, "assistant", "", analysisResult)
+  }
+
+  async saveAssistantAnalysisMessage(
+    chatId: string,
+    userId: string,
+    input: AssistantAnalysisMessageInput,
+  ): Promise<Message> {
+    return this.saveToBackend(
       chatId,
       userId,
       "assistant",
       "",
-      analysisResult
+      input.analysis,
+      {
+        messageId: input.messageId,
+        createdAt: input.createdAt,
+        metadata: buildAnalysisMessageMetadata({
+          state: input.state,
+          model: input.model,
+          sourceMessageId: input.sourceMessageId,
+          error: input.error,
+          highlights: input.analysis?.highlights,
+        }),
+      },
     )
-
-    return assistantMessage
   }
 
   async deleteChat(chatId: string): Promise<void> {
@@ -148,7 +181,12 @@ export class GrpcChatService implements IChatService {
     userId: string,
     role: "user" | "assistant",
     content: string,
-    analysisResult?: any
+    analysisResult?: any,
+    options?: {
+      messageId?: string
+      createdAt?: Date
+      metadata?: Record<string, string>
+    },
   ): Promise<Message> {
 
     const grpcAnalysis = analysisResult ? mapDomainAnalysisToGrpc(analysisResult) : undefined
@@ -160,18 +198,22 @@ export class GrpcChatService implements IChatService {
         role,
         content,
         analysis: grpcAnalysis,
-        metadata: {}
+        metadata: options?.metadata ?? {},
+        message_id: options?.messageId ?? "",
+        created_at: options?.createdAt ? Math.floor(options.createdAt.getTime() / 1000) : 0,
       }, (err: any, response: any) => {
         if (err) return reject(err)
 
-        const msg: Message = {
+        resolve(mapGrpcMessageToDomain({
           id: response.message_id,
+          chat_id: chatId,
+          user_id: userId,
           role,
           content,
-          createdAt: new Date(parseInt(response.timestamp) * 1000),
-          analysis: analysisResult
-        }
-        resolve(msg)
+          created_at: String(response.timestamp),
+          metadata: options?.metadata ?? {},
+          analysis: grpcAnalysis,
+        }))
       })
     })
   }

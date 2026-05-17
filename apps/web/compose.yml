@@ -1,15 +1,31 @@
 services:
-  frontend:
-    container_name: detect_ai_frontend
-    build: 
+  db-migrate:
+    build:
       context: .
       dockerfile: Dockerfile
+      target: migrate
+    restart: "no"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+    networks:
+      - detectai_net
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+
+  frontend:
+    container_name: detect_ai_frontend
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+        NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
     restart: always
     environment:
       # Environment
       - NODE_ENV=${NODE_ENV}
       - LOG_LEVEL=${LOG_LEVEL}
-      - HOSTNAME=${HOSTNAME:-0.0.0.0}
       # OAuth
       - GITHUB_ID=${GITHUB_ID}
       - GITHUB_SECRET=${GITHUB_SECRET}
@@ -22,12 +38,16 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       # Redis User Cache Sentinel
+      - REDIS_MODE=${REDIS_MODE:-sentinel}
+      - REDIS_URL=${REDIS_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_MASTER_NAME=${REDIS_MASTER_NAME:-mymaster}
-      - REDIS_SENTINELS=${REDIS_SENTINELS:-detect_ai_redis_sentinel_1:26379,detect_ai_redis_sentinel_2:26379,detect_ai_redis_sentinel_3:26379}
+      - REDIS_SENTINELS=${REDIS_SENTINELS:-redis-sentinel-1:26379}
       # Redis Analytics Cluster
+      - REDIS_USAGE_MODE=${REDIS_USAGE_MODE}
       - USE_REDIS_CLUSTER=${USE_REDIS_CLUSTER:-true}
       - REDIS_USAGE_URL=${REDIS_USAGE_URL}
+      - REDIS_USAGE_PASSWORD=${REDIS_USAGE_PASSWORD}
       # Cloudflare Turnstile
       - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
       - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}
@@ -38,6 +58,7 @@ services:
       # Payment Gateway
       - PAYMENT_GATEWAY_URL=${PAYMENT_GATEWAY_URL}
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - PROMETHEUS_WEB_SCRAPE_TOKEN=${PROMETHEUS_WEB_SCRAPE_TOKEN:-}
       # Inference Service
       - AI_SERVICE_URL=${AI_SERVICE_URL}
       - AI_SERVICE_API_KEY=${AI_SERVICE_API_KEY}
@@ -50,6 +71,8 @@ services:
     networks:
       - detectai_net
     depends_on:
+      db-migrate:
+        condition: service_completed_successfully
       postgres-primary:
         condition: service_healthy
       redis-master:

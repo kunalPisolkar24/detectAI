@@ -1,20 +1,103 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { createChatAction, sendMessageAction, deleteChatAction, renameChatAction } from "@/features/chat/actions/chat"
+import { createChatAction, deleteChatAction, renameChatAction } from "@/features/chat/actions/chat"
 import { useChatUIStore } from "../stores/ui-store"
-import { Message, ChatSession, ChatHistoryItem } from "../types"
+import { Message, ChatSession, ChatHistoryItem, ModelType, StreamingAnalysisProgress } from "../types"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
+interface SerializedMessage extends Omit<Message, "createdAt"> {
+  createdAt: string
+}
+
+type StreamEvent =
+  | { type: "accepted"; message: SerializedMessage }
+  | { type: "started"; totalChars: number; totalChunks: number }
+  | { type: "progress"; processedChunks: number; totalChunks: number }
+  | { type: "final"; message: SerializedMessage }
+  | { type: "error"; error: string }
+
+interface RetryAnalysisInput {
+  assistantMessageId: string
+  assistantCreatedAt: Date
+  sourceMessageId: string
+  content: string
+  model: ModelType
+}
+
+type AnalysisExecutionInput =
+  | { kind: "new"; content: string }
+  | ({ kind: "retry" } & RetryAnalysisInput)
+
+class StreamingChatError extends Error {
+  constructor(
+    message: string,
+    readonly kind: "cancelled" | "failed",
+    readonly rollbackUserMessage: boolean,
+    readonly invalidateChat: boolean,
+    readonly retainAssistantMessage: boolean,
+  ) {
+    super(message)
+  }
+}
+
+const isAbortError = (error: unknown) =>
+  (error instanceof DOMException && error.name === "AbortError") ||
+  (typeof error === "object" && error !== null && "name" in error && error.name === "AbortError")
+
+const createStreamingProgress = (
+  model: ModelType,
+  retryContent: string,
+  overrides: Partial<StreamingAnalysisProgress> = {},
+): StreamingAnalysisProgress => ({
+  model,
+  processedChunks: 0,
+  totalChunks: 0,
+  status: "running",
+  retryContent,
+  ...overrides,
+})
+
+const parseStreamError = async (response: Response) => {
+  try {
+    const payload = await response.json()
+    if (payload?.error) {
+      return payload.error as string
+    }
+  } catch {
+  }
+
+  return "Failed to analyze text"
+}
+
+const deserializeMessage = (message: SerializedMessage): Message => ({
+  ...message,
+  createdAt: new Date(message.createdAt),
+})
+
 export const useSendMessage = () => {
   const queryClient = useQueryClient()
-  const { currentChatId, selectedModel, setCurrentChatId } = useChatUIStore()
+  const currentChatId = useChatUIStore((state) => state.currentChatId)
+  const selectedModel = useChatUIStore((state) => state.selectedModel)
+  const setCurrentChatId = useChatUIStore((state) => state.setCurrentChatId)
+  const registerActiveAnalysis = useChatUIStore((state) => state.registerActiveAnalysis)
+  const updateActiveAnalysisMessageId = useChatUIStore((state) => state.updateActiveAnalysisMessageId)
+  const clearActiveAnalysis = useChatUIStore((state) => state.clearActiveAnalysis)
+  const cancelActiveAnalysis = useChatUIStore((state) => state.cancelActiveAnalysis)
+  const activeAnalysisChatId = useChatUIStore((state) => state.activeAnalysisChatId)
+  const activeAnalysisMessageId = useChatUIStore((state) => state.activeAnalysisMessageId)
+  const isCancelling = useChatUIStore((state) => state.isCancellingAnalysis)
 
-  return useMutation({
-    mutationFn: async (content: string) => {
+  const mutation = useMutation({
+    mutationFn: async (input: AnalysisExecutionInput) => {
+      if (useChatUIStore.getState().activeAnalysisChatId) {
+        throw new Error("An analysis is already running")
+      }
+
       let activeChatId = currentChatId
+      const effectiveModel = input.kind === "retry" ? input.model : selectedModel
 
-      if (!activeChatId) {
-        const createResult = await createChatAction(content)
+      if (input.kind === "new" && !activeChatId) {
+        const createResult = await createChatAction(input.content)
 
         if (!createResult.success) {
           throw new Error(createResult.error)
@@ -26,60 +109,375 @@ export const useSendMessage = () => {
 
         queryClient.setQueryData<ChatSession>(["chat", activeChatId], {
           ...newChat,
-          messages: []
+          messages: [],
         })
 
         await queryClient.invalidateQueries({ queryKey: ["chat-history"] })
       }
 
-      const optimisticMessage: Message = {
-        id: crypto.randomUUID(),
-        role: "user",
-        content,
-        createdAt: new Date()
+      if (!activeChatId) {
+        throw new Error("Chat session could not be created")
       }
 
-      queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
-        if (!old) return undefined
-        return {
-          ...old,
-          messages: [...old.messages, optimisticMessage]
+      const optimisticUserId = input.kind === "new" ? crypto.randomUUID() : null
+      const streamingAssistantId = input.kind === "retry" ? input.assistantMessageId : crypto.randomUUID()
+      const controller = new AbortController()
+      let activeAssistantMessageId = streamingAssistantId
+
+      if (input.kind === "new") {
+        const optimisticUserMessage: Message = {
+          id: optimisticUserId!,
+          role: "user",
+          content: input.content,
+          createdAt: new Date(),
         }
-      })
 
-      const sendResult = await sendMessageAction(activeChatId, content, selectedModel)
+        const streamingAssistantMessage: Message = {
+          id: streamingAssistantId,
+          role: "assistant",
+          content: "",
+          createdAt: new Date(),
+          isStreaming: true,
+          streamingProgress: createStreamingProgress(effectiveModel, input.content),
+        }
 
-      if (!sendResult.success) {
-        throw new Error(sendResult.error)
-      }
-
-      return sendResult.data
-    },
-    onSuccess: (newMessage) => {
-      useChatUIStore.getState().setRateLimited(false)
-
-      const activeChatId = useChatUIStore.getState().currentChatId
-
-      if (activeChatId) {
         queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
-          if (!old) return undefined
+          if (!old) {
+            return undefined
+          }
+
           return {
             ...old,
-            messages: [...old.messages, newMessage]
+            messages: [...old.messages, optimisticUserMessage, streamingAssistantMessage],
           }
         })
+      } else {
+        queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
+          if (!old) {
+            return undefined
+          }
+
+          return {
+            ...old,
+            messages: old.messages.map((message) =>
+              message.id === streamingAssistantId
+                ? {
+                    ...message,
+                    analysis: undefined,
+                    content: "",
+                    isStreaming: true,
+                    analysisStatus: message.analysisStatus
+                      ? {
+                          ...message.analysisStatus,
+                          state: "running",
+                          error: undefined,
+                        }
+                      : message.analysisStatus,
+                    streamingProgress: createStreamingProgress(effectiveModel, input.content),
+                  }
+                : message,
+            ),
+          }
+        })
+      }
+
+      registerActiveAnalysis({
+        chatId: activeChatId,
+        messageId: streamingAssistantId,
+        cancel: () => controller.abort(),
+      })
+
+      let shouldRollbackUserMessage = input.kind === "new"
+      let shouldRetainAssistantMessage = input.kind === "retry"
+      try {
+        const response = await fetch("/api/chat/analyze/stream", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            chatId: activeChatId,
+            content: input.content,
+            model: effectiveModel,
+            assistantMessageId: input.kind === "retry" ? input.assistantMessageId : undefined,
+            assistantCreatedAt: input.kind === "retry" ? input.assistantCreatedAt.toISOString() : undefined,
+            sourceMessageId: input.kind === "retry" ? input.sourceMessageId : undefined,
+          }),
+        })
+
+        if (!response.ok) {
+          throw new StreamingChatError(
+            await parseStreamError(response),
+            "failed",
+            input.kind === "new",
+            false,
+            input.kind === "retry",
+          )
+        }
+
+        if (!response.body) {
+          throw new StreamingChatError("Streaming response body was not available", "failed", false, false, true)
+        }
+
+        shouldRollbackUserMessage = false
+        shouldRetainAssistantMessage = true
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ""
+        let finalMessage: Message | null = null
+
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) {
+            break
+          }
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split("\n")
+          buffer = lines.pop() ?? ""
+
+          for (const line of lines) {
+            if (!line.trim()) {
+              continue
+            }
+
+            const event = JSON.parse(line) as StreamEvent
+
+            if (event.type === "accepted") {
+              const acceptedMessage = deserializeMessage(event.message)
+              activeAssistantMessageId = acceptedMessage.id
+              updateActiveAnalysisMessageId(acceptedMessage.id)
+
+              queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
+                if (!old) {
+                  return undefined
+                }
+
+                return {
+                  ...old,
+                  messages: old.messages.map((message) =>
+                    message.id === streamingAssistantId
+                      ? {
+                          ...acceptedMessage,
+                          isStreaming: true,
+                          streamingProgress: message.streamingProgress ?? createStreamingProgress(
+                            effectiveModel,
+                            input.content,
+                            {
+                              sourceMessageId: acceptedMessage.analysisStatus?.sourceMessageId,
+                            },
+                          ),
+                        }
+                      : message,
+                  ),
+                }
+              })
+              continue
+            }
+
+            if (event.type === "started") {
+              queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
+                if (!old) {
+                  return undefined
+                }
+
+                return {
+                  ...old,
+                  messages: old.messages.map((message) =>
+                    message.id === activeAssistantMessageId
+                      ? {
+                          ...message,
+                          isStreaming: true,
+                          streamingProgress: {
+                            model: effectiveModel,
+                            processedChunks: 0,
+                            totalChunks: event.totalChunks,
+                            status: "running",
+                            retryContent: input.content,
+                            sourceMessageId: message.analysisStatus?.sourceMessageId,
+                          },
+                        }
+                      : message,
+                  ),
+                }
+              })
+              continue
+            }
+
+            if (event.type === "progress") {
+              queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
+                if (!old) {
+                  return undefined
+                }
+
+                return {
+                  ...old,
+                  messages: old.messages.map((message) =>
+                    message.id === activeAssistantMessageId
+                      ? {
+                          ...message,
+                          isStreaming: true,
+                          streamingProgress: {
+                            model: effectiveModel,
+                            processedChunks: event.processedChunks,
+                            totalChunks: event.totalChunks,
+                            status: "running",
+                            retryContent: input.content,
+                            sourceMessageId: message.analysisStatus?.sourceMessageId,
+                          },
+                        }
+                      : message,
+                  ),
+                }
+              })
+              continue
+            }
+
+            if (event.type === "error") {
+              throw new StreamingChatError(event.error, "failed", false, false, true)
+            }
+
+            if (event.type === "final") {
+              finalMessage = deserializeMessage(event.message)
+
+              queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
+                if (!old) {
+                  return undefined
+                }
+
+                return {
+                  ...old,
+                  messages: old.messages.map((message) =>
+                    message.id === activeAssistantMessageId ? finalMessage! : message,
+                  ),
+                }
+              })
+            }
+          }
+        }
+
+        if (!finalMessage) {
+          throw new StreamingChatError("Analysis completed without a final result", "failed", false, false, true)
+        }
+
+        return {
+          chatId: activeChatId,
+          message: finalMessage,
+        }
+      } catch (error) {
+        const failure =
+          isAbortError(error)
+            ? new StreamingChatError("Analysis canceled", "cancelled", false, false, true)
+            : error instanceof StreamingChatError
+            ? error
+            : new StreamingChatError(
+                error instanceof Error ? error.message : "Failed to analyze text",
+                "failed",
+                shouldRollbackUserMessage,
+                false,
+                shouldRetainAssistantMessage,
+              )
+
+        queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
+          if (!old) {
+            return undefined
+          }
+
+          if (!failure.retainAssistantMessage) {
+            return {
+              ...old,
+              messages: old.messages.filter((message) => {
+                if (message.id === streamingAssistantId) {
+                  return false
+                }
+
+                if (failure.rollbackUserMessage && message.id === optimisticUserId) {
+                  return false
+                }
+
+                return true
+              }),
+            }
+          }
+
+          return {
+            ...old,
+            messages: old.messages.flatMap((message) => {
+              if (failure.rollbackUserMessage && message.id === optimisticUserId) {
+                return []
+              }
+
+              if (message.id !== activeAssistantMessageId) {
+                return [message]
+              }
+
+              const previousProgress = message.streamingProgress ?? createStreamingProgress(effectiveModel, input.content)
+
+              return [{
+                ...message,
+                analysis: undefined,
+                content: "",
+                isStreaming: false,
+                analysisStatus: message.analysisStatus
+                  ? {
+                      ...message.analysisStatus,
+                      state: failure.kind,
+                      error: failure.kind === "failed" ? failure.message : undefined,
+                    }
+                  : message.analysisStatus,
+                streamingProgress: {
+                  ...previousProgress,
+                  model: effectiveModel,
+                  retryContent: input.content,
+                  status: failure.kind,
+                  error: failure.kind === "failed" ? failure.message : undefined,
+                },
+              }]
+            }),
+          }
+        })
+
+        if (failure.invalidateChat) {
+          await queryClient.invalidateQueries({ queryKey: ["chat", activeChatId] })
+        }
+
+        throw failure
+      } finally {
+        clearActiveAnalysis()
+      }
+    },
+    onSuccess: async (result) => {
+      useChatUIStore.getState().setRateLimited(false)
+
+      if (result?.chatId) {
+        await queryClient.invalidateQueries({ queryKey: ["chat", result.chatId] })
       }
     },
     onError: (error) => {
       console.error("Failed to send message", error)
+      if (error instanceof StreamingChatError && error.kind === "cancelled") {
+        return
+      }
+
       if (error instanceof Error && (error.message.includes("Rate limit") || error.message.includes("429"))) {
         useChatUIStore.getState().setRateLimited(true)
-        toast.error("Rate limit exceeded")
       } else {
-        toast.error("Failed to send message")
+        toast.error(error instanceof Error ? error.message : "Failed to send message")
       }
-    }
+    },
   })
+
+  return {
+    sendMessage: (content: string) => mutation.mutate({ kind: "new", content }),
+    retryAnalysis: (input: RetryAnalysisInput) => mutation.mutate({ kind: "retry", ...input }),
+    cancelActiveAnalysis,
+    isAnalyzing: Boolean(activeAnalysisMessageId),
+    isCancelling,
+    activeAnalysisChatId,
+    activeAnalysisMessageId,
+  }
 }
 
 export const useChatMutations = () => {
@@ -95,16 +493,15 @@ export const useChatMutations = () => {
     },
     onSuccess: (_, chatId) => {
       queryClient.setQueryData<ChatHistoryItem[]>(["chat-history"], (old) =>
-        old?.filter(c => c.id !== chatId) || []
+        old?.filter(c => c.id !== chatId) || [],
       )
 
       if (currentChatId === chatId) {
         setCurrentChatId(null)
         router.push("/chat")
       }
-      toast.success("Chat deleted")
     },
-    onError: () => toast.error("Failed to delete chat")
+    onError: () => toast.error("Failed to delete chat"),
   })
 
   const renameChat = useMutation({
@@ -115,12 +512,11 @@ export const useChatMutations = () => {
     },
     onSuccess: (updatedChat) => {
       queryClient.setQueryData<ChatHistoryItem[]>(["chat-history"], (old) =>
-        old?.map(c => c.id === updatedChat.id ? updatedChat : c) || []
+        old?.map(c => c.id === updatedChat.id ? updatedChat : c) || [],
       )
       queryClient.invalidateQueries({ queryKey: ["chat", updatedChat.id] })
-      toast.success("Chat renamed")
     },
-    onError: () => toast.error("Failed to rename chat")
+    onError: () => toast.error("Failed to rename chat"),
   })
 
   return { deleteChat, renameChat }

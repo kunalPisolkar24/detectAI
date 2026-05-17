@@ -12,13 +12,21 @@ services:
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_SENTINELS=${REDIS_SENTINELS}
+      - REDIS_MASTER_NAME=${REDIS_MASTER_NAME}
       - REDIS_USAGE_URL=${REDIS_USAGE_URL}
-      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
+      - REDIS_USAGE_MODE=${REDIS_USAGE_MODE:-cluster}
+      - REDIS_MODE=${REDIS_MODE:-standalone}
       - PORT=${WORKER_ANALYTICS_PORT:-7001}
     ports:
       - "${WORKER_ANALYTICS_PORT:-7001}:7001"
     networks:
       - detectai_net
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      postgres-primary:
+        condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:7001/health" ]
       interval: 30s
@@ -39,12 +47,19 @@ services:
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
+      - REDIS_SENTINELS=${REDIS_SENTINELS}
+      - REDIS_MASTER_NAME=${REDIS_MASTER_NAME}
+      - REDIS_MODE=${REDIS_MODE:-standalone}
       - PORT=${WORKER_CRON_PORT:-7002}
     ports:
       - "${WORKER_CRON_PORT:-7002}:7002"
     networks:
       - detectai_net
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      postgres-primary:
+        condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:7002/health" ]
       interval: 30s
@@ -65,8 +80,11 @@ services:
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_MODE=${REDIS_MODE_STANDALONE:-standalone}
+      - REDIS_SENTINELS=${REDIS_SENTINELS}
+      - REDIS_MASTER_NAME=${REDIS_MASTER_NAME}
+      - REDIS_MODE=${REDIS_MODE:-standalone}
       - RABBITMQ_URL=${RABBITMQ_URL}
+      - RABBITMQ_QUEUE_TYPE=${RABBITMQ_QUEUE_TYPE:-quorum}
       - PADDLE_API_KEY=${PADDLE_API_KEY}
       - PADDLE_ENVIRONMENT=${PADDLE_ENVIRONMENT}
       - PORT=${WORKER_PAYMENTS_PORT:-7003}
@@ -75,6 +93,10 @@ services:
     networks:
       - detectai_net
     depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      postgres-primary:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     healthcheck:

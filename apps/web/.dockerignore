@@ -8,3 +8,15 @@ README.md
 build
 dist
 .vercel
+.env
+.env.*
+coverage
+test
+!test/load/mock-server
+.pytest_cache
+.vscode
+.idea
+*.log
+
+# Ignore host generated prisma client
+lib/shared/generated/prisma

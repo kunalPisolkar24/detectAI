@@ -1,10 +1,10 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth-options"
+import { authOptions } from "@/lib/config/auth-options"
 import { userService } from "@/features/auth/services/user-service"
 import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
-import { SubscriptionStatus } from "@/lib/generated/prisma/client"
+import { SubscriptionStatus } from "@/lib/shared/generated/prisma/client"
 import { ProfileView } from "@/features/profile/components/profile-view"
 
 export const metadata: Metadata = {
@@ -28,15 +28,16 @@ export default async function ProfilePage() {
     redirect("/login")
   }
 
-  const isPremium = user.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE
+  const isPremium = user.subscription?.status === SubscriptionStatus.ACTIVE
 
   const userData = {
     ...user,
     isPremium,
-    paddleSubscriptionStatus: user.paddleSubscriptionStatus as string | null,
-    paddleCancellationScheduled: user.paddleCancellationScheduled,
+    subscriptionEndsAt: user.subscription?.endsAt ?? null,
+    paddleSubscriptionStatus: user.subscription?.status as string | null,
+    paddleCancellationScheduled: user.subscription?.cancellationScheduled ?? false,
     apiCallCountDaily: realTimeUsage.dailyCount,
-    apiCallCountTotal: user.apiCallCountTotal + realTimeUsage.pendingCount
+    apiCallCountTotal: (user.usage?.apiCallCountTotal ?? 0) + realTimeUsage.pendingCount
   }
 
   return (

@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth-options"
-import { prisma } from "@/lib/prisma"
-import { SubscriptionStatus } from "@/lib/generated/prisma/client"
-import { env } from "@/lib/env"
+import { authOptions } from "@/lib/config/auth-options"
+import { prisma } from "@/lib/infrastructure/prisma"
+import { SubscriptionStatus } from "@/lib/shared/generated/prisma/client"
+import { env } from "@/lib/config/env"
 import { userService } from "@/features/auth/services/user-service"
 
 type ActionState = {
@@ -27,26 +27,30 @@ export async function cancelSubscriptionAction(): Promise<ActionState> {
       where: { id: userId },
       select: {
         email: true,
-        paddleSubscriptionId: true,
-        paddleSubscriptionStatus: true
+        subscription: {
+          select: {
+            paddleSubscriptionId: true,
+            status: true
+          }
+        }
       },
     })
 
-    if (!user || !user.paddleSubscriptionId) {
+    if (!user || !user.subscription?.paddleSubscriptionId) {
       return { error: "No active subscription details found." }
     }
 
     const isActive =
-      user.paddleSubscriptionStatus === SubscriptionStatus.ACTIVE ||
-      user.paddleSubscriptionStatus === SubscriptionStatus.TRIALING
+      user.subscription.status === SubscriptionStatus.ACTIVE ||
+      user.subscription.status === SubscriptionStatus.TRIALING
 
     if (!isActive) {
       return { error: "Subscription is already inactive." }
     }
 
-    await prisma.user.update({
-      where: { id: userId },
-      data: { paddleCancellationScheduled: true }
+    await prisma.subscription.update({
+      where: { userId },
+      data: { cancellationScheduled: true }
     })
 
     await userService.invalidateUserCache(userId, user.email)
@@ -55,20 +59,21 @@ export async function cancelSubscriptionAction(): Promise<ActionState> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Internal-Key": env.INTERNAL_API_KEY || "",
       },
       body: JSON.stringify({
         event_type: "user.cancel_subscription",
         data: {
           userId: userId,
-          paddleSubscriptionId: user.paddleSubscriptionId
+          paddleSubscriptionId: user.subscription.paddleSubscriptionId
         }
       }),
     })
 
     if (!response.ok) {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { paddleCancellationScheduled: false }
+      await prisma.subscription.update({
+        where: { userId },
+        data: { cancellationScheduled: false }
       })
       await userService.invalidateUserCache(userId, user.email)
       console.error(`Gateway Error: ${response.statusText}`)

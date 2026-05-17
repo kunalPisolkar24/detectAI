@@ -8,11 +8,11 @@ import (
 
 type ChatService interface {
 	CreateSession(ctx context.Context, userID, title string) (*domain.ChatSession, error)
-	GetSession(ctx context.Context, chatID string) (*domain.ChatSession, error)
+	GetSession(ctx context.Context, chatID, userID string) (*domain.ChatSession, error)
 	GetUserSessions(ctx context.Context, userID string) ([]*domain.ChatSession, error)
-	RenameSession(ctx context.Context, chatID, newTitle string) error
-	DeleteSession(ctx context.Context, chatID string) error
+	RenameSession(ctx context.Context, chatID, userID, newTitle string) error
+	DeleteSession(ctx context.Context, chatID, userID string) error
 	
 	ProcessMessage(ctx context.Context, msg *domain.Message) error
-	GetHistory(ctx context.Context, chatID string, page, pageSize int32) ([]*domain.Message, bool, error)
+	GetHistory(ctx context.Context, chatID, userID string, page, pageSize int32) ([]*domain.Message, bool, error)
 }

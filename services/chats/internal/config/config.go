@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -14,7 +16,9 @@ type Config struct {
 	MetricsPort          string        `envconfig:"METRICS_PORT" default:":9091"`
 	MongoURI             string        `envconfig:"MONGO_URI" required:"true"`
 	MongoDatabase        string        `envconfig:"MONGO_DATABASE" default:"chat_db"`
-	RedisClusterAddrs    []string      `envconfig:"REDIS_CLUSTER_ADDRS" required:"true"`
+	RedisMode            string        `envconfig:"CHAT_REDIS_MODE" default:"cluster"`
+	RedisAddrs           []string      `envconfig:"CHAT_REDIS_ADDRS"`
+	LegacyRedisAddrs     []string      `envconfig:"REDIS_CLUSTER_ADDRS"`
 	RedisPassword        string        `envconfig:"REDIS_PASSWORD"`
 	RedisPoolSize        int           `envconfig:"REDIS_POOL_SIZE" default:"100"`
 	WorkerConcurrency    int           `envconfig:"WORKER_CONCURRENCY" default:"10"`
@@ -24,12 +28,31 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	_ = godotenv.Load()
+	if envFile := os.Getenv("ENV_FILE"); envFile != "" {
+		_ = godotenv.Load(envFile)
+	}
 
 	var cfg Config
 	err := envconfig.Process("", &cfg)
 	if err != nil {
 		return nil, err
 	}
+
+	if len(cfg.RedisAddrs) == 0 {
+		cfg.RedisAddrs = cfg.LegacyRedisAddrs
+	}
+
+	if len(cfg.RedisAddrs) == 0 {
+		return nil, fmt.Errorf("CHAT_REDIS_ADDRS is required")
+	}
+
+	switch cfg.RedisMode {
+	case "standalone":
+		cfg.RedisAddrs = []string{cfg.RedisAddrs[0]}
+	case "cluster":
+	default:
+		return nil, fmt.Errorf("unsupported CHAT_REDIS_MODE: %s", cfg.RedisMode)
+	}
+
 	return &cfg, nil
 }

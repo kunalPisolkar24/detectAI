@@ -3,7 +3,7 @@
 import { useMemo } from "react"
 import { m } from "framer-motion"
 import { Zap } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import { VISUALIZER_TEXT } from "../constants"
 
 export const TextDetectionVisualizer = () => {

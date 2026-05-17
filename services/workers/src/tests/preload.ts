@@ -20,7 +20,7 @@ const prismaMockObj = {
     $disconnect: mockDisconnect,
 };
 
-mock.module("@shared/db", () => ({
+mock.module("@shared/database/PrismaService", () => ({
     prisma: prismaMockObj,
     prismaPrimary: prismaMockObj,
 }));

@@ -75,6 +75,12 @@ jobs:
           TURNSTILE_SECRET_KEY: "dummy"
         run: pnpm build
 
+      - name: Run Unit & UI Integration Tests
+        run: pnpm test:run
+
+      - name: Run Backend Integration Tests
+        run: pnpm test:integration:backend
+
   build-and-push:
     name: Build & Push Docker Image
     needs: quality-assurance
@@ -104,6 +110,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Validate public build variables
+        env:
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+          NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${{ vars.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN }}
+        run: |
+          test -n "$NEXT_PUBLIC_TURNSTILE_SITE_KEY"
+          test "$NEXT_PUBLIC_TURNSTILE_SITE_KEY" != "dummy"
+          test -n "$NEXT_PUBLIC_PADDLE_CLIENT_TOKEN"
+          test "$NEXT_PUBLIC_PADDLE_CLIENT_TOKEN" != "dummy"
+
       - name: Build and Push
         uses: docker/build-push-action@v5
         with:
@@ -112,5 +128,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY=${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+            NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=${{ vars.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN }}
           cache-from: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:buildcache,mode=max

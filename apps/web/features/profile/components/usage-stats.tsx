@@ -1,8 +1,8 @@
 "use client"
 
 import { m } from "framer-motion"
-import { cn } from "@/lib/utils"
-import { teko, inter } from "@/lib/fonts"
+import { cn } from "@/lib/core/utils"
+import { teko, inter } from "@/lib/core/fonts"
 import { Infinity } from "lucide-react"
 
 interface UsageStatsProps {

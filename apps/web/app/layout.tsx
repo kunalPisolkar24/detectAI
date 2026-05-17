@@ -4,7 +4,7 @@ import { LazyMotionProvider } from "@/components/providers/lazy-motion-provider"
 import { QueryProvider } from "@/components/providers/query-provider";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { Toaster } from "@/components/ui/sonner";
-import { inter } from "@/lib/fonts";
+import { inter } from "@/lib/core/fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -30,7 +30,7 @@ export default function RootLayout({
             <QueryProvider>
               <LazyMotionProvider>
                 {children}
-                <Toaster position="bottom-right" />
+                <Toaster position="top-right" />
               </LazyMotionProvider>
             </QueryProvider>
           </ThemeProvider>

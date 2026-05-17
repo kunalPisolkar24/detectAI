@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { m, useScroll, useMotionValueEvent } from "framer-motion"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import { NavLogo } from "./components/nav-logo"
 import { NavDesktop } from "./components/nav-desktop"
 import { NavMobile } from "./components/nav-mobile"

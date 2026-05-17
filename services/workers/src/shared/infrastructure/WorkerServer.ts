@@ -1,5 +1,5 @@
 import { MetricsService } from "../monitoring/MetricsService";
-import { Logger } from "../logger";
+import { Logger } from "../logging/Logger";
 
 export class WorkerServer {
     constructor(

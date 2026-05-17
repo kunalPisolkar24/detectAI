@@ -7,8 +7,9 @@ import { useRef } from "react"
 interface TurnstileComponentProps {
   siteKey: string
   onVerify: (token: string) => void
-  onError?: (error: unknown) => void
+  onError?: (error: string) => void
   onExpire?: () => void
+  onTimeout?: () => void
 }
 
 export function TurnstileComponent({
@@ -16,6 +17,7 @@ export function TurnstileComponent({
   onVerify,
   onError,
   onExpire,
+  onTimeout,
 }: TurnstileComponentProps) {
   const turnstileRef = useRef<TurnstileInstance>(null)
   const { theme } = useTheme()
@@ -24,7 +26,7 @@ export function TurnstileComponent({
     onVerify(token)
   }
 
-  const handleError = (error: unknown) => {
+  const handleError = (error: string) => {
     if (onError) {
       onError(error)
     }
@@ -37,9 +39,13 @@ export function TurnstileComponent({
       onSuccess={handleSuccess}
       onError={handleError}
       onExpire={onExpire}
+      onTimeout={onTimeout}
       options={{
         theme: theme === "dark" ? "dark" : "light",
         size: "normal",
+        retry: "never",
+        refreshExpired: "manual",
+        refreshTimeout: "manual",
       }}
     />
   )

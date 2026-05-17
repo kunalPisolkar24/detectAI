@@ -11,7 +11,7 @@ import { Eye, EyeOff, Mail, Lock, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import type { z } from "zod"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -19,7 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { LoginSchema } from "@/schemas/auth"
 import { TurnstileComponent } from "./turnstile"
 import { CardWrapper } from "./card-wrapper"
-import { teko } from "@/lib/fonts"
+import { teko } from "@/lib/core/fonts"
 import { useTurnstile } from "@/features/auth/hooks/use-turnstile"
 import { verifyTurnstileAction } from "@/features/auth/actions/verify-turnstile"
 
@@ -31,7 +31,18 @@ export const LoginForm = () => {
   const [rememberMe, setRememberMe] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   
-  const { token, key, onVerify, reset, siteKey } = useTurnstile()
+  const {
+    token,
+    key,
+    siteKey,
+    isConfigured,
+    errorMessage,
+    onVerify,
+    onError,
+    onExpire,
+    onTimeout,
+    reset,
+  } = useTurnstile()
 
   const form = useForm<z.infer<typeof LoginSchema>>({
     resolver: zodResolver(LoginSchema),
@@ -140,9 +151,9 @@ export const LoginForm = () => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Email</FormLabel>
-                <FormControl>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <div className="relative">
+                  <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <FormControl>
                     <Input
                       {...field}
                       type="email"
@@ -150,8 +161,8 @@ export const LoginForm = () => {
                       className="pl-9 bg-background/50 border-black/10 dark:border-white/10"
                       disabled={isPending}
                     />
-                  </div>
-                </FormControl>
+                  </FormControl>
+                </div>
                 <FormMessage />
               </FormItem>
             )}
@@ -163,9 +174,9 @@ export const LoginForm = () => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Password</FormLabel>
-                <FormControl>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <div className="relative">
+                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <FormControl>
                     <Input
                       {...field}
                       type={showPassword ? "text" : "password"}
@@ -173,16 +184,17 @@ export const LoginForm = () => {
                       className="pl-9 pr-10 bg-background/50 border-black/10 dark:border-white/10"
                       disabled={isPending}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
-                      disabled={isPending}
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </FormControl>
+                  </FormControl>
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
+                    disabled={isPending}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
                 <FormMessage />
               </FormItem>
             )}
@@ -212,15 +224,42 @@ export const LoginForm = () => {
           </div>
 
           <div className="flex justify-center pt-2">
-            <TurnstileComponent
-              key={key}
-              siteKey={siteKey}
-              onVerify={onVerify}
-              onError={() => {
-                setFormError("Verification error. Please try again.")
-                reset()
-              }}
-            />
+            <div className="flex w-full flex-col items-center gap-3">
+              {isConfigured ? (
+                <TurnstileComponent
+                  key={key}
+                  siteKey={siteKey}
+                  onVerify={onVerify}
+                  onError={onError}
+                  onExpire={onExpire}
+                  onTimeout={onTimeout}
+                />
+              ) : (
+                <div className="w-full rounded-md border border-destructive/20 bg-destructive/15 px-4 py-3 text-center text-sm text-destructive">
+                  {errorMessage}
+                </div>
+              )}
+
+              {errorMessage && isConfigured ? (
+                <div className="flex w-full flex-col items-center gap-2">
+                  <p className="text-center text-sm text-destructive">
+                    {errorMessage}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setFormError(null)
+                      reset()
+                    }}
+                    disabled={isPending}
+                  >
+                    Retry verification
+                  </Button>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <Button

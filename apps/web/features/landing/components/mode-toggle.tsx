@@ -3,7 +3,7 @@
 import { useTheme } from "next-themes"
 import { Sun, Moon } from "lucide-react"
 import { m } from "framer-motion"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 
 export const ModeToggle = () => {
   const { theme, setTheme } = useTheme()

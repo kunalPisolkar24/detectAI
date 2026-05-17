@@ -1,0 +1,8 @@
+services:
+  payment-gateway:
+    environment:
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq-lb:5672/
+      - RABBITMQ_QUEUE_TYPE=quorum
+    depends_on:
+      rabbitmq-lb:
+        condition: service_started

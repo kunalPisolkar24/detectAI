@@ -6,11 +6,11 @@ import { m } from "framer-motion"
 import { PanelRight, X, LogIn } from "lucide-react"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import { NAV_LINKS } from "../constants"
 import { NavLogo } from "./nav-logo"
 import { ModeToggle } from "./mode-toggle"
-import { teko } from "@/lib/fonts"
+import { teko } from "@/lib/core/fonts"
 
 export const NavMobile = () => {
   const [isOpen, setIsOpen] = useState(false)

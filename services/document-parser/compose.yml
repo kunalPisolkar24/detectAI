@@ -5,6 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    stop_grace_period: 30s
     environment:
       - PYTHONUNBUFFERED=1
       - PORT=${PORT_DOC_PARSER}

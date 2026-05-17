@@ -1,59 +1,45 @@
-import asyncio
+import time
+from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from app.config import settings
-from app.utils.logger import logger, log_request_middleware
-from app.utils.validator import validate_file
-from app.utils.cleaner import TextCleaner
-from app.services.extractor import FileExtractor
-from app.schemas import ExtractionResponse, HealthCheck
+from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
+from app.core.config import settings
+from app.core.exceptions import DocumentParserError
+from app.core.logging import log_request_middleware
+from app.core.metrics import record_request
+from app.api.v1.router import router as v1_router
+from app.api.exception_handlers import document_parser_exception_handler
 
-app = FastAPI(title=settings.API_TITLE, version=settings.API_VERSION)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.process_pool = ThreadPoolExecutor(max_workers=settings.WORKER_THREADS)
+    yield
+    app.state.process_pool.shutdown(wait=True)
+
+app = FastAPI(
+    title=settings.API_TITLE,
+    version=settings.API_VERSION,
+    lifespan=lifespan
+)
 
 app.add_middleware(BaseHTTPMiddleware, dispatch=log_request_middleware)
 
-# Thread pool for CPU-bound tasks
-process_pool = ThreadPoolExecutor(max_workers=4)
+@app.exception_handler(DocumentParserError)
+async def _document_parser_exception_handler(request: Request, exc: DocumentParserError):
+    return await document_parser_exception_handler(request, exc)
 
-def cpu_bound_processing(file_obj: UploadFile, content: bytes) -> str:
-    raw_text = FileExtractor.process(file_obj, content)
-    clean_text = TextCleaner.clean(raw_text)
-    return clean_text
+async def _metrics_middleware(request: Request, call_next):
+    if request.url.path == "/metrics":
+        return await call_next(request)
 
-@app.post("/extract", response_model=ExtractionResponse)
-async def extract_text(file: UploadFile = File(...)):
-    logger.info(f"Received file: {file.filename}, type: {file.content_type}")
-    
-    try:
-        await validate_file(file)
-        
-        content = await file.read()
-        
-        loop = asyncio.get_running_loop()
-        extracted_text = await loop.run_in_executor(
-            process_pool, 
-            cpu_bound_processing, 
-            file, 
-            content
-        )
-        
-        return ExtractionResponse(
-            filename=file.filename,
-            content_type=file.content_type,
-            text_length=len(extracted_text),
-            text=extracted_text
-        )
+    start = time.perf_counter()
+    response = await call_next(request)
 
-    except HTTPException as he:
-        raise he
-    except ValueError as ve:
-        logger.error(f"Processing error: {str(ve)}")
-        raise HTTPException(status_code=422, detail=str(ve))
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal processing error")
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", request.url.path)
+    record_request(request.method, route_path, response.status_code, time.perf_counter() - start)
+    return response
 
-@app.get("/health", response_model=HealthCheck)
-async def health_check():
-    return HealthCheck(status="ok")
+app.add_middleware(BaseHTTPMiddleware, dispatch=_metrics_middleware)
+
+app.include_router(v1_router)
