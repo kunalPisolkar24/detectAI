@@ -13,7 +13,7 @@ documentParser:
 inference:
   replicaCount: 1
   gpu:
-    enabled: true # Uses NVIDIA L4 GPU
+    enabled: false # Disabled for local Kind CPU deployment
     limit: 1
   resources:
     limits:
