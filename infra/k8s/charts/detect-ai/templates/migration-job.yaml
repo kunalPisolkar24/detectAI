@@ -1,4 +1,4 @@
-{{- if .Values.migration.enabled }}
+{{- if or .Values.databases.postgres.enabled (and .Values.global (eq .Values.global.environment "production")) }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -20,13 +20,23 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name | quote }}
     spec:
       restartPolicy: Never
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
       containers:
         - name: prisma-migrate
-          image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
+          image: "{{ .Values.web.image.repository }}-migrate:{{ .Values.web.image.tag | default "latest" }}"
           imagePullPolicy: {{ .Values.web.image.pullPolicy }}
-          command: ["pnpm", "--filter", "web", "run", "prisma:migrate"]
           envFrom:
             - secretRef:
-                name: {{ .Values.secretName }}
-  backoffLimit: 1
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+  backoffLimit: 2
 {{- end }}
