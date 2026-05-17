@@ -12,6 +12,8 @@ global:
     capabilities:
       drop:
       - ALL
+
+fullnameOverride: "detect-ai"
 # Frontend Next.js Web App
 web:
   replicaCount: 2
