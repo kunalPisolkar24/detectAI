@@ -111,6 +111,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Validate public build variables
+        if: github.ref_name == 'main'
         env:
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
           NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${{ vars.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN }}
