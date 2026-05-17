@@ -1,0 +1,309 @@
+{{- if .Values.databases.redis.cluster.enabled }}
+
+# 1. Redis Cluster StatefulSet (6 replicas)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-redis-cluster
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: redis-cluster
+spec:
+  serviceName: {{ .Release.Name }}-redis-cluster
+  replicas: 6
+  selector:
+    matchLabels:
+      app: redis-cluster
+  template:
+    metadata:
+      labels:
+        app: redis-cluster
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
+    spec:
+      containers:
+        # Redis Node Container
+        - name: redis
+          image: "redis:7.2-alpine"
+          command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--cluster-node-timeout", "5000", "--appendonly", "yes", "--bind", "0.0.0.0"]
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+            - name: cluster
+              containerPort: 16379
+              protocol: TCP
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+        # sidecar redis-exporter
+        - name: redis-exporter
+          image: "oliver006/redis_exporter:v1.55.0"
+          ports:
+            - name: metrics
+              containerPort: 9121
+              protocol: TCP
+          env:
+            - name: REDIS_ADDR
+              value: "redis://localhost:6379"
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ .Values.databases.storageClass | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.databases.redis.cluster.storageSize }}
+---
+# Headless Cluster Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-redis-cluster
+  namespace: {{ .Release.Namespace }}
+spec:
+  clusterIP: None
+  ports:
+    - port: 6379
+      targetPort: redis
+      name: redis
+    - port: 9121
+      targetPort: metrics
+      name: metrics
+  selector:
+    app: redis-cluster
+
+---
+# 2. Redis Cluster Creator Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-redis-cluster-creator
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: cluster-creator
+          image: "redis:7.2-alpine"
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              echo "Waiting for Redis nodes to be ready..."
+              sleep 15
+              
+              # Resolve IP addresses of all 6 nodes
+              IP_0=$(getent hosts {{ .Release.Name }}-redis-cluster-0.{{ .Release.Name }}-redis-cluster.{{ .Release.Namespace }}.svc.cluster.local | awk '{print $1}')
+              IP_1=$(getent hosts {{ .Release.Name }}-redis-cluster-1.{{ .Release.Name }}-redis-cluster.{{ .Release.Namespace }}.svc.cluster.local | awk '{print $1}')
+              IP_2=$(getent hosts {{ .Release.Name }}-redis-cluster-2.{{ .Release.Name }}-redis-cluster.{{ .Release.Namespace }}.svc.cluster.local | awk '{print $1}')
+              IP_3=$(getent hosts {{ .Release.Name }}-redis-cluster-3.{{ .Release.Name }}-redis-cluster.{{ .Release.Namespace }}.svc.cluster.local | awk '{print $1}')
+              IP_4=$(getent hosts {{ .Release.Name }}-redis-cluster-4.{{ .Release.Name }}-redis-cluster.{{ .Release.Namespace }}.svc.cluster.local | awk '{print $1}')
+              IP_5=$(getent hosts {{ .Release.Name }}-redis-cluster-5.{{ .Release.Name }}-redis-cluster.{{ .Release.Namespace }}.svc.cluster.local | awk '{print $1}')
+              
+              echo "Creating cluster with IPs: $IP_0 $IP_1 $IP_2 $IP_3 $IP_4 $IP_5"
+              
+              # Run cluster create command with automatic approval
+              redis-cli --cluster create \
+                $IP_0:6379 $IP_1:6379 $IP_2:6379 $IP_3:6379 $IP_4:6379 $IP_5:6379 \
+                --cluster-replicas 1 --cluster-yes
+
+{{- else if .Values.databases.redis.sentinel.enabled }}
+
+# Redis Sentinel StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-redis-sentinel
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: redis-sentinel
+spec:
+  serviceName: {{ .Release.Name }}-redis-sentinel
+  replicas: 3
+  selector:
+    matchLabels:
+      app: redis-sentinel
+  template:
+    metadata:
+      labels:
+        app: redis-sentinel
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
+    spec:
+      containers:
+        - name: redis
+          image: "redis:7.2-alpine"
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+        # sidecar sentinel container
+        - name: sentinel
+          image: "redis:7.2-alpine"
+          command:
+            - "redis-sentinel"
+            - "/etc/redis/sentinel.conf"
+          volumeMounts:
+            - name: sentinel-config
+              mountPath: /etc/redis
+        # sidecar redis-exporter
+        - name: redis-exporter
+          image: "oliver006/redis_exporter:v1.55.0"
+          ports:
+            - name: metrics
+              containerPort: 9121
+          env:
+            - name: REDIS_ADDR
+              value: "redis://localhost:6379"
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ .Values.databases.storageClass | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.databases.redis.sentinel.storageSize }}
+  # Placeholder config map for sentinel boot
+  volumes:
+    - name: sentinel-config
+      configMap:
+        name: {{ .Release.Name }}-sentinel-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-sentinel-config
+  namespace: {{ .Release.Namespace }}
+data:
+  sentinel.conf: |
+    port 26379
+    sentinel monitor mymaster localhost 6379 2
+    sentinel down-after-milliseconds mymaster 5000
+    sentinel failover-timeout mymaster 60000
+    sentinel parallel-syncs mymaster 1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-redis-sentinel-service
+  namespace: {{ .Release.Namespace }}
+spec:
+  ports:
+    - port: 6379
+      targetPort: redis
+      name: redis
+    - port: 26379
+      targetPort: 26379
+      name: sentinel
+    - port: 9121
+      targetPort: metrics
+      name: metrics
+  selector:
+    app: redis-sentinel
+
+{{- else }}
+
+# Standalone Redis setup (Dev/Testing Profile)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-redis-standalone
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: redis-standalone
+spec:
+  serviceName: {{ .Release.Name }}-redis-standalone
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-standalone
+  template:
+    metadata:
+      labels:
+        app: redis-standalone
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
+    spec:
+      containers:
+        - name: redis
+          image: "redis:7.2-alpine"
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+        # sidecar redis-exporter
+        - name: redis-exporter
+          image: "oliver006/redis_exporter:v1.55.0"
+          ports:
+            - name: metrics
+              containerPort: 9121
+              protocol: TCP
+          env:
+            - name: REDIS_ADDR
+              value: "redis://localhost:6379"
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ .Values.databases.storageClass | quote }}
+        resources:
+          requests:
+            storage: "2Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-redis-standalone-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: redis-standalone
+spec:
+  ports:
+    - port: 6379
+      targetPort: redis
+      name: redis
+    - port: 9121
+      targetPort: metrics
+      name: metrics
+  selector:
+    app: redis-standalone
+
+{{- end }}
