@@ -43,7 +43,7 @@ workers:
       enabled: false
 
 databases:
-  storageClass: "local-path"
+  storageClass: "standard"
   postgres:
     storageSize: "2Gi"
   mongo:
