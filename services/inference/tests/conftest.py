@@ -7,11 +7,11 @@ import pytest
 
 os.environ.setdefault("API_KEY", "test-secret-key")
 
-import src.infrastructure.config as config_module
-import src.adapters.inbound.grpc.grpc_server as grpc_server_module
-import src.adapters.inbound.grpc.interceptors as interceptors_module
-from src.infrastructure.config import Settings
-from src.domain.models import DocumentScore
+import src.infrastructure.config as config_module  # noqa: E402
+import src.adapters.inbound.grpc.grpc_server as grpc_server_module  # noqa: E402
+import src.adapters.inbound.grpc.interceptors as interceptors_module  # noqa: E402
+from src.infrastructure.config import Settings  # noqa: E402
+from src.domain.models import DocumentScore  # noqa: E402
 
 
 class AbortError(Exception):

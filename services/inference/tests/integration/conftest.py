@@ -1,13 +1,10 @@
 import asyncio
-import os
 import time
 import socket
 from typing import List
 
-import grpc
 import pytest
 import jwt
-from prometheus_client import REGISTRY
 
 from src.infrastructure.config import Settings
 import src.infrastructure.config as config_module

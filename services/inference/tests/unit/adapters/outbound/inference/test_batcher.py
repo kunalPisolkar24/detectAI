@@ -6,9 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.application.ports.outbound.inference import ISyncBatchInferenceEngine
 from src.domain.exceptions import ServiceOverloadedError
-from src.domain.models import BatcherHealthSnapshot, BatcherHealthStatus
 from src.adapters.outbound.inference.batcher import BatchingProxy
 from concurrent.futures import ThreadPoolExecutor
 

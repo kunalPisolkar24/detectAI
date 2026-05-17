@@ -2,6 +2,7 @@ from grpc_health.v1 import health_pb2
 from prometheus_client import Counter, Gauge, Histogram
 
 from src.domain.models import BatcherHealthSnapshot, BatcherHealthStatus
+from src.application.ports.outbound.telemetry import ITelemetryReporter
 
 GRPC_REQUESTS_TOTAL = Counter(
     'grpc_requests_total',
@@ -112,9 +113,6 @@ _SERVICE_HEALTH_REASONS = (
     'inference_circuit_open',
     'inference_queue_full',
 )
-
-
-from src.application.ports.outbound.telemetry import ITelemetryReporter
 
 
 class PrometheusTelemetryReporter(ITelemetryReporter):

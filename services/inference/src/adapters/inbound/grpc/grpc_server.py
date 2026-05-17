@@ -1,4 +1,3 @@
-import grpc
 from grpc import aio
 import asyncio
 import signal

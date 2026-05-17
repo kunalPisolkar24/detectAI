@@ -3,7 +3,6 @@ from src.domain.exceptions import (
     InferenceError,
     InvalidInputError,
     ModelLoadError,
-    ServiceOverloadedError,
 )
 
 def test_exceptions_inheritance():
