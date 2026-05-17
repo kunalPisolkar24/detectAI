@@ -1,0 +1,24 @@
+{{- if .Values.workers.payments.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ .Release.Name }}-worker-payments-scaler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: worker-payments
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-worker-payments
+  minReplicaCount: {{ .Values.workers.payments.keda.minReplicas | default 1 }}
+  maxReplicaCount: {{ .Values.workers.payments.keda.maxReplicas | default 10 }}
+  cooldownPeriod: 300
+  pollingInterval: 15
+  triggers:
+    - type: rabbitmq
+      metadata:
+        queueName: "billing-queue"
+        value: "{{ .Values.workers.payments.keda.queueLength | default 50 }}"
+        hostFromEnv: "RABBITMQ_URL" # Read host from shared envFrom configs
+{{- end }}

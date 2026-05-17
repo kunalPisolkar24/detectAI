@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-worker-payments
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: worker-payments
+spec:
+  {{- if not .Values.workers.payments.keda.enabled }}
+  replicas: {{ .Values.workers.payments.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: worker-payments
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: worker-payments
+        release: {{ .Release.Name }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.workers.payments.port }}"
+    spec:
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: worker-payments
+          image: "{{ .Values.workers.image.repository }}:{{ .Values.workers.image.tag }}"
+          imagePullPolicy: {{ .Values.workers.image.pullPolicy }}
+          command: ["bun", "run", "src/modules/payments/index.ts"]
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.workers.payments.port }}
+              protocol: TCP
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 15"]
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+            - secretRef:
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            {{- toYaml .Values.workers.payments.resources | nindent 12 }}

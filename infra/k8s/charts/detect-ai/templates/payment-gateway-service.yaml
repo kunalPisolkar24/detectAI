@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-payments-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: payments-gateway
+spec:
+  type: {{ .Values.payments.service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .Values.payments.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: payments-gateway
+    release: {{ .Release.Name }}

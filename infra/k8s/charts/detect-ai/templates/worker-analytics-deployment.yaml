@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-worker-analytics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: worker-analytics
+spec:
+  replicas: {{ .Values.workers.analytics.replicaCount }}
+  selector:
+    matchLabels:
+      app: worker-analytics
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: worker-analytics
+        release: {{ .Release.Name }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.workers.analytics.port }}"
+    spec:
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: worker-analytics
+          image: "{{ .Values.workers.image.repository }}:{{ .Values.workers.image.tag }}"
+          imagePullPolicy: {{ .Values.workers.image.pullPolicy }}
+          command: ["bun", "run", "src/modules/analytics/index.ts"]
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.workers.analytics.port }}
+              protocol: TCP
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+            - secretRef:
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            {{- toYaml .Values.workers.analytics.resources | nindent 12 }}

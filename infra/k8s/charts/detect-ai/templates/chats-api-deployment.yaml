@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-chats-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: chats-api
+spec:
+  replicas: {{ .Values.chats.api.replicaCount }}
+  selector:
+    matchLabels:
+      app: chats-api
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: chats-api
+        release: {{ .Release.Name }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.chats.api.service.metricsPort }}"
+    spec:
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: chats-api
+          image: "{{ .Values.chats.image.repository }}:{{ .Values.chats.image.tag }}"
+          imagePullPolicy: {{ .Values.chats.image.pullPolicy }}
+          # API role command or argument (if applicable, else standard entrypoint)
+          command: ["/app/chats"]
+          args: ["server"]
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.chats.api.service.grpcPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.chats.api.service.metricsPort }}
+              protocol: TCP
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+            - secretRef:
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            {{- toYaml .Values.chats.api.resources | nindent 12 }}
