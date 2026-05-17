@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-inference
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: inference
+spec:
+  {{- if not .Values.inference.autoscaling.enabled }}
+  replicas: {{ .Values.inference.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: inference
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: inference
+        release: {{ .Release.Name }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.inference.service.metricsPort }}"
+    spec:
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      terminationGracePeriodSeconds: 60
+      # Dedicated GPU node scheduling via taints/tolerations & node affinity
+      {{- if .Values.inference.gpu.enabled }}
+      tolerations:
+        - key: "gpu"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: "gpu"
+                    operator: "In"
+                    values: ["true"]
+      {{- end }}
+      containers:
+        - name: inference
+          image: "{{ .Values.inference.image.repository }}:{{ .Values.inference.image.tag }}"
+          imagePullPolicy: {{ .Values.inference.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.inference.service.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.inference.service.metricsPort }}
+              protocol: TCP
+          # Generous startup probe for model loading into memory
+          startupProbe:
+            httpGet:
+              path: "/healthz"
+              port: {{ .Values.inference.service.metricsPort }}
+            failureThreshold: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: "/healthz"
+              port: {{ .Values.inference.service.metricsPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: "/healthz"
+              port: {{ .Values.inference.service.metricsPort }}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 15"]
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+            - secretRef:
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            requests:
+              cpu: {{ .Values.inference.resources.requests.cpu | quote }}
+              memory: {{ .Values.inference.resources.requests.memory | quote }}
+            limits:
+              cpu: {{ .Values.inference.resources.limits.cpu | quote }}
+              memory: {{ .Values.inference.resources.limits.memory | quote }}
+              {{- if .Values.inference.gpu.enabled }}
+              nvidia.com/gpu: {{ .Values.inference.gpu.limit | quote }}
+              {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-inference-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: inference
+spec:
+  type: {{ .Values.inference.service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .Values.inference.service.port }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+    - port: {{ .Values.inference.service.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    app: inference
+    release: {{ .Release.Name }}

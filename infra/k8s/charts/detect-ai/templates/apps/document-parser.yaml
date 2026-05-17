@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-document-parser
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: document-parser
+spec:
+  replicas: {{ .Values.documentParser.replicaCount }}
+  selector:
+    matchLabels:
+      app: document-parser
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: document-parser
+        release: {{ .Release.Name }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+    spec:
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: document-parser
+          image: "{{ .Values.documentParser.image.repository }}:{{ .Values.documentParser.image.tag }}"
+          imagePullPolicy: {{ .Values.documentParser.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+            - secretRef:
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            {{- toYaml .Values.documentParser.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-document-parser-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: document-parser
+spec:
+  type: {{ .Values.documentParser.service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .Values.documentParser.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: document-parser
+    release: {{ .Release.Name }}

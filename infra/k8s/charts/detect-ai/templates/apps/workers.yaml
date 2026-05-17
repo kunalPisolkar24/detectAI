@@ -1,0 +1,177 @@
+# 1. Bun Analytics Worker
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-worker-analytics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: worker-analytics
+spec:
+  replicas: {{ .Values.workers.analytics.replicaCount }}
+  selector:
+    matchLabels:
+      app: worker-analytics
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: worker-analytics
+        release: {{ .Release.Name }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.workers.analytics.port }}"
+    spec:
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: worker-analytics
+          image: "{{ .Values.workers.image.repository }}:{{ .Values.workers.image.tag }}"
+          imagePullPolicy: {{ .Values.workers.image.pullPolicy }}
+          command: ["bun", "run", "src/modules/analytics/index.ts"]
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.workers.analytics.port }}
+              protocol: TCP
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+            - secretRef:
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            {{- toYaml .Values.workers.analytics.resources | nindent 12 }}
+
+---
+# 2. Bun Scheduler / Cron Worker
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-worker-cron
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: worker-cron
+spec:
+  replicas: {{ .Values.workers.cron.replicaCount }}
+  selector:
+    matchLabels:
+      app: worker-cron
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: worker-cron
+        release: {{ .Release.Name }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.workers.cron.port }}"
+    spec:
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: worker-cron
+          image: "{{ .Values.workers.image.repository }}:{{ .Values.workers.image.tag }}"
+          imagePullPolicy: {{ .Values.workers.image.pullPolicy }}
+          command: ["bun", "run", "src/modules/cron/index.ts"]
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.workers.cron.port }}
+              protocol: TCP
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+            - secretRef:
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            {{- toYaml .Values.workers.cron.resources | nindent 12 }}
+
+---
+# 3. Bun Payments Worker
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-worker-payments
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: worker-payments
+spec:
+  {{- if not .Values.workers.payments.keda.enabled }}
+  replicas: {{ .Values.workers.payments.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: worker-payments
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: worker-payments
+        release: {{ .Release.Name }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.workers.payments.port }}"
+    spec:
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: worker-payments
+          image: "{{ .Values.workers.image.repository }}:{{ .Values.workers.image.tag }}"
+          imagePullPolicy: {{ .Values.workers.image.pullPolicy }}
+          command: ["bun", "run", "src/modules/payments/index.ts"]
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.workers.payments.port }}
+              protocol: TCP
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 15"]
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+            - secretRef:
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            {{- toYaml .Values.workers.payments.resources | nindent 12 }}
+
+---
+# 4. KEDA ScaledObject for dynamic autoscaling based on RabbitMQ
+{{- if .Values.workers.payments.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ .Release.Name }}-worker-payments-scaler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: worker-payments
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-worker-payments
+  minReplicaCount: {{ .Values.workers.payments.keda.minReplicas | default 1 }}
+  maxReplicaCount: {{ .Values.workers.payments.keda.maxReplicas | default 10 }}
+  cooldownPeriod: 300
+  pollingInterval: 15
+  triggers:
+    - type: rabbitmq
+      metadata:
+        queueName: "billing-queue"
+        value: "{{ .Values.workers.payments.keda.queueLength | default 50 }}"
+        hostFromEnv: "RABBITMQ_URL"
+{{- end }}

@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-payments-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: payments-gateway
+spec:
+  replicas: {{ .Values.payments.replicaCount }}
+  selector:
+    matchLabels:
+      app: payments-gateway
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: payments-gateway
+        release: {{ .Release.Name }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.payments.service.port }}"
+    spec:
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: payments-gateway
+          image: "{{ .Values.payments.image.repository }}:{{ .Values.payments.image.tag }}"
+          imagePullPolicy: {{ .Values.payments.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.payments.service.port }}
+              protocol: TCP
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+            - secretRef:
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            {{- toYaml .Values.payments.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-payments-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: payments-gateway
+spec:
+  type: {{ .Values.payments.service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .Values.payments.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: payments-gateway
+    release: {{ .Release.Name }}
