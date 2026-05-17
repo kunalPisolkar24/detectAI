@@ -172,13 +172,13 @@ shell-web:
 	$(PROD_COMPOSE) exec frontend /bin/sh
 
 k8s-dev-up:
-	@sh infra/k8s/deploy.sh dev
+	@bash infra/k8s/deploy.sh dev
 
 k8s-dev-down:
 	@helm uninstall staging -n detect-ai
 
 k8s-prod-up:
-	@sh infra/k8s/deploy.sh prod
+	@bash infra/k8s/deploy.sh prod
 
 k8s-prod-down:
 	@helm uninstall prod -n detect-ai-prod
