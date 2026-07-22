@@ -1,6 +1,5 @@
 import { type IUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
 import { type RedisClient } from "@shared/cache/RedisClient";
-import { LockService } from "@shared/cache/lock";
 import { Logger } from "@shared/logging/Logger";
 import { SubscriptionStatus } from "../../../../../generated/prisma/client";
 import { CacheKeys } from "@shared/cache/keys";
@@ -8,30 +7,19 @@ import { MetricsService } from "@shared/monitoring/MetricsService";
 
 export class SubscriptionSweeper {
     private readonly BATCH_SIZE = 100;
-    private readonly LOCK_KEY = "cron:subscription_sweeper";
-    private readonly LOCK_TTL_MS = 120_000;
 
     constructor(
         private readonly userRepository: IUserRepository,
         private readonly redis: RedisClient,
-        private readonly lockService: LockService,
         private readonly metrics: MetricsService
     ) {}
 
     public async processExpiredSubscriptions(): Promise<number> {
-        const release = await this.lockService.acquire(this.LOCK_KEY, this.LOCK_TTL_MS);
-
-        if (!release) {
-            Logger.warn("Subscription sweeper lock already held by another instance, skipping.");
-            return 0;
-        }
-
         const timer = this.metrics.jobDuration.startTimer({ job_type: "sweep_expired" });
 
         this.metrics.activeJobs.inc({ job_type: "sweep_expired" });
         try {
-            const now = new Date();
-            const expiredUsers = await this.userRepository.findExpiredSubscriptions(now, this.BATCH_SIZE);
+            const expiredUsers = await this.userRepository.findExpiredSubscriptionsWithLock(this.BATCH_SIZE);
 
             if (expiredUsers.length === 0) {
                 timer({ status: "empty" });
@@ -51,12 +39,13 @@ export class SubscriptionSweeper {
             throw error;
         } finally {
             this.metrics.activeJobs.dec({ job_type: "sweep_expired" });
-            await release();
         }
     }
 
     private async bulkDowngradeUsers(users: { id: string; email: string }[]): Promise<void> {
         const userIds = users.map(u => u.id);
+
+        await this.bulkInvalidateCache(users);
 
         await this.userRepository.bulkUpdateStatus(userIds, {
             status: SubscriptionStatus.CANCELED,
