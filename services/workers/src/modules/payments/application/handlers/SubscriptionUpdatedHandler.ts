@@ -49,7 +49,7 @@ export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
 
         await this.invalidateCache(userId, user.email);
 
-        await this.userRepository.lockAndUpdateSubscription(userId, eventTimestamp, status, updateData);
+        await this.userRepository.lockAndUpdateSubscription(userId, eventTimestamp, status, updateData, customerId);
 
         await this.invalidateCache(userId, user.email);
 

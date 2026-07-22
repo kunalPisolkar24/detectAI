@@ -17,7 +17,8 @@ export interface IUserRepository {
         userId: string,
         eventTimestamp: Date,
         status: SubscriptionStatus,
-        payload: PaymentUpdatePayload
+        payload: PaymentUpdatePayload,
+        paddleCustomerId?: string
     ): Promise<UserRecord>;
     getSubscriptionStatusWithLock(userId: string): Promise<SubscriptionStatus | null>;
 }
@@ -105,7 +106,8 @@ export class PrismaUserRepository implements IUserRepository {
         userId: string,
         eventTimestamp: Date,
         status: SubscriptionStatus,
-        payload: PaymentUpdatePayload
+        payload: PaymentUpdatePayload,
+        paddleCustomerId?: string
     ): Promise<UserRecord> {
         return this.prismaWriter.$transaction(async (tx: any) => {
             const rows = (await tx.$queryRawUnsafe(
@@ -124,33 +126,36 @@ export class PrismaUserRepository implements IUserRepository {
                 validateTransition(null, status);
             }
 
-            return tx.user.update({
-                where: { id: userId },
-                data: {
-                    paddleCustomerId: payload.paddleCustomerId,
-                    subscription: {
-                        upsert: {
-                            create: {
-                                paddleSubscriptionId: payload.paddleSubscriptionId,
-                                paddlePlanId: payload.paddlePlanId,
-                                status: payload.status,
-                                endsAt: payload.endsAt,
-                                cancellationScheduled: payload.cancellationScheduled ?? false,
-                                eventTimestamp,
-                            },
-                            update: {
-                                paddleSubscriptionId: payload.paddleSubscriptionId,
-                                paddlePlanId: payload.paddlePlanId,
-                                status: payload.status,
-                                endsAt: payload.endsAt,
-                                cancellationScheduled: payload.cancellationScheduled ?? false,
-                                eventTimestamp,
-                            },
-                        },
-                    },
+            if (paddleCustomerId) {
+                await tx.user.update({
+                    where: { id: userId },
+                    data: { paddleCustomerId },
+                });
+            }
+
+            await tx.subscription.upsert({
+                where: { userId },
+                create: {
+                    userId,
+                    paddleSubscriptionId: payload.paddleSubscriptionId,
+                    paddlePlanId: payload.paddlePlanId,
+                    status: payload.status,
+                    endsAt: payload.endsAt,
+                    cancellationScheduled: payload.cancellationScheduled ?? false,
+                    eventTimestamp,
                 },
-                select: { email: true },
+                update: {
+                    paddleSubscriptionId: payload.paddleSubscriptionId,
+                    paddlePlanId: payload.paddlePlanId,
+                    status: payload.status,
+                    endsAt: payload.endsAt,
+                    cancellationScheduled: payload.cancellationScheduled ?? false,
+                    eventTimestamp,
+                },
             });
+
+            const user = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
+            return { email: user!.email };
         });
     }
 

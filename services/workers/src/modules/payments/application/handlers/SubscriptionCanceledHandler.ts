@@ -45,7 +45,8 @@ export class SubscriptionCanceledHandler implements IPaymentEventHandler {
                 status: SubscriptionStatus.CANCELED,
                 endsAt,
                 cancellationScheduled: false,
-            }
+            },
+            undefined
         );
 
         await this.invalidateCache(userId, user.email);
