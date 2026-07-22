@@ -3,7 +3,6 @@ import { CacheKeys } from "@shared/cache/keys";
 import "../../../../../tests/setup-integration";
 import { prismaPrimary, prisma } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
-import { LockService } from "@shared/cache/lock";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
 import { SubscriptionUpdatedHandler } from "../SubscriptionUpdatedHandler";
@@ -12,18 +11,29 @@ import { SubscriptionStatus } from "../../../../../../generated/prisma/client";
 describe("SubscriptionUpdatedHandler Integration", () => {
     let handler: SubscriptionUpdatedHandler;
     let redis: any;
+    let eventRedis: any;
     let userRepository: PrismaUserRepository;
 
     beforeEach(async () => {
+        const redisUrl = process.env.REDIS_URL!;
         redis = RedisFactory.createClient({
             mode: "standalone",
             name: "test-redis",
-            url: process.env.REDIS_URL,
+            url: redisUrl,
         });
-        const lockService = new LockService(redis);
+        eventRedis = RedisFactory.createClient({
+            mode: "standalone",
+            name: "test-event-redis",
+            url: redisUrl,
+        });
         const metrics = new MetricsService("test-payments");
         userRepository = new PrismaUserRepository(prismaPrimary, prisma);
-        handler = new SubscriptionUpdatedHandler(userRepository, redis, lockService, metrics);
+        handler = new SubscriptionUpdatedHandler(userRepository, redis, eventRedis, metrics);
+    });
+
+    afterEach(async () => {
+        await redis.quit().catch(() => {});
+        await eventRedis.quit().catch(() => {});
     });
 
     test("should handle subscription update and invalidate cache", async () => {
@@ -50,7 +60,8 @@ describe("SubscriptionUpdatedHandler Integration", () => {
             ],
             current_billing_period: {
                 ends_at: new Date(Date.now() + 86400000).toISOString()
-            }
+            },
+            occurred_at: new Date().toISOString(),
         };
 
         // 4. Handle event

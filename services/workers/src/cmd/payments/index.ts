@@ -7,7 +7,6 @@ import { SubscriptionCanceledHandler } from "@modules/payments/application/handl
 import { UserCancelHandler } from "@modules/payments/application/handlers/UserCancelHandler";
 import { prisma, prismaPrimary } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
-import { LockService } from "@shared/cache/lock";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
 import { config } from "./config";
@@ -23,23 +22,35 @@ const redisClient = RedisFactory.createClient({
     password: process.env.REDIS_PASSWORD,
 });
 
+const eventRedisClient = RedisFactory.createClient({
+    mode: config.EVENT_REDIS_MODE,
+    name: "EventRedis",
+    url: config.EVENT_REDIS_URL,
+    sentinels: config.EVENT_REDIS_SENTINELS,
+    masterName: config.EVENT_REDIS_MASTER_NAME,
+    password: config.EVENT_REDIS_PASSWORD,
+});
+
 const metricsService = new MetricsService("worker-payments");
 metricsService.registerPool("primary", prismaPrimary);
 metricsService.registerPool("replica", prisma);
-
-const lockService = new LockService(redisClient);
 
 redisClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 1));
 redisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 1));
 redisClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 0));
 redisClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 0));
 
+eventRedisClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 1));
+eventRedisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 1));
+eventRedisClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 0));
+eventRedisClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 0));
+
 const userRepository = new PrismaUserRepository(prismaPrimary, prisma);
 const paddleClient = new PaddleClient(config.PADDLE_API_KEY, config.PADDLE_ENVIRONMENT);
 
-const subscriptionUpdatedHandler = new SubscriptionUpdatedHandler(userRepository, redisClient, lockService, metricsService);
-const subscriptionCanceledHandler = new SubscriptionCanceledHandler(userRepository, redisClient, metricsService);
-const userCancelHandler = new UserCancelHandler(paddleClient);
+const subscriptionUpdatedHandler = new SubscriptionUpdatedHandler(userRepository, redisClient, eventRedisClient, metricsService);
+const subscriptionCanceledHandler = new SubscriptionCanceledHandler(userRepository, redisClient, eventRedisClient, metricsService);
+const userCancelHandler = new UserCancelHandler(userRepository, paddleClient, eventRedisClient);
 
 const paymentService = new PaymentService(
     {
@@ -75,6 +86,7 @@ const shutdown = async () => {
     metricsService.activeWorkers.dec();
     await prisma.$disconnect();
     await redisClient.quit();
+    await eventRedisClient.quit();
     process.exit(0);
 };
 

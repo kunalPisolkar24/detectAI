@@ -2,16 +2,18 @@ import { SubscriptionStatus } from "../../../../../generated/prisma/client";
 import { type IUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
 import { type RedisClient } from "@shared/cache/RedisClient";
 import { CacheKeys } from "@shared/cache/keys";
-import { LockService } from "@shared/cache/lock";
 import { MetricsService } from "@shared/monitoring/MetricsService";
+import { Logger } from "@shared/logging/Logger";
 import { type PaddleEventData, type PaymentUpdatePayload } from "../../domain/types";
 import type { IPaymentEventHandler } from "./IPaymentEventHandler";
+
+const EVENT_TS_PREFIX = "payment:event:ts:";
 
 export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
     constructor(
         private readonly userRepository: IUserRepository,
         private readonly redis: RedisClient,
-        private readonly lockService: LockService,
+        private readonly eventRedis: RedisClient,
         private readonly metrics: MetricsService
     ) {}
 
@@ -26,6 +28,13 @@ export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
 
         if (!subId || !status || !customerId || !planId) return;
 
+        const eventTimestamp = data.occurred_at ? new Date(data.occurred_at) : new Date();
+
+        if (await this.isEventStale(userId, eventTimestamp)) return;
+
+        const user = await this.userRepository.findUniqueById(userId);
+        if (!user) return;
+
         const updateData: PaymentUpdatePayload = {
             paddleCustomerId: customerId,
             paddleSubscriptionId: subId,
@@ -38,24 +47,45 @@ export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
             updateData.cancellationScheduled = data.scheduled_change.action === "cancel";
         }
 
-        const updatedUser = await this.userRepository.updateById(userId, updateData, { email: true });
-        await this.invalidateUserCache(userId, updatedUser.email);
+        await this.invalidateCache(userId, user.email);
+
+        const result = await this.userRepository.lockAndUpdateSubscription(userId, eventTimestamp, status, updateData, customerId);
+
+        if (!result.stale) {
+            await this.invalidateCache(userId, result.email);
+            await this.setEventTimestamp(userId, eventTimestamp);
+        }
     }
 
-    private async invalidateUserCache(userId: string, email: string): Promise<void> {
-        const keys = [CacheKeys.user(userId), CacheKeys.userByEmail(email)];
-
+    private async isEventStale(userId: string, eventTimestamp: Date): Promise<boolean> {
         try {
-            const locks = await Promise.all(keys.map(key => this.lockService.acquire(key)));
-            try {
-                await this.redis.del(...keys);
-                this.metrics.cacheOperations.inc({ operation: "invalidate", cache_type: "main" }, keys.length);
-            } finally {
-                await Promise.all(locks.map(release => release ? release() : Promise.resolve()));
+            const stored = await this.eventRedis.get(`${EVENT_TS_PREFIX}${userId}`);
+            if (stored && eventTimestamp <= new Date(stored)) {
+                Logger.info("Skipping stale event", { userId, eventTimestamp: eventTimestamp.toISOString(), stored });
+                return true;
             }
         } catch (error) {
-            await this.redis.del(...keys).catch(() => {});
-            this.metrics.jobErrors.inc({ job_type: "cache_invalidate", error_type: "lock_failure" });
+            Logger.warn("Event Redis pre-check failed, proceeding to PG", { userId, error });
+        }
+        return false;
+    }
+
+    private async invalidateCache(userId: string, email: string): Promise<void> {
+        const keys = [CacheKeys.user(userId), CacheKeys.userByEmail(email)];
+        try {
+            await this.redis.del(...keys);
+            this.metrics.cacheOperations.inc({ operation: "invalidate", cache_type: "main" }, keys.length);
+        } catch (error) {
+            Logger.error("Failed to invalidate cache", error, { userId });
+            this.metrics.jobErrors.inc({ job_type: "cache_invalidate", error_type: "redis_error" });
+        }
+    }
+
+    private async setEventTimestamp(userId: string, eventTimestamp: Date): Promise<void> {
+        try {
+            await this.eventRedis.set(`${EVENT_TS_PREFIX}${userId}`, eventTimestamp.toISOString());
+        } catch (error) {
+            Logger.warn("Failed to set event timestamp in Redis", { userId, error });
         }
     }
 

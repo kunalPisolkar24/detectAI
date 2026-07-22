@@ -10,21 +10,33 @@ import { SubscriptionStatus } from "../../../../../../generated/prisma/client";
 
 describe("PaymentHandlers Integration", () => {
     let redis: any;
+    let eventRedis: any;
     let userRepository: PrismaUserRepository;
     let metrics: MetricsService;
 
     beforeEach(async () => {
+        const redisUrl = process.env.REDIS_URL!;
         redis = RedisFactory.createClient({
             mode: "standalone",
             name: "test-redis",
-            url: process.env.REDIS_URL,
+            url: redisUrl,
+        });
+        eventRedis = RedisFactory.createClient({
+            mode: "standalone",
+            name: "test-event-redis",
+            url: redisUrl,
         });
         metrics = new MetricsService("test-payments");
         userRepository = new PrismaUserRepository(prismaPrimary, prisma);
     });
 
+    afterEach(async () => {
+        await redis.quit().catch(() => {});
+        await eventRedis.quit().catch(() => {});
+    });
+
     test("should handle subscription canceled event", async () => {
-        const handler = new SubscriptionCanceledHandler(userRepository, redis, metrics);
+        const handler = new SubscriptionCanceledHandler(userRepository, redis, eventRedis, metrics);
 
         // 1. Seed user with active sub
         const user = await prismaPrimary.user.create({
@@ -44,7 +56,8 @@ describe("PaymentHandlers Integration", () => {
         // 2. Handle cancellation
         const eventData = {
             id: "sub_to_cancel",
-            canceled_at: new Date().toISOString()
+            canceled_at: new Date().toISOString(),
+            occurred_at: new Date().toISOString(),
         };
         await handler.handle(user.id, eventData as any);
 

@@ -32,6 +32,12 @@ export class PaymentService {
             return;
         }
 
+        const rawOccurredAt = (event as any).occurred_at;
+        if (!rawOccurredAt) {
+            Logger.warn("Event missing occurred_at, using server timestamp", { event_type, userId });
+        }
+        data.occurred_at = rawOccurredAt ?? new Date().toISOString();
+
         this.metrics.activeJobs.inc({ job_type: event_type });
         try {
             await handler.handle(userId, data);
