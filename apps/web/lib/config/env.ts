@@ -30,6 +30,7 @@ export const env = createEnv({
     PAYMENT_GATEWAY_URL: z.string().url().default("http://payment-gateway:8080"),
     INTERNAL_API_KEY: z.string().optional(),
     PROMETHEUS_WEB_SCRAPE_TOKEN: z.string().min(1).optional(),
+    RABBITMQ_URL: z.string().url(),
   },
   client: {
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1),
@@ -65,6 +66,7 @@ export const env = createEnv({
     PAYMENT_GATEWAY_URL: process.env.PAYMENT_GATEWAY_URL,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
     PROMETHEUS_WEB_SCRAPE_TOKEN: process.env.PROMETHEUS_WEB_SCRAPE_TOKEN,
+    RABBITMQ_URL: process.env.RABBITMQ_URL,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,
