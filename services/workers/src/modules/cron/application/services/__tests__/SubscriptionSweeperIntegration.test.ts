@@ -6,6 +6,7 @@ import { MetricsService } from "@shared/monitoring/MetricsService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
 import { SubscriptionSweeper } from "../SubscriptionSweeper";
 import { SubscriptionStatus } from "../../../../../../generated/prisma/client";
+import { Pool } from "pg";
 
 describe("SubscriptionSweeper Integration", () => {
     let sweeper: SubscriptionSweeper;
@@ -76,4 +77,46 @@ describe("SubscriptionSweeper Integration", () => {
         expect(updatedActive?.status).toBe(SubscriptionStatus.ACTIVE);
     });
 
+    test("should skip locked subscriptions with SKIP LOCKED", async () => {
+        const expiredDate = new Date(Date.now() - 10000);
+
+        const [user1, user2] = await Promise.all([
+            prismaPrimary.user.create({
+                data: {
+                    email: "skip-lock-1@test.com",
+                    subscription: {
+                        create: { status: SubscriptionStatus.ACTIVE, endsAt: expiredDate },
+                    },
+                },
+            }),
+            prismaPrimary.user.create({
+                data: {
+                    email: "skip-lock-2@test.com",
+                    subscription: {
+                        create: { status: SubscriptionStatus.ACTIVE, endsAt: expiredDate },
+                    },
+                },
+            }),
+        ]);
+
+        const lockPool = new Pool({ connectionString: process.env.DATABASE_URL });
+        const lockClient = await lockPool.connect();
+        try {
+            await lockClient.query("BEGIN");
+            await lockClient.query(
+                `SELECT id FROM "Subscription" WHERE "userId" = $1 FOR UPDATE`,
+                [user1.id],
+            );
+
+            const swept = await sweeper.processExpiredSubscriptions();
+            expect(swept).toBe(1);
+
+            const sub2 = await prismaPrimary.subscription.findUnique({ where: { userId: user2.id } });
+            expect(sub2?.status).toBe(SubscriptionStatus.CANCELED);
+        } finally {
+            await lockClient.query("ROLLBACK");
+            lockClient.release();
+            await lockPool.end();
+        }
+    });
 });

@@ -79,6 +79,11 @@ describe("SubscriptionSweeper", () => {
         const secondDelArgs = mockRedisClient.del.mock.calls[1] as string[];
         expect(secondDelArgs).toContain(CacheKeys.user("u1"));
         expect(secondDelArgs).toContain(CacheKeys.userByEmail("u1@test.com"));
+
+        const delCallOrder = mockRedisClient.del.mock.invocationCallOrder;
+        const updateCallOrder = mockUserRepository.bulkUpdateStatus.mock.invocationCallOrder;
+        expect(delCallOrder[0]).toBeLessThan(updateCallOrder[0]);
+        expect(updateCallOrder[0]).toBeLessThan(delCallOrder[1]);
     });
 
     test("should propagate error if db throws", async () => {

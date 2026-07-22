@@ -10,7 +10,6 @@ export interface IUserRepository {
     updateManyByIdAndSubscription(userId: string, subscriptionId: string, data: object): Promise<{ count: number }>;
     findUniqueById(userId: string): Promise<UserRecord | null>;
     bulkUpdateStatus(userIds: string[], data: object): Promise<{ count: number }>;
-    findExpiredSubscriptions(now: Date, limit: number): Promise<{ id: string; email: string }[]>;
     findExpiredSubscriptionsWithLock(limit: number): Promise<{ id: string; email: string }[]>;
     incrementUsage(userId: string, count: number): Promise<void>;
 }
@@ -72,26 +71,6 @@ export class PrismaUserRepository implements IUserRepository {
             },
             data,
         });
-    }
-
-    async findExpiredSubscriptions(now: Date, limit: number): Promise<{ id: string; email: string }[]> {
-        const subscriptions = await this.prismaWriter.subscription.findMany({
-            where: {
-                OR: [
-                    { status: SubscriptionStatus.ACTIVE },
-                    { status: SubscriptionStatus.TRIALING },
-                ],
-                endsAt: { lt: now },
-            },
-            take: limit,
-            select: { 
-                user: {
-                    select: { id: true, email: true }
-                }
-            },
-        });
-
-        return subscriptions.map((s: any) => s.user);
     }
 
     async findExpiredSubscriptionsWithLock(limit: number): Promise<{ id: string; email: string }[]> {
