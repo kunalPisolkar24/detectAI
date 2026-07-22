@@ -19,8 +19,8 @@ export interface PaymentEvent {
 
 export interface PaymentUpdatePayload {
   paddleCustomerId: string;
-  paddleSubscriptionId: string;
-  paddlePlanId: string;
+  paddleSubscriptionId: string | null;
+  paddlePlanId: string | null;
   status: SubscriptionStatus;
   endsAt: Date | null;
   cancellationScheduled?: boolean;
