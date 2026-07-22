@@ -45,6 +45,8 @@ export class SubscriptionSweeper {
     private async bulkDowngradeUsers(users: { id: string; email: string }[]): Promise<void> {
         const userIds = users.map(u => u.id);
 
+        // Pre-invalidate before DB write to shrink the stale-read window.
+        // If the write fails, the next read pays a cache-miss penalty — acceptable for consistency.
         await this.bulkInvalidateCache(users);
 
         await this.userRepository.bulkUpdateStatus(userIds, {

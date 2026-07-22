@@ -14,6 +14,7 @@ export interface PaddleEventData {
 
 export interface PaymentEvent {
   event_type: string;
+  occurred_at?: string;
   data: PaddleEventData;
 }
 
