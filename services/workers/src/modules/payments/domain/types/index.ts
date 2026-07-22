@@ -9,6 +9,7 @@ export interface PaddleEventData {
   current_billing_period?: { ends_at?: string };
   scheduled_change?: { effective_at?: string; action?: string };
   canceled_at?: string;
+  occurred_at?: string;
 }
 
 export interface PaymentEvent {
@@ -23,4 +24,5 @@ export interface PaymentUpdatePayload {
   status: SubscriptionStatus;
   endsAt: Date | null;
   cancellationScheduled?: boolean;
+  eventTimestamp?: Date;
 }
