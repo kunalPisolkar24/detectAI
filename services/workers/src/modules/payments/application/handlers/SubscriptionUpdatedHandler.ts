@@ -49,11 +49,12 @@ export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
 
         await this.invalidateCache(userId, user.email);
 
-        await this.userRepository.lockAndUpdateSubscription(userId, eventTimestamp, status, updateData, customerId);
+        const result = await this.userRepository.lockAndUpdateSubscription(userId, eventTimestamp, status, updateData, customerId);
 
-        await this.invalidateCache(userId, user.email);
-
-        await this.setEventTimestamp(userId, eventTimestamp);
+        if (!result.stale) {
+            await this.invalidateCache(userId, result.email);
+            await this.setEventTimestamp(userId, eventTimestamp);
+        }
     }
 
     private async isEventStale(userId: string, eventTimestamp: Date): Promise<boolean> {

@@ -19,7 +19,7 @@ export interface IUserRepository {
         status: SubscriptionStatus,
         payload: PaymentUpdatePayload,
         paddleCustomerId?: string
-    ): Promise<UserRecord>;
+    ): Promise<{ email: string; stale: boolean }>;
     getSubscriptionStatusWithLock(userId: string): Promise<SubscriptionStatus | null>;
 }
 
@@ -108,7 +108,7 @@ export class PrismaUserRepository implements IUserRepository {
         status: SubscriptionStatus,
         payload: PaymentUpdatePayload,
         paddleCustomerId?: string
-    ): Promise<UserRecord> {
+    ): Promise<{ email: string; stale: boolean }> {
         return this.prismaWriter.$transaction(async (tx: any) => {
             const rows = (await tx.$queryRawUnsafe(
                 `SELECT s."eventTimestamp", s.status FROM "Subscription" s WHERE s."userId" = $1 FOR UPDATE`,
@@ -119,7 +119,7 @@ export class PrismaUserRepository implements IUserRepository {
                 const stored = rows[0]!;
                 if (stored.eventTimestamp && eventTimestamp <= stored.eventTimestamp) {
                     const user = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
-                    return { email: user!.email };
+                    return { email: user!.email, stale: true };
                 }
                 validateTransition(stored.status as SubscriptionStatus | null, status);
             } else {
@@ -155,7 +155,7 @@ export class PrismaUserRepository implements IUserRepository {
             });
 
             const user = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
-            return { email: user!.email };
+            return { email: user!.email, stale: false };
         });
     }
 

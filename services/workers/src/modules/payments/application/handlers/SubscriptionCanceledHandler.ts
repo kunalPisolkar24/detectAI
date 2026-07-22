@@ -34,7 +34,7 @@ export class SubscriptionCanceledHandler implements IPaymentEventHandler {
 
         await this.invalidateCache(userId, user.email);
 
-        await this.userRepository.lockAndUpdateSubscription(
+        const result = await this.userRepository.lockAndUpdateSubscription(
             userId,
             eventTimestamp,
             SubscriptionStatus.CANCELED,
@@ -49,9 +49,10 @@ export class SubscriptionCanceledHandler implements IPaymentEventHandler {
             undefined
         );
 
-        await this.invalidateCache(userId, user.email);
-
-        await this.setEventTimestamp(userId, eventTimestamp);
+        if (!result.stale) {
+            await this.invalidateCache(userId, result.email);
+            await this.setEventTimestamp(userId, eventTimestamp);
+        }
     }
 
     private async isEventStale(userId: string, eventTimestamp: Date): Promise<boolean> {
