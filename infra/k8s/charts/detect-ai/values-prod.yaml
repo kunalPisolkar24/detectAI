@@ -42,7 +42,12 @@ payments:
 
 workers:
   analytics:
-    replicaCount: 1 # Analytical processor
+    replicaCount: 1
+    keda:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 10
+      queueLength: 50
   cron:
     replicaCount: 1 # Must remain at 1 to prevent double crons
   payments:
