@@ -50,7 +50,7 @@ const paddleClient = new PaddleClient(config.PADDLE_API_KEY, config.PADDLE_ENVIR
 
 const subscriptionUpdatedHandler = new SubscriptionUpdatedHandler(userRepository, redisClient, eventRedisClient, metricsService);
 const subscriptionCanceledHandler = new SubscriptionCanceledHandler(userRepository, redisClient, eventRedisClient, metricsService);
-const userCancelHandler = new UserCancelHandler(userRepository, paddleClient, eventRedisClient);
+const userCancelHandler = new UserCancelHandler(userRepository, paddleClient, redisClient, eventRedisClient, metricsService);
 
 const paymentService = new PaymentService(
     {
