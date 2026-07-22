@@ -31,6 +31,11 @@ describe("SubscriptionUpdatedHandler Integration", () => {
         handler = new SubscriptionUpdatedHandler(userRepository, redis, eventRedis, metrics);
     });
 
+    afterEach(async () => {
+        await redis.quit().catch(() => {});
+        await eventRedis.quit().catch(() => {});
+    });
+
     test("should handle subscription update and invalidate cache", async () => {
         // 1. Seed user
         const user = await prismaPrimary.user.create({

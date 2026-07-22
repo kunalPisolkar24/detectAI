@@ -28,7 +28,7 @@ const eventRedisClient = RedisFactory.createClient({
     url: config.EVENT_REDIS_URL,
     sentinels: config.EVENT_REDIS_SENTINELS,
     masterName: config.EVENT_REDIS_MASTER_NAME,
-    password: process.env.EVENT_REDIS_PASSWORD,
+    password: config.EVENT_REDIS_PASSWORD,
 });
 
 const metricsService = new MetricsService("worker-payments");

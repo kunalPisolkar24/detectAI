@@ -7,8 +7,6 @@ export interface UserRecord {
 }
 
 export interface IUserRepository {
-    updateById(userId: string, data: PaymentUpdatePayload, select: { email: true }): Promise<UserRecord>;
-    updateManyByIdAndSubscription(userId: string, subscriptionId: string, data: object): Promise<{ count: number }>;
     findUniqueById(userId: string): Promise<UserRecord | null>;
     bulkUpdateStatus(userIds: string[], data: object): Promise<{ count: number }>;
     findExpiredSubscriptionsWithLock(limit: number): Promise<{ id: string; email: string }[]>;
@@ -28,41 +26,6 @@ export class PrismaUserRepository implements IUserRepository {
         private readonly prismaWriter: any,
         private readonly prismaReader: any
     ) {}
-
-    async updateById(userId: string, data: PaymentUpdatePayload, select: { email: true }): Promise<UserRecord> {
-        return this.prismaWriter.user.update({
-            where: { id: userId },
-            data: {
-                paddleCustomerId: data.paddleCustomerId,
-                subscription: {
-                    upsert: {
-                        create: {
-                            paddleSubscriptionId: data.paddleSubscriptionId,
-                            paddlePlanId: data.paddlePlanId,
-                            status: data.status,
-                            endsAt: data.endsAt,
-                            cancellationScheduled: data.cancellationScheduled ?? false,
-                        },
-                        update: {
-                            paddleSubscriptionId: data.paddleSubscriptionId,
-                            paddlePlanId: data.paddlePlanId,
-                            status: data.status,
-                            endsAt: data.endsAt,
-                            cancellationScheduled: data.cancellationScheduled ?? false,
-                        }
-                    }
-                }
-            },
-            select,
-        });
-    }
-
-    async updateManyByIdAndSubscription(userId: string, subscriptionId: string, data: object): Promise<{ count: number }> {
-        return this.prismaWriter.subscription.updateMany({
-            where: { userId, paddleSubscriptionId: subscriptionId },
-            data,
-        });
-    }
 
     async findUniqueById(userId: string): Promise<UserRecord | null> {
         return this.prismaReader.user.findUnique({

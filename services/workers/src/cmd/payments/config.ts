@@ -10,6 +10,7 @@ const paymentEnvSchema = baseEnvSchema.omit({
   EVENT_REDIS_MODE: z.enum(["standalone", "sentinel"]).default("standalone"),
   EVENT_REDIS_SENTINELS: z.string().optional(),
   EVENT_REDIS_MASTER_NAME: z.string().optional(),
+  EVENT_REDIS_PASSWORD: z.string().optional(),
 });
 
 export const config = createConfig(paymentEnvSchema, "Payments");

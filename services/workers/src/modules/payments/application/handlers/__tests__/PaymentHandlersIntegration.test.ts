@@ -30,6 +30,11 @@ describe("PaymentHandlers Integration", () => {
         userRepository = new PrismaUserRepository(prismaPrimary, prisma);
     });
 
+    afterEach(async () => {
+        await redis.quit().catch(() => {});
+        await eventRedis.quit().catch(() => {});
+    });
+
     test("should handle subscription canceled event", async () => {
         const handler = new SubscriptionCanceledHandler(userRepository, redis, eventRedis, metrics);
 
