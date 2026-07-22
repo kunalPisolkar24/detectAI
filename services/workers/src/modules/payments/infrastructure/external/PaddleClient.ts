@@ -26,6 +26,11 @@ export class PaddleClient implements IPaddleClient {
             body: JSON.stringify({ effective_from: "next_billing_period" }),
         });
 
+        if (response.status === 409) {
+            Logger.warn("Subscription already canceled in Paddle", { subscriptionId });
+            return;
+        }
+
         if (!response.ok) {
             const errorData = await response.json();
             Logger.error("Paddle API error during subscription cancellation", { subscriptionId, errorData });
