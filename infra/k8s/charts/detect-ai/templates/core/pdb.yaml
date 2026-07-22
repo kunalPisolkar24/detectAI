@@ -1,0 +1,111 @@
+{{- $fullname := include "detect-ai.fullname" . }}
+
+# 1. Stateless App Tier PDBs
+# We use a minAvailable of 1 (or maxUnavailable 1) for apps running > 1 replicas
+{{- range $app, $config := dict "web" .Values.web "chats-api" .Values.chats.api "payments-gateway" .Values.payments "inference" .Values.inference }}
+{{- $isHA := false }}
+{{- if hasKey $config "autoscaling" }}
+  {{- if and $config.autoscaling.enabled (gt (int $config.autoscaling.minReplicas) 1) }}
+    {{- $isHA = true }}
+  {{- end }}
+  {{- if and (not $config.autoscaling.enabled) (gt (int $config.replicaCount) 1) }}
+    {{- $isHA = true }}
+  {{- end }}
+{{- else if hasKey $config "replicaCount" }}
+  {{- if gt (int $config.replicaCount) 1 }}
+    {{- $isHA = true }}
+  {{- end }}
+{{- end }}
+
+{{- if $isHA }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fullname }}-{{ $app }}-pdb
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" $ | nindent 4 }}
+spec:
+  # Ensure at least 1 pod remains during voluntary node drains
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "detect-ai.selectorLabels" $ | nindent 6 }}
+      app: {{ $app }}
+{{- end }}
+{{- end }}
+
+# 2. Database Tier PDBs
+
+{{- if .Values.databases.mongo.sharded }}
+---
+# MongoDB Router PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fullname }}-mongodb-router-pdb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
+      app: mongodb-router
+{{- end }}
+
+{{- if and .Values.databases.rabbitmq.replicaCount (gt (int .Values.databases.rabbitmq.replicaCount) 1) }}
+---
+# RabbitMQ Cluster PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fullname }}-rabbitmq-pdb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
+      app: rabbitmq
+{{- end }}
+
+{{- if .Values.databases.redis.sentinel.enabled }}
+---
+# Redis Sentinel PDB (requires quorum to survive, so maxUnavailable 1)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fullname }}-redis-sentinel-pdb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
+      app: redis-sentinel
+{{- end }}
+
+{{- if .Values.databases.redis.cluster.enabled }}
+---
+# Redis Cluster PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fullname }}-redis-cluster-pdb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
+      app: redis-cluster
+{{- end }}

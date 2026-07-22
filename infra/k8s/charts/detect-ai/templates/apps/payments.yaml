@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-payments-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: payments-gateway
+spec:
+  replicas: {{ .Values.payments.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
+      app: payments-gateway
+  template:
+    metadata:
+      labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
+        app: payments-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.payments.service.port }}"
+    spec:
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.global.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: payments-gateway
+          {{- with .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.payments.image.repository }}:{{ .Values.payments.image.tag }}"
+          imagePullPolicy: {{ .Values.payments.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.payments.service.port }}
+              protocol: TCP
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+          {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "{{ include "detect-ai.fullname" . }}-payments-gateway"
+          {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "detect-ai.fullname" . }}-config
+            - secretRef:
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            {{- toYaml .Values.payments.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-payments-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: payments-gateway
+spec:
+  type: {{ .Values.payments.service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .Values.payments.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
+    app: payments-gateway

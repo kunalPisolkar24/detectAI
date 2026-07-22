@@ -24,7 +24,8 @@ PROD_NETWORK := $(if $(PROD_NETWORK),$(PROD_NETWORK),detect_ai_network)
 	up down logs clean build rebuild shell-web \
 	prod-up prod-down prod-logs prod-clean prod-build prod-rebuild prod-config prod-ps prod-migrate \
 	prod-monitoring-up prod-monitoring-down prod-monitoring-logs prod-monitoring-config prod-monitoring-ps \
-	local-up local-down local-logs local-clean local-build local-rebuild local-config local-ps
+	local-up local-down local-logs local-clean local-build local-rebuild local-config local-ps \
+	k8s-dev-up k8s-dev-down k8s-prod-up k8s-prod-down k8s-cluster-up k8s-cluster-down
 
 help:
 	@printf "\nDetect AI Docker commands\n\n"
@@ -57,6 +58,13 @@ help:
 	@printf "  make local-rebuild     Rebuild local images without cache\n"
 	@printf "  make local-config      Render local compose config\n"
 	@printf "  make local-ps          Show local containers\n\n"
+	@printf "Kubernetes\n"
+	@printf "  make k8s-cluster-up    Create local Kind cluster and ingress controller\n"
+	@printf "  make k8s-cluster-down  Delete local Kind cluster\n"
+	@printf "  make k8s-dev-up        Deploy the dev environment to k8s using envs/.env.dev\n"
+	@printf "  make k8s-dev-down      Tear down the dev environment in k8s\n"
+	@printf "  make k8s-prod-up       Deploy the prod environment to k8s using envs/.env.prod\n"
+	@printf "  make k8s-prod-down     Tear down the prod environment in k8s\n\n"
 	@printf "Generic\n"
 	@printf "  make build STACK=prod|local [SERVICE=name]\n"
 	@printf "  make rebuild STACK=prod|local [SERVICE=name]\n"
@@ -162,3 +170,34 @@ local-ps:
 
 shell-web:
 	$(PROD_COMPOSE) exec frontend /bin/sh
+
+k8s-dev-up:
+	@bash infra/k8s/deploy.sh dev
+
+k8s-dev-down:
+	@helm uninstall staging -n detect-ai
+
+k8s-prod-up:
+	@bash infra/k8s/deploy.sh prod
+
+k8s-prod-down:
+	@helm uninstall prod -n detect-ai-prod
+
+k8s-cluster-up:
+	@echo "Checking if Kind cluster 'detect-ai' already exists..."
+	@if kind get clusters | grep -q "^detect-ai$$"; then \
+		echo "Cluster 'detect-ai' already exists. Skipping creation."; \
+	else \
+		echo "Creating Kind cluster with NGINX Ingress support..."; \
+		kind create cluster --name detect-ai --config infra/k8s/kind-cluster-config.yaml; \
+	fi
+	@echo "Installing NGINX Ingress Controller..."
+	@kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	@echo "Sleeping 10s to let Kubernetes register Ingress Controller pods..."
+	@sleep 10
+	@echo "Waiting for Ingress Controller to be ready..."
+	@kubectl wait --namespace ingress-nginx --for=condition=available deployment/ingress-nginx-controller --timeout=90s
+	@echo "Cluster is ready! You can now run 'make k8s-dev-up'."
+
+k8s-cluster-down:
+	@kind delete cluster --name detect-ai

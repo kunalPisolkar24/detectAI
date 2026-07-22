@@ -1,0 +1,148 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-rabbitmq
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: rabbitmq
+spec:
+  serviceName: {{ include "detect-ai.fullname" . }}-rabbitmq-headless
+  replicas: {{ .Values.databases.rabbitmq.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
+        app: rabbitmq
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "15692"
+    spec:
+      containers:
+        - name: rabbitmq
+          image: "rabbitmq:3.12-management-alpine"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: amqp
+              containerPort: 5672
+              protocol: TCP
+            - name: management
+              containerPort: 15672
+              protocol: TCP
+            - name: metrics
+              containerPort: 15692
+              protocol: TCP
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.secretName | default .Values.secretName }}
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.secretName | default .Values.secretName }}
+                  key: RABBITMQ_DEFAULT_PASS
+            # Enable built-in prometheus metrics plugin natively
+            - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
+              value: "-rabbitmq_prometheus prometheus_port 15692"
+          # Robust RabbitMQ diagnostic probes
+          startupProbe:
+            exec:
+              command:
+                - "rabbitmq-diagnostics"
+                - "-q"
+                - "check_running"
+            failureThreshold: 20
+            periodSeconds: 5
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - "rabbitmq-diagnostics"
+                - "-q"
+                - "check_running"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - "rabbitmq-diagnostics"
+                - "-q"
+                - "check_local_alarms"
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.databases.rabbitmq.resources | nindent 12 }}
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
+  volumeClaimTemplates:
+    - metadata:
+        name: rabbitmq-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ .Values.databases.storageClass | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.databases.rabbitmq.storageSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-rabbitmq
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: rabbitmq
+spec:
+  ports:
+    - port: 5672
+      targetPort: amqp
+      protocol: TCP
+      name: amqp
+    - port: 15672
+      targetPort: management
+      protocol: TCP
+      name: management
+    - port: 15692
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
+    app: rabbitmq
+---
+# Headless service for stable pod DNS identities (required by StatefulSet clustering)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-rabbitmq-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: rabbitmq
+spec:
+  clusterIP: None
+  ports:
+    - port: 5672
+      targetPort: amqp
+      protocol: TCP
+      name: amqp
+    - port: 15672
+      targetPort: management
+      protocol: TCP
+      name: management
+    - port: 15692
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
+    app: rabbitmq

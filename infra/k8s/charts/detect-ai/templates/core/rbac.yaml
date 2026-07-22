@@ -1,0 +1,41 @@
+# Promtail Scraper Role & Service Account
+{{- if .Values.monitoring.promtail.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-promtail
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-promtail-role
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/proxy
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-promtail-binding
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "detect-ai.fullname" . }}-promtail
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "detect-ai.fullname" . }}-promtail-role
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

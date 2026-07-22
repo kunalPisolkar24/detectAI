@@ -1,69 +1,311 @@
-api:
-  replicaCount: 1
+global:
+  environment: "production"
+  secretName: "detect-ai-secrets"
+  detectAiNetwork: "detect-ai-network"
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+
+fullnameOverride: "detect-ai"
+# Frontend Next.js Web App
+web:
+  replicaCount: 2
   image:
-    repository: kunalpisolkar/detect-ai
-    pullPolicy: IfNotPresent
+    repository: "localhost:5001/detect-ai-web"
+    pullPolicy: "IfNotPresent"
     tag: "latest"
   service:
-    type: ClusterIP
-    port: 5000
-  resources:
-    limits:
-      cpu: 500m
-      memory: 512Mi
-    requests:
-      cpu: 200m
-      memory: 256Mi
-  autoscaling:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 5
-    targetCPUUtilizationPercentage: 80
-
-web:
-  replicaCount: 1
-  image:
-    repository: localhost:5001/detect-ai-web
-    pullPolicy: IfNotPresent
-    tag: ""
-  service:
-    type: ClusterIP
+    type: "ClusterIP"
     port: 80
     targetPort: 3000
   resources:
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: "500m"
+      memory: "512Mi"
     requests:
-      cpu: 200m
-      memory: 256Mi
+      cpu: "200m"
+      memory: "512Mi"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+# FastAPI Document Parser Service
+documentParser:
+  replicaCount: 1
+  image:
+    repository: "kunalpisolkar/detect-ai-doc-parser"
+    pullPolicy: "IfNotPresent"
+    tag: "latest"
+  service:
+    type: "ClusterIP"
+    port: 8000
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
   autoscaling:
     enabled: false
     minReplicas: 1
-    maxReplicas: 5
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 75
+
+# ML Inference Service (Python + GPU Option)
+inference:
+  replicaCount: 1
+  image:
+    repository: "kunalpisolkar/detect-ai-inference"
+    pullPolicy: "IfNotPresent"
+    tag: "latest"
+  service:
+    type: "ClusterIP"
+    port: 50051
+    metricsPort: 8333
+  gpu:
+    enabled: false
+    limit: 1
+  resources:
+    limits:
+      cpu: "4.0"
+      memory: "8Gi"
+    requests:
+      cpu: "2.0"
+      memory: "4Gi"
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
     targetCPUUtilizationPercentage: 80
 
+# Go Chats Service (API and Worker roles)
+chats:
+  image:
+    repository: "kunalpisolkar/detect-ai-chats"
+    pullPolicy: "IfNotPresent"
+    tag: "latest"
+  api:
+    replicaCount: 2
+    service:
+      type: "ClusterIP"
+      grpcPort: 50051
+      metricsPort: 9091
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "200m"
+        memory: "512Mi"
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 75
+  worker:
+    replicaCount: 1
+    metricsPort: 9099
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "256Mi"
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+
+# Go Payment Gateway Service
+payments:
+  replicaCount: 2
+  image:
+    repository: "kunalpisolkar/detect-ai-payments-gateway"
+    pullPolicy: "IfNotPresent"
+    tag: "latest"
+  service:
+    type: "ClusterIP"
+    port: 8080
+  resources:
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+
+# Bun Workers
+workers:
+  image:
+    repository: "kunalpisolkar/detect-ai-workers"
+    pullPolicy: "IfNotPresent"
+    tag: "latest"
+  analytics:
+    replicaCount: 1
+    port: 7001
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "256Mi"
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+  cron:
+    replicaCount: 1
+    port: 7002
+    resources:
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+      requests:
+        cpu: "100m"
+        memory: "64Mi"
+  payments:
+    replicaCount: 1
+    port: 7003
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "256Mi"
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+    keda:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 10
+      queueLength: 50
+
+# Self-Hosted Databases & Stateful Services
+databases:
+  storageClass: "local-path"
+  postgres:
+    storageSize: "5Gi"
+    resources:
+      limits:
+        cpu: "1.0"
+        memory: "1Gi"
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+  mongo:
+    sharded: false
+    replicaCount: 1
+    storageSize: "5Gi"
+    resources:
+      limits:
+        cpu: "1.0"
+        memory: "1Gi"
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+  rabbitmq:
+    replicaCount: 1
+    storageSize: "5Gi"
+    resources:
+      limits:
+        cpu: "1.0"
+        memory: "1Gi"
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+  redis:
+    sentinel:
+      enabled: false
+      replicaCount: 3
+      storageSize: "2Gi"
+    cluster:
+      enabled: false
+      replicaCount: 6
+      storageSize: "2Gi"
+
+# NGINX Ingress Controller Routing
 ingress:
   enabled: true
   className: "nginx"
-  host: detect-ai.127.0.0.1.nip.io
+  host: "detect-ai.local"
+  tls:
+    # Set to true in production with a cert-manager ClusterIssuer configured
+    enabled: false
+    clusterIssuer: "letsencrypt-prod"
+  rateLimit:
+    # Enable in production to protect against DDoS and endpoint abuse
+    enabled: false
+    rps: "50"
+    burstMultiplier: "2"
 
-secretName: ""
-
+# LGTM Observability Stack Integration
 monitoring:
   enabled: true
-  prometheus:
-    prometheusSpec:
-      storageSpec:
-        volumeClaimTemplate:
-          spec:
-            accessModes: ["ReadWriteOnce"]
-            resources:
-              requests:
-                storage: 1Gi
-  grafana:
+  kube-prometheus-stack:
     enabled: true
-    adminPassword: "prom-operator"
+    prometheus:
+      prometheusSpec:
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 5Gi
+    grafana:
+      enabled: true
+      adminPassword: "prom-operator"
+      sidecar:
+        dashboards:
+          enabled: true
+          label: grafana_dashboard
+          labelValue: "1"
+          searchNamespace: ALL
+          provider:
+            foldersFromFilesStructure: true
+      additionalDataSources:
+        - name: Tempo
+          type: tempo
+          uid: tempo
+          url: http://detect-ai-tempo:3100
+          access: proxy
+          jsonData:
+            httpMethod: GET
+            serviceMap:
+              datasourceUid: prometheus
+            lokiSearch:
+              datasourceUid: loki
+  loki:
+    enabled: true
+    storageSize: "5Gi"
+  promtail:
+    enabled: true
+  tracing:
+    enabled: true
+    tempo:
+      storageSize: "10Gi"
+      retention: "48h"
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
+        requests:
+          cpu: "200m"
+          memory: "512Mi"
+    otelCollector:
+      replicaCount: 1
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
 
-migration:
+# Zero-Trust Network Policies
+networkPolicies:
+  # Set to true once you have confirmed the ingress-nginx namespace label is correct
   enabled: false

@@ -1,0 +1,57 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: {{ .Values.ingress.className | quote }}
+    nginx.ingress.kubernetes.io/client-max-body-size: "10m"
+    {{- if and .Values.ingress.tls .Values.ingress.tls.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.clusterIssuer | default "letsencrypt-prod" | quote }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    {{- end }}
+    {{- if and .Values.ingress.rateLimit .Values.ingress.rateLimit.enabled }}
+    nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.rateLimit.rps | default "50" | quote }}
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: {{ .Values.ingress.rateLimit.burstMultiplier | default "2" | quote }}
+    {{- end }}
+spec:
+  {{- if and .Values.ingress.tls .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ include "detect-ai.fullname" . }}-tls-secret
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          # Web Frontend (Next.js)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "detect-ai.fullname" . }}-web-service
+                port:
+                  name: http
+          # Payment Gateway (Paddle Webhook Receiver)
+          - path: /webhook/paddle
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "detect-ai.fullname" . }}-payments-service
+                port:
+                  number: 8080
+          # Grafana Dashboard (In-house monitoring)
+          {{- if .Values.monitoring.enabled }}
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-grafana
+                port:
+                  number: 80
+          {{- end }}
+{{- end }}

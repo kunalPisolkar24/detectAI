@@ -1,0 +1,109 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-otel-collector-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+data:
+  otel-collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 75
+        spike_limit_percentage: 15
+      batch:
+        send_batch_size: 8192
+        timeout: 200ms
+    exporters:
+      otlp:
+        endpoint: "{{ include "detect-ai.fullname" . }}-tempo:4317"
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-otel-collector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: otel-collector
+spec:
+  replicas: {{ .Values.monitoring.tracing.otelCollector.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
+        app: otel-collector
+    spec:
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.global.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: otel-collector
+          image: "otel/opentelemetry-collector-contrib:0.90.0"
+          imagePullPolicy: IfNotPresent
+          {{- with .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          args:
+            - "--config=/etc/otelcol/otel-collector.yaml"
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.monitoring.tracing.otelCollector.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "detect-ai.fullname" . }}-otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-otel-collector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: otel-collector
+spec:
+  ports:
+    - port: 4317
+      targetPort: otlp-grpc
+      name: otlp-grpc
+    - port: 4318
+      targetPort: otlp-http
+      name: otlp-http
+  selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
+    app: otel-collector
+{{- end }}

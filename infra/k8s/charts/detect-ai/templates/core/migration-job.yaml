@@ -1,0 +1,64 @@
+{{- if or .Values.databases.postgres.enabled (and .Values.global (eq .Values.global.environment "production")) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-migration-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: migration-job
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "-5"
+spec:
+  template:
+    metadata:
+      name: "{{ include "detect-ai.fullname" . }}-migration"
+      labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
+        app: migration-job
+    spec:
+      restartPolicy: OnFailure
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      initContainers:
+        # Actively poll and wait until Postgres is fully ready to accept traffic
+        - name: wait-for-postgres
+          image: "postgres:16-alpine"
+          imagePullPolicy: IfNotPresent
+          command:
+            - "sh"
+            - "-c"
+            - |
+              echo "Waiting for PostgreSQL at {{ include "detect-ai.fullname" . }}-postgres:5432..."
+              until pg_isready -h {{ include "detect-ai.fullname" . }}-postgres -p 5432 -U postgres; do
+                echo "Postgres is not ready yet. Retrying in 2 seconds..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready!"
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+      containers:
+        - name: prisma-migrate
+          image: "{{ .Values.web.image.repository }}-migrate:{{ .Values.web.image.tag | default "latest" }}"
+          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+  backoffLimit: 5
+{{- end }}

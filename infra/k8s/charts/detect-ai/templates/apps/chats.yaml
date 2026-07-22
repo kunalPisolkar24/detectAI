@@ -1,0 +1,194 @@
+# 1. Chats API gRPC Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-chats-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: chats-api
+spec:
+  replicas: {{ .Values.chats.api.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
+      app: chats-api
+  template:
+    metadata:
+      labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
+        app: chats-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.chats.api.service.metricsPort }}"
+    spec:
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.global.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "detect-ai.selectorLabels" . | nindent 20 }}
+                    app: chats-api
+                topologyKey: "kubernetes.io/hostname"
+      containers:
+        - name: chats-api
+          {{- with .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.chats.image.repository }}:{{ .Values.chats.image.tag }}"
+          imagePullPolicy: {{ .Values.chats.image.pullPolicy }}
+          command: ["/app/chat-service"]
+          args: ["server"]
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.chats.api.service.grpcPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.chats.api.service.metricsPort }}
+              protocol: TCP
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+          env:
+            - name: SERVICE_ROLE
+              value: "api"
+            {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
+            - name: OTEL_SERVICE_NAME
+              value: "{{ include "detect-ai.fullname" . }}-chats-api"
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "detect-ai.fullname" . }}-config
+            - secretRef:
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            {{- toYaml .Values.chats.api.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-chats-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: chats-api
+spec:
+  type: {{ .Values.chats.api.service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .Values.chats.api.service.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+    - port: {{ .Values.chats.api.service.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
+    app: chats-api
+
+---
+# 2. Chats Background Event Worker
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-chats-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: chats-worker
+spec:
+  replicas: {{ .Values.chats.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
+      app: chats-worker
+  template:
+    metadata:
+      labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
+        app: chats-worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.chats.worker.metricsPort }}"
+    spec:
+      {{- if .Values.global.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.secretName }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.global.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: chats-worker
+          {{- with .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.chats.image.repository }}:{{ .Values.chats.image.tag }}"
+          imagePullPolicy: {{ .Values.chats.image.pullPolicy }}
+          command: ["/app/chat-service"]
+          args: ["worker"]
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.chats.worker.metricsPort }}
+              protocol: TCP
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+          env:
+            - name: SERVICE_ROLE
+              value: "worker"
+            {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
+            - name: OTEL_SERVICE_NAME
+              value: "{{ include "detect-ai.fullname" . }}-chats-worker"
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "detect-ai.fullname" . }}-config
+            - secretRef:
+                name: {{ .Values.global.secretName | default .Values.secretName }}
+          resources:
+            {{- toYaml .Values.chats.worker.resources | nindent 12 }}
+
+---
+# 3. Chats API Optional HPA
+{{- if .Values.chats.api.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-chats-api-hpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "detect-ai.fullname" . }}-chats-api
+  minReplicas: {{ .Values.chats.api.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.chats.api.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.chats.api.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}

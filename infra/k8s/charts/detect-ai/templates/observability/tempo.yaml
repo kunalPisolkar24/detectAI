@@ -1,0 +1,148 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-tempo-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+data:
+  tempo.yaml: |
+    server:
+      http_listen_port: 3100
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+    ingester:
+      max_block_duration: 5m
+    compactor:
+      ring:
+        kvstore:
+          store: memberlist
+    storage:
+      trace:
+        backend: local
+        block:
+          bloom_filter_false_positive: 0.05
+        local:
+          path: /var/tempo/traces
+        wal:
+          path: /var/tempo/wal
+    memberlist:
+      abort_if_cluster_join_fails: false
+      bind_port: 7946
+      join_members:
+        - 127.0.0.1:7946
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-tempo
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: tempo
+spec:
+  serviceName: {{ include "detect-ai.fullname" . }}-tempo-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
+      app: tempo
+  template:
+    metadata:
+      labels:
+        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
+        app: tempo
+    spec:
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.global.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: tempo
+          image: "grafana/tempo:2.3.0"
+          imagePullPolicy: IfNotPresent
+          {{- with .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          args:
+            - "-config.file=/etc/tempo/tempo.yaml"
+          ports:
+            - name: http
+              containerPort: 3100
+              protocol: TCP
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.monitoring.tracing.tempo.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tempo
+            - name: tempo-data
+              mountPath: /var/tempo
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "detect-ai.fullname" . }}-tempo-config
+  volumeClaimTemplates:
+    - metadata:
+        name: tempo-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ .Values.databases.storageClass | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.monitoring.tracing.tempo.storageSize | default "10Gi" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-tempo
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: tempo
+spec:
+  ports:
+    - port: 3100
+      targetPort: http
+      name: http
+    - port: 4317
+      targetPort: otlp-grpc
+      name: otlp-grpc
+    - port: 4318
+      targetPort: otlp-http
+      name: otlp-http
+  selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
+    app: tempo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-tempo-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: tempo
+spec:
+  clusterIP: None
+  ports:
+    - port: 3100
+      name: http
+  selector:
+    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
+    app: tempo
+{{- end }}
