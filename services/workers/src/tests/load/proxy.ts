@@ -6,7 +6,6 @@ import { Logger } from "@shared/logging/Logger";
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
-const REDIS_USAGE_URL = process.env.REDIS_USAGE_URL || "redis://localhost:6382";
 const REDIS_MODE = (process.env.REDIS_MODE as any) || "standalone";
 const PORT = 9999;
 const MOCK_MODE = process.env.MOCK_MODE === "true";
@@ -22,13 +21,6 @@ const redisClient = MOCK_MODE ? null : RedisFactory.createClient({
     sentinels: process.env.REDIS_SENTINELS ? JSON.parse(process.env.REDIS_SENTINELS) : undefined,
     masterName: process.env.REDIS_MASTER_NAME,
     password: process.env.REDIS_PASSWORD,
-});
-
-const usageRedisClient = MOCK_MODE ? null : RedisFactory.createClient({
-    mode: REDIS_MODE,
-    name: "LoadProxyUsageRedis",
-    url: REDIS_USAGE_URL,
-    password: process.env.REDIS_USAGE_PASSWORD || "usage_cache_password",
 });
 
 async function initAmqp() {
@@ -113,9 +105,8 @@ const server = serve({
                         update: {}
                     });
 
-                    if (usageRedisClient) {
-                        await usageRedisClient.sadd("usage:dirty_users", userId);
-                        await usageRedisClient.incrby(`usage:{${userId}}:pending`, count);
+                    if (amqpChannel) {
+                        amqpChannel.sendToQueue("analytics.usage", Buffer.from(JSON.stringify({ userId, count, timestamp: new Date().toISOString() })), { persistent: true });
                     }
                 }
 
