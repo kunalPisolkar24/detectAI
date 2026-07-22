@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { initializePaddle, Paddle } from "@paddle/paddle-js"
 import { ArrowLeft } from "lucide-react"
+import { confirmUpgradeAction } from "../actions/confirm-upgrade"
 import { toast } from "sonner"
 import { cn } from "@/lib/core/utils"
 import { env } from "@/lib/config/env"
@@ -14,8 +15,6 @@ import { Pricing } from "@/features/landing/pricing"
 
 const PREMIUM_MONTHLY_PRICE_ID = "pri_01jr2gqggwjakpc1hd9xzym7fy"
 const PREMIUM_YEARLY_PRICE_ID = "pri_01jr2gs8ckz66srr8sd1byh7n4"
-
-const POLL_INTERVALS_MS = [2000, 3000, 5000, 8000, 12000]
 
 export const UpgradeView = () => {
   const router = useRouter()
@@ -32,8 +31,7 @@ export const UpgradeView = () => {
             environment: "sandbox",
             eventCallback: async (data) => {
               if (data.name === "checkout.completed") {
-                toast.success("Payment received! Activating your Premium access…")
-                await pollForPremiumActivation()
+                await handleCheckoutCompleted()
               }
             },
           })
@@ -51,23 +49,19 @@ export const UpgradeView = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const pollForPremiumActivation = async () => {
-    for (const delay of POLL_INTERVALS_MS) {
-      await new Promise<void>(resolve => setTimeout(resolve, delay))
+  const handleCheckoutCompleted = async () => {
+    toast.success("Payment received! Activating your Premium access…")
+    const result = await confirmUpgradeAction()
 
-      const refreshed = await updateSession()
-
-      if (refreshed?.user?.isPremium) {
-        toast.success("Premium activated! Welcome to Flare.")
-        router.push("/chat")
-        return
-      }
+    if (result.isPremium) {
+      await updateSession({ isPremium: true })
+      toast.success("Premium activated! Welcome to Flare.")
+      router.push("/chat?upgrade_success=true")
+    } else {
+      toast.warning(
+        "Your subscription is being activated, please refresh."
+      )
     }
-
-    toast.warning(
-      "Your subscription is being processed. It may take a moment to reflect — try refreshing if it doesn't update shortly."
-    )
-    router.push("/chat")
   }
 
   const handlePlanSelect = (planId: string, billingCycle: "monthly" | "yearly") => {
