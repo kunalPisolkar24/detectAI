@@ -37,13 +37,6 @@ export class UserCancelHandler implements IPaymentEventHandler {
 
     if (await this.deduplicator.isStale(resolvedUserId, eventTimestamp)) return;
 
-    const currentStatus = await this.userRepository.getSubscriptionStatusWithLock(resolvedUserId);
-
-    if (currentStatus === SubscriptionStatus.CANCELED) {
-      Logger.info("Subscription already canceled, skipping Paddle API call", { userId: resolvedUserId, paddleSubscriptionId });
-      return;
-    }
-
     await this.paddleClient.cancelSubscription(paddleSubscriptionId);
 
     const user = await this.userRepository.findUniqueById(resolvedUserId);
@@ -53,25 +46,36 @@ export class UserCancelHandler implements IPaymentEventHandler {
       await this.invalidateCache(resolvedUserId, user.email);
     }
 
-    const result = await this.userRepository.lockAndUpdateSubscription(
-      resolvedUserId,
-      eventTimestamp,
-      SubscriptionStatus.CANCELED,
-      {
-        paddleCustomerId: "",
-        paddleSubscriptionId: null,
-        paddlePlanId: null,
-        status: SubscriptionStatus.CANCELED,
-        endsAt: null,
-        cancellationScheduled: false,
-      },
-      undefined
-    );
+    try {
+      const result = await this.userRepository.lockAndUpdateSubscription(
+        resolvedUserId,
+        eventTimestamp,
+        SubscriptionStatus.CANCELED,
+        {
+          paddleCustomerId: "",
+          paddleSubscriptionId: null,
+          paddlePlanId: null,
+          status: SubscriptionStatus.CANCELED,
+          endsAt: null,
+          cancellationScheduled: false,
+        },
+        undefined
+      );
 
-    if (!result.stale) {
-      await this.invalidateCache(resolvedUserId, result.email);
-      await this.deduplicator.markProcessed(resolvedUserId, eventTimestamp);
+      if (!result.stale) {
+        await this.invalidateCache(resolvedUserId, result.email);
+      }
+    } catch (error) {
+      // A concurrent webhook (subscription.canceled) may have already set the status to CANCELED.
+      // If so, validateTransition(CANCELED -> CANCELED) throws — that's fine, the end state is correct.
+      if (error instanceof Error && error.message.includes("CANCELED -> CANCELED")) {
+        Logger.info("Subscription already canceled by concurrent event", { userId: resolvedUserId });
+      } else {
+        throw error;
+      }
     }
+
+    await this.deduplicator.markProcessed(resolvedUserId, eventTimestamp);
   }
 
   private async invalidateCache(userId: string, email: string): Promise<void> {
