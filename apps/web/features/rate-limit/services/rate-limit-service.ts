@@ -2,26 +2,22 @@ import { usageRedis } from "@/lib/infrastructure/redis-limit"
 import { startOfDay, format } from "date-fns"
 import { metrics } from "@/lib/infrastructure/metrics"
 import { logger } from "@/lib/infrastructure/logger"
+import { analyticsPublisher } from "@/lib/infrastructure/analytics-publisher"
+import { prisma } from "@/lib/infrastructure/prisma"
 
 export interface IRateLimitService {
   checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }>
   trackUsage(userId: string): Promise<void>
-  getRealTimeUsage(userId: string): Promise<{ dailyCount: number; pendingCount: number }>
+  getRealTimeUsage(userId: string): Promise<{ dailyCount: number }>
 }
 
 export class RedisRateLimitService implements IRateLimitService {
   private static readonly FREE_TIER_LIMIT = 100
-  private static readonly PENDING_TTL = 86400
   private static readonly RATE_LIMIT_TTL = 86400
-  private static readonly GLOBAL_DIRTY_SET_KEY = "usage:dirty_users"
 
   private getDailyKey(userId: string): string {
     const today = format(startOfDay(new Date()), "yyyy-MM-dd")
     return `rate_limit:{${userId}}:daily:${today}`
-  }
-
-  private getPendingKey(userId: string): string {
-    return `usage:{${userId}}:pending`
   }
 
   public async checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }> {
@@ -51,43 +47,37 @@ export class RedisRateLimitService implements IRateLimitService {
 
   public async trackUsage(userId: string): Promise<void> {
     const dailyKey = this.getDailyKey(userId)
-    const pendingKey = this.getPendingKey(userId)
 
     const userPipeline = usageRedis.pipeline()
-
     userPipeline.incr(dailyKey)
     userPipeline.expire(dailyKey, RedisRateLimitService.RATE_LIMIT_TTL)
-    
-    userPipeline.incr(pendingKey)
-    userPipeline.expire(pendingKey, RedisRateLimitService.PENDING_TTL)
 
     try {
       await Promise.all([
         userPipeline.exec(),
-        usageRedis.sadd(RedisRateLimitService.GLOBAL_DIRTY_SET_KEY, userId)
+        analyticsPublisher.publish(userId, 1),
       ])
     } catch (error) {
       logger.error({ msg: "Failed to track usage metrics", userId, error })
     }
   }
 
-  public async getRealTimeUsage(userId: string): Promise<{ dailyCount: number; pendingCount: number }> {
-    const dailyKey = this.getDailyKey(userId)
-    const pendingKey = this.getPendingKey(userId)
-
+  public async getRealTimeUsage(userId: string): Promise<{ dailyCount: number }> {
     try {
-      const [daily, pending] = await Promise.all([
-        usageRedis.get(dailyKey),
-        usageRedis.get(pendingKey)
-      ])
-
-      return {
-        dailyCount: daily ? parseInt(daily, 10) : 0,
-        pendingCount: pending ? parseInt(pending, 10) : 0
+      const daily = await usageRedis.get(this.getDailyKey(userId))
+      if (daily !== null) {
+        return { dailyCount: parseInt(daily, 10) }
       }
     } catch (error) {
-      logger.error({ msg: "Failed to retrieve real-time usage", userId, error })
-      return { dailyCount: 0, pendingCount: 0 }
+      logger.error({ msg: "Redis read failed, falling back to DB", userId, error })
+    }
+
+    try {
+      const usage = await prisma.usage.findUnique({ where: { userId } })
+      return { dailyCount: usage?.apiCallCountDaily ?? 0 }
+    } catch (error) {
+      logger.error({ msg: "DB fallback failed for real-time usage", userId, error })
+      return { dailyCount: 0 }
     }
   }
 }
