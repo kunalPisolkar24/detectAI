@@ -21,6 +21,7 @@ export const lockService = {
   },
 
   async executeMulti<T>(keys: string[], task: () => Promise<T>, ttlMs = 5000): Promise<T> {
-    return this.execute(keys[0], task, ttlMs)
+    const compositeKey = [...keys].sort().join("||")
+    return this.execute(compositeKey, task, ttlMs)
   },
 }
