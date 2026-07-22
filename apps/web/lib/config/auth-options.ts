@@ -89,6 +89,7 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: "jwt",
+    maxAge: 60 * 60,
   },
   secret: env.NEXTAUTH_SECRET,
   callbacks: {
@@ -96,22 +97,9 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id
         token.isPremium = user.isPremium ?? false
-      }
-
-      if (token.id) {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const dbUser = await userService.getUserById(token.id) as any
-
-          if (dbUser) {
-            token.name = dbUser.name ?? token.name
-            token.email = dbUser.email ?? token.email
-            token.picture = dbUser.image ?? token.picture
-            token.isPremium = dbUser.subscription?.status === SubscriptionStatus.ACTIVE
-          }
-        } catch (error) {
-          console.error("JWT Callback error:", error)
-        }
+        token.name = user.name ?? null
+        token.email = user.email ?? null
+        token.picture = user.image ?? null
       }
 
       if (trigger === "update" && session) {
