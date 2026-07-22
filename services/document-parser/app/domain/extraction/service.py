@@ -10,9 +10,8 @@ from app.domain.extraction.cleaner import TextCleaner
 
 class ExtractionService:
     @staticmethod
-    def process_file(file: UploadFile) -> str:
+    def process_file(file: UploadFile, mime_type: str) -> str:
         suffix = os.path.splitext(file.filename or "")[1]
-        mime_type = file.content_type or "unknown"
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp_path = tmp.name

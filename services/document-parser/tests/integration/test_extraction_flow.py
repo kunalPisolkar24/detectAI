@@ -49,11 +49,10 @@ def test_full_extraction_docx(client, fixtures_dir):
     assert "Hello Integration Test DOCX" in data["text"]
 
 @pytest.mark.integration
-def test_extraction_invalid_magic_number(client, fixtures_dir):
-    file_path = os.path.join(fixtures_dir, "spoofed.pdf")
-    with open(file_path, "rb") as f:
-        files = {"file": ("spoofed.pdf", f, "application/pdf")}
-        response = client.post("/extract", files=files)
-    
-    assert response.status_code == 422
-    assert "Invalid file signature" in response.json()["detail"]
+def test_extraction_unsupported_type_rejected(client):
+    # GIF header is detected as image/gif, which is not an allowed type
+    files = {"file": ("document.gif", b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00!\xf9\x04\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;", "image/gif")}
+    response = client.post("/extract", files=files)
+
+    assert response.status_code == 415
+    assert "Unsupported media type" in response.json()["detail"]

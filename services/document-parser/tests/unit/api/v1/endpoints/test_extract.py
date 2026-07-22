@@ -13,7 +13,7 @@ def test_health_check(client):
     assert response.json() == {"status": "ok"}
 
 def test_extract_txt_success(client, mocker):
-    mocker.patch("app.api.v1.endpoints.extract.validate_upload", return_value=None)
+    mocker.patch("app.api.v1.endpoints.extract.validate_upload", return_value="text/plain")
     mocker.patch("app.domain.extraction.service.ExtractionService.process_file", return_value="Extracted Content")
 
     files = {"file": ("test.txt", b"Content", "text/plain")}
@@ -23,16 +23,16 @@ def test_extract_txt_success(client, mocker):
     assert response.json()["text"] == "Extracted Content"
 
 def test_invalid_mime_type(client):
-    files = {"file": ("image.png", b"data", "image/png")}
+    # PNG header is detected as image/png, which is not an allowed type
+    files = {"file": ("image.png", b"\x89PNG\r\n\x1a\n", "image/png")}
     response = client.post("/extract", files=files)
     assert response.status_code == 415
 
 def test_invalid_magic_number(client):
-    # Spoof PDF content type but provide wrong magic number
-    files = {"file": ("spoof.pdf", b"This is not a PDF", "application/pdf")}
+    # PNG header content is detected as image/png, which is not an allowed type
+    files = {"file": ("spoof.pdf", b"\x89PNG\r\n\x1a\n", "application/pdf")}
     response = client.post("/extract", files=files)
-    assert response.status_code == 422
-    assert "Invalid file signature" in response.json()["detail"]
+    assert response.status_code == 415
 
 def test_file_too_large(client, mocker):
     from app.core.exceptions import FileTooLargeError
