@@ -22,14 +22,14 @@ def test_extract_txt_success(client, mocker):
     assert response.status_code == 200
     assert response.json()["text"] == "Extracted Content"
 
-def test_invalid_mime_type(client):
-    # PNG header is detected as image/png, which is not an allowed type
+def test_invalid_mime_type(client, mocker):
+    mocker.patch("app.api.deps.magic.from_buffer", return_value="image/png")
     files = {"file": ("image.png", b"\x89PNG\r\n\x1a\n", "image/png")}
     response = client.post("/extract", files=files)
     assert response.status_code == 415
 
-def test_invalid_magic_number(client):
-    # PNG header content is detected as image/png, which is not an allowed type
+def test_content_type_mismatch_rejected(client, mocker):
+    mocker.patch("app.api.deps.magic.from_buffer", return_value="image/png")
     files = {"file": ("spoof.pdf", b"\x89PNG\r\n\x1a\n", "application/pdf")}
     response = client.post("/extract", files=files)
     assert response.status_code == 415
