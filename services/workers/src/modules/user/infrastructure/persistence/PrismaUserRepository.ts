@@ -1,5 +1,6 @@
 import { SubscriptionStatus } from "../../../../../generated/prisma/client";
 import { type PaymentUpdatePayload } from "@modules/payments/domain/types";
+import { validateTransition } from "@modules/payments/domain/stateMachine";
 
 export interface UserRecord {
     email: string;
@@ -12,6 +13,12 @@ export interface IUserRepository {
     bulkUpdateStatus(userIds: string[], data: object): Promise<{ count: number }>;
     findExpiredSubscriptionsWithLock(limit: number): Promise<{ id: string; email: string }[]>;
     incrementUsage(userId: string, count: number): Promise<void>;
+    lockAndUpdateSubscription(
+        userId: string,
+        eventTimestamp: Date,
+        status: SubscriptionStatus,
+        payload: PaymentUpdatePayload
+    ): Promise<UserRecord>;
 }
 
 export class PrismaUserRepository implements IUserRepository {
@@ -79,6 +86,59 @@ export class PrismaUserRepository implements IUserRepository {
             limit,
         );
         return rows;
+    }
+
+    async lockAndUpdateSubscription(
+        userId: string,
+        eventTimestamp: Date,
+        status: SubscriptionStatus,
+        payload: PaymentUpdatePayload
+    ): Promise<UserRecord> {
+        return this.prismaWriter.$transaction(async (tx: any) => {
+            const rows = (await tx.$queryRawUnsafe(
+                `SELECT s."eventTimestamp", s.status FROM "Subscription" s WHERE s."userId" = $1 FOR UPDATE`,
+                userId,
+            )) as Array<{ eventTimestamp: Date | null; status: string | null }>;
+
+            if (rows.length > 0) {
+                const stored = rows[0]!;
+                if (stored.eventTimestamp && eventTimestamp <= stored.eventTimestamp) {
+                    const user = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
+                    return { email: user!.email };
+                }
+                validateTransition(stored.status as SubscriptionStatus | null, status);
+            } else {
+                validateTransition(null, status);
+            }
+
+            return tx.user.update({
+                where: { id: userId },
+                data: {
+                    paddleCustomerId: payload.paddleCustomerId,
+                    subscription: {
+                        upsert: {
+                            create: {
+                                paddleSubscriptionId: payload.paddleSubscriptionId,
+                                paddlePlanId: payload.paddlePlanId,
+                                status: payload.status,
+                                endsAt: payload.endsAt,
+                                cancellationScheduled: payload.cancellationScheduled ?? false,
+                                eventTimestamp,
+                            },
+                            update: {
+                                paddleSubscriptionId: payload.paddleSubscriptionId,
+                                paddlePlanId: payload.paddlePlanId,
+                                status: payload.status,
+                                endsAt: payload.endsAt,
+                                cancellationScheduled: payload.cancellationScheduled ?? false,
+                                eventTimestamp,
+                            },
+                        },
+                    },
+                },
+                select: { email: true },
+            });
+        });
     }
 
     async incrementUsage(userId: string, count: number): Promise<void> {
