@@ -34,6 +34,13 @@ def test_content_type_mismatch_rejected(client, mocker):
     response = client.post("/extract", files=files)
     assert response.status_code == 415
 
+# The early size guard (deps.py:8) uses file.size from the Content-Length header.
+# When Content-Length is absent (chunked transfer), file.size is None and the guard
+# is silently skipped. This is intentional — the fast-fail is a best-effort benefit
+# for honest clients. The authoritative size check runs in the thread pool
+# (service.py:21) and cannot be bypassed. FastAPI's TestClient always sets
+# Content-Length, so a unit test for the None path is not feasible here.
+
 def test_file_too_large(client, mocker):
     from app.core.exceptions import FileTooLargeError
     mocker.patch("app.api.v1.endpoints.extract.validate_upload", side_effect=FileTooLargeError(20, 10))

@@ -31,13 +31,14 @@ def test_process_file_success(mocker):
 
 
 def test_process_file_too_large(mocker):
-    from app.core.config import settings
     from app.core.exceptions import FileTooLargeError
+    import app.domain.extraction.service as svc
+
+    mocker.patch.object(svc.settings, "MAX_UPLOAD_SIZE_BYTES", 100)
 
     mock_file = MagicMock()
     mock_file.filename = "large.txt"
-    oversized = b"x" * (settings.MAX_UPLOAD_SIZE_BYTES + 1)
-    mock_file.file.read.return_value = oversized
+    mock_file.file.read.return_value = b"x" * 101
 
     with pytest.raises(FileTooLargeError) as exc_info:
         ExtractionService.process_file(mock_file, "text/plain")

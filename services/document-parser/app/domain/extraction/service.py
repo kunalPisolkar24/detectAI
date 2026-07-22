@@ -34,6 +34,8 @@ class ExtractionService:
                 )
 
                 return cleaned_text
+            except FileTooLargeError:
+                raise
             except Exception:
                 record_extraction_failure(
                     mime_type=mime_type,
