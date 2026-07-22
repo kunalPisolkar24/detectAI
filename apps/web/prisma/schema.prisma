@@ -45,6 +45,7 @@ model Subscription {
   status                   SubscriptionStatus?
   endsAt                   DateTime?
   cancellationScheduled    Boolean @default(false)
+  eventTimestamp           DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
