@@ -13,20 +13,16 @@ const { SubscriptionSweeper } = await import("../../../application/services/Subs
 describe("SubscriptionSweeper", () => {
     let sweeper: InstanceType<typeof SubscriptionSweeper>;
     let metricsMock: MetricsService;
-    let mockRelease: ReturnType<typeof mock>;
-    let mockAcquire: ReturnType<typeof mock>;
     let mockUserRepository: {
-        findExpiredSubscriptions: ReturnType<typeof mock>;
+        findExpiredSubscriptionsWithLock: ReturnType<typeof mock>;
         bulkUpdateStatus: ReturnType<typeof mock>;
     };
 
     beforeEach(() => {
         mockRedisClient.del.mockClear();
-        mockRelease = mock(() => Promise.resolve());
-        mockAcquire = mock(() => Promise.resolve(mockRelease));
 
         mockUserRepository = {
-            findExpiredSubscriptions: mock(() => Promise.resolve([])),
+            findExpiredSubscriptionsWithLock: mock(() => Promise.resolve([])),
             bulkUpdateStatus: mock(() => Promise.resolve({ count: 0 })),
         };
 
@@ -46,25 +42,16 @@ describe("SubscriptionSweeper", () => {
         sweeper = new SubscriptionSweeper(
             mockUserRepository as any,
             mockRedisClient as any,
-            { acquire: mockAcquire } as any,
             metricsMock
         );
     });
 
-    test("should return 0 and do nothing if lock cannot be acquired", async () => {
-        mockAcquire.mockResolvedValue(null);
-        const count = await sweeper.processExpiredSubscriptions();
-        expect(count).toBe(0);
-        expect(mockUserRepository.findExpiredSubscriptions).not.toHaveBeenCalled();
-    });
-
     test("should return 0 and do nothing if no expired subscriptions found", async () => {
-        mockUserRepository.findExpiredSubscriptions.mockResolvedValue([]);
+        mockUserRepository.findExpiredSubscriptionsWithLock.mockResolvedValue([]);
         const count = await sweeper.processExpiredSubscriptions();
         expect(count).toBe(0);
         expect(mockUserRepository.bulkUpdateStatus).not.toHaveBeenCalled();
         expect(mockRedisClient.del).not.toHaveBeenCalled();
-        expect(mockRelease).toHaveBeenCalled();
     });
 
     test("should downgrade users and invalidate cache", async () => {
@@ -72,7 +59,7 @@ describe("SubscriptionSweeper", () => {
             { id: "u1", email: "u1@test.com" },
             { id: "u2", email: "u2@test.com" }
         ];
-        mockUserRepository.findExpiredSubscriptions.mockResolvedValue(expiredUsers);
+        mockUserRepository.findExpiredSubscriptionsWithLock.mockResolvedValue(expiredUsers);
         mockUserRepository.bulkUpdateStatus.mockResolvedValue({ count: 2 });
 
         const count = await sweeper.processExpiredSubscriptions();
@@ -83,28 +70,31 @@ describe("SubscriptionSweeper", () => {
             expect.objectContaining({ status: "CANCELED" })
         );
 
-        const delArgs = mockRedisClient.del.mock.calls[0] as string[];
-        expect(delArgs).toContain(CacheKeys.user("u1"));
-        expect(delArgs).toContain(CacheKeys.userByEmail("u1@test.com"));
-        expect(mockRelease).toHaveBeenCalled();
+        expect(mockRedisClient.del).toHaveBeenCalledTimes(2);
+
+        const firstDelArgs = mockRedisClient.del.mock.calls[0] as string[];
+        expect(firstDelArgs).toContain(CacheKeys.user("u1"));
+        expect(firstDelArgs).toContain(CacheKeys.userByEmail("u1@test.com"));
+
+        const secondDelArgs = mockRedisClient.del.mock.calls[1] as string[];
+        expect(secondDelArgs).toContain(CacheKeys.user("u1"));
+        expect(secondDelArgs).toContain(CacheKeys.userByEmail("u1@test.com"));
     });
 
-    test("should release lock even if db throws", async () => {
-        mockUserRepository.findExpiredSubscriptions.mockResolvedValue([{ id: "u1", email: "u1@test.com" }]);
+    test("should propagate error if db throws", async () => {
+        mockUserRepository.findExpiredSubscriptionsWithLock.mockResolvedValue([{ id: "u1", email: "u1@test.com" }]);
         mockUserRepository.bulkUpdateStatus.mockRejectedValue(new Error("DB Fail"));
 
         await expect(sweeper.processExpiredSubscriptions()).rejects.toThrow("DB Fail");
-        expect(mockRedisClient.del).not.toHaveBeenCalled();
-        expect(mockRelease).toHaveBeenCalled();
+        expect(mockRedisClient.del).toHaveBeenCalledTimes(1);
     });
 
     test("should continue and return count if redis invalidation fails", async () => {
-        mockUserRepository.findExpiredSubscriptions.mockResolvedValue([{ id: "u1", email: "u1@test.com" }]);
+        mockUserRepository.findExpiredSubscriptionsWithLock.mockResolvedValue([{ id: "u1", email: "u1@test.com" }]);
         mockUserRepository.bulkUpdateStatus.mockResolvedValue({ count: 1 });
         mockRedisClient.del.mockRejectedValue(new Error("Redis Fail"));
 
         const count = await sweeper.processExpiredSubscriptions();
         expect(count).toBe(1);
-        expect(mockRelease).toHaveBeenCalled();
     });
 });
