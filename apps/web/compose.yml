@@ -66,6 +66,8 @@ services:
       - CHAT_SERVICE_URL=${CHAT_SERVICE_URL}
       # File Processing Service
       - FILE_EXTRACTOR_API_URL=${FILE_EXTRACTOR_API_URL}
+      # RabbitMQ
+      - RABBITMQ_URL=${RABBITMQ_URL}
     ports:
       - "${PORT_FRONTEND}:3000"
     networks:

@@ -35,6 +35,7 @@ services:
       - PAYMENT_GATEWAY_URL=${PAYMENT_GATEWAY_URL}
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
       - CHAT_SERVICE_URL=${CHAT_SERVICE_URL}
+      - RABBITMQ_URL=${RABBITMQ_URL}
 
   payment-gateway:
     build:
@@ -59,11 +60,10 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REDIS_URL=${REDIS_URL}
-      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
       - REDIS_MODE=${REDIS_MODE:-standalone}
       - REDIS_SENTINELS=${REDIS_SENTINELS}
       - REDIS_MASTER_NAME=${REDIS_MASTER_NAME}
-      - REDIS_USAGE_MODE=${REDIS_USAGE_MODE}
+      - RABBITMQ_URL=${RABBITMQ_URL}
     volumes:
       - ../../services/workers:/app
       - /app/node_modules

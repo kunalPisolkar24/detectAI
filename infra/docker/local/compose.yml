@@ -195,8 +195,7 @@ services:
       REDIS_MODE: ${REDIS_MODE}
       REDIS_SENTINELS: ${REDIS_SENTINELS}
       REDIS_MASTER_NAME: ${REDIS_MASTER_NAME}
-      REDIS_USAGE_URL: ${REDIS_USAGE_URL}
-      REDIS_USAGE_MODE: ${REDIS_USAGE_MODE}
+      RABBITMQ_URL: ${RABBITMQ_URL}
       PORT: ${WORKER_ANALYTICS_PORT}
     ports:
       - "${WORKER_ANALYTICS_PORT}:7001"
@@ -207,7 +206,7 @@ services:
         condition: service_healthy
       redis-app:
         condition: service_healthy
-      redis-usage:
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7001/health"]
@@ -394,6 +393,7 @@ services:
       AI_SERVICE_API_KEY: ${AI_SERVICE_API_KEY}
       CHAT_SERVICE_URL: ${CHAT_SERVICE_URL}
       FILE_EXTRACTOR_API_URL: ${FILE_EXTRACTOR_API_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
     ports:
       - "${PORT_FRONTEND}:3000"
     depends_on:
