@@ -32,6 +32,9 @@ export class PaymentService {
             return;
         }
 
+        const occurredAt = (event as any).occurred_at ?? new Date().toISOString();
+        data.occurred_at = occurredAt;
+
         this.metrics.activeJobs.inc({ job_type: event_type });
         try {
             await handler.handle(userId, data);
