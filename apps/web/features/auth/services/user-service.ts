@@ -51,7 +51,7 @@ export class UserService {
     const emailKey = cacheService.keys.userByEmail(currentUser.email)
     const lockKeys = [idKey, emailKey]
 
-    return lockService.execute(lockKeys, async () => {
+    return lockService.executeMulti(lockKeys, async () => {
       const updatedUser = await userRepository.update(id, data)
 
       const keysInvalidate = [idKey, emailKey]

@@ -20,6 +20,7 @@ vi.mock('@/lib/services/cache-service', () => ({
 vi.mock('@/lib/services/lock-service', () => ({
   lockService: {
     execute: vi.fn((_key: unknown, fn: () => unknown) => fn()),
+    executeMulti: vi.fn((_keys: unknown, fn: () => unknown) => fn()),
   },
 }))
 
@@ -168,7 +169,7 @@ describe('UserService', () => {
 
       await userService.updateUser('user-1', { name: 'X' })
 
-      expect(lockService.execute).toHaveBeenCalledWith(
+      expect(lockService.executeMulti).toHaveBeenCalledWith(
         expect.arrayContaining(['user:user-1', 'user:email:test@example.com']),
         expect.any(Function),
       )
