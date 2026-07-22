@@ -4,7 +4,6 @@ import { RedisFactory } from "@shared/cache/RedisClient";
 import { Logger } from "@shared/logging/Logger";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
-import { LockService } from "@shared/cache/lock";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
 import { config } from "./config";
 
@@ -30,9 +29,8 @@ redisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_
 redisClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 0));
 redisClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 0));
 
-const lockService = new LockService(redisClient);
 const userRepository = new PrismaUserRepository(prismaPrimary, prisma);
-const sweeper = new SubscriptionSweeper(userRepository, redisClient, lockService, metricsService);
+const sweeper = new SubscriptionSweeper(userRepository, redisClient, metricsService);
 
 const server = new WorkerServer(
     metricsService,
