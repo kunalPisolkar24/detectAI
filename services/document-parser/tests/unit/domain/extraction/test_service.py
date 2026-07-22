@@ -13,10 +13,9 @@ def test_process_file_success(mocker):
 
     mock_file = MagicMock()
     mock_file.filename = "test.txt"
-    mock_file.content_type = "text/plain"
     mock_file.file.read.return_value = b"Dummy Content"
 
-    result = ExtractionService.process_file(mock_file)
+    result = ExtractionService.process_file(mock_file, "text/plain")
 
     assert result == "Cleaned Text"
     mock_strategy.extract.assert_called_once()
@@ -31,6 +30,22 @@ def test_process_file_success(mocker):
     assert not os.path.exists(called_path)
 
 
+def test_process_file_too_large(mocker):
+    from app.core.exceptions import FileTooLargeError
+    import app.domain.extraction.service as svc
+
+    mocker.patch.object(svc.settings, "MAX_UPLOAD_SIZE_BYTES", 100)
+
+    mock_file = MagicMock()
+    mock_file.filename = "large.txt"
+    mock_file.file.read.return_value = b"x" * 101
+
+    with pytest.raises(FileTooLargeError) as exc_info:
+        ExtractionService.process_file(mock_file, "text/plain")
+
+    assert "exceeds limit" in str(exc_info.value)
+
+
 def test_process_file_cleanup_on_error(mocker):
     mock_strategy = MagicMock()
     mock_strategy.extract.side_effect = Exception("Parsing Failed")
@@ -39,11 +54,10 @@ def test_process_file_cleanup_on_error(mocker):
 
     mock_file = MagicMock()
     mock_file.filename = "test.pdf"
-    mock_file.content_type = "application/pdf"
     mock_file.file.read.return_value = b"Dummy PDF Content"
 
     with pytest.raises(Exception) as exc_info:
-        ExtractionService.process_file(mock_file)
+        ExtractionService.process_file(mock_file, "application/pdf")
 
     assert str(exc_info.value) == "Parsing Failed"
     mock_record_failure.assert_called_once_with(

@@ -1,6 +1,8 @@
 import os
 import tempfile
 from fastapi import UploadFile
+from app.core.config import settings
+from app.core.exceptions import FileTooLargeError
 from app.core.metrics import record_extraction, record_extraction_failure
 from app.domain.extraction.strategies import ExtractorFactory
 from app.domain.extraction.cleaner import TextCleaner
@@ -8,15 +10,16 @@ from app.domain.extraction.cleaner import TextCleaner
 
 class ExtractionService:
     @staticmethod
-    def process_file(file: UploadFile) -> str:
+    def process_file(file: UploadFile, mime_type: str) -> str:
         suffix = os.path.splitext(file.filename or "")[1]
-        mime_type = file.content_type or "unknown"
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp_path = tmp.name
             try:
                 content = file.file.read()
                 file_size_bytes = len(content)
+                if file_size_bytes > settings.MAX_UPLOAD_SIZE_BYTES:
+                    raise FileTooLargeError(file_size_bytes, settings.MAX_UPLOAD_SIZE_BYTES)
                 tmp.write(content)
                 tmp.flush()
 
@@ -31,6 +34,8 @@ class ExtractionService:
                 )
 
                 return cleaned_text
+            except FileTooLargeError:
+                raise
             except Exception:
                 record_extraction_failure(
                     mime_type=mime_type,

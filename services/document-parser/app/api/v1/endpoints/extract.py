@@ -8,18 +8,19 @@ router = APIRouter()
 
 @router.post("/extract", response_model=ExtractionResponse)
 async def extract_text(request: Request, file: UploadFile = File(...)):
-    await validate_upload(file)
+    mime_type = await validate_upload(file)
 
     loop = asyncio.get_running_loop()
     extracted_text = await loop.run_in_executor(
         request.app.state.process_pool,
         ExtractionService.process_file,
-        file
+        file,
+        mime_type,
     )
 
     return ExtractionResponse(
         filename=file.filename or "unknown",
-        content_type=file.content_type or "unknown",
+        content_type=mime_type,
         text_length=len(extracted_text),
         text=extracted_text
     )
