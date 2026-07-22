@@ -1,6 +1,8 @@
 import os
 import tempfile
 from fastapi import UploadFile
+from app.core.config import settings
+from app.core.exceptions import FileTooLargeError
 from app.core.metrics import record_extraction, record_extraction_failure
 from app.domain.extraction.strategies import ExtractorFactory
 from app.domain.extraction.cleaner import TextCleaner
@@ -17,6 +19,8 @@ class ExtractionService:
             try:
                 content = file.file.read()
                 file_size_bytes = len(content)
+                if file_size_bytes > settings.MAX_UPLOAD_SIZE_BYTES:
+                    raise FileTooLargeError(file_size_bytes, settings.MAX_UPLOAD_SIZE_BYTES)
                 tmp.write(content)
                 tmp.flush()
 

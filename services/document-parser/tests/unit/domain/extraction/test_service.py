@@ -31,6 +31,22 @@ def test_process_file_success(mocker):
     assert not os.path.exists(called_path)
 
 
+def test_process_file_too_large(mocker):
+    from app.core.config import settings
+    from app.core.exceptions import FileTooLargeError
+
+    mock_file = MagicMock()
+    mock_file.filename = "large.txt"
+    mock_file.content_type = "text/plain"
+    oversized = b"x" * (settings.MAX_UPLOAD_SIZE_BYTES + 1)
+    mock_file.file.read.return_value = oversized
+
+    with pytest.raises(FileTooLargeError) as exc_info:
+        ExtractionService.process_file(mock_file)
+
+    assert "exceeds limit" in str(exc_info.value)
+
+
 def test_process_file_cleanup_on_error(mocker):
     mock_strategy = MagicMock()
     mock_strategy.extract.side_effect = Exception("Parsing Failed")
