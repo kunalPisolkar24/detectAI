@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { RabbitMQWorker } from "@shared/messaging/RabbitMQWorker";
 import { AnalyticsService } from "@modules/analytics/application/services/AnalyticsService";
 import { prisma } from "@shared/database/PrismaService";
@@ -9,6 +10,12 @@ import { config } from "./config";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
 
 const QUEUE_NAME = "analytics.usage";
+
+const UsageEventSchema = z.object({
+  userId: z.string().min(1),
+  count: z.number().int().positive(),
+  timestamp: z.string().datetime().optional(),
+});
 
 const mainClient = RedisFactory.createClient({
   mode: config.REDIS_MODE,
@@ -34,7 +41,12 @@ const worker = new RabbitMQWorker(
   config.RABBITMQ_URL,
   QUEUE_NAME,
   async (event: any) => {
-    await analyticsService.handleUsageEvent(event.userId, event.count);
+    const result = UsageEventSchema.safeParse(event);
+    if (!result.success) {
+      Logger.warn("Invalid analytics usage event", { errors: result.error.format(), event });
+      return;
+    }
+    await analyticsService.handleUsageEvent(result.data.userId, result.data.count);
   },
   metricsService,
   config.RABBITMQ_QUEUE_TYPE ?? "classic"
