@@ -19,10 +19,10 @@ secrets:
   DATABASE_URL_REPLICA: "postgresql://detect_ai:CHANGE_ME@detect-ai-postgres:5432/detect_ai"
   REDIS_PASSWORD: "CHANGE_ME"
   REDIS_URL: "redis://:CHANGE_ME@detect-ai-redis-usercache:6379"
-  REDIS_USAGE_URL: "redis://detect-ai-redis-usage:6379"
-  REDIS_USAGE_PASSWORD: ""
-  EVENT_REDIS_URL: "redis://detect-ai-redis-events:6379"
-  EVENT_REDIS_PASSWORD: ""
+  REDIS_USAGE_URL: "redis://:CHANGE_ME@detect-ai-redis-usage:6379"
+  REDIS_USAGE_PASSWORD: "CHANGE_ME"
+  EVENT_REDIS_URL: "redis://:CHANGE_ME@detect-ai-redis-events:6379"
+  EVENT_REDIS_PASSWORD: "CHANGE_ME"
   RABBITMQ_URL: "amqp://guest:guest@detect-ai-rabbitmq:5672/"
   AI_SERVICE_API_KEY: "CHANGE_ME"
   INTERNAL_API_KEY: "CHANGE_ME"
@@ -32,6 +32,9 @@ secrets:
   PADDLE_API_KEY: ""
   PADDLE_ENVIRONMENT: "sandbox"
   PADDLE_WEBHOOK_SECRET: ""
+
+migration:
+  image: "your-registry/detect-ai-migrate:latest"
 
 fullnameOverride: "detect-ai"
 # Frontend Next.js Web App
@@ -212,6 +215,7 @@ workers:
 databases:
   storageClass: "local-path"
   postgres:
+    enabled: true
     storageSize: "5Gi"
     resources:
       limits:
@@ -222,6 +226,7 @@ databases:
         memory: "512Mi"
   mongo:
     sharded: false
+    database: "chats"
     replicaCount: 1
     storageSize: "5Gi"
     resources:

@@ -35,10 +35,11 @@ data:
   CHAT_REDIS_ADDRS: "{{ include "detect-ai.fullname" . }}-redis-chat:6379"
   {{- end }}
   
+  {{- $mongoDb := .Values.databases.mongo.database | default "chats" }}
   {{- if .Values.databases.mongo.sharded }}
-  MONGO_URL: "mongodb://{{ include "detect-ai.fullname" . }}-mongodb-router-service:27017/chats"
+  MONGO_URL: "mongodb://{{ include "detect-ai.fullname" . }}-mongodb-router-service:27017/{{ $mongoDb }}"
   {{- else }}
-  MONGO_URL: "mongodb://{{ include "detect-ai.fullname" . }}-mongodb-standalone-service:27017/chats"
+  MONGO_URL: "mongodb://{{ include "detect-ai.fullname" . }}-mongodb-standalone-service:27017/{{ $mongoDb }}"
   {{- end }}
 
   POSTGRES_HOST: "{{ include "detect-ai.fullname" . }}-postgres"

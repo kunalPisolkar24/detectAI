@@ -1,4 +1,4 @@
-{{- if or .Values.databases.postgres.enabled (and .Values.global (eq .Values.global.environment "production")) }}
+{{- if .Values.databases.postgres.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -9,7 +9,7 @@ metadata:
     app: migration-job
   annotations:
     "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-failed
     "helm.sh/hook-weight": "-5"
 spec:
   template:
@@ -48,7 +48,7 @@ spec:
               memory: "64Mi"
       containers:
         - name: prisma-migrate
-          image: "{{ .Values.web.image.repository }}-migrate:{{ .Values.web.image.tag | default "latest" }}"
+          image: "{{ .Values.migration.image }}"
           imagePullPolicy: {{ .Values.web.image.pullPolicy }}
           envFrom:
             - secretRef:
