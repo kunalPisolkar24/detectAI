@@ -1,5 +1,12 @@
 {{- $fullname := include "detect-ai.fullname" . }}
 {{- $sc := .Values.databases.storageClass | quote }}
+{{- $redisImage := .Values.databases.redis.image }}
+{{- $sentinelImage := .Values.databases.redis.sentinel.image }}
+{{- $sentinelTag := .Values.databases.redis.sentinel.tag }}
+{{- $exporterImage := .Values.databases.redis.exporter.image }}
+{{- $exporterTag := .Values.databases.redis.exporter.tag }}
+{{- $redisSecret := .Values.databases.redis.passwordSecretName }}
+{{- $psc := .Values.global.podSecurityContext }}
 
 ---
 # 1. User Cache Redis — Sentinel HA (prod) or Standalone (dev)
@@ -14,8 +21,12 @@ metadata:
 spec:
   clusterSize: {{ .Values.databases.redis.userCache.clusterSize }}
   kubernetesConfig:
-    image: "quay.io/opstree/redis:v7.0.15"
+    image: {{ $redisImage | quote }}
     imagePullPolicy: IfNotPresent
+    {{- if $redisSecret }}
+    redisSecret:
+      name: {{ $redisSecret }}
+    {{- end }}
     service:
       serviceType: ClusterIP
     resources:
@@ -27,13 +38,13 @@ spec:
         memory: "512Mi"
   redisExporter:
     enabled: true
-    image: quay.io/opstree/redis-exporter
-    tag: v1.44.0
+    image: {{ $exporterImage | quote }}
+    tag: {{ $exporterTag | quote }}
     imagePullPolicy: IfNotPresent
   sentinel:
     enabled: true
-    image: quay.io/opstree/redis-sentinel
-    tag: v7.0.15
+    image: {{ $sentinelImage | quote }}
+    tag: {{ $sentinelTag | quote }}
     imagePullPolicy: IfNotPresent
     size: {{ .Values.databases.redis.userCache.sentinelSize }}
     parallelSyncs: "1"
@@ -48,8 +59,7 @@ spec:
           requests:
             storage: {{ .Values.databases.redis.userCache.storageSize }}
   podSecurityContext:
-    runAsUser: 1000
-    fsGroup: 1000
+    {{- toYaml $psc | nindent 4 }}
 {{- else }}
 apiVersion: redis.redis.opstreelabs.in/v1beta2
 kind: Redis
@@ -60,8 +70,12 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
 spec:
   kubernetesConfig:
-    image: "quay.io/opstree/redis:v7.0.15"
+    image: {{ $redisImage | quote }}
     imagePullPolicy: IfNotPresent
+    {{- if $redisSecret }}
+    redisSecret:
+      name: {{ $redisSecret }}
+    {{- end }}
     service:
       serviceType: ClusterIP
     resources:
@@ -73,8 +87,8 @@ spec:
         memory: "128Mi"
   redisExporter:
     enabled: true
-    image: quay.io/opstree/redis-exporter
-    tag: v1.44.0
+    image: {{ $exporterImage | quote }}
+    tag: {{ $exporterTag | quote }}
     imagePullPolicy: IfNotPresent
   storage:
     volumeClaimTemplate:
@@ -85,8 +99,7 @@ spec:
           requests:
             storage: {{ .Values.databases.redis.userCache.storageSize }}
   podSecurityContext:
-    runAsUser: 1000
-    fsGroup: 1000
+    {{- toYaml $psc | nindent 4 }}
 {{- end }}
 
 ---
@@ -100,8 +113,12 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
 spec:
   kubernetesConfig:
-    image: "quay.io/opstree/redis:v7.0.15"
+    image: {{ $redisImage | quote }}
     imagePullPolicy: IfNotPresent
+    {{- if $redisSecret }}
+    redisSecret:
+      name: {{ $redisSecret }}
+    {{- end }}
     service:
       serviceType: ClusterIP
     resources:
@@ -113,8 +130,8 @@ spec:
         memory: "128Mi"
   redisExporter:
     enabled: true
-    image: quay.io/opstree/redis-exporter
-    tag: v1.44.0
+    image: {{ $exporterImage | quote }}
+    tag: {{ $exporterTag | quote }}
     imagePullPolicy: IfNotPresent
   storage:
     volumeClaimTemplate:
@@ -125,8 +142,7 @@ spec:
           requests:
             storage: {{ .Values.databases.redis.usage.storageSize }}
   podSecurityContext:
-    runAsUser: 1000
-    fsGroup: 1000
+    {{- toYaml $psc | nindent 4 }}
 
 ---
 # 3. Events Redis — Standalone
@@ -139,8 +155,12 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
 spec:
   kubernetesConfig:
-    image: "quay.io/opstree/redis:v7.0.15"
+    image: {{ $redisImage | quote }}
     imagePullPolicy: IfNotPresent
+    {{- if $redisSecret }}
+    redisSecret:
+      name: {{ $redisSecret }}
+    {{- end }}
     service:
       serviceType: ClusterIP
     resources:
@@ -152,8 +172,8 @@ spec:
         memory: "128Mi"
   redisExporter:
     enabled: true
-    image: quay.io/opstree/redis-exporter
-    tag: v1.44.0
+    image: {{ $exporterImage | quote }}
+    tag: {{ $exporterTag | quote }}
     imagePullPolicy: IfNotPresent
   storage:
     volumeClaimTemplate:
@@ -164,8 +184,7 @@ spec:
           requests:
             storage: {{ .Values.databases.redis.events.storageSize }}
   podSecurityContext:
-    runAsUser: 1000
-    fsGroup: 1000
+    {{- toYaml $psc | nindent 4 }}
 
 ---
 # 4. Chat Redis — Cluster (prod) or Standalone (dev)
@@ -180,8 +199,12 @@ metadata:
 spec:
   clusterSize: {{ .Values.databases.redis.chat.leaderReplicas }}
   kubernetesConfig:
-    image: "quay.io/opstree/redis:v7.0.15"
+    image: {{ $redisImage | quote }}
     imagePullPolicy: IfNotPresent
+    {{- if $redisSecret }}
+    redisSecret:
+      name: {{ $redisSecret }}
+    {{- end }}
     service:
       serviceType: ClusterIP
     resources:
@@ -193,8 +216,8 @@ spec:
         memory: "512Mi"
   redisExporter:
     enabled: true
-    image: quay.io/opstree/redis-exporter
-    tag: v1.44.0
+    image: {{ $exporterImage | quote }}
+    tag: {{ $exporterTag | quote }}
     imagePullPolicy: IfNotPresent
   storage:
     nodeConfVolume: true
@@ -218,8 +241,7 @@ spec:
     replicas: {{ .Values.databases.redis.chat.followerReplicas }}
     serviceType: ClusterIP
   podSecurityContext:
-    runAsUser: 1000
-    fsGroup: 1000
+    {{- toYaml $psc | nindent 4 }}
 {{- else }}
 apiVersion: redis.redis.opstreelabs.in/v1beta2
 kind: Redis
@@ -230,8 +252,12 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
 spec:
   kubernetesConfig:
-    image: "quay.io/opstree/redis:v7.0.15"
+    image: {{ $redisImage | quote }}
     imagePullPolicy: IfNotPresent
+    {{- if $redisSecret }}
+    redisSecret:
+      name: {{ $redisSecret }}
+    {{- end }}
     service:
       serviceType: ClusterIP
     resources:
@@ -243,8 +269,8 @@ spec:
         memory: "128Mi"
   redisExporter:
     enabled: true
-    image: quay.io/opstree/redis-exporter
-    tag: v1.44.0
+    image: {{ $exporterImage | quote }}
+    tag: {{ $exporterTag | quote }}
     imagePullPolicy: IfNotPresent
   storage:
     volumeClaimTemplate:
@@ -255,6 +281,5 @@ spec:
           requests:
             storage: {{ .Values.databases.redis.chat.storageSize }}
   podSecurityContext:
-    runAsUser: 1000
-    fsGroup: 1000
+    {{- toYaml $psc | nindent 4 }}
 {{- end }}
