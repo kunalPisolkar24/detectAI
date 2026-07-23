@@ -222,13 +222,21 @@ databases:
         cpu: "500m"
         memory: "512Mi"
   redis:
-    sentinel:
-      enabled: false
-      replicaCount: 3
+    userCache:
+      sentinel:
+        enabled: false
+      clusterSize: 3
+      sentinelSize: 3
       storageSize: "2Gi"
-    cluster:
-      enabled: false
-      replicaCount: 6
+    usage:
+      storageSize: "1Gi"
+    events:
+      storageSize: "1Gi"
+    chat:
+      cluster:
+        enabled: false
+      leaderReplicas: 3
+      followerReplicas: 3
       storageSize: "2Gi"
 
 # NGINX Ingress Controller Routing

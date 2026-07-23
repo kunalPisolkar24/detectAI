@@ -71,13 +71,21 @@ databases:
     replicaCount: 3 # Clustered RabbitMQ
     storageSize: "10Gi"
   redis:
-    sentinel:
-      enabled: true # Redis Sentinel HA
-      replicaCount: 3
+    userCache:
+      sentinel:
+        enabled: true
+      clusterSize: 3
+      sentinelSize: 3
       storageSize: "5Gi"
-    cluster:
-      enabled: true # Redis Analytics Cluster
-      replicaCount: 6
+    usage:
+      storageSize: "2Gi"
+    events:
+      storageSize: "2Gi"
+    chat:
+      cluster:
+        enabled: true
+      leaderReplicas: 3
+      followerReplicas: 3
       storageSize: "5Gi"
 
 ingress:
