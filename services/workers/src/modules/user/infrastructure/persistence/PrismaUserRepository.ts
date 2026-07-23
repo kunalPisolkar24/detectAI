@@ -18,7 +18,6 @@ export interface IUserRepository {
         payload: PaymentUpdatePayload,
         paddleCustomerId?: string
     ): Promise<{ email: string; stale: boolean }>;
-    getSubscriptionStatusWithLock(userId: string): Promise<SubscriptionStatus | null>;
 }
 
 export class PrismaUserRepository implements IUserRepository {
@@ -51,18 +50,6 @@ export class PrismaUserRepository implements IUserRepository {
             limit,
         );
         return rows;
-    }
-
-    async getSubscriptionStatusWithLock(userId: string): Promise<SubscriptionStatus | null> {
-        return this.prismaWriter.$transaction(async (tx: any) => {
-            const rows = (await tx.$queryRawUnsafe(
-                `SELECT status FROM "Subscription" s WHERE s."userId" = $1 FOR UPDATE`,
-                userId,
-            )) as Array<{ status: string | null }>;
-
-            if (rows.length === 0) return null;
-            return rows[0]!.status as SubscriptionStatus | null;
-        });
     }
 
     async lockAndUpdateSubscription(
