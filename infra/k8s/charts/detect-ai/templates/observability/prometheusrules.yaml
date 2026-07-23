@@ -77,6 +77,7 @@ spec:
             summary: "Redis {{ `{{ $labels.app }}` }} master link is down"
             description: "Redis replica {{ `{{ $labels.app }}` }} has lost connection to its master."
 
+        {{- if .Values.databases.redis.userCache.sentinel.enabled }}
         - alert: RedisSentinelQuorumLost
           expr: redis_sentinel_masters_sentinels{app=~"{{ $fullname }}-redis-usercache"} < 2
           for: 1m
@@ -85,7 +86,9 @@ spec:
           annotations:
             summary: "Redis Sentinel quorum lost"
             description: "Redis Sentinel {{ `{{ $labels.app }}` }} has fewer than 2 sentinels available. Automatic failover cannot occur."
+        {{- end }}
 
+        {{- if .Values.databases.redis.chat.cluster.enabled }}
         - alert: RedisClusterStateFailed
           expr: redis_cluster_state{app=~"{{ $fullname }}-redis-chat-.*"} == 0
           for: 1m
@@ -103,4 +106,5 @@ spec:
           annotations:
             summary: "Redis Cluster {{ `{{ $labels.app }}` }} slot coverage below 100%"
             description: "Redis Cluster {{ `{{ $labels.app }}` }} has {{ `{{ $value | humanizePercentage }}` }} slot coverage. Some keyspace is unavailable."
+        {{- end }}
 {{- end }}

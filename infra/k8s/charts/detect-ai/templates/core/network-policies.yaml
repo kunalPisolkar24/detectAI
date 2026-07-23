@@ -60,6 +60,9 @@ spec:
           - document-parser
           - inference
           - payments-gateway
+          - worker-analytics
+          - worker-cron
+          - worker-payments
   policyTypes:
     - Ingress
   ingress:
@@ -94,6 +97,7 @@ spec:
                   - chats-api
                   - payments-gateway
                   - migration-job
+                  - worker-payments
 
 ---
 # 5. Allow apps to reach Redis

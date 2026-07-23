@@ -60,10 +60,14 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: {{ $fullname }}-{{ $redis }}
+      app.kubernetes.io/name: {{ $fullname }}-{{ $redis }}
   endpoints:
     - port: redis-exporter
       interval: 15s
+  relabelings:
+    - sourceLabels: [__meta_kubernetes_service_label_app_kubernetes_io_name]
+      targetLabel: app
+      replacement: ${1}
 {{- end }}
 
 {{- end }}

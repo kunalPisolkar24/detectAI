@@ -290,6 +290,8 @@ ingress:
 # LGTM Observability Stack Integration
 monitoring:
   enabled: true
+  prometheus:
+    release: "monitoring"
   kube-prometheus-stack:
     enabled: true
     prometheus:
