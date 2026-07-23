@@ -2,5 +2,8 @@ dependencies:
 - name: kube-prometheus-stack
   repository: https://prometheus-community.github.io/helm-charts
   version: 57.0.2
-digest: sha256:8d221b06dced61c7066de8d666ea5897d787f8eee0701189ce677b9e36cb5803
-generated: "2025-06-29T09:06:48.494563037Z"
+- name: redis-operator
+  repository: https://ot-container-kit.github.io/helm-charts
+  version: 0.25.0
+digest: sha256:2cc4e67006be87e6ce5cda45b025b7a56b3fde966c0f5cd81d1fb9e490d08183
+generated: "2026-07-23T04:50:31.896353427Z"

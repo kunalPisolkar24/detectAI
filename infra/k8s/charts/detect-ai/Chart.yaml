@@ -9,3 +9,6 @@ dependencies:
   version: "57.0.2"
   repository: "https://prometheus-community.github.io/helm-charts"
   alias: monitoring
+- name: redis-operator
+  version: "0.25.0"
+  repository: "https://ot-container-kit.github.io/helm-charts"
