@@ -107,12 +107,12 @@ metadata:
 spec:
   podSelector:
     matchExpressions:
-      - key: app
+      - key: redis_setup_type
         operator: In
         values:
-          - redis-standalone
-          - redis-sentinel
-          - redis-cluster
+          - standalone
+          - replication
+          - cluster
   policyTypes:
     - Ingress
   ingress:
