@@ -14,6 +14,10 @@ data:
   FILE_EXTRACTOR_API_URL: "http://{{ include "detect-ai.fullname" . }}-document-parser-service:8000"
   
   # Databases and Broker Endpoints
+  # NOTE: Redis passwords are injected via the detect-ai-secrets Secret:
+  #   REDIS_PASSWORD, REDIS_USAGE_PASSWORD, EVENT_REDIS_PASSWORD
+  # Apps must pass these as the `password` option to the Redis client constructor
+  # (the plain URL omits the password intentionally to keep it out of the ConfigMap).
   {{- if .Values.databases.redis.userCache.sentinel.enabled }}
   REDIS_MASTER_NAME: "mymaster"
   REDIS_SENTINELS: "{{ include "detect-ai.fullname" . }}-redis-usercache:26379"
