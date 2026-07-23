@@ -10,7 +10,6 @@ include:
   - path: ./infra/redis.yml
   - path: ./infra/redis-cluster.yml
   - path: ./infra/rabbitmq-cluster.yml
-  - path: ./infra/compose.shared.yml
   
   - path: ../../../services/document-parser/compose.yml
   - path: ../../../services/inference/compose.yml
