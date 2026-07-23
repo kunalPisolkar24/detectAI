@@ -37,6 +37,14 @@ secrets:
 
 migration:
   image: "your-registry/detect-ai-migrate:latest"
+  pullPolicy: "IfNotPresent"
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
 
 fullnameOverride: "detect-ai"
 # Frontend Next.js Web App

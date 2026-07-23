@@ -49,7 +49,7 @@ spec:
       containers:
         - name: prisma-migrate
           image: "{{ .Values.migration.image }}"
-          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.migration.pullPolicy }}
           envFrom:
             - secretRef:
                 name: {{ .Values.global.secretName }}
