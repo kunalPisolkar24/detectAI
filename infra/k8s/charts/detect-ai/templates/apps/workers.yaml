@@ -46,6 +46,16 @@ spec:
             - name: metrics
               containerPort: {{ .Values.workers.analytics.port }}
               protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 15
+            periodSeconds: 20
           lifecycle:
             preStop:
               exec:
@@ -110,6 +120,16 @@ spec:
             - name: metrics
               containerPort: {{ .Values.workers.cron.port }}
               protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 15
+            periodSeconds: 20
           lifecycle:
             preStop:
               exec:
@@ -176,6 +196,16 @@ spec:
             - name: metrics
               containerPort: {{ .Values.workers.payments.port }}
               protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 15
+            periodSeconds: 20
           lifecycle:
             preStop:
               exec:

@@ -58,6 +58,16 @@ spec:
             - name: metrics
               containerPort: {{ .Values.chats.api.service.metricsPort }}
               protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 15
+            periodSeconds: 20
           lifecycle:
             preStop:
               exec:

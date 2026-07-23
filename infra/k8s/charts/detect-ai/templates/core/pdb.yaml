@@ -88,7 +88,7 @@ spec:
   maxUnavailable: 1
   selector:
     matchLabels:
-      app: {{ $fullname }}-redis-usercache
+      app.kubernetes.io/name: {{ $fullname }}-redis-usercache
 {{- end }}
 
 {{- if .Values.databases.redis.chat.cluster.enabled }}
@@ -105,7 +105,7 @@ spec:
   maxUnavailable: 1
   selector:
     matchLabels:
-      app: {{ $fullname }}-redis-chat-leader
+      app.kubernetes.io/name: {{ $fullname }}-redis-chat-leader
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -118,5 +118,5 @@ spec:
   maxUnavailable: 1
   selector:
     matchLabels:
-      app: {{ $fullname }}-redis-chat-follower
+      app.kubernetes.io/name: {{ $fullname }}-redis-chat-follower
 {{- end }}
