@@ -44,12 +44,19 @@ class AnalyticsPublisher {
   }
 
   async publish(userId: string, count: number): Promise<void> {
-    const ch = await this.ensureChannel()
-    ch.sendToQueue(
-      QUEUE,
-      Buffer.from(JSON.stringify({ userId, count, timestamp: new Date().toISOString() })),
-      { persistent: true }
-    )
+    const payload = Buffer.from(JSON.stringify({ userId, count, timestamp: new Date().toISOString() }))
+    const opts = { persistent: true }
+
+    let ch = await this.ensureChannel()
+    try {
+      ch.sendToQueue(QUEUE, payload, opts)
+    } catch {
+      this.channel = null
+      this.connection = null
+      this.connecting = null
+      ch = await this.ensureChannel()
+      ch.sendToQueue(QUEUE, payload, opts)
+    }
   }
 }
 
