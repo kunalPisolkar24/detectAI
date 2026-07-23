@@ -130,10 +130,6 @@ services:
     ports:
       - "6379:6379"
 
-  redis-ratelimit:
-    ports:
-      - "6382:6379"
-
   redis-sentinel-1:
     ports:
       - "26379:26379"
