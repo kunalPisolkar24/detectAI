@@ -1,0 +1,18 @@
+services:
+  redis-events:
+    image: redis:7.2-alpine
+    container_name: detect_ai_redis_events
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass "${EVENT_REDIS_PASSWORD}"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${EVENT_REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - detectai_net
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network}
+    external: true

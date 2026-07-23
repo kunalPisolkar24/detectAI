@@ -73,6 +73,18 @@ services:
       timeout: 3s
       retries: 10
 
+  redis-events:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${EVENT_REDIS_PASSWORD}
+    volumes:
+      - redis_events_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${EVENT_REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   chat-mongo:
     image: mongo:6.0
     restart: unless-stopped
@@ -425,5 +437,6 @@ volumes:
   redis_app_data:
   redis_usage_data:
   redis_chat_data:
+  redis_events_data:
   chat_mongo_data:
   inference_model_cache:
