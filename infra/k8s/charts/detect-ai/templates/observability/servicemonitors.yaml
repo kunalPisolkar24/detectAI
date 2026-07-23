@@ -26,7 +26,7 @@ spec:
 {{- end }}
 
 # 2. Database Exporter Monitors
-{{- range $db := list "postgres" "rabbitmq" "mongodb-router" "mongodb-standalone" "redis-cluster" "redis-sentinel" "redis-standalone" }}
+{{- range $db := list "postgres" "rabbitmq" "mongodb-router" "mongodb-standalone" }}
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -40,9 +40,29 @@ spec:
   selector:
     matchLabels:
       {{- include "detect-ai.selectorLabels" $ | nindent 6 }}
-      app: {{ if contains "mongodb" $db }}mongodb{{ else if contains "redis" $db }}redis{{ else }}{{ $db }}{{ end }}
+      app: {{ if contains "mongodb" $db }}mongodb{{ else }}{{ $db }}{{ end }}
   endpoints:
     - port: metrics
+      interval: 15s
+{{- end }}
+
+# 3. Redis Exporter Monitors (operator-managed)
+{{- range $redis := list "redis-usercache" "redis-usage" "redis-events" "redis-chat-leader" "redis-chat-follower" }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $fullname }}-{{ $redis }}-monitor
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" $ | nindent 4 }}
+    release: {{ $prometheusRelease }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ $fullname }}-{{ $redis }}
+  endpoints:
+    - port: redis-exporter
       interval: 15s
 {{- end }}
 

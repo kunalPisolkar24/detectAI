@@ -1,0 +1,106 @@
+{{- if .Values.monitoring.enabled }}
+{{- $fullname := include "detect-ai.fullname" . }}
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ $fullname }}-redis-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    release: {{ .Values.monitoring.prometheus.release | default "prometheus" }}
+spec:
+  groups:
+    - name: redis-alerts
+      interval: 30s
+      rules:
+        - alert: RedisDown
+          expr: redis_up{app=~"{{ $fullname }}-redis-.*"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Redis {{ `{{ $labels.app }}` }} is down"
+            description: "Redis instance {{ `{{ $labels.app }}` }} has been unreachable for more than 1 minute."
+
+        - alert: RedisMemoryHigh
+          expr: redis_memory_used_bytes{app=~"{{ $fullname }}-redis-.*"} / redis_memory_max_bytes{app=~"{{ $fullname }}-redis-.*"} > 0.8
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Redis {{ `{{ $labels.app }}` }} memory exceeds 80%"
+            description: "Redis instance {{ `{{ $labels.app }}` }} is using {{ `{{ $value | humanizePercentage }}` }} of its max memory."
+
+        - alert: RedisMemoryCritical
+          expr: redis_memory_used_bytes{app=~"{{ $fullname }}-redis-.*"} / redis_memory_max_bytes{app=~"{{ $fullname }}-redis-.*"} > 0.95
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Redis {{ `{{ $labels.app }}` }} memory exceeds 95%"
+            description: "Redis instance {{ `{{ $labels.app }}` }} is critically low on memory ({{ `{{ $value | humanizePercentage }}` }})."
+
+        - alert: RedisEvictions
+          expr: rate(redis_evicted_keys_total{app=~"{{ $fullname }}-redis-.*"}[5m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Redis {{ `{{ $labels.app }}` }} is evicting keys"
+            description: "Redis instance {{ `{{ $labels.app }}` }} is evicting {{ `{{ $value | humanize }}` }} keys/sec. Check TTL policies."
+
+        - alert: RedisHighConnections
+          expr: redis_connected_clients{app=~"{{ $fullname }}-redis-.*"} > 100
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Redis {{ `{{ $labels.app }}` }} has many connections"
+            description: "Redis instance {{ `{{ $labels.app }}` }} has {{ `{{ $value }}` }} connected clients."
+
+        - alert: RedisReplicationLag
+          expr: redis_master_last_io_seconds_ago{app=~"{{ $fullname }}-redis-.*"} > 30
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Redis {{ `{{ $labels.app }}` }} replication lag exceeds 30s"
+            description: "Redis replica {{ `{{ $labels.app }}` }} is {{ `{{ $value }}` }}s behind the master."
+
+        - alert: RedisMasterLinkDown
+          expr: redis_master_link_up{app=~"{{ $fullname }}-redis-.*"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Redis {{ `{{ $labels.app }}` }} master link is down"
+            description: "Redis replica {{ `{{ $labels.app }}` }} has lost connection to its master."
+
+        - alert: RedisSentinelQuorumLost
+          expr: redis_sentinel_masters_sentinels{app=~"{{ $fullname }}-redis-usercache"} < 2
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Redis Sentinel quorum lost"
+            description: "Redis Sentinel {{ `{{ $labels.app }}` }} has fewer than 2 sentinels available. Automatic failover cannot occur."
+
+        - alert: RedisClusterStateFailed
+          expr: redis_cluster_state{app=~"{{ $fullname }}-redis-chat-.*"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Redis Cluster {{ `{{ $labels.app }}` }} state is FAIL"
+            description: "Redis Cluster {{ `{{ $labels.app }}` }} is in a failed state. Some slots may be unavailable."
+
+        - alert: RedisClusterSlotCoverage
+          expr: redis_cluster_slots_ok{app=~"{{ $fullname }}-redis-chat-.*"} / redis_cluster_slots_total{app=~"{{ $fullname }}-redis-chat-.*"} < 1
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Redis Cluster {{ `{{ $labels.app }}` }} slot coverage below 100%"
+            description: "Redis Cluster {{ `{{ $labels.app }}` }} has {{ `{{ $value | humanizePercentage }}` }} slot coverage. Some keyspace is unavailable."
+{{- end }}
