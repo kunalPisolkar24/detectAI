@@ -96,7 +96,7 @@ spec:
             - name: API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.global.secretName | default .Values.secretName }}
+                  name: {{ .Values.global.secretName }}
                   key: AI_SERVICE_API_KEY
             {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
             - name: OTEL_SERVICE_NAME
@@ -106,7 +106,7 @@ spec:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
-                name: {{ .Values.global.secretName | default .Values.secretName }}
+                name: {{ .Values.global.secretName }}
           resources:
             requests:
               cpu: {{ .Values.inference.resources.requests.cpu | quote }}

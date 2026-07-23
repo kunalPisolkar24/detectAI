@@ -1,4 +1,4 @@
-{{- if and .Values.monitoring.enabled .Values.monitoring.kube-prometheus-stack.enabled }}
+{{- if and .Values.monitoring.enabled (index .Values.monitoring "kube-prometheus-stack" "enabled") }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

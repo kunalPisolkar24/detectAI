@@ -1785,7 +1785,7 @@ async function writeDashboard(folder, filename, spec) {
   const specJsonStr = JSON.stringify(spec, null, 2);
   const indentedJson = specJsonStr.split("\n").map(line => `    ${line}`).join("\n");
   
-  const content = `{{- if and .Values.monitoring.enabled .Values.monitoring.kube-prometheus-stack.enabled }}
+  const content = `{{- if and .Values.monitoring.enabled (index .Values.monitoring "kube-prometheus-stack" "enabled") }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

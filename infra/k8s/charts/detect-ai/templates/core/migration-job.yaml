@@ -52,7 +52,7 @@ spec:
           imagePullPolicy: {{ .Values.web.image.pullPolicy }}
           envFrom:
             - secretRef:
-                name: {{ .Values.global.secretName | default .Values.secretName }}
+                name: {{ .Values.global.secretName }}
           resources:
             limits:
               cpu: "500m"
