@@ -8,7 +8,9 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
     app: worker-analytics
 spec:
+  {{- if not .Values.workers.analytics.keda.enabled }}
   replicas: {{ .Values.workers.analytics.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "detect-ai.selectorLabels" . | nindent 6 }}
@@ -214,7 +216,35 @@ spec:
   triggers:
     - type: rabbitmq
       metadata:
-        queueName: "billing-queue"
+        queueName: "payment_events"
         value: "{{ .Values.workers.payments.keda.queueLength | default 50 }}"
+        hostFromEnv: "RABBITMQ_URL"
+{{- end }}
+
+---
+# 5. KEDA ScaledObject for Analytics Worker autoscaling based on RabbitMQ
+{{- if .Values.workers.analytics.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-worker-analytics-scaler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: worker-analytics
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "detect-ai.fullname" . }}-worker-analytics
+  minReplicaCount: {{ .Values.workers.analytics.keda.minReplicas | default 1 }}
+  maxReplicaCount: {{ .Values.workers.analytics.keda.maxReplicas | default 10 }}
+  cooldownPeriod: 300
+  pollingInterval: 15
+  triggers:
+    - type: rabbitmq
+      metadata:
+        queueName: "analytics.usage"
+        value: "{{ .Values.workers.analytics.keda.queueLength | default 50 }}"
         hostFromEnv: "RABBITMQ_URL"
 {{- end }}

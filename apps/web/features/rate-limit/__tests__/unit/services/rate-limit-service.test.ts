@@ -3,12 +3,27 @@ import { RedisRateLimitService } from '../../../services/rate-limit-service'
 import { usageRedis } from '@/lib/infrastructure/redis-limit'
 import { metrics } from '@/lib/infrastructure/metrics'
 import { logger } from '@/lib/infrastructure/logger'
+import { analyticsPublisher } from '@/lib/infrastructure/analytics-publisher'
+import { prisma } from '@/lib/infrastructure/prisma'
 
 vi.mock('@/lib/infrastructure/redis-limit', () => ({
   usageRedis: {
     get: vi.fn(),
     pipeline: vi.fn(),
-    sadd: vi.fn(),
+  },
+}))
+
+vi.mock('@/lib/infrastructure/analytics-publisher', () => ({
+  analyticsPublisher: {
+    publish: vi.fn(),
+  },
+}))
+
+vi.mock('@/lib/infrastructure/prisma', () => ({
+  prisma: {
+    usage: {
+      findUnique: vi.fn(),
+    },
   },
 }))
 
@@ -77,19 +92,16 @@ describe('RedisRateLimitService', () => {
   })
 
   describe('trackUsage', () => {
-    it('executes pipeline with correct keys and increments', async () => {
+    it('increments daily key and publishes to rabbitmq', async () => {
       mockPipeline.exec.mockResolvedValue([])
       await service.trackUsage('user-1')
 
       const dailyKey = 'rate_limit:{user-1}:daily:2026-04-25'
-      const pendingKey = 'usage:{user-1}:pending'
 
       expect(mockPipeline.incr).toHaveBeenCalledWith(dailyKey)
       expect(mockPipeline.expire).toHaveBeenCalledWith(dailyKey, 86400)
-      expect(mockPipeline.incr).toHaveBeenCalledWith(pendingKey)
-      expect(mockPipeline.expire).toHaveBeenCalledWith(pendingKey, 86400)
       expect(mockPipeline.exec).toHaveBeenCalled()
-      expect(usageRedis.sadd).toHaveBeenCalledWith('usage:dirty_users', 'user-1')
+      expect(analyticsPublisher.publish).toHaveBeenCalledWith('user-1', 1)
     })
 
     it('logs error if pipeline execution fails', async () => {
@@ -104,30 +116,34 @@ describe('RedisRateLimitService', () => {
   })
 
   describe('getRealTimeUsage', () => {
-    it('returns parsed counts from redis', async () => {
-      vi.mocked(usageRedis.get)
-        .mockResolvedValueOnce('50') // daily
-        .mockResolvedValueOnce('5')  // pending
+    it('returns daily count from redis', async () => {
+      vi.mocked(usageRedis.get).mockResolvedValue('42')
 
       const result = await service.getRealTimeUsage('user-1')
-      expect(result).toEqual({ dailyCount: 50, pendingCount: 5 })
+      expect(result).toEqual({ dailyCount: 42 })
     })
 
-    it('returns zeros if keys do not exist', async () => {
+    it('returns zero if key does not exist in redis', async () => {
       vi.mocked(usageRedis.get).mockResolvedValue(null)
+
       const result = await service.getRealTimeUsage('user-1')
-      expect(result).toEqual({ dailyCount: 0, pendingCount: 0 })
+      expect(result).toEqual({ dailyCount: 0 })
     })
 
-    it('logs error and returns zeros if redis fails', async () => {
+    it('falls back to db if redis fails', async () => {
       vi.mocked(usageRedis.get).mockRejectedValue(new Error('Redis error'))
-      const result = await service.getRealTimeUsage('user-1')
+      vi.mocked(prisma.usage.findUnique).mockResolvedValue({ apiCallCountDaily: 25 } as any)
 
-      expect(result).toEqual({ dailyCount: 0, pendingCount: 0 })
-      expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({
-        msg: 'Failed to retrieve real-time usage',
-        userId: 'user-1'
-      }))
+      const result = await service.getRealTimeUsage('user-1')
+      expect(result).toEqual({ dailyCount: 25 })
+    })
+
+    it('returns zero if both redis and db fail', async () => {
+      vi.mocked(usageRedis.get).mockRejectedValue(new Error('Redis error'))
+      vi.mocked(prisma.usage.findUnique).mockRejectedValue(new Error('DB error'))
+
+      const result = await service.getRealTimeUsage('user-1')
+      expect(result).toEqual({ dailyCount: 0 })
     })
   })
 })

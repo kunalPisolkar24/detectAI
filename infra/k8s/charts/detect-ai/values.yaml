@@ -157,6 +157,11 @@ workers:
       requests:
         cpu: "100m"
         memory: "128Mi"
+    keda:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 10
+      queueLength: 50
   cron:
     replicaCount: 1
     port: 7002

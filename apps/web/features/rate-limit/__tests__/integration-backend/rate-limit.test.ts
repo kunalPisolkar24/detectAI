@@ -1,6 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { rateLimitService } from '../../services/rate-limit-service'
 import { usageRedis } from '@/lib/infrastructure/redis-limit'
+import { analyticsPublisher } from '@/lib/infrastructure/analytics-publisher'
+
+vi.mock('@/lib/infrastructure/redis-limit', () => ({
+  usageRedis: {
+    get: vi.fn(),
+    pipeline: vi.fn(),
+  },
+}))
+
+vi.mock('@/lib/infrastructure/analytics-publisher', () => ({
+  analyticsPublisher: {
+    publish: vi.fn(),
+  },
+}))
+
+vi.mock('@/lib/infrastructure/prisma', () => ({
+  prisma: {
+    usage: {
+      findUnique: vi.fn(),
+    },
+  },
+}))
 
 describe('RedisRateLimitService Integration', () => {
   beforeEach(() => {
@@ -32,23 +54,21 @@ describe('RedisRateLimitService Integration', () => {
     expect(result.remaining).toBe(-1)
   })
 
-  it('tracks usage by incrementing daily and pending keys', async () => {
-    const userId = 'user-1'
-    
-    await rateLimitService.trackUsage(userId)
-    
+  it('tracks usage by incrementing daily key and publishing to rabbitmq', async () => {
+    const mockPipeline = { incr: vi.fn().mockReturnThis(), expire: vi.fn().mockReturnThis(), exec: vi.fn().mockResolvedValue([]) }
+    vi.mocked(usageRedis.pipeline).mockReturnValue(mockPipeline as any)
+
+    await rateLimitService.trackUsage('user-1')
+
     expect(usageRedis.pipeline).toHaveBeenCalled()
-    expect(usageRedis.sadd).toHaveBeenCalledWith('usage:dirty_users', userId)
+    expect(analyticsPublisher.publish).toHaveBeenCalledWith('user-1', 1)
   })
 
-  it('retrieves real-time usage correctly', async () => {
-    vi.mocked(usageRedis.get)
-      .mockResolvedValueOnce('42') // daily
-      .mockResolvedValueOnce('5')  // pending
+  it('retrieves real-time usage correctly from redis', async () => {
+    vi.mocked(usageRedis.get).mockResolvedValue('42')
       
     const usage = await rateLimitService.getRealTimeUsage('user-1')
     
     expect(usage.dailyCount).toBe(42)
-    expect(usage.pendingCount).toBe(5)
   })
 })
