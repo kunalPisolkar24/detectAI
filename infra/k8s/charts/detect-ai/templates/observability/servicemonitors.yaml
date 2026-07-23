@@ -67,7 +67,7 @@ spec:
   relabelings:
     - sourceLabels: [__meta_kubernetes_service_label_app_kubernetes_io_name]
       targetLabel: app
-      replacement: ${1}
+      replacement: $1
 {{- end }}
 
 {{- end }}

@@ -80,7 +80,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * avg(up{${jobSelector(\"chat-worker\")}})",
+          "expr": "100 * avg(up{job=~\".*(chat-worker|chats-worker).*\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -146,7 +146,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(chat_messages_ingested_total{${jobSelector(\"chat-worker\")}}[5m]))",
+          "expr": "sum(rate(chat_messages_ingested_total{job=~\".*(chat-worker|chats-worker).*\"}[5m]))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -212,7 +212,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "max(chat_redis_stream_lag{${jobSelector(\"chat-worker\")}})",
+          "expr": "max(chat_redis_stream_lag{job=~\".*(chat-worker|chats-worker).*\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -278,7 +278,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(process_cpu_seconds_total{${jobSelector(\"chat-worker\")}}[5m])",
+          "expr": "rate(process_cpu_seconds_total{job=~\".*(chat-worker|chats-worker).*\"}[5m])",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -323,7 +323,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(chat_messages_ingested_total{${jobSelector(\"chat-worker\")}}[5m])",
+          "expr": "rate(chat_messages_ingested_total{job=~\".*(chat-worker|chats-worker).*\"}[5m])",
           "legendFormat": "ingested",
           "range": true,
           "refId": "A"
@@ -368,7 +368,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "chat_redis_stream_lag{${jobSelector(\"chat-worker\")}}",
+          "expr": "chat_redis_stream_lag{job=~\".*(chat-worker|chats-worker).*\"}",
           "legendFormat": "{{partition}}",
           "range": true,
           "refId": "A"
@@ -413,14 +413,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "go_goroutines{${jobSelector(\"chat-worker\")}}",
+          "expr": "go_goroutines{job=~\".*(chat-worker|chats-worker).*\"}",
           "legendFormat": "goroutines",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "go_memstats_heap_alloc_bytes{${jobSelector(\"chat-worker\")}}",
+          "expr": "go_memstats_heap_alloc_bytes{job=~\".*(chat-worker|chats-worker).*\"}",
           "legendFormat": "heap alloc",
           "range": true,
           "refId": "B"
@@ -465,21 +465,21 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(process_cpu_seconds_total{${jobSelector(\"chat-worker\")}}[5m])",
+          "expr": "rate(process_cpu_seconds_total{job=~\".*(chat-worker|chats-worker).*\"}[5m])",
           "legendFormat": "cpu cores",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "process_resident_memory_bytes{${jobSelector(\"chat-worker\")}}",
+          "expr": "process_resident_memory_bytes{job=~\".*(chat-worker|chats-worker).*\"}",
           "legendFormat": "resident memory",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "process_open_fds{${jobSelector(\"chat-worker\")}}",
+          "expr": "process_open_fds{job=~\".*(chat-worker|chats-worker).*\"}",
           "legendFormat": "open fds",
           "range": true,
           "refId": "C"
@@ -635,21 +635,21 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(chat_stream_errors_total{${jobSelector(\"chat-worker\")}}[5m])) by (operation)",
+          "expr": "sum(rate(chat_stream_errors_total{job=~\".*(chat-worker|chats-worker).*\"}[5m])) by (operation)",
           "legendFormat": "Stream Errors {{operation}}",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(chat_database_errors_total{${jobSelector(\"chat-worker\")}}[5m])) by (operation)",
+          "expr": "sum(rate(chat_database_errors_total{job=~\".*(chat-worker|chats-worker).*\"}[5m])) by (operation)",
           "legendFormat": "DB Errors {{operation}}",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(chat_dlq_messages_total{${jobSelector(\"chat-worker\")}}[5m]))",
+          "expr": "sum(rate(chat_dlq_messages_total{job=~\".*(chat-worker|chats-worker).*\"}[5m]))",
           "legendFormat": "DLQ Messages",
           "range": true,
           "refId": "C"

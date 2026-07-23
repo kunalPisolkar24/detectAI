@@ -216,7 +216,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{${jobSelector(\"node\")},mode=\"idle\"}[5m])) * 100)",
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{job=~\".*node.*\",mode=\"idle\"}[5m])) * 100)",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -284,7 +284,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{${jobSelector(\"node\")}} / node_memory_MemTotal_bytes{${jobSelector(\"node\")}}))",
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{job=~\".*node.*\"} / node_memory_MemTotal_bytes{job=~\".*node.*\"}))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -566,7 +566,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(model_batch_queue_size{${jobSelector(\"inference\")}}) by (model)",
+          "expr": "sum(model_batch_queue_size{job=~\".*inference.*\"}) by (model)",
           "legendFormat": "{{model}}",
           "range": true,
           "refId": "A"

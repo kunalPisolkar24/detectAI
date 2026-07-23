@@ -1,4 +1,4 @@
-{{- if and .Values.monitoring.enabled (index .Values.monitoring "kube-prometheus-stack" "enabled") }}
+{{- if and .Values.monitoring.enabled .Values.monitoring.kube-prometheus-stack.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -93,7 +93,7 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "100 * max(inference_service_health_status{${jobSelector(\"inference\")},status=\"serving\"})",
+              "expr": "100 * max(inference_service_health_status{job=~\".*inference.*\",status=\"serving\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -161,7 +161,7 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "100 * avg(inference_engine_health_status{${jobSelector(\"inference\")},status=\"serving\"})",
+              "expr": "100 * avg(inference_engine_health_status{job=~\".*inference.*\",status=\"serving\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -229,7 +229,7 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "100 * max(model_batch_queue_size{${jobSelector(\"inference\")}} / clamp_min(inference_engine_queue_capacity{${jobSelector(\"inference\")}}, 1))",
+              "expr": "100 * max(model_batch_queue_size{job=~\".*inference.*\"} / clamp_min(inference_engine_queue_capacity{job=~\".*inference.*\"}, 1))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -296,7 +296,7 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "max(inference_engine_circuit_open_seconds{${jobSelector(\"inference\")}})",
+              "expr": "max(inference_engine_circuit_open_seconds{job=~\".*inference.*\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -354,8 +354,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "inference_service_health_status{${jobSelector(\"inference\")}}",
-              "legendFormat": "{{ "{{" }}status{{ "}}" }}",
+              "expr": "inference_service_health_status{job=~\".*inference.*\"}",
+              "legendFormat": "{{status}}",
               "range": true,
               "refId": "A"
             }
@@ -412,8 +412,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "inference_service_health_reason{${jobSelector(\"inference\")},reason!=\"none\"}",
-              "legendFormat": "{{ "{{" }}reason{{ "}}" }}",
+              "expr": "inference_service_health_reason{job=~\".*inference.*\",reason!=\"none\"}",
+              "legendFormat": "{{reason}}",
               "range": true,
               "refId": "A"
             }
@@ -470,8 +470,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "inference_engine_health_status{${jobSelector(\"inference\")}}",
-              "legendFormat": "{{ "{{" }}model{{ "}}" }} {{ "{{" }}status{{ "}}" }}",
+              "expr": "inference_engine_health_status{job=~\".*inference.*\"}",
+              "legendFormat": "{{model}} {{status}}",
               "range": true,
               "refId": "A"
             }
@@ -515,15 +515,15 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "model_batch_queue_size{${jobSelector(\"inference\")}}",
-              "legendFormat": "{{ "{{" }}model{{ "}}" }} queued",
+              "expr": "model_batch_queue_size{job=~\".*inference.*\"}",
+              "legendFormat": "{{model}} queued",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
-              "expr": "inference_engine_queue_capacity{${jobSelector(\"inference\")}}",
-              "legendFormat": "{{ "{{" }}model{{ "}}" }} capacity",
+              "expr": "inference_engine_queue_capacity{job=~\".*inference.*\"}",
+              "legendFormat": "{{model}} capacity",
               "range": true,
               "refId": "B"
             }
@@ -586,8 +586,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "100 * model_batch_queue_size{${jobSelector(\"inference\")}} / clamp_min(inference_engine_queue_capacity{${jobSelector(\"inference\")}}, 1)",
-              "legendFormat": "{{ "{{" }}model{{ "}}" }}",
+              "expr": "100 * model_batch_queue_size{job=~\".*inference.*\"} / clamp_min(inference_engine_queue_capacity{job=~\".*inference.*\"}, 1)",
+              "legendFormat": "{{model}}",
               "range": true,
               "refId": "A"
             }
@@ -632,8 +632,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "inference_engine_circuit_open_seconds{${jobSelector(\"inference\")}}",
-              "legendFormat": "{{ "{{" }}model{{ "}}" }}",
+              "expr": "inference_engine_circuit_open_seconds{job=~\".*inference.*\"}",
+              "legendFormat": "{{model}}",
               "range": true,
               "refId": "A"
             }
@@ -677,14 +677,14 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "rate(process_cpu_seconds_total{${jobSelector(\"inference\")}}[5m])",
+              "expr": "rate(process_cpu_seconds_total{job=~\".*inference.*\"}[5m])",
               "legendFormat": "cpu cores",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
-              "expr": "process_resident_memory_bytes{${jobSelector(\"inference\")}}",
+              "expr": "process_resident_memory_bytes{job=~\".*inference.*\"}",
               "legendFormat": "resident memory",
               "range": true,
               "refId": "B"
