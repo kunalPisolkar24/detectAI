@@ -101,6 +101,8 @@ spec:
 
 ---
 # 5. Allow apps to reach Redis
+# Matches on app.kubernetes.io/managed-by (always set by the redis-operator)
+# and redis_setup_type (set on the Redis CR pods by the operator).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -110,6 +112,8 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
 spec:
   podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: redis-operator
     matchExpressions:
       - key: redis_setup_type
         operator: In
