@@ -302,40 +302,37 @@ monitoring:
   enabled: true
   prometheus:
     release: "monitoring"
-  kube-prometheus-stack:
+    prometheusSpec:
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 5Gi
+  grafana:
     enabled: true
-    prometheus:
-      prometheusSpec:
-        storageSpec:
-          volumeClaimTemplate:
-            spec:
-              accessModes: ["ReadWriteOnce"]
-              resources:
-                requests:
-                  storage: 5Gi
-    grafana:
-      enabled: true
-      adminPassword: "prom-operator"
-      sidecar:
-        dashboards:
-          enabled: true
-          label: grafana_dashboard
-          labelValue: "1"
-          searchNamespace: ALL
-          provider:
-            foldersFromFilesStructure: true
-      additionalDataSources:
-        - name: Tempo
-          type: tempo
-          uid: tempo
-          url: http://detect-ai-tempo:3100
-          access: proxy
-          jsonData:
-            httpMethod: GET
-            serviceMap:
-              datasourceUid: prometheus
-            lokiSearch:
-              datasourceUid: loki
+    adminPassword: "prom-operator"
+    sidecar:
+      dashboards:
+        enabled: true
+        label: grafana_dashboard
+        labelValue: "1"
+        searchNamespace: ALL
+        provider:
+          foldersFromFilesStructure: true
+    additionalDataSources:
+      - name: Tempo
+        type: tempo
+        uid: tempo
+        url: http://detect-ai-tempo:3100
+        access: proxy
+        jsonData:
+          httpMethod: GET
+          serviceMap:
+            datasourceUid: prometheus
+          lokiSearch:
+            datasourceUid: loki
   loki:
     enabled: true
     storageSize: "5Gi"
