@@ -8,6 +8,7 @@ from prometheus_client import (
     generate_latest,
     multiprocess,
 )
+from app.core.exceptions import ExtractionError, FileTooLargeError, UnsupportedFileTypeError
 
 HTTP_REQUESTS_TOTAL = Counter(
     "http_requests_total",
@@ -47,6 +48,22 @@ EXTRACTED_TEXT_BYTES_TOTAL = Counter(
     ["mime_type"],
 )
 
+EXTRACTION_FAILURES_TOTAL = Counter(
+    "extraction_failures_total",
+    "Total number of extraction failures by error type",
+    ["mime_type", "error_type"],
+)
+
+
+def classify_extraction_error(exc: Exception) -> str:
+    if isinstance(exc, FileTooLargeError):
+        return "file_too_large"
+    if isinstance(exc, UnsupportedFileTypeError):
+        return "unsupported_file_type"
+    if isinstance(exc, ExtractionError):
+        return "corrupt_document"
+    return "unexpected"
+
 
 def record_request(method: str, route: str, status_code: int, duration: float) -> None:
     status_code_label = str(status_code)
@@ -62,9 +79,10 @@ def record_extraction(mime_type: str, file_size_bytes: int, text_bytes: int) -> 
     EXTRACTED_TEXT_BYTES_TOTAL.labels(mime_type=mime_type).inc(text_bytes)
 
 
-def record_extraction_failure(mime_type: str, file_size_bytes: int) -> None:
+def record_extraction_failure(mime_type: str, file_size_bytes: int, error_type: str = "unexpected") -> None:
     PARSED_FILE_SIZE_BYTES.labels(mime_type=mime_type).observe(file_size_bytes)
     PARSED_DOCUMENTS_TOTAL.labels(mime_type=mime_type, status="error").inc()
+    EXTRACTION_FAILURES_TOTAL.labels(mime_type=mime_type, error_type=error_type).inc()
 
 
 def render_metrics() -> tuple[bytes, str]:

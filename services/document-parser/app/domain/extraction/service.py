@@ -3,7 +3,7 @@ import tempfile
 from fastapi import UploadFile
 from app.core.config import settings
 from app.core.exceptions import FileTooLargeError
-from app.core.metrics import record_extraction, record_extraction_failure
+from app.core.metrics import classify_extraction_error, record_extraction, record_extraction_failure
 from app.domain.extraction.strategies import ExtractorFactory
 from app.domain.extraction.cleaner import TextCleaner
 
@@ -34,12 +34,11 @@ class ExtractionService:
                 )
 
                 return cleaned_text
-            except FileTooLargeError:
-                raise
-            except Exception:
+            except Exception as exc:
                 record_extraction_failure(
                     mime_type=mime_type,
                     file_size_bytes=len(content) if "content" in dir() else 0,
+                    error_type=classify_extraction_error(exc),
                 )
                 raise
             finally:
