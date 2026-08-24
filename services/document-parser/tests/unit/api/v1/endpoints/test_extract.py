@@ -13,14 +13,34 @@ def test_health_check(client):
     assert response.json() == {"status": "ok"}
 
 def test_extract_txt_success(client, mocker):
+    from app.domain.extraction.strategies import ExtractionResult
     mocker.patch("app.api.v1.endpoints.extract.validate_upload", return_value="text/plain")
-    mocker.patch("app.domain.extraction.service.ExtractionService.process_file", return_value="Extracted Content")
+    mocker.patch(
+        "app.domain.extraction.service.ExtractionService.process_file",
+        return_value=ExtractionResult(text="Extracted Content"),
+    )
 
     files = {"file": ("test.txt", b"Content", "text/plain")}
     response = client.post("/extract", files=files)
 
     assert response.status_code == 200
     assert response.json()["text"] == "Extracted Content"
+    assert response.json()["truncated"] is False
+
+def test_extract_reports_truncation(client, mocker):
+    from app.domain.extraction.strategies import ExtractionResult
+    mocker.patch("app.api.v1.endpoints.extract.validate_upload", return_value="application/pdf")
+    mocker.patch(
+        "app.domain.extraction.service.ExtractionService.process_file",
+        return_value=ExtractionResult(text="Partial content", truncated=True),
+    )
+
+    files = {"file": ("broken.pdf", b"%PDF-broken", "application/pdf")}
+    response = client.post("/extract", files=files)
+
+    assert response.status_code == 200
+    assert response.json()["truncated"] is True
+    assert response.json()["text_length"] == len("Partial content")
 
 def test_invalid_mime_type(client, mocker):
     mocker.patch("app.api.deps.magic.from_buffer", return_value="image/png")

@@ -31,9 +31,9 @@ def test_pdf_extraction_strips_margin_band(tmp_path):
 
     result = PdfExtractionStrategy().extract(str(pdf))
 
-    assert "HEADER CANARY" not in result
-    assert "Page 1" not in result
-    assert "Body line" in result
+    assert "HEADER CANARY" not in result.text
+    assert "Page 1" not in result.text
+    assert "Body line" in result.text
 
 
 def test_pdf_extraction_keeps_body_text_touching_margin_band(tmp_path):
@@ -42,7 +42,7 @@ def test_pdf_extraction_keeps_body_text_touching_margin_band(tmp_path):
 
     result = PdfExtractionStrategy().extract(str(pdf))
 
-    assert "Heading near top" in result
+    assert "Heading near top" in result.text
 
 
 def test_pdf_extraction_drops_cross_page_repetition(tmp_path):
@@ -54,6 +54,6 @@ def test_pdf_extraction_drops_cross_page_repetition(tmp_path):
 
     result = PdfExtractionStrategy().extract(str(pdf))
 
-    assert "REPEATED BANNER" not in result
-    assert "Unique intro" in result
-    assert "Unique findings" in result
+    assert "REPEATED BANNER" not in result.text
+    assert "Unique intro" in result.text
+    assert "Unique findings" in result.text

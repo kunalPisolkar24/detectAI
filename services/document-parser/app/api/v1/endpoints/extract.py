@@ -11,7 +11,7 @@ async def extract_text(request: Request, file: UploadFile = File(...)):
     mime_type = await validate_upload(file)
 
     loop = asyncio.get_running_loop()
-    extracted_text = await loop.run_in_executor(
+    result = await loop.run_in_executor(
         request.app.state.process_pool,
         ExtractionService.process_file,
         file,
@@ -21,6 +21,7 @@ async def extract_text(request: Request, file: UploadFile = File(...)):
     return ExtractionResponse(
         filename=file.filename or "unknown",
         content_type=mime_type,
-        text_length=len(extracted_text),
-        text=extracted_text
+        text_length=len(result.text),
+        text=result.text,
+        truncated=result.truncated
     )

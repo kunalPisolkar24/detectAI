@@ -2,11 +2,12 @@ import pytest
 import os
 from unittest.mock import MagicMock
 from app.domain.extraction.service import ExtractionService
+from app.domain.extraction.strategies import ExtractionResult
 
 
 def test_process_file_success(mocker):
     mock_strategy = MagicMock()
-    mock_strategy.extract.return_value = "Mocked Raw Text"
+    mock_strategy.extract.return_value = ExtractionResult(text="Mocked Raw Text")
     mocker.patch("app.domain.extraction.service.ExtractorFactory.get_strategy", return_value=mock_strategy)
     mocker.patch("app.domain.extraction.service.TextCleaner.clean", return_value="Cleaned Text")
     mock_record = mocker.patch("app.domain.extraction.service.record_extraction")
@@ -17,7 +18,8 @@ def test_process_file_success(mocker):
 
     result = ExtractionService.process_file(mock_file, "text/plain")
 
-    assert result == "Cleaned Text"
+    assert result.text == "Cleaned Text"
+    assert result.truncated is False
     mock_strategy.extract.assert_called_once()
     mock_record.assert_called_once_with(
         mime_type="text/plain",
@@ -28,6 +30,22 @@ def test_process_file_success(mocker):
     called_path = mock_strategy.extract.call_args[0][0]
     assert called_path.endswith(".txt")
     assert not os.path.exists(called_path)
+
+
+def test_process_file_preserves_truncation_flag(mocker):
+    mock_strategy = MagicMock()
+    mock_strategy.extract.return_value = ExtractionResult(text="Partial text", truncated=True)
+    mocker.patch("app.domain.extraction.service.ExtractorFactory.get_strategy", return_value=mock_strategy)
+    mocker.patch("app.domain.extraction.service.TextCleaner.clean", side_effect=lambda t: t)
+
+    mock_file = MagicMock()
+    mock_file.filename = "broken.pdf"
+    mock_file.file.read.return_value = b"%PDF-partial"
+
+    result = ExtractionService.process_file(mock_file, "application/pdf")
+
+    assert result.text == "Partial text"
+    assert result.truncated is True
 
 
 def test_process_file_too_large(mocker):

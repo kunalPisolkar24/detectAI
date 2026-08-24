@@ -2,6 +2,7 @@ import math
 import re
 import zipfile
 from collections import Counter
+from dataclasses import dataclass
 
 import fitz
 import docx
@@ -15,32 +16,52 @@ DOCX_FIELD_CONTROL_CHARS = re.compile(r"[\x13\x14\x15]")
 UTF8_BOM = "\ufeff"
 LATIN1_BOM = "\xef\xbb\xbf"
 
+
+@dataclass
+class ExtractionResult:
+    text: str
+    truncated: bool = False
+
 class ExtractionStrategy(ABC):
     @abstractmethod
-    def extract(self, file_path: str) -> str:
+    def extract(self, file_path: str) -> ExtractionResult:
         pass
 
 class PdfExtractionStrategy(ExtractionStrategy):
-    def extract(self, file_path: str) -> str:
+    def extract(self, file_path: str) -> ExtractionResult:
         page_texts = []
         total_length = 0
+        unreadable_pages = 0
+        total_pages = 0
         try:
             with fitz.open(file_path) as doc:
                 if doc.page_count > settings.MAX_PDF_PAGES:
                     raise DocumentTooLargeError(doc.page_count, settings.MAX_PDF_PAGES)
                 for page in doc:
-                    text = self._extract_page_text(page)
+                    total_pages += 1
+                    try:
+                        text = self._extract_page_text(page)
+                    except Exception:
+                        unreadable_pages += 1
+                        continue
                     if not text:
                         continue
                     page_texts.append(text)
                     total_length += len(text)
                     if total_length > settings.MAX_TEXT_LENGTH:
                         break
-            return self._drop_repeated_lines(page_texts)
         except DocumentTooLargeError:
             raise
         except Exception as e:
             raise ExtractionError(f"PDF processing failed: {str(e)}")
+
+        if unreadable_pages and not page_texts:
+            raise ExtractionError(f"PDF processing failed: all {unreadable_pages} pages unreadable")
+
+        return ExtractionResult(
+            text=self._drop_repeated_lines(page_texts),
+            truncated=bool(unreadable_pages),
+        )
 
     @staticmethod
     def _extract_page_text(page) -> str:
@@ -87,7 +108,7 @@ class PdfExtractionStrategy(ExtractionStrategy):
         return " ".join(line.split())
 
 class DocxExtractionStrategy(ExtractionStrategy):
-    def extract(self, file_path: str) -> str:
+    def extract(self, file_path: str) -> ExtractionResult:
         try:
             self._guard_uncompressed_size(file_path)
             doc = docx.Document(file_path)
@@ -100,7 +121,7 @@ class DocxExtractionStrategy(ExtractionStrategy):
                     total_length += len(text)
                 if total_length > settings.MAX_TEXT_LENGTH:
                     break
-            return "\n".join(text_content)
+            return ExtractionResult(text="\n".join(text_content))
         except DocumentTooLargeError:
             raise
         except Exception as e:
@@ -118,14 +139,14 @@ class DocxExtractionStrategy(ExtractionStrategy):
         return DOCX_FIELD_CONTROL_CHARS.sub("", text).replace("\t", " ")
 
 class TxtExtractionStrategy(ExtractionStrategy):
-    def extract(self, file_path: str) -> str:
+    def extract(self, file_path: str) -> ExtractionResult:
         try:
             with open(file_path, "rb") as f:
                 content = f.read()
             try:
-                return content.decode("utf-8").removeprefix(UTF8_BOM)
+                return ExtractionResult(text=content.decode("utf-8").removeprefix(UTF8_BOM))
             except UnicodeDecodeError:
-                return content.decode("latin-1").removeprefix(LATIN1_BOM)
+                return ExtractionResult(text=content.decode("latin-1").removeprefix(LATIN1_BOM))
         except Exception as e:
             raise ExtractionError(f"Text decoding failed: {str(e)}")
 

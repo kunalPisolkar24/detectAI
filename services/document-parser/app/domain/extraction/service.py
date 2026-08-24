@@ -4,13 +4,13 @@ from fastapi import UploadFile
 from app.core.config import settings
 from app.core.exceptions import FileTooLargeError
 from app.core.metrics import classify_extraction_error, record_extraction, record_extraction_failure
-from app.domain.extraction.strategies import ExtractorFactory
+from app.domain.extraction.strategies import ExtractorFactory, ExtractionResult
 from app.domain.extraction.cleaner import TextCleaner
 
 
 class ExtractionService:
     @staticmethod
-    def process_file(file: UploadFile, mime_type: str) -> str:
+    def process_file(file: UploadFile, mime_type: str) -> ExtractionResult:
         suffix = os.path.splitext(file.filename or "")[1]
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -24,8 +24,8 @@ class ExtractionService:
                 tmp.flush()
 
                 strategy = ExtractorFactory.get_strategy(mime_type)
-                raw_text = strategy.extract(tmp_path)
-                cleaned_text = TextCleaner.clean(raw_text)
+                raw_result = strategy.extract(tmp_path)
+                cleaned_text = TextCleaner.clean(raw_result.text)
 
                 record_extraction(
                     mime_type=mime_type,
@@ -33,7 +33,7 @@ class ExtractionService:
                     text_bytes=len(cleaned_text.encode("utf-8")),
                 )
 
-                return cleaned_text
+                return ExtractionResult(text=cleaned_text, truncated=raw_result.truncated)
             except Exception as exc:
                 record_extraction_failure(
                     mime_type=mime_type,

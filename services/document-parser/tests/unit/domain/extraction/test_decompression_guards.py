@@ -35,7 +35,7 @@ def test_pdf_accepts_documents_at_page_limit(tmp_path, mocker):
 
     result = PdfExtractionStrategy().extract(str(pdf))
 
-    assert isinstance(result, str)
+    assert result.truncated is False
 
 
 def _mock_zip_archive(mocker, member_sizes):
@@ -64,7 +64,7 @@ def test_docx_accepts_archives_under_uncompressed_limit(mocker):
     with patch("docx.Document", return_value=mock_doc):
         result = DocxExtractionStrategy().extract("small.docx")
 
-    assert result == ""
+    assert result.text == ""
 
 
 def test_docx_non_zip_input_raises_extraction_error(tmp_path):
