@@ -58,6 +58,16 @@ spec:
             - name: metrics
               containerPort: {{ .Values.chats.api.service.metricsPort }}
               protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 15
+            periodSeconds: 20
           lifecycle:
             preStop:
               exec:
@@ -73,7 +83,7 @@ spec:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
-                name: {{ .Values.global.secretName | default .Values.secretName }}
+                name: {{ .Values.global.secretName }}
           resources:
             {{- toYaml .Values.chats.api.resources | nindent 12 }}
 ---
@@ -163,7 +173,7 @@ spec:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
-                name: {{ .Values.global.secretName | default .Values.secretName }}
+                name: {{ .Values.global.secretName }}
           resources:
             {{- toYaml .Values.chats.worker.resources | nindent 12 }}
 

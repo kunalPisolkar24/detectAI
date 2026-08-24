@@ -93,7 +93,7 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "100 * avg(up{${jobSelector(\"document-parser\")}})",
+              "expr": "100 * avg(up{job=~\".*document-parser.*\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -338,8 +338,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(rate(http_request_duration_seconds_count{${jobSelector(\"document-parser\")}}[5m])) by (route, status_code)",
-              "legendFormat": "{{ "{{" }}route{{ "}}" }} {{ "{{" }}status_code{{ "}}" }}",
+              "expr": "sum(rate(http_request_duration_seconds_count{job=~\".*document-parser.*\"}[5m])) by (route, status_code)",
+              "legendFormat": "{{route}} {{status_code}}",
               "range": true,
               "refId": "A"
             }
@@ -383,8 +383,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{${jobSelector(\"document-parser\")}}[5m])) by (route, le))",
-              "legendFormat": "{{ "{{" }}route{{ "}}" }}",
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~\".*document-parser.*\"}[5m])) by (route, le))",
+              "legendFormat": "{{route}}",
               "range": true,
               "refId": "A"
             }
@@ -428,8 +428,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(rate(http_request_duration_seconds_count{${jobSelector(\"document-parser\")}}[5m])) by (status_code)",
-              "legendFormat": "{{ "{{" }}status_code{{ "}}" }}",
+              "expr": "sum(rate(http_request_duration_seconds_count{job=~\".*document-parser.*\"}[5m])) by (status_code)",
+              "legendFormat": "{{status_code}}",
               "range": true,
               "refId": "A"
             }
@@ -622,8 +622,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(rate(parsed_documents_total{${jobSelector(\"document-parser\")}}[5m])) by (mime_type, status)",
-              "legendFormat": "{{ "{{" }}mime_type{{ "}}" }} {{ "{{" }}status{{ "}}" }}",
+              "expr": "sum(rate(parsed_documents_total{job=~\".*document-parser.*\"}[5m])) by (mime_type, status)",
+              "legendFormat": "{{mime_type}} {{status}}",
               "range": true,
               "refId": "A"
             }
@@ -667,15 +667,15 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(rate(extracted_text_bytes_total{${jobSelector(\"document-parser\")}}[5m])) by (mime_type)",
-              "legendFormat": "{{ "{{" }}mime_type{{ "}}" }} text bytes/s",
+              "expr": "sum(rate(extracted_text_bytes_total{job=~\".*document-parser.*\"}[5m])) by (mime_type)",
+              "legendFormat": "{{mime_type}} text bytes/s",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
-              "expr": "histogram_quantile(0.95, sum(rate(parsed_file_size_bytes_bucket{${jobSelector(\"document-parser\")}}[5m])) by (mime_type, le))",
-              "legendFormat": "{{ "{{" }}mime_type{{ "}}" }} size p95 bytes",
+              "expr": "histogram_quantile(0.95, sum(rate(parsed_file_size_bytes_bucket{job=~\".*document-parser.*\"}[5m])) by (mime_type, le))",
+              "legendFormat": "{{mime_type}} size p95 bytes",
               "range": true,
               "refId": "B"
             }

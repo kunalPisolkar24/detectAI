@@ -54,8 +54,12 @@ class AnalyticsPublisher {
       this.channel = null
       this.connection = null
       this.connecting = null
-      ch = await this.ensureChannel()
-      ch.sendToQueue(QUEUE, payload, opts)
+      try {
+        ch = await this.ensureChannel()
+        ch.sendToQueue(QUEUE, payload, opts)
+      } catch (retryErr) {
+        console.error("AnalyticsPublisher retry failed, dropping message", retryErr)
+      }
     }
   }
 }

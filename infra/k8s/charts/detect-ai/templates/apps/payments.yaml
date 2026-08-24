@@ -42,6 +42,18 @@ spec:
             - name: http
               containerPort: {{ .Values.payments.service.port }}
               protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
           lifecycle:
             preStop:
               exec:
@@ -55,7 +67,7 @@ spec:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
-                name: {{ .Values.global.secretName | default .Values.secretName }}
+                name: {{ .Values.global.secretName }}
           resources:
             {{- toYaml .Values.payments.resources | nindent 12 }}
 ---

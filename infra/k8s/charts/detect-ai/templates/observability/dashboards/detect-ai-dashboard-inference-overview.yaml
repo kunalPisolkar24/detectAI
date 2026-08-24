@@ -93,7 +93,7 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "100 * avg(up{${jobSelector(\"inference\")}})",
+              "expr": "100 * avg(up{job=~\".*inference.*\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -159,7 +159,7 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(rate(grpc_requests_total{${jobSelector(\"inference\")}}[5m]))",
+              "expr": "sum(rate(grpc_requests_total{job=~\".*inference.*\"}[5m]))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -227,7 +227,7 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "100 * sum(rate(grpc_requests_total{${jobSelector(\"inference\")},code!=\"OK\"}[5m])) / clamp_min(sum(rate(grpc_requests_total{${jobSelector(\"inference\")}}[5m])), 0.001)",
+              "expr": "100 * sum(rate(grpc_requests_total{job=~\".*inference.*\",code!=\"OK\"}[5m])) / clamp_min(sum(rate(grpc_requests_total{job=~\".*inference.*\"}[5m])), 0.001)",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -293,7 +293,7 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "histogram_quantile(0.95, sum(rate(grpc_latency_seconds_bucket{${jobSelector(\"inference\")}}[5m])) by (le))",
+              "expr": "histogram_quantile(0.95, sum(rate(grpc_latency_seconds_bucket{job=~\".*inference.*\"}[5m])) by (le))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -338,8 +338,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(rate(grpc_requests_total{${jobSelector(\"inference\")}}[5m])) by (method, model, code)",
-              "legendFormat": "{{ "{{" }}method{{ "}}" }} {{ "{{" }}model{{ "}}" }} {{ "{{" }}code{{ "}}" }}",
+              "expr": "sum(rate(grpc_requests_total{job=~\".*inference.*\"}[5m])) by (method, model, code)",
+              "legendFormat": "{{method}} {{model}} {{code}}",
               "range": true,
               "refId": "A"
             }
@@ -383,8 +383,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "histogram_quantile(0.95, sum(rate(grpc_latency_seconds_bucket{${jobSelector(\"inference\")}}[5m])) by (method, model, le))",
-              "legendFormat": "{{ "{{" }}method{{ "}}" }} {{ "{{" }}model{{ "}}" }}",
+              "expr": "histogram_quantile(0.95, sum(rate(grpc_latency_seconds_bucket{job=~\".*inference.*\"}[5m])) by (method, model, le))",
+              "legendFormat": "{{method}} {{model}}",
               "range": true,
               "refId": "A"
             }
@@ -428,8 +428,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(model_batch_queue_size{${jobSelector(\"inference\")}}) by (model)",
-              "legendFormat": "{{ "{{" }}model{{ "}}" }}",
+              "expr": "sum(model_batch_queue_size{job=~\".*inference.*\"}) by (model)",
+              "legendFormat": "{{model}}",
               "range": true,
               "refId": "A"
             }
@@ -473,15 +473,15 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "histogram_quantile(0.95, sum(rate(model_batch_size_bucket{${jobSelector(\"inference\")}}[5m])) by (model, le))",
-              "legendFormat": "{{ "{{" }}model{{ "}}" }} size p95",
+              "expr": "histogram_quantile(0.95, sum(rate(model_batch_size_bucket{job=~\".*inference.*\"}[5m])) by (model, le))",
+              "legendFormat": "{{model}} size p95",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
-              "expr": "histogram_quantile(0.95, sum(rate(model_batch_processing_seconds_bucket{${jobSelector(\"inference\")}}[5m])) by (model, le))",
-              "legendFormat": "{{ "{{" }}model{{ "}}" }} processing p95",
+              "expr": "histogram_quantile(0.95, sum(rate(model_batch_processing_seconds_bucket{job=~\".*inference.*\"}[5m])) by (model, le))",
+              "legendFormat": "{{model}} processing p95",
               "range": true,
               "refId": "B"
             }
@@ -527,15 +527,15 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "histogram_quantile(0.50, sum(rate(model_ai_confidence_score_bucket{${jobSelector(\"inference\")}}[5m])) by (model, le))",
-              "legendFormat": "{{ "{{" }}model{{ "}}" }} p50",
+              "expr": "histogram_quantile(0.50, sum(rate(model_ai_confidence_score_bucket{job=~\".*inference.*\"}[5m])) by (model, le))",
+              "legendFormat": "{{model}} p50",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
-              "expr": "histogram_quantile(0.95, sum(rate(model_ai_confidence_score_bucket{${jobSelector(\"inference\")}}[5m])) by (model, le))",
-              "legendFormat": "{{ "{{" }}model{{ "}}" }} p95",
+              "expr": "histogram_quantile(0.95, sum(rate(model_ai_confidence_score_bucket{job=~\".*inference.*\"}[5m])) by (model, le))",
+              "legendFormat": "{{model}} p95",
               "range": true,
               "refId": "B"
             }
@@ -579,14 +579,14 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "rate(process_cpu_seconds_total{${jobSelector(\"inference\")}}[5m])",
+              "expr": "rate(process_cpu_seconds_total{job=~\".*inference.*\"}[5m])",
               "legendFormat": "cpu cores",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
-              "expr": "process_resident_memory_bytes{${jobSelector(\"inference\")}}",
+              "expr": "process_resident_memory_bytes{job=~\".*inference.*\"}",
               "legendFormat": "resident memory",
               "range": true,
               "refId": "B"

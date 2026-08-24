@@ -102,11 +102,6 @@ scrape_configs:
       - targets:
           - redis-exporter-slave-2:9121
 
-  - job_name: redis-ratelimit
-    static_configs:
-      - targets:
-          - redis-exporter-ratelimit:9121
-
   - job_name: redis-usage-0
     static_configs:
       - targets:

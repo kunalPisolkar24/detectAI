@@ -60,6 +60,9 @@ spec:
           - document-parser
           - inference
           - payments-gateway
+          - worker-analytics
+          - worker-cron
+          - worker-payments
   policyTypes:
     - Ingress
   ingress:
@@ -94,9 +97,12 @@ spec:
                   - chats-api
                   - payments-gateway
                   - migration-job
+                  - worker-payments
 
 ---
 # 5. Allow apps to reach Redis
+# Matches on app.kubernetes.io/managed-by (always set by the redis-operator)
+# and redis_setup_type (set on the Redis CR pods by the operator).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -106,13 +112,15 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
 spec:
   podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: redis-operator
     matchExpressions:
-      - key: app
+      - key: redis_setup_type
         operator: In
         values:
-          - redis-standalone
-          - redis-sentinel
-          - redis-cluster
+          - standalone
+          - replication
+          - cluster
   policyTypes:
     - Ingress
   ingress:

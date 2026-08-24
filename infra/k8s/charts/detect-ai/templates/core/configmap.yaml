@@ -14,23 +14,36 @@ data:
   FILE_EXTRACTOR_API_URL: "http://{{ include "detect-ai.fullname" . }}-document-parser-service:8000"
   
   # Databases and Broker Endpoints
-  {{- if .Values.databases.redis.cluster.enabled }}
-  REDIS_USAGE_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-cluster-0.{{ include "detect-ai.fullname" . }}-redis-cluster:6379,{{ include "detect-ai.fullname" . }}-redis-cluster-1.{{ include "detect-ai.fullname" . }}-redis-cluster:6379,{{ include "detect-ai.fullname" . }}-redis-cluster-2.{{ include "detect-ai.fullname" . }}-redis-cluster:6379"
-  {{- else }}
-  REDIS_USAGE_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-standalone-service:6379"
-  {{- end }}
-  
-  {{- if .Values.databases.redis.sentinel.enabled }}
+  # NOTE: Redis passwords are injected via the detect-ai-secrets Secret:
+  #   REDIS_PASSWORD, REDIS_USAGE_PASSWORD, EVENT_REDIS_PASSWORD
+  # Apps must pass these as the `password` option to the Redis client constructor
+  # (the plain URL omits the password intentionally to keep it out of the ConfigMap).
+  {{- if .Values.databases.redis.userCache.sentinel.enabled }}
   REDIS_MASTER_NAME: "mymaster"
-  REDIS_SENTINELS: "{{ include "detect-ai.fullname" . }}-redis-sentinel-0.{{ include "detect-ai.fullname" . }}-redis-sentinel:26379,{{ include "detect-ai.fullname" . }}-redis-sentinel-1.{{ include "detect-ai.fullname" . }}-redis-sentinel:26379,{{ include "detect-ai.fullname" . }}-redis-sentinel-2.{{ include "detect-ai.fullname" . }}-redis-sentinel:26379"
+  REDIS_SENTINELS: "{{ include "detect-ai.fullname" . }}-redis-usercache:26379"
   {{- else }}
-  REDIS_SENTINEL_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-standalone-service:6379"
+  REDIS_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-usercache:6379"
   {{- end }}
   
-  {{- if .Values.databases.mongo.sharded }}
-  MONGO_URL: "mongodb://{{ include "detect-ai.fullname" . }}-mongodb-router-service:27017/chats"
+  REDIS_USAGE_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-usage:6379"
+  REDIS_USAGE_MODE: "standalone"
+  
+  EVENT_REDIS_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-events:6379"
+  EVENT_REDIS_MODE: "standalone"
+  
+  {{- if .Values.databases.redis.chat.cluster.enabled }}
+  CHAT_REDIS_MODE: "cluster"
+  CHAT_REDIS_ADDRS: "{{ include "detect-ai.fullname" . }}-redis-chat-leader:6379"
   {{- else }}
-  MONGO_URL: "mongodb://{{ include "detect-ai.fullname" . }}-mongodb-standalone-service:27017/chats"
+  CHAT_REDIS_MODE: "standalone"
+  CHAT_REDIS_ADDRS: "{{ include "detect-ai.fullname" . }}-redis-chat:6379"
+  {{- end }}
+  
+  {{- $mongoDb := .Values.databases.mongo.database | default "chats" }}
+  {{- if .Values.databases.mongo.sharded }}
+  MONGO_URL: "mongodb://{{ include "detect-ai.fullname" . }}-mongodb-router-service:27017/{{ $mongoDb }}"
+  {{- else }}
+  MONGO_URL: "mongodb://{{ include "detect-ai.fullname" . }}-mongodb-standalone-service:27017/{{ $mongoDb }}"
   {{- end }}
 
   POSTGRES_HOST: "{{ include "detect-ai.fullname" . }}-postgres"

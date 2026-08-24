@@ -15,4 +15,3 @@ infra/k8s/envs/.env.prod
 
 # Helm
 infra/k8s/charts/*/charts/
-infra/k8s/charts/*/Chart.lock

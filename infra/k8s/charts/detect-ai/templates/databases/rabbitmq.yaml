@@ -40,12 +40,12 @@ spec:
             - name: RABBITMQ_DEFAULT_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.global.secretName | default .Values.secretName }}
+                  name: {{ .Values.global.secretName }}
                   key: RABBITMQ_DEFAULT_USER
             - name: RABBITMQ_DEFAULT_PASS
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.global.secretName | default .Values.secretName }}
+                  name: {{ .Values.global.secretName }}
                   key: RABBITMQ_DEFAULT_PASS
             # Enable built-in prometheus metrics plugin natively
             - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS

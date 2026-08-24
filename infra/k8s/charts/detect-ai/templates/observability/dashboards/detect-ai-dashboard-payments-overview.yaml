@@ -93,7 +93,7 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "100 * avg(up{${jobSelector(\"payment-gateway\")}})",
+              "expr": "100 * avg(up{job=~\".*(payment-gateway|payments-gateway).*\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -338,8 +338,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(rate(http_request_duration_seconds_count{${jobSelector(\"payment-gateway\")}}[5m])) by (route, status_code)",
-              "legendFormat": "{{ "{{" }}route{{ "}}" }} {{ "{{" }}status_code{{ "}}" }}",
+              "expr": "sum(rate(http_request_duration_seconds_count{job=~\".*(payment-gateway|payments-gateway).*\"}[5m])) by (route, status_code)",
+              "legendFormat": "{{route}} {{status_code}}",
               "range": true,
               "refId": "A"
             }
@@ -383,8 +383,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{${jobSelector(\"payment-gateway\")}}[5m])) by (route, le))",
-              "legendFormat": "{{ "{{" }}route{{ "}}" }}",
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~\".*(payment-gateway|payments-gateway).*\"}[5m])) by (route, le))",
+              "legendFormat": "{{route}}",
               "range": true,
               "refId": "A"
             }
@@ -428,14 +428,14 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "go_goroutines{${jobSelector(\"payment-gateway\")}}",
+              "expr": "go_goroutines{job=~\".*(payment-gateway|payments-gateway).*\"}",
               "legendFormat": "goroutines",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
-              "expr": "go_memstats_heap_alloc_bytes{${jobSelector(\"payment-gateway\")}}",
+              "expr": "go_memstats_heap_alloc_bytes{job=~\".*(payment-gateway|payments-gateway).*\"}",
               "legendFormat": "heap alloc",
               "range": true,
               "refId": "B"
@@ -480,21 +480,21 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "rate(process_cpu_seconds_total{${jobSelector(\"payment-gateway\")}}[5m])",
+              "expr": "rate(process_cpu_seconds_total{job=~\".*(payment-gateway|payments-gateway).*\"}[5m])",
               "legendFormat": "cpu cores",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
-              "expr": "process_resident_memory_bytes{${jobSelector(\"payment-gateway\")}}",
+              "expr": "process_resident_memory_bytes{job=~\".*(payment-gateway|payments-gateway).*\"}",
               "legendFormat": "resident memory",
               "range": true,
               "refId": "B"
             },
             {
               "editorMode": "code",
-              "expr": "process_open_fds{${jobSelector(\"payment-gateway\")}}",
+              "expr": "process_open_fds{job=~\".*(payment-gateway|payments-gateway).*\"}",
               "legendFormat": "open fds",
               "range": true,
               "refId": "C"
@@ -650,14 +650,14 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(rate(payment_events_published_total{${jobSelector(\"payment-gateway\")}}[5m])) by (event_type, status)",
-              "legendFormat": "Event published {{ "{{" }}event_type{{ "}}" }} {{ "{{" }}status{{ "}}" }}",
+              "expr": "sum(rate(payment_events_published_total{job=~\".*(payment-gateway|payments-gateway).*\"}[5m])) by (event_type, status)",
+              "legendFormat": "Event published {{event_type}} {{status}}",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
-              "expr": "sum(rate(payment_webhook_signatures_invalid_total{${jobSelector(\"payment-gateway\")}}[5m]))",
+              "expr": "sum(rate(payment_webhook_signatures_invalid_total{job=~\".*(payment-gateway|payments-gateway).*\"}[5m]))",
               "legendFormat": "Invalid Signatures Rate",
               "range": true,
               "refId": "B"
@@ -702,21 +702,21 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "rabbitmq_connection_status{${jobSelector(\"payment-gateway\")}}",
+              "expr": "rabbitmq_connection_status{job=~\".*(payment-gateway|payments-gateway).*\"}",
               "legendFormat": "Connection Status (1=Connected)",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
-              "expr": "sum(rate(rabbitmq_reconnections_total{${jobSelector(\"payment-gateway\")}}[5m]))",
+              "expr": "sum(rate(rabbitmq_reconnections_total{job=~\".*(payment-gateway|payments-gateway).*\"}[5m]))",
               "legendFormat": "Reconnections Rate",
               "range": true,
               "refId": "B"
             },
             {
               "editorMode": "code",
-              "expr": "histogram_quantile(0.95, sum(rate(rabbitmq_publish_duration_seconds_bucket{${jobSelector(\"payment-gateway\")}}[5m])) by (le))",
+              "expr": "histogram_quantile(0.95, sum(rate(rabbitmq_publish_duration_seconds_bucket{job=~\".*(payment-gateway|payments-gateway).*\"}[5m])) by (le))",
               "legendFormat": "Publish Latency p95",
               "range": true,
               "refId": "C"

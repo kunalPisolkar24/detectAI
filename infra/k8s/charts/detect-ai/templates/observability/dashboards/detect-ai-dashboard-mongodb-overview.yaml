@@ -159,7 +159,7 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(mongodb_dbstats_dataSize{${jobSelector(\"mongodb\")},database=\"chat_db\"})",
+              "expr": "sum(mongodb_dbstats_dataSize{job=~\".*mongodb.*\",database=\"chat_db\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -225,7 +225,7 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(mongodb_dbstats_indexSize{${jobSelector(\"mongodb\")},database=\"chat_db\"})",
+              "expr": "sum(mongodb_dbstats_indexSize{job=~\".*mongodb.*\",database=\"chat_db\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -291,7 +291,7 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(mongodb_dbstats_objects{${jobSelector(\"mongodb\")},database=\"chat_db\"})",
+              "expr": "sum(mongodb_dbstats_objects{job=~\".*mongodb.*\",database=\"chat_db\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -336,8 +336,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(mongodb_dbstats_dataSize{${jobSelector(\"mongodb\")}}) by (database)",
-              "legendFormat": "{{ "{{" }}database{{ "}}" }}",
+              "expr": "sum(mongodb_dbstats_dataSize{job=~\".*mongodb.*\"}) by (database)",
+              "legendFormat": "{{database}}",
               "range": true,
               "refId": "A"
             }
@@ -381,15 +381,15 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(mongodb_dbstats_storageSize{${jobSelector(\"mongodb\")}}) by (database)",
-              "legendFormat": "{{ "{{" }}database{{ "}}" }} storage",
+              "expr": "sum(mongodb_dbstats_storageSize{job=~\".*mongodb.*\"}) by (database)",
+              "legendFormat": "{{database}} storage",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
-              "expr": "sum(mongodb_dbstats_indexSize{${jobSelector(\"mongodb\")}}) by (database)",
-              "legendFormat": "{{ "{{" }}database{{ "}}" }} index",
+              "expr": "sum(mongodb_dbstats_indexSize{job=~\".*mongodb.*\"}) by (database)",
+              "legendFormat": "{{database}} index",
               "range": true,
               "refId": "B"
             }
@@ -433,15 +433,15 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum(mongodb_dbstats_objects{${jobSelector(\"mongodb\")}}) by (database)",
-              "legendFormat": "{{ "{{" }}database{{ "}}" }} objects",
+              "expr": "sum(mongodb_dbstats_objects{job=~\".*mongodb.*\"}) by (database)",
+              "legendFormat": "{{database}} objects",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
-              "expr": "sum(mongodb_dbstats_indexes{${jobSelector(\"mongodb\")}}) by (database)",
-              "legendFormat": "{{ "{{" }}database{{ "}}" }} indexes",
+              "expr": "sum(mongodb_dbstats_indexes{job=~\".*mongodb.*\"}) by (database)",
+              "legendFormat": "{{database}} indexes",
               "range": true,
               "refId": "B"
             }
@@ -485,8 +485,8 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "avg(mongodb_dbstats_avgObjSize{${jobSelector(\"mongodb\")}}) by (database)",
-              "legendFormat": "{{ "{{" }}database{{ "}}" }}",
+              "expr": "avg(mongodb_dbstats_avgObjSize{job=~\".*mongodb.*\"}) by (database)",
+              "legendFormat": "{{database}}",
               "range": true,
               "refId": "A"
             }
@@ -531,7 +531,7 @@ data:
             {
               "editorMode": "code",
               "expr": "100 * sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{job=~\".*(cadvisor|kubelet).*\",container_label_com_docker_compose_service=~\".*mongo.*\",id!=\"/\"}[5m]))",
-              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }}",
+              "legendFormat": "{{container_label_com_docker_compose_service}}",
               "range": true,
               "refId": "A"
             }
@@ -576,7 +576,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{job=~\".*(cadvisor|kubelet).*\",container_label_com_docker_compose_service=~\".*mongo.*\",id!=\"/\"})",
-              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }}",
+              "legendFormat": "{{container_label_com_docker_compose_service}}",
               "range": true,
               "refId": "A"
             }
@@ -621,7 +621,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum by (container_label_com_docker_compose_service) (container_fs_usage_bytes{job=~\".*(cadvisor|kubelet).*\",container_label_com_docker_compose_service=~\".*mongo.*\",id!=\"/\"})",
-              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }}",
+              "legendFormat": "{{container_label_com_docker_compose_service}}",
               "range": true,
               "refId": "A"
             }
@@ -666,14 +666,14 @@ data:
             {
               "editorMode": "code",
               "expr": "sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{job=~\".*(cadvisor|kubelet).*\",container_label_com_docker_compose_service=~\".*mongo.*\",id!=\"/\"}[5m]))",
-              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }} rx",
+              "legendFormat": "{{container_label_com_docker_compose_service}} rx",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{job=~\".*(cadvisor|kubelet).*\",container_label_com_docker_compose_service=~\".*mongo.*\",id!=\"/\"}[5m]))",
-              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }} tx",
+              "legendFormat": "{{container_label_com_docker_compose_service}} tx",
               "range": true,
               "refId": "B"
             }

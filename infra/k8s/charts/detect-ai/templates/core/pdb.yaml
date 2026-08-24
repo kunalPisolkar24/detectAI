@@ -74,13 +74,13 @@ spec:
       app: rabbitmq
 {{- end }}
 
-{{- if .Values.databases.redis.sentinel.enabled }}
+{{- if .Values.databases.redis.userCache.sentinel.enabled }}
 ---
-# Redis Sentinel PDB (requires quorum to survive, so maxUnavailable 1)
+# Redis UserCache Sentinel PDB — maxUnavailable 1 to preserve quorum
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ $fullname }}-redis-sentinel-pdb
+  name: {{ $fullname }}-redis-usercache-pdb
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "detect-ai.labels" . | nindent 4 }}
@@ -88,17 +88,16 @@ spec:
   maxUnavailable: 1
   selector:
     matchLabels:
-      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
-      app: redis-sentinel
+      app.kubernetes.io/name: {{ $fullname }}-redis-usercache
 {{- end }}
 
-{{- if .Values.databases.redis.cluster.enabled }}
+{{- if .Values.databases.redis.chat.cluster.enabled }}
 ---
-# Redis Cluster PDB
+# Redis Chat Cluster PDB — maxUnavailable 1 for both leader and follower
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ $fullname }}-redis-cluster-pdb
+  name: {{ $fullname }}-redis-chat-leader-pdb
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "detect-ai.labels" . | nindent 4 }}
@@ -106,6 +105,18 @@ spec:
   maxUnavailable: 1
   selector:
     matchLabels:
-      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
-      app: redis-cluster
+      app.kubernetes.io/name: {{ $fullname }}-redis-chat-leader
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fullname }}-redis-chat-follower-pdb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $fullname }}-redis-chat-follower
 {{- end }}

@@ -146,7 +146,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(mongodb_dbstats_dataSize{${jobSelector(\"mongodb\")},database=\"chat_db\"})",
+          "expr": "sum(mongodb_dbstats_dataSize{job=~\".*mongodb.*\",database=\"chat_db\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -212,7 +212,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(mongodb_dbstats_indexSize{${jobSelector(\"mongodb\")},database=\"chat_db\"})",
+          "expr": "sum(mongodb_dbstats_indexSize{job=~\".*mongodb.*\",database=\"chat_db\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -278,7 +278,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(mongodb_dbstats_objects{${jobSelector(\"mongodb\")},database=\"chat_db\"})",
+          "expr": "sum(mongodb_dbstats_objects{job=~\".*mongodb.*\",database=\"chat_db\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -323,7 +323,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(mongodb_dbstats_dataSize{${jobSelector(\"mongodb\")}}) by (database)",
+          "expr": "sum(mongodb_dbstats_dataSize{job=~\".*mongodb.*\"}) by (database)",
           "legendFormat": "{{database}}",
           "range": true,
           "refId": "A"
@@ -368,14 +368,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(mongodb_dbstats_storageSize{${jobSelector(\"mongodb\")}}) by (database)",
+          "expr": "sum(mongodb_dbstats_storageSize{job=~\".*mongodb.*\"}) by (database)",
           "legendFormat": "{{database}} storage",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(mongodb_dbstats_indexSize{${jobSelector(\"mongodb\")}}) by (database)",
+          "expr": "sum(mongodb_dbstats_indexSize{job=~\".*mongodb.*\"}) by (database)",
           "legendFormat": "{{database}} index",
           "range": true,
           "refId": "B"
@@ -420,14 +420,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(mongodb_dbstats_objects{${jobSelector(\"mongodb\")}}) by (database)",
+          "expr": "sum(mongodb_dbstats_objects{job=~\".*mongodb.*\"}) by (database)",
           "legendFormat": "{{database}} objects",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(mongodb_dbstats_indexes{${jobSelector(\"mongodb\")}}) by (database)",
+          "expr": "sum(mongodb_dbstats_indexes{job=~\".*mongodb.*\"}) by (database)",
           "legendFormat": "{{database}} indexes",
           "range": true,
           "refId": "B"
@@ -472,7 +472,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "avg(mongodb_dbstats_avgObjSize{${jobSelector(\"mongodb\")}}) by (database)",
+          "expr": "avg(mongodb_dbstats_avgObjSize{job=~\".*mongodb.*\"}) by (database)",
           "legendFormat": "{{database}}",
           "range": true,
           "refId": "A"

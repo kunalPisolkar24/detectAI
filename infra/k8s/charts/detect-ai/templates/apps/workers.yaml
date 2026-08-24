@@ -46,6 +46,16 @@ spec:
             - name: metrics
               containerPort: {{ .Values.workers.analytics.port }}
               protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 15
+            periodSeconds: 20
           lifecycle:
             preStop:
               exec:
@@ -59,7 +69,7 @@ spec:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
-                name: {{ .Values.global.secretName | default .Values.secretName }}
+                name: {{ .Values.global.secretName }}
           resources:
             {{- toYaml .Values.workers.analytics.resources | nindent 12 }}
 
@@ -110,6 +120,16 @@ spec:
             - name: metrics
               containerPort: {{ .Values.workers.cron.port }}
               protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 15
+            periodSeconds: 20
           lifecycle:
             preStop:
               exec:
@@ -123,7 +143,7 @@ spec:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
-                name: {{ .Values.global.secretName | default .Values.secretName }}
+                name: {{ .Values.global.secretName }}
           resources:
             {{- toYaml .Values.workers.cron.resources | nindent 12 }}
 
@@ -176,6 +196,16 @@ spec:
             - name: metrics
               containerPort: {{ .Values.workers.payments.port }}
               protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 15
+            periodSeconds: 20
           lifecycle:
             preStop:
               exec:
@@ -189,7 +219,7 @@ spec:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
-                name: {{ .Values.global.secretName | default .Values.secretName }}
+                name: {{ .Values.global.secretName }}
           resources:
             {{- toYaml .Values.workers.payments.resources | nindent 12 }}
 

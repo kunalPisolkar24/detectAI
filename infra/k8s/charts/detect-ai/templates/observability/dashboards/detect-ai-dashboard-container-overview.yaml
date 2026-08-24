@@ -335,7 +335,7 @@ data:
             {
               "editorMode": "code",
               "expr": "count by (container_label_com_docker_compose_service) (container_start_time_seconds{container_label_com_docker_compose_service!=\"\",id!=\"/\"})",
-              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }}",
+              "legendFormat": "{{container_label_com_docker_compose_service}}",
               "range": true,
               "refId": "A"
             }
@@ -380,7 +380,7 @@ data:
             {
               "editorMode": "code",
               "expr": "topk(12, 100 * sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }}",
+              "legendFormat": "{{container_label_com_docker_compose_service}}",
               "range": true,
               "refId": "A"
             }
@@ -425,7 +425,7 @@ data:
             {
               "editorMode": "code",
               "expr": "topk(12, sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{container_label_com_docker_compose_service!=\"\",id!=\"/\"}))",
-              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }}",
+              "legendFormat": "{{container_label_com_docker_compose_service}}",
               "range": true,
               "refId": "A"
             }
@@ -470,7 +470,7 @@ data:
             {
               "editorMode": "code",
               "expr": "topk(12, sum by (container_label_com_docker_compose_service) (container_fs_usage_bytes{container_label_com_docker_compose_service!=\"\",id!=\"/\"}))",
-              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }}",
+              "legendFormat": "{{container_label_com_docker_compose_service}}",
               "range": true,
               "refId": "A"
             }
@@ -515,7 +515,7 @@ data:
             {
               "editorMode": "code",
               "expr": "topk(12, sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }}",
+              "legendFormat": "{{container_label_com_docker_compose_service}}",
               "range": true,
               "refId": "A"
             }
@@ -560,7 +560,7 @@ data:
             {
               "editorMode": "code",
               "expr": "topk(12, sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{container_label_com_docker_compose_service!=\"\",id!=\"/\"}[5m])))",
-              "legendFormat": "{{ "{{" }}container_label_com_docker_compose_service{{ "}}" }}",
+              "legendFormat": "{{container_label_com_docker_compose_service}}",
               "range": true,
               "refId": "A"
             }

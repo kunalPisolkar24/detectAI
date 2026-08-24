@@ -1,517 +1,285 @@
-{{- if .Values.databases.redis.cluster.enabled }}
+{{- $fullname := include "detect-ai.fullname" . }}
+{{- $sc := .Values.databases.storageClass | quote }}
+{{- $redisImage := .Values.databases.redis.image }}
+{{- $sentinelImage := .Values.databases.redis.sentinel.image }}
+{{- $sentinelTag := .Values.databases.redis.sentinel.tag }}
+{{- $exporterImage := .Values.databases.redis.exporter.image }}
+{{- $exporterTag := .Values.databases.redis.exporter.tag }}
+{{- $redisSecret := .Values.databases.redis.passwordSecretName }}
+{{- $psc := .Values.global.podSecurityContext }}
 
-# 1. Redis Cluster StatefulSet (6 replicas)
-apiVersion: apps/v1
-kind: StatefulSet
+---
+# 1. User Cache Redis — Sentinel HA (prod) or Standalone (dev)
+{{- if .Values.databases.redis.userCache.sentinel.enabled }}
+apiVersion: redis.redis.opstreelabs.in/v1beta2
+kind: RedisReplication
 metadata:
-  name: {{ include "detect-ai.fullname" . }}-redis-cluster
+  name: {{ $fullname }}-redis-usercache
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "detect-ai.labels" . | nindent 4 }}
-    app: redis-cluster
 spec:
-  serviceName: {{ include "detect-ai.fullname" . }}-redis-cluster
-  replicas: 6
-  selector:
-    matchLabels:
-      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
-      app: redis-cluster
-  template:
-    metadata:
-      labels:
-        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
-        app: redis-cluster
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "9121"
-    spec:
-      containers:
-        # Redis Node Container
-        - name: redis
-          image: "redis:7.2-alpine"
-          command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--cluster-node-timeout", "5000", "--appendonly", "yes", "--bind", "0.0.0.0"]
-          ports:
-            - name: redis
-              containerPort: 6379
-              protocol: TCP
-            - name: cluster
-              containerPort: 16379
-              protocol: TCP
-          startupProbe:
-            exec:
-              command:
-                - "redis-cli"
-                - "ping"
-            failureThreshold: 15
-            periodSeconds: 2
-          readinessProbe:
-            exec:
-              command:
-                - "redis-cli"
-                - "ping"
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            exec:
-              command:
-                - "redis-cli"
-                - "ping"
-            initialDelaySeconds: 10
-            periodSeconds: 20
-          resources:
-            limits:
-              cpu: "500m"
-              memory: "512Mi"
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
-          volumeMounts:
-            - name: redis-data
-              mountPath: /data
-        # sidecar redis-exporter
-        - name: redis-exporter
-          image: "oliver006/redis_exporter:v1.55.0"
-          ports:
-            - name: metrics
-              containerPort: 9121
-              protocol: TCP
-          env:
-            - name: REDIS_ADDR
-              value: "redis://localhost:6379"
-          resources:
-            limits:
-              cpu: "100m"
-              memory: "128Mi"
-            requests:
-              cpu: "50m"
-              memory: "64Mi"
-  volumeClaimTemplates:
-    - metadata:
-        name: redis-data
+  clusterSize: {{ .Values.databases.redis.userCache.clusterSize }}
+  kubernetesConfig:
+    image: {{ $redisImage | quote }}
+    imagePullPolicy: IfNotPresent
+    {{- if $redisSecret }}
+    redisSecret:
+      name: {{ $redisSecret }}
+    {{- end }}
+    service:
+      serviceType: ClusterIP
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+  redisExporter:
+    enabled: true
+    image: {{ $exporterImage | quote }}
+    tag: {{ $exporterTag | quote }}
+    imagePullPolicy: IfNotPresent
+  sentinel:
+    enabled: true
+    image: {{ $sentinelImage | quote }}
+    tag: {{ $sentinelTag | quote }}
+    imagePullPolicy: IfNotPresent
+    size: {{ .Values.databases.redis.userCache.sentinelSize }}
+    parallelSyncs: "1"
+    failoverTimeout: "60000"
+    downAfterMilliseconds: "5000"
+  storage:
+    volumeClaimTemplate:
       spec:
-        accessModes: [ "ReadWriteOnce" ]
-        storageClassName: {{ .Values.databases.storageClass | quote }}
+        storageClassName: {{ $sc }}
+        accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            storage: {{ .Values.databases.redis.cluster.storageSize }}
----
-# Headless Cluster Service
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ include "detect-ai.fullname" . }}-redis-cluster
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "detect-ai.labels" . | nindent 4 }}
-    app: redis-cluster
-spec:
-  clusterIP: None
-  ports:
-    - port: 6379
-      targetPort: redis
-      name: redis
-    - port: 9121
-      targetPort: metrics
-      name: metrics
-  selector:
-    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
-    app: redis-cluster
-
----
-# 2. Redis Cluster Creator Job with Dynamic Host Resolution and Active Polling Loops
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: {{ include "detect-ai.fullname" . }}-redis-cluster-creator
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "detect-ai.labels" . | nindent 4 }}
-  annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-delete-policy": before-hook-creation
-spec:
-  template:
-    spec:
-      restartPolicy: OnFailure
-      containers:
-        - name: cluster-creator
-          image: "redis:7.2-alpine"
-          command:
-            - "/bin/sh"
-            - "-c"
-            - |
-              echo "Actively polling all Redis cluster node endpoints..."
-              {{- range $node := list 0 1 2 3 4 5 }}
-              until redis-cli -h {{ include "detect-ai.fullname" $ }}-redis-cluster-{{ $node }}.{{ include "detect-ai.fullname" $ }}-redis-cluster.{{ $.Release.Namespace }}.svc.cluster.local ping | grep -q PONG; do
-                echo "Waiting for node {{ $node }} to respond..."
-                sleep 2
-              done
-              {{- end }}
-              
-              echo "All nodes responsive! Fetching cluster IP mappings..."
-              IP_0=$(getent hosts {{ include "detect-ai.fullname" . }}-redis-cluster-0.{{ include "detect-ai.fullname" . }}-redis-cluster.{{ .Release.Namespace }}.svc.cluster.local | awk '{print $1}')
-              IP_1=$(getent hosts {{ include "detect-ai.fullname" . }}-redis-cluster-1.{{ include "detect-ai.fullname" . }}-redis-cluster.{{ .Release.Namespace }}.svc.cluster.local | awk '{print $1}')
-              IP_2=$(getent hosts {{ include "detect-ai.fullname" . }}-redis-cluster-2.{{ include "detect-ai.fullname" . }}-redis-cluster.{{ .Release.Namespace }}.svc.cluster.local | awk '{print $1}')
-              IP_3=$(getent hosts {{ include "detect-ai.fullname" . }}-redis-cluster-3.{{ include "detect-ai.fullname" . }}-redis-cluster.{{ .Release.Namespace }}.svc.cluster.local | awk '{print $1}')
-              IP_4=$(getent hosts {{ include "detect-ai.fullname" . }}-redis-cluster-4.{{ include "detect-ai.fullname" . }}-redis-cluster.{{ .Release.Namespace }}.svc.cluster.local | awk '{print $1}')
-              IP_5=$(getent hosts {{ include "detect-ai.fullname" . }}-redis-cluster-5.{{ include "detect-ai.fullname" . }}-redis-cluster.{{ .Release.Namespace }}.svc.cluster.local | awk '{print $1}')
-              
-              echo "Creating cluster with resolved IPs: $IP_0 $IP_1 $IP_2 $IP_3 $IP_4 $IP_5"
-              redis-cli --cluster create \
-                $IP_0:6379 $IP_1:6379 $IP_2:6379 $IP_3:6379 $IP_4:6379 $IP_5:6379 \
-                --cluster-replicas 1 --cluster-yes
-
-{{- else if .Values.databases.redis.sentinel.enabled }}
-
-# Redis Sentinel HA StatefulSet
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: {{ include "detect-ai.fullname" . }}-redis-sentinel
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "detect-ai.labels" . | nindent 4 }}
-    app: redis-sentinel
-spec:
-  serviceName: {{ include "detect-ai.fullname" . }}-redis-sentinel-headless
-  replicas: 3
-  selector:
-    matchLabels:
-      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
-      app: redis-sentinel
-  template:
-    metadata:
-      labels:
-        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
-        app: redis-sentinel
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "9121"
-    spec:
-      containers:
-        # Dynamic Master/Replica Auto-Bootstrap Redis Engine
-        - name: redis
-          image: "redis:7.2-alpine"
-          command:
-            - "/bin/sh"
-            - "-c"
-            - |
-              HOSTNAME=$(hostname)
-              INDEX=${HOSTNAME##*-}
-              if [ "$INDEX" -eq "0" ]; then
-                echo "Configuring as Bootstrap Master Node..."
-                exec redis-server --protected-mode no
-              else
-                echo "Configuring as Replica Node pointing to index 0 master..."
-                exec redis-server --replicaof {{ include "detect-ai.fullname" . }}-redis-sentinel-0.{{ include "detect-ai.fullname" . }}-redis-sentinel 6379 --protected-mode no
-              fi
-          ports:
-            - name: redis
-              containerPort: 6379
-              protocol: TCP
-          startupProbe:
-            exec:
-              command:
-                - "redis-cli"
-                - "ping"
-            failureThreshold: 15
-            periodSeconds: 2
-          readinessProbe:
-            exec:
-              command:
-                - "redis-cli"
-                - "ping"
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            exec:
-              command:
-                - "redis-cli"
-                - "ping"
-            initialDelaySeconds: 10
-            periodSeconds: 20
-          resources:
-            limits:
-              cpu: "500m"
-              memory: "512Mi"
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
-          volumeMounts:
-            - name: redis-data
-              mountPath: /data
-        # sidecar sentinel container (with Writable Config dir configuration to prevent CM crashes)
-        - name: sentinel
-          image: "redis:7.2-alpine"
-          command:
-            - "/bin/sh"
-            - "-c"
-            - |
-              # Copy read-only configmap file into writable emptyDir volume
-              cp /etc/redis-config/sentinel.conf /etc/redis/sentinel.conf
-              echo "Starting sentinel engine..."
-              exec redis-sentinel /etc/redis/sentinel.conf
-          ports:
-            - name: sentinel
-              containerPort: 26379
-              protocol: TCP
-          # Sentinel engine health check
-          startupProbe:
-            exec:
-              command:
-                - "redis-cli"
-                - "-p"
-                - "26379"
-                - "ping"
-            failureThreshold: 15
-            periodSeconds: 2
-          readinessProbe:
-            exec:
-              command:
-                - "redis-cli"
-                - "-p"
-                - "26379"
-                - "ping"
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            exec:
-              command:
-                - "redis-cli"
-                - "-p"
-                - "26379"
-                - "ping"
-            initialDelaySeconds: 10
-            periodSeconds: 20
-          volumeMounts:
-            - name: sentinel-config-dir
-              mountPath: /etc/redis
-            - name: sentinel-config-file
-              mountPath: /etc/redis-config
-        # sidecar redis-exporter
-        - name: redis-exporter
-          image: "oliver006/redis_exporter:v1.55.0"
-          ports:
-            - name: metrics
-              containerPort: 9121
-              protocol: TCP
-          env:
-            - name: REDIS_ADDR
-              value: "redis://localhost:6379"
-          resources:
-            limits:
-              cpu: "100m"
-              memory: "128Mi"
-            requests:
-              cpu: "50m"
-              memory: "64Mi"
-  volumeClaimTemplates:
-    - metadata:
-        name: redis-data
-      spec:
-        accessModes: [ "ReadWriteOnce" ]
-        storageClassName: {{ .Values.databases.storageClass | quote }}
-        resources:
-          requests:
-            storage: {{ .Values.databases.redis.sentinel.storageSize }}
-  volumes:
-    # Writable volume dir for Sentinel config updates
-    - name: sentinel-config-dir
-      emptyDir: {}
-    # Read-only configuration file blueprint
-    - name: sentinel-config-file
-      configMap:
-        name: {{ include "detect-ai.fullname" . }}-sentinel-config
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ include "detect-ai.fullname" . }}-sentinel-config
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "detect-ai.labels" . | nindent 4 }}
-data:
-  sentinel.conf: |
-    port 26379
-    sentinel monitor mymaster {{ include "detect-ai.fullname" . }}-redis-sentinel-0.{{ include "detect-ai.fullname" . }}-redis-sentinel 6379 2
-    sentinel down-after-milliseconds mymaster 5000
-    sentinel failover-timeout mymaster 60000
-    sentinel parallel-syncs mymaster 1
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ include "detect-ai.fullname" . }}-redis-sentinel-service
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "detect-ai.labels" . | nindent 4 }}
-    app: redis-sentinel
-spec:
-  ports:
-    - port: 6379
-      targetPort: redis
-      name: redis
-    - port: 26379
-      targetPort: 26379
-      name: sentinel
-    - port: 9121
-      targetPort: metrics
-      name: metrics
-  selector:
-    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
-    app: redis-sentinel
----
-# Headless service for stable pod DNS identities (required by sentinel peer discovery)
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ include "detect-ai.fullname" . }}-redis-sentinel-headless
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "detect-ai.labels" . | nindent 4 }}
-    app: redis-sentinel
-spec:
-  clusterIP: None
-  ports:
-    - port: 6379
-      targetPort: redis
-      name: redis
-    - port: 26379
-      targetPort: sentinel
-      name: sentinel
-  selector:
-    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
-    app: redis-sentinel
-
+            storage: {{ .Values.databases.redis.userCache.storageSize }}
+  podSecurityContext:
+    {{- toYaml $psc | nindent 4 }}
 {{- else }}
-
-# Standalone Redis setup (Dev/Testing Profile)
-apiVersion: apps/v1
-kind: StatefulSet
+apiVersion: redis.redis.opstreelabs.in/v1beta2
+kind: Redis
 metadata:
-  name: {{ include "detect-ai.fullname" . }}-redis-standalone
+  name: {{ $fullname }}-redis-usercache
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "detect-ai.labels" . | nindent 4 }}
-    app: redis-standalone
 spec:
-  serviceName: {{ include "detect-ai.fullname" . }}-redis-standalone-headless
-  replicas: 1
-  selector:
-    matchLabels:
-      {{- include "detect-ai.selectorLabels" . | nindent 6 }}
-      app: redis-standalone
-  template:
-    metadata:
-      labels:
-        {{- include "detect-ai.selectorLabels" . | nindent 8 }}
-        app: redis-standalone
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "9121"
-    spec:
-      containers:
-        - name: redis
-          image: "redis:7.2-alpine"
-          ports:
-            - name: redis
-              containerPort: 6379
-              protocol: TCP
-          startupProbe:
-            exec:
-              command:
-                - "redis-cli"
-                - "ping"
-            failureThreshold: 15
-            periodSeconds: 2
-          readinessProbe:
-            exec:
-              command:
-                - "redis-cli"
-                - "ping"
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            exec:
-              command:
-                - "redis-cli"
-                - "ping"
-            initialDelaySeconds: 10
-            periodSeconds: 20
-          resources:
-            limits:
-              cpu: "100m"
-              memory: "128Mi"
-            requests:
-              cpu: "50m"
-              memory: "64Mi"
-          volumeMounts:
-            - name: redis-data
-              mountPath: /data
-        # sidecar redis-exporter
-        - name: redis-exporter
-          image: "oliver006/redis_exporter:v1.55.0"
-          ports:
-            - name: metrics
-              containerPort: 9121
-              protocol: TCP
-          env:
-            - name: REDIS_ADDR
-              value: "redis://localhost:6379"
-          resources:
-            limits:
-              cpu: "100m"
-              memory: "128Mi"
-            requests:
-              cpu: "50m"
-              memory: "64Mi"
-  volumeClaimTemplates:
-    - metadata:
-        name: redis-data
+  kubernetesConfig:
+    image: {{ $redisImage | quote }}
+    imagePullPolicy: IfNotPresent
+    {{- if $redisSecret }}
+    redisSecret:
+      name: {{ $redisSecret }}
+    {{- end }}
+    service:
+      serviceType: ClusterIP
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+  redisExporter:
+    enabled: true
+    image: {{ $exporterImage | quote }}
+    tag: {{ $exporterTag | quote }}
+    imagePullPolicy: IfNotPresent
+  storage:
+    volumeClaimTemplate:
       spec:
-        accessModes: [ "ReadWriteOnce" ]
-        storageClassName: {{ .Values.databases.storageClass | quote }}
+        storageClassName: {{ $sc }}
+        accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            storage: "2Gi"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ include "detect-ai.fullname" . }}-redis-standalone-service
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "detect-ai.labels" . | nindent 4 }}
-    app: redis-standalone
-spec:
-  ports:
-    - port: 6379
-      targetPort: redis
-      name: redis
-    - port: 9121
-      targetPort: metrics
-      name: metrics
-  selector:
-    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
-    app: redis-standalone
----
-# Headless service for stable pod DNS identities
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ include "detect-ai.fullname" . }}-redis-standalone-headless
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "detect-ai.labels" . | nindent 4 }}
-    app: redis-standalone
-spec:
-  clusterIP: None
-  ports:
-    - port: 6379
-      targetPort: redis
-      name: redis
-  selector:
-    {{- include "detect-ai.selectorLabels" . | nindent 4 }}
-    app: redis-standalone
+            storage: {{ .Values.databases.redis.userCache.storageSize }}
+  podSecurityContext:
+    {{- toYaml $psc | nindent 4 }}
+{{- end }}
 
+---
+# 2. Usage Redis — Standalone
+apiVersion: redis.redis.opstreelabs.in/v1beta2
+kind: Redis
+metadata:
+  name: {{ $fullname }}-redis-usage
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+spec:
+  kubernetesConfig:
+    image: {{ $redisImage | quote }}
+    imagePullPolicy: IfNotPresent
+    {{- if $redisSecret }}
+    redisSecret:
+      name: {{ $redisSecret }}
+    {{- end }}
+    service:
+      serviceType: ClusterIP
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+  redisExporter:
+    enabled: true
+    image: {{ $exporterImage | quote }}
+    tag: {{ $exporterTag | quote }}
+    imagePullPolicy: IfNotPresent
+  storage:
+    volumeClaimTemplate:
+      spec:
+        storageClassName: {{ $sc }}
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.databases.redis.usage.storageSize }}
+  podSecurityContext:
+    {{- toYaml $psc | nindent 4 }}
+
+---
+# 3. Events Redis — Standalone
+apiVersion: redis.redis.opstreelabs.in/v1beta2
+kind: Redis
+metadata:
+  name: {{ $fullname }}-redis-events
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+spec:
+  kubernetesConfig:
+    image: {{ $redisImage | quote }}
+    imagePullPolicy: IfNotPresent
+    {{- if $redisSecret }}
+    redisSecret:
+      name: {{ $redisSecret }}
+    {{- end }}
+    service:
+      serviceType: ClusterIP
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+  redisExporter:
+    enabled: true
+    image: {{ $exporterImage | quote }}
+    tag: {{ $exporterTag | quote }}
+    imagePullPolicy: IfNotPresent
+  storage:
+    volumeClaimTemplate:
+      spec:
+        storageClassName: {{ $sc }}
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.databases.redis.events.storageSize }}
+  podSecurityContext:
+    {{- toYaml $psc | nindent 4 }}
+
+---
+# 4. Chat Redis — Cluster (prod) or Standalone (dev)
+{{- if .Values.databases.redis.chat.cluster.enabled }}
+apiVersion: redis.redis.opstreelabs.in/v1beta2
+kind: RedisCluster
+metadata:
+  name: {{ $fullname }}-redis-chat
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+spec:
+  clusterSize: {{ .Values.databases.redis.chat.leaderReplicas }}
+  kubernetesConfig:
+    image: {{ $redisImage | quote }}
+    imagePullPolicy: IfNotPresent
+    {{- if $redisSecret }}
+    redisSecret:
+      name: {{ $redisSecret }}
+    {{- end }}
+    service:
+      serviceType: ClusterIP
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+  redisExporter:
+    enabled: true
+    image: {{ $exporterImage | quote }}
+    tag: {{ $exporterTag | quote }}
+    imagePullPolicy: IfNotPresent
+  storage:
+    nodeConfVolume: true
+    nodeConfVolumeClaimTemplate:
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: "1Gi"
+    volumeClaimTemplate:
+      spec:
+        storageClassName: {{ $sc }}
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.databases.redis.chat.storageSize }}
+  redisLeader:
+    replicas: {{ .Values.databases.redis.chat.leaderReplicas }}
+    serviceType: ClusterIP
+  redisFollower:
+    replicas: {{ .Values.databases.redis.chat.followerReplicas }}
+    serviceType: ClusterIP
+  podSecurityContext:
+    {{- toYaml $psc | nindent 4 }}
+{{- else }}
+apiVersion: redis.redis.opstreelabs.in/v1beta2
+kind: Redis
+metadata:
+  name: {{ $fullname }}-redis-chat
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+spec:
+  kubernetesConfig:
+    image: {{ $redisImage | quote }}
+    imagePullPolicy: IfNotPresent
+    {{- if $redisSecret }}
+    redisSecret:
+      name: {{ $redisSecret }}
+    {{- end }}
+    service:
+      serviceType: ClusterIP
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+  redisExporter:
+    enabled: true
+    image: {{ $exporterImage | quote }}
+    tag: {{ $exporterTag | quote }}
+    imagePullPolicy: IfNotPresent
+  storage:
+    volumeClaimTemplate:
+      spec:
+        storageClassName: {{ $sc }}
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.databases.redis.chat.storageSize }}
+  podSecurityContext:
+    {{- toYaml $psc | nindent 4 }}
 {{- end }}

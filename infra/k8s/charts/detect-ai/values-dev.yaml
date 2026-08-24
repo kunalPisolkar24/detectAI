@@ -56,10 +56,12 @@ databases:
     replicaCount: 1
     storageSize: "2Gi"
   redis:
-    sentinel:
-      enabled: false # Standalone Redis for dev
-    cluster:
-      enabled: false
+    userCache:
+      sentinel:
+        enabled: false
+    chat:
+      cluster:
+        enabled: false
 
 ingress:
   enabled: true

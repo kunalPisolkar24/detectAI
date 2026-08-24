@@ -339,7 +339,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(pg_stat_database_numbackends) by (instance)",
-              "legendFormat": "{{ "{{" }}instance{{ "}}" }}",
+              "legendFormat": "{{instance}}",
               "range": true,
               "refId": "A"
             }
@@ -386,7 +386,7 @@ data:
             {
               "editorMode": "code",
               "expr": "100 * sum by (instance) (pg_stat_database_numbackends) / on(instance) pg_settings_max_connections",
-              "legendFormat": "{{ "{{" }}instance{{ "}}" }}",
+              "legendFormat": "{{instance}}",
               "range": true,
               "refId": "A"
             }
@@ -431,14 +431,14 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(pg_stat_database_xact_commit[5m])) by (instance)",
-              "legendFormat": "{{ "{{" }}instance{{ "}}" }} commit",
+              "legendFormat": "{{instance}} commit",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum(rate(pg_stat_database_xact_rollback[5m])) by (instance)",
-              "legendFormat": "{{ "{{" }}instance{{ "}}" }} rollback",
+              "legendFormat": "{{instance}} rollback",
               "range": true,
               "refId": "B"
             }
@@ -485,7 +485,7 @@ data:
             {
               "editorMode": "code",
               "expr": "100 * sum by (instance) (rate(pg_stat_database_blks_hit[5m])) / clamp_min(sum by (instance) (rate(pg_stat_database_blks_hit[5m]) + rate(pg_stat_database_blks_read[5m])), 0.001)",
-              "legendFormat": "{{ "{{" }}instance{{ "}}" }}",
+              "legendFormat": "{{instance}}",
               "range": true,
               "refId": "A"
             }
@@ -530,7 +530,7 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(pg_database_size_bytes) by (instance)",
-              "legendFormat": "{{ "{{" }}instance{{ "}}" }}",
+              "legendFormat": "{{instance}}",
               "range": true,
               "refId": "A"
             }
@@ -575,14 +575,14 @@ data:
             {
               "editorMode": "code",
               "expr": "sum(rate(pg_stat_database_deadlocks[5m])) by (instance)",
-              "legendFormat": "{{ "{{" }}instance{{ "}}" }} deadlocks",
+              "legendFormat": "{{instance}} deadlocks",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum(rate(pg_stat_database_temp_bytes[5m])) by (instance)",
-              "legendFormat": "{{ "{{" }}instance{{ "}}" }} temp bytes",
+              "legendFormat": "{{instance}} temp bytes",
               "range": true,
               "refId": "B"
             }
@@ -627,7 +627,7 @@ data:
             {
               "editorMode": "code",
               "expr": "max(pg_replication_lag_seconds) by (instance)",
-              "legendFormat": "{{ "{{" }}instance{{ "}}" }}",
+              "legendFormat": "{{instance}}",
               "range": true,
               "refId": "A"
             }
@@ -672,14 +672,14 @@ data:
             {
               "editorMode": "code",
               "expr": "pg_wal_size_bytes",
-              "legendFormat": "{{ "{{" }}instance{{ "}}" }} wal size",
+              "legendFormat": "{{instance}} wal size",
               "range": true,
               "refId": "A"
             },
             {
               "editorMode": "code",
               "expr": "sum(pg_stat_activity_count) by (instance)",
-              "legendFormat": "{{ "{{" }}instance{{ "}}" }} activity",
+              "legendFormat": "{{instance}} activity",
               "range": true,
               "refId": "B"
             }

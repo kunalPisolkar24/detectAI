@@ -13,6 +13,39 @@ global:
       drop:
       - ALL
 
+secrets:
+  DATABASE_URL: "postgresql://detect_ai:CHANGE_ME@detect-ai-postgres:5432/detect_ai"
+  DATABASE_URL_REPLICA: "postgresql://detect_ai:CHANGE_ME@detect-ai-postgres:5432/detect_ai"
+  POSTGRES_PASSWORD: "CHANGE_ME"
+  REDIS_PASSWORD: "CHANGE_ME"
+  REDIS_URL: "redis://:CHANGE_ME@detect-ai-redis-usercache:6379"
+  REDIS_USAGE_URL: "redis://:CHANGE_ME@detect-ai-redis-usage:6379"
+  REDIS_USAGE_PASSWORD: "CHANGE_ME"
+  EVENT_REDIS_URL: "redis://:CHANGE_ME@detect-ai-redis-events:6379"
+  EVENT_REDIS_PASSWORD: "CHANGE_ME"
+  RABBITMQ_URL: "amqp://guest:guest@detect-ai-rabbitmq:5672/"
+  RABBITMQ_DEFAULT_USER: "guest"
+  RABBITMQ_DEFAULT_PASS: "CHANGE_ME"
+  AI_SERVICE_API_KEY: "CHANGE_ME"
+  INTERNAL_API_KEY: "CHANGE_ME"
+  NEXTAUTH_SECRET: "CHANGE_ME"
+  NEXTAUTH_URL: "http://detect-ai-web:3000/"
+  TURNSTILE_SECRET_KEY: ""
+  PADDLE_API_KEY: ""
+  PADDLE_ENVIRONMENT: "sandbox"
+  PADDLE_WEBHOOK_SECRET: ""
+
+migration:
+  image: "your-registry/detect-ai-migrate:latest"
+  pullPolicy: "IfNotPresent"
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+
 fullnameOverride: "detect-ai"
 # Frontend Next.js Web App
 web:
@@ -192,6 +225,7 @@ workers:
 databases:
   storageClass: "local-path"
   postgres:
+    enabled: true
     storageSize: "5Gi"
     resources:
       limits:
@@ -202,6 +236,7 @@ databases:
         memory: "512Mi"
   mongo:
     sharded: false
+    database: "chats"
     replicaCount: 1
     storageSize: "5Gi"
     resources:
@@ -222,13 +257,29 @@ databases:
         cpu: "500m"
         memory: "512Mi"
   redis:
+    passwordSecretName: "detect-ai-secrets"
+    image: "quay.io/opstree/redis:v7.0.15"
     sentinel:
-      enabled: false
-      replicaCount: 3
+      image: "quay.io/opstree/redis-sentinel"
+      tag: "v7.0.15"
+    exporter:
+      image: "quay.io/opstree/redis-exporter"
+      tag: "v1.44.0"
+    userCache:
+      sentinel:
+        enabled: false
+      clusterSize: 3
+      sentinelSize: 3
       storageSize: "2Gi"
-    cluster:
-      enabled: false
-      replicaCount: 6
+    usage:
+      storageSize: "1Gi"
+    events:
+      storageSize: "1Gi"
+    chat:
+      cluster:
+        enabled: false
+      leaderReplicas: 3
+      followerReplicas: 3
       storageSize: "2Gi"
 
 # NGINX Ingress Controller Routing
@@ -249,40 +300,39 @@ ingress:
 # LGTM Observability Stack Integration
 monitoring:
   enabled: true
-  kube-prometheus-stack:
+  prometheus:
+    release: "monitoring"
+    prometheusSpec:
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 5Gi
+  grafana:
     enabled: true
-    prometheus:
-      prometheusSpec:
-        storageSpec:
-          volumeClaimTemplate:
-            spec:
-              accessModes: ["ReadWriteOnce"]
-              resources:
-                requests:
-                  storage: 5Gi
-    grafana:
-      enabled: true
-      adminPassword: "prom-operator"
-      sidecar:
-        dashboards:
-          enabled: true
-          label: grafana_dashboard
-          labelValue: "1"
-          searchNamespace: ALL
-          provider:
-            foldersFromFilesStructure: true
-      additionalDataSources:
-        - name: Tempo
-          type: tempo
-          uid: tempo
-          url: http://detect-ai-tempo:3100
-          access: proxy
-          jsonData:
-            httpMethod: GET
-            serviceMap:
-              datasourceUid: prometheus
-            lokiSearch:
-              datasourceUid: loki
+    adminPassword: "prom-operator"
+    sidecar:
+      dashboards:
+        enabled: true
+        label: grafana_dashboard
+        labelValue: "1"
+        searchNamespace: ALL
+        provider:
+          foldersFromFilesStructure: true
+    additionalDataSources:
+      - name: Tempo
+        type: tempo
+        uid: tempo
+        url: http://detect-ai-tempo:3100
+        access: proxy
+        jsonData:
+          httpMethod: GET
+          serviceMap:
+            datasourceUid: prometheus
+          lokiSearch:
+            datasourceUid: loki
   loki:
     enabled: true
     storageSize: "5Gi"

@@ -42,6 +42,37 @@ spec:
                     {{- include "detect-ai.selectorLabels" . | nindent 20 }}
                     app: web
                 topologyKey: "kubernetes.io/hostname"
+      {{- if .Values.databases.postgres.enabled }}
+      initContainers:
+        - name: wait-for-postgres
+          image: "postgres:16-alpine"
+          imagePullPolicy: IfNotPresent
+          command:
+            - "sh"
+            - "-c"
+            - |
+              echo "Waiting for PostgreSQL at {{ include "detect-ai.fullname" . }}-postgres:5432..."
+              until pg_isready -h {{ include "detect-ai.fullname" . }}-postgres -p 5432 -U postgres; do
+                echo "Postgres is not ready yet. Retrying in 2 seconds..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready!"
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+        - name: prisma-migrate
+          image: "{{ .Values.migration.image }}"
+          imagePullPolicy: {{ .Values.migration.pullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.global.secretName }}
+          resources:
+            {{- toYaml .Values.migration.resources | nindent 12 }}
+      {{- end }}
       containers:
         - name: web
           {{- with .Values.global.containerSecurityContext }}
@@ -54,6 +85,18 @@ spec:
             - name: http
               containerPort: {{ .Values.web.service.targetPort }}
               protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
           lifecycle:
             preStop:
               exec:
@@ -67,7 +110,7 @@ spec:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
-                name: {{ .Values.global.secretName | default .Values.secretName }}
+                name: {{ .Values.global.secretName }}
           resources:
             {{- toYaml .Values.web.resources | nindent 12 }}
 ---

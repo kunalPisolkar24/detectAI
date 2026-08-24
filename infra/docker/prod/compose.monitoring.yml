@@ -172,18 +172,6 @@ services:
     networks:
       - detectai_net
 
-  redis-exporter-ratelimit:
-    image: oliver006/redis_exporter:v1.80.1
-    container_name: detect_ai_redis_exporter_ratelimit
-    restart: unless-stopped
-    environment:
-      - REDIS_ADDR=redis://redis-ratelimit:6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-    expose:
-      - "9121"
-    networks:
-      - detectai_net
-
   redis-exporter-usage-0:
     image: oliver006/redis_exporter:v1.80.1
     container_name: detect_ai_redis_exporter_usage_0

@@ -57,11 +57,23 @@ spec:
             - name: OTEL_SERVICE_NAME
               value: "{{ include "detect-ai.fullname" . }}-document-parser"
           {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
           envFrom:
             - configMapRef:
                 name: {{ include "detect-ai.fullname" . }}-config
             - secretRef:
-                name: {{ .Values.global.secretName | default .Values.secretName }}
+                name: {{ .Values.global.secretName }}
           resources:
             {{- toYaml .Values.documentParser.resources | nindent 12 }}
 ---

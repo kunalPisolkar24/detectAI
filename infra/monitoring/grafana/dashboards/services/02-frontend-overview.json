@@ -80,7 +80,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * avg(up{${jobSelector(\"frontend\")}})",
+          "expr": "100 * avg(up{job=~\".*(frontend|web).*\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -325,7 +325,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(http_request_duration_seconds_count{${jobSelector(\"frontend\")}}[5m])) by (route, status_code)",
+          "expr": "sum(rate(http_request_duration_seconds_count{job=~\".*(frontend|web).*\"}[5m])) by (route, status_code)",
           "legendFormat": "{{route}} {{status_code}}",
           "range": true,
           "refId": "A"
@@ -370,7 +370,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{${jobSelector(\"frontend\")}}[5m])) by (route, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~\".*(frontend|web).*\"}[5m])) by (route, le))",
           "legendFormat": "{{route}}",
           "range": true,
           "refId": "A"
@@ -415,7 +415,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(db_query_duration_seconds_count{${jobSelector(\"frontend\")}}[5m])) by (operation, status)",
+          "expr": "sum(rate(db_query_duration_seconds_count{job=~\".*(frontend|web).*\"}[5m])) by (operation, status)",
           "legendFormat": "{{operation}} {{status}}",
           "range": true,
           "refId": "A"
@@ -460,7 +460,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket{${jobSelector(\"frontend\")}}[5m])) by (operation, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket{job=~\".*(frontend|web).*\"}[5m])) by (operation, le))",
           "legendFormat": "{{operation}}",
           "range": true,
           "refId": "A"
@@ -505,7 +505,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(ai_inference_duration_seconds_count{${jobSelector(\"frontend\")}}[5m])) by (model, status)",
+          "expr": "sum(rate(ai_inference_duration_seconds_count{job=~\".*(frontend|web).*\"}[5m])) by (model, status)",
           "legendFormat": "{{model}} {{status}}",
           "range": true,
           "refId": "A"
@@ -550,7 +550,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(ai_inference_duration_seconds_bucket{${jobSelector(\"frontend\")}}[5m])) by (model, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(ai_inference_duration_seconds_bucket{job=~\".*(frontend|web).*\"}[5m])) by (model, le))",
           "legendFormat": "{{model}}",
           "range": true,
           "refId": "A"
@@ -595,7 +595,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(cache_operations_total{${jobSelector(\"frontend\")}}[5m])) by (operation, status)",
+          "expr": "sum(rate(cache_operations_total{job=~\".*(frontend|web).*\"}[5m])) by (operation, status)",
           "legendFormat": "{{operation}} {{status}}",
           "range": true,
           "refId": "A"
@@ -640,7 +640,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(rate_limit_hits_total{${jobSelector(\"frontend\")}}[5m])) by (tier)",
+          "expr": "sum(rate(rate_limit_hits_total{job=~\".*(frontend|web).*\"}[5m])) by (tier)",
           "legendFormat": "{{tier}}",
           "range": true,
           "refId": "A"
@@ -685,21 +685,21 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "nodejs_eventloop_lag_p99_seconds{${jobSelector(\"frontend\")}}",
+          "expr": "nodejs_eventloop_lag_p99_seconds{job=~\".*(frontend|web).*\"}",
           "legendFormat": "event loop p99",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "nodejs_heap_size_used_bytes{${jobSelector(\"frontend\")}}",
+          "expr": "nodejs_heap_size_used_bytes{job=~\".*(frontend|web).*\"}",
           "legendFormat": "heap used",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "nodejs_active_handles{${jobSelector(\"frontend\")}}",
+          "expr": "nodejs_active_handles{job=~\".*(frontend|web).*\"}",
           "legendFormat": "active handles",
           "range": true,
           "refId": "C"
