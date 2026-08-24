@@ -60,8 +60,8 @@ def test_docx_extraction_excludes_footnote_content(tmp_path):
 
     result = DocxExtractionStrategy().extract(str(docx_file))
 
-    assert "FOOTNOTE LEAK CANARY" not in result
-    assert "Body text" in result
+    assert "FOOTNOTE LEAK CANARY" not in result.text
+    assert "Body text" in result.text
 
 
 def test_docx_extraction_resolves_fields_and_expands_tabs(tmp_path):
@@ -70,8 +70,8 @@ def test_docx_extraction_resolves_fields_and_expands_tabs(tmp_path):
 
     result = DocxExtractionStrategy().extract(str(docx_file))
 
-    assert "Body text" in result
-    assert "Page 7 end" in result
-    assert "\t" not in result
+    assert "Body text" in result.text
+    assert "Page 7 end" in result.text
+    assert "\t" not in result.text
     for control_char in ("\x13", "\x14", "\x15"):
-        assert control_char not in result
+        assert control_char not in result.text

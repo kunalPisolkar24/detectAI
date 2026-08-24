@@ -13,14 +13,34 @@ def test_health_check(client):
     assert response.json() == {"status": "ok"}
 
 def test_extract_txt_success(client, mocker):
+    from app.domain.extraction.strategies import ExtractionResult
     mocker.patch("app.api.v1.endpoints.extract.validate_upload", return_value="text/plain")
-    mocker.patch("app.domain.extraction.service.ExtractionService.process_file", return_value="Extracted Content")
+    mocker.patch(
+        "app.domain.extraction.service.ExtractionService.process_file",
+        return_value=ExtractionResult(text="Extracted Content"),
+    )
 
     files = {"file": ("test.txt", b"Content", "text/plain")}
     response = client.post("/extract", files=files)
 
     assert response.status_code == 200
     assert response.json()["text"] == "Extracted Content"
+    assert response.json()["truncated"] is False
+
+def test_extract_reports_truncation(client, mocker):
+    from app.domain.extraction.strategies import ExtractionResult
+    mocker.patch("app.api.v1.endpoints.extract.validate_upload", return_value="application/pdf")
+    mocker.patch(
+        "app.domain.extraction.service.ExtractionService.process_file",
+        return_value=ExtractionResult(text="Partial content", truncated=True),
+    )
+
+    files = {"file": ("broken.pdf", b"%PDF-broken", "application/pdf")}
+    response = client.post("/extract", files=files)
+
+    assert response.status_code == 200
+    assert response.json()["truncated"] is True
+    assert response.json()["text_length"] == len("Partial content")
 
 def test_invalid_mime_type(client, mocker):
     mocker.patch("app.api.deps.magic.from_buffer", return_value="image/png")
@@ -48,3 +68,50 @@ def test_file_too_large(client, mocker):
     files = {"file": ("large.txt", b"too big", "text/plain")}
     response = client.post("/extract", files=files)
     assert response.status_code == 413
+
+def test_extraction_error_returns_safe_detail(client, mocker):
+    from app.core.exceptions import ExtractionError
+    mocker.patch("app.api.v1.endpoints.extract.validate_upload", return_value="application/pdf")
+    mocker.patch(
+        "app.domain.extraction.service.ExtractionService.process_file",
+        side_effect=ExtractionError("PDF processing failed: Mupdf: cannot find startxref"),
+    )
+
+    files = {"file": ("broken.pdf", b"%PDF-broken", "application/pdf")}
+    response = client.post("/extract", files=files)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Could not extract text from this document."
+    assert "Mupdf" not in response.text
+    assert "startxref" not in response.text
+
+def test_document_too_large_returns_413(client, mocker):
+    from app.core.exceptions import DocumentTooLargeError
+    mocker.patch("app.api.v1.endpoints.extract.validate_upload", return_value="application/pdf")
+    mocker.patch(
+        "app.domain.extraction.service.ExtractionService.process_file",
+        side_effect=DocumentTooLargeError(200 * 1024 * 1024, 100 * 1024 * 1024),
+    )
+
+    files = {"file": ("bomb.pdf", b"%PDF-bomb", "application/pdf")}
+    response = client.post("/extract", files=files)
+
+    assert response.status_code == 413
+    assert "exceeds limit" in response.json()["detail"]
+
+def test_slow_extraction_times_out(client, mocker):
+    import time
+    import app.core.config as config_module
+
+    mocker.patch.object(config_module.settings, "EXTRACTION_TIMEOUT_SECONDS", 0.05)
+    mocker.patch("app.api.v1.endpoints.extract.validate_upload", return_value="text/plain")
+    mocker.patch(
+        "app.domain.extraction.service.ExtractionService.process_file",
+        side_effect=lambda *args: time.sleep(0.5),
+    )
+
+    files = {"file": ("slow.txt", b"content", "text/plain")}
+    response = client.post("/extract", files=files)
+
+    assert response.status_code == 504
+    assert "timed out" in response.json()["detail"]
