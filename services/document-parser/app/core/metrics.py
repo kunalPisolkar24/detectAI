@@ -8,7 +8,12 @@ from prometheus_client import (
     generate_latest,
     multiprocess,
 )
-from app.core.exceptions import ExtractionError, FileTooLargeError, UnsupportedFileTypeError
+from app.core.exceptions import (
+    DocumentTooLargeError,
+    ExtractionError,
+    FileTooLargeError,
+    UnsupportedFileTypeError,
+)
 
 HTTP_REQUESTS_TOTAL = Counter(
     "http_requests_total",
@@ -58,6 +63,8 @@ EXTRACTION_FAILURES_TOTAL = Counter(
 def classify_extraction_error(exc: Exception) -> str:
     if isinstance(exc, FileTooLargeError):
         return "file_too_large"
+    if isinstance(exc, DocumentTooLargeError):
+        return "document_too_large"
     if isinstance(exc, UnsupportedFileTypeError):
         return "unsupported_file_type"
     if isinstance(exc, ExtractionError):

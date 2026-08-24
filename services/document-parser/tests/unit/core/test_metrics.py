@@ -1,6 +1,11 @@
 import os
 from unittest.mock import patch
-from app.core.exceptions import ExtractionError, FileTooLargeError, UnsupportedFileTypeError
+from app.core.exceptions import (
+    DocumentTooLargeError,
+    ExtractionError,
+    FileTooLargeError,
+    UnsupportedFileTypeError,
+)
 from app.core.metrics import classify_extraction_error, render_metrics, record_extraction, record_extraction_failure
 
 
@@ -39,6 +44,7 @@ def test_record_extraction_failure_labels_error_type():
 
 def test_classify_extraction_error_categories():
     assert classify_extraction_error(FileTooLargeError(10, 5)) == "file_too_large"
+    assert classify_extraction_error(DocumentTooLargeError(10, 5)) == "document_too_large"
     assert classify_extraction_error(UnsupportedFileTypeError("image/png")) == "unsupported_file_type"
     assert classify_extraction_error(ExtractionError("boom")) == "corrupt_document"
     assert classify_extraction_error(ValueError("nope")) == "unexpected"

@@ -58,6 +58,7 @@ def _make_mock_doc(*pages):
     mock_doc = MagicMock()
     mock_doc.__iter__.return_value = list(pages)
     mock_doc.__enter__.return_value = mock_doc
+    mock_doc.page_count = len(pages)
     return mock_doc
 
 def test_extract_pdf_drops_lines_repeated_on_ratio_of_pages():
@@ -98,7 +99,8 @@ def test_extract_docx_success():
     mock_doc = MagicMock(paragraphs=[p1])
 
     strategy = DocxExtractionStrategy()
-    with patch("docx.Document", return_value=mock_doc):
+    with patch.object(DocxExtractionStrategy, "_guard_uncompressed_size"), \
+            patch("docx.Document", return_value=mock_doc):
         result = strategy.extract("dummy.docx")
         assert result == "Para 1"
 
@@ -107,7 +109,8 @@ def test_extract_docx_strips_field_chars_and_tabs():
     mock_doc = MagicMock(paragraphs=[p1])
 
     strategy = DocxExtractionStrategy()
-    with patch("docx.Document", return_value=mock_doc):
+    with patch.object(DocxExtractionStrategy, "_guard_uncompressed_size"), \
+            patch("docx.Document", return_value=mock_doc):
         result = strategy.extract("dummy.docx")
         assert result == "Before field result  after value"
 
@@ -117,7 +120,8 @@ def test_extract_docx_skips_paragraph_empty_after_cleanup():
     mock_doc = MagicMock(paragraphs=[p_field_only, p_real])
 
     strategy = DocxExtractionStrategy()
-    with patch("docx.Document", return_value=mock_doc):
+    with patch.object(DocxExtractionStrategy, "_guard_uncompressed_size"), \
+            patch("docx.Document", return_value=mock_doc):
         result = strategy.extract("dummy.docx")
         assert result == "Real content"
 
@@ -161,10 +165,12 @@ def test_extract_pdf_exception():
 
 def test_extract_docx_exception():
     strategy = DocxExtractionStrategy()
-    with patch("docx.Document", side_effect=Exception("Corrupted DOCX")):
+    with patch.object(DocxExtractionStrategy, "_guard_uncompressed_size"), \
+            patch("docx.Document", side_effect=Exception("Corrupted DOCX")):
         with pytest.raises(ExtractionError) as exc_info:
             strategy.extract("dummy.docx")
         assert "DOCX processing failed" in str(exc_info.value)
+        assert "Corrupted DOCX" in str(exc_info.value)
 
 def test_factory_returns_correct_strategy():
     assert isinstance(ExtractorFactory.get_strategy("application/pdf"), PdfExtractionStrategy)

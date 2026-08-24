@@ -64,3 +64,17 @@ def test_extraction_error_returns_safe_detail(client, mocker):
     assert response.json()["detail"] == "Could not extract text from this document."
     assert "Mupdf" not in response.text
     assert "startxref" not in response.text
+
+def test_document_too_large_returns_413(client, mocker):
+    from app.core.exceptions import DocumentTooLargeError
+    mocker.patch("app.api.v1.endpoints.extract.validate_upload", return_value="application/pdf")
+    mocker.patch(
+        "app.domain.extraction.service.ExtractionService.process_file",
+        side_effect=DocumentTooLargeError(200 * 1024 * 1024, 100 * 1024 * 1024),
+    )
+
+    files = {"file": ("bomb.pdf", b"%PDF-bomb", "application/pdf")}
+    response = client.post("/extract", files=files)
+
+    assert response.status_code == 413
+    assert "exceeds limit" in response.json()["detail"]

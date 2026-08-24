@@ -1,12 +1,13 @@
 import math
 import re
+import zipfile
 from collections import Counter
 
 import fitz
 import docx
 from abc import ABC, abstractmethod
 from app.core.config import settings
-from app.core.exceptions import ExtractionError
+from app.core.exceptions import DocumentTooLargeError, ExtractionError
 
 TEXT_BLOCK_TYPE = 0
 RATIO_EPSILON = 1e-9
@@ -25,6 +26,8 @@ class PdfExtractionStrategy(ExtractionStrategy):
         total_length = 0
         try:
             with fitz.open(file_path) as doc:
+                if doc.page_count > settings.MAX_PDF_PAGES:
+                    raise DocumentTooLargeError(doc.page_count, settings.MAX_PDF_PAGES)
                 for page in doc:
                     text = self._extract_page_text(page)
                     if not text:
@@ -34,6 +37,8 @@ class PdfExtractionStrategy(ExtractionStrategy):
                     if total_length > settings.MAX_TEXT_LENGTH:
                         break
             return self._drop_repeated_lines(page_texts)
+        except DocumentTooLargeError:
+            raise
         except Exception as e:
             raise ExtractionError(f"PDF processing failed: {str(e)}")
 
@@ -84,6 +89,7 @@ class PdfExtractionStrategy(ExtractionStrategy):
 class DocxExtractionStrategy(ExtractionStrategy):
     def extract(self, file_path: str) -> str:
         try:
+            self._guard_uncompressed_size(file_path)
             doc = docx.Document(file_path)
             text_content = []
             total_length = 0
@@ -95,8 +101,17 @@ class DocxExtractionStrategy(ExtractionStrategy):
                 if total_length > settings.MAX_TEXT_LENGTH:
                     break
             return "\n".join(text_content)
+        except DocumentTooLargeError:
+            raise
         except Exception as e:
             raise ExtractionError(f"DOCX processing failed: {str(e)}")
+
+    @staticmethod
+    def _guard_uncompressed_size(file_path: str) -> None:
+        with zipfile.ZipFile(file_path) as archive:
+            uncompressed_bytes = sum(info.file_size for info in archive.infolist())
+        if uncompressed_bytes > settings.MAX_DOCX_UNCOMPRESSED_BYTES:
+            raise DocumentTooLargeError(uncompressed_bytes, settings.MAX_DOCX_UNCOMPRESSED_BYTES)
 
     @classmethod
     def _clean_inline(cls, text: str) -> str:
