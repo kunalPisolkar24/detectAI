@@ -3,17 +3,62 @@ from unittest.mock import MagicMock, patch
 from app.domain.extraction.strategies import ExtractorFactory, PdfExtractionStrategy, DocxExtractionStrategy, TxtExtractionStrategy
 from app.core.exceptions import ExtractionError
 
-def test_extract_pdf_success():
-    mock_page = MagicMock()
-    mock_page.get_text.return_value = "PDF Content"
-    mock_doc = MagicMock()
-    mock_doc.__iter__.return_value = [mock_page]
-    mock_doc.__enter__.return_value = mock_doc
+def _make_pdf_page(blocks, height=842.0):
+    page = MagicMock()
+    page.get_text.return_value = blocks
+    page.rect.height = height
+    return page
 
+def test_extract_pdf_success():
+    blocks = [(0, 100, 500, 150, "PDF Content", 0, 0)]
     strategy = PdfExtractionStrategy()
-    with patch("fitz.open", return_value=mock_doc):
+    with patch("fitz.open", return_value=_make_mock_doc(_make_pdf_page(blocks))):
         result = strategy.extract("dummy.pdf")
         assert result == "PDF Content"
+
+def test_extract_pdf_skips_header_footer_blocks():
+    blocks = [
+        (0, 10, 300, 30, "Header banner", 0, 0),
+        (0, 100, 500, 400, "Body paragraph", 1, 0),
+        (0, 810, 300, 830, "Footer page 3", 2, 0),
+    ]
+    strategy = PdfExtractionStrategy()
+    with patch("fitz.open", return_value=_make_mock_doc(_make_pdf_page(blocks))):
+        result = strategy.extract("dummy.pdf")
+        assert result == "Body paragraph"
+
+def test_extract_pdf_ignores_image_blocks():
+    blocks = [
+        (0, 100, 200, 300, "<image: DeviceRGB>", 0, 1),
+        (0, 320, 200, 380, "Text after image", 1, 0),
+    ]
+    strategy = PdfExtractionStrategy()
+    with patch("fitz.open", return_value=_make_mock_doc(_make_pdf_page(blocks))):
+        result = strategy.extract("dummy.pdf")
+        assert result == "Text after image"
+
+def test_extract_pdf_skips_blocks_partially_in_band_only_if_fully_inside():
+    blocks = [
+        (0, 20, 300, 120, "Heading touching header band", 0, 0),
+        (0, 760, 300, 830, "Paragraph touching footer band", 1, 0),
+    ]
+    strategy = PdfExtractionStrategy()
+    with patch("fitz.open", return_value=_make_mock_doc(_make_pdf_page(blocks))):
+        result = strategy.extract("dummy.pdf")
+        assert result == "Heading touching header band\nParagraph touching footer band"
+
+def test_extract_pdf_all_blocks_filtered_returns_empty_string():
+    blocks = [(0, 10, 300, 30, "Only a header", 0, 0)]
+    strategy = PdfExtractionStrategy()
+    with patch("fitz.open", return_value=_make_mock_doc(_make_pdf_page(blocks))):
+        result = strategy.extract("dummy.pdf")
+        assert result == ""
+
+def _make_mock_doc(page):
+    mock_doc = MagicMock()
+    mock_doc.__iter__.return_value = [page]
+    mock_doc.__enter__.return_value = mock_doc
+    return mock_doc
 
 def test_extract_docx_success():
     p1 = MagicMock(text="Para 1")
