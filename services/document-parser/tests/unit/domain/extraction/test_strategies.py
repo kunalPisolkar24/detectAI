@@ -54,11 +54,44 @@ def test_extract_pdf_all_blocks_filtered_returns_empty_string():
         result = strategy.extract("dummy.pdf")
         assert result == ""
 
-def _make_mock_doc(page):
+def _make_mock_doc(*pages):
     mock_doc = MagicMock()
-    mock_doc.__iter__.return_value = [page]
+    mock_doc.__iter__.return_value = list(pages)
     mock_doc.__enter__.return_value = mock_doc
     return mock_doc
+
+def test_extract_pdf_drops_lines_repeated_on_ratio_of_pages():
+    page1 = _make_pdf_page([(0, 100, 500, 150, "Quarterly report\nConfidential", 0, 0)])
+    page2 = _make_pdf_page([(0, 100, 500, 150, "Confidential\nQ3 figures", 0, 0)])
+    strategy = PdfExtractionStrategy()
+    with patch("fitz.open", return_value=_make_mock_doc(page1, page2)):
+        result = strategy.extract("dummy.pdf")
+        assert result == "Quarterly report\nQ3 figures"
+
+def test_extract_pdf_keeps_line_below_repetition_threshold():
+    blocks1 = [(0, 100, 500, 150, "Intro", 0, 0)]
+    blocks2 = [(0, 100, 500, 150, "Methods", 0, 0)]
+    blocks3 = [(0, 100, 500, 150, "Intro again", 0, 0), (0, 200, 500, 250, "Shared banner", 1, 0)]
+    pages = [_make_pdf_page(b) for b in (blocks1, blocks2, blocks3)]
+    strategy = PdfExtractionStrategy()
+    with patch("fitz.open", return_value=_make_mock_doc(*pages)):
+        result = strategy.extract("dummy.pdf")
+        assert result == "Intro\nMethods\nIntro again\nShared banner"
+
+def test_extract_pdf_single_page_never_filtered():
+    blocks = [(0, 100, 500, 150, "Only page", 0, 0)]
+    strategy = PdfExtractionStrategy()
+    with patch("fitz.open", return_value=_make_mock_doc(_make_pdf_page(blocks))):
+        result = strategy.extract("dummy.pdf")
+        assert result == "Only page"
+
+def test_extract_pdf_repetition_matching_ignores_whitespace():
+    page1 = _make_pdf_page([(0, 100, 500, 150, "Chapter  one", 0, 0)])
+    page2 = _make_pdf_page([(0, 100, 500, 150, "Chapter\tone", 0, 0)])
+    strategy = PdfExtractionStrategy()
+    with patch("fitz.open", return_value=_make_mock_doc(page1, page2)):
+        result = strategy.extract("dummy.pdf")
+        assert result == ""
 
 def test_extract_docx_success():
     p1 = MagicMock(text="Para 1")

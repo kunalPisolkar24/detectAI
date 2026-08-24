@@ -1,3 +1,6 @@
+import math
+from collections import Counter
+
 import fitz
 import docx
 from abc import ABC, abstractmethod
@@ -5,6 +8,7 @@ from app.core.config import settings
 from app.core.exceptions import ExtractionError
 
 TEXT_BLOCK_TYPE = 0
+RATIO_EPSILON = 1e-9
 
 class ExtractionStrategy(ABC):
     @abstractmethod
@@ -13,7 +17,7 @@ class ExtractionStrategy(ABC):
 
 class PdfExtractionStrategy(ExtractionStrategy):
     def extract(self, file_path: str) -> str:
-        text_content = []
+        page_texts = []
         total_length = 0
         try:
             with fitz.open(file_path) as doc:
@@ -21,11 +25,11 @@ class PdfExtractionStrategy(ExtractionStrategy):
                     text = self._extract_page_text(page)
                     if not text:
                         continue
-                    text_content.append(text)
+                    page_texts.append(text)
                     total_length += len(text)
                     if total_length > settings.MAX_TEXT_LENGTH:
                         break
-            return "\n".join(text_content)
+            return self._drop_repeated_lines(page_texts)
         except Exception as e:
             raise ExtractionError(f"PDF processing failed: {str(e)}")
 
@@ -46,6 +50,32 @@ class PdfExtractionStrategy(ExtractionStrategy):
             y1 <= settings.HEADER_FOOTER_MARGIN_PT
             or y0 >= page_height - settings.HEADER_FOOTER_MARGIN_PT
         )
+
+    @classmethod
+    def _drop_repeated_lines(cls, page_texts: list[str]) -> str:
+        ratio = settings.HEADER_REPETITION_RATIO
+        if len(page_texts) < 2 or ratio <= 0:
+            return "\n".join(page_texts)
+
+        occurrences: Counter[str] = Counter()
+        pages_lines = []
+        for text in page_texts:
+            lines = [(line, cls._normalize(line)) for line in text.split("\n")]
+            pages_lines.append(lines)
+            occurrences.update({normalized for _, normalized in lines if normalized})
+
+        min_pages = math.ceil(ratio * len(pages_lines) - RATIO_EPSILON)
+        kept = [
+            line
+            for lines in pages_lines
+            for line, normalized in lines
+            if not normalized or occurrences[normalized] < min_pages
+        ]
+        return "\n".join(kept)
+
+    @staticmethod
+    def _normalize(line: str) -> str:
+        return " ".join(line.split())
 
 class DocxExtractionStrategy(ExtractionStrategy):
     def extract(self, file_path: str) -> str:
