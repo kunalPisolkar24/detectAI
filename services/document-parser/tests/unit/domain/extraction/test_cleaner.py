@@ -55,3 +55,7 @@ def test_repairs_hyphenated_line_breaks():
 def test_keeps_hyphens_without_line_break():
     input_text = "a well-known fact"
     assert TextCleaner.clean(input_text) == "a well-known fact"
+
+def test_strips_leading_bom_character():
+    input_text = "\ufeffStart of document"
+    assert TextCleaner.clean(input_text) == "Start of document"
