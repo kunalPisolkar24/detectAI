@@ -11,6 +11,7 @@ from prometheus_client import (
 from app.core.exceptions import (
     DocumentTooLargeError,
     ExtractionError,
+    ExtractionTimeoutError,
     FileTooLargeError,
     UnsupportedFileTypeError,
 )
@@ -59,6 +60,16 @@ EXTRACTION_FAILURES_TOTAL = Counter(
     ["mime_type", "error_type"],
 )
 
+EXTRACTION_TIMEOUTS_TOTAL = Counter(
+    "extraction_timeouts_total",
+    "Total number of extractions aborted after the timeout",
+    ["mime_type"],
+)
+
+
+def record_extraction_timeout(mime_type: str) -> None:
+    EXTRACTION_TIMEOUTS_TOTAL.labels(mime_type=mime_type).inc()
+
 
 def classify_extraction_error(exc: Exception) -> str:
     if isinstance(exc, FileTooLargeError):
@@ -67,6 +78,8 @@ def classify_extraction_error(exc: Exception) -> str:
         return "document_too_large"
     if isinstance(exc, UnsupportedFileTypeError):
         return "unsupported_file_type"
+    if isinstance(exc, ExtractionTimeoutError):
+        return "timeout"
     if isinstance(exc, ExtractionError):
         return "corrupt_document"
     return "unexpected"

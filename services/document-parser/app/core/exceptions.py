@@ -25,3 +25,10 @@ class DocumentTooLargeError(DocumentParserError):
             f"Document content size {size} exceeds limit of {limit / 1024 / 1024}MB",
             status_code=413
         )
+
+class ExtractionTimeoutError(DocumentParserError):
+    def __init__(self, timeout_seconds: float):
+        super().__init__(
+            f"Document extraction timed out after {timeout_seconds} seconds",
+            status_code=504
+        )

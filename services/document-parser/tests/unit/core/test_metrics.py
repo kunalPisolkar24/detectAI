@@ -3,10 +3,17 @@ from unittest.mock import patch
 from app.core.exceptions import (
     DocumentTooLargeError,
     ExtractionError,
+    ExtractionTimeoutError,
     FileTooLargeError,
     UnsupportedFileTypeError,
 )
-from app.core.metrics import classify_extraction_error, render_metrics, record_extraction, record_extraction_failure
+from app.core.metrics import (
+    classify_extraction_error,
+    record_extraction_timeout,
+    render_metrics,
+    record_extraction,
+    record_extraction_failure,
+)
 
 
 def test_render_metrics_single_process():
@@ -46,5 +53,12 @@ def test_classify_extraction_error_categories():
     assert classify_extraction_error(FileTooLargeError(10, 5)) == "file_too_large"
     assert classify_extraction_error(DocumentTooLargeError(10, 5)) == "document_too_large"
     assert classify_extraction_error(UnsupportedFileTypeError("image/png")) == "unsupported_file_type"
+    assert classify_extraction_error(ExtractionTimeoutError(30.0)) == "timeout"
     assert classify_extraction_error(ExtractionError("boom")) == "corrupt_document"
     assert classify_extraction_error(ValueError("nope")) == "unexpected"
+
+
+def test_record_extraction_timeout_increments_counter():
+    record_extraction_timeout(mime_type="application/pdf")
+    payload, _ = render_metrics()
+    assert b'extraction_timeouts_total{mime_type="application/pdf"}' in payload

@@ -98,3 +98,20 @@ def test_document_too_large_returns_413(client, mocker):
 
     assert response.status_code == 413
     assert "exceeds limit" in response.json()["detail"]
+
+def test_slow_extraction_times_out(client, mocker):
+    import time
+    import app.core.config as config_module
+
+    mocker.patch.object(config_module.settings, "EXTRACTION_TIMEOUT_SECONDS", 0.05)
+    mocker.patch("app.api.v1.endpoints.extract.validate_upload", return_value="text/plain")
+    mocker.patch(
+        "app.domain.extraction.service.ExtractionService.process_file",
+        side_effect=lambda *args: time.sleep(0.5),
+    )
+
+    files = {"file": ("slow.txt", b"content", "text/plain")}
+    response = client.post("/extract", files=files)
+
+    assert response.status_code == 504
+    assert "timed out" in response.json()["detail"]
