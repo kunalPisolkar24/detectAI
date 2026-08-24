@@ -48,3 +48,19 @@ def test_file_too_large(client, mocker):
     files = {"file": ("large.txt", b"too big", "text/plain")}
     response = client.post("/extract", files=files)
     assert response.status_code == 413
+
+def test_extraction_error_returns_safe_detail(client, mocker):
+    from app.core.exceptions import ExtractionError
+    mocker.patch("app.api.v1.endpoints.extract.validate_upload", return_value="application/pdf")
+    mocker.patch(
+        "app.domain.extraction.service.ExtractionService.process_file",
+        side_effect=ExtractionError("PDF processing failed: Mupdf: cannot find startxref"),
+    )
+
+    files = {"file": ("broken.pdf", b"%PDF-broken", "application/pdf")}
+    response = client.post("/extract", files=files)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Could not extract text from this document."
+    assert "Mupdf" not in response.text
+    assert "startxref" not in response.text
