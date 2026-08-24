@@ -37,3 +37,25 @@ def test_trim_lines():
     input_text = "  Line 1  \n  Line 2  "
     expected = "Line 1\nLine 2"
     assert TextCleaner.clean(input_text) == expected
+
+def test_strip_zero_width_and_control_chars():
+    input_text = "A\u200bB\u200cC\u200dD\u2060E\ufeffF\x07G\tH"
+    assert TextCleaner.clean(input_text) == "ABCDEFG H"
+
+def test_newlines_survive_while_controls_removed():
+    input_text = "line one\x01\nline two\x02"
+    result = TextCleaner.clean(input_text)
+    assert result == "line one\nline two"
+    assert "\x01" not in result
+
+def test_repairs_hyphenated_line_breaks():
+    input_text = "docu-\nment shipped on time"
+    assert TextCleaner.clean(input_text) == "document shipped on time"
+
+def test_keeps_hyphens_without_line_break():
+    input_text = "a well-known fact"
+    assert TextCleaner.clean(input_text) == "a well-known fact"
+
+def test_strips_leading_bom_character():
+    input_text = "\ufeffStart of document"
+    assert TextCleaner.clean(input_text) == "Start of document"
