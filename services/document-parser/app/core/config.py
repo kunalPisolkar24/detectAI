@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_BYTES: int = 10 * 1024 * 1024
     MAX_TEXT_LENGTH: int = 1_000_000
     WORKER_THREADS: int = int(os.getenv("WORKER_THREADS", os.cpu_count() or 4))
+
+    HEADER_FOOTER_MARGIN_PT: float = 40.0
+    HEADER_REPETITION_RATIO: float = 0.8
     
     ALLOWED_MIME_TYPES: list[str] = [
         "application/pdf",
