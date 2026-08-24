@@ -133,6 +133,18 @@ def test_extract_txt_latin1():
         result = strategy.extract("dummy.txt")
         assert result == "Café"
 
+def test_extract_txt_strips_utf8_bom():
+    strategy = TxtExtractionStrategy()
+    with patch("builtins.open", MagicMock(return_value=MagicMock(__enter__=lambda s: MagicMock(read=lambda: b"\xef\xbb\xbfHello World")))):
+        result = strategy.extract("dummy.txt")
+        assert result == "Hello World"
+
+def test_extract_txt_strips_bom_on_latin1_fallback():
+    strategy = TxtExtractionStrategy()
+    with patch("builtins.open", MagicMock(return_value=MagicMock(__enter__=lambda s: MagicMock(read=lambda: b"\xef\xbb\xbfCaf\xe9\xfd")))):
+        result = strategy.extract("dummy.txt")
+        assert result == "Caféý"
+
 def test_extract_txt_exception():
     strategy = TxtExtractionStrategy()
     with patch("builtins.open", side_effect=Exception("File not found")):

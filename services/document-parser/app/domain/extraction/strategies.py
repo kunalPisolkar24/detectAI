@@ -11,6 +11,8 @@ from app.core.exceptions import ExtractionError
 TEXT_BLOCK_TYPE = 0
 RATIO_EPSILON = 1e-9
 DOCX_FIELD_CONTROL_CHARS = re.compile(r"[\x13\x14\x15]")
+UTF8_BOM = "\ufeff"
+LATIN1_BOM = "\xef\xbb\xbf"
 
 class ExtractionStrategy(ABC):
     @abstractmethod
@@ -106,9 +108,9 @@ class TxtExtractionStrategy(ExtractionStrategy):
             with open(file_path, "rb") as f:
                 content = f.read()
             try:
-                return content.decode("utf-8")
+                return content.decode("utf-8").removeprefix(UTF8_BOM)
             except UnicodeDecodeError:
-                return content.decode("latin-1")
+                return content.decode("latin-1").removeprefix(LATIN1_BOM)
         except Exception as e:
             raise ExtractionError(f"Text decoding failed: {str(e)}")
 
