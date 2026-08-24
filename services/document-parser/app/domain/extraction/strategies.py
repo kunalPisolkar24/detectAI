@@ -1,4 +1,5 @@
 import math
+import re
 from collections import Counter
 
 import fitz
@@ -9,6 +10,7 @@ from app.core.exceptions import ExtractionError
 
 TEXT_BLOCK_TYPE = 0
 RATIO_EPSILON = 1e-9
+DOCX_FIELD_CONTROL_CHARS = re.compile(r"[\x13\x14\x15]")
 
 class ExtractionStrategy(ABC):
     @abstractmethod
@@ -84,14 +86,19 @@ class DocxExtractionStrategy(ExtractionStrategy):
             text_content = []
             total_length = 0
             for para in doc.paragraphs:
-                if para.text.strip():
-                    text_content.append(para.text)
-                    total_length += len(para.text)
+                text = self._clean_inline(para.text)
+                if text.strip():
+                    text_content.append(text)
+                    total_length += len(text)
                 if total_length > settings.MAX_TEXT_LENGTH:
                     break
             return "\n".join(text_content)
         except Exception as e:
             raise ExtractionError(f"DOCX processing failed: {str(e)}")
+
+    @classmethod
+    def _clean_inline(cls, text: str) -> str:
+        return DOCX_FIELD_CONTROL_CHARS.sub("", text).replace("\t", " ")
 
 class TxtExtractionStrategy(ExtractionStrategy):
     def extract(self, file_path: str) -> str:

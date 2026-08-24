@@ -102,6 +102,25 @@ def test_extract_docx_success():
         result = strategy.extract("dummy.docx")
         assert result == "Para 1"
 
+def test_extract_docx_strips_field_chars_and_tabs():
+    p1 = MagicMock(text="Before \x13field\x14 result \x15 after\tvalue")
+    mock_doc = MagicMock(paragraphs=[p1])
+
+    strategy = DocxExtractionStrategy()
+    with patch("docx.Document", return_value=mock_doc):
+        result = strategy.extract("dummy.docx")
+        assert result == "Before field result  after value"
+
+def test_extract_docx_skips_paragraph_empty_after_cleanup():
+    p_field_only = MagicMock(text="\x13\x14\x15")
+    p_real = MagicMock(text="Real content")
+    mock_doc = MagicMock(paragraphs=[p_field_only, p_real])
+
+    strategy = DocxExtractionStrategy()
+    with patch("docx.Document", return_value=mock_doc):
+        result = strategy.extract("dummy.docx")
+        assert result == "Real content"
+
 def test_extract_txt_utf8():
     strategy = TxtExtractionStrategy()
     with patch("builtins.open", MagicMock(return_value=MagicMock(__enter__=lambda s: MagicMock(read=lambda: b"Hello World")))):
