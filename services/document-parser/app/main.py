@@ -9,11 +9,13 @@ from app.core.logging import log_request_middleware
 from app.core.metrics import IN_FLIGHT_REQUESTS, record_request, register_process_pool
 from app.api.v1.router import router as v1_router
 from app.api.exception_handlers import document_parser_exception_handler
+from app.core.tracing import setup_tracing
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.process_pool = ThreadPoolExecutor(max_workers=settings.WORKER_THREADS)
     register_process_pool(app.state.process_pool)
+    setup_tracing(app, service_name="document-parser", service_version=settings.API_VERSION)
     yield
     app.state.process_pool.shutdown(wait=True)
 

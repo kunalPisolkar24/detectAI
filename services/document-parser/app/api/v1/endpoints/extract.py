@@ -1,5 +1,8 @@
 import asyncio
+import contextvars
 import time
+from functools import partial
+
 from fastapi import APIRouter, File, Request, UploadFile
 from app.api.deps import validate_upload
 from app.core.config import settings
@@ -15,12 +18,10 @@ async def extract_text(request: Request, file: UploadFile = File(...)):
     mime_type = await validate_upload(file)
 
     loop = asyncio.get_running_loop()
+    task_context = contextvars.copy_context()
     future = loop.run_in_executor(
         request.app.state.process_pool,
-        run_extraction_task,
-        file,
-        mime_type,
-        time.perf_counter(),
+        partial(task_context.run, run_extraction_task, file, mime_type, time.perf_counter()),
     )
 
     try:

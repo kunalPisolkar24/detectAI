@@ -1,7 +1,10 @@
 import os
 import tempfile
 import time
+
 from fastapi import UploadFile
+from opentelemetry import trace
+
 from app.core.config import settings
 from app.core.exceptions import FileTooLargeError
 from app.core.metrics import (
@@ -16,6 +19,8 @@ from app.core.metrics import (
 )
 from app.domain.extraction.strategies import ExtractorFactory, ExtractionResult
 from app.domain.extraction.cleaner import TextCleaner
+
+tracer = trace.get_tracer(__name__)
 
 
 def run_extraction_task(file: UploadFile, mime_type: str, submitted_at: float) -> ExtractionResult:
@@ -48,31 +53,38 @@ class ExtractionService:
 
                 strategy = ExtractorFactory.get_strategy(mime_type)
 
-                extraction_started = time.perf_counter()
-                try:
-                    raw_result = strategy.extract(tmp_path)
-                except Exception:
+                with tracer.start_as_current_span("extraction") as span:
+                    span.set_attribute("mime_type", mime_type)
+                    span.set_attribute("file_size", file_size_bytes)
+
+                    extraction_started = time.perf_counter()
+                    try:
+                        raw_result = strategy.extract(tmp_path)
+                    except Exception:
+                        record_extraction_duration(
+                            mime_type=mime_type,
+                            status="error",
+                            duration_seconds=time.perf_counter() - extraction_started,
+                        )
+                        raise
                     record_extraction_duration(
                         mime_type=mime_type,
-                        status="error",
+                        status="success",
                         duration_seconds=time.perf_counter() - extraction_started,
                     )
-                    raise
-                record_extraction_duration(
-                    mime_type=mime_type,
-                    status="success",
-                    duration_seconds=time.perf_counter() - extraction_started,
-                )
 
-                cleaned_text = TextCleaner.clean(raw_result.text)
+                    cleaned_text = TextCleaner.clean(raw_result.text)
 
-                record_extraction(
-                    mime_type=mime_type,
-                    file_size_bytes=file_size_bytes,
-                    text_bytes=len(cleaned_text.encode("utf-8")),
-                )
+                    span.set_attribute("text_length", len(cleaned_text.encode("utf-8")))
+                    span.set_attribute("truncated", raw_result.truncated)
 
-                return ExtractionResult(text=cleaned_text, truncated=raw_result.truncated)
+                    record_extraction(
+                        mime_type=mime_type,
+                        file_size_bytes=file_size_bytes,
+                        text_bytes=len(cleaned_text.encode("utf-8")),
+                    )
+
+                    return ExtractionResult(text=cleaned_text, truncated=raw_result.truncated)
             except Exception as exc:
                 record_extraction_failure(
                     mime_type=mime_type,
