@@ -8,9 +8,11 @@ from app.core.exceptions import (
     UnsupportedFileTypeError,
 )
 from app.core.metrics import (
+    IN_FLIGHT_REQUESTS,
     classify_extraction_error,
     record_extraction_duration,
     record_extraction_timeout,
+    record_rejected_upload,
     render_metrics,
     record_extraction,
     record_extraction_failure,
@@ -100,3 +102,38 @@ def test_record_extraction_timeout_increments_counter():
     record_extraction_timeout(mime_type="application/pdf")
     payload, _ = render_metrics()
     assert b'extraction_timeouts_total{mime_type="application/pdf"}' in payload
+
+
+def test_record_rejected_upload_reasons():
+    payload_before, _ = render_metrics()
+
+    record_rejected_upload(FileTooLargeError(10, 5))
+    record_rejected_upload(DocumentTooLargeError(10, 5))
+    record_rejected_upload(UnsupportedFileTypeError("image/png"))
+
+    payload_after, _ = render_metrics()
+    assert (
+        _metric_value(payload_after, 'rejected_uploads_total{reason="too_large"}')
+        - _metric_value(payload_before, 'rejected_uploads_total{reason="too_large"}')
+    ) == 2.0
+    assert (
+        _metric_value(payload_after, 'rejected_uploads_total{reason="unsupported_type"}')
+        - _metric_value(payload_before, 'rejected_uploads_total{reason="unsupported_type"}')
+    ) == 1.0
+
+
+def test_record_rejected_upload_ignores_non_rejections():
+    before = _metric_value(render_metrics()[0], 'rejected_uploads_total{reason="too_large"}')
+    record_rejected_upload(ExtractionError("boom"))
+    after = _metric_value(render_metrics()[0], 'rejected_uploads_total{reason="too_large"}')
+    assert before is not None
+    assert after == before
+
+
+def test_in_flight_requests_gauge_tracks_inc_dec():
+    IN_FLIGHT_REQUESTS.inc(3)
+    payload, _ = render_metrics()
+    assert b"in_flight_requests 3.0" in payload
+    IN_FLIGHT_REQUESTS.dec(3)
+    payload, _ = render_metrics()
+    assert b"in_flight_requests" in payload

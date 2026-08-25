@@ -48,6 +48,20 @@ def test_invalid_mime_type(client, mocker):
     response = client.post("/extract", files=files)
     assert response.status_code == 415
 
+def test_rejected_uploads_counted_by_reason(client, mocker):
+    from app.core.metrics import render_metrics
+    from tests.unit.core.test_metrics import _metric_value
+
+    mocker.patch("app.api.deps.magic.from_buffer", return_value="image/zip")
+    files = {"file": ("archive.png", b"PK\x03\x04", "application/pdf")}
+    response = client.post("/extract", files=files)
+
+    assert response.status_code == 415
+    payload, _ = render_metrics()
+    series = 'rejected_uploads_total{reason="unsupported_type"}'
+    before = _metric_value(payload, series)
+    assert before is not None and before >= 1.0
+
 def test_content_type_mismatch_rejected(client, mocker):
     mocker.patch("app.api.deps.magic.from_buffer", return_value="image/png")
     files = {"file": ("spoof.pdf", b"\x89PNG\r\n\x1a\n", "application/pdf")}

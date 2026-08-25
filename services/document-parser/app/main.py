@@ -6,7 +6,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.core.config import settings
 from app.core.exceptions import DocumentParserError
 from app.core.logging import log_request_middleware
-from app.core.metrics import record_request
+from app.core.metrics import IN_FLIGHT_REQUESTS, record_request
 from app.api.v1.router import router as v1_router
 from app.api.exception_handlers import document_parser_exception_handler
 
@@ -33,7 +33,11 @@ async def _metrics_middleware(request: Request, call_next):
         return await call_next(request)
 
     start = time.perf_counter()
-    response = await call_next(request)
+    IN_FLIGHT_REQUESTS.inc()
+    try:
+        response = await call_next(request)
+    finally:
+        IN_FLIGHT_REQUESTS.dec()
 
     route = request.scope.get("route")
     route_path = getattr(route, "path", request.url.path)

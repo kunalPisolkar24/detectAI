@@ -4,6 +4,7 @@ from prometheus_client import (
     REGISTRY,
     CollectorRegistry,
     Counter,
+    Gauge,
     Histogram,
     generate_latest,
     multiprocess,
@@ -66,6 +67,17 @@ EXTRACTION_TIMEOUTS_TOTAL = Counter(
     ["mime_type"],
 )
 
+REJECTED_UPLOADS_TOTAL = Counter(
+    "rejected_uploads_total",
+    "Total number of uploads rejected before extraction",
+    ["reason"],
+)
+
+IN_FLIGHT_REQUESTS = Gauge(
+    "in_flight_requests",
+    "Number of HTTP requests currently being processed",
+)
+
 EXTRACTION_DURATION_SECONDS = Histogram(
     "extraction_duration_seconds",
     "Time spent parsing documents",
@@ -94,6 +106,13 @@ def record_extraction_duration(mime_type: str, status: str, duration_seconds: fl
 
 def record_extraction_timeout(mime_type: str) -> None:
     EXTRACTION_TIMEOUTS_TOTAL.labels(mime_type=mime_type).inc()
+
+
+def record_rejected_upload(exc: Exception) -> None:
+    if isinstance(exc, (FileTooLargeError, DocumentTooLargeError)):
+        REJECTED_UPLOADS_TOTAL.labels(reason="too_large").inc()
+    elif isinstance(exc, UnsupportedFileTypeError):
+        REJECTED_UPLOADS_TOTAL.labels(reason="unsupported_type").inc()
 
 
 def classify_extraction_error(exc: Exception) -> str:
