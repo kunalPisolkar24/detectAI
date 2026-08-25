@@ -52,23 +52,23 @@ const subscriptionUpdatedHandler = new SubscriptionUpdatedHandler(userRepository
 const subscriptionCanceledHandler = new SubscriptionCanceledHandler(userRepository, redisClient, eventRedisClient, metricsService);
 const userCancelHandler = new UserCancelHandler(userRepository, paddleClient, redisClient, eventRedisClient, metricsService);
 
-const paymentService = new PaymentService(
-    {
-        "subscription.created": subscriptionUpdatedHandler,
-        "subscription.updated": subscriptionUpdatedHandler,
-        "subscription.activated": subscriptionUpdatedHandler,
-        "subscription.canceled": subscriptionCanceledHandler,
-        "user.cancel_subscription": userCancelHandler,
-    },
-    metricsService
-);
+const paymentHandlers = {
+    "subscription.created": subscriptionUpdatedHandler,
+    "subscription.updated": subscriptionUpdatedHandler,
+    "subscription.activated": subscriptionUpdatedHandler,
+    "subscription.canceled": subscriptionCanceledHandler,
+    "user.cancel_subscription": userCancelHandler,
+} as const;
+
+const paymentService = new PaymentService(paymentHandlers, metricsService);
 
 const worker = new RabbitMQWorker(
     config.RABBITMQ_URL,
     QUEUE_NAME,
     async (event: any) => await paymentService.handleEvent(event),
     metricsService,
-    config.RABBITMQ_QUEUE_TYPE ?? "classic"
+    config.RABBITMQ_QUEUE_TYPE ?? "classic",
+    Object.keys(paymentHandlers)
 );
 
 worker.start();

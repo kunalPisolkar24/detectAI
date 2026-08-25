@@ -16,7 +16,8 @@ export class RabbitMQWorker {
         private readonly queueName: string,
         private readonly handler: MessageHandler,
         private readonly metrics: MetricsService,
-        private readonly queueType: "classic" | "quorum" = "classic"
+        private readonly queueType: "classic" | "quorum" = "classic",
+        private readonly allowedJobTypes?: readonly string[]
     ) { }
 
     public async start(): Promise<void> {
@@ -94,8 +95,15 @@ export class RabbitMQWorker {
     private async setupTopology(): Promise<void> {
         if (!this.channel) return;
 
+        const dlxName = `${this.queueName}_dlx`;
+        const dlqName = `${this.queueName}_dlq`;
+
+        await this.channel.assertExchange(dlxName, "direct", { durable: true });
+        await this.channel.assertQueue(dlqName, { durable: true });
+        await this.channel.bindQueue(dlqName, dlxName, this.queueName);
+
         const args: Record<string, unknown> = {
-            "x-dead-letter-exchange": `${this.queueName}_dlx`,
+            "x-dead-letter-exchange": dlxName,
             "x-dead-letter-routing-key": this.queueName
         };
 
@@ -112,14 +120,27 @@ export class RabbitMQWorker {
         await this.channel.consume(this.queueName, this.onMessage.bind(this));
     }
 
+    private resolveJobType(event: any): string {
+        const raw =
+            typeof event?.event_type === "string"
+                ? event.event_type
+                : typeof event?.type === "string"
+                    ? event.type
+                    : "";
+        if (!this.allowedJobTypes || !raw || !this.allowedJobTypes.includes(raw)) {
+            return "other";
+        }
+        return raw;
+    }
+
     private async onMessage(msg: ConsumeMessage | null) {
         if (!msg || !this.channel) return;
 
-        let jobType = "unknown";
+        let jobType: string;
         try {
             const content = msg.content.toString();
             const event = JSON.parse(content);
-            jobType = event.event_type || event.type || "unknown";
+            jobType = this.resolveJobType(event);
 
             this.metrics.messageSizeBytes.observe({ job_type: jobType }, msg.content.length);
 

@@ -1,5 +1,5 @@
-import { describe, test, expect, mock, beforeEach } from "bun:test";
-import { amqpMock, mockChannel, mockAck, mockNack, mockOn } from "../../mocks/amqplib";
+import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
+import { amqpMock, mockChannel, mockAck, mockNack, mockOn, mockAssertExchange, mockBindQueue } from "../../mocks/amqplib";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 
 const originalExit = process.exit;
@@ -20,7 +20,14 @@ describe("RabbitMQWorker", () => {
         mockAck.mockClear();
         mockNack.mockClear();
         mockChannel.consume.mockClear();
+        mockChannel.assertQueue.mockClear();
+        mockChannel.assertExchange.mockClear();
+        mockChannel.bindQueue.mockClear();
         worker = new RabbitMQWorker("amqp://localhost", "test_queue", mockHandler, metrics);
+    });
+
+    afterEach(async () => {
+        if (worker) await worker.shutdown();
     });
 
     test("should establish connection and setup queue", async () => {
@@ -28,6 +35,42 @@ describe("RabbitMQWorker", () => {
         expect(mockChannel.assertQueue).toHaveBeenCalled();
         expect(mockChannel.consume).toHaveBeenCalled();
         expect(worker.getStatus()).toBe(true);
+    });
+
+    test("should declare dlx, dlq and binding alongside the work queue", async () => {
+        await worker.start();
+
+        expect(mockAssertExchange).toHaveBeenCalledWith("test_queue_dlx", "direct", { durable: true });
+        expect(mockChannel.assertQueue).toHaveBeenCalledWith("test_queue_dlq", { durable: true });
+        expect(mockBindQueue).toHaveBeenCalledWith("test_queue_dlq", "test_queue_dlx", "test_queue");
+        expect(mockChannel.assertQueue).toHaveBeenCalledWith("test_queue", expect.objectContaining({
+            arguments: expect.objectContaining({
+                "x-dead-letter-exchange": "test_queue_dlx",
+                "x-dead-letter-routing-key": "test_queue",
+            }),
+        }));
+    });
+
+    test("should bound job_type labels to the allowlist", async () => {
+        worker = new RabbitMQWorker(
+            "amqp://localhost",
+            "test_queue",
+            mockHandler,
+            metrics,
+            "classic",
+            ["subscription.updated"]
+        );
+        await worker.start();
+        const observeSpy = mock(() => {});
+        (worker.metrics.messageSizeBytes as any).observe = observeSpy;
+
+        const onMessageCallback = mockChannel.consume.mock.calls.at(-1)![1];
+        await onMessageCallback({ content: Buffer.from(JSON.stringify({ event_type: "subscription.updated" })) });
+        await onMessageCallback({ content: Buffer.from(JSON.stringify({ event_type: "evil" + "x".repeat(500) })) });
+        await onMessageCallback({ content: Buffer.from(JSON.stringify({ userId: "u1" })) });
+
+        const labelArgs = observeSpy.mock.calls.map((c: any) => c[0].job_type);
+        expect(labelArgs).toEqual(["subscription.updated", "other", "other"]);
     });
 
     test("should acknowledge message on successful processing", async () => {

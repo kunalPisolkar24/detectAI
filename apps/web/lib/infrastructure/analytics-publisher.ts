@@ -37,7 +37,14 @@ class AnalyticsPublisher {
       this.channel = null
     })
 
-    await ch.assertQueue(QUEUE, { durable: true })
+    await ch.assertQueue(QUEUE, {
+      durable: true,
+      arguments: {
+        "x-dead-letter-exchange": `${QUEUE}_dlx`,
+        "x-dead-letter-routing-key": QUEUE,
+        "x-queue-type": "quorum",
+      },
+    })
 
     this.connection = conn
     this.channel = ch
