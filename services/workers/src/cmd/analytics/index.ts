@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { RabbitMQWorker } from "@shared/messaging/RabbitMQWorker";
 import { AnalyticsService } from "@modules/analytics/application/services/AnalyticsService";
-import { prisma } from "@shared/database/PrismaService";
+import { prisma, getPgPool } from "@shared/database/PrismaService";
 import { Logger } from "@shared/logging/Logger";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { MetricsService } from "@shared/monitoring/MetricsService";
@@ -29,7 +29,7 @@ const mainClient = RedisFactory.createClient({
 });
 
 const metricsService = new MetricsService("worker-analytics");
-metricsService.registerPool("primary", prisma);
+metricsService.registerPool("primary", getPgPool("primary")!);
 
 mainClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 1));
 mainClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 1));
@@ -62,7 +62,7 @@ const server = new WorkerServer(
   metricsService,
   config.PORT,
   () => true,
-  () => worker.getStatus()
+  () => worker.getStatus() && mainClient.status === "ready"
 );
 
 server.start();

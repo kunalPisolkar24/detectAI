@@ -6,6 +6,8 @@ import { Logger } from "../logging/Logger";
 let _prismaPrimary: PrismaClient;
 let _prismaReplica: PrismaClient;
 let _prisma: PrismaClient;
+let _poolPrimary: Pool;
+let _poolReplica: Pool;
 
 const READ_OPERATIONS = [
   'findUnique',
@@ -18,11 +20,21 @@ const READ_OPERATIONS = [
   'groupBy',
 ];
 
+function redactConnectionString(url: string | undefined): string {
+  if (!url) return "<missing>";
+  try {
+    const parsed = new URL(url);
+    return `${parsed.protocol}//${parsed.username}:***@${parsed.host}${parsed.pathname}`;
+  } catch {
+    return "<unparseable>";
+  }
+}
+
 function initializeClients() {
   const primaryUrl = process.env.DATABASE_URL;
   const replicaUrl = process.env.DATABASE_URL_REPLICA || primaryUrl;
 
-  console.log(`Initializing Prisma clients. DATABASE_URL: ${primaryUrl}`);
+  Logger.info(`Initializing Prisma clients (${redactConnectionString(primaryUrl)})`);
 
   if (!primaryUrl) {
     throw new Error("DATABASE_URL is not defined");
@@ -34,18 +46,18 @@ function initializeClients() {
     connectionTimeoutMillis: 5000,
   };
 
-  const poolPrimary = new Pool({
+  _poolPrimary = new Pool({
     connectionString: primaryUrl,
     ...poolConfig
   });
 
-  const poolReplica = new Pool({
+  _poolReplica = new Pool({
     connectionString: replicaUrl,
     ...poolConfig
   });
 
-  const adapterPrimary = new PrismaPg(poolPrimary);
-  const adapterReplica = new PrismaPg(poolReplica);
+  const adapterPrimary = new PrismaPg(_poolPrimary);
+  const adapterReplica = new PrismaPg(_poolReplica);
 
   _prismaPrimary = new PrismaClient({
     adapter: adapterPrimary,
@@ -76,16 +88,25 @@ function initializeClients() {
   }) as unknown as PrismaClient;
 }
 
+function ensureInitialized() {
+  if (!_prismaPrimary) initializeClients();
+}
+
+export function getPgPool(name: "primary" | "replica"): Pool | null {
+  ensureInitialized();
+  return name === "primary" ? _poolPrimary : _poolReplica;
+}
+
 export const prismaPrimary: PrismaClient = new Proxy({} as PrismaClient, {
   get(_, prop) {
-    if (!_prismaPrimary) initializeClients();
+    ensureInitialized();
     return (_prismaPrimary as any)[prop];
   }
 });
 
 export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
   get(_, prop) {
-    if (!_prisma) initializeClients();
+    ensureInitialized();
     return (_prisma as any)[prop];
   }
 });

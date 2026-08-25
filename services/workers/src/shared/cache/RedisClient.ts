@@ -69,7 +69,7 @@ export class RedisFactory {
       enableReadyCheck: false,
       family: 4,
       keepAlive: 10000,
-      lazyConnect: true,
+      lazyConnect: false,
       retryStrategy(times) {
         return Math.min(times * 50, 2000);
       },

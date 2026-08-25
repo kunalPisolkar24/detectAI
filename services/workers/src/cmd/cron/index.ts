@@ -1,5 +1,5 @@
 import { SubscriptionSweeper } from "@modules/cron/application/services/SubscriptionSweeper";
-import { prisma, prismaPrimary } from "@shared/database/PrismaService";
+import { prisma, prismaPrimary, getPgPool } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { Logger } from "@shared/logging/Logger";
 import { MetricsService } from "@shared/monitoring/MetricsService";
@@ -21,8 +21,8 @@ const redisClient = RedisFactory.createClient({
 });
 
 const metricsService = new MetricsService("worker-cron");
-metricsService.registerPool("primary", prismaPrimary);
-metricsService.registerPool("replica", prisma);
+metricsService.registerPool("primary", getPgPool("primary")!);
+metricsService.registerPool("replica", getPgPool("replica")!);
 
 redisClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 1));
 redisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 1));
@@ -36,7 +36,7 @@ const server = new WorkerServer(
     metricsService,
     config.PORT || 7777,
     () => true,
-    () => redisClient.status === "ready" || redisClient.status === "connect"
+    () => redisClient.status === "ready"
 );
 
 server.start();

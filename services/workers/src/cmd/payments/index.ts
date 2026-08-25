@@ -5,7 +5,7 @@ import { PaddleClient } from "@modules/payments/infrastructure/external/PaddleCl
 import { SubscriptionUpdatedHandler } from "@modules/payments/application/handlers/SubscriptionUpdatedHandler";
 import { SubscriptionCanceledHandler } from "@modules/payments/application/handlers/SubscriptionCanceledHandler";
 import { UserCancelHandler } from "@modules/payments/application/handlers/UserCancelHandler";
-import { prisma, prismaPrimary } from "@shared/database/PrismaService";
+import { prisma, prismaPrimary, getPgPool } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
@@ -32,8 +32,8 @@ const eventRedisClient = RedisFactory.createClient({
 });
 
 const metricsService = new MetricsService("worker-payments");
-metricsService.registerPool("primary", prismaPrimary);
-metricsService.registerPool("replica", prisma);
+metricsService.registerPool("primary", getPgPool("primary")!);
+metricsService.registerPool("replica", getPgPool("replica")!);
 
 redisClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 1));
 redisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 1));
@@ -78,7 +78,7 @@ const server = new WorkerServer(
     metricsService,
     config.PORT,
     () => true,
-    () => worker.getStatus()
+    () => worker.getStatus() && redisClient.status === "ready"
 );
 
 server.start();

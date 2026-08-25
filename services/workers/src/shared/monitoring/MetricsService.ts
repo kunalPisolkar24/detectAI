@@ -130,7 +130,7 @@ export class MetricsService {
         return this.registry.contentType;
     }
 
-    public registerPool(name: string, pool: any): void {
+    public registerPool(name: string, pool: Pick<import("pg").Pool, "totalCount" | "idleCount" | "waitingCount">): void {
         this.registry.registerMetric(new Gauge({
             name: `db_pool_${name}_connections`,
             help: `Connections in ${name} pool`,
