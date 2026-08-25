@@ -313,6 +313,14 @@ monitoring:
   grafana:
     enabled: true
     adminPassword: "prom-operator"
+    extraVolumes:
+      - name: document-parser-alerts
+        configMap:
+          name: detect-ai-document-parser-alerts
+    extraVolumeMounts:
+      - name: document-parser-alerts
+        mountPath: /etc/grafana/provisioning/alerting
+        readOnly: true
     sidecar:
       dashboards:
         enabled: true
