@@ -1,0 +1,35 @@
+services:
+  document-parser:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=8000
+      - WORKERS=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    ports:
+      - "8000:8000"
+    networks:
+      - loadnet
+
+  k6:
+    image: grafana/k6
+    volumes:
+      - ./load:/load
+    environment:
+      - API_URL=http://document-parser:8000
+    depends_on:
+      document-parser:
+        condition: service_healthy
+    networks:
+      - loadnet
+
+networks:
+  loadnet:
+    name: docparser_loadnet
