@@ -8,9 +8,39 @@ const extractionTime = new Trend('extraction_duration');
 const errorRate = new Rate('errors');
 
 // Test Configuration
+const mode = (__ENV.MODE || 'vus').toLowerCase();
 const targetVUs = parseInt(__ENV.VUS) || 20;
 const holdDuration = __ENV.DURATION || '1m';
 const rampTime = __ENV.RAMP_TIME || '30s';
+const targetRPS = parseInt(__ENV.RPS) || 50;
+
+function extractionScenario() {
+  if (mode === 'rps') {
+    return {
+      executor: 'ramping-arrival-rate',
+      startRate: 1,
+      timeUnit: '1s',
+      preAllocatedVUs: Math.max(targetVUs, 20),
+      maxVUs: Math.max(targetVUs * 2, 100),
+      stages: [
+        { duration: rampTime, target: targetRPS },
+        { duration: holdDuration, target: targetRPS },
+        { duration: rampTime, target: 0 },
+      ],
+      exec: 'extract',
+    };
+  }
+  return {
+    executor: 'ramping-vus',
+    startVUs: 0,
+    stages: [
+      { duration: rampTime, target: targetVUs },
+      { duration: holdDuration, target: targetVUs },
+      { duration: rampTime, target: 0 },
+    ],
+    exec: 'extract',
+  };
+}
 
 export const options = {
   scenarios: {
@@ -20,22 +50,12 @@ export const options = {
       duration: '30s',
       exec: 'health',
     },
-    extraction_load: {
-      executor: 'ramping-vus',
-      startVUs: 0,
-      stages: [
-        { duration: rampTime, target: targetVUs },   // Ramp up
-        { duration: holdDuration, target: targetVUs },// Hold peak load
-        { duration: rampTime, target: 0 },           // Ramp down
-      ],
-      exec: 'extract',
-    },
+    extraction_load: extractionScenario(),
   },
   thresholds: {
     // 95% of requests must complete under 1.5s
-    'http_req_duration': ['p(95)<1500'],
     // 99% of requests must complete under 3s
-    'http_req_duration': ['p(99)<3000'],
+    'http_req_duration': ['p(95)<1500', 'p(99)<3000'],
     // 0% errors allowed
     'errors': ['rate==0'],
   },
@@ -46,7 +66,7 @@ const pdfFile = open('./fixtures/sample.pdf', 'b');
 const txtFile = open('./fixtures/sample.txt', 'b');
 const docxFile = open('./fixtures/sample.docx', 'b');
 
-const BASE_URL = __ENV.API_URL || 'http://localhost:8000';
+const BASE_URL = __ENV.API_URL || 'http://document-parser:8000';
 
 export function health() {
   const res = http.get(`${BASE_URL}/health`);
@@ -65,7 +85,7 @@ export function extract() {
     { name: 'sample.txt', data: txtFile, type: 'text/plain' },
     { name: 'sample.docx', data: docxFile, type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
   ];
-  
+
   const fileToUpload = fileTypes[Math.floor(Math.random() * fileTypes.length)];
 
   const fd = new FormData();
@@ -90,6 +110,8 @@ export function extract() {
     errorRate.add(1);
   }
 
-  // Add realistic sleep between requests
-  sleep(Math.random() * 2 + 1); // 1-3 seconds
+  if (mode !== 'rps') {
+    // Add realistic think-time only for open-workload VU pacing
+    sleep(Math.random() * 2 + 1); // 1-3 seconds
+  }
 }

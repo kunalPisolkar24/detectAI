@@ -1,9 +1,12 @@
 VUS ?= 20
 DURATION ?= 1m
 RAMP_TIME ?= 30s
-API_URL ?= http://localhost:8000
+RPS ?= 50
+MODE ?= vus
 
-.PHONY: load-test build run stop
+COMPOSE_LOAD = docker compose -f compose.load.yml
+
+.PHONY: load-test load-up load-down build run stop
 
 build:
 	docker build -t detectai-document-parser .
@@ -15,13 +18,24 @@ run:
 stop:
 	PORT_DOC_PARSER=8000 detect_ai_network=detectai_net docker compose down
 
-load-test:
-	@echo "Running k6 load test with $(VUS) VUs for $(DURATION) (Ramp: $(RAMP_TIME)) against $(API_URL)..."
-	docker run --rm -i \
-		--network host \
-		-v $(PWD)/load:/load \
+load-up:
+	$(COMPOSE_LOAD) up -d --build
+
+load-down:
+	$(COMPOSE_LOAD) down --remove-orphans
+
+load-test: load-down load-up
+	@echo "Waiting for document-parser to become healthy..."
+	@until $$(curl --output /dev/null --silent --head --fail http://localhost:8000/health); do \
+		printf '.'; \
+		sleep 2; \
+	done
+	@echo "\nRunning k6 load test ($(MODE) mode, VUS=$(VUS), RPS=$(RPS), DURATION=$(DURATION), RAMP=$(RAMP_TIME))..."
+	$(COMPOSE_LOAD) run --rm \
+		-e MODE=$(MODE) \
 		-e VUS=$(VUS) \
 		-e DURATION=$(DURATION) \
 		-e RAMP_TIME=$(RAMP_TIME) \
-		-e API_URL=$(API_URL) \
-		grafana/k6 run /load/script.js
+		-e RPS=$(RPS) \
+		k6 run /load/script.js
+	@$(MAKE) load-down
