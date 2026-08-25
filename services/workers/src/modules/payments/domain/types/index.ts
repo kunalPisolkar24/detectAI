@@ -18,12 +18,3 @@ export interface PaymentEvent {
   data: PaddleEventData;
 }
 
-export interface PaymentUpdatePayload {
-  paddleCustomerId: string;
-  paddleSubscriptionId: string | null;
-  paddlePlanId: string | null;
-  status: SubscriptionStatus;
-  endsAt: Date | null;
-  cancellationScheduled?: boolean;
-  eventTimestamp?: Date;
-}

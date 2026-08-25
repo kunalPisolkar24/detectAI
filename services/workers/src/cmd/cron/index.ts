@@ -5,6 +5,7 @@ import { Logger } from "@shared/logging/Logger";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { config } from "./config";
 
 const CHECK_INTERVAL_MS = 1000 * 60 * 60;

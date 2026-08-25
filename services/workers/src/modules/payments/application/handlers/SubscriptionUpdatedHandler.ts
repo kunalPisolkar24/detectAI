@@ -1,11 +1,12 @@
 import { SubscriptionStatus } from "../../../../../generated/prisma/client";
-import { type IUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { type RedisClient } from "@shared/cache/RedisClient";
 import { CacheKeys } from "@shared/cache/keys";
 import { EventDeduplicator } from "@shared/cache/EventDeduplicator";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { Logger } from "@shared/logging/Logger";
-import { type PaddleEventData, type PaymentUpdatePayload } from "../../domain/types";
+import { type PaddleEventData } from "../../domain/types";
+import { type SubscriptionUpdateData } from "@modules/user/domain/types";
 import type { IPaymentEventHandler } from "./IPaymentEventHandler";
 import { UserNotFoundError } from "../../domain/errors";
 
@@ -39,7 +40,7 @@ export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
     const user = await this.userRepository.findUniqueById(userId);
     if (!user) throw new UserNotFoundError(userId);
 
-    const updateData: PaymentUpdatePayload = {
+    const updateData: SubscriptionUpdateData = {
       paddleCustomerId: customerId,
       paddleSubscriptionId: subId,
       paddlePlanId: planId,

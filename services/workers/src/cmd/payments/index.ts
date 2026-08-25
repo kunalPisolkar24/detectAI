@@ -1,10 +1,12 @@
 import { RabbitMQWorker } from "@shared/messaging/RabbitMQWorker";
 import { PaymentService } from "@modules/payments/application/services/PaymentService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { PaddleClient } from "@modules/payments/infrastructure/external/PaddleClient";
 import { SubscriptionUpdatedHandler } from "@modules/payments/application/handlers/SubscriptionUpdatedHandler";
 import { SubscriptionCanceledHandler } from "@modules/payments/application/handlers/SubscriptionCanceledHandler";
 import { UserCancelHandler } from "@modules/payments/application/handlers/UserCancelHandler";
+import { validateTransition } from "@modules/payments/domain/stateMachine";
 import { prisma, prismaPrimary, getPgPool } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { MetricsService } from "@shared/monitoring/MetricsService";
@@ -45,7 +47,7 @@ eventRedisClient.on("ready", () => metricsService.redisConnectionStatus.set({ cl
 eventRedisClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 0));
 eventRedisClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 0));
 
-const userRepository = new PrismaUserRepository(prismaPrimary, prisma);
+const userRepository = new PrismaUserRepository(prismaPrimary, prisma, validateTransition);
 const paddleClient = new PaddleClient(config.PADDLE_API_KEY, config.PADDLE_ENVIRONMENT);
 
 const subscriptionUpdatedHandler = new SubscriptionUpdatedHandler(userRepository, redisClient, eventRedisClient, metricsService);

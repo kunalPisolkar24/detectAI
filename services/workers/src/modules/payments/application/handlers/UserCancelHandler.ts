@@ -1,5 +1,5 @@
 import { SubscriptionStatus } from "../../../../../generated/prisma/client";
-import { type IUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { type RedisClient } from "@shared/cache/RedisClient";
 import { CacheKeys } from "@shared/cache/keys";
 import { EventDeduplicator } from "@shared/cache/EventDeduplicator";

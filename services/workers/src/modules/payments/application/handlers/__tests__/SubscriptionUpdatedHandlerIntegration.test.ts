@@ -5,6 +5,7 @@ import { prismaPrimary, prisma } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { SubscriptionUpdatedHandler } from "../SubscriptionUpdatedHandler";
 import { SubscriptionStatus } from "../../../../../../generated/prisma/client";
 

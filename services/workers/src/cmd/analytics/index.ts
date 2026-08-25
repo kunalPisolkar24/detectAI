@@ -8,6 +8,7 @@ import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
 import { config } from "./config";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { UsageEventDeduplicator } from "@modules/analytics/infrastructure/UsageEventDeduplicator";
 
 const QUEUE_NAME = "analytics.usage";

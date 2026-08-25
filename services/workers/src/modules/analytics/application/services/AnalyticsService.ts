@@ -1,4 +1,4 @@
-import { type IUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { type UsageEventDeduplicator } from "../../infrastructure/UsageEventDeduplicator";
 import { CacheKeys } from "@shared/cache/keys";
 import { type RedisClient } from "@shared/cache/RedisClient";

@@ -1,4 +1,4 @@
-import { type IUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { type RedisClient } from "@shared/cache/RedisClient";
 import { Logger } from "@shared/logging/Logger";
 import { SubscriptionStatus } from "../../../../../generated/prisma/client";
