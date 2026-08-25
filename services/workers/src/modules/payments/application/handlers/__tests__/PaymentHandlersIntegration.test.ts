@@ -1,4 +1,4 @@
-import { expect, test, describe, beforeEach, spyOn } from "bun:test";
+import { expect, test, describe, beforeEach, afterEach, spyOn } from "bun:test";
 import "../../../../../tests/setup-integration";
 import { prismaPrimary, prisma } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";

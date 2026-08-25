@@ -14,6 +14,7 @@ export class MetricsService {
     public readonly activeJobs: Gauge;
     public readonly messageSizeBytes: Histogram;
     public readonly deadLetteredTotal: Counter;
+    public readonly unhandledEventsTotal: Counter;
     public readonly dbPoolStatus: Gauge;
 
     constructor(private readonly serviceName: string) {
@@ -87,6 +88,13 @@ export class MetricsService {
             name: "worker_active_jobs",
             help: "Number of jobs currently being processed",
             labelNames: ["job_type"],
+            registers: [this.registry]
+        });
+
+        this.unhandledEventsTotal = new Counter({
+            name: "worker_unhandled_events_total",
+            help: "Events received with no registered handler",
+            labelNames: ["event_type"],
             registers: [this.registry]
         });
 

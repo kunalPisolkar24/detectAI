@@ -35,6 +35,7 @@ const sweeper = new SubscriptionSweeper(userRepository, redisClient, metricsServ
 const server = new WorkerServer(
     metricsService,
     config.PORT || 7777,
+    () => true,
     () => redisClient.status === "ready" || redisClient.status === "connect"
 );
 
@@ -74,6 +75,7 @@ startWorker();
 const shutdown = async () => {
     if (isShuttingDown) return;
     isShuttingDown = true;
+    server.stop();
     metricsService.activeWorkers.dec();
     
     Logger.info("Shutting down Cron Worker...");
@@ -85,5 +87,5 @@ const shutdown = async () => {
     process.exit(0);
 };
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);

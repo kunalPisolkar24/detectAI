@@ -58,12 +58,14 @@ metricsService.activeWorkers.inc();
 const server = new WorkerServer(
   metricsService,
   config.PORT,
+  () => true,
   () => worker.getStatus()
 );
 
 server.start();
 
 const shutdown = async () => {
+  server.stop();
   metricsService.activeWorkers.dec();
   await worker.shutdown();
   await mainClient.quit();

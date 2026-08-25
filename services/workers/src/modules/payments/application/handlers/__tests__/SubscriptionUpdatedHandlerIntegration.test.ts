@@ -1,4 +1,4 @@
-import { expect, test, describe, beforeEach } from "bun:test";
+import { expect, test, describe, beforeEach, afterEach } from "bun:test";
 import { CacheKeys } from "@shared/cache/keys";
 import "../../../../../tests/setup-integration";
 import { prismaPrimary, prisma } from "@shared/database/PrismaService";

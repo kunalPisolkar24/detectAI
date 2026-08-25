@@ -37,7 +37,7 @@ export class PrismaUserRepository implements IUserRepository {
         return this.prismaWriter.subscription.updateMany({
             where: {
                 userId: { in: userIds },
-                status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
+                status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING, SubscriptionStatus.PAST_DUE] },
                 endsAt: { lt: new Date() },
             },
             data,
@@ -46,7 +46,7 @@ export class PrismaUserRepository implements IUserRepository {
 
     async findExpiredSubscriptionsWithLock(limit: number): Promise<{ id: string; email: string }[]> {
         const rows = await this.prismaWriter.$queryRawUnsafe<Array<{ id: string; email: string }>>(
-            `SELECT u.id, u.email FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id WHERE s.status IN ('ACTIVE', 'TRIALING') AND s."endsAt" < NOW() ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
+            `SELECT u.id, u.email FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id WHERE s.status IN ('ACTIVE', 'TRIALING', 'PAST_DUE') AND s."endsAt" < NOW() ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
             limit,
         );
         return rows;

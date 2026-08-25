@@ -1,12 +1,16 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { UserNotFoundError } from "../../../domain/errors";
 
 const mockLogger = { info: mock(), error: mock(), warn: mock() };
 mock.module("@shared/logging/Logger", () => ({ Logger: mockLogger }));
 
 const { PaymentService } = await import("../../../application/services/PaymentService");
 
-const createMetricsMock = () => ({
-    jobDuration: { startTimer: mock(() => mock()) },
+const createMetricsMock = () => {
+    const jobTimer = mock();
+    return ({
+    jobDuration: { startTimer: mock(() => jobTimer) },
+    jobTimer,
     jobTotal: { inc: mock() },
     jobErrors: { inc: mock() },
     cacheOperations: { inc: mock() },
@@ -16,7 +20,9 @@ const createMetricsMock = () => ({
     redisConnectionStatus: { set: mock() },
     messageSizeBytes: { observe: mock() },
     deadLetteredTotal: { inc: mock() },
-});
+    unhandledEventsTotal: { inc: mock() },
+    });
+};
 
 describe("PaymentService", () => {
     let metricsMock: ReturnType<typeof createMetricsMock>;
@@ -92,7 +98,26 @@ describe("PaymentService", () => {
         };
         await service.handleEvent(event as any);
         expect(mockLogger.warn).toHaveBeenCalled();
+        expect(metricsMock.unhandledEventsTotal.inc).toHaveBeenCalledWith({ event_type: "other" });
         expect(metricsMock.jobTotal.inc).not.toHaveBeenCalled();
+    });
+
+    test("routes user-not-found failures onto the DLQ path", async () => {
+        const service = buildService();
+        const notFound = new UserNotFoundError("user_1");
+        mockSubscriptionHandler.handle.mockRejectedValue(notFound);
+        const event = {
+            event_type: "subscription.updated",
+            data: { custom_data: { userId: "user_1" } }
+        };
+
+        await expect(service.handleEvent(event as any)).rejects.toBe(notFound);
+
+        expect(metricsMock.jobErrors.inc).toHaveBeenCalledWith({
+            job_type: "subscription.updated",
+            error_type: "user_not_found",
+        });
+        expect(metricsMock.jobTimer).toHaveBeenCalledWith({ status: "dlq" });
     });
 
     test("re-throws handler errors and records error metrics", async () => {

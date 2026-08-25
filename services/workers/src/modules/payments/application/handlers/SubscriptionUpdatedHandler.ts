@@ -7,6 +7,7 @@ import { MetricsService } from "@shared/monitoring/MetricsService";
 import { Logger } from "@shared/logging/Logger";
 import { type PaddleEventData, type PaymentUpdatePayload } from "../../domain/types";
 import type { IPaymentEventHandler } from "./IPaymentEventHandler";
+import { UserNotFoundError } from "../../domain/errors";
 
 export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
   private readonly deduplicator: EventDeduplicator;
@@ -36,7 +37,7 @@ export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
     if (await this.deduplicator.isStale(userId, eventTimestamp)) return;
 
     const user = await this.userRepository.findUniqueById(userId);
-    if (!user) return;
+    if (!user) throw new UserNotFoundError(userId);
 
     const updateData: PaymentUpdatePayload = {
       paddleCustomerId: customerId,

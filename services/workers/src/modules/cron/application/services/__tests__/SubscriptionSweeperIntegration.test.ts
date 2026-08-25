@@ -119,4 +119,36 @@ describe("SubscriptionSweeper Integration", () => {
             await lockPool.end();
         }
     });
+
+    test("should sweep expired PAST_DUE subscriptions to CANCELED", async () => {
+        const expiredDate = new Date(Date.now() - 10000);
+        const futureDate = new Date(Date.now() + 86400000);
+
+        const userPastDue = await prismaPrimary.user.create({
+            data: {
+                email: "past-due-expired@example.com",
+                subscription: {
+                    create: { status: SubscriptionStatus.PAST_DUE, endsAt: expiredDate },
+                },
+            },
+        });
+        const userPastDueActiveWindow = await prismaPrimary.user.create({
+            data: {
+                email: "past-due-future@example.com",
+                subscription: {
+                    create: { status: SubscriptionStatus.PAST_DUE, endsAt: futureDate },
+                },
+            },
+        });
+
+        const swept = await sweeper.processExpiredSubscriptions();
+
+        expect(swept).toBeGreaterThanOrEqual(1);
+
+        const sweptSub = await prismaPrimary.subscription.findUnique({ where: { userId: userPastDue.id } });
+        expect(sweptSub?.status).toBe(SubscriptionStatus.CANCELED);
+
+        const untouched = await prismaPrimary.subscription.findUnique({ where: { userId: userPastDueActiveWindow.id } });
+        expect(untouched?.status).toBe(SubscriptionStatus.PAST_DUE);
+    });
 });

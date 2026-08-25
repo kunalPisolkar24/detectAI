@@ -77,6 +77,7 @@ metricsService.activeWorkers.inc();
 const server = new WorkerServer(
     metricsService,
     config.PORT,
+    () => true,
     () => worker.getStatus()
 );
 
@@ -84,11 +85,13 @@ server.start();
 
 const shutdown = async () => {
     metricsService.activeWorkers.dec();
+    server.stop();
+    await worker.shutdown();
     await prisma.$disconnect();
     await redisClient.quit();
     await eventRedisClient.quit();
     process.exit(0);
 };
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);
