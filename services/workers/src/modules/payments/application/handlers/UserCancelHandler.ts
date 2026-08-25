@@ -1,7 +1,7 @@
+import { UserCacheInvalidator } from "@shared/cache/invalidation";
 import { SubscriptionStatus } from "../../../../../generated/prisma/client";
 import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { type RedisClient } from "@shared/cache/RedisClient";
-import { CacheKeys } from "@shared/cache/keys";
 import { EventDeduplicator } from "@shared/cache/EventDeduplicator";
 import { type IPaddleClient } from "../../infrastructure/external/PaddleClient";
 import { type PaddleEventData } from "../../domain/types";
@@ -10,6 +10,8 @@ import { Logger } from "@shared/logging/Logger";
 import type { IPaymentEventHandler } from "./IPaymentEventHandler";
 
 export class UserCancelHandler implements IPaymentEventHandler {
+  private readonly cacheInvalidator: UserCacheInvalidator;
+
   private readonly deduplicator: EventDeduplicator;
 
   constructor(
@@ -19,6 +21,7 @@ export class UserCancelHandler implements IPaymentEventHandler {
     eventRedis: RedisClient,
     private readonly metrics: MetricsService
   ) {
+    this.cacheInvalidator = new UserCacheInvalidator(redis, metrics);
     this.deduplicator = new EventDeduplicator(eventRedis);
   }
 
@@ -43,7 +46,7 @@ export class UserCancelHandler implements IPaymentEventHandler {
     if (user) {
       // Pre-invalidate before DB write to shrink the stale-read window.
       // If the write fails, the next read pays a cache-miss penalty — acceptable for consistency.
-      await this.invalidateCache(resolvedUserId, user.email);
+      await this.cacheInvalidator.invalidateUser(resolvedUserId, user.email);
     }
 
     try {
@@ -63,7 +66,7 @@ export class UserCancelHandler implements IPaymentEventHandler {
       );
 
       if (!result.stale) {
-        await this.invalidateCache(resolvedUserId, result.email);
+        await this.cacheInvalidator.invalidateUser(resolvedUserId, result.email);
       }
     } catch (error) {
       // A concurrent webhook (subscription.canceled) may have already set the status to CANCELED.
@@ -78,14 +81,4 @@ export class UserCancelHandler implements IPaymentEventHandler {
     await this.deduplicator.markProcessed(resolvedUserId, eventTimestamp);
   }
 
-  private async invalidateCache(userId: string, email: string): Promise<void> {
-    const keys = [CacheKeys.user(userId), CacheKeys.userByEmail(email)];
-    try {
-      await this.redis.del(...keys);
-      this.metrics.cacheOperations.inc({ operation: "invalidate", cache_type: "main" }, keys.length);
-    } catch (error) {
-      Logger.error("Failed to invalidate cache", error, { userId });
-      this.metrics.jobErrors.inc({ job_type: "cache_invalidate", error_type: "redis_error" });
-    }
-  }
 }

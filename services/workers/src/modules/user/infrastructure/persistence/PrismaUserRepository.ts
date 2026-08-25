@@ -24,22 +24,25 @@ export class PrismaUserRepository implements IUserRepository {
         });
     }
 
-    async bulkUpdateStatus(userIds: string[], data: BulkSubscriptionUpdate): Promise<{ count: number }> {
-        return this.prismaWriter.subscription.updateMany({
-            where: {
-                userId: { in: userIds },
-                status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING, SubscriptionStatus.PAST_DUE] },
-                endsAt: { lt: new Date() },
-            },
-            data,
-        });
-    }
+    async expireDueSubscriptions(limit: number, data: BulkSubscriptionUpdate): Promise<ExpiredSubscription[]> {
+        return this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
+            const users = await tx.$queryRawUnsafe<ExpiredSubscription[]>(
+                `SELECT u.id, u.email FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id WHERE s.status IN ('ACTIVE', 'TRIALING', 'PAST_DUE') AND s."endsAt" < NOW() ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
+                limit,
+            );
+            if (users.length === 0) return [];
 
-    async findExpiredSubscriptionsWithLock(limit: number): Promise<ExpiredSubscription[]> {
-        return this.prismaWriter.$queryRawUnsafe<ExpiredSubscription[]>(
-            `SELECT u.id, u.email FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id WHERE s.status IN ('ACTIVE', 'TRIALING', 'PAST_DUE') AND s."endsAt" < NOW() ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
-            limit,
-        );
+            await tx.subscription.updateMany({
+                where: {
+                    userId: { in: users.map(user => user.id) },
+                    status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING, SubscriptionStatus.PAST_DUE] },
+                    endsAt: { lt: new Date() },
+                },
+                data,
+            });
+
+            return users;
+        });
     }
 
     async incrementUsage(userId: string, count: number): Promise<void> {

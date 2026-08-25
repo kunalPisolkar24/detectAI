@@ -12,8 +12,8 @@ export type TransitionValidator = (
 
 export interface IUserRepository {
     findUniqueById(userId: string): Promise<UserRecord | null>;
-    bulkUpdateStatus(userIds: string[], data: BulkSubscriptionUpdate): Promise<{ count: number }>;
-    findExpiredSubscriptionsWithLock(limit: number): Promise<ExpiredSubscription[]>;
+    /** Selects due subscriptions with FOR UPDATE SKIP LOCKED and cancels them in one transaction. */
+    expireDueSubscriptions(limit: number, data: BulkSubscriptionUpdate): Promise<ExpiredSubscription[]>;
     incrementUsage(userId: string, count: number): Promise<void>;
     lockAndUpdateSubscription(
         userId: string,
