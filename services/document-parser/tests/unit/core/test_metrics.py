@@ -14,6 +14,7 @@ from app.core.metrics import (
     is_process_pool_healthy,
     mark_extraction_finished,
     mark_extraction_started,
+    record_request,
     record_extraction_duration,
     record_extraction_queue_wait,
     record_extraction_timeout,
@@ -62,17 +63,10 @@ def test_record_extraction_emits_size_and_ratio_histograms():
 
 
 def test_record_extraction_skips_ratio_for_empty_text():
-    before_ratio = _metric_value(render_metrics()[0], 'extraction_compression_ratio_sum{mime_type="text/plain"}')
-    before_length_sum = _metric_value(render_metrics()[0], 'extracted_text_length_bytes_sum{mime_type="text/plain"}')
-
     record_extraction(mime_type="text/plain", file_size_bytes=2048, text_bytes=0)
-
-    after_ratio = _metric_value(render_metrics()[0], 'extraction_compression_ratio_sum{mime_type="text/plain"}')
-    after_length_sum = _metric_value(render_metrics()[0], 'extracted_text_length_bytes_sum{mime_type="text/plain"}')
-    assert before_ratio is not None
-    assert after_ratio == before_ratio
-    assert before_length_sum is not None
-    assert after_length_sum == before_length_sum
+    payload, _ = render_metrics()
+    assert _metric_value(payload, 'extraction_compression_ratio_count{mime_type="text/plain"}') is None
+    assert _metric_value(payload, 'extracted_text_length_bytes_count{mime_type="text/plain"}') == 1.0
 
 
 def test_record_extraction_duration_labels_status():
@@ -112,29 +106,19 @@ def test_record_extraction_timeout_increments_counter():
 
 
 def test_record_rejected_upload_reasons():
-    payload_before, _ = render_metrics()
-
     record_rejected_upload(FileTooLargeError(10, 5))
     record_rejected_upload(DocumentTooLargeError(10, 5))
     record_rejected_upload(UnsupportedFileTypeError("image/png"))
-
-    payload_after, _ = render_metrics()
-    assert (
-        _metric_value(payload_after, 'rejected_uploads_total{reason="too_large"}')
-        - _metric_value(payload_before, 'rejected_uploads_total{reason="too_large"}')
-    ) == 2.0
-    assert (
-        _metric_value(payload_after, 'rejected_uploads_total{reason="unsupported_type"}')
-        - _metric_value(payload_before, 'rejected_uploads_total{reason="unsupported_type"}')
-    ) == 1.0
+    payload, _ = render_metrics()
+    assert _metric_value(payload, 'rejected_uploads_total{reason="too_large"}') == 2.0
+    assert _metric_value(payload, 'rejected_uploads_total{reason="unsupported_type"}') == 1.0
 
 
 def test_record_rejected_upload_ignores_non_rejections():
-    before = _metric_value(render_metrics()[0], 'rejected_uploads_total{reason="too_large"}')
     record_rejected_upload(ExtractionError("boom"))
-    after = _metric_value(render_metrics()[0], 'rejected_uploads_total{reason="too_large"}')
-    assert before is not None
-    assert after == before
+    payload, _ = render_metrics()
+    assert _metric_value(payload, 'rejected_uploads_total{reason="too_large"}') is None
+    assert _metric_value(payload, 'rejected_uploads_total{reason="unsupported_type"}') is None
 
 
 def test_in_flight_requests_gauge_tracks_inc_dec():
@@ -217,3 +201,17 @@ def test_is_process_pool_healthy_states():
 
     register_process_pool(None)
     assert is_process_pool_healthy() is False
+
+
+def test_record_request_success_increments_route_counters():
+    record_request(method="POST", route="/extract", status_code=200, duration=0.3)
+    payload, _ = render_metrics()
+    series = 'http_requests_total{method="POST",route="/extract",status_code="200"}'
+    assert _metric_value(payload, series) == 1.0
+
+
+def test_record_request_error_status_increments_error_counter():
+    record_request(method="POST", route="/extract", status_code=500, duration=0.1)
+    payload, _ = render_metrics()
+    error_series = 'http_request_errors_total{method="POST",route="/extract",status_code="500"}'
+    assert _metric_value(payload, error_series) == 1.0

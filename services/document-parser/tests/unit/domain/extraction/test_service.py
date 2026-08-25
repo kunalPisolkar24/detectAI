@@ -203,3 +203,40 @@ def test_process_file_records_file_too_large_error_type(mocker):
         file_size_bytes=101,
         error_type="file_too_large",
     )
+
+
+def test_process_file_sets_extraction_span_attributes(mocker):
+    mock_strategy = MagicMock()
+    mock_strategy.extract.return_value = ExtractionResult(text="Span body", truncated=True)
+    mocker.patch("app.domain.extraction.service.ExtractorFactory.get_strategy", return_value=mock_strategy)
+    mocker.patch("app.domain.extraction.service.TextCleaner.clean", side_effect=lambda t: t)
+
+    mock_span = MagicMock()
+    mock_tracer = MagicMock()
+    mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+    mocker.patch("app.domain.extraction.service.tracer", mock_tracer)
+
+    mock_file = MagicMock()
+    mock_file.filename = "span.pdf"
+    mock_file.file.read.return_value = b"%PDF-span"
+
+    ExtractionService.process_file(mock_file, "application/pdf")
+
+    attributes = {call.args[0]: call.args[1] for call in mock_span.set_attribute.call_args_list}
+    assert attributes["mime_type"] == "application/pdf"
+    assert attributes["file_size"] == len(b"%PDF-span")
+    assert attributes["text_length"] == len("Span body".encode())
+    assert attributes["truncated"] is True
+
+
+def test_process_file_records_zero_size_when_read_fails(mocker):
+    mock_record_failure = mocker.patch("app.domain.extraction.service.record_extraction_failure")
+
+    mock_file = MagicMock()
+    mock_file.filename = "broken.pdf"
+    mock_file.file.read.side_effect = RuntimeError("socket gone")
+
+    with pytest.raises(RuntimeError):
+        ExtractionService.process_file(mock_file, "application/pdf")
+
+    assert mock_record_failure.call_args.kwargs["file_size_bytes"] == 0

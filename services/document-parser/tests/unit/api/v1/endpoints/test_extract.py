@@ -1,12 +1,3 @@
-import pytest
-from fastapi.testclient import TestClient
-from app.main import app
-
-@pytest.fixture
-def client():
-    with TestClient(app) as c:
-        yield c
-
 def test_health_check(client):
     response = client.get("/health")
     assert response.status_code == 200
@@ -123,6 +114,8 @@ def test_slow_extraction_times_out(client, mocker):
         "app.domain.extraction.service.ExtractionService.process_file",
         side_effect=lambda *args: time.sleep(0.5),
     )
+    mocker.patch("app.domain.extraction.service.mark_extraction_started")
+    mocker.patch("app.domain.extraction.service.mark_extraction_finished")
 
     files = {"file": ("slow.txt", b"content", "text/plain")}
     response = client.post("/extract", files=files)

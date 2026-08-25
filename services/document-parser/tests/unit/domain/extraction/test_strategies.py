@@ -202,3 +202,59 @@ def test_factory_returns_correct_strategy():
 def test_factory_raises_on_unknown_mime():
     with pytest.raises(ExtractionError):
         ExtractorFactory.get_strategy("image/png")
+
+def test_extract_pdf_truncates_at_max_text_length(mocker):
+    import app.domain.extraction.strategies as strategies_module
+
+    mocker.patch.object(strategies_module.settings, "MAX_TEXT_LENGTH", 10)
+    page_a = _make_pdf_page([(0, 100, 500, 150, "A" * 12, 0, 0)])
+    page_b = _make_pdf_page([(0, 100, 500, 150, "B" * 12, 0, 0)])
+    strategy = PdfExtractionStrategy()
+
+    with patch("fitz.open", return_value=_make_mock_doc(page_a, page_b)):
+        result = strategy.extract("dummy.pdf")
+
+    assert result.text == "A" * 12
+    assert result.truncated is False
+
+
+def test_extract_docx_truncates_at_max_text_length(mocker):
+    from unittest.mock import MagicMock, patch
+    import app.domain.extraction.strategies as strategies_module
+
+    mocker.patch.object(strategies_module.settings, "MAX_TEXT_LENGTH", 10)
+    long_para = MagicMock(text="A" * 12)
+    later_para = MagicMock(text="Later")
+    mock_doc = MagicMock(paragraphs=[long_para, later_para])
+    strategy = DocxExtractionStrategy()
+
+    with patch.object(DocxExtractionStrategy, "_guard_uncompressed_size"), \
+            patch("docx.Document", return_value=mock_doc):
+        result = strategy.extract("dummy.docx")
+
+    assert result.text == "A" * 12
+
+
+def test_extract_pdf_non_positive_ratio_skips_repetition_filter(mocker):
+    import app.domain.extraction.strategies as strategies_module
+
+    mocker.patch.object(strategies_module.settings, "HEADER_REPETITION_RATIO", 0)
+    page1 = _make_pdf_page([(0, 100, 500, 150, "Same banner\nUnique one", 0, 0)])
+    page2 = _make_pdf_page([(0, 100, 500, 150, "Same banner\nUnique two", 0, 0)])
+    strategy = PdfExtractionStrategy()
+
+    with patch("fitz.open", return_value=_make_mock_doc(page1, page2)):
+        result = strategy.extract("dummy.pdf")
+
+    assert result.text == "Same banner\nUnique one\nSame banner\nUnique two"
+
+
+def test_extract_empty_txt_returns_empty_result():
+    strategy = TxtExtractionStrategy()
+    empty_file = MagicMock(__enter__=lambda s: MagicMock(read=lambda: b""))
+
+    with patch("builtins.open", MagicMock(return_value=empty_file)):
+        result = strategy.extract("empty.txt")
+
+    assert result.text == ""
+    assert result.truncated is False
