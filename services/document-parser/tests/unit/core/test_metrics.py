@@ -10,6 +10,7 @@ from app.core.exceptions import (
 from app.core.metrics import (
     IN_FLIGHT_REQUESTS,
     classify_extraction_error,
+    is_process_pool_healthy,
     record_extraction_duration,
     record_extraction_queue_wait,
     record_extraction_timeout,
@@ -169,3 +170,20 @@ def test_record_extraction_queue_wait_samples_histogram():
     record_extraction_queue_wait(mime_type="application/pdf", wait_seconds=0.02)
     payload, _ = render_metrics()
     assert b'extraction_queue_wait_seconds_count{mime_type="application/pdf"}' in payload
+
+
+def test_is_process_pool_healthy_states():
+    from unittest.mock import MagicMock
+
+    healthy_pool = MagicMock()
+    healthy_pool._shutdown = False
+    register_process_pool(healthy_pool)
+    assert is_process_pool_healthy() is True
+
+    shutdown_pool = MagicMock()
+    shutdown_pool._shutdown = True
+    register_process_pool(shutdown_pool)
+    assert is_process_pool_healthy() is False
+
+    register_process_pool(None)
+    assert is_process_pool_healthy() is False

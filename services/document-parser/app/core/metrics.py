@@ -116,6 +116,10 @@ def refresh_process_pool_gauges() -> None:
     EXTRACTION_POOL_QUEUE_DEPTH.set(_process_pool._work_queue.qsize())
     EXTRACTION_POOL_MAX_WORKERS.set(_process_pool._max_workers)
 
+
+def is_process_pool_healthy() -> bool:
+    return _process_pool is not None and not _process_pool._shutdown
+
 EXTRACTION_DURATION_SECONDS = Histogram(
     "extraction_duration_seconds",
     "Time spent parsing documents",
