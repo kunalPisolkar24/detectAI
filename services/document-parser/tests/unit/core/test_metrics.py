@@ -14,6 +14,7 @@ from app.core.metrics import (
     is_process_pool_healthy,
     mark_extraction_finished,
     mark_extraction_started,
+    record_request,
     record_extraction_duration,
     record_extraction_queue_wait,
     record_extraction_timeout,
@@ -200,3 +201,17 @@ def test_is_process_pool_healthy_states():
 
     register_process_pool(None)
     assert is_process_pool_healthy() is False
+
+
+def test_record_request_success_increments_route_counters():
+    record_request(method="POST", route="/extract", status_code=200, duration=0.3)
+    payload, _ = render_metrics()
+    series = 'http_requests_total{method="POST",route="/extract",status_code="200"}'
+    assert _metric_value(payload, series) == 1.0
+
+
+def test_record_request_error_status_increments_error_counter():
+    record_request(method="POST", route="/extract", status_code=500, duration=0.1)
+    payload, _ = render_metrics()
+    error_series = 'http_request_errors_total{method="POST",route="/extract",status_code="500"}'
+    assert _metric_value(payload, error_series) == 1.0
