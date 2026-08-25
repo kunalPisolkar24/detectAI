@@ -8,10 +8,12 @@ import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
 import { config } from "./config";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { UsageEventDeduplicator } from "@modules/analytics/infrastructure/UsageEventDeduplicator";
 
 const QUEUE_NAME = "analytics.usage";
 
 const UsageEventSchema = z.object({
+  eventId: z.string().uuid().optional(),
   userId: z.string().min(1),
   count: z.number().int().positive(),
   timestamp: z.string().datetime().optional(),
@@ -35,7 +37,8 @@ mainClient.on("close", () => metricsService.redisConnectionStatus.set({ client_n
 mainClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 0));
 
 const userRepository = new PrismaUserRepository(prisma, prisma);
-const analyticsService = new AnalyticsService(userRepository, mainClient, metricsService);
+const usageDeduplicator = new UsageEventDeduplicator(mainClient);
+const analyticsService = new AnalyticsService(userRepository, mainClient, metricsService, usageDeduplicator);
 
 const worker = new RabbitMQWorker(
   config.RABBITMQ_URL,
@@ -46,7 +49,7 @@ const worker = new RabbitMQWorker(
       Logger.warn("Invalid analytics usage event", { errors: result.error.format(), event });
       return;
     }
-    await analyticsService.handleUsageEvent(result.data.userId, result.data.count);
+    await analyticsService.handleUsageEvent(result.data.userId, result.data.count, result.data.eventId);
   },
   metricsService,
   config.RABBITMQ_QUEUE_TYPE ?? "classic"

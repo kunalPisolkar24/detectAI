@@ -6,11 +6,13 @@ import { RedisFactory } from "@shared/cache/RedisClient";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
 import { AnalyticsService } from "../AnalyticsService";
+import { UsageEventDeduplicator } from "../../../infrastructure/UsageEventDeduplicator";
 
 describe("AnalyticsService Integration", () => {
     let service: AnalyticsService;
     let redis: any;
     let userRepository: PrismaUserRepository;
+    let usageDeduplicator: UsageEventDeduplicator;
 
     beforeEach(async () => {
         redis = RedisFactory.createClient({
@@ -20,7 +22,8 @@ describe("AnalyticsService Integration", () => {
         });
         const metrics = new MetricsService("test-analytics");
         userRepository = new PrismaUserRepository(prismaPrimary, prisma);
-        service = new AnalyticsService(userRepository, redis, metrics);
+        usageDeduplicator = new UsageEventDeduplicator(redis);
+        service = new AnalyticsService(userRepository, redis, metrics, usageDeduplicator);
     });
 
     test("should handle usage event: increment db and invalidate cache", async () => {
@@ -41,5 +44,18 @@ describe("AnalyticsService Integration", () => {
 
         const cached = await redis.get(CacheKeys.user(userId));
         expect(cached).toBeNull();
+    });
+
+    test("should count duplicate event ids exactly once", async () => {
+        const user = await prismaPrimary.user.create({
+            data: { email: "analytics-duplicate-event@example.com" },
+        });
+
+        const eventId = crypto.randomUUID();
+        await service.handleUsageEvent(user.id, 5, eventId);
+        await service.handleUsageEvent(user.id, 5, eventId);
+
+        const usage = await prismaPrimary.usage.findUnique({ where: { userId: user.id } });
+        expect(usage?.apiCallCountTotal).toBe(5);
     });
 });

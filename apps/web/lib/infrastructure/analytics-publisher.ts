@@ -51,7 +51,9 @@ class AnalyticsPublisher {
   }
 
   async publish(userId: string, count: number): Promise<void> {
-    const payload = Buffer.from(JSON.stringify({ userId, count, timestamp: new Date().toISOString() }))
+    const payload = Buffer.from(
+      JSON.stringify({ eventId: crypto.randomUUID(), userId, count, timestamp: new Date().toISOString() })
+    )
     const opts = { persistent: true }
 
     let ch = await this.ensureChannel()
