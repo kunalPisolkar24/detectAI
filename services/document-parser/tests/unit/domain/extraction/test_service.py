@@ -11,6 +11,7 @@ def test_process_file_success(mocker):
     mocker.patch("app.domain.extraction.service.ExtractorFactory.get_strategy", return_value=mock_strategy)
     mocker.patch("app.domain.extraction.service.TextCleaner.clean", return_value="Cleaned Text")
     mock_record = mocker.patch("app.domain.extraction.service.record_extraction")
+    mock_record_duration = mocker.patch("app.domain.extraction.service.record_extraction_duration")
 
     mock_file = MagicMock()
     mock_file.filename = "test.txt"
@@ -26,10 +27,37 @@ def test_process_file_success(mocker):
         file_size_bytes=len(b"Dummy Content"),
         text_bytes=len("Cleaned Text".encode("utf-8")),
     )
+    mock_record_duration.assert_called_once_with(
+        mime_type="text/plain",
+        status="success",
+        duration_seconds=mock_record_duration.call_args.kwargs["duration_seconds"],
+    )
 
     called_path = mock_strategy.extract.call_args[0][0]
     assert called_path.endswith(".txt")
     assert not os.path.exists(called_path)
+
+
+def test_process_file_records_failed_extraction_duration(mocker):
+    from app.core.exceptions import ExtractionError
+
+    mock_strategy = MagicMock()
+    mock_strategy.extract.side_effect = ExtractionError("PDF processing failed: bad xref")
+    mocker.patch("app.domain.extraction.service.ExtractorFactory.get_strategy", return_value=mock_strategy)
+    mocker.patch("app.domain.extraction.service.record_extraction_failure")
+    mock_record_duration = mocker.patch("app.domain.extraction.service.record_extraction_duration")
+
+    mock_file = MagicMock()
+    mock_file.filename = "broken.pdf"
+    mock_file.file.read.return_value = b"%PDF-broken"
+
+    with pytest.raises(ExtractionError):
+        ExtractionService.process_file(mock_file, "application/pdf")
+
+    duration_call = mock_record_duration.call_args
+    assert duration_call.kwargs["status"] == "error"
+    assert duration_call.kwargs["mime_type"] == "application/pdf"
+    assert duration_call.kwargs["duration_seconds"] >= 0
 
 
 def test_process_file_preserves_truncation_flag(mocker):

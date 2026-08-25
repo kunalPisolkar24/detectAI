@@ -1,9 +1,15 @@
 import os
 import tempfile
+import time
 from fastapi import UploadFile
 from app.core.config import settings
 from app.core.exceptions import FileTooLargeError
-from app.core.metrics import classify_extraction_error, record_extraction, record_extraction_failure
+from app.core.metrics import (
+    classify_extraction_error,
+    record_extraction,
+    record_extraction_duration,
+    record_extraction_failure,
+)
 from app.domain.extraction.strategies import ExtractorFactory, ExtractionResult
 from app.domain.extraction.cleaner import TextCleaner
 
@@ -24,7 +30,23 @@ class ExtractionService:
                 tmp.flush()
 
                 strategy = ExtractorFactory.get_strategy(mime_type)
-                raw_result = strategy.extract(tmp_path)
+
+                extraction_started = time.perf_counter()
+                try:
+                    raw_result = strategy.extract(tmp_path)
+                except Exception:
+                    record_extraction_duration(
+                        mime_type=mime_type,
+                        status="error",
+                        duration_seconds=time.perf_counter() - extraction_started,
+                    )
+                    raise
+                record_extraction_duration(
+                    mime_type=mime_type,
+                    status="success",
+                    duration_seconds=time.perf_counter() - extraction_started,
+                )
+
                 cleaned_text = TextCleaner.clean(raw_result.text)
 
                 record_extraction(

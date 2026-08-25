@@ -9,6 +9,7 @@ from app.core.exceptions import (
 )
 from app.core.metrics import (
     classify_extraction_error,
+    record_extraction_duration,
     record_extraction_timeout,
     render_metrics,
     record_extraction,
@@ -35,6 +36,43 @@ def test_record_extraction_success_increments_metrics():
     assert b"parsed_documents_total" in payload
     assert b"parsed_file_size_bytes" in payload
     assert b"extracted_text_bytes_total" in payload
+
+
+def _metric_value(payload: bytes, series: str) -> float | None:
+    for line in payload.decode().splitlines():
+        if line.startswith(series + " "):
+            return float(line.rsplit(" ", 1)[1])
+    return None
+
+
+def test_record_extraction_emits_size_and_ratio_histograms():
+    record_extraction(mime_type="text/plain", file_size_bytes=2048, text_bytes=512)
+    payload, _ = render_metrics()
+    assert b'extracted_text_length_bytes_count{mime_type="text/plain"}' in payload
+    assert b'extraction_compression_ratio_count{mime_type="text/plain"}' in payload
+
+
+def test_record_extraction_skips_ratio_for_empty_text():
+    before_ratio = _metric_value(render_metrics()[0], 'extraction_compression_ratio_sum{mime_type="text/plain"}')
+    before_length_sum = _metric_value(render_metrics()[0], 'extracted_text_length_bytes_sum{mime_type="text/plain"}')
+
+    record_extraction(mime_type="text/plain", file_size_bytes=2048, text_bytes=0)
+
+    after_ratio = _metric_value(render_metrics()[0], 'extraction_compression_ratio_sum{mime_type="text/plain"}')
+    after_length_sum = _metric_value(render_metrics()[0], 'extracted_text_length_bytes_sum{mime_type="text/plain"}')
+    assert before_ratio is not None
+    assert after_ratio == before_ratio
+    assert before_length_sum is not None
+    assert after_length_sum == before_length_sum
+
+
+def test_record_extraction_duration_labels_status():
+    record_extraction_duration(mime_type="application/pdf", status="success", duration_seconds=0.2)
+    record_extraction_duration(mime_type="application/pdf", status="error", duration_seconds=0.4)
+    payload, _ = render_metrics()
+    assert b'extraction_duration_seconds_count{mime_type="application/pdf",status="success"} 1.0' in payload
+    assert b'extraction_duration_seconds_count{mime_type="application/pdf",status="error"} 1.0' in payload
+    assert b'extraction_duration_seconds_sum{mime_type="application/pdf",status="success"} 0.2' in payload
 
 
 def test_record_extraction_failure_increments_error_counter():

@@ -66,6 +66,31 @@ EXTRACTION_TIMEOUTS_TOTAL = Counter(
     ["mime_type"],
 )
 
+EXTRACTION_DURATION_SECONDS = Histogram(
+    "extraction_duration_seconds",
+    "Time spent parsing documents",
+    ["mime_type", "status"],
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0),
+)
+
+EXTRACTED_TEXT_LENGTH_BYTES = Histogram(
+    "extracted_text_length_bytes",
+    "Distribution of cleaned extracted text size in bytes",
+    ["mime_type"],
+    buckets=(1024, 10240, 102400, 262144, 524288, 1048576, 2097152, 5242880),
+)
+
+EXTRACTION_COMPRESSION_RATIO = Histogram(
+    "extraction_compression_ratio",
+    "Ratio of input file bytes to extracted text bytes",
+    ["mime_type"],
+    buckets=(0.5, 1, 2, 5, 10, 25, 50, 100, 500),
+)
+
+
+def record_extraction_duration(mime_type: str, status: str, duration_seconds: float) -> None:
+    EXTRACTION_DURATION_SECONDS.labels(mime_type=mime_type, status=status).observe(duration_seconds)
+
 
 def record_extraction_timeout(mime_type: str) -> None:
     EXTRACTION_TIMEOUTS_TOTAL.labels(mime_type=mime_type).inc()
@@ -97,6 +122,9 @@ def record_extraction(mime_type: str, file_size_bytes: int, text_bytes: int) -> 
     PARSED_FILE_SIZE_BYTES.labels(mime_type=mime_type).observe(file_size_bytes)
     PARSED_DOCUMENTS_TOTAL.labels(mime_type=mime_type, status="success").inc()
     EXTRACTED_TEXT_BYTES_TOTAL.labels(mime_type=mime_type).inc(text_bytes)
+    EXTRACTED_TEXT_LENGTH_BYTES.labels(mime_type=mime_type).observe(text_bytes)
+    if file_size_bytes > 0 and text_bytes > 0:
+        EXTRACTION_COMPRESSION_RATIO.labels(mime_type=mime_type).observe(file_size_bytes / text_bytes)
 
 
 def record_extraction_failure(mime_type: str, file_size_bytes: int, error_type: str = "unexpected") -> None:
