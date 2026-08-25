@@ -75,4 +75,75 @@ describe("RabbitMQWorker", () => {
         closeCallback();
         expect(mockExit).not.toHaveBeenCalled();
     });
+
+    test("should not attempt reconnect after shutdown", async () => {
+        await worker.start();
+        expect(worker.getStatus()).toBe(true);
+
+        await worker.shutdown();
+        expect(worker.getStatus()).toBe(false);
+
+        const connectSpy = mock(() => Promise.resolve());
+        const originalConnect = worker.connect;
+        worker.connect = connectSpy;
+
+        const closeCallback = mockOn.mock.calls.find(call => call[0] === "close")?.[1]!;
+        closeCallback();
+
+        expect(connectSpy).not.toHaveBeenCalled();
+        worker.connect = originalConnect;
+    });
+
+    test("should resolve without ack when channel is unavailable after processing", async () => {
+        await worker.start();
+        const onMessageCallback = mockChannel.consume.mock.calls[0]![1];
+        const fakeMsg = {
+            content: Buffer.from(JSON.stringify({ event_type: "test" })),
+        };
+
+        mockHandler.mockImplementation(() => {
+            worker.channel = null;
+            return Promise.resolve();
+        });
+
+        await onMessageCallback(fakeMsg);
+        expect(mockHandler).toHaveBeenCalled();
+        expect(mockAck).not.toHaveBeenCalled();
+        expect(mockNack).not.toHaveBeenCalled();
+    });
+
+    test("should not throw when nack hits a dead channel", async () => {
+        const failingHandler = mock(() => {
+            worker.channel = null;
+            return Promise.reject(new Error("Fail"));
+        });
+        worker = new RabbitMQWorker("amqp://localhost", "test_queue", failingHandler, metrics);
+        await worker.start();
+        const onMessageCallback = mockChannel.consume.mock.calls[0]![1];
+        const fakeMsg = {
+            content: Buffer.from(JSON.stringify({ event_type: "test" })),
+        };
+
+        await onMessageCallback(fakeMsg);
+        expect(failingHandler).toHaveBeenCalled();
+        expect(mockNack).not.toHaveBeenCalled();
+    });
+
+    test("should swallow channel errors during acknowledge", async () => {
+        await worker.start();
+        const onMessageCallback = mockChannel.consume.mock.calls[0]![1];
+        const fakeMsg = {
+            content: Buffer.from(JSON.stringify({ event_type: "test" })),
+        };
+
+        mockAck.mockImplementation(() => {
+            throw new Error("IllegalOperationError: Channel closed");
+        });
+
+        await onMessageCallback(fakeMsg);
+        expect(mockHandler).toHaveBeenCalled();
+        expect(mockAck).toHaveBeenCalledWith(fakeMsg);
+
+        mockAck.mockImplementation(() => {});
+    });
 });
