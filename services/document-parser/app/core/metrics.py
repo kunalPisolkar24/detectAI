@@ -1,4 +1,5 @@
 import os
+import threading
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     REGISTRY,
@@ -101,6 +102,8 @@ EXTRACTION_POOL_MAX_WORKERS = Gauge(
 )
 
 _process_pool = None
+_pool_state_lock = threading.Lock()
+_pool_busy_tasks = 0
 
 
 def register_process_pool(pool) -> None:
@@ -109,12 +112,34 @@ def register_process_pool(pool) -> None:
     refresh_process_pool_gauges()
 
 
-def refresh_process_pool_gauges() -> None:
+def mark_extraction_started() -> None:
+    global _pool_busy_tasks
+    with _pool_state_lock:
+        _pool_busy_tasks += 1
+
+
+def mark_extraction_finished() -> None:
+    global _pool_busy_tasks
+    with _pool_state_lock:
+        _pool_busy_tasks -= 1
+
+
+def get_pool_stats() -> tuple[int, int, int] | None:
     if _process_pool is None:
+        return None
+    with _pool_state_lock:
+        busy = _pool_busy_tasks
+    return busy, _process_pool._work_queue.qsize(), _process_pool._max_workers
+
+
+def refresh_process_pool_gauges() -> None:
+    stats = get_pool_stats()
+    if stats is None:
         return
-    EXTRACTION_POOL_ACTIVE_THREADS.set(len(_process_pool._threads))
-    EXTRACTION_POOL_QUEUE_DEPTH.set(_process_pool._work_queue.qsize())
-    EXTRACTION_POOL_MAX_WORKERS.set(_process_pool._max_workers)
+    busy, queued, max_workers = stats
+    EXTRACTION_POOL_ACTIVE_THREADS.set(busy)
+    EXTRACTION_POOL_QUEUE_DEPTH.set(queued)
+    EXTRACTION_POOL_MAX_WORKERS.set(max_workers)
 
 
 def is_process_pool_healthy() -> bool:

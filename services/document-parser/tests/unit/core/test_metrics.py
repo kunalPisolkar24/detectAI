@@ -10,7 +10,10 @@ from app.core.exceptions import (
 from app.core.metrics import (
     IN_FLIGHT_REQUESTS,
     classify_extraction_error,
+    get_pool_stats,
     is_process_pool_healthy,
+    mark_extraction_finished,
+    mark_extraction_started,
     record_extraction_duration,
     record_extraction_queue_wait,
     record_extraction_timeout,
@@ -143,22 +146,49 @@ def test_in_flight_requests_gauge_tracks_inc_dec():
     assert b"in_flight_requests" in payload
 
 
-def test_refresh_process_pool_gauges_reports_pool_state(mocker):
+def test_refresh_process_pool_gauges_reports_pool_state():
     from unittest.mock import MagicMock
 
     mock_pool = MagicMock()
-    mock_pool._threads = {"t1", "t2"}
     mock_pool._work_queue.qsize.return_value = 7
     mock_pool._max_workers = 4
 
     register_process_pool(mock_pool)
     try:
+        mark_extraction_started()
+        mark_extraction_started()
+        refresh_process_pool_gauges()
         payload, _ = render_metrics()
         assert b"extraction_pool_active_threads 2.0" in payload
         assert b"extraction_pool_queue_depth 7.0" in payload
         assert b"extraction_pool_max_workers 4.0" in payload
+
+        mark_extraction_finished()
+        mark_extraction_finished()
+        refresh_process_pool_gauges()
+        payload, _ = render_metrics()
+        assert b"extraction_pool_active_threads 0.0" in payload
     finally:
         register_process_pool(None)
+
+
+def test_get_pool_stats_reports_busy_queue_and_capacity():
+    from unittest.mock import MagicMock
+
+    mock_pool = MagicMock()
+    mock_pool._work_queue.qsize.return_value = 3
+    mock_pool._max_workers = 8
+    register_process_pool(mock_pool)
+    try:
+        busy_before, _, _ = get_pool_stats()
+        mark_extraction_started()
+        assert get_pool_stats() == (busy_before + 1, 3, 8)
+        mark_extraction_finished()
+        assert get_pool_stats() == (busy_before, 3, 8)
+    finally:
+        register_process_pool(None)
+
+    assert get_pool_stats() is None
 
 
 def test_refresh_process_pool_gauges_without_pool_is_noop():

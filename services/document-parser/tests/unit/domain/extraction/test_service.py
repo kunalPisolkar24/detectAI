@@ -82,6 +82,8 @@ def test_run_extraction_task_records_queue_wait_and_delegates(mocker):
 
     mock_record_wait = mocker.patch("app.domain.extraction.service.record_extraction_queue_wait")
     mocker.patch("app.domain.extraction.service.refresh_process_pool_gauges")
+    mock_started = mocker.patch("app.domain.extraction.service.mark_extraction_started")
+    mock_finished = mocker.patch("app.domain.extraction.service.mark_extraction_finished")
     mock_process = mocker.patch(
         "app.domain.extraction.service.ExtractionService.process_file",
         return_value="delegated",
@@ -97,6 +99,27 @@ def test_run_extraction_task_records_queue_wait_and_delegates(mocker):
     assert wait_call.kwargs["mime_type"] == "text/plain"
     assert 0.04 <= wait_call.kwargs["wait_seconds"] <= 1.0
     mock_process.assert_called_once_with(mock_file, "text/plain")
+    mock_started.assert_called_once()
+    mock_finished.assert_called_once()
+
+
+def test_run_extraction_task_marks_finished_on_failure(mocker):
+    import time
+    from app.domain.extraction.service import run_extraction_task
+
+    mocker.patch("app.domain.extraction.service.record_extraction_queue_wait")
+    mocker.patch("app.domain.extraction.service.refresh_process_pool_gauges")
+    mocker.patch("app.domain.extraction.service.mark_extraction_started")
+    mock_finished = mocker.patch("app.domain.extraction.service.mark_extraction_finished")
+    mocker.patch(
+        "app.domain.extraction.service.ExtractionService.process_file",
+        side_effect=RuntimeError("parse exploded"),
+    )
+
+    with pytest.raises(RuntimeError):
+        run_extraction_task(MagicMock(), "application/pdf", time.perf_counter())
+
+    mock_finished.assert_called_once()
 
 
 def test_process_file_too_large(mocker):

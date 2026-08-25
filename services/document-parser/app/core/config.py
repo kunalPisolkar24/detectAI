@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     MAX_PDF_PAGES: int = 1000
     MAX_DOCX_UNCOMPRESSED_BYTES: int = 100 * 1024 * 1024
     EXTRACTION_TIMEOUT_SECONDS: float = 30.0
+    READINESS_MAX_QUEUE_DEPTH: int = 50
     WORKER_THREADS: int = int(os.getenv("WORKER_THREADS", os.cpu_count() or 4))
 
     HEADER_FOOTER_MARGIN_PT: float = 40.0

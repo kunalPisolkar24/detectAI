@@ -6,6 +6,8 @@ from app.core.config import settings
 from app.core.exceptions import FileTooLargeError
 from app.core.metrics import (
     classify_extraction_error,
+    mark_extraction_finished,
+    mark_extraction_started,
     record_extraction,
     record_extraction_duration,
     record_extraction_failure,
@@ -21,8 +23,12 @@ def run_extraction_task(file: UploadFile, mime_type: str, submitted_at: float) -
         mime_type=mime_type,
         wait_seconds=max(0.0, time.perf_counter() - submitted_at),
     )
-    refresh_process_pool_gauges()
-    return ExtractionService.process_file(file, mime_type)
+    mark_extraction_started()
+    try:
+        return ExtractionService.process_file(file, mime_type)
+    finally:
+        mark_extraction_finished()
+        refresh_process_pool_gauges()
 
 
 class ExtractionService:
