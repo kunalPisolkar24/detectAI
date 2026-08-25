@@ -9,9 +9,20 @@ from app.core.metrics import (
     record_extraction,
     record_extraction_duration,
     record_extraction_failure,
+    record_extraction_queue_wait,
+    refresh_process_pool_gauges,
 )
 from app.domain.extraction.strategies import ExtractorFactory, ExtractionResult
 from app.domain.extraction.cleaner import TextCleaner
+
+
+def run_extraction_task(file: UploadFile, mime_type: str, submitted_at: float) -> ExtractionResult:
+    record_extraction_queue_wait(
+        mime_type=mime_type,
+        wait_seconds=max(0.0, time.perf_counter() - submitted_at),
+    )
+    refresh_process_pool_gauges()
+    return ExtractionService.process_file(file, mime_type)
 
 
 class ExtractionService:

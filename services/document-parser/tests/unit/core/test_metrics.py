@@ -11,8 +11,11 @@ from app.core.metrics import (
     IN_FLIGHT_REQUESTS,
     classify_extraction_error,
     record_extraction_duration,
+    record_extraction_queue_wait,
     record_extraction_timeout,
     record_rejected_upload,
+    refresh_process_pool_gauges,
+    register_process_pool,
     render_metrics,
     record_extraction,
     record_extraction_failure,
@@ -137,3 +140,32 @@ def test_in_flight_requests_gauge_tracks_inc_dec():
     IN_FLIGHT_REQUESTS.dec(3)
     payload, _ = render_metrics()
     assert b"in_flight_requests" in payload
+
+
+def test_refresh_process_pool_gauges_reports_pool_state(mocker):
+    from unittest.mock import MagicMock
+
+    mock_pool = MagicMock()
+    mock_pool._threads = {"t1", "t2"}
+    mock_pool._work_queue.qsize.return_value = 7
+    mock_pool._max_workers = 4
+
+    register_process_pool(mock_pool)
+    try:
+        payload, _ = render_metrics()
+        assert b"extraction_pool_active_threads 2.0" in payload
+        assert b"extraction_pool_queue_depth 7.0" in payload
+        assert b"extraction_pool_max_workers 4.0" in payload
+    finally:
+        register_process_pool(None)
+
+
+def test_refresh_process_pool_gauges_without_pool_is_noop():
+    register_process_pool(None)
+    refresh_process_pool_gauges()
+
+
+def test_record_extraction_queue_wait_samples_histogram():
+    record_extraction_queue_wait(mime_type="application/pdf", wait_seconds=0.02)
+    payload, _ = render_metrics()
+    assert b'extraction_queue_wait_seconds_count{mime_type="application/pdf"}' in payload

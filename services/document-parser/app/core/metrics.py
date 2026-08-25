@@ -78,6 +78,44 @@ IN_FLIGHT_REQUESTS = Gauge(
     "Number of HTTP requests currently being processed",
 )
 
+EXTRACTION_QUEUE_WAIT_SECONDS = Histogram(
+    "extraction_queue_wait_seconds",
+    "Time between executor submission and extraction start",
+    ["mime_type"],
+    buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 5.0),
+)
+
+EXTRACTION_POOL_ACTIVE_THREADS = Gauge(
+    "extraction_pool_active_threads",
+    "Worker threads currently active in the extraction pool",
+)
+
+EXTRACTION_POOL_QUEUE_DEPTH = Gauge(
+    "extraction_pool_queue_depth",
+    "Tasks waiting in the extraction pool queue",
+)
+
+EXTRACTION_POOL_MAX_WORKERS = Gauge(
+    "extraction_pool_max_workers",
+    "Configured worker threads in the extraction pool",
+)
+
+_process_pool = None
+
+
+def register_process_pool(pool) -> None:
+    global _process_pool
+    _process_pool = pool
+    refresh_process_pool_gauges()
+
+
+def refresh_process_pool_gauges() -> None:
+    if _process_pool is None:
+        return
+    EXTRACTION_POOL_ACTIVE_THREADS.set(len(_process_pool._threads))
+    EXTRACTION_POOL_QUEUE_DEPTH.set(_process_pool._work_queue.qsize())
+    EXTRACTION_POOL_MAX_WORKERS.set(_process_pool._max_workers)
+
 EXTRACTION_DURATION_SECONDS = Histogram(
     "extraction_duration_seconds",
     "Time spent parsing documents",
@@ -102,6 +140,10 @@ EXTRACTION_COMPRESSION_RATIO = Histogram(
 
 def record_extraction_duration(mime_type: str, status: str, duration_seconds: float) -> None:
     EXTRACTION_DURATION_SECONDS.labels(mime_type=mime_type, status=status).observe(duration_seconds)
+
+
+def record_extraction_queue_wait(mime_type: str, wait_seconds: float) -> None:
+    EXTRACTION_QUEUE_WAIT_SECONDS.labels(mime_type=mime_type).observe(wait_seconds)
 
 
 def record_extraction_timeout(mime_type: str) -> None:

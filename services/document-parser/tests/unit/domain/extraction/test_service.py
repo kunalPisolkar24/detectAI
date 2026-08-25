@@ -76,6 +76,29 @@ def test_process_file_preserves_truncation_flag(mocker):
     assert result.truncated is True
 
 
+def test_run_extraction_task_records_queue_wait_and_delegates(mocker):
+    import time
+    from app.domain.extraction.service import run_extraction_task
+
+    mock_record_wait = mocker.patch("app.domain.extraction.service.record_extraction_queue_wait")
+    mocker.patch("app.domain.extraction.service.refresh_process_pool_gauges")
+    mock_process = mocker.patch(
+        "app.domain.extraction.service.ExtractionService.process_file",
+        return_value="delegated",
+    )
+
+    mock_file = MagicMock()
+    submitted_at = time.perf_counter() - 0.05
+
+    result = run_extraction_task(mock_file, "text/plain", submitted_at)
+
+    assert result == "delegated"
+    wait_call = mock_record_wait.call_args
+    assert wait_call.kwargs["mime_type"] == "text/plain"
+    assert 0.04 <= wait_call.kwargs["wait_seconds"] <= 1.0
+    mock_process.assert_called_once_with(mock_file, "text/plain")
+
+
 def test_process_file_too_large(mocker):
     from app.core.exceptions import FileTooLargeError
     import app.domain.extraction.service as svc

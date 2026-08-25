@@ -1,10 +1,11 @@
 import asyncio
+import time
 from fastapi import APIRouter, File, Request, UploadFile
 from app.api.deps import validate_upload
 from app.core.config import settings
 from app.core.exceptions import ExtractionTimeoutError
 from app.core.metrics import record_extraction_timeout
-from app.domain.extraction.service import ExtractionService
+from app.domain.extraction.service import run_extraction_task
 from app.models.extraction import ExtractionResponse
 
 router = APIRouter()
@@ -16,9 +17,10 @@ async def extract_text(request: Request, file: UploadFile = File(...)):
     loop = asyncio.get_running_loop()
     future = loop.run_in_executor(
         request.app.state.process_pool,
-        ExtractionService.process_file,
+        run_extraction_task,
         file,
         mime_type,
+        time.perf_counter(),
     )
 
     try:

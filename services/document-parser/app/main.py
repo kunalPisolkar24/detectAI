@@ -6,13 +6,14 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.core.config import settings
 from app.core.exceptions import DocumentParserError
 from app.core.logging import log_request_middleware
-from app.core.metrics import IN_FLIGHT_REQUESTS, record_request
+from app.core.metrics import IN_FLIGHT_REQUESTS, record_request, register_process_pool
 from app.api.v1.router import router as v1_router
 from app.api.exception_handlers import document_parser_exception_handler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.process_pool = ThreadPoolExecutor(max_workers=settings.WORKER_THREADS)
+    register_process_pool(app.state.process_pool)
     yield
     app.state.process_pool.shutdown(wait=True)
 
