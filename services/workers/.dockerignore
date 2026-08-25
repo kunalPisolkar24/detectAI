@@ -12,3 +12,9 @@ README.md
 
 # Ignore host generated prisma client
 generated/prisma
+
+# Test & load-test assets never needed at runtime
+**/__tests__
+src/tests
+**/*.unit.test.ts
+**/*Integration.test.ts
