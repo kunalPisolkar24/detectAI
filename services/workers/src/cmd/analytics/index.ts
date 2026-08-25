@@ -1,17 +1,20 @@
 import { z } from "zod";
 import { RabbitMQWorker } from "@shared/messaging/RabbitMQWorker";
 import { AnalyticsService } from "@modules/analytics/application/services/AnalyticsService";
-import { prisma } from "@shared/database/PrismaService";
+import { prisma, getPgPool } from "@shared/database/PrismaService";
 import { Logger } from "@shared/logging/Logger";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
 import { config } from "./config";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
+import { UsageEventDeduplicator } from "@modules/analytics/infrastructure/UsageEventDeduplicator";
 
 const QUEUE_NAME = "analytics.usage";
 
 const UsageEventSchema = z.object({
+  eventId: z.string().uuid().optional(),
   userId: z.string().min(1),
   count: z.number().int().positive(),
   timestamp: z.string().datetime().optional(),
@@ -27,7 +30,7 @@ const mainClient = RedisFactory.createClient({
 });
 
 const metricsService = new MetricsService("worker-analytics");
-metricsService.registerPool("primary", prisma);
+metricsService.registerPool("primary", getPgPool("primary")!);
 
 mainClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 1));
 mainClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 1));
@@ -35,7 +38,8 @@ mainClient.on("close", () => metricsService.redisConnectionStatus.set({ client_n
 mainClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 0));
 
 const userRepository = new PrismaUserRepository(prisma, prisma);
-const analyticsService = new AnalyticsService(userRepository, mainClient, metricsService);
+const usageDeduplicator = new UsageEventDeduplicator(mainClient);
+const analyticsService = new AnalyticsService(userRepository, mainClient, metricsService, usageDeduplicator);
 
 const worker = new RabbitMQWorker(
   config.RABBITMQ_URL,
@@ -46,7 +50,7 @@ const worker = new RabbitMQWorker(
       Logger.warn("Invalid analytics usage event", { errors: result.error.format(), event });
       return;
     }
-    await analyticsService.handleUsageEvent(result.data.userId, result.data.count);
+    await analyticsService.handleUsageEvent(result.data.userId, result.data.count, result.data.eventId);
   },
   metricsService,
   config.RABBITMQ_QUEUE_TYPE ?? "classic"
@@ -58,12 +62,14 @@ metricsService.activeWorkers.inc();
 const server = new WorkerServer(
   metricsService,
   config.PORT,
-  () => worker.getStatus()
+  () => true,
+  () => worker.getStatus() && mainClient.status === "ready"
 );
 
 server.start();
 
 const shutdown = async () => {
+  server.stop();
   metricsService.activeWorkers.dec();
   await worker.shutdown();
   await mainClient.quit();

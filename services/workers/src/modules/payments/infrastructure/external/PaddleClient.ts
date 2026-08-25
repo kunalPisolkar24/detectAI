@@ -9,7 +9,8 @@ export class PaddleClient implements IPaddleClient {
 
     constructor(
         private readonly apiKey: string,
-        environment: "sandbox" | "production"
+        environment: "sandbox" | "production",
+        private readonly timeoutMs: number = 10_000
     ) {
         this.baseUrl = environment === "production"
             ? "https://api.paddle.com"
@@ -24,6 +25,7 @@ export class PaddleClient implements IPaddleClient {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({ effective_from: "next_billing_period" }),
+            signal: AbortSignal.timeout(this.timeoutMs),
         });
 
         if (response.status === 409) {
@@ -32,9 +34,24 @@ export class PaddleClient implements IPaddleClient {
         }
 
         if (!response.ok) {
-            const errorData = await response.json();
-            Logger.error("Paddle API error during subscription cancellation", { subscriptionId, errorData });
-            throw new Error(`Paddle API Error: ${JSON.stringify(errorData)}`);
+            const errorData = await this.safeParseErrorBody(response);
+            Logger.error("Paddle API error during subscription cancellation", {
+                subscriptionId,
+                status: response.status,
+                errorData,
+            });
+            throw new Error(
+                `Paddle API error ${response.status} while canceling subscription ${subscriptionId}: ${JSON.stringify(errorData)}`
+            );
+        }
+    }
+
+    private async safeParseErrorBody(response: Response): Promise<unknown> {
+        try {
+            return await response.json();
+        } catch {
+            const text = await response.text().catch(() => "");
+            return { body: text.slice(0, 512) || "<empty response body>" };
         }
     }
 }

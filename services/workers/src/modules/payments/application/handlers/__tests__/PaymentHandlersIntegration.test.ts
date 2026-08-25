@@ -1,9 +1,10 @@
-import { expect, test, describe, beforeEach, spyOn } from "bun:test";
+import { expect, test, describe, beforeEach, afterEach, spyOn } from "bun:test";
 import "../../../../../tests/setup-integration";
 import { prismaPrimary, prisma } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { SubscriptionCanceledHandler } from "../SubscriptionCanceledHandler";
 import { PaymentService } from "../../services/PaymentService";
 import { SubscriptionStatus } from "../../../../../../generated/prisma/client";

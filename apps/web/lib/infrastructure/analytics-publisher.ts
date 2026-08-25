@@ -37,14 +37,23 @@ class AnalyticsPublisher {
       this.channel = null
     })
 
-    await ch.assertQueue(QUEUE, { durable: true })
+    await ch.assertQueue(QUEUE, {
+      durable: true,
+      arguments: {
+        "x-dead-letter-exchange": `${QUEUE}_dlx`,
+        "x-dead-letter-routing-key": QUEUE,
+        "x-queue-type": "quorum",
+      },
+    })
 
     this.connection = conn
     this.channel = ch
   }
 
   async publish(userId: string, count: number): Promise<void> {
-    const payload = Buffer.from(JSON.stringify({ userId, count, timestamp: new Date().toISOString() }))
+    const payload = Buffer.from(
+      JSON.stringify({ eventId: crypto.randomUUID(), userId, count, timestamp: new Date().toISOString() })
+    )
     const opts = { persistent: true }
 
     let ch = await this.ensureChannel()

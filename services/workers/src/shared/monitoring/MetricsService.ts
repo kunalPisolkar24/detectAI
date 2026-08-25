@@ -14,6 +14,7 @@ export class MetricsService {
     public readonly activeJobs: Gauge;
     public readonly messageSizeBytes: Histogram;
     public readonly deadLetteredTotal: Counter;
+    public readonly unhandledEventsTotal: Counter;
     public readonly dbPoolStatus: Gauge;
 
     constructor(private readonly serviceName: string) {
@@ -90,6 +91,13 @@ export class MetricsService {
             registers: [this.registry]
         });
 
+        this.unhandledEventsTotal = new Counter({
+            name: "worker_unhandled_events_total",
+            help: "Events received with no registered handler",
+            labelNames: ["event_type"],
+            registers: [this.registry]
+        });
+
         this.messageSizeBytes = new Histogram({
             name: "worker_message_size_bytes",
             help: "Size of incoming messages in bytes",
@@ -122,7 +130,7 @@ export class MetricsService {
         return this.registry.contentType;
     }
 
-    public registerPool(name: string, pool: any): void {
+    public registerPool(name: string, pool: Pick<import("pg").Pool, "totalCount" | "idleCount" | "waitingCount">): void {
         this.registry.registerMetric(new Gauge({
             name: `db_pool_${name}_connections`,
             help: `Connections in ${name} pool`,

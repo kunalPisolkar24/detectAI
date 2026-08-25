@@ -1,29 +1,20 @@
-import { SubscriptionStatus } from "../../../../../generated/prisma/client";
-import { type PaymentUpdatePayload } from "@modules/payments/domain/types";
-import { validateTransition } from "@modules/payments/domain/stateMachine";
+import { SubscriptionStatus, type PrismaClient } from "../../../../../generated/prisma/client";
+import { type IUserRepository, type TransitionValidator } from "../../domain/IUserRepository";
+import {
+    type BulkSubscriptionUpdate,
+    type ExpiredSubscription,
+    type SubscriptionUpdateData,
+    type SubscriptionUpdateResult,
+    type UserRecord,
+} from "../../domain/types";
 
-export interface UserRecord {
-    email: string;
-}
-
-export interface IUserRepository {
-    findUniqueById(userId: string): Promise<UserRecord | null>;
-    bulkUpdateStatus(userIds: string[], data: object): Promise<{ count: number }>;
-    findExpiredSubscriptionsWithLock(limit: number): Promise<{ id: string; email: string }[]>;
-    incrementUsage(userId: string, count: number): Promise<void>;
-    lockAndUpdateSubscription(
-        userId: string,
-        eventTimestamp: Date,
-        status: SubscriptionStatus,
-        payload: PaymentUpdatePayload,
-        paddleCustomerId?: string
-    ): Promise<{ email: string; stale: boolean }>;
-}
+type PrismaTransaction = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 
 export class PrismaUserRepository implements IUserRepository {
     constructor(
-        private readonly prismaWriter: any,
-        private readonly prismaReader: any
+        private readonly prismaWriter: PrismaClient,
+        private readonly prismaReader: PrismaClient,
+        private readonly validateStatusTransition: TransitionValidator = () => {}
     ) {}
 
     async findUniqueById(userId: string): Promise<UserRecord | null> {
@@ -33,47 +24,61 @@ export class PrismaUserRepository implements IUserRepository {
         });
     }
 
-    async bulkUpdateStatus(userIds: string[], data: object): Promise<{ count: number }> {
-        return this.prismaWriter.subscription.updateMany({
-            where: {
-                userId: { in: userIds },
-                status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
-                endsAt: { lt: new Date() },
-            },
-            data,
+    async expireDueSubscriptions(limit: number, data: BulkSubscriptionUpdate): Promise<ExpiredSubscription[]> {
+        return this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
+            const users = await tx.$queryRawUnsafe<ExpiredSubscription[]>(
+                `SELECT u.id, u.email FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id WHERE s.status IN ('ACTIVE', 'TRIALING', 'PAST_DUE') AND s."endsAt" < NOW() ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
+                limit,
+            );
+            if (users.length === 0) return [];
+
+            await tx.subscription.updateMany({
+                where: {
+                    userId: { in: users.map(user => user.id) },
+                    status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING, SubscriptionStatus.PAST_DUE] },
+                    endsAt: { lt: new Date() },
+                },
+                data,
+            });
+
+            return users;
         });
     }
 
-    async findExpiredSubscriptionsWithLock(limit: number): Promise<{ id: string; email: string }[]> {
-        const rows = await this.prismaWriter.$queryRawUnsafe<Array<{ id: string; email: string }>>(
-            `SELECT u.id, u.email FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id WHERE s.status IN ('ACTIVE', 'TRIALING') AND s."endsAt" < NOW() ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
-            limit,
-        );
-        return rows;
+    async incrementUsage(userId: string, count: number): Promise<void> {
+        await this.prismaWriter.$executeRaw`
+            INSERT INTO "Usage" ("id", "userId", "apiCallCountTotal", "apiCallCountDaily", "lastApiCallReset", "updatedAt", "createdAt")
+            VALUES (gen_random_uuid(), ${userId}, ${count}, ${count}, NOW(), NOW(), NOW())
+            ON CONFLICT ("userId") DO UPDATE SET
+                "apiCallCountTotal" = "Usage"."apiCallCountTotal" + ${count},
+                "apiCallCountDaily" = "Usage"."apiCallCountDaily" + ${count},
+                "lastApiCallReset" = NOW(),
+                "updatedAt" = NOW()
+        `;
     }
 
     async lockAndUpdateSubscription(
         userId: string,
         eventTimestamp: Date,
         status: SubscriptionStatus,
-        payload: PaymentUpdatePayload,
+        payload: SubscriptionUpdateData,
         paddleCustomerId?: string
-    ): Promise<{ email: string; stale: boolean }> {
-        return this.prismaWriter.$transaction(async (tx: any) => {
-            const rows = (await tx.$queryRawUnsafe(
+    ): Promise<SubscriptionUpdateResult> {
+        return this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
+            const rows = await tx.$queryRawUnsafe<Array<{ eventTimestamp: Date | null; status: string }>>(
                 `SELECT s."eventTimestamp", s.status FROM "Subscription" s WHERE s."userId" = $1 FOR UPDATE`,
                 userId,
-            )) as Array<{ eventTimestamp: Date | null; status: string | null }>;
+            );
+            const currentRow = rows[0];
 
-            if (rows.length > 0) {
-                const stored = rows[0]!;
-                if (stored.eventTimestamp && eventTimestamp <= stored.eventTimestamp) {
+            if (currentRow) {
+                if (currentRow.eventTimestamp && eventTimestamp <= currentRow.eventTimestamp) {
                     const user = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
-                    return { email: user!.email, stale: true };
+                    return user ? { email: user.email, stale: true } : { email: "", stale: true };
                 }
-                validateTransition(stored.status as SubscriptionStatus | null, status);
+                this.validateStatusTransition(currentRow.status as SubscriptionStatus, status);
             } else {
-                validateTransition(null, status);
+                this.validateStatusTransition(null, status);
             }
 
             if (paddleCustomerId) {
@@ -105,19 +110,8 @@ export class PrismaUserRepository implements IUserRepository {
             });
 
             const user = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
-            return { email: user!.email, stale: false };
+            if (!user) return { email: "", stale: false };
+            return { email: user.email, stale: false };
         });
-    }
-
-    async incrementUsage(userId: string, count: number): Promise<void> {
-        await this.prismaWriter.$executeRaw`
-            INSERT INTO "Usage" ("id", "userId", "apiCallCountTotal", "apiCallCountDaily", "lastApiCallReset", "updatedAt", "createdAt")
-            VALUES (gen_random_uuid(), ${userId}, ${count}, ${count}, NOW(), NOW(), NOW())
-            ON CONFLICT ("userId") DO UPDATE SET
-                "apiCallCountTotal" = "Usage"."apiCallCountTotal" + ${count},
-                "apiCallCountDaily" = "Usage"."apiCallCountDaily" + ${count},
-                "lastApiCallReset" = NOW(),
-                "updatedAt" = NOW()
-        `;
     }
 }

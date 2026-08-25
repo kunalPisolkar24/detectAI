@@ -4,11 +4,15 @@ export const mockAck = mock();
 export const mockNack = mock();
 export const mockConsume = mock();
 export const mockAssertQueue = mock(() => Promise.resolve());
+export const mockAssertExchange = mock(() => Promise.resolve());
+export const mockBindQueue = mock(() => Promise.resolve());
 export const mockPrefetch = mock(() => Promise.resolve());
 export const mockOn = mock();
 
 export const mockChannel = {
     assertQueue: mockAssertQueue,
+    assertExchange: mockAssertExchange,
+    bindQueue: mockBindQueue,
     prefetch: mockPrefetch,
     consume: mockConsume,
     ack: mockAck,

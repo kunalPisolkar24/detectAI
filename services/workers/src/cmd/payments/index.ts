@@ -1,11 +1,13 @@
 import { RabbitMQWorker } from "@shared/messaging/RabbitMQWorker";
 import { PaymentService } from "@modules/payments/application/services/PaymentService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { PaddleClient } from "@modules/payments/infrastructure/external/PaddleClient";
 import { SubscriptionUpdatedHandler } from "@modules/payments/application/handlers/SubscriptionUpdatedHandler";
 import { SubscriptionCanceledHandler } from "@modules/payments/application/handlers/SubscriptionCanceledHandler";
 import { UserCancelHandler } from "@modules/payments/application/handlers/UserCancelHandler";
-import { prisma, prismaPrimary } from "@shared/database/PrismaService";
+import { validateTransition } from "@modules/payments/domain/stateMachine";
+import { prisma, prismaPrimary, getPgPool } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
@@ -32,8 +34,8 @@ const eventRedisClient = RedisFactory.createClient({
 });
 
 const metricsService = new MetricsService("worker-payments");
-metricsService.registerPool("primary", prismaPrimary);
-metricsService.registerPool("replica", prisma);
+metricsService.registerPool("primary", getPgPool("primary")!);
+metricsService.registerPool("replica", getPgPool("replica")!);
 
 redisClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 1));
 redisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 1));
@@ -45,30 +47,30 @@ eventRedisClient.on("ready", () => metricsService.redisConnectionStatus.set({ cl
 eventRedisClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 0));
 eventRedisClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 0));
 
-const userRepository = new PrismaUserRepository(prismaPrimary, prisma);
+const userRepository = new PrismaUserRepository(prismaPrimary, prisma, validateTransition);
 const paddleClient = new PaddleClient(config.PADDLE_API_KEY, config.PADDLE_ENVIRONMENT);
 
 const subscriptionUpdatedHandler = new SubscriptionUpdatedHandler(userRepository, redisClient, eventRedisClient, metricsService);
 const subscriptionCanceledHandler = new SubscriptionCanceledHandler(userRepository, redisClient, eventRedisClient, metricsService);
 const userCancelHandler = new UserCancelHandler(userRepository, paddleClient, redisClient, eventRedisClient, metricsService);
 
-const paymentService = new PaymentService(
-    {
-        "subscription.created": subscriptionUpdatedHandler,
-        "subscription.updated": subscriptionUpdatedHandler,
-        "subscription.activated": subscriptionUpdatedHandler,
-        "subscription.canceled": subscriptionCanceledHandler,
-        "user.cancel_subscription": userCancelHandler,
-    },
-    metricsService
-);
+const paymentHandlers = {
+    "subscription.created": subscriptionUpdatedHandler,
+    "subscription.updated": subscriptionUpdatedHandler,
+    "subscription.activated": subscriptionUpdatedHandler,
+    "subscription.canceled": subscriptionCanceledHandler,
+    "user.cancel_subscription": userCancelHandler,
+} as const;
+
+const paymentService = new PaymentService(paymentHandlers, metricsService);
 
 const worker = new RabbitMQWorker(
     config.RABBITMQ_URL,
     QUEUE_NAME,
     async (event: any) => await paymentService.handleEvent(event),
     metricsService,
-    config.RABBITMQ_QUEUE_TYPE ?? "classic"
+    config.RABBITMQ_QUEUE_TYPE ?? "classic",
+    Object.keys(paymentHandlers)
 );
 
 worker.start();
@@ -77,18 +79,21 @@ metricsService.activeWorkers.inc();
 const server = new WorkerServer(
     metricsService,
     config.PORT,
-    () => worker.getStatus()
+    () => true,
+    () => worker.getStatus() && redisClient.status === "ready"
 );
 
 server.start();
 
 const shutdown = async () => {
     metricsService.activeWorkers.dec();
+    server.stop();
+    await worker.shutdown();
     await prisma.$disconnect();
     await redisClient.quit();
     await eventRedisClient.quit();
     process.exit(0);
 };
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);

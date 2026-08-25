@@ -11,19 +11,24 @@ RUN DATABASE_URL=postgresql://127.0.0.1:5432/dummy bun prisma generate
 
 COPY . .
 
+FROM oven/bun:1-slim AS prod-deps
+
+WORKDIR /app
+
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile --production
+
 FROM oven/bun:1-slim AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
-
 RUN chown bun:bun /app
 
 COPY --chown=bun:bun package.json bun.lock* ./
 
-COPY --from=builder --chown=bun:bun /app/node_modules /app/node_modules
+COPY --from=prod-deps --chown=bun:bun /app/node_modules /app/node_modules
 
 USER bun
 

@@ -1,10 +1,11 @@
 import { SubscriptionSweeper } from "@modules/cron/application/services/SubscriptionSweeper";
-import { prisma, prismaPrimary } from "@shared/database/PrismaService";
+import { prisma, prismaPrimary, getPgPool } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { Logger } from "@shared/logging/Logger";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { config } from "./config";
 
 const CHECK_INTERVAL_MS = 1000 * 60 * 60;
@@ -21,8 +22,8 @@ const redisClient = RedisFactory.createClient({
 });
 
 const metricsService = new MetricsService("worker-cron");
-metricsService.registerPool("primary", prismaPrimary);
-metricsService.registerPool("replica", prisma);
+metricsService.registerPool("primary", getPgPool("primary")!);
+metricsService.registerPool("replica", getPgPool("replica")!);
 
 redisClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 1));
 redisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 1));
@@ -35,7 +36,8 @@ const sweeper = new SubscriptionSweeper(userRepository, redisClient, metricsServ
 const server = new WorkerServer(
     metricsService,
     config.PORT || 7777,
-    () => redisClient.status === "ready" || redisClient.status === "connect"
+    () => true,
+    () => redisClient.status === "ready"
 );
 
 server.start();
@@ -74,6 +76,7 @@ startWorker();
 const shutdown = async () => {
     if (isShuttingDown) return;
     isShuttingDown = true;
+    server.stop();
     metricsService.activeWorkers.dec();
     
     Logger.info("Shutting down Cron Worker...");
@@ -85,5 +88,5 @@ const shutdown = async () => {
     process.exit(0);
 };
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);
