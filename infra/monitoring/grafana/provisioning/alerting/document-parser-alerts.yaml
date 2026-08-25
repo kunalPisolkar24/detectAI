@@ -1,0 +1,365 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: document-parser
+    folder: Detect-AI
+    interval: 1m
+    rules:
+      - title: DocumentParserTargetDown
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: up{job="document-parser"} == 0
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: document-parser target unreachable for 2 minutes
+        labels:
+          severity: critical
+      - title: DocumentParserHighErrorRate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: 100 * sum(rate(http_request_errors_total{job="document-parser"}[5m])) / sum(rate(http_request_duration_seconds_count{job="document-parser"}[5m]))
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 5
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: document-parser error rate above 5% for 10 minutes
+        labels:
+          severity: critical
+      - title: DocumentParserHighLatency
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job="document-parser"}[5m])))
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 2
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: document-parser p95 request latency above 2 seconds for 10 minutes
+        labels:
+          severity: warning
+      - title: DocumentParserExtractionFailures
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(rate(parsed_documents_total{job="document-parser",status="error"}[5m])) > 0.1
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.1
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: document-parser failing more than 0.1 extractions per second for 10 minutes
+        labels:
+          severity: warning
+      - title: DocumentParserHighRejectionRate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(rate(rejected_uploads_total[5m])) > 1
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: document-parser rejecting more than 1 upload per second for 15 minutes
+        labels:
+          severity: warning
+      - title: DocumentParserPoolSaturation
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: (max(extraction_pool_active_threads) >= max(extraction_pool_max_workers)) and (max(extraction_pool_queue_depth) > 10)
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: extraction pool saturated with growing queue for 10 minutes
+        labels:
+          severity: critical
+      - title: DocumentParserSlowExtraction
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: histogram_quantile(0.95, sum by (le) (rate(extraction_duration_seconds_bucket{job="document-parser"}[5m])))
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 5
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: document-parser p95 extraction duration above 5 seconds for 15 minutes
+        labels:
+          severity: warning
