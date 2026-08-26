@@ -1,0 +1,54 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+    networks:
+      - gateway_loadnet
+
+  payment-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET:-test_webhook_secret}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-test_internal_key}
+      PORT: "8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - gateway_loadnet
+
+  k6:
+    image: grafana/k6:latest
+    command: run /scripts/scenarios/${SCENARIO:-spike}.js
+    environment:
+      BASE_URL: http://payment-gateway:8080
+      PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET:-test_webhook_secret}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-test_internal_key}
+      TARGET_VUS: ${TARGET_VUS:-20}
+      RAMP_UP: ${RAMP_UP:-10s}
+      RAMP_DOWN: ${RAMP_DOWN:-10s}
+      DURATION: ${DURATION:-30s}
+    volumes:
+      - ./test/load:/scripts:ro
+    depends_on:
+      payment-gateway:
+        condition: service_healthy
+    networks:
+      - gateway_loadnet
+
+networks:
+  gateway_loadnet:

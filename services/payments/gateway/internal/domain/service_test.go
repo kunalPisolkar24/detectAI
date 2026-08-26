@@ -87,6 +87,48 @@ func TestPaymentService_ProcessWebhook(t *testing.T) {
 	})
 }
 
+func TestPaymentService_ExtractEventType(t *testing.T) {
+	s := &PaymentService{}
+
+	tests := []struct {
+		name string
+		body []byte
+		want string
+	}{
+		{
+			name: "Prefers event_type",
+			body: []byte(`{"event_type":"payment.succeeded","alert_name":"legacy"}`),
+			want: "payment.succeeded",
+		},
+		{
+			name: "Falls back to legacy alert_name",
+			body: []byte(`{"alert_name":"payment.succeeded"}`),
+			want: "payment.succeeded",
+		},
+		{
+			name: "Both missing yields unknown",
+			body: []byte(`{"foo":"bar"}`),
+			want: "unknown",
+		},
+		{
+			name: "Empty body yields unknown",
+			body: []byte(`{}`),
+			want: "unknown",
+		},
+		{
+			name: "Malformed JSON yields unknown",
+			body: []byte(`{"event_type":`),
+			want: "unknown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, s.extractEventType(tt.body))
+		})
+	}
+}
+
 func TestPaymentService_ProcessInternalEvent(t *testing.T) {
 	body := []byte(`{"event_type":"internal"}`)
 

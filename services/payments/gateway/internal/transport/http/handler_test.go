@@ -103,6 +103,16 @@ func TestHandler_HandleWebhook(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 
+	t.Run("Missing Signature Header", func(t *testing.T) {
+		ms.On("ProcessWebhook", mock.Anything, "", body).Return(errors.New("invalid signature")).Once()
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/webhook/paddle", bytes.NewBuffer(body))
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
 	t.Run("Internal Error", func(t *testing.T) {
 		ms.On("ProcessWebhook", mock.Anything, signature, body).Return(errors.New("some error")).Once()
 
@@ -153,6 +163,17 @@ func TestHandler_HandleInternalEvent(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("Service Error", func(t *testing.T) {
+		ms.On("ProcessInternalEvent", mock.Anything, body).Return(errors.New("some error")).Once()
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/internal/events", bytes.NewBuffer(body))
+		req.Header.Set("X-Internal-Key", "internal-secret")
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }
 

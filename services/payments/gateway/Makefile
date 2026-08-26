@@ -1,4 +1,4 @@
-.PHONY: build run test test-coverage test-integration deps
+.PHONY: build run test test-coverage test-integration deps load-test load-down load-test-spike load-test-stress load-test-soak load-test-internal
 
 build:
 	go build -o gateway ./cmd/gateway/main.go
@@ -16,15 +16,14 @@ test-coverage:
 test-integration:
 	go test -v -tags=integration ./test/integration/...
 
-# Generic load test command: make load-test SCENARIO=spike ARGS="-e TARGET_VUS=100"
+# Self-contained load test: compose brings up rabbitmq + gateway + k6 on a
+# dedicated network, no dependency on the main detect_ai stack.
+# Usage: make load-test SCENARIO=spike TARGET_VUS=100 DURATION=60s
 load-test:
-	docker run --rm -i --network=detect_ai_network \
-		-v $(CURDIR)/test/load:/test \
-		-e BASE_URL=http://payment-gateway:8080 \
-		-e PADDLE_WEBHOOK_SECRET=$(PADDLE_WEBHOOK_SECRET) \
-		-e INTERNAL_API_KEY=$(INTERNAL_API_KEY) \
-		$(ARGS) \
-		grafana/k6 run /test/scenarios/$(SCENARIO).js
+	docker compose -f compose.load.yml up --abort-on-container-exit --exit-code-from k6
+
+load-down:
+	docker compose -f compose.load.yml down -v --remove-orphans
 
 load-test-spike:
 	@$(MAKE) load-test SCENARIO=spike
@@ -34,6 +33,9 @@ load-test-stress:
 
 load-test-soak:
 	@$(MAKE) load-test SCENARIO=soak
+
+load-test-internal:
+	@$(MAKE) load-test SCENARIO=internal
 
 deps:
 	go mod tidy
