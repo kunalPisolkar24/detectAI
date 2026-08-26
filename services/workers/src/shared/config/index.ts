@@ -4,10 +4,13 @@ import { Logger } from "@shared/logging/Logger";
 export const baseEnvSchema = z.object({
   DATABASE_URL: z.string().url(),
   DATABASE_URL_REPLICA: z.string().url().optional(),
-  REDIS_URL: z.string().url(),
-  REDIS_MODE: z.enum(["standalone", "sentinel"]).default("standalone"),
+  // Single redis:// URL, or a comma-separated host list for cluster mode
+  // (e.g. "redis://a:6379,redis://b:6379"), parsed by RedisFactory.
+  REDIS_URL: z.string().min(1),
+  REDIS_MODE: z.enum(["standalone", "sentinel", "cluster"]).default("standalone"),
   REDIS_SENTINELS: z.string().optional(),
   REDIS_MASTER_NAME: z.string().optional(),
+  REDIS_PASSWORD: z.string().optional(),
   RABBITMQ_URL: z.string().url().default("amqp://guest:guest@localhost:5672"),
   RABBITMQ_QUEUE_TYPE: z.enum(["classic", "quorum"]).default("classic"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),

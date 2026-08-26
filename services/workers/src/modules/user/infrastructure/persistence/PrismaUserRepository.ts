@@ -24,24 +24,50 @@ export class PrismaUserRepository implements IUserRepository {
         });
     }
 
-    async expireDueSubscriptions(limit: number, data: BulkSubscriptionUpdate): Promise<ExpiredSubscription[]> {
+    async expireDueSubscriptions(
+        limit: number,
+        data: BulkSubscriptionUpdate,
+        sweepTime: Date,
+        onSelected?: (users: ExpiredSubscription[]) => Promise<void>
+    ): Promise<ExpiredSubscription[]> {
         return this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
+            // NULL status = never billable, never swept (data-hygiene guard, see #189).
+            // NULL endsAt = lifetime subscription, never swept (see #198).
+            // Audit queries for prod replicas live in docs/sweep-null-audit.sql.
             const users = await tx.$queryRawUnsafe<ExpiredSubscription[]>(
-                `SELECT u.id, u.email FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id WHERE s.status IN ('ACTIVE', 'TRIALING', 'PAST_DUE') AND s."endsAt" < NOW() ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
+                `SELECT u.id, u.email, s."paddleSubscriptionId" FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id
+                 WHERE s.status IS NOT NULL AND s.status IN ('ACTIVE', 'TRIALING', 'PAST_DUE', 'PAUSED')
+                   AND s."endsAt" IS NOT NULL AND s."endsAt" < $2
+                 ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
                 limit,
+                sweepTime,
             );
             if (users.length === 0) return [];
 
-            await tx.subscription.updateMany({
+            if (onSelected) {
+                await onSelected(users);
+            }
+
+            const result = await tx.subscription.updateMany({
                 where: {
                     userId: { in: users.map(user => user.id) },
-                    status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING, SubscriptionStatus.PAST_DUE] },
-                    endsAt: { lt: new Date() },
+                    status: {
+                        in: [
+                            SubscriptionStatus.ACTIVE,
+                            SubscriptionStatus.TRIALING,
+                            SubscriptionStatus.PAST_DUE,
+                            SubscriptionStatus.PAUSED,
+                        ],
+                    },
+                    endsAt: { lt: sweepTime },
                 },
-                data,
+                data: {
+                    ...data,
+                    eventTimestamp: data.eventTimestamp ?? sweepTime,
+                },
             });
 
-            return users;
+            return users.slice(0, result.count);
         });
     }
 
@@ -72,7 +98,7 @@ export class PrismaUserRepository implements IUserRepository {
             const currentRow = rows[0];
 
             if (currentRow) {
-                if (currentRow.eventTimestamp && eventTimestamp <= currentRow.eventTimestamp) {
+                if (currentRow.eventTimestamp !== null && eventTimestamp <= currentRow.eventTimestamp) {
                     const user = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
                     return user ? { email: user.email, stale: true } : { email: "", stale: true };
                 }

@@ -13,7 +13,10 @@ const validTransitions: Record<string, Set<string>> = {
     SubscriptionStatus.PAST_DUE,
     SubscriptionStatus.PAUSED,
   ]),
-  [SubscriptionStatus.PAUSED]: new Set([SubscriptionStatus.ACTIVE]),
+  [SubscriptionStatus.PAUSED]: new Set([
+    SubscriptionStatus.ACTIVE,
+    SubscriptionStatus.CANCELED,
+  ]),
   [SubscriptionStatus.PAST_DUE]: new Set([
     SubscriptionStatus.ACTIVE,
     SubscriptionStatus.CANCELED,

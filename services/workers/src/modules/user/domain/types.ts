@@ -19,6 +19,7 @@ export interface BulkSubscriptionUpdate {
     cancellationScheduled?: boolean;
     paddleSubscriptionId?: string | null;
     paddlePlanId?: string | null;
+    eventTimestamp?: Date;
 }
 
 export interface SubscriptionUpdateResult {
@@ -29,4 +30,5 @@ export interface SubscriptionUpdateResult {
 export interface ExpiredSubscription {
     id: string;
     email: string;
+    paddleSubscriptionId?: string | null;
 }

@@ -8,7 +8,7 @@ export class WorkerServer {
         private readonly metricsService: MetricsService,
         private readonly port: number,
         private readonly healthCheck: () => boolean,
-        private readonly readyCheck: () => boolean = healthCheck
+        private readonly readyCheck: () => boolean | Promise<boolean> = healthCheck
     ) {}
 
     public start(): void {
@@ -22,7 +22,7 @@ export class WorkerServer {
                 }
 
                 if (url.pathname === "/ready") {
-                    return this.booleanResponse(this.readyCheck(), "ready", "not_ready");
+                    return this.booleanResponse(await this.readyCheck(), "ready", "not_ready");
                 }
 
                 if (url.pathname === "/metrics") {

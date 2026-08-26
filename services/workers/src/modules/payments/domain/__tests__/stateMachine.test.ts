@@ -74,8 +74,8 @@ describe("validateTransition", () => {
       expect(() => validateTransition(SubscriptionStatus.PAUSED, SubscriptionStatus.ACTIVE)).not.toThrow();
     });
 
-    test("rejects CANCELED", () => {
-      expect(() => validateTransition(SubscriptionStatus.PAUSED, SubscriptionStatus.CANCELED)).toThrow();
+    test("allows CANCELED (expiry sweep)", () => {
+      expect(() => validateTransition(SubscriptionStatus.PAUSED, SubscriptionStatus.CANCELED)).not.toThrow();
     });
 
     test("rejects PAUSED", () => {
