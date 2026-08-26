@@ -1,0 +1,580 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.grafana.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "detect-ai.fullname" . }}-payment-gateway-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "detect-ai.labels" . | nindent 4 }}
+    app: payments-gateway
+data:
+  payment-gateway-alerts.yaml: |
+    apiVersion: 1
+    
+    groups:
+      - orgId: 1
+        name: payment-gateway
+        folder: Detect-AI
+        interval: 1m
+        rules:
+          - title: PaymentGatewayDown
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 120
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: prometheus
+                  editorMode: code
+                  expr: up{job=~".*(payment-gateway|payments-gateway).*"} == 0
+                  instant: true
+                  range: false
+                  refId: A
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 0
+                          - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      reducer:
+                        params: []
+                        type: last
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  reducer: last
+                  refId: C
+                  type: reduce
+            for: 2m
+            noDataState: OK
+            execErrState: Error
+            annotations:
+              summary: payment-gateway target unreachable for 2 minutes
+            labels:
+              severity: critical
+          - title: PaymentGatewayHighHTTPErrorRate
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: prometheus
+                  editorMode: code
+                  expr: 100 * rate(http_request_errors_total{service="payment-gateway"}[5m]) / rate(http_request_duration_seconds_count{service="payment-gateway"}[5m])
+                  instant: true
+                  range: false
+                  refId: A
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 5
+                          - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      reducer:
+                        params: []
+                        type: last
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  reducer: last
+                  refId: C
+                  type: reduce
+            for: 10m
+            noDataState: OK
+            execErrState: Error
+            annotations:
+              summary: payment-gateway HTTP error rate above 5% for 10 minutes
+            labels:
+              severity: critical
+          - title: PaymentGatewayHighLatency
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: prometheus
+                  editorMode: code
+                  expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{service="payment-gateway"}[5m])))
+                  instant: true
+                  range: false
+                  refId: A
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 1
+                          - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      reducer:
+                        params: []
+                        type: last
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  reducer: last
+                  refId: C
+                  type: reduce
+            for: 10m
+            noDataState: OK
+            execErrState: Error
+            annotations:
+              summary: payment-gateway p95 request latency above 1 second for 10 minutes
+            labels:
+              severity: warning
+          - title: PaymentGatewayInvalidSignatureRate
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 900
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: prometheus
+                  editorMode: code
+                  expr: rate(payment_webhook_signatures_invalid_total{service="payment-gateway"}[15m])
+                  instant: true
+                  range: false
+                  refId: A
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 0.05
+                          - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      reducer:
+                        params: []
+                        type: last
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  reducer: last
+                  refId: C
+                  type: reduce
+            for: 15m
+            noDataState: OK
+            execErrState: Error
+            annotations:
+              summary: payment-gateway rejecting more than 0.05 webhook signatures per second for 15 minutes
+            labels:
+              severity: critical
+          - title: PaymentGatewayPublishErrors
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: prometheus
+                  editorMode: code
+                  expr: rate(payment_events_published_total{service="payment-gateway",status="error"}[5m])
+                  instant: true
+                  range: false
+                  refId: A
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 0
+                          - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      reducer:
+                        params: []
+                        type: last
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  reducer: last
+                  refId: C
+                  type: reduce
+            for: 5m
+            noDataState: OK
+            execErrState: Error
+            annotations:
+              summary: payment-gateway failing to publish payment events for 5 minutes
+            labels:
+              severity: critical
+          - title: PaymentGatewayRabbitMQDown
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 120
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: prometheus
+                  editorMode: code
+                  expr: rabbitmq_connection_status{service="payment-gateway"} == 0
+                  instant: true
+                  range: false
+                  refId: A
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 0
+                          - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      reducer:
+                        params: []
+                        type: last
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  reducer: last
+                  refId: C
+                  type: reduce
+            for: 2m
+            noDataState: OK
+            execErrState: Error
+            annotations:
+              summary: payment-gateway disconnected from RabbitMQ for 2 minutes
+            labels:
+              severity: critical
+          - title: PaymentGatewayRabbitMQPublishSlow
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: prometheus
+                  editorMode: code
+                  expr: histogram_quantile(0.95, sum by (le) (rate(rabbitmq_publish_duration_seconds_bucket{service="payment-gateway"}[5m])))
+                  instant: true
+                  range: false
+                  refId: A
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 1
+                          - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      reducer:
+                        params: []
+                        type: last
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  reducer: last
+                  refId: C
+                  type: reduce
+            for: 10m
+            noDataState: OK
+            execErrState: Error
+            annotations:
+              summary: payment-gateway p95 RabbitMQ publish duration above 1 second for 10 minutes
+            labels:
+              severity: warning
+          - title: PaymentGatewayRabbitMQFlapping
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: prometheus
+                  editorMode: code
+                  expr: rate(rabbitmq_reconnections_total{service="payment-gateway"}[10m])
+                  instant: true
+                  range: false
+                  refId: A
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 0
+                          - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      reducer:
+                        params: []
+                        type: last
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  reducer: last
+                  refId: C
+                  type: reduce
+            for: 15m
+            noDataState: OK
+            execErrState: Error
+            annotations:
+              summary: payment-gateway reconnecting to RabbitMQ repeatedly for 15 minutes
+            labels:
+              severity: warning
+          - title: PaymentEventsQueueBacklog
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: prometheus
+                  editorMode: code
+                  expr: rabbitmq_queue_messages_ready{queue="payment_events"}
+                  instant: true
+                  range: false
+                  refId: A
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 100
+                          - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      reducer:
+                        params: []
+                        type: last
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  reducer: last
+                  refId: C
+                  type: reduce
+            for: 10m
+            noDataState: OK
+            execErrState: Error
+            annotations:
+              summary: payment_events queue backlog above 100 ready messages for 10 minutes
+            labels:
+              severity: warning
+          - title: PaymentEventsNoConsumer
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: prometheus
+                  editorMode: code
+                  expr: rabbitmq_queue_consumers{queue="payment_events"} == 0
+                  instant: true
+                  range: false
+                  refId: A
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 0
+                          - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      reducer:
+                        params: []
+                        type: last
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  reducer: last
+                  refId: C
+                  type: reduce
+            for: 5m
+            noDataState: OK
+            execErrState: Error
+            annotations:
+              summary: payment_events queue has had no consumer for 5 minutes
+            labels:
+              severity: critical
+          - title: PaymentEventsUnackedHigh
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: prometheus
+                  editorMode: code
+                  expr: rabbitmq_queue_messages_unacknowledged{queue="payment_events"}
+                  instant: true
+                  range: false
+                  refId: A
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 50
+                          - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      reducer:
+                        params: []
+                        type: last
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  reducer: last
+                  refId: C
+                  type: reduce
+            for: 10m
+            noDataState: OK
+            execErrState: Error
+            annotations:
+              summary: payment_events queue unacknowledged messages above 50 for 10 minutes
+            labels:
+              severity: warning

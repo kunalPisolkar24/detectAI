@@ -317,9 +317,16 @@ monitoring:
       - name: document-parser-alerts
         configMap:
           name: detect-ai-document-parser-alerts
+      - name: payment-gateway-alerts
+        configMap:
+          name: detect-ai-payment-gateway-alerts
     extraVolumeMounts:
       - name: document-parser-alerts
         mountPath: /etc/grafana/provisioning/alerting
+        readOnly: true
+      - name: payment-gateway-alerts
+        mountPath: /etc/grafana/provisioning/alerting/payment-gateway-alerts.yaml
+        subPath: payment-gateway-alerts.yaml
         readOnly: true
     sidecar:
       dashboards:
