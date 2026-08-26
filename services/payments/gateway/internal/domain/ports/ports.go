@@ -43,6 +43,11 @@ type HealthChecker interface {
 type MetricsRecorder interface {
 	RecordPublish(eventType, status string)
 	RecordInvalidSignature()
+	RecordWebhookReceived(eventType string)
+	RecordWebhookUnknownEventType()
+	RecordInternalEventUnauthorized()
+	RecordWebhookBodyError(reason string)
+	RecordSignatureValidationDuration(seconds float64)
 	SetRabbitMQStatus(connected bool)
 	RecordRabbitMQPublishDuration(duration float64)
 	RecordRabbitMQReconnection()

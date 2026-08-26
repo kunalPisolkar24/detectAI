@@ -7,7 +7,10 @@ COPY . .
 RUN go mod tidy
 RUN go mod download
 
-RUN go build -o gateway ./cmd/gateway/main.go
+ARG VERSION=dev
+ARG COMMIT=unknown
+
+RUN go build -ldflags "-X main.buildVersion=${VERSION} -X main.buildCommit=${COMMIT}" -o gateway ./cmd/gateway/main.go
 
 FROM alpine:latest
 

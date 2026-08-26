@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"gateway/internal/domain/ports"
 	"gateway/internal/logger"
 	"io"
@@ -14,6 +15,7 @@ import (
 type HandlerConfig struct {
 	Service     ports.PaymentService
 	Health      ports.HealthChecker
+	Metrics     ports.MetricsRecorder
 	InternalKey string
 	Logger      logger.Logger
 }
@@ -21,6 +23,7 @@ type HandlerConfig struct {
 type Handler struct {
 	service     ports.PaymentService
 	health      ports.HealthChecker
+	metrics     ports.MetricsRecorder
 	internalKey string
 	logger      logger.Logger
 }
@@ -29,6 +32,7 @@ func NewHandler(cfg HandlerConfig) *Handler {
 	return &Handler{
 		service:     cfg.Service,
 		health:      cfg.Health,
+		metrics:     cfg.Metrics,
 		internalKey: cfg.InternalKey,
 		logger:      cfg.Logger,
 	}
@@ -58,7 +62,14 @@ func (h *Handler) handleWebhook(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		h.logger.Error("Failed to read request body", "error", err)
+		reason := "unreadable"
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			reason = "too_large"
+		}
+		h.metrics.RecordWebhookBodyError(reason)
+
+		h.logger.Error("Failed to read request body", "error", err, "reason", reason)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Request body too large or unreadable"})
 		return
 	}
@@ -85,6 +96,7 @@ func (h *Handler) handleWebhook(c *gin.Context) {
 func (h *Handler) handleInternalEvent(c *gin.Context) {
 	key := c.GetHeader("X-Internal-Key")
 	if key == "" || key != h.internalKey {
+		h.metrics.RecordInternalEventUnauthorized()
 		h.logger.Warn("Unauthorized internal event attempt", "ip", c.ClientIP())
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return

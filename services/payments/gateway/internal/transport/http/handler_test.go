@@ -18,13 +18,14 @@ import (
 func setupTestRouter(ms *mocks.MockPaymentService, mh *mocks.MockEventProducer) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	log := logger.New()
+	monitor := monitoring.New("payment-gateway")
 	handler := NewHandler(HandlerConfig{
 		Service:     ms,
 		Health:      mh,
+		Metrics:     monitor,
 		InternalKey: "internal-secret",
 		Logger:      log,
 	})
-	monitor := monitoring.New("payment-gateway")
 	r := gin.New()
 	r.Use(monitor.Middleware())
 	r.GET("/metrics", gin.WrapH(monitor.Handler()))
@@ -111,6 +112,17 @@ func TestHandler_HandleWebhook(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("Body Too Large", func(t *testing.T) {
+		oversized := bytes.Repeat([]byte("a"), (1<<20)+1)
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/webhook/paddle", bytes.NewBuffer(oversized))
+		req.Header.Set("Paddle-Signature", signature)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 }
 

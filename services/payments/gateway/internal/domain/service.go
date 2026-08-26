@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"gateway/internal/domain/ports"
+	"time"
 )
+
+const unknownEventType = "unknown"
 
 type PaymentService struct {
 	publisher     ports.Publisher
@@ -25,8 +28,17 @@ func NewPaymentService(pub ports.Publisher, val ports.SignatureValidator, rec po
 
 func (s *PaymentService) ProcessWebhook(ctx context.Context, signature string, body []byte) error {
 	eventType := s.extractEventType(body)
+	s.metrics.RecordWebhookReceived(eventType)
 
-	if !s.validator.Validate(signature, body, s.webhookSecret) {
+	if eventType == unknownEventType {
+		s.metrics.RecordWebhookUnknownEventType()
+	}
+
+	start := time.Now()
+	valid := s.validator.Validate(signature, body, s.webhookSecret)
+	s.metrics.RecordSignatureValidationDuration(time.Since(start).Seconds())
+
+	if !valid {
 		s.metrics.RecordInvalidSignature()
 		return fmt.Errorf("invalid signature")
 	}
@@ -59,7 +71,7 @@ func (s *PaymentService) extractEventType(body []byte) string {
 		AlertName string `json:"alert_name"` // For legacy Paddle webhooks
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return "unknown"
+		return unknownEventType
 	}
 
 	if payload.EventType != "" {
@@ -68,5 +80,5 @@ func (s *PaymentService) extractEventType(body []byte) string {
 	if payload.AlertName != "" {
 		return payload.AlertName
 	}
-	return "unknown"
+	return unknownEventType
 }

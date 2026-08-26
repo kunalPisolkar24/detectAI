@@ -21,6 +21,8 @@ func TestPaymentService_ProcessWebhook(t *testing.T) {
 		mr := new(mocks.MockMetricsRecorder)
 		s := NewPaymentService(mp, mv, mr, secret)
 
+		mr.On("RecordWebhookReceived", "test").Once()
+		mr.On("RecordSignatureValidationDuration", mock.Anything).Once()
 		mv.On("Validate", signature, body, secret).Return(true).Once()
 		mp.On("Publish", mock.Anything, body).Return(nil).Once()
 		mr.On("RecordPublish", "test", "success").Once()
@@ -37,6 +39,8 @@ func TestPaymentService_ProcessWebhook(t *testing.T) {
 		mr := new(mocks.MockMetricsRecorder)
 		s := NewPaymentService(mp, mv, mr, secret)
 
+		mr.On("RecordWebhookReceived", "test").Once()
+		mr.On("RecordSignatureValidationDuration", mock.Anything).Once()
 		mv.On("Validate", signature, body, secret).Return(false).Once()
 		mr.On("RecordInvalidSignature").Once()
 
@@ -52,6 +56,8 @@ func TestPaymentService_ProcessWebhook(t *testing.T) {
 		mr := new(mocks.MockMetricsRecorder)
 		s := NewPaymentService(mp, mv, mr, secret)
 
+		mr.On("RecordWebhookReceived", "test").Once()
+		mr.On("RecordSignatureValidationDuration", mock.Anything).Once()
 		mv.On("Validate", signature, body, secret).Return(true).Once()
 		mp.On("Publish", mock.Anything, body).Return(errors.New("publish failed")).Once()
 		mr.On("RecordPublish", "test", "error").Once()
@@ -59,6 +65,25 @@ func TestPaymentService_ProcessWebhook(t *testing.T) {
 		err := s.ProcessWebhook(context.Background(), signature, body)
 		assert.Error(t, err)
 		assert.Equal(t, "publish failed", err.Error())
+	})
+
+	t.Run("Unknown Event Type", func(t *testing.T) {
+		mp := new(mocks.MockEventProducer)
+		mv := new(mocks.MockSignatureValidator)
+		mr := new(mocks.MockMetricsRecorder)
+		s := NewPaymentService(mp, mv, mr, secret)
+
+		unidentified := []byte(`{"foo":"bar"}`)
+
+		mr.On("RecordWebhookReceived", "unknown").Once()
+		mr.On("RecordWebhookUnknownEventType").Once()
+		mr.On("RecordSignatureValidationDuration", mock.Anything).Once()
+		mv.On("Validate", signature, unidentified, secret).Return(true).Once()
+		mp.On("Publish", mock.Anything, unidentified).Return(nil).Once()
+		mr.On("RecordPublish", "unknown", "success").Once()
+
+		err := s.ProcessWebhook(context.Background(), signature, unidentified)
+		assert.NoError(t, err)
 	})
 }
 

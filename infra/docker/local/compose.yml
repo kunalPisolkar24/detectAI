@@ -161,6 +161,9 @@ services:
     build:
       context: ../../../services/payments/gateway
       dockerfile: Dockerfile
+      args:
+        VERSION: ${GATEWAY_VERSION:-dev}
+        COMMIT: ${GATEWAY_COMMIT:-unknown}
     restart: unless-stopped
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}

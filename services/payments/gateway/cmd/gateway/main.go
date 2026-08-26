@@ -20,6 +20,11 @@ import (
 
 const QueueName = "payment_events"
 
+var (
+	buildVersion = "dev"
+	buildCommit  = "unknown"
+)
+
 func main() {
 	log := logger.New()
 	cfg, err := config.Load()
@@ -29,6 +34,7 @@ func main() {
 	}
 
 	monitor := monitoring.New("payment-gateway")
+	monitor.SetBuildInfo(buildVersion, buildCommit)
 	rabbitMQ := rabbitmq.NewRabbitMQProducer(cfg.RabbitMQURL, QueueName, cfg.RabbitMQQueueType, log, monitor)
 	paddleValidator := paddle.NewPaddleValidator()
 
@@ -36,6 +42,7 @@ func main() {
 	handler := http.NewHandler(http.HandlerConfig{
 		Service:     paymentService,
 		Health:      rabbitMQ,
+		Metrics:     monitor,
 		InternalKey: cfg.InternalAPIKey,
 		Logger:      log,
 	})
