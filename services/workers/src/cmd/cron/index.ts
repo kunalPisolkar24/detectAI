@@ -32,7 +32,7 @@ const redisClient = RedisFactory.createClient({
     url: config.REDIS_URL,
     sentinels: config.REDIS_SENTINELS,
     masterName: config.REDIS_MASTER_NAME,
-    password: process.env.REDIS_PASSWORD,
+    password: config.REDIS_PASSWORD,
 });
 
 const metricsService = new MetricsService("worker-cron");
@@ -45,7 +45,7 @@ redisClient.on("close", () => metricsService.redisConnectionStatus.set({ client_
 redisClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 0));
 
 const userRepository = new PrismaUserRepository(prismaPrimary, prisma);
-const sweeper = new SubscriptionSweeper(userRepository, redisClient, metricsService);
+const sweeper = new SubscriptionSweeper(userRepository, redisClient, metricsService, config.CRON_BATCH_SIZE);
 
 const server = new WorkerServer(
     metricsService,

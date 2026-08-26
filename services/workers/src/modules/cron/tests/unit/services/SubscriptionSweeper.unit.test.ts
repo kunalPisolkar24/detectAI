@@ -85,6 +85,20 @@ describe("SubscriptionSweeper", () => {
         await expect(sweeper.processExpiredSubscriptions()).rejects.toThrow("DB Fail");
     });
 
+    test("should honour a custom batch size", async () => {
+        mockUserRepository.expireDueSubscriptions.mockResolvedValue([]);
+
+        const customSweeper = new SubscriptionSweeper(
+            mockUserRepository as any,
+            mockRedisClient as any,
+            metricsMock,
+            10
+        );
+        await customSweeper.processExpiredSubscriptions();
+
+        expect(mockUserRepository.expireDueSubscriptions.mock.calls[0]![0]).toBe(10);
+    });
+
     test("should continue and return count if redis invalidation fails", async () => {
         mockUserRepository.expireDueSubscriptions.mockResolvedValue([{ id: "u1", email: "u1@test.com" }]);
         mockRedisClient.del.mockRejectedValue(new Error("Redis Fail"));

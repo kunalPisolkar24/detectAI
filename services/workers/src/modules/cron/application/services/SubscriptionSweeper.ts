@@ -6,15 +6,17 @@ import { SubscriptionStatus } from "../../../../../generated/prisma/client";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 
 export class SubscriptionSweeper {
-    private readonly BATCH_SIZE = 100;
+    private readonly BATCH_SIZE: number;
 
     private readonly cacheInvalidator: UserCacheInvalidator;
 
     constructor(
         private readonly userRepository: IUserRepository,
         redis: RedisClient,
-        private readonly metrics: MetricsService
+        private readonly metrics: MetricsService,
+        batchSize = 100
     ) {
+        this.BATCH_SIZE = batchSize;
         this.cacheInvalidator = new UserCacheInvalidator(redis, metrics);
     }
 
