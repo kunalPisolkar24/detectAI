@@ -274,4 +274,59 @@ describe("SubscriptionSweeper Integration", () => {
         const activeSub = await prismaPrimary.subscription.findUnique({ where: { userId: stillActive.id } });
         expect(activeSub?.status).toBe(SubscriptionStatus.ACTIVE);
     });
+
+    test("should sweep expired PAUSED subscriptions and leave future ones", async () => {
+        const expiredDate = new Date(Date.now() - 60000);
+        const futureDate = new Date(Date.now() + 86400000);
+
+        const [pausedExpired, pausedFuture] = await Promise.all([
+            prismaPrimary.user.create({
+                data: {
+                    email: "paused-expired@example.com",
+                    subscription: { create: { status: SubscriptionStatus.PAUSED, endsAt: expiredDate } },
+                },
+            }),
+            prismaPrimary.user.create({
+                data: {
+                    email: "paused-future@example.com",
+                    subscription: { create: { status: SubscriptionStatus.PAUSED, endsAt: futureDate } },
+                },
+            }),
+        ]);
+
+        await sweeper.processExpiredSubscriptions();
+
+        const sweptSub = await prismaPrimary.subscription.findUnique({ where: { userId: pausedExpired.id } });
+        expect(sweptSub?.status).toBe(SubscriptionStatus.CANCELED);
+
+        const untouchedSub = await prismaPrimary.subscription.findUnique({ where: { userId: pausedFuture.id } });
+        expect(untouchedSub?.status).toBe(SubscriptionStatus.PAUSED);
+    });
+
+    test("should never sweep NULL status or NULL endsAt rows", async () => {
+        const expiredDate = new Date(Date.now() - 60000);
+
+        const [nullStatus, nullEndsAt] = await Promise.all([
+            prismaPrimary.user.create({
+                data: {
+                    email: "null-status@example.com",
+                    subscription: { create: { status: null, endsAt: expiredDate } },
+                },
+            }),
+            prismaPrimary.user.create({
+                data: {
+                    email: "null-ends-at@example.com",
+                    subscription: { create: { status: SubscriptionStatus.ACTIVE, endsAt: null } },
+                },
+            }),
+        ]);
+
+        await sweeper.processExpiredSubscriptions();
+
+        for (const user of [nullStatus, nullEndsAt]) {
+            const sub = await prismaPrimary.subscription.findUnique({ where: { userId: user.id } });
+            expect(sub?.status).not.toBe(SubscriptionStatus.CANCELED);
+            expect(sub?.eventTimestamp).toBeNull();
+        }
+    });
 });

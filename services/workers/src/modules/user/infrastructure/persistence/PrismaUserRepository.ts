@@ -26,8 +26,14 @@ export class PrismaUserRepository implements IUserRepository {
 
     async expireDueSubscriptions(limit: number, data: BulkSubscriptionUpdate, sweepTime: Date): Promise<ExpiredSubscription[]> {
         return this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
+            // NULL status = never billable, never swept (data-hygiene guard, see #189).
+            // NULL endsAt = lifetime subscription, never swept (see #198).
+            // Audit queries for prod replicas live in docs/sweep-null-audit.sql.
             const users = await tx.$queryRawUnsafe<ExpiredSubscription[]>(
-                `SELECT u.id, u.email FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id WHERE s.status IN ('ACTIVE', 'TRIALING', 'PAST_DUE') AND s."endsAt" < $2 ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
+                `SELECT u.id, u.email FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id
+                 WHERE s.status IS NOT NULL AND s.status IN ('ACTIVE', 'TRIALING', 'PAST_DUE', 'PAUSED')
+                   AND s."endsAt" IS NOT NULL AND s."endsAt" < $2
+                 ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
                 limit,
                 sweepTime,
             );
@@ -36,7 +42,14 @@ export class PrismaUserRepository implements IUserRepository {
             const result = await tx.subscription.updateMany({
                 where: {
                     userId: { in: users.map(user => user.id) },
-                    status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING, SubscriptionStatus.PAST_DUE] },
+                    status: {
+                        in: [
+                            SubscriptionStatus.ACTIVE,
+                            SubscriptionStatus.TRIALING,
+                            SubscriptionStatus.PAST_DUE,
+                            SubscriptionStatus.PAUSED,
+                        ],
+                    },
                     endsAt: { lt: sweepTime },
                 },
                 data: {

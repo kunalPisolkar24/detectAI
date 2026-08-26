@@ -25,6 +25,9 @@ export class SubscriptionSweeper {
         try {
             const sweepTime = new Date();
 
+            // Expiry is a terminal downgrade; it intentionally bypasses the
+            // payments stateMachine (PAUSED->CANCELED is invalid via webhooks
+            // but is the whole point of the sweep, see #196/#178).
             const sweptUsers = await this.userRepository.expireDueSubscriptions(this.BATCH_SIZE, {
                 status: SubscriptionStatus.CANCELED,
                 cancellationScheduled: false,
