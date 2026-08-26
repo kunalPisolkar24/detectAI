@@ -35,7 +35,7 @@ export class PrismaUserRepository implements IUserRepository {
             // NULL endsAt = lifetime subscription, never swept (see #198).
             // Audit queries for prod replicas live in docs/sweep-null-audit.sql.
             const users = await tx.$queryRawUnsafe<ExpiredSubscription[]>(
-                `SELECT u.id, u.email FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id
+                `SELECT u.id, u.email, s."paddleSubscriptionId" FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id
                  WHERE s.status IS NOT NULL AND s.status IN ('ACTIVE', 'TRIALING', 'PAST_DUE', 'PAUSED')
                    AND s."endsAt" IS NOT NULL AND s."endsAt" < $2
                  ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,

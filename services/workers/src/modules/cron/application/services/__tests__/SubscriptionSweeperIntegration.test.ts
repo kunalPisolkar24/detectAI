@@ -329,4 +329,31 @@ describe("SubscriptionSweeper Integration", () => {
             expect(sub?.eventTimestamp).toBeNull();
         }
     });
+
+    test("should clear cancellationScheduled and paddle identifiers as terminal state", async () => {
+        const expiredDate = new Date(Date.now() - 60000);
+
+        const user = await prismaPrimary.user.create({
+            data: {
+                email: "terminal-wipe@example.com",
+                subscription: {
+                    create: {
+                        status: SubscriptionStatus.ACTIVE,
+                        endsAt: expiredDate,
+                        paddleSubscriptionId: "sub_terminal",
+                        paddlePlanId: "plan_9",
+                        cancellationScheduled: true,
+                    },
+                },
+            },
+        });
+
+        await sweeper.processExpiredSubscriptions();
+
+        const sub = await prismaPrimary.subscription.findUnique({ where: { userId: user.id } });
+        expect(sub?.status).toBe(SubscriptionStatus.CANCELED);
+        expect(sub?.cancellationScheduled).toBe(false);
+        expect(sub?.paddleSubscriptionId).toBeNull();
+        expect(sub?.paddlePlanId).toBeNull();
+    });
 });

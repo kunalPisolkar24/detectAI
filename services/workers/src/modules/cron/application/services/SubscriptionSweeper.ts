@@ -30,6 +30,8 @@ export class SubscriptionSweeper {
             // Expiry is a terminal downgrade; it intentionally bypasses the
             // payments stateMachine (PAUSED->CANCELED is invalid via webhooks
             // but is the whole point of the sweep, see #196/#178).
+            // cancellationScheduled:false is intentional: once endsAt has passed,
+            // a scheduled cancellation is moot — the row is fully canceled.
             const sweptUsers = await this.userRepository.expireDueSubscriptions(this.BATCH_SIZE, {
                 status: SubscriptionStatus.CANCELED,
                 cancellationScheduled: false,
@@ -49,6 +51,15 @@ export class SubscriptionSweeper {
             }
 
             Logger.info(`Found ${sweptUsers.length} expired subscriptions to sweep.`);
+
+            for (const user of sweptUsers) {
+                if (user.paddleSubscriptionId) {
+                    Logger.info("Sweep clearing paddle identifiers for downgraded subscription", {
+                        userId: user.id,
+                        paddleSubscriptionId: user.paddleSubscriptionId,
+                    });
+                }
+            }
 
             await this.cacheInvalidator.invalidateUsers(sweptUsers);
 
