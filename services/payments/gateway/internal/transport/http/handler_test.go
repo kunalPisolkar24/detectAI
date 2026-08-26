@@ -32,26 +32,40 @@ func setupTestRouter(ms *mocks.MockPaymentService, mh *mocks.MockEventProducer) 
 	return r
 }
 
-func TestHandler_HealthCheck(t *testing.T) {
+func TestHandler_Livez(t *testing.T) {
 	ms := new(mocks.MockPaymentService)
 	mh := new(mocks.MockEventProducer)
 	router := setupTestRouter(ms, mh)
 
-	t.Run("Returns 200 when healthy", func(t *testing.T) {
+	t.Run("Returns 200 even when RabbitMQ is disconnected", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/healthz", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+}
+
+func TestHandler_Readyz(t *testing.T) {
+	ms := new(mocks.MockPaymentService)
+	mh := new(mocks.MockEventProducer)
+	router := setupTestRouter(ms, mh)
+
+	t.Run("Returns 200 when connected", func(t *testing.T) {
 		mh.On("IsConnected").Return(true).Once()
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/health", nil)
+		req, _ := http.NewRequest("GET", "/readyz", nil)
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
 	})
 
-	t.Run("Returns 503 when unhealthy", func(t *testing.T) {
+	t.Run("Returns 503 when disconnected", func(t *testing.T) {
 		mh.On("IsConnected").Return(false).Once()
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/health", nil)
+		req, _ := http.NewRequest("GET", "/readyz", nil)
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, w.Code)

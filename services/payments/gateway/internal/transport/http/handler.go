@@ -35,14 +35,19 @@ func NewHandler(cfg HandlerConfig) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(r *gin.Engine) {
-	r.GET("/health", h.healthCheck)
+	r.GET("/healthz", h.livez)
+	r.GET("/readyz", h.readyz)
 	r.POST("/webhook/paddle", h.handleWebhook)
 	r.POST("/internal/events", h.handleInternalEvent)
 }
 
-func (h *Handler) healthCheck(c *gin.Context) {
+func (h *Handler) livez(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func (h *Handler) readyz(c *gin.Context) {
 	if !h.health.IsConnected() {
-		h.logger.Error("Health check failed: RabbitMQ disconnected")
+		h.logger.Error("Readiness check failed: RabbitMQ disconnected")
 		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "rabbitmq": "disconnected"})
 		return
 	}
