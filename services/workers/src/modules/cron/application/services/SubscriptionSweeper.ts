@@ -23,12 +23,15 @@ export class SubscriptionSweeper {
 
         this.metrics.activeJobs.inc({ job_type: "sweep_expired" });
         try {
+            const sweepTime = new Date();
+
             const sweptUsers = await this.userRepository.expireDueSubscriptions(this.BATCH_SIZE, {
                 status: SubscriptionStatus.CANCELED,
                 cancellationScheduled: false,
                 paddleSubscriptionId: null,
                 paddlePlanId: null,
-            });
+                eventTimestamp: sweepTime,
+            }, sweepTime);
 
             if (sweptUsers.length === 0) {
                 timer({ status: "empty" });

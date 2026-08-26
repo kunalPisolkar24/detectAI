@@ -63,10 +63,13 @@ describe("SubscriptionSweeper", () => {
         const count = await sweeper.processExpiredSubscriptions();
 
         expect(count).toBe(2);
-        expect(mockUserRepository.expireDueSubscriptions).toHaveBeenCalledWith(
-            expect.any(Number),
-            expect.objectContaining({ status: "CANCELED" })
-        );
+        expect(mockUserRepository.expireDueSubscriptions).toHaveBeenCalledTimes(1);
+
+        const call = mockUserRepository.expireDueSubscriptions.mock.calls[0]! as [number, { status: string; eventTimestamp?: Date }, Date];
+        expect(call[0]).toBe(100);
+        expect(call[1].status).toBe("CANCELED");
+        expect(call[2]).toBeInstanceOf(Date);
+        expect(call[1].eventTimestamp).toBe(call[2]);
 
         expect(mockRedisClient.del).toHaveBeenCalledTimes(1);
         const delArgs = mockRedisClient.del.mock.calls[0] as string[];

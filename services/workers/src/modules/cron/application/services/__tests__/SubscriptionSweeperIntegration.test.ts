@@ -5,6 +5,7 @@ import { RedisFactory } from "@shared/cache/RedisClient";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
 import { type IUserRepository } from "@modules/user/domain/IUserRepository";
+import { validateTransition } from "@modules/payments/domain/stateMachine";
 import { SubscriptionSweeper } from "../SubscriptionSweeper";
 import { SubscriptionStatus } from "../../../../../../generated/prisma/client";
 import { Pool } from "pg";
@@ -151,5 +152,126 @@ describe("SubscriptionSweeper Integration", () => {
 
         const untouched = await prismaPrimary.subscription.findUnique({ where: { userId: userPastDueActiveWindow.id } });
         expect(untouched?.status).toBe(SubscriptionStatus.PAST_DUE);
+    });
+
+    test("should stamp eventTimestamp on swept subscriptions", async () => {
+        const expiredDate = new Date(Date.now() - 60000);
+
+        const user = await prismaPrimary.user.create({
+            data: {
+                email: "stamp-event-ts@example.com",
+                subscription: {
+                    create: { status: SubscriptionStatus.ACTIVE, endsAt: expiredDate },
+                },
+            },
+        });
+
+        const before = Date.now();
+        await sweeper.processExpiredSubscriptions();
+        const after = Date.now();
+
+        const sub = await prismaPrimary.subscription.findUnique({ where: { userId: user.id } });
+        expect(sub?.status).toBe(SubscriptionStatus.CANCELED);
+        expect(sub?.eventTimestamp).not.toBeNull();
+
+        const stamped = sub!.eventTimestamp!.getTime();
+        expect(stamped).toBeGreaterThanOrEqual(before);
+        expect(stamped).toBeLessThanOrEqual(after);
+    });
+
+    test("should reject stale webhook replay after sweep but accept fresh resubscribe", async () => {
+        const expiredDate = new Date(Date.now() - 60000);
+
+        const user = await prismaPrimary.user.create({
+            data: {
+                email: "replay@example.com",
+                subscription: {
+                    create: {
+                        status: SubscriptionStatus.ACTIVE,
+                        endsAt: expiredDate,
+                        eventTimestamp: new Date(Date.now() - 120000),
+                    },
+                },
+            },
+        });
+
+        const validatingRepo = new PrismaUserRepository(prismaPrimary, prisma, validateTransition);
+        const sweepTime = new Date(Date.now() - 30000);
+        const swept = await validatingRepo.expireDueSubscriptions(10, {
+            status: SubscriptionStatus.CANCELED,
+            cancellationScheduled: false,
+            paddleSubscriptionId: null,
+            paddlePlanId: null,
+            eventTimestamp: sweepTime,
+        }, sweepTime);
+        expect(swept).toHaveLength(1);
+
+        const staleReplay = await validatingRepo.lockAndUpdateSubscription(
+            user.id,
+            new Date(sweepTime.getTime() - 3600_000),
+            SubscriptionStatus.ACTIVE,
+            { paddleCustomerId: "cus_x", paddleSubscriptionId: "sub_replay", paddlePlanId: "plan_1", status: SubscriptionStatus.ACTIVE, endsAt: null },
+        );
+        expect(staleReplay.stale).toBe(true);
+
+        const afterReplay = await prismaPrimary.subscription.findUnique({ where: { userId: user.id } });
+        expect(afterReplay?.status).toBe(SubscriptionStatus.CANCELED);
+
+        const freshResubscribe = await validatingRepo.lockAndUpdateSubscription(
+            user.id,
+            new Date(sweepTime.getTime() + 3600_000),
+            SubscriptionStatus.ACTIVE,
+            { paddleCustomerId: "cus_x", paddleSubscriptionId: "sub_fresh", paddlePlanId: "plan_1", status: SubscriptionStatus.ACTIVE, endsAt: null },
+        );
+        expect(freshResubscribe.stale).toBe(false);
+
+        const afterResubscribe = await prismaPrimary.subscription.findUnique({ where: { userId: user.id } });
+        expect(afterResubscribe?.status).toBe(SubscriptionStatus.ACTIVE);
+        expect(afterResubscribe?.eventTimestamp!.getTime()).toBe(new Date(sweepTime.getTime() + 3600_000).getTime());
+    });
+
+    test("should return only actually mutated users", async () => {
+        const expiredDate = new Date(Date.now() - 60000);
+        const futureDate = new Date(Date.now() + 86400000);
+
+        const [expired1, expired2, stillActive] = await Promise.all([
+            prismaPrimary.user.create({
+                data: {
+                    email: "mutated-1@example.com",
+                    subscription: { create: { status: SubscriptionStatus.TRIALING, endsAt: expiredDate } },
+                },
+            }),
+            prismaPrimary.user.create({
+                data: {
+                    email: "mutated-2@example.com",
+                    subscription: { create: { status: SubscriptionStatus.PAST_DUE, endsAt: expiredDate } },
+                },
+            }),
+            prismaPrimary.user.create({
+                data: {
+                    email: "mutated-future@example.com",
+                    subscription: { create: { status: SubscriptionStatus.ACTIVE, endsAt: futureDate } },
+                },
+            }),
+        ]);
+
+        const sweepTime = new Date();
+        const mutated = await userRepository.expireDueSubscriptions(10, {
+            status: SubscriptionStatus.CANCELED,
+            cancellationScheduled: false,
+            paddleSubscriptionId: null,
+            paddlePlanId: null,
+            eventTimestamp: sweepTime,
+        }, sweepTime);
+
+        expect(mutated.map(user => user.id).sort()).toEqual([expired1.id, expired2.id].sort());
+
+        for (const mutatedUser of mutated) {
+            const sub = await prismaPrimary.subscription.findUnique({ where: { userId: mutatedUser.id } });
+            expect(sub?.status).toBe(SubscriptionStatus.CANCELED);
+        }
+
+        const activeSub = await prismaPrimary.subscription.findUnique({ where: { userId: stillActive.id } });
+        expect(activeSub?.status).toBe(SubscriptionStatus.ACTIVE);
     });
 });

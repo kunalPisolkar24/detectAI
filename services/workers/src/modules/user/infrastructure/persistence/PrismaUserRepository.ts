@@ -24,24 +24,28 @@ export class PrismaUserRepository implements IUserRepository {
         });
     }
 
-    async expireDueSubscriptions(limit: number, data: BulkSubscriptionUpdate): Promise<ExpiredSubscription[]> {
+    async expireDueSubscriptions(limit: number, data: BulkSubscriptionUpdate, sweepTime: Date): Promise<ExpiredSubscription[]> {
         return this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
             const users = await tx.$queryRawUnsafe<ExpiredSubscription[]>(
-                `SELECT u.id, u.email FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id WHERE s.status IN ('ACTIVE', 'TRIALING', 'PAST_DUE') AND s."endsAt" < NOW() ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
+                `SELECT u.id, u.email FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id WHERE s.status IN ('ACTIVE', 'TRIALING', 'PAST_DUE') AND s."endsAt" < $2 ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
                 limit,
+                sweepTime,
             );
             if (users.length === 0) return [];
 
-            await tx.subscription.updateMany({
+            const result = await tx.subscription.updateMany({
                 where: {
                     userId: { in: users.map(user => user.id) },
                     status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING, SubscriptionStatus.PAST_DUE] },
-                    endsAt: { lt: new Date() },
+                    endsAt: { lt: sweepTime },
                 },
-                data,
+                data: {
+                    ...data,
+                    eventTimestamp: data.eventTimestamp ?? sweepTime,
+                },
             });
 
-            return users;
+            return users.slice(0, result.count);
         });
     }
 
@@ -72,7 +76,7 @@ export class PrismaUserRepository implements IUserRepository {
             const currentRow = rows[0];
 
             if (currentRow) {
-                if (currentRow.eventTimestamp && eventTimestamp <= currentRow.eventTimestamp) {
+                if (currentRow.eventTimestamp !== null && eventTimestamp <= currentRow.eventTimestamp) {
                     const user = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
                     return user ? { email: user.email, stale: true } : { email: "", stale: true };
                 }
