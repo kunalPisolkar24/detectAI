@@ -10,12 +10,20 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+type deferredConfirm interface {
+	Done() <-chan struct{}
+	Acked() bool
+}
+
+type confirmFactory func(ports.AMQPChannel, context.Context, amqp.Publishing) (deferredConfirm, error)
+
 type RabbitMQProducer struct {
 	cm        *ConnectionManager
 	queueName string
 	queueType string
 	logger    logger.Logger
 	metrics   ports.MetricsRecorder
+	publish   confirmFactory
 }
 
 func NewRabbitMQProducer(url string, queueName string, queueType string, log logger.Logger, metrics ports.MetricsRecorder) *RabbitMQProducer {
@@ -24,6 +32,10 @@ func NewRabbitMQProducer(url string, queueName string, queueType string, log log
 		queueType: queueType,
 		logger:    log,
 		metrics:   metrics,
+	}
+
+	p.publish = func(ch ports.AMQPChannel, ctx context.Context, msg amqp.Publishing) (deferredConfirm, error) {
+		return ch.PublishWithDeferredConfirmWithContext(ctx, "", p.queueName, false, false, msg)
 	}
 
 	p.cm = NewConnectionManager(url, log, metrics, p.setupTopology)
@@ -69,16 +81,11 @@ func (p *RabbitMQProducer) Publish(ctx context.Context, body []byte) error {
 	}
 
 	start := time.Now()
-	conf, err := ch.PublishWithDeferredConfirmWithContext(ctx,
-		"",
-		p.queueName,
-		false,
-		false,
-		amqp.Publishing{
-			DeliveryMode: amqp.Persistent,
-			ContentType:  "application/json",
-			Body:         body,
-		})
+	conf, err := p.publish(ch, ctx, amqp.Publishing{
+		DeliveryMode: amqp.Persistent,
+		ContentType:  "application/json",
+		Body:         body,
+	})
 	if err != nil {
 		return err
 	}
