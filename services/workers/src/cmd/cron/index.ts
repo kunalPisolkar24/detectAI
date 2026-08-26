@@ -8,9 +8,23 @@ import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/P
 import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { config } from "./config";
 
-const CHECK_INTERVAL_MS = 1000 * 60 * 60;
 const BATCH_COOLDOWN_MS = 5000;
 const ERROR_COOLDOWN_MS = 60000;
+const SHUTDOWN_GRACE_MS = 10000;
+
+function jitter(intervalMs: number): number {
+    return Math.round(intervalMs * (0.9 + Math.random() * 0.2));
+}
+
+function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
+    return new Promise(resolve => {
+        const timer = setTimeout(resolve, ms);
+        signal.addEventListener("abort", () => {
+            clearTimeout(timer);
+            resolve();
+        }, { once: true });
+    });
+}
 
 const redisClient = RedisFactory.createClient({
     mode: config.REDIS_MODE,
@@ -43,47 +57,68 @@ const server = new WorkerServer(
 server.start();
 
 let isShuttingDown = false;
+let currentJob: Promise<number> | null = null;
 
-async function startWorker() {
-    Logger.info("Cron Worker (Subscription Sweeper) initializing...");
-    metricsService.activeWorkers.inc();
-    await new Promise(resolve => setTimeout(resolve, 2000));
+const abort = new AbortController();
 
-    Logger.info("Initialization complete. Running immediate startup sweep.");
+async function startWorker(): Promise<void> {
+    Logger.info(`Cron Worker (Subscription Sweeper) initializing. Check interval: ${config.CRON_CHECK_INTERVAL_MS}ms.`);
 
     while (!isShuttingDown) {
         try {
-            const processedCount = await sweeper.processExpiredSubscriptions();
-            
+            currentJob = sweeper.processExpiredSubscriptions();
+            const processedCount = await currentJob;
+            currentJob = null;
+
             if (processedCount > 0) {
                 Logger.info(`Sweeper processed ${processedCount} records. Checking for more in ${BATCH_COOLDOWN_MS}ms...`);
-                await new Promise(resolve => setTimeout(resolve, BATCH_COOLDOWN_MS));
+                await abortableSleep(BATCH_COOLDOWN_MS, abort.signal);
             } else {
-                Logger.info(`No expired subscriptions found. Sleeping for ${CHECK_INTERVAL_MS / 1000 / 60} minutes.`);
-                await new Promise(resolve => setTimeout(resolve, CHECK_INTERVAL_MS));
+                const sleepMs = jitter(config.CRON_CHECK_INTERVAL_MS);
+                Logger.info(`No expired subscriptions found. Sleeping for ${Math.round(sleepMs / 1000)}s.`);
+                await abortableSleep(sleepMs, abort.signal);
             }
-
         } catch (error) {
+            currentJob = null;
             Logger.error("Critical error in Cron loop", error);
             metricsService.jobErrors.inc({ job_type: "cron_loop", error_type: "critical" });
-            await new Promise(resolve => setTimeout(resolve, ERROR_COOLDOWN_MS));
+            await abortableSleep(ERROR_COOLDOWN_MS, abort.signal);
         }
     }
 }
 
-startWorker();
+const loopDone = startWorker();
+loopDone.catch(error => {
+    metricsService.activeWorkers.dec();
+    Logger.error("Cron worker crashed during startup or execution", error);
+    process.exit(1);
+});
 
 const shutdown = async () => {
     if (isShuttingDown) return;
     isShuttingDown = true;
-    server.stop();
-    metricsService.activeWorkers.dec();
-    
+
     Logger.info("Shutting down Cron Worker...");
-    
+    server.stop();
+    abort.abort();
+
+    if (currentJob) {
+        await Promise.race([
+            currentJob.catch(() => {}),
+            new Promise(resolve => setTimeout(resolve, SHUTDOWN_GRACE_MS)),
+        ]);
+    }
+
+    await Promise.race([
+        loopDone.catch(() => {}),
+        new Promise(resolve => setTimeout(resolve, SHUTDOWN_GRACE_MS)),
+    ]);
+
+    metricsService.activeWorkers.dec();
+
     await prisma.$disconnect();
     await redisClient.quit();
-    
+
     Logger.info("Cron Worker exited gracefully");
     process.exit(0);
 };
