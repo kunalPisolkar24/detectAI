@@ -8,6 +8,7 @@ import (
 	"gateway/internal/infrastructure/rabbitmq"
 	"gateway/internal/logger"
 	"gateway/internal/monitoring"
+	"gateway/internal/tracing"
 	"gateway/internal/transport/http"
 	nethttp "net/http"
 	"os"
@@ -16,9 +17,15 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 const QueueName = "payment_events"
+
+var (
+	buildVersion = "dev"
+	buildCommit  = "unknown"
+)
 
 func main() {
 	log := logger.New()
@@ -29,6 +36,14 @@ func main() {
 	}
 
 	monitor := monitoring.New("payment-gateway")
+	monitor.SetBuildInfo(buildVersion, buildCommit)
+
+	shutdownTracing, err := tracing.Init("payment-gateway")
+	if err != nil {
+		log.Error("Failed to initialize tracing", "error", err)
+		os.Exit(1)
+	}
+
 	rabbitMQ := rabbitmq.NewRabbitMQProducer(cfg.RabbitMQURL, QueueName, cfg.RabbitMQQueueType, log, monitor)
 	paddleValidator := paddle.NewPaddleValidator()
 
@@ -36,12 +51,14 @@ func main() {
 	handler := http.NewHandler(http.HandlerConfig{
 		Service:     paymentService,
 		Health:      rabbitMQ,
+		Metrics:     monitor,
 		InternalKey: cfg.InternalAPIKey,
 		Logger:      log,
 	})
 
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(otelgin.Middleware("payment-gateway"))
 	r.Use(monitor.Middleware())
 	r.GET("/metrics", gin.WrapH(monitor.Handler()))
 
@@ -73,5 +90,12 @@ func main() {
 	}
 
 	rabbitMQ.Close()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	if err := shutdownTracing(shutdownCtx); err != nil {
+		log.Error("Failed to flush traces on shutdown", "error", err)
+	}
+
 	log.Info("Gateway exited")
 }

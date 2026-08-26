@@ -18,13 +18,14 @@ import (
 func setupTestRouter(ms *mocks.MockPaymentService, mh *mocks.MockEventProducer) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	log := logger.New()
+	monitor := monitoring.New("payment-gateway")
 	handler := NewHandler(HandlerConfig{
 		Service:     ms,
 		Health:      mh,
+		Metrics:     monitor,
 		InternalKey: "internal-secret",
 		Logger:      log,
 	})
-	monitor := monitoring.New("payment-gateway")
 	r := gin.New()
 	r.Use(monitor.Middleware())
 	r.GET("/metrics", gin.WrapH(monitor.Handler()))
@@ -32,26 +33,40 @@ func setupTestRouter(ms *mocks.MockPaymentService, mh *mocks.MockEventProducer) 
 	return r
 }
 
-func TestHandler_HealthCheck(t *testing.T) {
+func TestHandler_Livez(t *testing.T) {
 	ms := new(mocks.MockPaymentService)
 	mh := new(mocks.MockEventProducer)
 	router := setupTestRouter(ms, mh)
 
-	t.Run("Returns 200 when healthy", func(t *testing.T) {
+	t.Run("Returns 200 even when RabbitMQ is disconnected", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/healthz", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+}
+
+func TestHandler_Readyz(t *testing.T) {
+	ms := new(mocks.MockPaymentService)
+	mh := new(mocks.MockEventProducer)
+	router := setupTestRouter(ms, mh)
+
+	t.Run("Returns 200 when connected", func(t *testing.T) {
 		mh.On("IsConnected").Return(true).Once()
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/health", nil)
+		req, _ := http.NewRequest("GET", "/readyz", nil)
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
 	})
 
-	t.Run("Returns 503 when unhealthy", func(t *testing.T) {
+	t.Run("Returns 503 when disconnected", func(t *testing.T) {
 		mh.On("IsConnected").Return(false).Once()
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/health", nil)
+		req, _ := http.NewRequest("GET", "/readyz", nil)
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
@@ -97,6 +112,17 @@ func TestHandler_HandleWebhook(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("Body Too Large", func(t *testing.T) {
+		oversized := bytes.Repeat([]byte("a"), (1<<20)+1)
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/webhook/paddle", bytes.NewBuffer(oversized))
+		req.Header.Set("Paddle-Signature", signature)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 }
 
