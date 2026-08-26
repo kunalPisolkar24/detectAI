@@ -36,7 +36,12 @@ export class SubscriptionSweeper {
                 paddleSubscriptionId: null,
                 paddlePlanId: null,
                 eventTimestamp: sweepTime,
-            }, sweepTime);
+            }, sweepTime, async (selected) => {
+                // Pre-commit DEL (payments-style double-del): shrinks the window
+                // where a replica-lag read repopulates stale entries after commit.
+                // ~100ms replica lag remains possible; see #187.
+                await this.cacheInvalidator.invalidateUsers(selected);
+            });
 
             if (sweptUsers.length === 0) {
                 timer({ status: "empty" });
@@ -50,6 +55,9 @@ export class SubscriptionSweeper {
             this.metrics.jobTotal.inc({ job_type: "user_downgrade" }, sweptUsers.length);
             timer({ status: "success" });
             return sweptUsers.length;
+        } catch (error) {
+            timer({ status: "error" });
+            throw error;
         } finally {
             this.metrics.activeJobs.dec({ job_type: "sweep_expired" });
         }

@@ -24,7 +24,12 @@ export class PrismaUserRepository implements IUserRepository {
         });
     }
 
-    async expireDueSubscriptions(limit: number, data: BulkSubscriptionUpdate, sweepTime: Date): Promise<ExpiredSubscription[]> {
+    async expireDueSubscriptions(
+        limit: number,
+        data: BulkSubscriptionUpdate,
+        sweepTime: Date,
+        onSelected?: (users: ExpiredSubscription[]) => Promise<void>
+    ): Promise<ExpiredSubscription[]> {
         return this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
             // NULL status = never billable, never swept (data-hygiene guard, see #189).
             // NULL endsAt = lifetime subscription, never swept (see #198).
@@ -38,6 +43,10 @@ export class PrismaUserRepository implements IUserRepository {
                 sweepTime,
             );
             if (users.length === 0) return [];
+
+            if (onSelected) {
+                await onSelected(users);
+            }
 
             const result = await tx.subscription.updateMany({
                 where: {

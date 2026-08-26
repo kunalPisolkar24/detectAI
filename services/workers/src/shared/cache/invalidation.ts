@@ -18,10 +18,20 @@ export class UserCacheInvalidator {
         if (keys.length === 0) return;
 
         try {
-            await this.redis.del(...keys);
+            try {
+                await this.redis.del(...keys);
+            } catch {
+                // One immediate retry: transient blips are common, and a missed DEL
+                // leaves stale entitlements cached until TTL.
+                await new Promise(resolve => setTimeout(resolve, 50));
+                await this.redis.del(...keys);
+            }
             this.metrics.cacheOperations.inc({ operation: "invalidate", cache_type: "main" }, keys.length);
         } catch (error) {
-            Logger.error("Failed to invalidate user cache", error);
+            // Fail-open by design: the DB write has already committed, so failing
+            // the caller here would not un-commit it. The stale entry self-heals
+            // at TTL; divergence is observable via cache_invalidate jobErrors.
+            Logger.error("Failed to invalidate user cache after retry", error);
             this.metrics.jobErrors.inc({ job_type: "cache_invalidate", error_type: "redis_error" });
         }
     }

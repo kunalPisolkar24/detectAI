@@ -51,7 +51,15 @@ const server = new WorkerServer(
     metricsService,
     config.PORT || 7777,
     () => true,
-    () => redisClient.status === "ready"
+    async () => {
+        if (redisClient.status !== "ready") return false;
+        try {
+            await prisma.$queryRaw`SELECT 1`;
+            return true;
+        } catch {
+            return false;
+        }
+    }
 );
 
 server.start();
