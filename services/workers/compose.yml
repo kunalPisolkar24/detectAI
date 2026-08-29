@@ -32,7 +32,7 @@ services:
     healthcheck:
       test: [ "CMD", "bun", "-e", "const r = await fetch('http://localhost:7001/health'); if (!r.ok) process.exit(1);" ]
       interval: 30s
-      timeout: 10s
+      timeout: 3s
       retries: 3
       start_period: 15s
 
@@ -67,7 +67,7 @@ services:
     healthcheck:
       test: [ "CMD", "bun", "-e", "const r = await fetch('http://localhost:7002/health'); if (!r.ok) process.exit(1);" ]
       interval: 30s
-      timeout: 10s
+      timeout: 3s
       retries: 3
       start_period: 15s
 
@@ -111,7 +111,7 @@ services:
     healthcheck:
       test: [ "CMD", "bun", "-e", "const r = await fetch('http://localhost:7003/health'); if (!r.ok) process.exit(1);" ]
       interval: 30s
-      timeout: 10s
+      timeout: 3s
       retries: 3
       start_period: 15s
 

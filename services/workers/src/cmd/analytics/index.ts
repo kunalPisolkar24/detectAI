@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { RabbitMQWorker } from "@shared/messaging/RabbitMQWorker";
 import { AnalyticsService } from "@modules/analytics/application/services/AnalyticsService";
-import { prisma, getPgPool } from "@shared/database/PrismaService";
+import { prisma, prismaPrimary, getPgPool } from "@shared/database/PrismaService";
 import { Logger } from "@shared/logging/Logger";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { MetricsService } from "@shared/monitoring/MetricsService";
@@ -57,18 +57,61 @@ const worker = new RabbitMQWorker(
 );
 
 worker.start();
-metricsService.activeWorkers.inc();
+
+let isShuttingDown = false;
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>(resolve => { timeout = setTimeout(() => resolve(fallback), ms); });
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    return result;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
 
 const server = new WorkerServer(
   metricsService,
   config.PORT,
-  () => true,
-  () => worker.getStatus() && mainClient.status === "ready"
+  () => {
+    if (isShuttingDown) return { healthy: false, checks: { isShuttingDown: true } };
+    const healthy = worker.getStatus();
+    return { healthy, checks: { rabbitmq: healthy, isShuttingDown } };
+  },
+  async () => {
+    if (isShuttingDown) return { healthy: false, checks: { isShuttingDown: true } };
+    const pool = getPgPool("primary");
+    const waiting = pool ? pool.waitingCount : 0;
+    if (waiting > 0) return { healthy: false, checks: { poolWaiting: waiting, reason: "pool_waiting" } };
+
+    const dbOk = await withTimeout(
+      prismaPrimary.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
+      3000,
+      false
+    );
+    const redisOk = await withTimeout(
+      (async () => {
+        try {
+          const res = await mainClient.ping();
+          return res === "PONG" || mainClient.status === "ready";
+        } catch { return false; }
+      })(),
+      3000,
+      false
+    );
+    const workerOk = worker.getStatus();
+    const healthy = dbOk && redisOk && workerOk && waiting === 0;
+    return { healthy, checks: { db: dbOk, redis: redisOk, rabbitmq: workerOk, poolWaiting: waiting, isShuttingDown } };
+  }
 );
 
 server.start();
+metricsService.activeWorkers.inc();
 
 const shutdown = async () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
   server.stop();
   metricsService.activeWorkers.dec();
   await worker.shutdown();

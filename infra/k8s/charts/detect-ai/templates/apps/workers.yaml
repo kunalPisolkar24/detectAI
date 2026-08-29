@@ -47,15 +47,31 @@ spec:
               containerPort: {{ .Values.workers.analytics.port }}
               protocol: TCP
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /ready
               port: metrics
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /health
               port: metrics
             initialDelaySeconds: 15
             periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
           lifecycle:
             preStop:
               exec:
@@ -121,15 +137,31 @@ spec:
               containerPort: {{ .Values.workers.cron.port }}
               protocol: TCP
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /ready
               port: metrics
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /health
               port: metrics
             initialDelaySeconds: 15
             periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
           lifecycle:
             preStop:
               exec:
@@ -197,15 +229,31 @@ spec:
               containerPort: {{ .Values.workers.payments.port }}
               protocol: TCP
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /ready
               port: metrics
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /health
               port: metrics
             initialDelaySeconds: 15
             periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
           lifecycle:
             preStop:
               exec:
