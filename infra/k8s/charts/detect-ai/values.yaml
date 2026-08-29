@@ -320,6 +320,9 @@ monitoring:
       - name: payment-gateway-alerts
         configMap:
           name: detect-ai-payment-gateway-alerts
+      - name: worker-cron-alerts
+        configMap:
+          name: detect-ai-worker-cron-alerts
     extraVolumeMounts:
       - name: document-parser-alerts
         mountPath: /etc/grafana/provisioning/alerting
@@ -327,6 +330,10 @@ monitoring:
       - name: payment-gateway-alerts
         mountPath: /etc/grafana/provisioning/alerting/payment-gateway-alerts.yaml
         subPath: payment-gateway-alerts.yaml
+        readOnly: true
+      - name: worker-cron-alerts
+        mountPath: /etc/grafana/provisioning/alerting/worker-cron-alerts.yaml
+        subPath: worker-cron-alerts.yaml
         readOnly: true
     sidecar:
       dashboards:

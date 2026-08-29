@@ -1,0 +1,365 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: worker-cron
+    folder: Detect-AI
+    interval: 1m
+    rules:
+      - title: CronDown
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: up{job=~".*worker-cron.*"} == 0 or worker_active_instances{service="worker-cron"} == 0
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-cron target unreachable or no active instance for 2 minutes
+        labels:
+          severity: critical
+      - title: CronLoopErrorRate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: rate(worker_job_errors_total{service="worker-cron", job_type="cron_loop"}[5m])
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-cron cron loop errors detected for 5 minutes
+        labels:
+          severity: critical
+      - title: SweepErrorRate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: rate(worker_job_errors_total{service="worker-cron", job_type="sweep_expired"}[5m]) > 0 or histogram_quantile(0.95, sum by (le) (rate(worker_job_duration_seconds_bucket{service="worker-cron", job_type="sweep_expired"}[5m]))) > 2
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-cron sweep errors or p95 duration >2s for 10 minutes
+        labels:
+          severity: warning
+      - title: CacheInvalidateFailing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: rate(worker_job_errors_total{service="worker-cron", job_type="cache_invalidate", error_type="redis_error"}[5m])
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-cron cache invalidate failures for 5 minutes
+        labels:
+          severity: warning
+      - title: DBPoolWaiting
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: db_pool_connections{service="worker-cron", state="waiting"} > 0
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-cron DB pool waiting connections for 5 minutes
+        labels:
+          severity: warning
+      - title: ExpiryLagBacklog
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: worker_cron_expiry_lag_seconds > 900 or worker_cron_expired_backlog > 100
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-cron expiry lag >900s or backlog >100 for 10 minutes
+        labels:
+          severity: critical
+      - title: NoProgress
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: rate(worker_jobs_processed_total{service="worker-cron", job_type="user_downgrade"}[30m]) == 0 and worker_cron_expired_backlog > 0
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 30m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-cron no sweep progress for 30 minutes while backlog >0
+        labels:
+          severity: warning
