@@ -1,0 +1,143 @@
+name: "Task / Chore"
+description: "Track a chore, refactor, documentation, or housekeeping task. Use a clean, coherent title with no prefixes."
+title: ""
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Before you open this issue
+        - Search existing issues (open **and** closed) to avoid duplicates.
+        - Use a clean title with no prefixes like `chore:`, `task:`, or `[Task]`.
+        - Good: `Clean up expired subscription audit fields and tighten sweep batch sizing`
+        - Bad: `chore(cron): audit cleanup`, `[Task] sweep batch`
+
+  - type: input
+    id: title-check
+    attributes:
+      label: "Title (clean, no prefixes)"
+      description: "Copy the issue title you used. It must be a coherent sentence without prefixes or brackets."
+      placeholder: "Example: Clean up expired subscription audit fields and tighten sweep batch sizing"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: "Area / Service"
+      options:
+        - "apps/web"
+        - "services/payment-gateway"
+        - "services/file-processing"
+        - "services/inference"
+        - "services/workers"
+        - "services/chats"
+        - "infra / k8s / helm"
+        - "docs / tooling"
+        - "repo / github / ci"
+        - "unknown / multiple"
+      default: 0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: task-type
+    attributes:
+      label: "Task Type"
+      options:
+        - "chore / housekeeping"
+        - "refactor"
+        - "documentation"
+        - "ci / cd / infra"
+        - "dependency update"
+        - "tech debt"
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: "Context"
+      description: "Why is this task needed? Link to prior discussion or PR if relevant."
+      placeholder: "Explain the background, tech debt, or trigger for this task."
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: "Scope of Work"
+      description: "What will be done? List concrete items."
+      placeholder: |
+        - Update ...
+        - Remove ...
+        - Add tests for ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: "Acceptance Criteria"
+      placeholder: |
+        - [ ] Old fields removed and migration done
+        - [ ] No behavior change for active subscriptions
+        - [ ] Docs updated
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: "Dependencies / Risks"
+      placeholder: "Depends on: ... Risk: ..."
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: deduplication
+    attributes:
+      label: "Deduplication Check (required)"
+      options:
+        - label: "I searched open and closed issues for keywords related to this task and found no duplicate"
+          required: true
+        - label: "I searched open and closed pull requests for work in progress and found none"
+          required: true
+
+  - type: input
+    id: keywords-searched
+    attributes:
+      label: "Keywords Searched"
+      placeholder: "Example: sweep batch, audit field, cron, redis"
+    validations:
+      required: true
+
+  - type: input
+    id: idempotency-key
+    attributes:
+      label: "Idempotency Key (for AI agents, optional for humans)"
+      description: "Format: agent:<name>-<YYYYMMDD>-<short-hash> or task ID."
+      placeholder: "agent:opencode-20260529-a1b2c3"
+    validations:
+      required: false
+
+  - type: textarea
+    id: agent-disclosure
+    attributes:
+      label: "Agent Disclosure (if created by an AI agent)"
+      placeholder: |
+        Agent: opencode / cursor / copilot
+        Model: muse-spark-1.2
+        Task / Prompt ID:
+        Human approver: @username
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: title-clean
+    attributes:
+      label: "Title Hygiene"
+      options:
+        - label: "My title is a clean, coherent sentence with no feat/fix/chore prefix and no brackets"
+          required: true

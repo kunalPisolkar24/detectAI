@@ -1,0 +1,137 @@
+name: "Feature Request"
+description: "Propose a new feature or enhancement. Use a clean, coherent title with no prefixes."
+title: ""
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Before you open this issue
+        - Search existing issues (open **and** closed) for similar proposals.
+        - Use a clean title with no prefixes like `feat:`, `feature:`, or `[Feature]`.
+        - Good: `Add decompression bomb protection for zip uploads`
+        - Bad: `feat(dp): decompression bomb`, `[Feature] zip protection`
+
+  - type: input
+    id: title-check
+    attributes:
+      label: "Title (clean, no prefixes)"
+      description: "Copy the issue title you used. It must be a coherent sentence without prefixes or brackets."
+      placeholder: "Example: Add decompression bomb protection for zip uploads"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: "Area / Service"
+      description: "Select the primary area for this feature."
+      options:
+        - "apps/web"
+        - "services/payment-gateway"
+        - "services/file-processing"
+        - "services/inference"
+        - "services/workers"
+        - "services/chats"
+        - "infra / k8s / helm"
+        - "docs / tooling"
+        - "unknown / multiple"
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: "Motivation / Problem"
+      description: "Why is this needed? What problem does it solve? Who benefits?"
+      placeholder: "Describe the user need or technical gap."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "Proposal"
+      description: "What should be built? Keep it high-level but concrete."
+      placeholder: "Describe the proposed solution, API or UI changes, and scope."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternatives Considered"
+      description: "What other approaches did you consider and why were they not chosen?"
+      placeholder: "List alternatives and trade-offs. Write 'None' if not applicable."
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: "Acceptance Criteria"
+      description: "Checkboxes that define when this feature is done."
+      placeholder: |
+        - [ ] Zip extraction rejects entries exceeding ratio limit
+        - [ ] Metrics emitted for rejected archives
+        - [ ] Documentation updated
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope-notes
+    attributes:
+      label: "Scope and Dependencies"
+      description: "What is in scope vs out of scope? Any dependencies or breaking changes?"
+      placeholder: "In scope: ... Out of scope: ... Depends on: ..."
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: deduplication
+    attributes:
+      label: "Deduplication Check (required)"
+      options:
+        - label: "I searched open and closed issues for keywords related to this feature and found no duplicate"
+          required: true
+        - label: "I searched open and closed pull requests for an implementation in progress and found none"
+          required: true
+
+  - type: input
+    id: keywords-searched
+    attributes:
+      label: "Keywords Searched"
+      description: "List the keywords you used to verify no duplicate exists."
+      placeholder: "Example: decompression bomb, zip ratio, extraction limits"
+    validations:
+      required: true
+
+  - type: input
+    id: idempotency-key
+    attributes:
+      label: "Idempotency Key (for AI agents, optional for humans)"
+      description: "AI agents must set this. Format: agent:<name>-<YYYYMMDD>-<short-hash> or task ID."
+      placeholder: "agent:opencode-20260529-a1b2c3"
+    validations:
+      required: false
+
+  - type: textarea
+    id: agent-disclosure
+    attributes:
+      label: "Agent Disclosure (if created by an AI agent)"
+      placeholder: |
+        Agent: opencode / cursor / copilot
+        Model: muse-spark-1.2
+        Task / Prompt ID:
+        Human approver: @username
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: title-clean
+    attributes:
+      label: "Title Hygiene"
+      options:
+        - label: "My title is a clean, coherent sentence with no feat/fix/chore prefix and no brackets"
+          required: true
