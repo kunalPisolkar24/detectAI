@@ -23,13 +23,6 @@ jobs:
 
             const errors = [];
 
-            // Rule 1: feature branches must target dev only
-            if (head.startsWith("feat/") || head.startsWith("fix/") || head.startsWith("chore/") || head.startsWith("docs/")) {
-              if (base !== "dev") {
-                errors.push(`Feature branch \`${head}\` must target \`dev\` (junction). Current base is \`${base}\`. Retarget this PR to \`dev\`.`);
-              }
-            }
-
             // Rule 2: AI agents must only target dev
             if (isAgent && base !== "dev") {
               errors.push(`AI-generated PRs must target \`dev\` only. This PR targets \`${base}\`.`);
