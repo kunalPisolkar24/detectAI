@@ -1,3 +1,6 @@
+import { initTracing } from "@shared/tracing/instrumentation";
+initTracing("worker-analytics");
+
 import { z } from "zod";
 import { RabbitMQWorker } from "@shared/messaging/RabbitMQWorker";
 import { AnalyticsService } from "@modules/analytics/application/services/AnalyticsService";

@@ -1,3 +1,6 @@
+import { initTracing } from "@shared/tracing/instrumentation";
+initTracing("worker-cron");
+
 import { SubscriptionSweeper } from "@modules/cron/application/services/SubscriptionSweeper";
 import { prisma, prismaPrimary, getPgPool } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";

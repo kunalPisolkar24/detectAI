@@ -1,3 +1,6 @@
+import { initTracing } from "@shared/tracing/instrumentation";
+initTracing("worker-payments");
+
 import { RabbitMQWorker } from "@shared/messaging/RabbitMQWorker";
 import { PaymentService } from "@modules/payments/application/services/PaymentService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";

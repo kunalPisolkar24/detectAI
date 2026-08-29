@@ -4,6 +4,7 @@ import { type RedisClient } from "@shared/cache/RedisClient";
 import { Logger } from "@shared/logging/Logger";
 import { SubscriptionStatus } from "../../../../../generated/prisma/client";
 import { MetricsService } from "@shared/monitoring/MetricsService";
+import { trace, SpanStatusCode } from "@opentelemetry/api";
 
 export class SubscriptionSweeper {
     private readonly BATCH_SIZE: number;
@@ -21,11 +22,15 @@ export class SubscriptionSweeper {
     }
 
     public async processExpiredSubscriptions(): Promise<number> {
+        const tracer = trace.getTracer("worker-cron");
+        const sweepSpan = tracer.startSpan("sweep_expired");
         const timer = this.metrics.jobDuration.startTimer({ job_type: "sweep_expired" });
 
         this.metrics.activeJobs.inc({ job_type: "sweep_expired" });
         try {
             const sweepTime = new Date();
+            sweepSpan.setAttribute("batch.size", this.BATCH_SIZE);
+            sweepSpan.setAttribute("sweepTime", sweepTime.toISOString());
 
             // Expiry is a terminal downgrade; it intentionally bypasses the
             // payments stateMachine (PAUSED->CANCELED is invalid via webhooks
@@ -51,6 +56,7 @@ export class SubscriptionSweeper {
             if (sweptUsers.length === 0) {
                 this.metrics.expiryLagSeconds.set(0);
                 this.metrics.expiredBacklog.set(0);
+                sweepSpan.setAttribute("result.count", 0);
                 timer({ status: "empty" });
                 return 0;
             }
@@ -86,13 +92,17 @@ export class SubscriptionSweeper {
             await this.cacheInvalidator.invalidateUsers(sweptUsers);
 
             this.metrics.jobTotal.inc({ job_type: "user_downgrade" }, sweptUsers.length);
+            sweepSpan.setAttribute("result.count", sweptUsers.length);
             timer({ status: "success" });
+            sweepSpan.setStatus({ code: SpanStatusCode.OK });
             return sweptUsers.length;
         } catch (error) {
             timer({ status: "error" });
+            try { sweepSpan.recordException(error as Error); sweepSpan.setStatus({ code: SpanStatusCode.ERROR }); } catch {}
             throw error;
         } finally {
             this.metrics.activeJobs.dec({ job_type: "sweep_expired" });
+            try { sweepSpan.end(); } catch {}
         }
     }
 

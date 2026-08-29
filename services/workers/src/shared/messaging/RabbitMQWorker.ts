@@ -1,6 +1,7 @@
 import amqp, { type Channel, type ConsumeMessage, type ChannelModel } from "amqplib";
 import { Logger } from "../logging/Logger";
 import { MetricsService } from "../monitoring/MetricsService";
+import { trace, SpanStatusCode } from "@opentelemetry/api";
 
 type MessageHandler = (msg: any) => Promise<void>;
 
@@ -136,21 +137,28 @@ export class RabbitMQWorker {
     private async onMessage(msg: ConsumeMessage | null) {
         if (!msg || !this.channel) return;
 
-        let jobType: string;
+        let jobType: string = "other";
+        const tracer = trace.getTracer("worker-messaging");
+        const span = tracer.startSpan(`queue.consume ${this.queueName}`, { attributes: { "messaging.system": "rabbitmq", "messaging.destination": this.queueName } });
         try {
             const content = msg.content.toString();
             const event = JSON.parse(content);
             jobType = this.resolveJobType(event);
+            span.setAttribute("job_type", jobType);
 
             this.metrics.messageSizeBytes.observe({ job_type: jobType }, msg.content.length);
 
             await this.handler(event);
+            span.setStatus({ code: SpanStatusCode.OK });
 
             this.safeAck(msg);
         } catch (error) {
+            try { span.recordException(error as Error); span.setStatus({ code: SpanStatusCode.ERROR }); } catch {}
             Logger.error("Failed to process message, sending to DLQ", error);
             this.metrics.deadLetteredTotal.inc({ job_type: jobType });
             this.safeNack(msg);
+        } finally {
+            try { span.end(); } catch {}
         }
     }
 

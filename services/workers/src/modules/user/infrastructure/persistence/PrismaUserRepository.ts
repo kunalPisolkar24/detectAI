@@ -8,6 +8,7 @@ import {
     type UserRecord,
 } from "../../domain/types";
 import { type MetricsService } from "@shared/monitoring/MetricsService";
+import { trace, SpanStatusCode } from "@opentelemetry/api";
 
 type PrismaTransaction = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 
@@ -32,10 +33,12 @@ export class PrismaUserRepository implements IUserRepository {
         sweepTime: Date,
         onSelected?: (users: ExpiredSubscription[]) => Promise<void>
     ): Promise<ExpiredSubscription[]> {
+        const tracer = trace.getTracer("worker-db");
+        const span = tracer.startSpan("db.expireDueSubscriptions", { attributes: { limit, sweepTime: sweepTime.toISOString() } });
         const txTimer = this.metrics?.dbTransactionDurationSeconds.startTimer();
         let txResult: "committed" | "rolled_back" = "committed";
         try {
-            return await this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
+            const result = await this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
             // NULL status = never billable, never swept (data-hygiene guard, see #189).
             // NULL endsAt = lifetime subscription, never swept (see #198).
             // Audit queries for prod replicas live in docs/sweep-null-audit.sql.
@@ -94,11 +97,16 @@ export class PrismaUserRepository implements IUserRepository {
 
             return users.slice(0, result.count);
         });
+            span.setAttribute("result.count", result.length);
+            span.setStatus({ code: SpanStatusCode.OK });
+            return result;
         } catch (error) {
             txResult = "rolled_back";
+            try { span.recordException(error as Error); span.setStatus({ code: SpanStatusCode.ERROR }); } catch {}
             throw error;
         } finally {
             try { txTimer?.({ result: txResult }); } catch {}
+            try { span.end(); } catch {}
         }
     }
 
