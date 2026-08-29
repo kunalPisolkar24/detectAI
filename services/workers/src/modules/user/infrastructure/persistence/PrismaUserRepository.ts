@@ -32,7 +32,10 @@ export class PrismaUserRepository implements IUserRepository {
         sweepTime: Date,
         onSelected?: (users: ExpiredSubscription[]) => Promise<void>
     ): Promise<ExpiredSubscription[]> {
-        return this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
+        const txTimer = this.metrics?.dbTransactionDurationSeconds.startTimer();
+        let txResult: "committed" | "rolled_back" = "committed";
+        try {
+            return await this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
             // NULL status = never billable, never swept (data-hygiene guard, see #189).
             // NULL endsAt = lifetime subscription, never swept (see #198).
             // Audit queries for prod replicas live in docs/sweep-null-audit.sql.
@@ -78,14 +81,25 @@ export class PrismaUserRepository implements IUserRepository {
                 if (filtered > 0) {
                     this.metrics.staleEventsFilteredTotal.inc({ reason: "phantom_select" }, filtered);
                 }
-                // SKIP LOCKED pressure: limit - selected indicates locked rows skipped
+                // SKIP LOCKED pressure: when selected < limit but update count < selected, or selected < limit indicates locks held
                 if (users.length > 0 && users.length < limit) {
-                    // partial fill may indicate SKIP LOCKED contention — visible via batch histogram delta
+                    const skipped = limit - users.length;
+                    // Best-effort: partial fill may be due to locks or simply not enough rows; still valuable as contention signal
+                    try { this.metrics.dbLockSkippedTotal.inc(skipped); } catch {}
+                } else if (filtered > 0) {
+                    // phantom filtered also indicates clock drift / concurrent mutation contention
+                    try { this.metrics.dbLockSkippedTotal.inc(filtered); } catch {}
                 }
             }
 
             return users.slice(0, result.count);
         });
+        } catch (error) {
+            txResult = "rolled_back";
+            throw error;
+        } finally {
+            try { txTimer?.({ result: txResult }); } catch {}
+        }
     }
 
     async incrementUsage(userId: string, count: number): Promise<void> {

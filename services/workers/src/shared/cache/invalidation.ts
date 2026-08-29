@@ -18,13 +18,26 @@ export class UserCacheInvalidator {
         if (keys.length === 0) return;
 
         try {
+            let durationTimer = this.metrics.cacheInvalidateDurationSeconds.startTimer({ attempt: "1" });
             try {
                 await this.redis.del(...keys);
-            } catch {
+                durationTimer();
+            } catch (firstError) {
+                durationTimer();
                 // One immediate retry: transient blips are common, and a missed DEL
                 // leaves stale entitlements cached until TTL.
+                try {
+                    this.metrics.cacheInvalidateRetriesTotal.inc();
+                } catch {}
                 await new Promise(resolve => setTimeout(resolve, 50));
-                await this.redis.del(...keys);
+                durationTimer = this.metrics.cacheInvalidateDurationSeconds.startTimer({ attempt: "2" });
+                try {
+                    await this.redis.del(...keys);
+                    durationTimer();
+                } catch (retryError) {
+                    durationTimer();
+                    throw retryError;
+                }
             }
             this.metrics.cacheOperations.inc({ operation: "invalidate", cache_type: "main" }, keys.length);
         } catch (error) {

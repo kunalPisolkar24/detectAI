@@ -21,9 +21,29 @@ function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
         const timer = setTimeout(resolve, ms);
         signal.addEventListener("abort", () => {
             clearTimeout(timer);
+            try { metricsService.shutdownAbortsTotal.inc({ reason: "sleep_aborted" }); } catch {}
             resolve();
         }, { once: true });
     });
+}
+
+async function updateSubscriptionStatusGauges(): Promise<void> {
+    try {
+        const groups = await prismaPrimary.subscription.groupBy({
+            by: ["status"],
+            _count: { status: true },
+        });
+        for (const g of groups) {
+            const status = (g.status ?? "NULL") as string;
+            metricsService.subscriptionStatus.set({ status }, g._count.status);
+        }
+        // Ensure known statuses are exposed even when 0 (helps dashboard continuity)
+        const known = ["ACTIVE", "PAST_DUE", "PAUSED", "TRIALING", "CANCELED"];
+        const seen = new Set(groups.map(g => g.status));
+        for (const s of known) if (!seen.has(s as any)) metricsService.subscriptionStatus.set({ status: s }, 0);
+    } catch {
+        // best-effort; groupBy may fail if replica not ready — ignore for loop liveness
+    }
 }
 
 const redisClient = RedisFactory.createClient({
@@ -38,6 +58,8 @@ const redisClient = RedisFactory.createClient({
 const metricsService = new MetricsService("worker-cron");
 metricsService.registerPool("primary", getPgPool("primary")!);
 metricsService.registerPool("replica", getPgPool("replica")!);
+metricsService.cronConfig.set({ param: "check_interval_ms" }, config.CRON_CHECK_INTERVAL_MS);
+metricsService.cronConfig.set({ param: "batch_size" }, config.CRON_BATCH_SIZE);
 
 redisClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 1));
 redisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 1));
@@ -79,15 +101,21 @@ async function startWorker(): Promise<void> {
             currentJob = null;
 
             if (processedCount > 0) {
+                metricsService.loopIterationsTotal.inc({ result: "success" });
                 Logger.info(`Sweeper processed ${processedCount} records. Checking for more in ${BATCH_COOLDOWN_MS}ms...`);
                 await abortableSleep(BATCH_COOLDOWN_MS, abort.signal);
             } else {
+                metricsService.loopIterationsTotal.inc({ result: "empty" });
                 const sleepMs = jitter(config.CRON_CHECK_INTERVAL_MS);
+                try { metricsService.jitterSeconds.observe(sleepMs / 1000); } catch {}
                 Logger.info(`No expired subscriptions found. Sleeping for ${Math.round(sleepMs / 1000)}s.`);
                 await abortableSleep(sleepMs, abort.signal);
+                // periodic status distribution gauge — low frequency (once per idle cycle, ~900s)
+                await updateSubscriptionStatusGauges();
             }
         } catch (error) {
             currentJob = null;
+            metricsService.loopIterationsTotal.inc({ result: "error" });
             Logger.error("Critical error in Cron loop", error);
             metricsService.jobErrors.inc({ job_type: "cron_loop", error_type: "critical" });
             await abortableSleep(ERROR_COOLDOWN_MS, abort.signal);
@@ -111,16 +139,22 @@ const shutdown = async () => {
     abort.abort();
 
     if (currentJob) {
-        await Promise.race([
-            currentJob.catch(() => {}),
-            new Promise(resolve => setTimeout(resolve, SHUTDOWN_GRACE_MS)),
+        const raced = await Promise.race([
+            currentJob.catch(() => {}).then(() => "done" as const),
+            new Promise<"timeout">(resolve => setTimeout(() => resolve("timeout"), SHUTDOWN_GRACE_MS)),
         ]);
+        if (raced === "timeout") {
+            try { metricsService.shutdownAbortsTotal.inc({ reason: "job_grace_timeout" }); } catch {}
+        }
     }
 
-    await Promise.race([
-        loopDone.catch(() => {}),
-        new Promise(resolve => setTimeout(resolve, SHUTDOWN_GRACE_MS)),
+    const loopRaced = await Promise.race([
+        loopDone.catch(() => {}).then(() => "done" as const),
+        new Promise<"timeout">(resolve => setTimeout(() => resolve("timeout"), SHUTDOWN_GRACE_MS)),
     ]);
+    if (loopRaced === "timeout") {
+        try { metricsService.shutdownAbortsTotal.inc({ reason: "job_grace_timeout" }); } catch {}
+    }
 
     metricsService.activeWorkers.dec();
 
