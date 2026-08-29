@@ -1,0 +1,70 @@
+name: PR Base Guard
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches: [dev, staging, main]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate promotion path and title hygiene
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const base = pr.base.ref;
+            const head = pr.head.ref;
+            const title = pr.title || "";
+            const body = pr.body || "";
+            const labels = pr.labels.map(l => l.name);
+            const isAgent = labels.includes("agent-generated") || /AI Disclosure/i.test(body) || /agent:/i.test(body);
+
+            const errors = [];
+
+            // Rule 1: feature branches must target dev only
+            if (head.startsWith("feat/") || head.startsWith("fix/") || head.startsWith("chore/") || head.startsWith("docs/")) {
+              if (base !== "dev") {
+                errors.push(`Feature branch \`${head}\` must target \`dev\` (junction). Current base is \`${base}\`. Retarget this PR to \`dev\`.`);
+              }
+            }
+
+            // Rule 2: AI agents must only target dev
+            if (isAgent && base !== "dev") {
+              errors.push(`AI-generated PRs must target \`dev\` only. This PR targets \`${base}\`.`);
+            }
+
+            // Rule 3: dev -> staging and staging -> main are promotion PRs (informational)
+            // No hard fail, but warn if feature branch tries to target staging/main directly
+            if ((base === "staging" || base === "main") && head !== "dev" && head !== "staging") {
+              errors.push(`\`${base}\` should only receive promotions from \`${base === "staging" ? "dev" : "staging"}\`. Feature branches should target \`dev\`.`);
+            }
+
+            // Rule 4: Title hygiene - no feat/fix/chore prefixes or brackets
+            const prefixRe = /^(feat|fix|chore|docs|refactor|test|build|ci)(\(.+\))?:\s/i;
+            const bracketRe = /^\s*\[.*\]\s*/;
+            if (prefixRe.test(title)) {
+              errors.push(`Title must not use conventional prefixes like \`feat:\`, \`fix:\`, \`chore:\`. Found prefix in: "${title}". Use a clean sentence instead.`);
+            }
+            if (bracketRe.test(title)) {
+              errors.push(`Title must not start with brackets like \`[Bug]\` or \`[Feature]\`. Found: "${title}".`);
+            }
+
+            // Rule 5: Body must contain promotion path checklist (PR template)
+            if (!/Promotion Path/i.test(body)) {
+              errors.push("PR body is missing the `Promotion Path` checklist from the template. Please use the repository pull request template.");
+            }
+
+            if (errors.length > 0) {
+              const comment = `### PR Base Guard failed\n\n${errors.map(e => `- ${e}`).join("\n")}\n\nSee \`CONTRIBUTING.md#branching-strategy-and-ai-agent-guidelines\` for the expected flow: \`feat/* -> dev (junction, no CI) -> staging (CI) -> main (CI)\` and clean title rules.`;
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: comment
+              });
+              core.setFailed(errors.join("\n"));
+            } else {
+              console.log("PR base guard passed");
+            }

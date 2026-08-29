@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "Branching and AI Agent Guidelines"
+    url: https://github.com/kunalPisolkar24/detectAI/blob/dev/CONTRIBUTING.md#branching-strategy-and-ai-agent-guidelines
+    about: "Read this before letting an AI create issues or pull requests. Explains feat -> dev -> staging -> main flow and clean title rules."
+  - name: "Existing Issues and Pull Requests"
+    url: https://github.com/kunalPisolkar24/detectAI/issues
+    about: "Search open and closed issues before creating a new one to avoid duplicates."

@@ -1,0 +1,158 @@
+name: "Bug Report"
+description: "Report a bug. Use a clean, coherent title with no prefixes."
+title: ""
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Before you open this issue
+        - Search existing issues (open **and** closed) to avoid duplicates.
+        - Use a clean title with no prefixes like `fix:`, `bug:`, or `[Bug]`.
+        - Good: `Subscription sweep fails for paused accounts after expiry`
+        - Bad: `fix(cron): sweep`, `[Bug] sweep fails`, `bug: paused sweep`
+
+  - type: input
+    id: title-check
+    attributes:
+      label: "Title (clean, no prefixes)"
+      description: "Copy the issue title you used above. It must be a coherent sentence without feat/fix/chore prefixes or brackets."
+      placeholder: "Example: Subscription sweep fails for paused accounts after expiry"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: "Area / Service"
+      description: "Select the primary area affected."
+      options:
+        - "apps/web"
+        - "services/payment-gateway"
+        - "services/file-processing"
+        - "services/inference"
+        - "services/workers"
+        - "services/chats"
+        - "infra / k8s / helm"
+        - "docs / tooling"
+        - "unknown / multiple"
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: "Summary"
+      description: "What happened and why it matters. Keep it factual and concise."
+      placeholder: "Describe the bug, its impact, and who is affected."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Steps to Reproduce"
+      description: "List the minimal steps to reproduce the bug."
+      placeholder: |
+        1. Go to ...
+        2. Call endpoint / api with ...
+        3. Observe ...
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-vs-actual
+    attributes:
+      label: "Expected vs Actual Behavior"
+      description: "What did you expect and what actually happened?"
+      placeholder: |
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: "Evidence / Logs / Screenshots"
+      description: "Paste relevant logs, error messages, or screenshots. Redact secrets."
+      placeholder: "Add log snippets, stack traces, or request IDs. Use code blocks for logs."
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: "Environment"
+      description: "Where did you see this? Helps triage."
+      placeholder: "Branch, commit, env (local/dev/staging/prod), browser, etc."
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: "Acceptance Criteria"
+      description: "What must be true for this bug to be considered fixed? Use checkboxes."
+      placeholder: |
+        - [ ] Paused subscriptions past expiry are swept correctly
+        - [ ] Existing tests pass
+        - [ ] No regression for active subscriptions
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: deduplication
+    attributes:
+      label: "Deduplication Check (required)"
+      description: "You must search before opening. Duplicates will be closed."
+      options:
+        - label: "I searched open and closed issues for keywords related to this bug and found no existing report"
+          required: true
+        - label: "I searched open and closed pull requests for a fix in progress and found none"
+          required: true
+
+  - type: input
+    id: keywords-searched
+    attributes:
+      label: "Keywords Searched"
+      description: "List the keywords you used to verify no duplicate exists."
+      placeholder: "Example: paused sweep, expiry, subscription, cron"
+    validations:
+      required: true
+
+  - type: input
+    id: idempotency-key
+    attributes:
+      label: "Idempotency Key (for AI agents, optional for humans)"
+      description: "AI agents must set this to avoid duplicate automation. Format: agent:<name>-<YYYYMMDD>-<short-hash> or task ID."
+      placeholder: "agent:opencode-20260529-a1b2c3"
+    validations:
+      required: false
+
+  - type: textarea
+    id: agent-disclosure
+    attributes:
+      label: "Agent Disclosure (if created by an AI agent)"
+      description: "If an AI opened this issue, disclose details for auditability."
+      placeholder: |
+        Agent: opencode / cursor / copilot
+        Model: muse-spark-1.2
+        Task / Prompt ID:
+        Human approver: @username
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: title-clean
+    attributes:
+      label: "Title Hygiene"
+      options:
+        - label: "My title is a clean, coherent sentence with no feat/fix/chore prefix and no brackets"
+          required: true
