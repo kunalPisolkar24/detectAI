@@ -7,6 +7,7 @@ import {
     type SubscriptionUpdateResult,
     type UserRecord,
 } from "../../domain/types";
+import { type MetricsService } from "@shared/monitoring/MetricsService";
 
 type PrismaTransaction = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 
@@ -14,7 +15,8 @@ export class PrismaUserRepository implements IUserRepository {
     constructor(
         private readonly prismaWriter: PrismaClient,
         private readonly prismaReader: PrismaClient,
-        private readonly validateStatusTransition: TransitionValidator = () => {}
+        private readonly validateStatusTransition: TransitionValidator = () => {},
+        private readonly metrics?: MetricsService
     ) {}
 
     async findUniqueById(userId: string): Promise<UserRecord | null> {
@@ -35,13 +37,16 @@ export class PrismaUserRepository implements IUserRepository {
             // NULL endsAt = lifetime subscription, never swept (see #198).
             // Audit queries for prod replicas live in docs/sweep-null-audit.sql.
             const users = await tx.$queryRawUnsafe<ExpiredSubscription[]>(
-                `SELECT u.id, u.email, s."paddleSubscriptionId" FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id
+                `SELECT u.id, u.email, s."paddleSubscriptionId", s."endsAt" FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id
                  WHERE s.status IS NOT NULL AND s.status IN ('ACTIVE', 'TRIALING', 'PAST_DUE', 'PAUSED')
                    AND s."endsAt" IS NOT NULL AND s."endsAt" < $2
                  ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
                 limit,
                 sweepTime,
             );
+            if (this.metrics) {
+                this.metrics.sweepBatchSize.observe({ stage: "selected" }, users.length);
+            }
             if (users.length === 0) return [];
 
             if (onSelected) {
@@ -66,6 +71,18 @@ export class PrismaUserRepository implements IUserRepository {
                     eventTimestamp: data.eventTimestamp ?? sweepTime,
                 },
             });
+
+            if (this.metrics) {
+                this.metrics.sweepBatchSize.observe({ stage: "updated" }, result.count);
+                const filtered = users.length - result.count;
+                if (filtered > 0) {
+                    this.metrics.staleEventsFilteredTotal.inc({ reason: "phantom_select" }, filtered);
+                }
+                // SKIP LOCKED pressure: limit - selected indicates locked rows skipped
+                if (users.length > 0 && users.length < limit) {
+                    // partial fill may indicate SKIP LOCKED contention — visible via batch histogram delta
+                }
+            }
 
             return users.slice(0, result.count);
         });

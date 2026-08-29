@@ -16,6 +16,10 @@ export class MetricsService {
     public readonly deadLetteredTotal: Counter;
     public readonly unhandledEventsTotal: Counter;
     public readonly dbPoolStatus: Gauge;
+    public readonly expiryLagSeconds: Gauge;
+    public readonly expiredBacklog: Gauge;
+    public readonly sweepBatchSize: Histogram;
+    public readonly staleEventsFilteredTotal: Counter;
 
     constructor(private readonly serviceName: string) {
         this.registry = new Registry();
@@ -117,6 +121,33 @@ export class MetricsService {
             name: "db_pool_connections",
             help: "Current status of database connection pool",
             labelNames: ["pool_name", "state"],
+            registers: [this.registry]
+        });
+
+        this.expiryLagSeconds = new Gauge({
+            name: "worker_cron_expiry_lag_seconds",
+            help: "Max lag in seconds between sweepTime and oldest expired endsAt (SLO)",
+            registers: [this.registry]
+        });
+
+        this.expiredBacklog = new Gauge({
+            name: "worker_cron_expired_backlog",
+            help: "Number of expired subscriptions pending sweep (backlog)",
+            registers: [this.registry]
+        });
+
+        this.sweepBatchSize = new Histogram({
+            name: "worker_cron_sweep_batch_size",
+            help: "Batch size during cron sweep (selected vs updated)",
+            labelNames: ["stage"],
+            buckets: [10, 50, 100, 250, 500],
+            registers: [this.registry]
+        });
+
+        this.staleEventsFilteredTotal = new Counter({
+            name: "worker_cron_stale_events_filtered_total",
+            help: "Total phantom/stale events filtered during sweep",
+            labelNames: ["reason"],
             registers: [this.registry]
         });
     }

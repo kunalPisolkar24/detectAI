@@ -31,4 +31,5 @@ export interface ExpiredSubscription {
     id: string;
     email: string;
     paddleSubscriptionId?: string | null;
+    endsAt?: Date | string | null;
 }

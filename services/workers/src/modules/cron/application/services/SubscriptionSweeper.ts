@@ -45,9 +45,31 @@ export class SubscriptionSweeper {
                 await this.cacheInvalidator.invalidateUsers(selected);
             });
 
+            // P0 SLO: expiry lag + backlog gauges (issue #207)
+            // lag = max(sweepTime - endsAt) piggybacked on selected endsAt to avoid extra RTT.
+            // backlog heuristic for b1: when batch full, pending > batch; refined to exact COUNT(*) in b2 when limit hit.
             if (sweptUsers.length === 0) {
+                this.metrics.expiryLagSeconds.set(0);
+                this.metrics.expiredBacklog.set(0);
                 timer({ status: "empty" });
                 return 0;
+            }
+            try {
+                const lags = sweptUsers
+                    .map(u => {
+                        const endsAt = (u as any).endsAt;
+                        if (!endsAt) return 0;
+                        const ts = endsAt instanceof Date ? endsAt.getTime() : new Date(endsAt).getTime();
+                        return (sweepTime.getTime() - ts) / 1000;
+                    })
+                    .filter(v => v > 0);
+                const maxLag = lags.length ? Math.max(...lags) : 0;
+                this.metrics.expiryLagSeconds.set(Math.max(0, maxLag));
+                // Heuristic backlog: swept count +1 when batch full indicates remaining work (exact count in b2)
+                const backlog = sweptUsers.length >= this.BATCH_SIZE ? sweptUsers.length + 1 : sweptUsers.length;
+                this.metrics.expiredBacklog.set(backlog);
+            } catch {
+                // gauges are best-effort; sweep success takes precedence
             }
 
             Logger.info(`Found ${sweptUsers.length} expired subscriptions to sweep.`);
