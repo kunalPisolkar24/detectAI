@@ -47,15 +47,31 @@ spec:
               containerPort: {{ .Values.workers.analytics.port }}
               protocol: TCP
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /ready
               port: metrics
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /health
               port: metrics
             initialDelaySeconds: 15
             periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
           lifecycle:
             preStop:
               exec:
@@ -64,6 +80,10 @@ spec:
           env:
             - name: OTEL_SERVICE_NAME
               value: "{{ include "detect-ai.fullname" . }}-worker-analytics"
+            - name: OTEL_TRACES_SAMPLER
+              value: "parentbased_traceidratio"
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: "0.1"
           {{- end }}
           envFrom:
             - configMapRef:
@@ -121,15 +141,31 @@ spec:
               containerPort: {{ .Values.workers.cron.port }}
               protocol: TCP
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /ready
               port: metrics
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /health
               port: metrics
             initialDelaySeconds: 15
             periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
           lifecycle:
             preStop:
               exec:
@@ -138,6 +174,8 @@ spec:
           env:
             - name: OTEL_SERVICE_NAME
               value: "{{ include "detect-ai.fullname" . }}-worker-cron"
+            - name: OTEL_TRACES_SAMPLER
+              value: "parentbased_always_on"
           {{- end }}
           envFrom:
             - configMapRef:
@@ -197,15 +235,31 @@ spec:
               containerPort: {{ .Values.workers.payments.port }}
               protocol: TCP
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /ready
               port: metrics
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /health
               port: metrics
             initialDelaySeconds: 15
             periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
           lifecycle:
             preStop:
               exec:
@@ -214,6 +268,10 @@ spec:
           env:
             - name: OTEL_SERVICE_NAME
               value: "{{ include "detect-ai.fullname" . }}-worker-payments"
+            - name: OTEL_TRACES_SAMPLER
+              value: "parentbased_traceidratio"
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: "0.1"
           {{- end }}
           envFrom:
             - configMapRef:

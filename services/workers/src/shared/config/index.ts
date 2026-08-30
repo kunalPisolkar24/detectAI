@@ -15,6 +15,10 @@ export const baseEnvSchema = z.object({
   RABBITMQ_QUEUE_TYPE: z.enum(["classic", "quorum"]).default("classic"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().default(7777),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional().or(z.literal("").optional()),
+  OTEL_SERVICE_NAME: z.string().optional(),
+  OTEL_TRACES_SAMPLER: z.string().optional(),
+  OTEL_TRACES_SAMPLER_ARG: z.string().optional(),
 });
 
 export const createConfig = <T extends z.ZodTypeAny>(

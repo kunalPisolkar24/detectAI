@@ -4,6 +4,7 @@ import { type RedisClient } from "@shared/cache/RedisClient";
 import { Logger } from "@shared/logging/Logger";
 import { SubscriptionStatus } from "../../../../../generated/prisma/client";
 import { MetricsService } from "@shared/monitoring/MetricsService";
+import { trace, SpanStatusCode } from "@opentelemetry/api";
 
 export class SubscriptionSweeper {
     private readonly BATCH_SIZE: number;
@@ -21,11 +22,15 @@ export class SubscriptionSweeper {
     }
 
     public async processExpiredSubscriptions(): Promise<number> {
+        const tracer = trace.getTracer("worker-cron");
+        const sweepSpan = tracer.startSpan("sweep_expired");
         const timer = this.metrics.jobDuration.startTimer({ job_type: "sweep_expired" });
 
         this.metrics.activeJobs.inc({ job_type: "sweep_expired" });
         try {
             const sweepTime = new Date();
+            sweepSpan.setAttribute("batch.size", this.BATCH_SIZE);
+            sweepSpan.setAttribute("sweepTime", sweepTime.toISOString());
 
             // Expiry is a terminal downgrade; it intentionally bypasses the
             // payments stateMachine (PAUSED->CANCELED is invalid via webhooks
@@ -45,9 +50,32 @@ export class SubscriptionSweeper {
                 await this.cacheInvalidator.invalidateUsers(selected);
             });
 
+            // P0 SLO: expiry lag + backlog gauges (issue #207)
+            // lag = max(sweepTime - endsAt) piggybacked on selected endsAt to avoid extra RTT.
+            // backlog heuristic for b1: when batch full, pending > batch; refined to exact COUNT(*) in b2 when limit hit.
             if (sweptUsers.length === 0) {
+                this.metrics.expiryLagSeconds.set(0);
+                this.metrics.expiredBacklog.set(0);
+                sweepSpan.setAttribute("result.count", 0);
                 timer({ status: "empty" });
                 return 0;
+            }
+            try {
+                const lags = sweptUsers
+                    .map(u => {
+                        const endsAt = (u as any).endsAt;
+                        if (!endsAt) return 0;
+                        const ts = endsAt instanceof Date ? endsAt.getTime() : new Date(endsAt).getTime();
+                        return (sweepTime.getTime() - ts) / 1000;
+                    })
+                    .filter(v => v > 0);
+                const maxLag = lags.length ? Math.max(...lags) : 0;
+                this.metrics.expiryLagSeconds.set(Math.max(0, maxLag));
+                // Heuristic backlog: swept count +1 when batch full indicates remaining work (exact count in b2)
+                const backlog = sweptUsers.length >= this.BATCH_SIZE ? sweptUsers.length + 1 : sweptUsers.length;
+                this.metrics.expiredBacklog.set(backlog);
+            } catch {
+                // gauges are best-effort; sweep success takes precedence
             }
 
             Logger.info(`Found ${sweptUsers.length} expired subscriptions to sweep.`);
@@ -64,13 +92,17 @@ export class SubscriptionSweeper {
             await this.cacheInvalidator.invalidateUsers(sweptUsers);
 
             this.metrics.jobTotal.inc({ job_type: "user_downgrade" }, sweptUsers.length);
+            sweepSpan.setAttribute("result.count", sweptUsers.length);
             timer({ status: "success" });
+            sweepSpan.setStatus({ code: SpanStatusCode.OK });
             return sweptUsers.length;
         } catch (error) {
             timer({ status: "error" });
+            try { sweepSpan.recordException(error as Error); sweepSpan.setStatus({ code: SpanStatusCode.ERROR }); } catch {}
             throw error;
         } finally {
             this.metrics.activeJobs.dec({ job_type: "sweep_expired" });
+            try { sweepSpan.end(); } catch {}
         }
     }
 

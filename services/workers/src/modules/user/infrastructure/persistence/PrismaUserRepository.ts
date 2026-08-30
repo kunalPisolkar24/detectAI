@@ -7,6 +7,8 @@ import {
     type SubscriptionUpdateResult,
     type UserRecord,
 } from "../../domain/types";
+import { type MetricsService } from "@shared/monitoring/MetricsService";
+import { trace, SpanStatusCode } from "@opentelemetry/api";
 
 type PrismaTransaction = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 
@@ -14,7 +16,8 @@ export class PrismaUserRepository implements IUserRepository {
     constructor(
         private readonly prismaWriter: PrismaClient,
         private readonly prismaReader: PrismaClient,
-        private readonly validateStatusTransition: TransitionValidator = () => {}
+        private readonly validateStatusTransition: TransitionValidator = () => {},
+        private readonly metrics?: MetricsService
     ) {}
 
     async findUniqueById(userId: string): Promise<UserRecord | null> {
@@ -30,18 +33,26 @@ export class PrismaUserRepository implements IUserRepository {
         sweepTime: Date,
         onSelected?: (users: ExpiredSubscription[]) => Promise<void>
     ): Promise<ExpiredSubscription[]> {
-        return this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
+        const tracer = trace.getTracer("worker-db");
+        const span = tracer.startSpan("db.expireDueSubscriptions", { attributes: { limit, sweepTime: sweepTime.toISOString() } });
+        const txTimer = this.metrics?.dbTransactionDurationSeconds.startTimer();
+        let txResult: "committed" | "rolled_back" = "committed";
+        try {
+            const result = await this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
             // NULL status = never billable, never swept (data-hygiene guard, see #189).
             // NULL endsAt = lifetime subscription, never swept (see #198).
             // Audit queries for prod replicas live in docs/sweep-null-audit.sql.
             const users = await tx.$queryRawUnsafe<ExpiredSubscription[]>(
-                `SELECT u.id, u.email, s."paddleSubscriptionId" FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id
+                `SELECT u.id, u.email, s."paddleSubscriptionId", s."endsAt" FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id
                  WHERE s.status IS NOT NULL AND s.status IN ('ACTIVE', 'TRIALING', 'PAST_DUE', 'PAUSED')
                    AND s."endsAt" IS NOT NULL AND s."endsAt" < $2
                  ORDER BY s."endsAt" ASC LIMIT $1 FOR UPDATE OF s SKIP LOCKED`,
                 limit,
                 sweepTime,
             );
+            if (this.metrics) {
+                this.metrics.sweepBatchSize.observe({ stage: "selected" }, users.length);
+            }
             if (users.length === 0) return [];
 
             if (onSelected) {
@@ -67,8 +78,36 @@ export class PrismaUserRepository implements IUserRepository {
                 },
             });
 
+            if (this.metrics) {
+                this.metrics.sweepBatchSize.observe({ stage: "updated" }, result.count);
+                const filtered = users.length - result.count;
+                if (filtered > 0) {
+                    this.metrics.staleEventsFilteredTotal.inc({ reason: "phantom_select" }, filtered);
+                }
+                // SKIP LOCKED pressure: when selected < limit but update count < selected, or selected < limit indicates locks held
+                if (users.length > 0 && users.length < limit) {
+                    const skipped = limit - users.length;
+                    // Best-effort: partial fill may be due to locks or simply not enough rows; still valuable as contention signal
+                    try { this.metrics.dbLockSkippedTotal.inc(skipped); } catch {}
+                } else if (filtered > 0) {
+                    // phantom filtered also indicates clock drift / concurrent mutation contention
+                    try { this.metrics.dbLockSkippedTotal.inc(filtered); } catch {}
+                }
+            }
+
             return users.slice(0, result.count);
         });
+            span.setAttribute("result.count", result.length);
+            span.setStatus({ code: SpanStatusCode.OK });
+            return result;
+        } catch (error) {
+            txResult = "rolled_back";
+            try { span.recordException(error as Error); span.setStatus({ code: SpanStatusCode.ERROR }); } catch {}
+            throw error;
+        } finally {
+            try { txTimer?.({ result: txResult }); } catch {}
+            try { span.end(); } catch {}
+        }
     }
 
     async incrementUsage(userId: string, count: number): Promise<void> {

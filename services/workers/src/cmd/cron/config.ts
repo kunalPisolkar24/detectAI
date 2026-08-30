@@ -12,6 +12,10 @@ const cronEnvSchema = baseEnvSchema
     REDIS_PASSWORD: true,
     NODE_ENV: true,
     PORT: true,
+    OTEL_EXPORTER_OTLP_ENDPOINT: true,
+    OTEL_SERVICE_NAME: true,
+    OTEL_TRACES_SAMPLER: true,
+    OTEL_TRACES_SAMPLER_ARG: true,
   })
   .extend({
     // Max expiry lag equals this interval (idle sleep between sweeps).

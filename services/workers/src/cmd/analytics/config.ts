@@ -11,6 +11,10 @@ const analyticsEnvSchema = baseEnvSchema.pick({
   RABBITMQ_QUEUE_TYPE: true,
   NODE_ENV: true,
   PORT: true,
+  OTEL_EXPORTER_OTLP_ENDPOINT: true,
+  OTEL_SERVICE_NAME: true,
+  OTEL_TRACES_SAMPLER: true,
+  OTEL_TRACES_SAMPLER_ARG: true,
 });
 
 export const config = createConfig(analyticsEnvSchema, "Analytics");

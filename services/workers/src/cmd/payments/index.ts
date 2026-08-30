@@ -1,3 +1,6 @@
+import { initTracing } from "@shared/tracing/instrumentation";
+initTracing("worker-payments");
+
 import { RabbitMQWorker } from "@shared/messaging/RabbitMQWorker";
 import { PaymentService } from "@modules/payments/application/services/PaymentService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
@@ -74,18 +77,57 @@ const worker = new RabbitMQWorker(
 );
 
 worker.start();
-metricsService.activeWorkers.inc();
+
+let isShuttingDown = false;
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>(resolve => { timeout = setTimeout(() => resolve(fallback), ms); });
+  try { const result = await Promise.race([promise, timeoutPromise]); return result; } finally { if (timeout) clearTimeout(timeout); }
+}
 
 const server = new WorkerServer(
     metricsService,
     config.PORT,
-    () => true,
-    () => worker.getStatus() && redisClient.status === "ready"
+    () => {
+        if (isShuttingDown) return { healthy: false, checks: { isShuttingDown: true } };
+        const healthy = worker.getStatus();
+        return { healthy, checks: { rabbitmq: healthy, isShuttingDown } };
+    },
+    async () => {
+        if (isShuttingDown) return { healthy: false, checks: { isShuttingDown: true } };
+        const pool = getPgPool("primary");
+        const waiting = pool ? pool.waitingCount : 0;
+        if (waiting > 0) return { healthy: false, checks: { poolWaiting: waiting, reason: "pool_waiting" } };
+
+        const dbOk = await withTimeout(
+            prismaPrimary.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
+            3000,
+            false
+        );
+        const pingWithTimeout = (client: typeof redisClient) => withTimeout(
+            (async () => {
+                try {
+                    const res = await client.ping();
+                    return res === "PONG" || client.status === "ready";
+                } catch { return false; }
+            })(),
+            3000,
+            false
+        );
+        const [redisOk, eventRedisOk] = await Promise.all([pingWithTimeout(redisClient), pingWithTimeout(eventRedisClient)]);
+        const workerOk = worker.getStatus();
+        const healthy = dbOk && redisOk && eventRedisOk && workerOk && waiting === 0;
+        return { healthy, checks: { db: dbOk, redis: redisOk, eventRedis: eventRedisOk, rabbitmq: workerOk, poolWaiting: waiting, isShuttingDown } };
+    }
 );
 
 server.start();
+metricsService.activeWorkers.inc();
 
 const shutdown = async () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
     metricsService.activeWorkers.dec();
     server.stop();
     await worker.shutdown();
