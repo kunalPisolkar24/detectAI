@@ -130,8 +130,8 @@ export class PrismaUserRepository implements IUserRepository {
         paddleCustomerId?: string
     ): Promise<SubscriptionUpdateResult> {
         return this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
-            const rows = await tx.$queryRawUnsafe<Array<{ eventTimestamp: Date | null; status: string }>>(
-                `SELECT s."eventTimestamp", s.status FROM "Subscription" s WHERE s."userId" = $1 FOR UPDATE`,
+            const rows = await tx.$queryRawUnsafe<Array<{ eventTimestamp: Date | null; status: string; paddlePlanId: string | null }>>(
+                `SELECT s."eventTimestamp", s.status, s."paddlePlanId" FROM "Subscription" s WHERE s."userId" = $1 FOR UPDATE`,
                 userId,
             );
             const currentRow = rows[0];
@@ -153,12 +153,13 @@ export class PrismaUserRepository implements IUserRepository {
                 });
             }
 
+            const effectivePaddlePlanId = payload.paddlePlanId !== undefined ? payload.paddlePlanId : (currentRow?.paddlePlanId ?? null);
             await tx.subscription.upsert({
                 where: { userId },
                 create: {
                     userId,
                     paddleSubscriptionId: payload.paddleSubscriptionId,
-                    paddlePlanId: payload.paddlePlanId,
+                    paddlePlanId: effectivePaddlePlanId,
                     status: payload.status,
                     endsAt: payload.endsAt,
                     cancellationScheduled: payload.cancellationScheduled ?? false,
@@ -166,7 +167,7 @@ export class PrismaUserRepository implements IUserRepository {
                 },
                 update: {
                     paddleSubscriptionId: payload.paddleSubscriptionId,
-                    paddlePlanId: payload.paddlePlanId,
+                    paddlePlanId: effectivePaddlePlanId,
                     status: payload.status,
                     endsAt: payload.endsAt,
                     cancellationScheduled: payload.cancellationScheduled ?? false,

@@ -2,6 +2,8 @@ import amqp, { type Channel, type ConsumeMessage, type ChannelModel } from "amqp
 import { Logger } from "../logging/Logger";
 import { MetricsService } from "../monitoring/MetricsService";
 import { trace, SpanStatusCode } from "@opentelemetry/api";
+import { UserNotFoundError, MissingFieldError } from "@modules/payments/domain/errors";
+import { InvalidTransitionError } from "@modules/payments/domain/stateMachine";
 
 type MessageHandler = (msg: any) => Promise<void>;
 
@@ -98,10 +100,36 @@ export class RabbitMQWorker {
 
         const dlxName = `${this.queueName}_dlx`;
         const dlqName = `${this.queueName}_dlq`;
+        const retryExchange = `${this.queueName}_retry_exchange`;
+        const retryQueue = `${this.queueName}_retry`;
 
         await this.channel.assertExchange(dlxName, "direct", { durable: true });
         await this.channel.assertQueue(dlqName, { durable: true });
         await this.channel.bindQueue(dlqName, dlxName, this.queueName);
+
+        // Retry exchange/queue with TTL and DLX back to main queue
+        await this.channel.assertExchange(retryExchange, "direct", { durable: true });
+        const retryArgs: Record<string, unknown> = {
+            "x-dead-letter-exchange": "",
+            "x-dead-letter-routing-key": this.queueName,
+            "x-message-ttl": 5000,
+        };
+        if (this.queueType === "quorum") {
+            retryArgs["x-queue-type"] = "quorum";
+        }
+        try {
+            await this.channel.assertQueue(retryQueue, {
+                durable: true,
+                arguments: retryArgs,
+            });
+            await this.channel.bindQueue(retryQueue, retryExchange, retryQueue);
+        } catch (error: any) {
+            const msg = String(error?.message ?? error);
+            if (msg.includes("PRECONDITION_FAILED") || msg.includes("406")) {
+                Logger.error("Queue declare failed due to args mismatch (406). If changing queue type (classic vs quorum) or TTL, delete old queue or use versioned queue payment_events_v2.", { queue: retryQueue, error });
+            }
+            throw error;
+        }
 
         const args: Record<string, unknown> = {
             "x-dead-letter-exchange": dlxName,
@@ -112,10 +140,18 @@ export class RabbitMQWorker {
             args["x-queue-type"] = "quorum";
         }
 
-        await this.channel.assertQueue(this.queueName, {
-            durable: true,
-            arguments: args
-        });
+        try {
+            await this.channel.assertQueue(this.queueName, {
+                durable: true,
+                arguments: args
+            });
+        } catch (error: any) {
+            const msg = String(error?.message ?? error);
+            if (msg.includes("PRECONDITION_FAILED") || msg.includes("406")) {
+                Logger.error("Queue declare failed due to args mismatch (406). If changing queue type (classic vs quorum), delete old queue or use versioned queue payment_events_v2.", { queue: this.queueName, error });
+            }
+            throw error;
+        }
 
         await this.channel.prefetch(1);
         await this.channel.consume(this.queueName, this.onMessage.bind(this));
@@ -132,6 +168,40 @@ export class RabbitMQWorker {
             return "other";
         }
         return raw;
+    }
+
+    private getRetryCount(msg: ConsumeMessage): number {
+        try {
+            const headers: any = (msg.properties && (msg.properties as any).headers) || {};
+            // Prefer custom header if we set it on retry publish
+            if (typeof headers["x-retry-count"] === "number") return headers["x-retry-count"];
+            const xDeath = headers["x-death"];
+            if (Array.isArray(xDeath) && xDeath.length > 0) {
+                // Sum counts for retry queue or just length
+                let total = 0;
+                for (const entry of xDeath) {
+                    if (entry.queue === `${this.queueName}_retry` || entry.exchange === `${this.queueName}_retry_exchange`) {
+                        total += typeof entry.count === "number" ? entry.count : 1;
+                    }
+                }
+                if (total > 0) return total;
+                // Fallback to total x-death length
+                return xDeath.length;
+            }
+            return 0;
+        } catch {
+            return 0;
+        }
+    }
+
+    private isRetryableError(error: unknown): boolean {
+        if (error instanceof UserNotFoundError) return false;
+        if (error instanceof MissingFieldError) return false;
+        if (error instanceof InvalidTransitionError) return false;
+        // Check by name as fallback (for mocked errors in tests)
+        const name = (error as any)?.name;
+        if (name === "UserNotFoundError" || name === "MissingFieldError" || name === "InvalidTransitionError") return false;
+        return true;
     }
 
     private async onMessage(msg: ConsumeMessage | null) {
@@ -154,6 +224,32 @@ export class RabbitMQWorker {
             this.safeAck(msg);
         } catch (error) {
             try { span.recordException(error as Error); span.setStatus({ code: SpanStatusCode.ERROR }); } catch {}
+            const retryable = this.isRetryableError(error);
+            const retryCount = this.getRetryCount(msg);
+            const maxRetries = 5;
+
+            if (retryable && retryCount < maxRetries) {
+                Logger.warn("Transient failure, retrying via delayed exchange", { jobType, retryCount, maxRetries, error });
+                try {
+                    (this.metrics as any).workerRetryTotal?.inc({ job_type: jobType });
+                } catch {}
+                const retryExchange = `${this.queueName}_retry_exchange`;
+                const retryQueue = `${this.queueName}_retry`;
+                try {
+                    const headers = { ...((msg.properties as any)?.headers || {}), "x-retry-count": retryCount + 1 };
+                    const ok = this.channel!.publish(retryExchange, retryQueue, msg.content, {
+                        persistent: true,
+                        contentType: "application/json",
+                        headers,
+                    });
+                    // Ack original regardless of publish confirm (amqplib publish is sync)
+                    this.safeAck(msg);
+                    return;
+                } catch (publishError) {
+                    Logger.error("Failed to publish to retry exchange, sending to DLQ", publishError);
+                }
+            }
+
             Logger.error("Failed to process message, sending to DLQ", error);
             this.metrics.deadLetteredTotal.inc({ job_type: jobType });
             this.safeNack(msg);

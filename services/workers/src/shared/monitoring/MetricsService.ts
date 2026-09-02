@@ -22,6 +22,9 @@ export class MetricsService {
     public readonly staleEventsFilteredTotal: Counter;
     public readonly workerDuplicateEventsTotal: Counter;
     public readonly workerIdempotencyRedisErrorsTotal: Counter;
+    public readonly workerRetryTotal: Counter;
+    public readonly paddleCancelTotal: Counter;
+    public readonly paddleRequestDuration: Histogram;
     public readonly cacheInvalidateDurationSeconds: Histogram;
     public readonly cacheInvalidateRetriesTotal: Counter;
     public readonly dbTransactionDurationSeconds: Histogram;
@@ -172,6 +175,28 @@ export class MetricsService {
         this.workerIdempotencyRedisErrorsTotal = new Counter({
             name: "worker_idempotency_redis_errors_total",
             help: "Total idempotency Redis errors (fallback to DB)",
+            registers: [this.registry]
+        });
+
+        this.workerRetryTotal = new Counter({
+            name: "worker_retry_total",
+            help: "Total retry attempts before DLQ",
+            labelNames: ["job_type"],
+            registers: [this.registry]
+        });
+
+        this.paddleCancelTotal = new Counter({
+            name: "paddle_cancel_total",
+            help: "Total Paddle cancel requests by status",
+            labelNames: ["status"],
+            registers: [this.registry]
+        });
+
+        this.paddleRequestDuration = new Histogram({
+            name: "paddle_request_duration_seconds",
+            help: "Duration of Paddle API requests",
+            labelNames: ["status"],
+            buckets: [0.1, 0.5, 1, 2, 5, 10],
             registers: [this.registry]
         });
 

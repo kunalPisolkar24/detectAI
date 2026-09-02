@@ -42,8 +42,8 @@ describe("validateTransition", () => {
       expect(() => validateTransition(SubscriptionStatus.TRIALING, SubscriptionStatus.PAUSED)).toThrow();
     });
 
-    test("rejects TRIALING", () => {
-      expect(() => validateTransition(SubscriptionStatus.TRIALING, SubscriptionStatus.TRIALING)).toThrow();
+    test("allows TRIALING (idempotent self-transition)", () => {
+      expect(() => validateTransition(SubscriptionStatus.TRIALING, SubscriptionStatus.TRIALING)).not.toThrow();
     });
   });
 
@@ -78,8 +78,8 @@ describe("validateTransition", () => {
       expect(() => validateTransition(SubscriptionStatus.PAUSED, SubscriptionStatus.CANCELED)).not.toThrow();
     });
 
-    test("rejects PAUSED", () => {
-      expect(() => validateTransition(SubscriptionStatus.PAUSED, SubscriptionStatus.PAUSED)).toThrow();
+    test("allows PAUSED (idempotent self-transition)", () => {
+      expect(() => validateTransition(SubscriptionStatus.PAUSED, SubscriptionStatus.PAUSED)).not.toThrow();
     });
 
     test("rejects TRIALING", () => {
@@ -96,8 +96,8 @@ describe("validateTransition", () => {
       expect(() => validateTransition(SubscriptionStatus.PAST_DUE, SubscriptionStatus.CANCELED)).not.toThrow();
     });
 
-    test("rejects PAST_DUE", () => {
-      expect(() => validateTransition(SubscriptionStatus.PAST_DUE, SubscriptionStatus.PAST_DUE)).toThrow();
+    test("allows PAST_DUE (idempotent self-transition)", () => {
+      expect(() => validateTransition(SubscriptionStatus.PAST_DUE, SubscriptionStatus.PAST_DUE)).not.toThrow();
     });
 
     test("rejects TRIALING", () => {
@@ -118,8 +118,8 @@ describe("validateTransition", () => {
       expect(() => validateTransition(SubscriptionStatus.CANCELED, SubscriptionStatus.TRIALING)).not.toThrow();
     });
 
-    test("rejects CANCELED", () => {
-      expect(() => validateTransition(SubscriptionStatus.CANCELED, SubscriptionStatus.CANCELED)).toThrow();
+    test("allows CANCELED (idempotent self-transition)", () => {
+      expect(() => validateTransition(SubscriptionStatus.CANCELED, SubscriptionStatus.CANCELED)).not.toThrow();
     });
 
     test("rejects PAST_DUE", () => {

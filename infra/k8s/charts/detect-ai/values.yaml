@@ -266,11 +266,14 @@ databases:
       image: "quay.io/opstree/redis-exporter"
       tag: "v1.44.0"
     userCache:
+      # LRU eviction for user cache (SETEX 3600) — isolated from events noeviction
       sentinel:
         enabled: false
       clusterSize: 3
       sentinelSize: 3
       storageSize: "2Gi"
+      maxmemory: "1gb"
+      maxmemoryPolicy: "allkeys-lru"
     usage:
       storageSize: "1Gi"
     events:

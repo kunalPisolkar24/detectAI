@@ -7,7 +7,7 @@ import { MetricsService } from "@shared/monitoring/MetricsService";
 import { Logger } from "@shared/logging/Logger";
 import { type PaddleEventData } from "../../domain/types";
 import type { IPaymentEventHandler } from "./IPaymentEventHandler";
-import { UserNotFoundError } from "../../domain/errors";
+import { UserNotFoundError, MissingFieldError } from "../../domain/errors";
 
 export class SubscriptionCanceledHandler implements IPaymentEventHandler {
   private readonly cacheInvalidator: UserCacheInvalidator;
@@ -28,16 +28,16 @@ export class SubscriptionCanceledHandler implements IPaymentEventHandler {
     if (!userId) return;
 
     const subId = data.id;
-    if (!subId) return;
+    if (!subId) throw new MissingFieldError("id");
 
-    const eventTimestamp = data.occurred_at ? new Date(data.occurred_at) : new Date();
+    const eventTimestamp = this.parseEventTimestamp(data.occurred_at);
 
     if (await this.deduplicator.isStale(userId, eventTimestamp)) return;
 
     const user = await this.userRepository.findUniqueById(userId);
     if (!user) throw new UserNotFoundError(userId);
 
-    const endsAt = data.canceled_at ? new Date(data.canceled_at) : null;
+    const endsAt = this.parseDate(data.canceled_at);
 
     // Pre-invalidate before DB write to shrink the stale-read window.
     // If the write fails, the next read pays a cache-miss penalty — acceptable for consistency.
@@ -64,4 +64,16 @@ export class SubscriptionCanceledHandler implements IPaymentEventHandler {
     }
   }
 
+  private parseEventTimestamp(occurredAt?: string): Date {
+    if (!occurredAt) return new Date();
+    const d = new Date(occurredAt);
+    if (isNaN(d.getTime())) throw new MissingFieldError("occurred_at");
+    return d;
+  }
+
+  private parseDate(raw?: string): Date | null {
+    if (!raw) return null;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
 }

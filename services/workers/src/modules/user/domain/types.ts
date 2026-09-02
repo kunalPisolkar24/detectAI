@@ -7,7 +7,7 @@ export interface UserRecord {
 export interface SubscriptionUpdateData {
     paddleCustomerId: string;
     paddleSubscriptionId: string | null;
-    paddlePlanId: string | null;
+    paddlePlanId: string | null | undefined;
     status: SubscriptionStatus;
     endsAt: Date | null;
     cancellationScheduled?: boolean;

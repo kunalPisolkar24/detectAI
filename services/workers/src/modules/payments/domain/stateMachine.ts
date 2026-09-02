@@ -1,8 +1,19 @@
 import { SubscriptionStatus } from "../../../../generated/prisma/client";
 
+export class InvalidTransitionError extends Error {
+  constructor(
+    public readonly from: string | null,
+    public readonly to: string,
+  ) {
+    super(`Invalid subscription status transition: ${from ?? "null"} -> ${to}`);
+    this.name = "InvalidTransitionError";
+  }
+}
+
 const validTransitions: Record<string, Set<string>> = {
   null: new Set([SubscriptionStatus.TRIALING, SubscriptionStatus.ACTIVE]),
   [SubscriptionStatus.TRIALING]: new Set([
+    SubscriptionStatus.TRIALING,
     SubscriptionStatus.ACTIVE,
     SubscriptionStatus.CANCELED,
     SubscriptionStatus.PAST_DUE,
@@ -14,14 +25,17 @@ const validTransitions: Record<string, Set<string>> = {
     SubscriptionStatus.PAUSED,
   ]),
   [SubscriptionStatus.PAUSED]: new Set([
+    SubscriptionStatus.PAUSED,
     SubscriptionStatus.ACTIVE,
     SubscriptionStatus.CANCELED,
   ]),
   [SubscriptionStatus.PAST_DUE]: new Set([
+    SubscriptionStatus.PAST_DUE,
     SubscriptionStatus.ACTIVE,
     SubscriptionStatus.CANCELED,
   ]),
   [SubscriptionStatus.CANCELED]: new Set([
+    SubscriptionStatus.CANCELED,
     SubscriptionStatus.ACTIVE,
     SubscriptionStatus.TRIALING,
   ]),
@@ -34,8 +48,6 @@ export function validateTransition(
   const key = current ?? "null";
   const allowed = validTransitions[key];
   if (!allowed || !allowed.has(next)) {
-    throw new Error(
-      `Invalid subscription status transition: ${current ?? "null"} -> ${next}`
-    );
+    throw new InvalidTransitionError(current as string | null, next);
   }
 }
