@@ -13,8 +13,13 @@ export interface PaddleEventData {
 }
 
 export interface PaymentEvent {
+  event_id: string;
   event_type: string;
+  notification_id?: string;
   occurred_at?: string;
   data: PaddleEventData;
+  // compat: some producers use camelCase
+  eventId?: string;
+  notificationId?: string;
 }
 

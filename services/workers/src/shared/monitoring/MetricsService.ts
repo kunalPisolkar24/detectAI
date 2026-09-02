@@ -20,6 +20,8 @@ export class MetricsService {
     public readonly expiredBacklog: Gauge;
     public readonly sweepBatchSize: Histogram;
     public readonly staleEventsFilteredTotal: Counter;
+    public readonly workerDuplicateEventsTotal: Counter;
+    public readonly workerIdempotencyRedisErrorsTotal: Counter;
     public readonly cacheInvalidateDurationSeconds: Histogram;
     public readonly cacheInvalidateRetriesTotal: Counter;
     public readonly dbTransactionDurationSeconds: Histogram;
@@ -157,6 +159,19 @@ export class MetricsService {
             name: "worker_cron_stale_events_filtered_total",
             help: "Total phantom/stale events filtered during sweep",
             labelNames: ["reason"],
+            registers: [this.registry]
+        });
+
+        this.workerDuplicateEventsTotal = new Counter({
+            name: "worker_duplicate_events_total",
+            help: "Total duplicate Paddle events filtered by event_id dedup",
+            labelNames: ["event_type"],
+            registers: [this.registry]
+        });
+
+        this.workerIdempotencyRedisErrorsTotal = new Counter({
+            name: "worker_idempotency_redis_errors_total",
+            help: "Total idempotency Redis errors (fallback to DB)",
             registers: [this.registry]
         });
 

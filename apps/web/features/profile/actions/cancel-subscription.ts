@@ -62,10 +62,14 @@ export async function cancelSubscriptionAction(): Promise<ActionState> {
         "X-Internal-Key": env.INTERNAL_API_KEY || "",
       },
       body: JSON.stringify({
+        event_id: `evt_internal_${crypto.randomUUID()}`,
         event_type: "user.cancel_subscription",
+        occurred_at: new Date().toISOString(),
+        notification_id: `internal_${userId}_${Date.now()}`,
         data: {
           userId: userId,
-          paddleSubscriptionId: user.subscription.paddleSubscriptionId
+          paddleSubscriptionId: user.subscription.paddleSubscriptionId,
+          custom_data: { userId },
         }
       }),
     })

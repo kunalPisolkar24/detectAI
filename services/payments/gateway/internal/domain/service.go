@@ -37,8 +37,10 @@ func (s *PaymentService) ProcessWebhook(ctx context.Context, signature string, b
 	defer span.End()
 
 	eventType := s.extractEventType(body)
+	eventID := s.extractEventID(body)
 	span.SetAttributes(
 		attribute.String("event_type", eventType),
+		attribute.String("event_id", eventID),
 		attribute.String("source", "paddle"),
 	)
 	s.metrics.RecordWebhookReceived(eventType)
@@ -75,8 +77,10 @@ func (s *PaymentService) ProcessInternalEvent(ctx context.Context, body []byte) 
 	defer span.End()
 
 	eventType := s.extractEventType(body)
+	eventID := s.extractEventID(body)
 	span.SetAttributes(
 		attribute.String("event_type", eventType),
+		attribute.String("event_id", eventID),
 		attribute.String("source", "internal"),
 	)
 
@@ -95,6 +99,7 @@ func (s *PaymentService) ProcessInternalEvent(ctx context.Context, body []byte) 
 
 func (s *PaymentService) extractEventType(body []byte) string {
 	var payload struct {
+		EventID   string `json:"event_id"`
 		EventType string `json:"event_type"`
 		AlertName string `json:"alert_name"` // For legacy Paddle webhooks
 	}
@@ -109,4 +114,14 @@ func (s *PaymentService) extractEventType(body []byte) string {
 		return payload.AlertName
 	}
 	return unknownEventType
+}
+
+func (s *PaymentService) extractEventID(body []byte) string {
+	var payload struct {
+		EventID string `json:"event_id"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return ""
+	}
+	return payload.EventID
 }

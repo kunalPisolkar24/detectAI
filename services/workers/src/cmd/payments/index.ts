@@ -12,6 +12,7 @@ import { UserCancelHandler } from "@modules/payments/application/handlers/UserCa
 import { validateTransition } from "@modules/payments/domain/stateMachine";
 import { prisma, prismaPrimary, getPgPool } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
+import { IdempotencyStore } from "@shared/cache/IdempotencyStore";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
 import { config } from "./config";
@@ -55,6 +56,7 @@ eventRedisClient.on("error", () => metricsService.redisConnectionStatus.set({ cl
 
 const userRepository = new PrismaUserRepository(prismaPrimary, prisma, validateTransition);
 const paddleClient = new PaddleClient(config.PADDLE_API_KEY, config.PADDLE_ENVIRONMENT);
+const idempotencyStore = new IdempotencyStore(eventRedisClient, prismaPrimary as any, metricsService);
 
 const subscriptionUpdatedHandler = new SubscriptionUpdatedHandler(userRepository, redisClient, eventRedisClient, metricsService);
 const subscriptionCanceledHandler = new SubscriptionCanceledHandler(userRepository, redisClient, eventRedisClient, metricsService);
@@ -68,7 +70,7 @@ const paymentHandlers = {
     "user.cancel_subscription": userCancelHandler,
 } as const;
 
-const paymentService = new PaymentService(paymentHandlers, metricsService);
+const paymentService = new PaymentService(paymentHandlers, metricsService, idempotencyStore);
 
 const worker = new RabbitMQWorker(
     config.RABBITMQ_URL,
