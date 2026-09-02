@@ -157,31 +157,4 @@ go test -v -tags=integration ./test/integration/...  # testcontainers rabbitmq:3
 make load-test SCENARIO=spike TARGET_VUS=100  # k6 spike/stress/soak/internal
 ```
 
-Manual:
 
-```bash
-TS=$(date +%s); BODY='{"event_type":"subscription.updated","data":{"id":"sub_123"}}'
-SIG=$(echo -n "$TS:$BODY" | openssl dgst -sha256 -hmac "$PADDLE_WEBHOOK_SECRET" | cut -d' ' -f2); SIG="ts=$TS;h1=$SIG"
-curl -i -X POST http://localhost:8080/webhook/paddle -H "Paddle-Signature: $SIG" -d "$BODY"
-
-curl -i -X POST http://localhost:8080/internal/events -H "X-Internal-Key: $INTERNAL_API_KEY" -d '{"event_type":"user.cancel_subscription","data":{"userId":"u"}}'
-```
-
-Integration `test/integration/integration_test.go:40` covers `internal` → queue, signed webhook byte-identical, `alert_name` legacy, `401` forged, `readyz` `503`.
-
-## Deployment
-
-- `EXPOSE 8080` `Dockerfile:25`, `USER appuser:10001` `Dockerfile:17`, multi-stage `golang:1.25-alpine`
-- Graceful `10s` HTTP `main.go:85` + `5s` tracing `main.go:94`, `gin.Recovery` `main.go:60`
-
-## Troubleshooting
-
-- `503 readyz` → `IsConnected() false` `connection.go:130` (RabbitMQ `5s` reconnect `connection.go:66`)
-- `401 invalid signature` → `ts` ±5min or `HMAC` fail `signature.go:45,53`
-- `406 PRECONDITION_FAILED` → quorum vs classic mismatch, delete queue or `payment_events_v2` `producer.go:78`
-
-## References
-
-- `compose.yml` / `compose.load.yml` / `Dockerfile`
-- `go.mod` / `internal/monitoring/monitoring.go`
-- `internal/infrastructure/paddle/signature_test.go` / `internal/transport/http/handler_test.go`
