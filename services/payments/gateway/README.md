@@ -104,59 +104,25 @@ PADDLE_WEBHOOK_SECRET=test INTERNAL_API_KEY=test make load-test
 
 ## Configuration
 
-- **`PADDLE_WEBHOOK_SECRET`** — required
-  - *Default:* —
-  - HMAC validation
-
-- **`INTERNAL_API_KEY`** — required
-  - *Default:* —
-  - `X-Internal-Key` auth for internal events
-
-- **`RABBITMQ_URL`** — optional
-  - *Default:* `amqp://guest:guest@rabbitmq:5672/`
-
-- **`RABBITMQ_QUEUE_TYPE`** — optional
-  - *Default:* `classic` (use `quorum` in prod)
-
-- **`PORT`** — optional
-  - *Default:* `8080`
-
-- **`OTEL_EXPORTER_OTLP_ENDPOINT`** — optional
-  - *Default:* — (disables tracing)
-
-- **`OTEL_SERVICE_NAME`** — optional
-  - *Default:* `payment-gateway`
-
-`GIN_MODE=release`. `.env.example` currently only `PADDLE_WEBHOOK_SECRET`.
+```ini
+PADDLE_WEBHOOK_SECRET=whsec_...  # required
+INTERNAL_API_KEY=s3cr3t          # required
+RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/  # optional
+RABBITMQ_QUEUE_TYPE=classic      # optional, quorum in prod
+PORT=8080                        # optional
+OTEL_EXPORTER_OTLP_ENDPOINT=     # optional, disables tracing
+OTEL_SERVICE_NAME=payment-gateway # optional
+```
 
 ## API
 
-### `GET /healthz`
-- **Auth:** none
-- **Success:** `200 {"status":"ok"}`
-- **Errors:** —
-
-### `GET /readyz`
-- **Auth:** none
-- **Success:** `200 {"status":"ok","service":"gateway"}` if RabbitMQ connected
-- **Errors:** `503 {"status":"error","rabbitmq":"disconnected"}`
-
-### `GET /metrics`
-- **Auth:** none
-- **Success:** Prometheus exposition
-- **Errors:** —
-
-### `POST /webhook/paddle`
-- **Auth:** `Paddle-Signature`
-- **Success:** `200 {"status":"queued"}`
-- **Errors:** `400 too_large/unreadable`, `401 invalid signature`, `500`
-
-### `POST /internal/events`
-- **Auth:** `X-Internal-Key`
-- **Success:** `200 {"status":"queued"}`
-- **Errors:** `401 unauthorized`, `400`, `500`
-
-Body is raw `application/json` stored `Persistent`.
+```text
+GET  /healthz          -> 200 {"status":"ok"}
+GET  /readyz           -> 200 or 503 if RabbitMQ down
+GET  /metrics          -> Prometheus
+POST /webhook/paddle   (Paddle-Signature) -> 200 queued | 400 401 500
+POST /internal/events  (X-Internal-Key)   -> 200 queued | 401 400 500
+```
 
 ## Testing
 
