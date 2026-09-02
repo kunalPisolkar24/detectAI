@@ -7,6 +7,7 @@ import { type IPaddleClient } from "../../infrastructure/external/PaddleClient";
 import { type PaddleEventData } from "../../domain/types";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { Logger } from "@shared/logging/Logger";
+import { InvalidTransitionError } from "../../domain/stateMachine";
 import type { IPaymentEventHandler } from "./IPaymentEventHandler";
 
 export class UserCancelHandler implements IPaymentEventHandler {
@@ -69,10 +70,8 @@ export class UserCancelHandler implements IPaymentEventHandler {
         await this.cacheInvalidator.invalidateUser(resolvedUserId, result.email);
       }
     } catch (error) {
-      // A concurrent webhook (subscription.canceled) may have already set the status to CANCELED.
-      // If so, validateTransition(CANCELED -> CANCELED) throws — that's fine, the end state is correct.
-      if (error instanceof Error && error.message.includes("CANCELED -> CANCELED")) {
-        Logger.info("Subscription already canceled by concurrent event", { userId: resolvedUserId });
+      if (error instanceof InvalidTransitionError && error.from === error.to) {
+        Logger.info("Idempotent self-transition, already in target state", { userId: resolvedUserId, from: error.from, to: error.to });
       } else {
         throw error;
       }
