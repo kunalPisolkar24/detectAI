@@ -175,6 +175,10 @@ spec:
     image: {{ $exporterImage | quote }}
     tag: {{ $exporterTag | quote }}
     imagePullPolicy: IfNotPresent
+  redisConfig:
+    appendonly: {{ .Values.databases.redis.events.appendonly | quote }}
+    save: {{ .Values.databases.redis.events.save | quote }}
+    maxmemory-policy: {{ .Values.databases.redis.events.maxmemoryPolicy | quote }}
   storage:
     volumeClaimTemplate:
       spec:

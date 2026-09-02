@@ -45,6 +45,9 @@ redisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_
 redisClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 0));
 redisClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 0));
 
+// EventRedis persists payment:event:ts:* dedup keys via AOF (--appendonly yes, save "900 1 300 10").
+// Verify with: redis-cli -a $EVENT_REDIS_PASSWORD INFO persistence | grep -E 'aof_enabled:1|rdb_last_bgsave_status:ok'
+// Do NOT run redis-events with --save "" --appendonly no (cache-only) — wipes dedup state on restart.
 eventRedisClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 1));
 eventRedisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 1));
 eventRedisClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 0));
