@@ -1,0 +1,29 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-alpine
+    container_name: payment_rabbitmq
+    restart: unless-stopped
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - detectai_net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+
+  payment-gateway:
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+
+networks:
+  detectai_net:
+    name: ${detect_ai_network:-detect-ai-network}
+
+volumes:
+  rabbitmq_data:

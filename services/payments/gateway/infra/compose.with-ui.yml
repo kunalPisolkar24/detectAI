@@ -1,0 +1,5 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "${RABBITMQ_UI_PORT:-15672}:15672"

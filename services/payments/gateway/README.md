@@ -83,17 +83,16 @@ curl http://localhost:8080/readyz   # 200 or 503 if RabbitMQ down
 curl http://localhost:8080/metrics  # Prometheus
 ```
 
-Docker:
+Docker & Compose via Makefile (uses `Dockerfile`):
 
 ```bash
-docker build -t payment-gateway --build-arg VERSION=1.0 --build-arg COMMIT=$(git rev-parse --short HEAD) .
-docker run -p 8080:8080 -e PADDLE_WEBHOOK_SECRET -e INTERNAL_API_KEY -e RABBITMQ_URL=amqp://host.docker.internal:5672/ payment-gateway
-```
-
-Compose (integrated, needs `detect_ai_network`):
-
-```bash
-docker compose up --build
+make gateway-build            # docker build
+make gateway-up               # gateway + RabbitMQ + UI
+make gateway-up WITH_UI=0     # gateway + RabbitMQ without UI
+make gateway-up WITH_RABBITMQ=0 # gateway only (external RABBITMQ_URL)
+make gateway-logs             # logs -f payment-gateway
+make gateway-down             # down (keep volume)
+make gateway-down-v           # down -v (clean)
 ```
 
 Self-contained load:

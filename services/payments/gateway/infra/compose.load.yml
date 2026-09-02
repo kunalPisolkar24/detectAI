@@ -12,7 +12,7 @@ services:
 
   payment-gateway:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile
     environment:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
@@ -43,7 +43,7 @@ services:
       RAMP_DOWN: ${RAMP_DOWN:-10s}
       DURATION: ${DURATION:-30s}
     volumes:
-      - ./test/load:/scripts:ro
+      - ../test/load:/scripts:ro
     depends_on:
       payment-gateway:
         condition: service_healthy
