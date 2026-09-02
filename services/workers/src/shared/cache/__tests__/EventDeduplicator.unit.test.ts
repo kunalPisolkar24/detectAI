@@ -64,7 +64,7 @@ describe("EventDeduplicator", () => {
     expect(mockLogger.warn).toHaveBeenCalled();
   });
 
-  test("markProcessed stores the event timestamp", async () => {
+  test("markProcessed stores the event timestamp with 30d TTL", async () => {
     redis.set.mockResolvedValue("OK");
 
     await dedup.markProcessed("user_1", new Date("2024-01-01T00:00:00Z"));
@@ -72,6 +72,8 @@ describe("EventDeduplicator", () => {
     expect(redis.set).toHaveBeenCalledWith(
       "payment:event:ts:user_1",
       "2024-01-01T00:00:00.000Z",
+      "EX",
+      2592000,
     );
   });
 

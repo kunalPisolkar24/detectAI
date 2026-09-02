@@ -98,3 +98,11 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
+
+model ProcessedWebhook {
+  eventId    String   @id
+  eventType  String
+  receivedAt DateTime @default(now())
+
+  @@index([receivedAt])
+}

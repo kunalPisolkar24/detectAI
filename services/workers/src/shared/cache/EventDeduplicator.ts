@@ -2,13 +2,15 @@ import { type RedisClient } from "./RedisClient";
 import { Logger } from "../logging/Logger";
 
 /**
- * Redis-backed dedup for Paddle payment events.
- * Keys: payment:event:ts:{userId} -> ISO timestamp (no TTL).
+ * Redis-backed ordering for Paddle payment events.
+ * Keys: payment:event:ts:{userId} -> ISO timestamp with 30d TTL (2592000s).
  * Requires persistent EventRedis (AOF --appendonly yes + volume) — restart must retain keys
- * or stale events reprocess. Verify: redis-cli INFO persistence shows aof_enabled:1.
+ * or stale events reprocess. 30d bounds memory to active users last 30d (monthly cycle);
+ * DB lockAndUpdateSubscription remains authoritative after expiry. Verify: redis-cli INFO persistence shows aof_enabled:1.
  */
 export class EventDeduplicator {
   private static readonly DEFAULT_PREFIX = "payment:event:ts:";
+  private static readonly TTL_SECONDS = 30 * 24 * 60 * 60; // 30d = 2592000
 
   constructor(
     private readonly redis: RedisClient,
@@ -30,7 +32,7 @@ export class EventDeduplicator {
 
   async markProcessed(userId: string, eventTimestamp: Date): Promise<void> {
     try {
-      await this.redis.set(`${this.prefix}${userId}`, eventTimestamp.toISOString());
+      await this.redis.set(`${this.prefix}${userId}`, eventTimestamp.toISOString(), "EX", EventDeduplicator.TTL_SECONDS);
     } catch (error) {
       Logger.warn("Failed to set event timestamp in Redis", { userId, error });
     }
