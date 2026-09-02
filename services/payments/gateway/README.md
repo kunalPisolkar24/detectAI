@@ -98,6 +98,28 @@ POST /webhook/paddle   (Paddle-Signature) -> 200 queued | 400 401 500
 POST /internal/events  (X-Internal-Key)   -> 200 queued | 401 400 500
 ```
 
+## Observability
+
+Logs are JSON to stdout. Tracing is OTel if an OTLP endpoint is set. Metrics at GET /metrics for Prometheus.
+
+Metrics configured:
+
+- HTTP requests total — counts every request by method, route and status code
+- HTTP request duration — measures how long each request takes
+- Payment webhooks received — counts valid Paddle webhooks by event type
+- Invalid signatures — counts HMAC failures
+- Published events — counts forwards to RabbitMQ by event type and status
+- RabbitMQ connection status — shows if gateway is connected to RabbitMQ
+
+Alerts configured:
+
+- Gateway down — gateway not up for more than 1 minute
+- RabbitMQ down — gateway cannot reach RabbitMQ for more than 1 minute
+- High invalid signatures — more than 1 bad signature every 10 seconds for 5 minutes
+- High publish latency — RabbitMQ publish p95 taking more than half a second for 5 minutes
+- DLQ depth — more than 10 messages stuck in dead letter queue for 5 minutes
+- Retry queue depth — more than 50 messages waiting to retry for 5 minutes
+
 ## Testing
 
 ```bash
