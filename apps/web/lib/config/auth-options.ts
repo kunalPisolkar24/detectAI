@@ -106,6 +106,27 @@ export const authOptions: NextAuthOptions = {
         if (typeof session.name === "string") token.name = session.name
         if (typeof session.picture === "string") token.picture = session.picture
         if (typeof session.isPremium === "boolean") token.isPremium = session.isPremium
+        return token
+      }
+
+      // Fallback revalidate for non-premium: single DB query, 60s throttle, no new API route
+      // Covers refresh/close after pay when pendingUpgrade flag expired or JWT stale 1h
+      if (trigger !== "update" && token.isPremium === false && token.id) {
+        const nowSec = Date.now() / 1000
+        const lastCheck = (token as any)._lastPremiumCheck as number | undefined
+        const iat = (token.iat as number) ?? 0
+        const shouldCheck = lastCheck ? nowSec - lastCheck > 60 : nowSec - iat > 60
+        if (shouldCheck) {
+          try {
+            const dbUser = await prisma.user.findUnique({
+              where: { id: token.id as string },
+              include: { subscription: true },
+            })
+            const isPremium = dbUser?.subscription?.status === SubscriptionStatus.ACTIVE
+            ;(token as any)._lastPremiumCheck = nowSec
+            token.isPremium = isPremium
+          } catch {}
+        }
       }
 
       return token

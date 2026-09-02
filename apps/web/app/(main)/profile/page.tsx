@@ -19,6 +19,7 @@ export default async function ProfilePage() {
     redirect("/login?callbackUrl=/profile")
   }
 
+  // DB-authoritative read (never stale); chat gate relies on session.user.isPremium refreshed via jwt fallback
   const [user, realTimeUsage] = await Promise.all([
     userService.getUserById(session.user.id),
     rateLimitService.getRealTimeUsage(session.user.id)

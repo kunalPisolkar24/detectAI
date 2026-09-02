@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 }
 
 export default async function ChatPage() {
+  // session.user.isPremium is refreshed via jwt fallback revalidate (auth-options.ts:96, 60s throttle) and pendingUpgrade resume (upgrade-view.tsx)
   const session = await getServerSession(authOptions)
   let isRateLimited = false
 
