@@ -3,7 +3,10 @@ services:
     image: redis:7.2-alpine
     container_name: detect_ai_redis_events
     restart: unless-stopped
-    command: redis-server --save "" --appendonly no --requirepass "${EVENT_REDIS_PASSWORD}"
+    # Persistence required for EventDeduplicator payment:event:ts:* keys — do NOT use --save "" --appendonly no (cache-only)
+    command: redis-server --appendonly yes --save "900 1 300 10" --requirepass "${EVENT_REDIS_PASSWORD}"
+    volumes:
+      - redis_events_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${EVENT_REDIS_PASSWORD}", "ping"]
       interval: 5s
@@ -11,6 +14,9 @@ services:
       retries: 5
     networks:
       - detectai_net
+
+volumes:
+  redis_events_data:
 
 networks:
   detectai_net:

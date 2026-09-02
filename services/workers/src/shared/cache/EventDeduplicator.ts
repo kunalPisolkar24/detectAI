@@ -1,6 +1,12 @@
 import { type RedisClient } from "./RedisClient";
 import { Logger } from "../logging/Logger";
 
+/**
+ * Redis-backed dedup for Paddle payment events.
+ * Keys: payment:event:ts:{userId} -> ISO timestamp (no TTL).
+ * Requires persistent EventRedis (AOF --appendonly yes + volume) — restart must retain keys
+ * or stale events reprocess. Verify: redis-cli INFO persistence shows aof_enabled:1.
+ */
 export class EventDeduplicator {
   private static readonly DEFAULT_PREFIX = "payment:event:ts:";
 

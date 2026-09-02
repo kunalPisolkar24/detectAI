@@ -274,7 +274,11 @@ databases:
     usage:
       storageSize: "1Gi"
     events:
+      # Persistent dedup store for payment:event:ts:* — must not use cache-only (--save "" --appendonly no)
       storageSize: "1Gi"
+      appendonly: "yes"
+      save: "900 1 300 10"
+      maxmemoryPolicy: "noeviction"
     chat:
       cluster:
         enabled: false
