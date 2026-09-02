@@ -22,6 +22,38 @@ export const UpgradeView = () => {
   const [paddle, setPaddle] = useState<Paddle | undefined>()
   const [isPaddleInitializing, setIsPaddleInitializing] = useState(true)
 
+  const PENDING_KEY = "pendingUpgrade"
+  const PENDING_TTL_MS = 7200000 // 2hr covers JWT 1h + buffer
+
+  const pollViaServerAction = async () => {
+    try {
+      const result = await confirmUpgradeAction()
+      if (result.isPremium) {
+        try {
+          localStorage.removeItem(PENDING_KEY)
+        } catch {}
+        await updateSession({ isPremium: true })
+        toast.success("Premium activated! Welcome to Flare.")
+        router.push("/chat?upgrade_success=true")
+      } else {
+        toast.warning("Your subscription is being activated, please refresh.")
+      }
+      return result
+    } catch (error) {
+      console.error("Poll via server action failed:", error)
+      toast.warning("Your subscription is being activated, please refresh.")
+      return { isPremium: false }
+    }
+  }
+
+  const handleCheckoutCompleted = async () => {
+    toast.success("Payment received! Activating your Premium access…")
+    try {
+      localStorage.setItem(PENDING_KEY, JSON.stringify({ ts: Date.now() }))
+    } catch {}
+    await pollViaServerAction()
+  }
+
   useEffect(() => {
     const initPaddle = async () => {
       try {
@@ -49,20 +81,31 @@ export const UpgradeView = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleCheckoutCompleted = async () => {
-    toast.success("Payment received! Activating your Premium access…")
-    const result = await confirmUpgradeAction()
-
-    if (result.isPremium) {
-      await updateSession({ isPremium: true })
-      toast.success("Premium activated! Welcome to Flare.")
-      router.push("/chat?upgrade_success=true")
-    } else {
-      toast.warning(
-        "Your subscription is being activated, please refresh."
-      )
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (status !== "authenticated") return
+    if (session?.user.isPremium) {
+      try {
+        localStorage.removeItem(PENDING_KEY)
+      } catch {}
+      return
     }
-  }
+    const raw = localStorage.getItem(PENDING_KEY)
+    if (!raw) return
+    try {
+      const parsed = JSON.parse(raw) as { ts: number }
+      if (!parsed.ts || Date.now() - parsed.ts > PENDING_TTL_MS) {
+        localStorage.removeItem(PENDING_KEY)
+        return
+      }
+      void pollViaServerAction()
+    } catch {
+      try {
+        localStorage.removeItem(PENDING_KEY)
+      } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, session?.user.isPremium])
 
   const handlePlanSelect = (planId: string, billingCycle: "monthly" | "yearly") => {
     if (planId !== "flare") {

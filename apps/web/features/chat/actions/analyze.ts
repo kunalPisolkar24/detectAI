@@ -12,6 +12,7 @@ export type AnalyzeActionResponse =
   | { success: false, error: string, isRateLimit?: boolean }
 
 export async function analyzeText(content: string, model: ModelType): Promise<AnalyzeActionResponse> {
+  // isPremium refreshed via jwt fallback (auth-options.ts) and pendingUpgrade resume; authoritative DB is Subscription.status
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.id) {
