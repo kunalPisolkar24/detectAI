@@ -9,8 +9,8 @@ Paddle webhook ──► Gateway ──► RabbitMQ payment_events ──► wor
 Web app (cancel) ─┘
 ```
 
-- `queueName payment_events` `cmd/gateway/main.go:23`, handles `POST /webhook/paddle` (HMAC) and `POST /internal/events` (`X-Internal-Key`) `internal/transport/http/handler.go:41`.
-- Forwards raw JSON `1 MiB` limit `handler.go:62`, `5s` timeout `handler.go:79`, persistent `application/json` `infrastructure/rabbitmq/producer.go:85`.
+- Handles `POST /webhook/paddle` (HMAC) and `POST /internal/events` (`X-Internal-Key`).
+- Forwards raw JSON with `1 MiB` limit, `5s` timeout, persistent `application/json`.
 
 ## Architecture
 
@@ -52,22 +52,22 @@ graph TB
     DLX --> DLQ[ dlq ]
 ```
 
-- `internal/domain/service.go:35` `ProcessWebhook` vs `ProcessInternalEvent` `L73` (`event_id` span `service.go:119`).
-- Quorum vs classic via `RABBITMQ_QUEUE_TYPE` `producer.go:66` (`compose.prod.yml:5` `quorum`).
+- `ProcessWebhook` vs `ProcessInternalEvent` with `event_id` tracing.
+- Quorum vs classic via `RABBITMQ_QUEUE_TYPE` (quorum in prod).
 
 ## Features
 
-- HMAC `ts:body` SHA256 ±5min `paddle/signature.go:45` `hmac.Equal` constant-time
-- Body limit `1 MiB` `handler.go:62` + `5s` context
-- Publisher confirms `Confirm(false)` `connection.go:97`, `PublishWithDeferredConfirmWithContext` `producer.go:38` + `RecordRabbitMQPublishDuration`
-- Topology `dlx`/`dlq` + `retry` `TTL 5000` `producer.go:46` + `406` hint `payment_events_v2` `producer.go:78`
-- Reconnect `5s` `connection.go:66` + `readyz` `503` `handler.go:52`
-- OTel `tracer` `service.go:18` + `otelgin` `main.go:61`, Prometheus `monitoring.go:41` (15 families)
+- HMAC `ts:body` SHA256 ±5min, constant-time compare
+- Body limit `1 MiB` + `5s` context
+- Publisher confirms with `RecordRabbitMQPublishDuration`
+- Topology `dlx`/`dlq` + `retry` `TTL 5000` + `406` hint `payment_events_v2`
+- Reconnect `5s` + `readyz` `503`
+- OTel tracing + Prometheus metrics (15 families)
 
 ## Quick Start
 
 ```bash
-go 1.25  # go.mod:3  golang:1.25-alpine Dockerfile:1
+go 1.25
 
 export PADDLE_WEBHOOK_SECRET=whsec_...
 export INTERNAL_API_KEY=s3cr3t
@@ -93,40 +93,70 @@ docker run -p 8080:8080 -e PADDLE_WEBHOOK_SECRET -e INTERNAL_API_KEY -e RABBITMQ
 Compose (integrated, needs `detect_ai_network`):
 
 ```bash
-docker compose up --build  # compose.yml:8 expects PADDLE_WEBHOOK_SECRET, INTERNAL_API_KEY
+docker compose up --build
 ```
 
 Self-contained load:
 
 ```bash
-PADDLE_WEBHOOK_SECRET=test INTERNAL_API_KEY=test make load-test  # compose.load.yml:17
+PADDLE_WEBHOOK_SECRET=test INTERNAL_API_KEY=test make load-test
 ```
 
 ## Configuration
 
-| Variable | Required | Default | Where |
-|---|---|---|---|
-| `PADDLE_WEBHOOK_SECRET` | yes | — | `config.go:30` HMAC |
-| `INTERNAL_API_KEY` | yes | — | `config.go:32` `X-Internal-Key` `handler.go:97` |
-| `RABBITMQ_URL` | no | `amqp://guest:guest@rabbitmq:5672/` | `config.go:24` `main.go:47` |
-| `RABBITMQ_QUEUE_TYPE` | no | `classic` | `config.go:25` `producer.go:66` quorum |
-| `PORT` | no | `8080` | `config.go:36` `main.go:68` `Dockerfile:25` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | no | — (disables) | `tracing.go:16` |
-| `OTEL_SERVICE_NAME` | no | `payment-gateway` | `tracing.go:20` |
+- **`PADDLE_WEBHOOK_SECRET`** — required
+  - *Default:* —
+  - HMAC validation
 
-`GIN_MODE=release` `compose.yml:13`. `.env.example` currently only `PADDLE_WEBHOOK_SECRET`.
+- **`INTERNAL_API_KEY`** — required
+  - *Default:* —
+  - `X-Internal-Key` auth for internal events
+
+- **`RABBITMQ_URL`** — optional
+  - *Default:* `amqp://guest:guest@rabbitmq:5672/`
+
+- **`RABBITMQ_QUEUE_TYPE`** — optional
+  - *Default:* `classic` (use `quorum` in prod)
+
+- **`PORT`** — optional
+  - *Default:* `8080`
+
+- **`OTEL_EXPORTER_OTLP_ENDPOINT`** — optional
+  - *Default:* — (disables tracing)
+
+- **`OTEL_SERVICE_NAME`** — optional
+  - *Default:* `payment-gateway`
+
+`GIN_MODE=release`. `.env.example` currently only `PADDLE_WEBHOOK_SECRET`.
 
 ## API
 
-| Method | Path | Auth | Success | Errors |
-|---|---|---|---|---|
-| `GET` | `/healthz` | none | `200 {"status":"ok"}` | — |
-| `GET` | `/readyz` | none | `200 {"status":"ok","service":"gateway"}` if `IsConnected()` | `503 {"status":"error","rabbitmq":"disconnected"}` |
-| `GET` | `/metrics` | none | Prometheus | — |
-| `POST` | `/webhook/paddle` | `Paddle-Signature` | `200 {"status":"queued"}` | `400 too_large/unreadable`, `401 invalid signature`, `500` |
-| `POST` | `/internal/events` | `X-Internal-Key` | `200 {"status":"queued"}` | `401 unauthorized`, `400`, `500` |
+### `GET /healthz`
+- **Auth:** none
+- **Success:** `200 {"status":"ok"}`
+- **Errors:** —
 
-Body is raw `[]byte` `application/json` stored `Persistent` `producer.go:85`. See `handler.go:41` routes.
+### `GET /readyz`
+- **Auth:** none
+- **Success:** `200 {"status":"ok","service":"gateway"}` if RabbitMQ connected
+- **Errors:** `503 {"status":"error","rabbitmq":"disconnected"}`
+
+### `GET /metrics`
+- **Auth:** none
+- **Success:** Prometheus exposition
+- **Errors:** —
+
+### `POST /webhook/paddle`
+- **Auth:** `Paddle-Signature`
+- **Success:** `200 {"status":"queued"}`
+- **Errors:** `400 too_large/unreadable`, `401 invalid signature`, `500`
+
+### `POST /internal/events`
+- **Auth:** `X-Internal-Key`
+- **Success:** `200 {"status":"queued"}`
+- **Errors:** `401 unauthorized`, `400`, `500`
+
+Body is raw `application/json` stored `Persistent`.
 
 ## Testing
 
@@ -136,5 +166,3 @@ make test-coverage     # go test -v -coverprofile=coverage.out ./... + go tool c
 make test-integration  # go test -v -tags=integration ./test/integration/... (testcontainers)
 make load-test SCENARIO=spike TARGET_VUS=100  # k6 spike/stress/soak/internal
 ```
-
-
