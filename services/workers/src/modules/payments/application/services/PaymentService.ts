@@ -2,7 +2,8 @@ import { createHash } from "crypto";
 import { Logger } from "@shared/logging/Logger";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import type { PaymentEvent } from "../../domain/types";
-import { UserNotFoundError } from "../../domain/errors";
+import { UserNotFoundError, MissingFieldError } from "../../domain/errors";
+import { InvalidTransitionError } from "../../domain/stateMachine";
 import type { IPaymentEventHandler } from "../handlers/IPaymentEventHandler";
 import { type IdempotencyStore } from "@shared/cache/IdempotencyStore";
 
@@ -60,6 +61,13 @@ export class PaymentService {
 
         const requiresUserId = event_type !== "user.cancel_subscription";
         if (!userId && requiresUserId) {
+            Logger.warn("Missing userId for event type", { event_type });
+            try {
+                this.metrics.jobErrors.inc({ job_type: jobLabel, error_type: "missing_userId" });
+            } catch {}
+            try {
+                this.metrics.unhandledEventsTotal.inc({ event_type: jobLabel });
+            } catch {}
             timer({ status: "ignored" });
             return;
         }
@@ -92,6 +100,17 @@ export class PaymentService {
                     userId: error.identifier,
                 });
                 this.metrics.jobErrors.inc({ job_type: jobLabel, error_type: "user_not_found" });
+                timer({ status: "dlq" });
+                throw error;
+            }
+            if (error instanceof MissingFieldError) {
+                Logger.warn("Missing required field, sending to DLQ", { field: error.field, event_type, userId });
+                try {
+                    this.metrics.jobErrors.inc({ job_type: jobLabel, error_type: `missing_${error.field}` });
+                } catch {}
+                try {
+                    this.metrics.jobErrors.inc({ job_type: jobLabel, error_type: "missing_field" });
+                } catch {}
                 timer({ status: "dlq" });
                 throw error;
             }

@@ -8,7 +8,7 @@ import { Logger } from "@shared/logging/Logger";
 import { type PaddleEventData } from "../../domain/types";
 import { type SubscriptionUpdateData } from "@modules/user/domain/types";
 import type { IPaymentEventHandler } from "./IPaymentEventHandler";
-import { UserNotFoundError } from "../../domain/errors";
+import { UserNotFoundError, MissingFieldError } from "../../domain/errors";
 
 export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
   private readonly cacheInvalidator: UserCacheInvalidator;
@@ -34,9 +34,17 @@ export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
     const planId = data.items?.[0]?.price?.id;
     const endsAt = this.parseEndsAt(data);
 
-    if (!subId || !status || !customerId || !planId) return;
+    if (!subId) throw new MissingFieldError("id");
+    if (!status) throw new MissingFieldError("status");
+    if (!customerId) throw new MissingFieldError("customer_id");
+    if (!planId) {
+      Logger.warn("Missing planId, updating without overwriting paddlePlanId", { userId, subId });
+      try {
+        this.metrics.jobErrors.inc({ job_type: "subscription.updated", error_type: "missing_planId" });
+      } catch {}
+    }
 
-    const eventTimestamp = data.occurred_at ? new Date(data.occurred_at) : new Date();
+    const eventTimestamp = this.parseEventTimestamp(data.occurred_at);
 
     if (await this.deduplicator.isStale(userId, eventTimestamp)) return;
 
@@ -46,7 +54,7 @@ export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
     const updateData: SubscriptionUpdateData = {
       paddleCustomerId: customerId,
       paddleSubscriptionId: subId,
-      paddlePlanId: planId,
+      paddlePlanId: planId ?? undefined,
       status,
       endsAt,
     };
@@ -79,6 +87,17 @@ export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
 
   private parseEndsAt(data: PaddleEventData): Date | null {
     const raw = data?.current_billing_period?.ends_at || data?.scheduled_change?.effective_at;
-    return raw ? new Date(raw) : null;
+    if (!raw) return null;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  private parseEventTimestamp(occurredAt?: string): Date {
+    if (!occurredAt) return new Date();
+    const d = new Date(occurredAt);
+    if (isNaN(d.getTime())) {
+      throw new MissingFieldError("occurred_at");
+    }
+    return d;
   }
 }
