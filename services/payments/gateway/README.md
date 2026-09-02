@@ -128,26 +128,6 @@ PADDLE_WEBHOOK_SECRET=test INTERNAL_API_KEY=test make load-test  # compose.load.
 
 Body is raw `[]byte` `application/json` stored `Persistent` `producer.go:85`. See `handler.go:41` routes.
 
-## Design Decisions
-
-- **HMAC** `tsStr + ":" + body` SHA256 `signature.go:49`, `ts`/`h1` regex `signature.go:18`, `±5min` `signature.go:45`, `hmac.Equal` `L53`.
-- **Direct publish** `""` `queueName` `producer.go:38`, DLQ via `x-dead-letter-exchange` `dlx` `producer.go:61`.
-- **Retry** `x-message-ttl 5000` `producer.go:68` → `MaxRetries 5` `RabbitMQWorker.ts`, `406` log suggests `payment_events_v2`.
-- **No idempotency** in gateway — stateless, `event_id` dedup downstream (`IdempotencyStore`).
-
-## Observability
-
-- **Logs** `slog` JSON `logger.go:17`
-- **Metrics** `monitoring.go:41` 15 families: `http_requests_total{method,route,status_code}`, `payment_events_published_total{event_type,status}`, `payment_webhooks_received_total{event_type}`, `rabbitmq_*`, `gateway_build_info{version,commit}` `main.go:39`
-- **Tracing** `otel.Tracer("gateway/payment-service")` `service.go:36` `event_type`/`event_id`/`source`, `otelgin` `main.go:61`, OTLP HTTP if endpoint set
-- **Build info** `go build -ldflags "-X main.buildVersion -X main.buildCommit"` `Dockerfile:13` `main.go:25`
-
-## Development
-
-- **Stack** `go 1.25` `go.mod:3`, `gin v1.10.0`, `amqp091-go v1.9.0`, `otel v1.46.0`, `prometheus v1.19.0`
-- **Layout** `cmd/gateway/main.go` wiring `log/config/monitor/tracing/rabbitmq/service/handler` (38 files)
-- **Makefile** `make build/run/test/test-coverage/test-integration/deps` `Makefile:3,9,16` + `compose.yml` / `compose.load.yml`
-
 ## Testing
 
 ```bash
