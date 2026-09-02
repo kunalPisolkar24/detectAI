@@ -4,13 +4,7 @@ Stateless Go service that validates Paddle webhooks and forwards events to Rabbi
 
 ## Overview
 
-```
-Paddle webhook ──► Gateway ──► RabbitMQ payment_events ──► worker-payments
-Web app (cancel) ─┘
-```
-
-- Handles `POST /webhook/paddle` (HMAC) and `POST /internal/events` (`X-Internal-Key`).
-- Forwards raw JSON with `1 MiB` limit, `5s` timeout, persistent `application/json`.
+Stateless service handling `POST /webhook/paddle` (HMAC) and `POST /internal/events` (`X-Internal-Key`), forwarding raw JSON with `1 MiB` limit, `5s` timeout, persistent `application/json`.
 
 ## Architecture
 
