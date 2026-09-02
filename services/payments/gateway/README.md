@@ -151,9 +151,9 @@ Body is raw `[]byte` `application/json` stored `Persistent` `producer.go:85`. Se
 ## Testing
 
 ```bash
-go test -v ./...  # unit, mocks
-go test -v -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
-go test -v -tags=integration ./test/integration/...  # testcontainers rabbitmq:3-management-alpine
+make test              # go test -v ./...
+make test-coverage     # go test -v -coverprofile=coverage.out ./... + go tool cover -func
+make test-integration  # go test -v -tags=integration ./test/integration/... (testcontainers)
 make load-test SCENARIO=spike TARGET_VUS=100  # k6 spike/stress/soak/internal
 ```
 
