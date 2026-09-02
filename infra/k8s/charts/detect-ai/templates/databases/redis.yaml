@@ -41,6 +41,9 @@ spec:
     image: {{ $exporterImage | quote }}
     tag: {{ $exporterTag | quote }}
     imagePullPolicy: IfNotPresent
+  redisConfig:
+    maxmemory: {{ .Values.databases.redis.userCache.maxmemory | quote }}
+    maxmemory-policy: {{ .Values.databases.redis.userCache.maxmemoryPolicy | quote }}
   sentinel:
     enabled: true
     image: {{ $sentinelImage | quote }}
@@ -90,6 +93,9 @@ spec:
     image: {{ $exporterImage | quote }}
     tag: {{ $exporterTag | quote }}
     imagePullPolicy: IfNotPresent
+  redisConfig:
+    maxmemory: {{ .Values.databases.redis.userCache.maxmemory | quote }}
+    maxmemory-policy: {{ .Values.databases.redis.userCache.maxmemoryPolicy | quote }}
   storage:
     volumeClaimTemplate:
       spec:

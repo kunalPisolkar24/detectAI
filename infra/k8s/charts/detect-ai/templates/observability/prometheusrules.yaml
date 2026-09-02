@@ -42,13 +42,13 @@ spec:
             description: "Redis instance {{ `{{ $labels.app }}` }} is critically low on memory ({{ `{{ $value | humanizePercentage }}` }})."
 
         - alert: RedisEvictions
-          expr: rate(redis_evicted_keys_total{app=~"{{ $fullname }}-redis-.*"}[5m]) > 0
+          expr: rate(redis_evicted_keys_total{app=~"{{ $fullname }}-redis-usercache.*"}[5m]) > 0
           for: 5m
           labels:
             severity: warning
           annotations:
             summary: "Redis {{ `{{ $labels.app }}` }} is evicting keys"
-            description: "Redis instance {{ `{{ $labels.app }}` }} is evicting {{ `{{ $value | humanize }}` }} keys/sec. Check TTL policies."
+            description: "Redis instance {{ `{{ $labels.app }}` }} is evicting {{ `{{ $value | humanize }}` }} keys/sec. Check TTL policies (expected for usercache LRU, should be 0 for events noeviction)."
 
         - alert: RedisHighConnections
           expr: redis_connected_clients{app=~"{{ $fullname }}-redis-.*"} > 100
