@@ -16,27 +16,28 @@ Web app (cancel) ─┘
 
 ```mermaid
 graph LR
-    Paddle -- POST /webhook/paddle<br/>Paddle-Signature --> GW[Gateway<br/>gin :8080]
-    WebApp -- POST /internal/events<br/>X-Internal-Key --> GW
-    GW -- PublishWithDeferredConfirm<br/>Persistent --> RMQ[(RabbitMQ<br/>payment_events)]
-    RMQ -- DLX --> DLQ[(payment_events_dlq)]
-    RMQ -- retry_exchange<br/>TTL 5s --> RQ[(payment_events_retry)] -- dead-letter --> RMQ
+    Paddle --> GW[Gateway]
+    WebApp --> GW
+    GW --> RMQ[(RabbitMQ)]
     RMQ --> Worker[worker-payments]
     Worker --> DB[(Postgres)]
+    RMQ --> DLQ[(DLQ)]
+    RMQ --> RQ[(Retry)]
+    RQ --> RMQ
 ```
 
 ```mermaid
 sequenceDiagram
     participant Paddle
-    participant GW as Gateway handler.go:61
-    participant Val as HMAC signature.go:49
-    participant RMQ as RabbitMQ producer.go:38
-    Paddle->>GW: POST /webhook/paddle<br/>Paddle-Signature: ts=...;h1=...
-    GW->>Val: ts/h1 regex, ±5min, HMAC SHA256 ts:body
+    participant GW as Gateway
+    participant Val as Validator
+    participant RMQ as RabbitMQ
+    Paddle->>GW: POST webhook
+    GW->>Val: Validate signature
     alt invalid
-        GW-->>Paddle: 401 Invalid signature
+        GW-->>Paddle: 401 Invalid
     else valid
-        GW->>RMQ: Publish queueName<br/>Confirm false
+        GW->>RMQ: Publish
         RMQ-->>GW: Acked
         GW-->>Paddle: 200 queued
     end
@@ -44,11 +45,11 @@ sequenceDiagram
 
 ```mermaid
 graph TB
-    MainQ[ payment_events<br/>x-dead-letter=dlx ] -->|nack transient<br/>x-retry <5| --> Rex[ payment_events_retry_exchange<br/>direct ]
-    Rex --> RQ[ payment_events_retry<br/>TTL 5000<br/>dead-letter -> payment_events ]
-    RQ -- expiry --> MainQ
-    MainQ -->|nack non-retryable<br/>or >=5| DLX[ payment_events_dlx ]
-    DLX --> DLQ[ payment_events_dlq ]
+    MainQ[ payment_events ] --> Rex[ retry_exchange ]
+    Rex --> RQ[ retry queue TTL 5000 ]
+    RQ --> MainQ
+    MainQ --> DLX[ dlx ]
+    DLX --> DLQ[ dlq ]
 ```
 
 - `internal/domain/service.go:35` `ProcessWebhook` vs `ProcessInternalEvent` `L73` (`event_id` span `service.go:119`).
