@@ -55,7 +55,7 @@ eventRedisClient.on("close", () => metricsService.redisConnectionStatus.set({ cl
 eventRedisClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 0));
 
 const userRepository = new PrismaUserRepository(prismaPrimary, prisma, validateTransition);
-const paddleClient = new PaddleClient(config.PADDLE_API_KEY, config.PADDLE_ENVIRONMENT);
+const paddleClient = new PaddleClient(config.PADDLE_API_KEY, config.PADDLE_ENVIRONMENT, 10_000, metricsService);
 const idempotencyStore = new IdempotencyStore(eventRedisClient, prismaPrimary as any, metricsService);
 
 const subscriptionUpdatedHandler = new SubscriptionUpdatedHandler(userRepository, redisClient, eventRedisClient, metricsService);

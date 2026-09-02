@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"gateway/internal/domain/ports"
 	"gateway/internal/logger"
+	"strings"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -45,6 +46,8 @@ func NewRabbitMQProducer(url string, queueName string, queueType string, log log
 func (p *RabbitMQProducer) setupTopology(ch ports.AMQPChannel) error {
 	dlxName := p.queueName + "_dlx"
 	dlqName := p.queueName + "_dlq"
+	retryExchange := p.queueName + "_retry_exchange"
+	retryQueue := p.queueName + "_retry"
 
 	if err := ch.ExchangeDeclare(dlxName, "direct", true, false, false, false, nil); err != nil {
 		return fmt.Errorf("failed to declare DLX: %w", err)
@@ -58,6 +61,28 @@ func (p *RabbitMQProducer) setupTopology(ch ports.AMQPChannel) error {
 		return fmt.Errorf("failed to bind DLQ: %w", err)
 	}
 
+	if err := ch.ExchangeDeclare(retryExchange, "direct", true, false, false, false, nil); err != nil {
+		return fmt.Errorf("failed to declare retry exchange: %w", err)
+	}
+
+	retryArgs := amqp.Table{
+		"x-dead-letter-exchange":    "",
+		"x-dead-letter-routing-key": p.queueName,
+		"x-message-ttl":             int32(5000),
+	}
+	if p.queueType == "quorum" {
+		retryArgs["x-queue-type"] = "quorum"
+	}
+	if _, err := ch.QueueDeclare(retryQueue, true, false, false, false, retryArgs); err != nil {
+		if isPreconditionFailed(err) {
+			p.logger.Error("Queue declare 406, quorum vs classic mismatch - delete old queue or use versioned queue payment_events_v2", "queue", retryQueue, "error", err)
+		}
+		return fmt.Errorf("failed to declare retry queue: %w", err)
+	}
+	if err := ch.QueueBind(retryQueue, retryQueue, retryExchange, false, nil); err != nil {
+		return fmt.Errorf("failed to bind retry queue: %w", err)
+	}
+
 	args := amqp.Table{
 		"x-dead-letter-exchange":    dlxName,
 		"x-dead-letter-routing-key": p.queueName,
@@ -68,10 +93,18 @@ func (p *RabbitMQProducer) setupTopology(ch ports.AMQPChannel) error {
 	}
 
 	if _, err := ch.QueueDeclare(p.queueName, true, false, false, false, args); err != nil {
+		if isPreconditionFailed(err) {
+			p.logger.Error("Queue declare 406, quorum vs classic mismatch - delete old queue or use versioned queue payment_events_v2", "queue", p.queueName, "error", err)
+		}
 		return fmt.Errorf("failed to declare main queue: %w", err)
 	}
 
 	return nil
+}
+
+func isPreconditionFailed(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "PRECONDITION_FAILED") || strings.Contains(msg, "406")
 }
 
 func (p *RabbitMQProducer) Publish(ctx context.Context, body []byte) error {
