@@ -55,50 +55,25 @@ graph TB
 - `ProcessWebhook` vs `ProcessInternalEvent` with `event_id` tracing.
 - Quorum vs classic via `RABBITMQ_QUEUE_TYPE` (quorum in prod).
 
-## Features
+## Webhook Validation
 
-- HMAC `ts:body` SHA256 ±5min, constant-time compare
-- Body limit `1 MiB` + `5s` context
-- Publisher confirms with `RecordRabbitMQPublishDuration`
-- Topology `dlx`/`dlq` + `retry` `TTL 5000` + `406` hint `payment_events_v2`
-- Reconnect `5s` + `readyz` `503`
-- OTel tracing + Prometheus metrics (15 families)
-
-## Quick Start
-
-```bash
-go 1.25
-
-export PADDLE_WEBHOOK_SECRET=whsec_...
-export INTERNAL_API_KEY=s3cr3t
-export RABBITMQ_URL=amqp://guest:guest@localhost:5672/
-export PORT=8080
-
-go run ./cmd/gateway/main.go
-# or
-make run
-
-curl http://localhost:8080/healthz  # {"status":"ok"}
-curl http://localhost:8080/readyz   # 200 or 503 if RabbitMQ down
-curl http://localhost:8080/metrics  # Prometheus
-```
-
-Docker & Compose via Makefile (uses `Dockerfile`):
-
-```bash
-make gateway-build            # docker build
-make gateway-up               # gateway + RabbitMQ + UI
-make gateway-up WITH_UI=0     # gateway + RabbitMQ without UI
-make gateway-up WITH_RABBITMQ=0 # gateway only (external RABBITMQ_URL)
-make gateway-logs             # logs -f payment-gateway
-make gateway-down             # down (keep volume)
-make gateway-down-v           # down -v (clean)
-```
-
-Self-contained load:
-
-```bash
-PADDLE_WEBHOOK_SECRET=test INTERNAL_API_KEY=test make load-test
+```mermaid
+sequenceDiagram
+    participant Paddle
+    participant GW as Gateway
+    participant Val as Validator
+    participant RMQ as RabbitMQ
+    Paddle->>GW: POST webhook with signature
+    GW->>Val: Extract ts and h1
+    Val->>Val: Check ts within 5min
+    Val->>Val: HMAC SHA256 ts body with secret
+    alt valid
+        GW->>RMQ: Publish persistent
+        RMQ-->>GW: Acked
+        GW-->>Paddle: 200 queued
+    else invalid
+        GW-->>Paddle: 401 Invalid
+    end
 ```
 
 ## Configuration

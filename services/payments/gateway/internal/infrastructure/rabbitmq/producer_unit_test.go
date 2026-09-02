@@ -170,6 +170,17 @@ func TestRabbitMQProducer_SetupTopology(t *testing.T) {
 			mch.On("ExchangeDeclare", "payment_events_dlx", "direct", true, false, false, false, amqp.Table(nil)).Return(nil).Once()
 			mch.On("QueueDeclare", "payment_events_dlq", true, false, false, false, amqp.Table(nil)).Return(amqp.Queue{}, nil).Once()
 			mch.On("QueueBind", "payment_events_dlq", "payment_events", "payment_events_dlx", false, amqp.Table(nil)).Return(nil).Once()
+			mch.On("ExchangeDeclare", "payment_events_retry_exchange", "direct", true, false, false, false, amqp.Table(nil)).Return(nil).Once()
+			retryArgs := amqp.Table{
+				"x-dead-letter-exchange":    "",
+				"x-dead-letter-routing-key": "payment_events",
+				"x-message-ttl":             int32(5000),
+			}
+			if tt.queueType == "quorum" {
+				retryArgs["x-queue-type"] = "quorum"
+			}
+			mch.On("QueueDeclare", "payment_events_retry", true, false, false, false, retryArgs).Return(amqp.Queue{}, nil).Once()
+			mch.On("QueueBind", "payment_events_retry", "payment_events_retry", "payment_events_retry_exchange", false, amqp.Table(nil)).Return(nil).Once()
 			mch.On("QueueDeclare", "payment_events", true, false, false, false, tt.wantArgs).Return(amqp.Queue{}, nil).Once()
 
 			err := p.setupTopology(mch)
