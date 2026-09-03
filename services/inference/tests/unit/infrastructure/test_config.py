@@ -6,7 +6,7 @@ from src.infrastructure.config import Settings
 
 def test_settings_accepts_comma_separated_inference_providers():
     settings = Settings(
-        API_KEY="test-secret-key",
+        API_KEY="test-secret-key-16chars",
         INFERENCE_PROVIDERS="CPUExecutionProvider, CUDAExecutionProvider",
     )
 
@@ -18,7 +18,7 @@ def test_settings_accepts_comma_separated_inference_providers():
 
 def test_settings_accepts_json_array_inference_providers():
     settings = Settings(
-        API_KEY="test-secret-key",
+        API_KEY="test-secret-key-16chars",
         INFERENCE_PROVIDERS='["CPUExecutionProvider", "CUDAExecutionProvider"]',
     )
 
@@ -30,7 +30,7 @@ def test_settings_accepts_json_array_inference_providers():
 
 def test_settings_rejects_empty_inference_providers():
     with pytest.raises(ValidationError):
-        Settings(API_KEY="test-secret-key", INFERENCE_PROVIDERS=" , ")
+        Settings(API_KEY="test-secret-key-16chars", INFERENCE_PROVIDERS=" , ")
 
 
 def test_settings_require_api_key(monkeypatch):
@@ -41,7 +41,7 @@ def test_settings_require_api_key(monkeypatch):
 
 
 def test_settings_include_pinned_model_revisions():
-    settings = Settings(API_KEY="test-secret-key")
+    settings = Settings(API_KEY="test-secret-key-16chars")
 
     assert settings.SPARK_MODEL_REVISION == "9a48004391c71272d6fb1d164ed7c56e1fbfe360"
     assert settings.FLARE_MODEL_REVISION == "e1911c0be59f4e10f0d120f639d1358e46bc2086"
@@ -65,13 +65,13 @@ def test_settings_include_pinned_model_revisions():
 )
 def test_settings_reject_non_positive_numeric_values(field_name, value):
     with pytest.raises(ValidationError):
-        Settings(API_KEY="test-secret-key", **{field_name: value})
+        Settings(API_KEY="test-secret-key-16chars", **{field_name: value})
 
 
 def test_settings_reject_stride_greater_than_chunk_limit():
     with pytest.raises(ValidationError, match="CHUNK_TOKEN_STRIDE"):
         Settings(
-            API_KEY="test-secret-key",
+            API_KEY="test-secret-key-16chars",
             CHUNK_TOKEN_LIMIT=128,
             CHUNK_TOKEN_STRIDE=192,
         )
@@ -87,4 +87,4 @@ def test_settings_reject_stride_greater_than_chunk_limit():
 )
 def test_settings_reject_non_immutable_model_revisions(field_name, value):
     with pytest.raises(ValidationError, match="40-character lowercase git SHAs"):
-        Settings(API_KEY="test-secret-key", **{field_name: value})
+        Settings(API_KEY="test-secret-key-16chars", **{field_name: value})
