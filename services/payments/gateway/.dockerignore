@@ -1,23 +1,68 @@
 # Go
 vendor/
+go.work
+go.work.sum
 *.test
 *.out
+*.cover
+coverage.*
+*.prof
+c.out
 
 # Binaries
 gateway
+/gateway
+bin/
+dist/
 
 # Environment
 .env
+.env.*
+**/.env.*
 
 # Git
 .git
 .gitignore
+.gitattributes
 
-# Docker
-Dockerfile
-compose.yml
+# Docker / Compose
+Dockerfile*
 .dockerignore
+compose*.yml
+docker-compose*.yml
+**/compose*.yml
+infra/
 
-# IDEs
+# Testing
+test/
+**/*_test.go
+**/testdata/
+
+# Docs & Tooling
+README*
+*.md
+Makefile
+makefile
+docs/
+LICENSE
+
+# IDEs / OS
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs / Temp / Cache
+*.log
+logs/
+tmp/
+temp/
+.tmp/
+.cache/
+htmlcov/
+coverage.out
+coverage.html
+node_modules/
