@@ -6,6 +6,27 @@ Stateless Go service that validates Paddle webhooks and forwards events to Rabbi
 
 Stateless service handling `POST /webhook/paddle` (HMAC) and `POST /internal/events` (`X-Internal-Key`), forwarding raw JSON with `1 MiB` limit, `5s` timeout, persistent `application/json`.
 
+## Packages
+
+| Package | Purpose |
+|---|---|
+| `gin` | HTTP router |
+| `amqp091-go` | RabbitMQ |
+| `prometheus` | Metrics |
+| `otel`, `otel/sdk`, `otelgin`, `otlptracehttp` | Tracing |
+| `sonic`, `goccy/go-json`, `json-iterator` | JSON |
+| `validator`, `locales`, `universal-translator`, `mimetype`, `go-urn` | Validation |
+| `grpc`, `protobuf`, `genproto` | gRPC |
+| `crypto`, `net`, `sys`, `text`, `arch` | Crypto |
+| `compress`, `xxhash`, `perks` | Prometheus internals |
+| `testcontainers`, `rabbitmq` | Integration |
+| `testify` | Mocks |
+| `mergo`, `ansiterm`, `winnio`, `purego`, `go-ole`, `uuid` | Testcontainers deps |
+| `moby`, `docker/go-connections` | Docker |
+| `logr`, `yaml`, `gopsutil` | OTel/config |
+
+See `go.mod` for full list.
+
 ## Architecture
 
 ```mermaid
