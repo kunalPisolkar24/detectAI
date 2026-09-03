@@ -10,8 +10,8 @@ services:
       test: ["CMD", "/bin/grpc_health_probe", "-addr=:50051"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 10m
       start_interval: 5s
     ports:
       - "${PORT_INFERENCE:-50051}:50051"
@@ -40,12 +40,6 @@ services:
       - INFERENCE_MAX_WORKERS=${INFERENCE_MAX_WORKERS:-32}
       - INFERENCE_PROVIDERS=${INFERENCE_PROVIDERS:-CPUExecutionProvider}
       - GRPC_MAX_WORKERS=${INFERENCE_GRPC_MAX_WORKERS:-50}
-    volumes:
-      - inference_models:/app/models
-
-volumes:
-  inference_models:
-    name: ${COMPOSE_PROJECT_NAME:-detect_ai}_inference_models
 
 networks:
   detectai_net:
