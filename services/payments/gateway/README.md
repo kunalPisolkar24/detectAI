@@ -145,3 +145,21 @@ make load-test SCENARIO=spike TARGET_VUS=100  # k6 spike/stress/soak/internal
 ```
 
 See [Load Testing](test/load/README.md) for scenarios and env.
+
+## Docker
+
+```bash
+make gateway-build                    # docker build -t payment-gateway .
+make gateway-up                       # gateway + rabbitmq + ui (WITH_RABBITMQ=1 WITH_UI=1)
+make gateway-up WITH_RABBITMQ=0       # gateway only, no rabbitmq
+make gateway-down                     # down --remove-orphans
+make gateway-down-v                   # down -v (removes rabbitmq_data volume)
+make gateway-logs                     # logs -f payment-gateway
+make gateway-ps                       # ps
+
+docker build -t payment-gateway .
+docker compose -f infra/compose.yml up --build -d
+docker compose -f infra/compose.yml -f infra/compose.with-rabbit.yml up --build -d
+docker compose -f infra/compose.yml -f infra/compose.with-rabbit.yml -f infra/compose.with-ui.yml up --build -d
+curl -f http://localhost:8080/readyz
+```

@@ -142,3 +142,20 @@ make load-test VUS=5 DURATION=10s  # k6 ramping-vus / ramping-arrival-rate via i
 ```
 
 See [Load Testing](load/script.js) for scenarios and env.
+
+## Docker
+
+```bash
+make parser-build                     # docker build -t detectai-document-parser .
+make parser-up                        # docker compose -f infra/compose.yml up --build -d
+make parser-down                      # down --remove-orphans
+make parser-down-v                    # down -v
+make parser-logs                      # logs -f document-parser
+make parser-ps                        # ps
+
+docker build -t detectai-document-parser .
+docker compose -f infra/compose.yml up --build -d
+docker compose -f infra/compose.yml -f infra/compose.prod.yml up --build -d
+curl -F file=@load/fixtures/sample.pdf http://localhost:8000/extract
+curl -f http://localhost:8000/health
+```
