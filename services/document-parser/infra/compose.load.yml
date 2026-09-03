@@ -13,17 +13,21 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
-    ports:
-      - "8000:8000"
     networks:
       - loadnet
 
   k6:
     image: grafana/k6
+    command: run /load/script.js
     volumes:
       - ../load:/load:ro
     environment:
       - API_URL=http://document-parser:8000
+      - MODE=${MODE:-vus}
+      - VUS=${VUS:-5}
+      - DURATION=${DURATION:-10s}
+      - RAMP_TIME=${RAMP_TIME:-5s}
+      - RPS=${RPS:-10}
     depends_on:
       document-parser:
         condition: service_healthy

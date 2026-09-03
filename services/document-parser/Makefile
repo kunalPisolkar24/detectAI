@@ -4,19 +4,19 @@ build:
 	docker build -t detectai-document-parser .
 
 run:
-	uvicorn app.main:app --reload --port 8000
+	poetry run uvicorn app.main:app --reload --port 8000
 
 test:
-	pytest -v
+	poetry run pytest -v
 
 test-coverage:
-	pytest --cov=app --cov-report=term-missing --cov-report=html --cov-report=xml
+	poetry run pytest --cov=app --cov-report=term-missing --cov-report=html --cov-report=xml
 
 test-integration:
-	pytest -m integration -v
+	poetry run pytest -m integration -v
 
 lint:
-	ruff check .
+	poetry run ruff check .
 
 deps:
 	poetry install
