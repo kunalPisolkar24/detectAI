@@ -6,32 +6,34 @@ from src.domain.exceptions import ModelLoadError
 @pytest.fixture
 def mock_loader_env(tmp_path):
     with patch("src.adapters.outbound.inference.loader.ort.InferenceSession") as mock_session, \
-         patch("src.adapters.outbound.inference.loader.pickle.load") as mock_pickle, \
+         patch("src.adapters.outbound.inference.loader.RestrictedUnpickler") as mock_unpickler, \
          patch("src.adapters.outbound.inference.loader.hf_hub_download") as mock_dl, \
          patch("src.adapters.outbound.inference.loader.snapshot_download") as mock_snap, \
          patch("src.adapters.outbound.inference.loader.time.sleep"), \
          patch("src.adapters.outbound.inference.loader.BertTokenizerFast.from_pretrained") as mock_tok:
-        
+
         mock_session.return_value = MagicMock()
-        mock_pickle.return_value = MagicMock()
+        mock_instance = MagicMock()
+        mock_instance.load.return_value = MagicMock()
+        mock_unpickler.return_value = mock_instance
         mock_tok.return_value = MagicMock()
         mock_dl.return_value = str(tmp_path / "model.onnx")
         mock_snap.return_value = str(tmp_path / "flare_dir")
-        
+
         with open(tmp_path / "model.onnx", "w") as f:
             f.write("dummy")
-            
-        yield mock_session, mock_pickle, mock_dl, mock_snap
+
+        yield mock_session, mock_unpickler, mock_dl, mock_snap
 
 def test_load_spark(mock_loader_env):
-    mock_session, mock_pickle, mock_dl, _ = mock_loader_env
+    mock_session, mock_unpickler, mock_dl, _ = mock_loader_env
     loader = HuggingFaceLoader("./cache")
-    
+
     session, tokenizer = loader.load("spark")
-    
+
     assert mock_dl.call_count == 2
     mock_session.assert_called_once()
-    mock_pickle.assert_called_once()
+    mock_unpickler.assert_called_once()
 
 def test_load_flare(mock_loader_env):
     _, _, _, mock_snap = mock_loader_env
@@ -43,9 +45,8 @@ def test_load_flare(mock_loader_env):
 
 def test_load_unknown_key():
     loader = HuggingFaceLoader("./cache")
-    with pytest.raises(ModelLoadError) as exc:
+    with pytest.raises(ValueError, match="Unknown model key"):
         loader.load("invalid_key")
-    assert "Unknown model key" in str(exc.value)
 
 def test_load_runtime_error(mock_loader_env):
     _, _, mock_dl, _ = mock_loader_env

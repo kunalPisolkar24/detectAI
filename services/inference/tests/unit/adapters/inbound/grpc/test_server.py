@@ -67,8 +67,9 @@ async def test_health_monitor_marks_queue_saturation_unhealthy():
 
     state, reason = monitor._resolve_state()
 
-    assert state == health_pb2.HealthCheckResponse.NOT_SERVING
-    assert reason == "inference_queue_full"
+    # QUEUE_FULL is transient load, should stay SERVING and shed via RESOURCE_EXHAUSTED
+    assert state == health_pb2.HealthCheckResponse.SERVING
+    assert reason is None
 
 
 @pytest.mark.asyncio
@@ -126,7 +127,7 @@ async def test_health_monitor_publishes_health_metrics(mocker):
     await monitor._publish_state()
 
     mock_service_health.assert_called_once_with(
-        health_pb2.HealthCheckResponse.NOT_SERVING,
-        "inference_queue_full",
+        health_pb2.HealthCheckResponse.SERVING,
+        None,
     )
     mock_engine_health.assert_called_once_with("spark", snapshot)

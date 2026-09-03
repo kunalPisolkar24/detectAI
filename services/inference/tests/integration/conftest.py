@@ -62,7 +62,7 @@ def test_settings():
 @pytest.fixture
 def auth_token(test_settings):
     return jwt.encode(
-        {"sub": "integration-test-user", "iat": int(time.time())},
+        {"sub": "integration-test-user", "iat": int(time.time()), "exp": int(time.time()) + 3600},
         test_settings.API_KEY,
         algorithm="HS256",
     )

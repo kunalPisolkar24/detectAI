@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import jwt
 import pytest
 
-os.environ.setdefault("API_KEY", "test-secret-key")
+os.environ.setdefault("API_KEY", "test-secret-key-16chars")
 
 import src.infrastructure.config as config_module  # noqa: E402
 import src.adapters.inbound.grpc.grpc_server as grpc_server_module  # noqa: E402
@@ -40,7 +40,7 @@ class FakeContext:
 @pytest.fixture
 def test_settings(monkeypatch, unused_tcp_port):
     settings = Settings(
-        API_KEY="test-secret-key",
+        API_KEY="test-secret-key-16chars",
         GRPC_PORT=unused_tcp_port,
         BATCH_SIZE=2,
         BATCH_TIMEOUT=0.05,
@@ -61,7 +61,7 @@ def test_settings(monkeypatch, unused_tcp_port):
 @pytest.fixture
 def auth_token(test_settings):
     return jwt.encode(
-        {"sub": "test-user", "iat": int(time.time())},
+        {"sub": "test-user", "iat": int(time.time()), "exp": int(time.time()) + 3600},
         test_settings.API_KEY,
         algorithm="HS256",
     )

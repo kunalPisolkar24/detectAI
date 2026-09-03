@@ -44,28 +44,41 @@ def test_spark_engine_binary_prob(mock_onnx_session):
 def test_spark_engine_flat_output(mock_onnx_session):
     tokenizer = MockTokenizer()
     engine = SparkEngine((mock_onnx_session, tokenizer))
-    
+
     mock_onnx_session.run.return_value = [np.array([0.9, 0.1], dtype=np.float32)]
-    
+
     results = engine.predict_batch(["text1", "text2"])
-    assert results == approx([0.9, 0.1])
+    # Flat logits are passed through sigmoid and clipped to [0,1]
+    def _sigmoid(x):  # type: ignore[no-untyped-def]
+        import math
+
+        return 1 / (1 + math.exp(-x))
+
+    assert results == approx([_sigmoid(0.9), _sigmoid(0.1)])
 
 def test_spark_engine_column_output(mock_onnx_session):
     tokenizer = MockTokenizer()
     engine = SparkEngine((mock_onnx_session, tokenizer))
-    
+
     mock_onnx_session.run.return_value = [np.array([[0.9], [0.1]], dtype=np.float32)]
-    
+
     results = engine.predict_batch(["text1", "text2"])
-    assert results == approx([0.9, 0.1])
+    def _sigmoid(x):  # type: ignore[no-untyped-def]
+        import math
+
+        return 1 / (1 + math.exp(-x))
+
+    assert results == approx([_sigmoid(0.9), _sigmoid(0.1)])
 
 def test_spark_engine_single_item_batch(mock_onnx_session):
     tokenizer = MockTokenizer()
     engine = SparkEngine((mock_onnx_session, tokenizer))
     mock_onnx_session.run.return_value = [np.array([0.7], dtype=np.float32)]
-    
+
     results = engine.predict_batch(["text"])
-    assert results == approx([0.7])
+    import math
+
+    assert results == approx([1 / (1 + math.exp(-0.7))])
 
 def test_spark_engine_failure(mock_onnx_session):
     tokenizer = MockTokenizer()
