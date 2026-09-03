@@ -1,8 +1,10 @@
 import asyncio
 import concurrent.futures
+import os
 import sys
 
 from prometheus_client import start_http_server
+from src.infrastructure.tracing import setup_tracing, shutdown_tracing
 
 from src.application.services.aggregation import ResultAggregator
 from src.application.services.chunking import build_chunk_planner
@@ -26,7 +28,9 @@ settings = get_settings()
 async def main():
     spark_executor: concurrent.futures.ThreadPoolExecutor | None = None
     flare_executor: concurrent.futures.ThreadPoolExecutor | None = None
+    tracing_provider = None
     try:
+        tracing_provider = setup_tracing(service_name=os.getenv("OTEL_SERVICE_NAME", "inference"))
         start_http_server(settings.METRICS_PORT)
         logger.info("metrics_server_started", port=settings.METRICS_PORT)
 
@@ -105,6 +109,10 @@ async def main():
         logger.critical("startup_failed", error=str(e), exc_info=True)
         sys.exit(1)
     finally:
+        try:
+            shutdown_tracing(tracing_provider)
+        except Exception:
+            pass
         for ex in (spark_executor, flare_executor):
             if ex is not None:
                 ex.shutdown(wait=False, cancel_futures=True)
