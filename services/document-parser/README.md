@@ -141,7 +141,7 @@ make test-integration  # poetry run pytest -m integration -v
 make load-test VUS=5 DURATION=10s  # k6 ramping-vus / ramping-arrival-rate via infra/compose.load.yml
 ```
 
-See [Load Testing](load/script.js) for scenarios and env.
+See [Load Testing](load/README.md) for scenarios and env.
 
 ## Docker
 
