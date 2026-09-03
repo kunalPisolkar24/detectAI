@@ -56,11 +56,11 @@ sequenceDiagram
 
 ```mermaid
 graph TB
-    PoolState[Pool busy/queued/max] --> Check{busy < max && queued < 50?}
-    Check -->|yes| Ready[200 ready]
-    Check -->|no| NotReady[503 not_ready]
-    Ready --> EP[/extract]
-    NotReady --> Block[reject /ready]
+    PoolState["Pool busy/queued/max"] --> Check{"busy < max and queued < 50?"}
+    Check -->|yes| Ready["200 ready"]
+    Check -->|no| NotReady["503 not_ready"]
+    Ready --> EP["/extract"]
+    NotReady --> Block["reject /ready"]
 ```
 
 - `PdfExtractionStrategy` vs `DocxExtractionStrategy` vs `TxtExtractionStrategy` via `ExtractorFactory` with `TextCleaner`.
