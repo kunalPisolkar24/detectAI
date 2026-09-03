@@ -135,10 +135,10 @@ Alerts configured:
 ## Testing
 
 ```bash
-pytest                               # pytest -m "not integration" --cov=app
-pytest -m integration                # pytest -m integration (fixtures + error paths)
-make build                           # docker build -t detectai-document-parser .
-make load-test VUS=20 DURATION=1m    # k6 ramping-vus / ramping-arrival-rate
+make test              # poetry run pytest -v
+make test-coverage     # poetry run pytest --cov=app --cov-report=term-missing --cov-report=html --cov-report=xml
+make test-integration  # poetry run pytest -m integration -v
+make load-test VUS=5 DURATION=10s  # k6 ramping-vus / ramping-arrival-rate via infra/compose.load.yml
 ```
 
 See [Load Testing](load/script.js) for scenarios and env.
