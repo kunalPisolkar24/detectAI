@@ -29,6 +29,6 @@ class ITelemetryReporter(ABC):
     def record_document_chunk_processed(self, operation: str, model_name: str) -> None:
         """Increment the total processed chunks counter. Must not raise."""
 
-    def record_document_chunk_failed(self, operation: str, model_name: str) -> None:
+    def record_document_chunk_failed(self, operation: str, model_name: str, reason: str = "error") -> None:
         """Record a failed chunk. Optional — default no-op, must not raise."""
         return

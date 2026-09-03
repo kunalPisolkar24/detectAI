@@ -12,6 +12,13 @@ from src.application.ports.outbound.inference import IModelLoader
 from src.domain.exceptions import ModelLoadError
 from src.infrastructure.config import parse_inference_providers
 
+try:
+    from src.infrastructure.metrics import record_provider_fallback
+except Exception:  # pragma: no cover
+
+    def record_provider_fallback(*args, **kwargs):  # type: ignore[no-redef]
+        pass
+
 logger = structlog.get_logger()
 
 _GPU_PROVIDERS = frozenset({"CUDAExecutionProvider", "TensorrtExecutionProvider", "ROCMExecutionProvider"})
@@ -86,8 +93,14 @@ class HuggingFaceLoader(IModelLoader):
             logger.error("model_load_failed_attempting_offline_fallback", model=model_key, error=str(e))
             try:
                 if model_key == "spark":
-                    return self._load_spark(local_only=True)
-                return self._load_flare(local_only=True)
+                    result = self._load_spark(local_only=True)
+                else:
+                    result = self._load_flare(local_only=True)
+                try:
+                    record_provider_fallback(model_key, ",".join(self.providers), "offline-cache", "offline")
+                except Exception:
+                    pass
+                return result
             except Exception as fallback_error:
                 raise ModelLoadError(
                     f"Failed to load {model_key}: {str(e)} (Offline fallback also failed: {str(fallback_error)})"
@@ -221,6 +234,10 @@ class HuggingFaceLoader(IModelLoader):
                 requested=self.providers,
                 active=active_providers,
             )
+            try:
+                record_provider_fallback(model_key, ",".join(self.providers), ",".join(active_providers), "gpu_missing")
+            except Exception:
+                pass
         else:
             logger.info(
                 "model_loaded",
