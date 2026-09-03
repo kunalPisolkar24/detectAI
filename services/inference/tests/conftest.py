@@ -61,7 +61,7 @@ def test_settings(monkeypatch, unused_tcp_port):
 @pytest.fixture
 def auth_token(test_settings):
     return jwt.encode(
-        {"sub": "test-user", "iat": int(time.time())},
+        {"sub": "test-user", "iat": int(time.time()), "exp": int(time.time()) + 3600},
         test_settings.API_KEY,
         algorithm="HS256",
     )

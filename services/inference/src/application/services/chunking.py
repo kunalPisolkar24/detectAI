@@ -208,8 +208,8 @@ class ChunkPlanner:
 
 
 def build_chunk_planner(tokenizer, chunk_size: int, stride: int, max_global_tokens: int) -> ChunkPlanner:
-    if tokenizer is None:
-        raise ValueError("tokenizer is required")
     if callable(tokenizer):
         return ChunkPlanner(BertTokenChunker(tokenizer), chunk_size, stride, max_global_tokens)
-    return ChunkPlanner(RegexTokenChunker(), chunk_size, stride, max_global_tokens)
+    if tokenizer is None:
+        return ChunkPlanner(RegexTokenChunker(), chunk_size, stride, max_global_tokens)
+    raise ValueError("tokenizer must be callable or None")
