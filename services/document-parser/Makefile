@@ -1,41 +1,51 @@
-VUS ?= 20
-DURATION ?= 1m
-RAMP_TIME ?= 30s
-RPS ?= 50
-MODE ?= vus
-
-COMPOSE_LOAD = docker compose -f compose.load.yml
-
-.PHONY: load-test load-up load-down build run stop
+.PHONY: build run test test-coverage test-integration lint deps load-test load-down parser-build parser-up parser-down parser-down-v parser-logs parser-ps
 
 build:
 	docker build -t detectai-document-parser .
 
 run:
-	PORT_DOC_PARSER=8000 detect_ai_network=detectai_net docker network create detectai_net || true
-	PORT_DOC_PARSER=8000 detect_ai_network=detectai_net docker compose up -d
+	uvicorn app.main:app --reload --port 8000
 
-stop:
-	PORT_DOC_PARSER=8000 detect_ai_network=detectai_net docker compose down
+test:
+	pytest -v
 
-load-up:
-	$(COMPOSE_LOAD) up -d --build
+test-coverage:
+	pytest --cov=app --cov-report=term-missing --cov-report=html --cov-report=xml
+
+test-integration:
+	pytest -m integration -v
+
+lint:
+	ruff check .
+
+deps:
+	poetry install
+
+# Self-contained load test: compose brings up document-parser + k6 on a
+# dedicated network, no dependency on the main detect-ai stack.
+# Usage: make load-test VUS=50 DURATION=2m RAMP_TIME=30s MODE=vus RPS=100
+load-test:
+	docker compose -f infra/compose.load.yml up --abort-on-container-exit --exit-code-from k6
 
 load-down:
-	$(COMPOSE_LOAD) down --remove-orphans
+	docker compose -f infra/compose.load.yml down -v --remove-orphans
 
-load-test: load-down load-up
-	@echo "Waiting for document-parser to become healthy..."
-	@until $$(curl --output /dev/null --silent --head --fail http://localhost:8000/health); do \
-		printf '.'; \
-		sleep 2; \
-	done
-	@echo "\nRunning k6 load test ($(MODE) mode, VUS=$(VUS), RPS=$(RPS), DURATION=$(DURATION), RAMP=$(RAMP_TIME))..."
-	$(COMPOSE_LOAD) run --rm \
-		-e MODE=$(MODE) \
-		-e VUS=$(VUS) \
-		-e DURATION=$(DURATION) \
-		-e RAMP_TIME=$(RAMP_TIME) \
-		-e RPS=$(RPS) \
-		k6 run /load/script.js
-	@$(MAKE) load-down
+# Document parser via infra compose files
+parser-build:
+	docker build -t detectai-document-parser .
+
+parser-up:
+	docker compose -f infra/compose.yml up --build -d
+	docker compose -f infra/compose.yml ps
+
+parser-down:
+	docker compose -f infra/compose.yml down --remove-orphans
+
+parser-down-v:
+	docker compose -f infra/compose.yml down -v --remove-orphans
+
+parser-logs:
+	docker compose -f infra/compose.yml logs -f document-parser
+
+parser-ps:
+	docker compose -f infra/compose.yml ps

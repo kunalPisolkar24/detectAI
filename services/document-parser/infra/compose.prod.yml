@@ -1,0 +1,6 @@
+services:
+  document-parser:
+    restart: always
+    environment:
+      - WORKERS=${DOC_PARSER_WORKERS:-4}
+      - GUNICORN_WORKERS=${DOC_PARSER_WORKERS:-4}

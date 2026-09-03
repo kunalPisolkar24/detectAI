@@ -1,7 +1,7 @@
 services:
   document-parser:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile
     environment:
       - PYTHONUNBUFFERED=1
@@ -21,7 +21,7 @@ services:
   k6:
     image: grafana/k6
     volumes:
-      - ./load:/load
+      - ../load:/load:ro
     environment:
       - API_URL=http://document-parser:8000
     depends_on:
