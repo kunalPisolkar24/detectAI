@@ -17,6 +17,22 @@ import structlog
 logger = structlog.get_logger()
 _CHUNK_TIMEOUT = 30.0
 
+try:
+    from src.infrastructure.metrics import (
+        record_document_chunk_failed,
+        record_document_request,
+        record_queue_rejected,
+    )
+except Exception:  # pragma: no cover
+    def record_document_chunk_failed(*args, **kwargs):  # type: ignore[no-redef]
+        pass
+
+    def record_document_request(*args, **kwargs):  # type: ignore[no-redef]
+        pass
+
+    def record_queue_rejected(*args, **kwargs):  # type: ignore[no-redef]
+        pass
+
 
 class TextPreparationPipeline:
     def __init__(self, validator: InputValidator, planners: dict[str, ChunkPlanner]):
@@ -107,6 +123,19 @@ class ConcurrencyDispatcher:
             if not math.isfinite(val) or not 0.0 <= val <= 1.0:
                 raise InvalidInputError(f"Engine returned out-of-range probability {val}")
             return val
+        except BaseException as e:
+            try:
+                if isinstance(e, asyncio.TimeoutError):
+                    record_document_chunk_failed(operation, model_key, "timeout")
+                elif isinstance(e, asyncio.CancelledError):
+                    record_document_chunk_failed(operation, model_key, "cancelled")
+                elif isinstance(e, InvalidInputError):
+                    record_document_chunk_failed(operation, model_key, "invalid")
+                else:
+                    record_document_chunk_failed(operation, model_key, "error")
+            except Exception:
+                pass
+            raise
         finally:
             if telemetry is not None:
                 try:
@@ -153,28 +182,58 @@ class DocumentAnalysisService:
         request_is_active: Optional[Callable[[], bool]] = None,
     ) -> DocumentScore:
         operation = "analyze"
-        validated_text, chunks = self.prep_pipeline.prepare(text, model_key)
-        engine = self._get_engine(model_key)
         try:
-            self.telemetry.observe_document_plan(operation, model_key, len(validated_text), len(chunks))
-        except Exception as e:
-            logger.warning("telemetry_plan_failed", error=str(e))
-        probabilities = [0.0] * len(chunks)
-        async for chunk_index, prob in self.dispatcher.execute_progressively(
-            engine,
-            chunks,
-            request_is_active,
-            operation=operation,
-            model_key=model_key,
-            telemetry=self.telemetry,
-        ):
-            probabilities[chunk_index] = prob
+            validated_text, chunks = self.prep_pipeline.prepare(text, model_key)
+            engine = self._get_engine(model_key)
             try:
-                self.telemetry.record_document_chunk_processed(operation, model_key)
+                self.telemetry.observe_document_plan(operation, model_key, len(validated_text), len(chunks))
             except Exception as e:
-                logger.warning("telemetry_processed_failed", error=str(e))
+                logger.warning("telemetry_plan_failed", error=str(e))
+            probabilities = [0.0] * len(chunks)
+            async for chunk_index, prob in self.dispatcher.execute_progressively(
+                engine,
+                chunks,
+                request_is_active,
+                operation=operation,
+                model_key=model_key,
+                telemetry=self.telemetry,
+            ):
+                probabilities[chunk_index] = prob
+                try:
+                    self.telemetry.record_document_chunk_processed(operation, model_key)
+                except Exception as e:
+                    logger.warning("telemetry_processed_failed", error=str(e))
 
-        return self.aggregator.aggregate(chunks, probabilities, len(validated_text))
+            result = self.aggregator.aggregate(chunks, probabilities, len(validated_text))
+            try:
+                record_document_request(operation, model_key, "success")
+            except Exception:
+                pass
+            return result
+        except InvalidInputError:
+            try:
+                record_document_request(operation, model_key, "invalid_argument")
+            except Exception:
+                pass
+            raise
+        except ServiceOverloadedError:
+            try:
+                record_document_request(operation, model_key, "overloaded")
+            except Exception:
+                pass
+            raise
+        except asyncio.CancelledError:
+            try:
+                record_document_request(operation, model_key, "cancelled")
+            except Exception:
+                pass
+            raise
+        except Exception:
+            try:
+                record_document_request(operation, model_key, "internal")
+            except Exception:
+                pass
+            raise
 
     async def stream(
         self,
@@ -183,34 +242,64 @@ class DocumentAnalysisService:
         request_is_active: Optional[Callable[[], bool]] = None,
     ) -> AsyncGenerator[DocumentStarted | DocumentProgress | DocumentScore, None]:
         operation = "stream"
-        validated_text, chunks = self.prep_pipeline.prepare(text, model_key)
-        engine = self._get_engine(model_key)
         try:
-            self.telemetry.observe_document_plan(operation, model_key, len(validated_text), len(chunks))
-        except Exception as e:
-            logger.warning("telemetry_plan_failed", error=str(e))
-        probabilities: list[float] = [0.0] * len(chunks)
-        processed_chunks = 0
-
-        yield DocumentStarted(total_chars=len(validated_text), total_chunks=len(chunks))
-
-        async for chunk_index, prob in self.dispatcher.execute_progressively(
-            engine,
-            chunks,
-            request_is_active,
-            operation=operation,
-            model_key=model_key,
-            telemetry=self.telemetry,
-        ):
-            probabilities[chunk_index] = prob
+            validated_text, chunks = self.prep_pipeline.prepare(text, model_key)
+            engine = self._get_engine(model_key)
             try:
-                self.telemetry.record_document_chunk_processed(operation, model_key)
+                self.telemetry.observe_document_plan(operation, model_key, len(validated_text), len(chunks))
             except Exception as e:
-                logger.warning("telemetry_processed_failed", error=str(e))
-            processed_chunks += 1
-            yield DocumentProgress(processed_chunks=processed_chunks, total_chunks=len(chunks))
+                logger.warning("telemetry_plan_failed", error=str(e))
+            probabilities: list[float] = [0.0] * len(chunks)
+            processed_chunks = 0
 
-        yield self.aggregator.aggregate(chunks, probabilities, len(validated_text))
+            yield DocumentStarted(total_chars=len(validated_text), total_chunks=len(chunks))
+
+            async for chunk_index, prob in self.dispatcher.execute_progressively(
+                engine,
+                chunks,
+                request_is_active,
+                operation=operation,
+                model_key=model_key,
+                telemetry=self.telemetry,
+            ):
+                probabilities[chunk_index] = prob
+                try:
+                    self.telemetry.record_document_chunk_processed(operation, model_key)
+                except Exception as e:
+                    logger.warning("telemetry_processed_failed", error=str(e))
+                processed_chunks += 1
+                yield DocumentProgress(processed_chunks=processed_chunks, total_chunks=len(chunks))
+
+            final = self.aggregator.aggregate(chunks, probabilities, len(validated_text))
+            yield final
+            try:
+                record_document_request(operation, model_key, "success")
+            except Exception:
+                pass
+        except InvalidInputError:
+            try:
+                record_document_request(operation, model_key, "invalid_argument")
+            except Exception:
+                pass
+            raise
+        except ServiceOverloadedError:
+            try:
+                record_document_request(operation, model_key, "overloaded")
+            except Exception:
+                pass
+            raise
+        except asyncio.CancelledError:
+            try:
+                record_document_request(operation, model_key, "cancelled")
+            except Exception:
+                pass
+            raise
+        except Exception:
+            try:
+                record_document_request(operation, model_key, "internal")
+            except Exception:
+                pass
+            raise
 
     def summarize(self, text: str, model_key: str) -> tuple[int, int]:
         validated_text, chunks = self.prep_pipeline.prepare(text, model_key)
@@ -245,9 +334,11 @@ class DocumentAnalysisService:
 
                 if snap.status != BatcherHealthStatus.SERVING:
                     logger.warning("engine_not_serving", model=model_key, status=snap.status.value)
-                    # Do not block; allow request but count as risk. Optionally raise if QUEUE_FULL etc.
-                    # For now, raise ServiceOverloadedError for non-serving to shed load
                     if snap.status in (BatcherHealthStatus.QUEUE_FULL, BatcherHealthStatus.WORKER_UNAVAILABLE, BatcherHealthStatus.CIRCUIT_OPEN):
+                        try:
+                            record_queue_rejected(model_key, "health_shed")
+                        except Exception:
+                            pass
                         raise ServiceOverloadedError(f"{model_key} is {snap.status.value}")
             except ServiceOverloadedError:
                 raise

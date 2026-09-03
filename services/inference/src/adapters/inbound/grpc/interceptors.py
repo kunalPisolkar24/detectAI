@@ -323,6 +323,19 @@ class MonitoringInterceptor(aio.ServerInterceptor):
         return grpc.StatusCode.INTERNAL.name
 
     def _resolve_trace_id(self, metadata: dict) -> str:
+        # Prefer real OTel span context if available (links logs to traces)
+        try:
+            from opentelemetry import trace as otel_trace
+
+            span = otel_trace.get_current_span()
+            ctx = span.get_span_context()
+            if ctx is not None and getattr(ctx, "is_valid", False):
+                # Format as 32-char hex, same as W3C traceparent
+                trace_id = format(ctx.trace_id, "032x")
+                if trace_id and trace_id != "0" * 32:
+                    return trace_id
+        except Exception:
+            pass
         for header in _TRACE_HEADERS:
             value = metadata.get(header)
             if value:

@@ -141,6 +141,43 @@ INFERENCE_DOCUMENT_CHUNKS_PROCESSED_TOTAL = _safe_counter(
     ['operation', 'model'],
 )
 
+INFERENCE_DOCUMENT_CHUNKS_FAILED_TOTAL = _safe_counter(
+    'inference_document_chunks_failed_total',
+    'Total number of failed document chunks',
+    ['operation', 'model', 'reason'],
+)
+
+INFERENCE_BATCH_QUEUE_REJECTED_TOTAL = _safe_counter(
+    'inference_batch_queue_rejected_total',
+    'Total number of rejected batch queue insertions',
+    ['model', 'reason'],
+)
+
+INFERENCE_BATCH_ERRORS_TOTAL = _safe_counter(
+    'inference_batch_errors_total',
+    'Total number of batch processing errors',
+    ['model', 'error_type'],
+)
+
+MODEL_BATCH_QUEUE_WAIT_SECONDS = _safe_histogram(
+    'model_batch_queue_wait_seconds',
+    'Time a batch item waited in the queue before processing',
+    ['model'],
+    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 5.0],
+)
+
+INFERENCE_ENGINE_PROVIDER_FALLBACK_TOTAL = _safe_counter(
+    'inference_engine_provider_fallback_total',
+    'Total number of provider fallbacks (GPU missing or offline)',
+    ['model', 'requested', 'active', 'trigger'],
+)
+
+INFERENCE_DOCUMENT_REQUESTS_TOTAL = _safe_counter(
+    'inference_document_requests_total',
+    'Total number of document requests by outcome',
+    ['operation', 'model', 'status'],
+)
+
 _SERVICE_HEALTH_STATUSES = ('serving', 'not_serving')
 _SERVICE_HEALTH_REASONS = (
     'none',
@@ -179,10 +216,9 @@ class PrometheusTelemetryReporter(ITelemetryReporter):
         except Exception:
             pass
 
-    def record_document_chunk_failed(self, operation: str, model_name: str) -> None:
+    def record_document_chunk_failed(self, operation: str, model_name: str, reason: str = "error") -> None:
         try:
-            # Re-use processed counter semantics for failure visibility if needed; keep no-op to avoid cardinality
-            pass
+            INFERENCE_DOCUMENT_CHUNKS_FAILED_TOTAL.labels(operation=operation, model=model_name, reason=reason).inc()
         except Exception:
             pass
 
@@ -219,6 +255,43 @@ def set_engine_health(model_name: str, snapshot: BatcherHealthSnapshot) -> None:
 
     INFERENCE_ENGINE_QUEUE_CAPACITY.labels(model=model_name).set(snapshot.queue_capacity)
     INFERENCE_ENGINE_CIRCUIT_OPEN_SECONDS.labels(model=model_name).set(snapshot.circuit_open_remaining or 0)
+
+
+def record_queue_rejected(model_name: str, reason: str) -> None:
+    try:
+        INFERENCE_BATCH_QUEUE_REJECTED_TOTAL.labels(model=model_name, reason=reason).inc()
+    except Exception:
+        pass
+
+
+def record_batch_error(model_name: str, error_type: str) -> None:
+    try:
+        INFERENCE_BATCH_ERRORS_TOTAL.labels(model=model_name, error_type=error_type).inc()
+    except Exception:
+        pass
+
+
+def observe_queue_wait(model_name: str, seconds: float) -> None:
+    try:
+        MODEL_BATCH_QUEUE_WAIT_SECONDS.labels(model=model_name).observe(max(0.0, float(seconds)))
+    except Exception:
+        pass
+
+
+def record_provider_fallback(model_name: str, requested: str, active: str, trigger: str) -> None:
+    try:
+        INFERENCE_ENGINE_PROVIDER_FALLBACK_TOTAL.labels(
+            model=model_name, requested=requested, active=active, trigger=trigger
+        ).inc()
+    except Exception:
+        pass
+
+
+def record_document_request(operation: str, model_name: str, status: str) -> None:
+    try:
+        INFERENCE_DOCUMENT_REQUESTS_TOTAL.labels(operation=operation, model=model_name, status=status).inc()
+    except Exception:
+        pass
 
 
 def observe_document_plan(operation: str, model_name: str, input_chars: int, chunk_count: int) -> None:
