@@ -12,11 +12,13 @@ include:
   - path: ./infra/redis-events.yml
   - path: ./infra/rabbitmq-cluster.yml
   
-  - path: ../../../services/document-parser/compose.yml
-  - path: ../../../services/inference/compose.yml
+  - path: ../../../services/document-parser/infra/compose.yml
+  - path: ../../../services/inference/infra/compose.yml
+  - path: ../../../services/inference/infra/compose.prod.yml
+  - path: ../../../services/inference/infra/compose.gpu.yml
   - path: ../../../services/workers/compose.yml
-  - path: ../../../services/payments/gateway/compose.yml
-  - path: ../../../services/payments/gateway/compose.prod.yml
+  - path: ../../../services/payments/gateway/infra/compose.yml
+  - path: ../../../services/payments/gateway/infra/compose.prod.yml
   - path: ../../../services/chats/compose.yml
   
   - path: ../../../apps/web/compose.yml

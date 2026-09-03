@@ -2,9 +2,10 @@ services:
   ai-service:
     container_name: detect_ai_inference
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: Dockerfile.local
     restart: unless-stopped
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "/bin/grpc_health_probe", "-addr=:50051"]
       interval: 30s
@@ -19,7 +20,6 @@ services:
       - detectai_net
     environment:
       - PYTHONUNBUFFERED=1
-
       - ENV=${ENV:-production}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - GRPC_PORT=50051
@@ -42,18 +42,6 @@ services:
       - GRPC_MAX_WORKERS=${INFERENCE_GRPC_MAX_WORKERS:-50}
     volumes:
       - inference_models:/app/models
-    deploy:
-      resources:
-        limits:
-          memory: 16G
-          cpus: "8.0"
-        reservations:
-          memory: 4G
-          cpus: "2.0"
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
 
 volumes:
   inference_models:
@@ -61,5 +49,4 @@ volumes:
 
 networks:
   detectai_net:
-    name: ${detect_ai_network:-detectai_net}
-    external: true
+    name: ${detect_ai_network:-detect-ai-network}

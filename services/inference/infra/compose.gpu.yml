@@ -1,0 +1,19 @@
+services:
+  ai-service:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      - INFERENCE_PROVIDERS=CUDAExecutionProvider
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+          cpus: "8.0"
+        reservations:
+          memory: 4G
+          cpus: "2.0"
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
