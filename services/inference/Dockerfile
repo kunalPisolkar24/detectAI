@@ -18,14 +18,14 @@ RUN wget -q https://bootstrap.pypa.io/get-pip.py && python3.11 get-pip.py && rm 
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
 
-RUN pip install --no-cache-dir poetry
+RUN pip install --no-cache-dir "poetry==2.3.3"
 
 RUN wget -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.19/grpc_health_probe-linux-amd64 && \
     chmod +x /bin/grpc_health_probe
 
 COPY pyproject.toml poetry.lock ./
 RUN poetry config virtualenvs.create false && \
-    poetry install --only main --extras gpu --no-interaction --no-ansi
+    poetry install --only main --extras gpu --no-interaction --no-ansi --no-root
 
 COPY . .
 

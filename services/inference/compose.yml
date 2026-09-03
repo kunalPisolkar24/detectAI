@@ -10,18 +10,21 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 60s
+      start_interval: 5s
     ports:
-      - "${PORT_INFERENCE}:50051"
-      - "127.0.0.1:${PORT_INFERENCE_METRICS:-8333}:8333"
+      - "${PORT_INFERENCE:-50051}:50051"
+      - "${PORT_INFERENCE_METRICS:-8333}:8333"
     networks:
       - detectai_net
     environment:
       - PYTHONUNBUFFERED=1
-      
-      - ENV=${NODE_ENV}
+
+      - ENV=${ENV:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - GRPC_PORT=50051
       - METRICS_PORT=8333
-      - API_KEY=${AI_SERVICE_API_KEY}
+      - API_KEY=${AI_SERVICE_API_KEY:?AI_SERVICE_API_KEY is required}
       - MODEL_CACHE_DIR=${INFERENCE_MODEL_CACHE_DIR:-./models}
       - SPARK_MODEL_REVISION=${INFERENCE_SPARK_MODEL_REVISION:-9a48004391c71272d6fb1d164ed7c56e1fbfe360}
       - FLARE_MODEL_REVISION=${INFERENCE_FLARE_MODEL_REVISION:-e1911c0be59f4e10f0d120f639d1358e46bc2086}
@@ -32,20 +35,31 @@ services:
       - MAX_INFLIGHT_DOC_CHUNKS=${INFERENCE_MAX_INFLIGHT_DOC_CHUNKS:-8}
       - CHUNK_TOKEN_LIMIT=${INFERENCE_CHUNK_TOKEN_LIMIT:-256}
       - CHUNK_TOKEN_STRIDE=${INFERENCE_CHUNK_TOKEN_STRIDE:-192}
-      - INFERENCE_PROVIDERS=${INFERENCE_PROVIDERS:-CUDAExecutionProvider,CPUExecutionProvider}
+      - MAX_GLOBAL_TOKENS=${INFERENCE_MAX_GLOBAL_TOKENS:-10000}
+      - MAX_CONCURRENT_BATCHES=${INFERENCE_MAX_CONCURRENT_BATCHES:-4}
+      - INFERENCE_MAX_WORKERS=${INFERENCE_MAX_WORKERS:-32}
+      - INFERENCE_PROVIDERS=${INFERENCE_PROVIDERS:-CPUExecutionProvider}
       - GRPC_MAX_WORKERS=${INFERENCE_GRPC_MAX_WORKERS:-50}
+    volumes:
+      - inference_models:/app/models
     deploy:
       resources:
         limits:
           memory: 16G
           cpus: "8.0"
         reservations:
+          memory: 4G
+          cpus: "2.0"
           devices:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
 
+volumes:
+  inference_models:
+    name: ${COMPOSE_PROJECT_NAME:-detect_ai}_inference_models
+
 networks:
   detectai_net:
-    name: ${detect_ai_network}
+    name: ${detect_ai_network:-detectai_net}
     external: true

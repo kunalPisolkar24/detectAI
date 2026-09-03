@@ -27,10 +27,10 @@ docker-build:
 docker-build-local:
 	docker build -f Dockerfile.local -t ai-service:local .
 
-test:
+test: proto
 	poetry run python -m pytest tests/unit -v --cov=src --cov-report=term-missing
 
-test-integration:
+test-integration: proto
 	poetry run python -m pytest tests/integration -v
 
 integration: test-integration
