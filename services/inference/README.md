@@ -384,42 +384,41 @@ message PredictResponse {
 
 ## Observability
 
-* **Logs:** JSON to stdout via `structlog` (`log_setup.py:13`), `trace_id`/`user_id`/`auth_type` bound via `contextvars`; `LOG_LEVEL` env controls level.
-* **Tracing:** `opentelemetry` OTLP/HTTP to `OTEL_EXPORTER_OTLP_ENDPOINT` (`/v1/traces`), `GrpcAioInstrumentorServer` auto-instruments if available; fail-open if no endpoint (`tracing.py:17`).
-* **Metrics:** `prometheus_client` at `:8333` (`start_http_server` in `main.py:34`). Key series:
+Logs are JSON to stdout. Tracing is OTel if an OTLP endpoint is set. Metrics at GET /metrics for Prometheus.
 
-| Metric | Type | Labels |
-|---|---|---|
-| `grpc_requests_total` | Counter | `method, code, model` |
-| `grpc_auth_failures_total` | Counter | `method, reason` |
-| `grpc_latency_seconds` | Histogram `0.005..10s` | `method, model` |
-| `model_batch_size` | Histogram `1..512` | `model` |
-| `model_batch_queue_size` | Gauge | `model` |
-| `model_batch_queue_wait_seconds` | Histogram | `model` |
-| `model_batch_processing_seconds` | Histogram | `model` |
-| `model_ai_confidence_score` | Histogram `0.1..1.0` | `model` |
-| `inference_service_health_status` | Gauge `serving/not_serving` | `status` |
-| `inference_service_health_reason` | Gauge | `reason` |
-| `inference_engine_health_status` | Gauge | `model, status` |
-| `inference_engine_queue_capacity` | Gauge | `model` |
-| `inference_engine_circuit_open_seconds` | Gauge | `model` |
-| `inference_document_input_chars` | Histogram `128..65536` | `operation, model` |
-| `inference_document_chunk_count` | Histogram `1..512` | `operation, model` |
-| `inference_document_inflight_chunks` | Gauge | `operation, model` |
-| `inference_document_requests_total` | Counter | `operation, model, status` |
-| `inference_document_chunks_processed_total` | Counter | `operation, model` |
-| `inference_document_chunks_failed_total` | Counter | `operation, model, reason` |
-| `inference_batch_queue_rejected_total` | Counter | `model, reason` |
-| `inference_batch_errors_total` | Counter | `model, error_type` |
-| `inference_engine_provider_fallback_total` | Counter | `model, requested, active, trigger` |
+Metrics configured:
 
-Alerts (derived, mirror parser/gateway style):
+- gRPC requests total — counts every request by method, code and model
+- gRPC auth failures — counts rejected requests by method and reason
+- gRPC latency — measures request latency by method and model
+- Batch size distribution — tracks ONNX batch sizes by model
+- Batch queue size — gauges items waiting in batch queue by model
+- Batch queue wait — measures time items wait in queue by model
+- Batch processing time — measures ONNX execution time by model
+- AI confidence score — tracks predicted AI probability by model
+- Service health status — shows gRPC health SERVING/NOT_SERVING
+- Service health reason — shows failure reason (initializing, shutdown, queue_full etc)
+- Engine health status — shows per-engine health by model and status
+- Engine queue capacity — shows configured queue size by model
+- Engine circuit open — shows remaining circuit open seconds by model
+- Document input chars — tracks input size by operation and model
+- Document chunk count — tracks planned chunks by operation and model
+- Document inflight chunks — gauges concurrent chunk predictions
+- Document requests total — counts document requests by operation, model and status
+- Document chunks processed — counts successful chunks by operation and model
+- Document chunks failed — counts failed chunks by operation, model and reason
+- Batch queue rejected — counts queue-full rejections by model and reason
+- Batch errors — counts batch errors by model and error type
+- Provider fallback — counts GPU→CPU fallbacks by model, requested/active provider and trigger
 
-* Inference down — `up{job=inference}==0` for `2m`
-* High error rate — `rate(grpc_requests_total{code!="OK"}[5m]) >0.05`
-* High latency — `histogram_quantile(0.95, grpc_latency_seconds) >2s` for `10m`
-* Queue full / worker unavailable — `inference_engine_health_status{status="queue_full"}==1`
-* Batch timeouts — `rate(inference_batch_errors_total{error_type="timeout"}[5m]) >0.1`
+Alerts configured:
+
+- Inference down — service not up for more than 2 minutes
+- High error rate — error rate above 5% for 5 minutes
+- High latency — p95 latency above 2 seconds for 10 minutes
+- Queue full — engine queue full for more than 1 minute
+- Batch timeouts — more than 0.1 timeouts per second for 5 minutes
+- Provider fallback — any GPU missing fallback
 
 ## Testing
 
