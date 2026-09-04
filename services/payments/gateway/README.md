@@ -156,10 +156,4 @@ make gateway-down                     # down --remove-orphans
 make gateway-down-v                   # down -v (removes rabbitmq_data volume)
 make gateway-logs                     # logs -f payment-gateway
 make gateway-ps                       # ps
-
-docker build -t payment-gateway .
-docker compose -f infra/compose.yml up --build -d
-docker compose -f infra/compose.yml -f infra/compose.with-rabbit.yml up --build -d
-docker compose -f infra/compose.yml -f infra/compose.with-rabbit.yml -f infra/compose.with-ui.yml up --build -d
-curl -f http://localhost:8080/readyz
 ```

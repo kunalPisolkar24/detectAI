@@ -445,15 +445,6 @@ make inference-down                  # down --remove-orphans
 make inference-down-v                # down -v
 # Prod variant (restart: always)
 make inference-up-prod GPU=1
-
-# Direct compose
-docker build -t ai-service:latest .
-docker build -f Dockerfile.local -t ai-service:local .
-docker compose -f infra/compose.yml up --build -d
-docker compose -f infra/compose.yml -f infra/compose.gpu.yml up --build -d
-docker compose -f infra/compose.yml -f infra/compose.prod.yml up --build -d
-grpc_health_probe -addr=:50051   # or curl -f grpc_health_probe
-curl http://localhost:8333/metrics
 ```
 
 * `infra/compose.yml:9` healthcheck `grpc_health_probe -addr=:50051` interval `30s` `start_period 10m` `start_interval 5s`; ports `50051:50051 8333:8333`; network `detectai_net`.
