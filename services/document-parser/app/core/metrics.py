@@ -106,6 +106,20 @@ _pool_state_lock = threading.Lock()
 _pool_busy_tasks = 0
 
 
+def _pool_snapshot() -> tuple[int, int, int] | None:
+    """Centralised snapshot of pool state; hides private ThreadPoolExecutor attrs."""
+    if _process_pool is None:
+        return None
+    with _pool_state_lock:
+        busy = _pool_busy_tasks
+    try:
+        queued = _process_pool._work_queue.qsize()  # type: ignore[attr-defined]
+    except Exception:
+        queued = 0
+    max_workers = getattr(_process_pool, "_max_workers", 0)
+    return busy, queued, max_workers
+
+
 def register_process_pool(pool) -> None:
     global _process_pool
     _process_pool = pool
@@ -125,15 +139,11 @@ def mark_extraction_finished() -> None:
 
 
 def get_pool_stats() -> tuple[int, int, int] | None:
-    if _process_pool is None:
-        return None
-    with _pool_state_lock:
-        busy = _pool_busy_tasks
-    return busy, _process_pool._work_queue.qsize(), _process_pool._max_workers
+    return _pool_snapshot()
 
 
 def refresh_process_pool_gauges() -> None:
-    stats = get_pool_stats()
+    stats = _pool_snapshot()
     if stats is None:
         return
     busy, queued, max_workers = stats
@@ -143,7 +153,7 @@ def refresh_process_pool_gauges() -> None:
 
 
 def is_process_pool_healthy() -> bool:
-    return _process_pool is not None and not _process_pool._shutdown
+    return _process_pool is not None and not getattr(_process_pool, "_shutdown", False)
 
 EXTRACTION_DURATION_SECONDS = Histogram(
     "extraction_duration_seconds",
@@ -179,24 +189,32 @@ def record_extraction_timeout(mime_type: str) -> None:
     EXTRACTION_TIMEOUTS_TOTAL.labels(mime_type=mime_type).inc()
 
 
+_REJECTED_REASON_MAP: dict[type[Exception], str] = {
+    FileTooLargeError: "too_large",
+    DocumentTooLargeError: "too_large",
+    UnsupportedFileTypeError: "unsupported_type",
+}
+
+_ERROR_TYPE_MAP: dict[type[Exception], str] = {
+    FileTooLargeError: "file_too_large",
+    DocumentTooLargeError: "document_too_large",
+    UnsupportedFileTypeError: "unsupported_file_type",
+    ExtractionTimeoutError: "timeout",
+    ExtractionError: "corrupt_document",
+}
+
+
 def record_rejected_upload(exc: Exception) -> None:
-    if isinstance(exc, (FileTooLargeError, DocumentTooLargeError)):
-        REJECTED_UPLOADS_TOTAL.labels(reason="too_large").inc()
-    elif isinstance(exc, UnsupportedFileTypeError):
-        REJECTED_UPLOADS_TOTAL.labels(reason="unsupported_type").inc()
+    for exc_type, reason in _REJECTED_REASON_MAP.items():
+        if isinstance(exc, exc_type):
+            REJECTED_UPLOADS_TOTAL.labels(reason=reason).inc()
+            return
 
 
 def classify_extraction_error(exc: Exception) -> str:
-    if isinstance(exc, FileTooLargeError):
-        return "file_too_large"
-    if isinstance(exc, DocumentTooLargeError):
-        return "document_too_large"
-    if isinstance(exc, UnsupportedFileTypeError):
-        return "unsupported_file_type"
-    if isinstance(exc, ExtractionTimeoutError):
-        return "timeout"
-    if isinstance(exc, ExtractionError):
-        return "corrupt_document"
+    for exc_type, label in _ERROR_TYPE_MAP.items():
+        if isinstance(exc, exc_type):
+            return label
     return "unexpected"
 
 

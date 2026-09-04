@@ -32,13 +32,11 @@ class PdfExtractionStrategy(ExtractionStrategy):
         page_texts = []
         total_length = 0
         unreadable_pages = 0
-        total_pages = 0
         try:
             with fitz.open(file_path) as doc:
                 if doc.page_count > settings.MAX_PDF_PAGES:
                     raise DocumentTooLargeError(doc.page_count, settings.MAX_PDF_PAGES)
                 for page in doc:
-                    total_pages += 1
                     try:
                         text = self._extract_page_text(page)
                     except Exception:

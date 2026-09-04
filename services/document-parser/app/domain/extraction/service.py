@@ -43,6 +43,7 @@ class ExtractionService:
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp_path = tmp.name
+            content = b""
             try:
                 content = file.file.read()
                 file_size_bytes = len(content)
@@ -88,7 +89,7 @@ class ExtractionService:
             except Exception as exc:
                 record_extraction_failure(
                     mime_type=mime_type,
-                    file_size_bytes=len(content) if "content" in dir() else 0,
+                    file_size_bytes=len(content),
                     error_type=classify_extraction_error(exc),
                 )
                 raise
