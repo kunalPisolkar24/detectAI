@@ -24,6 +24,7 @@ install:
 install-prod:
 	poetry install --only main --extras gpu
 
+# Canonical proto generation (also in Dockerfile/Dockerfile.local for image builds)
 proto:
 	mkdir -p src/generated
 	poetry run python -m grpc_tools.protoc -I./protos --python_out=./src/generated --grpc_python_out=./src/generated ./protos/ai_service.proto
