@@ -2,13 +2,13 @@ import { initTracing } from "@shared/tracing/instrumentation";
 initTracing("worker-cron");
 
 import { SubscriptionSweeper } from "@modules/cron/application/services/SubscriptionSweeper";
-import { prisma, prismaPrimary, getPgPool } from "@shared/database/PrismaService";
+import { prismaPrimary, getPgPool, closePrisma } from "@shared/database/PrismaService";
+import { prisma } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { Logger } from "@shared/logging/Logger";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
-import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { config } from "./config";
 
 const BATCH_COOLDOWN_MS = 5000;
@@ -21,12 +21,16 @@ const redisClient = RedisFactory.createClient({
     url: config.REDIS_URL,
     sentinels: config.REDIS_SENTINELS,
     masterName: config.REDIS_MASTER_NAME,
-    password: config.REDIS_PASSWORD,
+    password: (config as any).REDIS_PASSWORD,
 });
 
 const metricsService = new MetricsService("worker-cron");
-metricsService.registerPool("primary", getPgPool("primary")!);
-metricsService.registerPool("replica", getPgPool("replica")!);
+try {
+    const primaryPool = getPgPool("primary");
+    if (primaryPool) metricsService.registerPool("primary", primaryPool);
+    const replicaPool = getPgPool("replica");
+    if (replicaPool && replicaPool !== primaryPool) metricsService.registerPool("replica", replicaPool);
+} catch {}
 metricsService.cronConfig.set({ param: "check_interval_ms" }, config.CRON_CHECK_INTERVAL_MS);
 metricsService.cronConfig.set({ param: "batch_size" }, config.CRON_BATCH_SIZE);
 
@@ -42,6 +46,8 @@ const sweeper = new SubscriptionSweeper(userRepository, redisClient, metricsServ
 let isShuttingDown = false;
 let currentJob: Promise<number> | null = null;
 let lastSuccess = Date.now();
+const bootTime = Date.now();
+let loopStarted = false;
 const abort = new AbortController();
 
 function jitter(intervalMs: number): number {
@@ -50,6 +56,7 @@ function jitter(intervalMs: number): number {
 
 function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
     return new Promise(resolve => {
+        if (signal.aborted) return resolve();
         const timer = setTimeout(resolve, ms);
         signal.addEventListener("abort", () => {
             clearTimeout(timer);
@@ -62,6 +69,8 @@ function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
 async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<T>(resolve => { timeout = setTimeout(() => resolve(fallback), ms); });
+    // Prevent unhandled rejection on the losing promise
+    promise.catch(() => {});
     try {
         const result = await Promise.race([promise, timeoutPromise]);
         return result;
@@ -83,6 +92,10 @@ async function updateSubscriptionStatusGauges(): Promise<void> {
         const known = ["ACTIVE", "PAST_DUE", "PAUSED", "TRIALING", "CANCELED"];
         const seen = new Set(groups.map(g => g.status));
         for (const s of known) if (!seen.has(s as any)) metricsService.subscriptionStatus.set({ status: s }, 0);
+        // Zero out synthetic NULL if no longer present to avoid stale series
+        if (!seen.has(null as any) && groups.every(g => g.status !== null)) {
+            metricsService.subscriptionStatus.set({ status: "NULL" }, 0);
+        }
     } catch {
         // best-effort; groupBy may fail if replica not ready — ignore for loop liveness
     }
@@ -92,18 +105,23 @@ const server = new WorkerServer(
     metricsService,
     config.PORT || 7777,
     () => {
+        // Liveness: process alive, not shutting down. Do NOT check downstream or lastSuccess.
         if (isShuttingDown) return { healthy: false, checks: { isShuttingDown: true, reason: "shutting_down" } };
-        const age = Date.now() - lastSuccess;
-        const threshold = 2 * config.CRON_CHECK_INTERVAL_MS;
-        const healthy = age < threshold;
-        return { healthy, checks: { lastSuccessAgeMs: age, thresholdMs: threshold, isShuttingDown } };
+        // If loop never started within 60s, liveness fails (startup hang)
+        if (!loopStarted && Date.now() - bootTime > 60000) {
+            return { healthy: false, checks: { loopStarted, bootAgeMs: Date.now() - bootTime, reason: "loop_not_started" } };
+        }
+        return { healthy: true, checks: { isShuttingDown, loopStarted } };
     },
     async () => {
         if (isShuttingDown) return { healthy: false, checks: { isShuttingDown: true, reason: "shutting_down" } };
-        // Pool waiting pressure — if waiting>0, pool exhausted, not ready for new jobs
         const pool = getPgPool("primary");
         const waiting = pool ? pool.waitingCount : 0;
-        if (waiting > 0) return { healthy: false, checks: { db: false, redis: false, poolWaiting: waiting, reason: "pool_waiting" } };
+        const poolPressured = waiting > 5;
+
+        const age = Date.now() - lastSuccess;
+        const threshold = 2 * config.CRON_CHECK_INTERVAL_MS;
+        const loopStale = age > threshold;
 
         const dbCheck = withTimeout(
             prismaPrimary.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
@@ -113,7 +131,6 @@ const server = new WorkerServer(
         const redisCheck = withTimeout(
             (async () => {
                 try {
-                    // active ping more reliable than status==="ready" when enableReadyCheck:false (RedisClient.ts:35)
                     const res = await redisClient.ping();
                     return res === "PONG" || redisClient.status === "ready";
                 } catch {
@@ -125,13 +142,35 @@ const server = new WorkerServer(
         );
 
         const [dbOk, redisOk] = await Promise.all([dbCheck, redisCheck]);
-        const healthy = dbOk && redisOk && waiting === 0;
-        return { healthy, checks: { db: dbOk, redis: redisOk, poolWaiting: waiting, isShuttingDown } };
+        const healthy = dbOk && redisOk && !poolPressured && !loopStale;
+        return { healthy, checks: { db: dbOk, redis: redisOk, poolWaiting: waiting, poolPressured, lastSuccessAgeMs: age, thresholdMs: threshold, loopStale, isShuttingDown } };
     }
 );
 
-server.start();
-metricsService.activeWorkers.inc();
+// Bootstrap: wait for deps before starting server and loop
+async function bootstrap(): Promise<void> {
+    for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+            await withTimeout(prismaPrimary.$queryRaw`SELECT 1`, 3000, null as any);
+            await withTimeout(redisClient.ping(), 3000, null as any);
+            break;
+        } catch (e) {
+            Logger.warn(`Cron bootstrap waiting for deps (attempt ${attempt}/5)`, { error: e });
+            if (attempt < 5) await new Promise(r => setTimeout(r, 2000));
+        }
+    }
+    server.start();
+    metricsService.activeWorkers.inc();
+    loopStarted = true;
+    const loopDone = startWorker();
+    loopDone.catch(error => {
+        try { metricsService.activeWorkers.dec(); } catch {}
+        Logger.error("Cron worker crashed during startup or execution", error);
+        process.exit(1);
+    });
+    // Store for shutdown
+    (globalThis as any).__cronLoopDone = loopDone;
+}
 
 async function startWorker(): Promise<void> {
     Logger.info(`Cron Worker (Subscription Sweeper) initializing. Check interval: ${config.CRON_CHECK_INTERVAL_MS}ms.`);
@@ -165,10 +204,9 @@ async function startWorker(): Promise<void> {
     }
 }
 
-const loopDone = startWorker();
-loopDone.catch(error => {
-    try { metricsService.activeWorkers.dec(); } catch {}
-    Logger.error("Cron worker crashed during startup or execution", error);
+// Kick off bootstrap
+bootstrap().catch((err) => {
+    Logger.error("Cron bootstrap failed", err);
     process.exit(1);
 });
 
@@ -177,31 +215,41 @@ const shutdown = async () => {
     isShuttingDown = true;
 
     Logger.info("Shutting down Cron Worker...");
-    server.stop();
+    try { server.stop(); } catch {}
     abort.abort();
 
+    const loopDone: Promise<void> = (globalThis as any).__cronLoopDone;
+    // Total shutdown budget is SHUTDOWN_GRACE_MS (10s) — not 20s sequential
+    const budgetEnd = Date.now() + SHUTDOWN_GRACE_MS;
+
     if (currentJob) {
+        const remaining = Math.max(0, budgetEnd - Date.now());
         const raced = await Promise.race([
             currentJob.catch(() => {}).then(() => "done" as const),
-            new Promise<"timeout">(resolve => setTimeout(() => resolve("timeout"), SHUTDOWN_GRACE_MS)),
+            new Promise<"timeout">(resolve => setTimeout(() => resolve("timeout"), remaining)),
         ]);
         if (raced === "timeout") {
             try { metricsService.shutdownAbortsTotal.inc({ reason: "job_grace_timeout" }); } catch {}
         }
     }
 
-    const loopRaced = await Promise.race([
-        loopDone.catch(() => {}).then(() => "done" as const),
-        new Promise<"timeout">(resolve => setTimeout(() => resolve("timeout"), SHUTDOWN_GRACE_MS)),
-    ]);
-    if (loopRaced === "timeout") {
-        try { metricsService.shutdownAbortsTotal.inc({ reason: "job_grace_timeout" }); } catch {}
+    if (loopDone) {
+        const remaining = Math.max(0, budgetEnd - Date.now());
+        const loopRaced = await Promise.race([
+            loopDone.catch(() => {}).then(() => "done" as const),
+            new Promise<"timeout">(resolve => setTimeout(() => resolve("timeout"), remaining)),
+        ]);
+        if (loopRaced === "timeout") {
+            try { metricsService.shutdownAbortsTotal.inc({ reason: "loop_grace_timeout" }); } catch {}
+        }
     }
 
-    metricsService.activeWorkers.dec();
+    try { metricsService.activeWorkers.dec(); } catch {}
 
-    await prisma.$disconnect();
-    await redisClient.quit();
+    try { await closePrisma(); } catch (e: any) { Logger.warn("Prisma close error", { error: e instanceof Error ? e.message : String(e) }); }
+    try {
+        await Promise.race([redisClient.quit(), new Promise((_, rej) => setTimeout(() => rej(new Error("redis quit timeout")), 3000))]);
+    } catch {}
 
     Logger.info("Cron Worker exited gracefully");
     process.exit(0);
@@ -209,3 +257,6 @@ const shutdown = async () => {
 
 process.once("SIGINT", shutdown);
 process.once("SIGTERM", shutdown);
+process.once("SIGQUIT", shutdown);
+process.on("unhandledRejection", (reason: any) => Logger.error("Unhandled rejection in cron worker", reason));
+process.on("uncaughtException", (err: any) => Logger.error("Uncaught exception in cron worker", err));

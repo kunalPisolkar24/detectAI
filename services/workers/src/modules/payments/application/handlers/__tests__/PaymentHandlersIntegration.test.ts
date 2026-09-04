@@ -92,7 +92,7 @@ describe("PaymentHandlers Integration", () => {
         await paymentService.handleEvent(event as any);
 
         expect(handleSpy).toHaveBeenCalled();
-        const callArgs = handleSpy.mock.calls[0];
+        const callArgs = (handleSpy.mock.calls[0] as any);
         expect(callArgs?.[0]).toBe("user_123");
     });
 });

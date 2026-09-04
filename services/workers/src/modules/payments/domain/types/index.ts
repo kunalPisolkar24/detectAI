@@ -1,4 +1,4 @@
-import { SubscriptionStatus } from "../../../../generated/prisma/client";
+import { SubscriptionStatus } from "../../../../../generated/prisma/client";
 
 export interface PaddleEventData {
   id?: string;

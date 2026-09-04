@@ -1,4 +1,4 @@
-import { type SubscriptionStatus } from "../../../generated/prisma/client";
+import { type SubscriptionStatus } from "../../../../generated/prisma/client";
 
 export interface UserRecord {
     email: string;

@@ -288,14 +288,14 @@ export class RabbitMQWorker {
 
         try {
             if (this.channel) await this.channel.close();
-        } catch (e) {
-            Logger.warn("Channel already closed during shutdown", e);
+        } catch (e: any) {
+            Logger.warn("Channel already closed during shutdown", { error: e instanceof Error ? e.message : String(e) });
         }
 
         try {
             if (this.connection) await this.connection.close();
-        } catch (e) {
-            Logger.warn("Connection already closed during shutdown", e);
+        } catch (e: any) {
+            Logger.warn("Connection already closed during shutdown", { error: e instanceof Error ? e.message : String(e) });
         }
 
         this.channel = null;

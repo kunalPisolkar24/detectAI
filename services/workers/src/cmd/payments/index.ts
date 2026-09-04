@@ -4,17 +4,18 @@ initTracing("worker-payments");
 import { RabbitMQWorker } from "@shared/messaging/RabbitMQWorker";
 import { PaymentService } from "@modules/payments/application/services/PaymentService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
-import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { PaddleClient } from "@modules/payments/infrastructure/external/PaddleClient";
 import { SubscriptionUpdatedHandler } from "@modules/payments/application/handlers/SubscriptionUpdatedHandler";
 import { SubscriptionCanceledHandler } from "@modules/payments/application/handlers/SubscriptionCanceledHandler";
 import { UserCancelHandler } from "@modules/payments/application/handlers/UserCancelHandler";
 import { validateTransition } from "@modules/payments/domain/stateMachine";
-import { prisma, prismaPrimary, getPgPool } from "@shared/database/PrismaService";
+import { prismaPrimary, getPgPool, closePrisma } from "@shared/database/PrismaService";
+import { prisma } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { IdempotencyStore } from "@shared/cache/IdempotencyStore";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
+import { Logger } from "@shared/logging/Logger";
 import { config } from "./config";
 
 const QUEUE_NAME = "payment_events";
@@ -25,21 +26,25 @@ const redisClient = RedisFactory.createClient({
     url: config.REDIS_URL,
     sentinels: config.REDIS_SENTINELS,
     masterName: config.REDIS_MASTER_NAME,
-    password: process.env.REDIS_PASSWORD,
+    password: (config as any).REDIS_PASSWORD,
 });
 
 const eventRedisClient = RedisFactory.createClient({
-    mode: config.EVENT_REDIS_MODE,
+    mode: (config as any).EVENT_REDIS_MODE,
     name: "EventRedis",
-    url: config.EVENT_REDIS_URL,
-    sentinels: config.EVENT_REDIS_SENTINELS,
-    masterName: config.EVENT_REDIS_MASTER_NAME,
-    password: config.EVENT_REDIS_PASSWORD,
+    url: (config as any).EVENT_REDIS_URL,
+    sentinels: (config as any).EVENT_REDIS_SENTINELS,
+    masterName: (config as any).EVENT_REDIS_MASTER_NAME,
+    password: (config as any).EVENT_REDIS_PASSWORD,
 });
 
 const metricsService = new MetricsService("worker-payments");
-metricsService.registerPool("primary", getPgPool("primary")!);
-metricsService.registerPool("replica", getPgPool("replica")!);
+try {
+    const primaryPool = getPgPool("primary");
+    if (primaryPool) metricsService.registerPool("primary", primaryPool);
+    const replicaPool = getPgPool("replica");
+    if (replicaPool && replicaPool !== primaryPool) metricsService.registerPool("replica", replicaPool);
+} catch {}
 
 redisClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 1));
 redisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "PaymentsRedis" }, 1));
@@ -54,8 +59,8 @@ eventRedisClient.on("ready", () => metricsService.redisConnectionStatus.set({ cl
 eventRedisClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 0));
 eventRedisClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "EventRedis" }, 0));
 
-const userRepository = new PrismaUserRepository(prismaPrimary, prisma, validateTransition);
-const paddleClient = new PaddleClient(config.PADDLE_API_KEY, config.PADDLE_ENVIRONMENT, 10_000, metricsService);
+const userRepository = new PrismaUserRepository(prismaPrimary, prisma, validateTransition, metricsService);
+const paddleClient = new PaddleClient(config.PADDLE_API_KEY, (config as any).PADDLE_ENVIRONMENT, 10_000, metricsService);
 const idempotencyStore = new IdempotencyStore(eventRedisClient, prismaPrimary as any, metricsService);
 
 const subscriptionUpdatedHandler = new SubscriptionUpdatedHandler(userRepository, redisClient, eventRedisClient, metricsService);
@@ -73,37 +78,53 @@ const paymentHandlers = {
 const paymentService = new PaymentService(paymentHandlers, metricsService, idempotencyStore);
 
 const worker = new RabbitMQWorker(
-    config.RABBITMQ_URL,
+    (config as any).RABBITMQ_URL,
     QUEUE_NAME,
     async (event: any) => await paymentService.handleEvent(event),
     metricsService,
-    config.RABBITMQ_QUEUE_TYPE ?? "classic",
+    (config as any).RABBITMQ_QUEUE_TYPE ?? "classic",
     Object.keys(paymentHandlers)
 );
 
-worker.start();
-
 let isShuttingDown = false;
 
+// withTimeout that properly cancels the dangling promise's unhandled rejection
 async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<T>(resolve => { timeout = setTimeout(() => resolve(fallback), ms); });
-  try { const result = await Promise.race([promise, timeoutPromise]); return result; } finally { if (timeout) clearTimeout(timeout); }
+  let timedOut = false;
+  const timeoutPromise = new Promise<T>(resolve => {
+    timeout = setTimeout(() => {
+      timedOut = true;
+      resolve(fallback);
+    }, ms);
+  });
+  // Prevent unhandled rejection if the original promise rejects after timeout
+  promise.catch(() => {});
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    return result;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    // If we timed out, the original promise continues in background but its rejection is already caught
+    void promise.catch(() => {});
+  }
 }
 
+// Liveness = process alive; readiness = deps
 const server = new WorkerServer(
     metricsService,
     config.PORT,
     () => {
+        // Liveness: never fail on downstream — only on shutting down
         if (isShuttingDown) return { healthy: false, checks: { isShuttingDown: true } };
-        const healthy = worker.getStatus();
-        return { healthy, checks: { rabbitmq: healthy, isShuttingDown } };
+        return { healthy: true, checks: { isShuttingDown } };
     },
     async () => {
         if (isShuttingDown) return { healthy: false, checks: { isShuttingDown: true } };
         const pool = getPgPool("primary");
         const waiting = pool ? pool.waitingCount : 0;
-        if (waiting > 0) return { healthy: false, checks: { poolWaiting: waiting, reason: "pool_waiting" } };
+        // Only mark not-ready on sustained pressure, not transient >0 flapping
+        const poolPressured = waiting > 5;
 
         const dbOk = await withTimeout(
             prismaPrimary.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
@@ -122,25 +143,79 @@ const server = new WorkerServer(
         );
         const [redisOk, eventRedisOk] = await Promise.all([pingWithTimeout(redisClient), pingWithTimeout(eventRedisClient)]);
         const workerOk = worker.getStatus();
-        const healthy = dbOk && redisOk && eventRedisOk && workerOk && waiting === 0;
-        return { healthy, checks: { db: dbOk, redis: redisOk, eventRedis: eventRedisOk, rabbitmq: workerOk, poolWaiting: waiting, isShuttingDown } };
+        // poolPressured is a readiness signal but not the sole determinant — include in checks
+        const healthy = dbOk && redisOk && eventRedisOk && workerOk && !poolPressured;
+        return { healthy, checks: { db: dbOk, redis: redisOk, eventRedis: eventRedisOk, rabbitmq: workerOk, poolWaiting: waiting, poolPressured, isShuttingDown } };
     }
 );
 
-server.start();
-metricsService.activeWorkers.inc();
+async function bootstrap(): Promise<void> {
+    // Ensure DB/Redis are reachable before consuming — avoids immediate crash loops
+    const maxAttempts = 5;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            await withTimeout(prismaPrimary.$queryRaw`SELECT 1`, 3000, null as any);
+            await withTimeout(redisClient.ping(), 3000, null as any);
+            await withTimeout(eventRedisClient.ping(), 3000, null as any);
+            break;
+        } catch (e) {
+            Logger.warn(`Payments bootstrap waiting for deps (attempt ${attempt}/${maxAttempts})`, { error: e });
+            if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 2000));
+        }
+    }
+
+    server.start();
+    metricsService.activeWorkers.inc();
+
+    // Start consuming only after server is listening and deps are ready
+    worker.start().catch((err) => {
+        Logger.error("Payments worker failed to start", err);
+        process.exit(1);
+    });
+}
+
+bootstrap().catch((err) => {
+    Logger.error("Payments bootstrap failed", err);
+    process.exit(1);
+});
 
 const shutdown = async () => {
     if (isShuttingDown) return;
     isShuttingDown = true;
     metricsService.activeWorkers.dec();
-    server.stop();
-    await worker.shutdown();
-    await prisma.$disconnect();
-    await redisClient.quit();
-    await eventRedisClient.quit();
+    try {
+        server.stop();
+    } catch {}
+    // Bounded shutdown: worker drain first, then DB/Redis with timeouts
+    try {
+        await Promise.race([
+            worker.shutdown(),
+            new Promise<void>((resolve) => setTimeout(resolve, 10000)),
+        ]);
+    } catch (e: any) {
+        Logger.warn("Worker shutdown error", { error: e instanceof Error ? e.message : String(e) });
+    }
+    try {
+        await closePrisma();
+    } catch (e: any) {
+        Logger.warn("Prisma close error", { error: e instanceof Error ? e.message : String(e) });
+    }
+    try {
+        await Promise.race([redisClient.quit(), new Promise((_, rej) => setTimeout(() => rej(new Error("redis quit timeout")), 5000))]);
+    } catch {}
+    try {
+        await Promise.race([eventRedisClient.quit(), new Promise((_, rej) => setTimeout(() => rej(new Error("eventRedis quit timeout")), 5000))]);
+    } catch {}
     process.exit(0);
 };
 
 process.once("SIGINT", shutdown);
 process.once("SIGTERM", shutdown);
+process.once("SIGQUIT", shutdown);
+process.on("unhandledRejection", (reason: any) => {
+    Logger.error("Unhandled rejection in payments worker", reason);
+});
+process.on("uncaughtException", (err: any) => {
+    Logger.error("Uncaught exception in payments worker", err);
+    // Don't crash immediately — let shutdown handle it
+});

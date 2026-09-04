@@ -1,4 +1,4 @@
-import { type SubscriptionStatus } from "../../../generated/prisma/client";
+import { type SubscriptionStatus } from "../../../../generated/prisma/client";
 import { type BulkSubscriptionUpdate, type ExpiredSubscription, type SubscriptionUpdateData, type SubscriptionUpdateResult, type UserRecord } from "./types";
 
 /**
