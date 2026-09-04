@@ -148,12 +148,27 @@ See [Load Testing](test/load/README.md) for scenarios and env.
 
 ## Docker
 
+All Docker commands are wrapped with `make` for simplicity — no need to remember `docker build` or `compose` flags.
+
 ```bash
-make gateway-build                    # docker build -t payment-gateway .
-make gateway-up                       # gateway + rabbitmq + ui (WITH_RABBITMQ=1 WITH_UI=1)
-make gateway-up WITH_RABBITMQ=0       # gateway only, no rabbitmq
-make gateway-down                     # down --remove-orphans
-make gateway-down-v                   # down -v (removes rabbitmq_data volume)
-make gateway-logs                     # logs -f payment-gateway
-make gateway-ps                       # ps
+# Build the gateway image
+make gateway-build
+
+# Start gateway with RabbitMQ and management UI (default, full stack)
+make gateway-up
+
+# Start gateway only, without RabbitMQ (for testing the service alone)
+make gateway-up WITH_RABBITMQ=0
+
+# View live logs from the gateway
+make gateway-logs
+
+# Check which containers are running
+make gateway-ps
+
+# Stop the service
+make gateway-down
+
+# Stop and clean up volumes (removes RabbitMQ data)
+make gateway-down-v
 ```

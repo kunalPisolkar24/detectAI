@@ -145,11 +145,24 @@ See [Load Testing](load/README.md) for scenarios and env.
 
 ## Docker
 
+All Docker commands are wrapped with `make` for simplicity — no need to remember `docker build` or `compose` flags.
+
 ```bash
-make parser-build                     # docker build -t detectai-document-parser .
-make parser-up                        # docker compose -f infra/compose.yml up --build -d
-make parser-down                      # down --remove-orphans
-make parser-down-v                    # down -v
-make parser-logs                      # logs -f document-parser
-make parser-ps                        # ps
+# Build the parser image
+make parser-build
+
+# Start the service
+make parser-up
+
+# View live logs from the service
+make parser-logs
+
+# Check which containers are running
+make parser-ps
+
+# Stop the service
+make parser-down
+
+# Stop and clean up volumes (fresh start)
+make parser-down-v
 ```

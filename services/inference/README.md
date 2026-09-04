@@ -434,16 +434,31 @@ Coverage omits `src/main.py` and `src/generated/*` (`pyproject.toml:53`). Tests 
 
 ## Docker
 
+All Docker commands are wrapped with `make` for simplicity — no need to remember `docker build` or `compose` flags.
+
 ```bash
-# Standalone (CPU by default, GPU via GPU=1)
-make inference-build                 # docker build -t ai-service:latest .
-make inference-up                    # compose.yml + Dockerfile.local (CPUExecutionProvider)
-make inference-up GPU=1              # compose.gpu.yml -> Dockerfile + CUDAExecutionProvider (nvidia, 16G/8CPU)
-make inference-logs                  # logs -f ai-service
-make inference-ps                    # ps
-make inference-down                  # down --remove-orphans
-make inference-down-v                # down -v
-# Prod variant (restart: always)
+# Build the inference image
+make inference-build
+
+# Start the service locally on CPU (default, fast for development)
+make inference-up
+
+# Start with GPU acceleration (uses CUDA, needs nvidia runtime)
+make inference-up GPU=1
+
+# View live logs from the service
+make inference-logs
+
+# Check which containers are running
+make inference-ps
+
+# Stop the service
+make inference-down
+
+# Stop and clean up volumes (fresh start)
+make inference-down-v
+
+# Start in production mode (always restarts on failure)
 make inference-up-prod GPU=1
 ```
 
