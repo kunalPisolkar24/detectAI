@@ -273,17 +273,53 @@ export class MetricsService {
         return this.registry.contentType;
     }
 
+    private static readonly ALLOWED_EVENT_TYPES = new Set([
+        "subscription.created",
+        "subscription.updated",
+        "subscription.canceled",
+        "subscription.activated",
+        "user.cancel_subscription",
+        "usage_event",
+        "sweep_expired",
+        "other",
+    ]);
+
+    public sanitizeEventType(raw?: string): string {
+        if (!raw || typeof raw !== "string") return "other";
+        return MetricsService.ALLOWED_EVENT_TYPES.has(raw) ? raw : "other";
+    }
+
+    private readonly registeredPools = new Set<string>();
+
     public registerPool(name: string, pool: Pick<import("pg").Pool, "totalCount" | "idleCount" | "waitingCount">): void {
-        this.registry.registerMetric(new Gauge({
-            name: `db_pool_${name}_connections`,
-            help: `Connections in ${name} pool`,
-            labelNames: ["state"],
-            registers: [this.registry],
-            collect: () => {
-                this.dbPoolStatus.set({ pool_name: name, state: "total" }, pool.totalCount);
-                this.dbPoolStatus.set({ pool_name: name, state: "idle" }, pool.idleCount);
-                this.dbPoolStatus.set({ pool_name: name, state: "waiting" }, pool.waitingCount);
+        if (this.registeredPools.has(name)) return;
+        // Avoid duplicate metric registration crash
+        try {
+            const existing = this.registry.getSingleMetric(`db_pool_${name}_connections`);
+            if (existing) {
+                this.registeredPools.add(name);
+                return;
             }
-        }));
+        } catch {}
+        this.registeredPools.add(name);
+        try {
+            this.registry.registerMetric(new Gauge({
+                name: `db_pool_${name}_connections`,
+                help: `Connections in ${name} pool`,
+                labelNames: ["state"],
+                registers: [this.registry],
+                collect: () => {
+                    this.dbPoolStatus.set({ pool_name: name, state: "total" }, pool.totalCount);
+                    this.dbPoolStatus.set({ pool_name: name, state: "idle" }, pool.idleCount);
+                    this.dbPoolStatus.set({ pool_name: name, state: "waiting" }, pool.waitingCount);
+                }
+            }));
+        } catch (e: any) {
+            if (String(e?.message ?? "").includes("has already been registered")) {
+                // Idempotent — already registered in another instance (HMR/test)
+            } else {
+                throw e;
+            }
+        }
     }
 }

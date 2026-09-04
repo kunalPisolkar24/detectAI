@@ -1,7 +1,7 @@
 import amqp, { type Channel, type ConsumeMessage, type ChannelModel } from "amqplib";
 import { Logger } from "../logging/Logger";
 import { MetricsService } from "../monitoring/MetricsService";
-import { trace, SpanStatusCode } from "@opentelemetry/api";
+import { trace, SpanStatusCode, propagation, context } from "@opentelemetry/api";
 import { UserNotFoundError, MissingFieldError } from "@modules/payments/domain/errors";
 import { InvalidTransitionError } from "@modules/payments/domain/stateMachine";
 
@@ -269,7 +269,15 @@ export class RabbitMQWorker {
         this.inflight++;
         let jobType: string = "other";
         const tracer = trace.getTracer("worker-messaging");
-        const span = tracer.startSpan(`queue.consume ${this.queueName}`, { attributes: { "messaging.system": "rabbitmq", "messaging.destination": this.queueName } });
+        // Extract traceparent from headers if producer propagated (e.g., web analytics-publisher)
+        let parentContext = context.active();
+        try {
+            const headers = (msg.properties as any)?.headers as Record<string, unknown> | undefined;
+            if (headers && typeof headers["traceparent"] === "string") {
+                parentContext = propagation.extract(parentContext, headers as any);
+            }
+        } catch {}
+        const span = tracer.startSpan(`queue.consume ${this.queueName}`, { attributes: { "messaging.system": "rabbitmq", "messaging.destination": this.queueName } }, parentContext);
         try {
             const content = msg.content.toString();
             let event: any;
@@ -287,7 +295,10 @@ export class RabbitMQWorker {
 
             try { this.metrics.messageSizeBytes.observe({ job_type: jobType }, msg.content.length); } catch {}
 
-            await this.handler(event);
+            // Run handler inside span context so downstream DB/cache spans become children
+            await context.with(trace.setSpan(parentContext, span), async () => {
+                await this.handler(event);
+            });
             span.setStatus({ code: SpanStatusCode.OK });
 
             this.safeAck(msg, deliveryChannel);
