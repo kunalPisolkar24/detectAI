@@ -25,7 +25,7 @@ export class SubscriptionCanceledHandler implements IPaymentEventHandler {
   }
 
   async handle(userId: string | null, data: PaddleEventData): Promise<void> {
-    if (!userId) return;
+    if (!userId) throw new MissingFieldError("userId");
 
     const subId = data.id;
     if (!subId) throw new MissingFieldError("id");
@@ -48,7 +48,7 @@ export class SubscriptionCanceledHandler implements IPaymentEventHandler {
       eventTimestamp,
       SubscriptionStatus.CANCELED,
       {
-        paddleCustomerId: "",
+        paddleCustomerId: "" as unknown as string,
         paddleSubscriptionId: null,
         paddlePlanId: null,
         status: SubscriptionStatus.CANCELED,
