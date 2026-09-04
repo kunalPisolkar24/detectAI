@@ -6,6 +6,7 @@ services:
       dockerfile: Dockerfile
     restart: always
     command: [ "bun", "run", "start:analytics" ]
+    stop_grace_period: 35s
     environment:
       - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
@@ -34,11 +35,11 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD", "bun", "-e", "const r = await fetch('http://localhost:7001/health'); if (!r.ok) process.exit(1);" ]
+      test: [ "CMD", "bun", "-e", "const r = await fetch('http://localhost:7001/ready'); if (!r.ok) process.exit(1);" ]
       interval: 30s
-      timeout: 3s
+      timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 20s
 
   worker-cron:
     container_name: worker_cron
@@ -47,6 +48,7 @@ services:
       dockerfile: Dockerfile
     restart: always
     command: [ "bun", "run", "start:cron" ]
+    stop_grace_period: 40s
     environment:
       - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
@@ -74,9 +76,9 @@ services:
     healthcheck:
       test: [ "CMD", "bun", "-e", "const r = await fetch('http://localhost:7002/health'); if (!r.ok) process.exit(1);" ]
       interval: 30s
-      timeout: 3s
+      timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 20s
 
   worker-payments:
     container_name: worker_payments
@@ -85,6 +87,7 @@ services:
       dockerfile: Dockerfile
     restart: always
     command: [ "bun", "run", "start:payments" ]
+    stop_grace_period: 35s
     environment:
       - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
@@ -120,11 +123,11 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD", "bun", "-e", "const r = await fetch('http://localhost:7003/health'); if (!r.ok) process.exit(1);" ]
+      test: [ "CMD", "bun", "-e", "const r = await fetch('http://localhost:7003/ready'); if (!r.ok) process.exit(1);" ]
       interval: 30s
-      timeout: 3s
+      timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 20s
 
 networks:
   detectai_net:

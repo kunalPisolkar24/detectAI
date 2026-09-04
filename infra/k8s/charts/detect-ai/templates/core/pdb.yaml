@@ -2,7 +2,7 @@
 
 # 1. Stateless App Tier PDBs
 # We use a minAvailable of 1 (or maxUnavailable 1) for apps running > 1 replicas
-{{- range $app, $config := dict "web" .Values.web "chats-api" .Values.chats.api "payments-gateway" .Values.payments "inference" .Values.inference }}
+{{- range $app, $config := dict "web" .Values.web "chats-api" .Values.chats.api "payments-gateway" .Values.payments "inference" .Values.inference "worker-analytics" .Values.workers.analytics "worker-payments" .Values.workers.payments "worker-cron" .Values.workers.cron }}
 {{- $isHA := false }}
 {{- if hasKey $config "autoscaling" }}
   {{- if and $config.autoscaling.enabled (gt (int $config.autoscaling.minReplicas) 1) }}

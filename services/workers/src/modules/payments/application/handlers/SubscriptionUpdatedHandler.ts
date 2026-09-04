@@ -26,7 +26,7 @@ export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
   }
 
   async handle(userId: string | null, data: PaddleEventData): Promise<void> {
-    if (!userId) return;
+    if (!userId) throw new MissingFieldError("userId");
 
     const status = this.parseStatus(data.status);
     const subId = data.id;
@@ -57,11 +57,8 @@ export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
       paddlePlanId: planId ?? undefined,
       status,
       endsAt,
+      cancellationScheduled: data.scheduled_change?.action === "cancel",
     };
-
-    if (data?.scheduled_change) {
-      updateData.cancellationScheduled = data.scheduled_change.action === "cancel";
-    }
 
     // Pre-invalidate before DB write to shrink the stale-read window.
     // If the write fails, the next read pays a cache-miss penalty — acceptable for consistency.

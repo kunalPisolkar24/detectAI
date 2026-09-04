@@ -28,7 +28,12 @@ export function initTracing(serviceNameFallback: string): void {
     const sdk = new NodeSDK({
         serviceName,
         traceExporter,
-        instrumentations: [getNodeAutoInstrumentations()],
+        instrumentations: [getNodeAutoInstrumentations({
+            // Disable noisy / PII-prone instrumentations
+            '@opentelemetry/instrumentation-fs': { enabled: false },
+            '@opentelemetry/instrumentation-dns': { enabled: false },
+            '@opentelemetry/instrumentation-net': { enabled: false },
+        } as any)],
     });
 
     try {

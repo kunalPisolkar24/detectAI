@@ -33,6 +33,7 @@ COPY --from=prod-deps --chown=bun:bun /app/node_modules /app/node_modules
 USER bun
 
 COPY --from=builder --chown=bun:bun /app/generated ./generated
+COPY --from=builder --chown=bun:bun /app/prisma ./prisma
 COPY --from=builder --chown=bun:bun /app/src ./src
 COPY --from=builder --chown=bun:bun /app/prisma.config.ts ./
 COPY --from=builder --chown=bun:bun /app/bunfig.toml ./

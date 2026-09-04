@@ -50,7 +50,9 @@ beforeEach(async () => {
     const pool = new Pool({ connectionString: dbUrl });
     const client = await pool.connect();
     try {
-        const tables = ["User", "Subscription", "Usage", "Account", "Session", "VerificationToken"];
+        // NOTE: bun test runs files in parallel; TRUNCATE without isolation can race.
+        // For now, run integration tests with --concurrent=1 or use per-worker DB names.
+        const tables = ["User", "Subscription", "Usage", "Account", "Session", "VerificationToken", "ProcessedWebhook"];
         for (const table of tables) {
             await client.query(`TRUNCATE TABLE "${table}" CASCADE;`);
         }
@@ -62,12 +64,13 @@ beforeEach(async () => {
 
     const redisUrl = process.env.REDIS_URL;
     if (redisUrl) {
-        console.log("Flushing Redis...");
+        console.log("Flushing Redis DB 1 (flushdb, not flushall to avoid wiping dev cache)...");
         const Redis = (await import("ioredis")).default;
         const redisClient = new Redis(redisUrl);
-        await redisClient.flushall();
+        // Use flushdb to only clear DB index 1 (test), not entire instance
+        await redisClient.flushdb();
         await redisClient.quit();
-        console.log("Redis flushed");
+        console.log("Redis DB flushed");
     }
 }, 30000);
 

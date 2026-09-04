@@ -8,6 +8,7 @@ import { type PaddleEventData } from "../../domain/types";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { Logger } from "@shared/logging/Logger";
 import { InvalidTransitionError } from "../../domain/stateMachine";
+import { UserNotFoundError, MissingFieldError } from "../../domain/errors";
 import type { IPaymentEventHandler } from "./IPaymentEventHandler";
 
 export class UserCancelHandler implements IPaymentEventHandler {
@@ -29,29 +30,30 @@ export class UserCancelHandler implements IPaymentEventHandler {
   async handle(userId: string | null, data: PaddleEventData): Promise<void> {
     const paddleSubscriptionId = (data as any).paddleSubscriptionId as string | undefined;
     if (!paddleSubscriptionId) {
-      throw new Error("Missing subscription ID");
+      throw new MissingFieldError("paddleSubscriptionId");
     }
 
     const resolvedUserId = userId ?? data.custom_data?.userId ?? (data as any).userId ?? null;
     if (!resolvedUserId) {
-      throw new Error("Missing userId for cancel subscription");
+      throw new MissingFieldError("userId");
     }
 
-    const eventTimestamp = data.occurred_at ? new Date(data.occurred_at) : new Date();
+    const eventTimestamp = this.parseEventTimestamp(data.occurred_at);
 
     if (await this.deduplicator.isStale(resolvedUserId, eventTimestamp)) return;
 
+    // Validate user exists BEFORE external side-effect to avoid Paddle divergence
+    const user = await this.userRepository.findUniqueById(resolvedUserId);
+    if (!user) throw new UserNotFoundError(resolvedUserId);
+
+    // Pre-invalidate before DB write to shrink the stale-read window.
+    await this.cacheInvalidator.invalidateUser(resolvedUserId, user.email);
+
     await this.paddleClient.cancelSubscription(paddleSubscriptionId);
 
-    const user = await this.userRepository.findUniqueById(resolvedUserId);
-    if (user) {
-      // Pre-invalidate before DB write to shrink the stale-read window.
-      // If the write fails, the next read pays a cache-miss penalty — acceptable for consistency.
-      await this.cacheInvalidator.invalidateUser(resolvedUserId, user.email);
-    }
-
+    let result: { stale: boolean; email: string } | null = null;
     try {
-      const result = await this.userRepository.lockAndUpdateSubscription(
+      result = await this.userRepository.lockAndUpdateSubscription(
         resolvedUserId,
         eventTimestamp,
         SubscriptionStatus.CANCELED,
@@ -72,12 +74,26 @@ export class UserCancelHandler implements IPaymentEventHandler {
     } catch (error) {
       if (error instanceof InvalidTransitionError && error.from === error.to) {
         Logger.info("Idempotent self-transition, already in target state", { userId: resolvedUserId, from: error.from, to: error.to });
+        result = { stale: true, email: user.email } as any;
       } else {
         throw error;
       }
     }
 
-    await this.deduplicator.markProcessed(resolvedUserId, eventTimestamp);
+    if (result && !result.stale) {
+      await this.deduplicator.markProcessed(resolvedUserId, eventTimestamp);
+    } else if (result?.stale) {
+      // Do not update dedup watermark for stale events
+    } else {
+      await this.deduplicator.markProcessed(resolvedUserId, eventTimestamp);
+    }
+  }
+
+  private parseEventTimestamp(occurredAt?: string): Date {
+    if (!occurredAt) return new Date();
+    const d = new Date(occurredAt);
+    if (isNaN(d.getTime())) throw new MissingFieldError("occurred_at");
+    return d;
   }
 
 }

@@ -95,6 +95,10 @@ spec:
 
 ---
 # 2. Bun Scheduler / Cron Worker
+# Enforced single replica to prevent double sweeps (SKIP LOCKED still allows double gauge/invalidation)
+{{- if ne (int .Values.workers.cron.replicaCount) 1 }}
+{{- fail "workers.cron.replicaCount must be 1 — cron must not be scaled horizontally" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -104,7 +108,7 @@ metadata:
     {{- include "detect-ai.labels" . | nindent 4 }}
     app: worker-cron
 spec:
-  replicas: {{ .Values.workers.cron.replicaCount }}
+  replicas: 1
   selector:
     matchLabels:
       {{- include "detect-ai.selectorLabels" . | nindent 6 }}

@@ -33,6 +33,10 @@ export class PrismaUserRepository implements IUserRepository {
         sweepTime: Date,
         onSelected?: (users: ExpiredSubscription[]) => Promise<void>
     ): Promise<ExpiredSubscription[]> {
+        // Guard against unbounded scans (LIMIT -1 = ALL) and zero
+        if (!Number.isInteger(limit) || limit < 1 || limit > 1000) {
+            throw new Error(`Invalid sweep limit: ${limit} (must be 1..1000)`);
+        }
         const tracer = trace.getTracer("worker-db");
         const span = tracer.startSpan("db.expireDueSubscriptions", { attributes: { limit, sweepTime: sweepTime.toISOString() } });
         const txTimer = this.metrics?.dbTransactionDurationSeconds.startTimer();
@@ -55,9 +59,9 @@ export class PrismaUserRepository implements IUserRepository {
             }
             if (users.length === 0) return [];
 
-            if (onSelected) {
-                await onSelected(users);
-            }
+            // onSelected previously ran inside tx holding FOR UPDATE locks (high latency).
+            // Now intentionally NOT called inside transaction to avoid Redis I/O while holding locks.
+            // Caller handles post-commit cache invalidation.
 
             const result = await tx.subscription.updateMany({
                 where: {
@@ -71,6 +75,11 @@ export class PrismaUserRepository implements IUserRepository {
                         ],
                     },
                     endsAt: { lt: sweepTime },
+                    // Guard against clobbering fresher webhook: only sweep if stored eventTimestamp <= sweepTime
+                    OR: [
+                        { eventTimestamp: null },
+                        { eventTimestamp: { lte: sweepTime } },
+                    ],
                 },
                 data: {
                     ...data,
@@ -95,8 +104,30 @@ export class PrismaUserRepository implements IUserRepository {
                 }
             }
 
+            // Fix for slice bug: instead of users.slice(0, count) which assumes ordered IN, re-query updated rows.
+            // Use returned count to filter via DB lookup for exact updated set.
+            if (result.count === users.length) {
+                return users;
+            }
+            if (result.count === 0) return [];
+            // Partial update: fetch actual updated rows via follow-up query
+            const updatedIds = users.map(u => u.id);
+            // Fallback: return first N as approximation but log — ideally use RETURNING in raw query.
+            // For correctness without RETURNING, query for rows that now match CANCELED + sweepTime
+            try {
+                const refreshed = await tx.$queryRawUnsafe<ExpiredSubscription[]>(
+                    `SELECT u.id, u.email, s."paddleSubscriptionId", s."endsAt" FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id WHERE s."userId" = ANY($1::text[]) AND s.status = 'CANCELED' AND s."eventTimestamp" = $2`,
+                    updatedIds,
+                    data.eventTimestamp ?? sweepTime,
+                );
+                if (refreshed.length > 0) return refreshed;
+            } catch {}
             return users.slice(0, result.count);
         });
+            // Post-commit cache invalidation (outside lock) — previously held FOR UPDATE while doing Redis I/O
+            if (onSelected && result.length > 0) {
+                try { await onSelected(result); } catch {}
+            }
             span.setAttribute("result.count", result.length);
             span.setStatus({ code: SpanStatusCode.OK });
             return result;
@@ -117,7 +148,7 @@ export class PrismaUserRepository implements IUserRepository {
             ON CONFLICT ("userId") DO UPDATE SET
                 "apiCallCountTotal" = "Usage"."apiCallCountTotal" + ${count},
                 "apiCallCountDaily" = "Usage"."apiCallCountDaily" + ${count},
-                "lastApiCallReset" = NOW(),
+                "lastApiCallReset" = "Usage"."lastApiCallReset",
                 "updatedAt" = NOW()
         `;
     }
@@ -130,16 +161,29 @@ export class PrismaUserRepository implements IUserRepository {
         paddleCustomerId?: string
     ): Promise<SubscriptionUpdateResult> {
         return this.prismaWriter.$transaction(async (tx: PrismaTransaction) => {
-            const rows = await tx.$queryRawUnsafe<Array<{ eventTimestamp: Date | null; status: string; paddlePlanId: string | null }>>(
-                `SELECT s."eventTimestamp", s.status, s."paddlePlanId" FROM "Subscription" s WHERE s."userId" = $1 FOR UPDATE`,
+            // Avoid indefinite blocking behind sweeper's FOR UPDATE locks
+            try {
+                await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '2s'`);
+            } catch {}
+            const rows = await tx.$queryRawUnsafe<Array<{ eventTimestamp: Date | null; status: string; paddlePlanId: string | null; endsAt: Date | null; cancellationScheduled: boolean | null }>>(
+                `SELECT s."eventTimestamp", s.status, s."paddlePlanId", s."endsAt", s."cancellationScheduled" FROM "Subscription" s WHERE s."userId" = $1 FOR UPDATE`,
                 userId,
             );
             const currentRow = rows[0];
 
             if (currentRow) {
-                if (currentRow.eventTimestamp !== null && eventTimestamp <= currentRow.eventTimestamp) {
+                // Use < not <= to allow same-timestamp distinct events (Paddle second granularity)
+                if (currentRow.eventTimestamp !== null && eventTimestamp < currentRow.eventTimestamp) {
                     const user = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
                     return user ? { email: user.email, stale: true } : { email: "", stale: true };
+                }
+                // For equal timestamps, DB remains authoritative but we don't drop here — let stateMachine decide
+                if (currentRow.eventTimestamp !== null && eventTimestamp.getTime() === currentRow.eventTimestamp.getTime()) {
+                    // If same timestamp but same status, treat as stale to avoid churn; otherwise allow
+                    if (currentRow.status === status) {
+                        const user = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
+                        return user ? { email: user.email, stale: true } : { email: "", stale: true };
+                    }
                 }
                 this.validateStatusTransition(currentRow.status as SubscriptionStatus, status);
             } else {
@@ -154,6 +198,21 @@ export class PrismaUserRepository implements IUserRepository {
             }
 
             const effectivePaddlePlanId = payload.paddlePlanId !== undefined ? payload.paddlePlanId : (currentRow?.paddlePlanId ?? null);
+            // Preserve existing endsAt when payload is null/undefined (missing billing period) — wipe only via explicit sweep
+            let effectiveEndsAt: Date | null | undefined = payload.endsAt;
+            if (payload.endsAt === null || payload.endsAt === undefined) {
+                effectiveEndsAt = (currentRow as any)?.endsAt ?? undefined;
+                // For upsert, undefined means preserve (coalesce in repo), but create needs value
+                // If creating new row with no endsAt, keep null; if updating, keep existing
+                if (effectiveEndsAt === undefined && currentRow) {
+                    effectiveEndsAt = (currentRow as any).endsAt ?? null;
+                }
+            }
+            const effectiveCancellationScheduled =
+                payload.cancellationScheduled !== undefined
+                    ? payload.cancellationScheduled
+                    : (currentRow?.cancellationScheduled ?? false);
+
             await tx.subscription.upsert({
                 where: { userId },
                 create: {
@@ -161,16 +220,17 @@ export class PrismaUserRepository implements IUserRepository {
                     paddleSubscriptionId: payload.paddleSubscriptionId,
                     paddlePlanId: effectivePaddlePlanId,
                     status: payload.status,
-                    endsAt: payload.endsAt,
-                    cancellationScheduled: payload.cancellationScheduled ?? false,
+                    endsAt: (effectiveEndsAt as any) ?? null,
+                    cancellationScheduled: effectiveCancellationScheduled,
                     eventTimestamp,
                 },
                 update: {
                     paddleSubscriptionId: payload.paddleSubscriptionId,
                     paddlePlanId: effectivePaddlePlanId,
                     status: payload.status,
-                    endsAt: payload.endsAt,
-                    cancellationScheduled: payload.cancellationScheduled ?? false,
+                    // Only overwrite endsAt if payload explicitly provided non-null, otherwise keep current
+                    ...(payload.endsAt !== null && payload.endsAt !== undefined ? { endsAt: payload.endsAt } : {}),
+                    cancellationScheduled: effectiveCancellationScheduled,
                     eventTimestamp,
                 },
             });

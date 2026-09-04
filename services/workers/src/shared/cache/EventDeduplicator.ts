@@ -18,12 +18,29 @@ export class EventDeduplicator {
   ) {}
 
   async isStale(userId: string, eventTimestamp: Date): Promise<boolean> {
+    if (!userId || !userId.trim()) {
+      Logger.warn("Event dedup called with empty userId", { userId });
+      return false;
+    }
+    if (!(eventTimestamp instanceof Date) || isNaN(eventTimestamp.getTime())) {
+      Logger.warn("Event dedup called with invalid timestamp", { userId, eventTimestamp });
+      return false;
+    }
     try {
       const stored = await this.redis.get(`${this.prefix}${userId}`);
-      if (stored && eventTimestamp <= new Date(stored)) {
+      if (!stored) return false;
+      const storedDate = new Date(stored);
+      if (isNaN(storedDate.getTime())) {
+        Logger.warn("Event dedup stored value is invalid date, ignoring", { userId, stored });
+        return false;
+      }
+      // Use < for same-timestamp distinct events (tolerant), DB lockAndUpdateSubscription is authoritative
+      if (eventTimestamp < storedDate) {
         Logger.info("Skipping stale event", { userId, eventTimestamp: eventTimestamp.toISOString(), stored });
         return true;
       }
+      // Equal timestamps are not considered stale here; allow DB to decide ordering
+      return false;
     } catch (error) {
       Logger.warn("Event dedup pre-check failed, proceeding to DB", { userId, error });
     }
@@ -31,8 +48,32 @@ export class EventDeduplicator {
   }
 
   async markProcessed(userId: string, eventTimestamp: Date): Promise<void> {
+    if (!userId || !userId.trim()) return;
+    if (!(eventTimestamp instanceof Date) || isNaN(eventTimestamp.getTime())) return;
+    const key = `${this.prefix}${userId}`;
+    const value = eventTimestamp.toISOString();
     try {
-      await this.redis.set(`${this.prefix}${userId}`, eventTimestamp.toISOString(), "EX", EventDeduplicator.TTL_SECONDS);
+      // Try atomic CAS via Lua if available (ioredis), otherwise fallback to SET
+      const maybeEval = (this.redis as any).eval;
+      if (typeof maybeEval === "function") {
+        // Lua: only SET if not exists or new > stored (lexicographic ISO)
+        const script = `
+          local stored = redis.call('GET', KEYS[1])
+          if not stored or ARGV[1] > stored then
+            redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+            return 1
+          else
+            return 0
+          end
+        `;
+        try {
+          await (this.redis as any).eval(script, 1, key, value, String(EventDeduplicator.TTL_SECONDS));
+          return;
+        } catch {
+          // Fallback to simple SET if eval fails (e.g., cluster)
+        }
+      }
+      await this.redis.set(key, value, "EX", EventDeduplicator.TTL_SECONDS);
     } catch (error) {
       Logger.warn("Failed to set event timestamp in Redis", { userId, error });
     }

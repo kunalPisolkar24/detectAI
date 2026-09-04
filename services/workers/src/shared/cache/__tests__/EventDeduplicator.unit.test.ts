@@ -12,7 +12,7 @@ const createRedisMock = () => ({
 
 describe("EventDeduplicator", () => {
   let redis: ReturnType<typeof createRedisMock>;
-  let dedup: EventDeduplicator;
+  let dedup: InstanceType<typeof EventDeduplicator>;
 
   beforeEach(() => {
     redis = createRedisMock();
