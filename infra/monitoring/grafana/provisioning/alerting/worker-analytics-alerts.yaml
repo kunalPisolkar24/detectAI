@@ -2,11 +2,11 @@ apiVersion: 1
 
 groups:
   - orgId: 1
-    name: worker-cron
+    name: worker-analytics
     folder: Detect-AI
     interval: 1m
     rules:
-      - title: CronDown
+      - title: WorkerAnalyticsDown
         condition: C
         data:
           - refId: A
@@ -19,7 +19,7 @@ groups:
                 type: prometheus
                 uid: prometheus
               editorMode: code
-              expr: up{job=~".*worker-cron.*"} == 0 or worker_active_instances{service="worker-cron"} == 0
+              expr: up{job="worker-analytics"} == 0 or worker_active_instances{service="worker-analytics"} == 0
               instant: true
               range: false
               refId: A
@@ -54,10 +54,10 @@ groups:
         noDataState: OK
         execErrState: Error
         annotations:
-          summary: worker-cron target unreachable or no active instance for 2 minutes
+          summary: worker-analytics target unreachable or no active instance for 2 minutes
         labels:
           severity: critical
-      - title: CronLoopErrorRate
+      - title: AnalyticsHighErrorRate
         condition: C
         data:
           - refId: A
@@ -70,7 +70,7 @@ groups:
                 type: prometheus
                 uid: prometheus
               editorMode: code
-              expr: rate(worker_job_errors_total{service="worker-cron", job_type="cron_loop"}[5m])
+              expr: 100 * sum(rate(worker_job_errors_total{service="worker-analytics"}[5m])) / clamp_min(sum(rate(worker_jobs_processed_total{service="worker-analytics"}[5m])), 0.001) > 5
               instant: true
               range: false
               refId: A
@@ -101,14 +101,167 @@ groups:
               reducer: last
               refId: C
               type: reduce
-        for: 5m
+        for: 10m
         noDataState: OK
         execErrState: Error
         annotations:
-          summary: worker-cron cron loop errors detected for 5 minutes
+          summary: worker-analytics error rate above 5% for 10 minutes
         labels:
           severity: critical
-      - title: SweepErrorRate
+      - title: AnalyticsHighLatency
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: histogram_quantile(0.95, sum by (le) (rate(worker_job_duration_seconds_bucket{service="worker-analytics"}[5m]))) > 2
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-analytics p95 job duration above 2s for 10 minutes
+        labels:
+          severity: warning
+      - title: AnalyticsRabbitDown
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: rabbitmq_connection_status{service="worker-analytics"} == 0
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-analytics RabbitMQ disconnected for 2 minutes
+        labels:
+          severity: critical
+      - title: AnalyticsRedisDown
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: redis_connection_status{service="worker-analytics"} == 0
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-analytics Redis disconnected (AnalyticsMain or AnalyticsDedup) for 2 minutes
+        labels:
+          severity: critical
+      - title: AnalyticsRabbitFlapping
         condition: C
         data:
           - refId: A
@@ -121,7 +274,7 @@ groups:
                 type: prometheus
                 uid: prometheus
               editorMode: code
-              expr: rate(worker_job_errors_total{service="worker-cron", job_type="sweep_expired"}[5m]) > 0 or histogram_quantile(0.95, sum by (le) (rate(worker_job_duration_seconds_bucket{service="worker-cron", job_type="sweep_expired"}[5m]))) > 2
+              expr: rate(rabbitmq_reconnections_total{service="worker-analytics"}[10m]) > 0
               instant: true
               range: false
               refId: A
@@ -152,14 +305,14 @@ groups:
               reducer: last
               refId: C
               type: reduce
-        for: 10m
+        for: 15m
         noDataState: OK
         execErrState: Error
         annotations:
-          summary: worker-cron sweep errors or p95 duration >2s for 10 minutes
+          summary: worker-analytics reconnecting to RabbitMQ repeatedly for 15 minutes
         labels:
           severity: warning
-      - title: CacheInvalidateFailing
+      - title: AnalyticsDBPoolWaiting
         condition: C
         data:
           - refId: A
@@ -172,7 +325,7 @@ groups:
                 type: prometheus
                 uid: prometheus
               editorMode: code
-              expr: rate(worker_job_errors_total{service="worker-cron", job_type="cache_invalidate", error_type="redis_error"}[5m])
+              expr: db_pool_connections{service="worker-analytics", state="waiting"} > 0
               instant: true
               range: false
               refId: A
@@ -207,10 +360,10 @@ groups:
         noDataState: OK
         execErrState: Error
         annotations:
-          summary: worker-cron cache invalidate failures for 5 minutes
+          summary: worker-analytics DB pool waiting connections for 5 minutes
         labels:
           severity: warning
-      - title: DBPoolWaiting
+      - title: AnalyticsQueueBacklog
         condition: C
         data:
           - refId: A
@@ -223,58 +376,7 @@ groups:
                 type: prometheus
                 uid: prometheus
               editorMode: code
-              expr: db_pool_connections{service="worker-cron", pool_name="primary", state="waiting"} > 0 or db_pool_connections{service="worker-cron", pool_name="replica", state="waiting"} > 0
-              instant: true
-              range: false
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params:
-                      - 0
-                      - 0
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - A
-                  reducer:
-                    params: []
-                    type: last
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              reducer: last
-              refId: C
-              type: reduce
-        for: 5m
-        noDataState: OK
-        execErrState: Error
-        annotations:
-          summary: worker-cron DB pool waiting connections for 5 minutes
-        labels:
-          severity: warning
-      - title: ExpiryLagBacklog
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: prometheus
-            model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              editorMode: code
-              expr: worker_cron_expiry_lag_seconds{service="worker-cron"} > 900 or worker_cron_expired_backlog{service="worker-cron"} > 100
+              expr: rabbitmq_queue_messages_ready{queue="analytics.usage"} > 100
               instant: true
               range: false
               refId: A
@@ -309,61 +411,61 @@ groups:
         noDataState: OK
         execErrState: Error
         annotations:
-          summary: worker-cron expiry lag >900s or backlog >100 for 10 minutes
+          summary: analytics.usage queue backlog above 100 ready messages for 10 minutes
+        labels:
+          severity: warning
+      - title: AnalyticsQueueNoConsumer
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: rabbitmq_queue_consumers{queue="analytics.usage"} == 0
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: analytics.usage queue has had no consumer for 5 minutes
         labels:
           severity: critical
-      - title: NoProgress
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange:
-              from: 1800
-              to: 0
-            datasourceUid: prometheus
-            model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              editorMode: code
-              expr: increase(worker_jobs_processed_total{service="worker-cron", job_type="user_downgrade"}[30m]) == 0 and worker_cron_expired_backlog{service="worker-cron"} > 0
-              instant: true
-              range: false
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params:
-                      - 0
-                      - 0
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - A
-                  reducer:
-                    params: []
-                    type: last
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              reducer: last
-              refId: C
-              type: reduce
-        for: 30m
-        noDataState: OK
-        execErrState: Error
-        annotations:
-          summary: worker-cron no sweep progress for 30 minutes while backlog >0
-        labels:
-          severity: warning
-      - title: DLQGrowth
+      - title: AnalyticsQueueUnackedHigh
         condition: C
         data:
           - refId: A
@@ -376,160 +478,7 @@ groups:
                 type: prometheus
                 uid: prometheus
               editorMode: code
-              expr: rate(worker_dead_lettered_total{service="worker-cron"}[5m]) > 0
-              instant: true
-              range: false
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params:
-                      - 0
-                      - 0
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - A
-                  reducer:
-                    params: []
-                    type: last
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              reducer: last
-              refId: C
-              type: reduce
-        for: 5m
-        noDataState: OK
-        execErrState: Error
-        annotations:
-          summary: worker-cron DLQ growth detected (dead_lettered_total > 0)
-        labels:
-          severity: critical
-      - title: IdempotencyRedisErrors
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: prometheus
-            model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              editorMode: code
-              expr: rate(worker_idempotency_redis_errors_total{service="worker-cron"}[5m]) > 0.1
-              instant: true
-              range: false
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params:
-                      - 0
-                      - 0
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - A
-                  reducer:
-                    params: []
-                    type: last
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              reducer: last
-              refId: C
-              type: reduce
-        for: 5m
-        noDataState: OK
-        execErrState: Error
-        annotations:
-          summary: worker-cron idempotency Redis errors > 0.1/sec
-        labels:
-          severity: warning
-      - title: RetryStorm
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: prometheus
-            model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              editorMode: code
-              expr: rate(worker_retry_total{service="worker-cron"}[5m]) > 0.5
-              instant: true
-              range: false
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params:
-                      - 0
-                      - 0
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - A
-                  reducer:
-                    params: []
-                    type: last
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              reducer: last
-              refId: C
-              type: reduce
-        for: 5m
-        noDataState: OK
-        execErrState: Error
-        annotations:
-          summary: worker-cron retry storm >0.5/sec
-        labels:
-          severity: warning
-      - title: DuplicateRateAnomaly
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: prometheus
-            model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              editorMode: code
-              expr: rate(worker_duplicate_events_total{service="worker-cron"}[5m]) > 1
+              expr: rabbitmq_queue_messages_unacknowledged{queue="analytics.usage"} > 50
               instant: true
               range: false
               refId: A
@@ -564,6 +513,159 @@ groups:
         noDataState: OK
         execErrState: Error
         annotations:
-          summary: worker-cron high duplicate event rate >1/sec
+          summary: analytics.usage queue unacknowledged messages above 50 for 10 minutes
+        labels:
+          severity: warning
+      - title: AnalyticsDLQGrowth
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: rate(worker_dead_lettered_total{service="worker-analytics"}[5m]) > 0
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-analytics DLQ growth detected for 5 minutes
+        labels:
+          severity: critical
+      - title: AnalyticsRetryStorm
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: rate(worker_retry_total{service="worker-analytics"}[5m]) > 0.5
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-analytics retry storm >0.5/sec for 5 minutes
+        labels:
+          severity: warning
+      - title: AnalyticsUnhandledEvents
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: rate(worker_unhandled_events_total{service="worker-analytics"}[5m]) > 0
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-analytics unhandled events detected for 5 minutes
         labels:
           severity: warning
