@@ -17,21 +17,11 @@ import structlog
 logger = structlog.get_logger()
 _CHUNK_TIMEOUT = 30.0
 
-try:
-    from src.infrastructure.metrics import (
-        record_document_chunk_failed,
-        record_document_request,
-        record_queue_rejected,
-    )
-except Exception:  # pragma: no cover
-    def record_document_chunk_failed(*args, **kwargs):  # type: ignore[no-redef]
-        pass
-
-    def record_document_request(*args, **kwargs):  # type: ignore[no-redef]
-        pass
-
-    def record_queue_rejected(*args, **kwargs):  # type: ignore[no-redef]
-        pass
+from src.infrastructure.metrics import (
+    record_document_chunk_failed,
+    record_document_request,
+    record_queue_rejected,
+)
 
 
 class TextPreparationPipeline:
@@ -301,18 +291,12 @@ class DocumentAnalysisService:
                 pass
             raise
 
-    def summarize(self, text: str, model_key: str) -> tuple[int, int]:
-        validated_text, chunks = self.prep_pipeline.prepare(text, model_key)
-        return len(validated_text), len(chunks)
-
     async def shutdown(self) -> None:
         for name, engine in self.engines.items():
             if hasattr(engine, "shutdown"):
                 try:
                     shutdown = engine.shutdown
                     if inspect.iscoroutinefunction(shutdown):
-                        await shutdown()
-                    elif asyncio.iscoroutinefunction(getattr(shutdown, "__wrapped__", None)):
                         await shutdown()
                     else:
                         # Try calling and await if it returns coroutine

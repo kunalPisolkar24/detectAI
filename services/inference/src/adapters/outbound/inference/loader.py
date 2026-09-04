@@ -12,12 +12,7 @@ from src.application.ports.outbound.inference import IModelLoader
 from src.domain.exceptions import ModelLoadError
 from src.infrastructure.config import parse_inference_providers
 
-try:
-    from src.infrastructure.metrics import record_provider_fallback
-except Exception:  # pragma: no cover
-
-    def record_provider_fallback(*args, **kwargs):  # type: ignore[no-redef]
-        pass
+from src.infrastructure.metrics import record_provider_fallback
 
 logger = structlog.get_logger()
 
@@ -105,7 +100,6 @@ class HuggingFaceLoader(IModelLoader):
                 raise ModelLoadError(
                     f"Failed to load {model_key}: {str(e)} (Offline fallback also failed: {str(fallback_error)})"
                 ) from fallback_error
-            raise ModelLoadError(f"Failed to load {model_key}: {str(e)}") from e
 
     def _load_spark(self, local_only: bool = False):
         repo_id = "kpisolkar24/detect-ai-spark"

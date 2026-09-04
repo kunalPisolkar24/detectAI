@@ -105,8 +105,7 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
                 self.queue.put_nowait(PendingPrediction(text=text, future=future, enqueue_time=time.monotonic()))
                 BATCH_QUEUE_SIZE.labels(model=self.model_name).inc()
             except asyncio.QueueFull as exc:
-                if not future.done():
-                    future.cancel()
+                future.cancel()
                 try:
                     record_queue_rejected(self.model_name, "queue_full")
                 except Exception:
@@ -129,9 +128,6 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
             status = BatcherHealthStatus.WORKER_UNAVAILABLE
         elif self.queue.full():
             status = BatcherHealthStatus.QUEUE_FULL
-        elif self.semaphore.locked() and self.queue.qsize() > 0:
-            # Semaphore saturated while queue builds — still serving but saturated
-            status = BatcherHealthStatus.SERVING
         else:
             status = BatcherHealthStatus.SERVING
 
@@ -359,5 +355,4 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
                         fut.set_exception(InferenceError(f"{self.model_name} batch timeout: {e}"))
                     else:
                         fut.set_exception(e)
-            if isinstance(e, asyncio.CancelledError):
-                raise
+            raise

@@ -279,11 +279,6 @@ class MonitoringInterceptor(aio.ServerInterceptor):
     def _record_metrics(self, method_name: str, model_label: str, start_time: float, response_code: str) -> None:
         duration = time.monotonic() - start_time
         # Allow-list model label to avoid cardinality explosion
-        safe_label = model_label if model_label in _ALLOWED_MODELS else ("spark" if model_label == "spark" else "unknown" if model_label == "unknown" else "invalid")
-        # Actually above logic is redundant; implement simple allow-list
-        if safe_label not in _ALLOWED_MODELS and safe_label not in ("unknown", "invalid"):
-            safe_label = "invalid"
-        # Re-resolve correctly
         if model_label in _ALLOWED_MODELS:
             safe_label = model_label
         elif model_label in ("unknown", "invalid"):

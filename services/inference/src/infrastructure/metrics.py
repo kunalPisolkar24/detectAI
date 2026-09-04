@@ -240,13 +240,6 @@ def set_service_health(state: int, reason: str | None) -> None:
         INFERENCE_SERVICE_HEALTH_REASON.labels(reason=health_reason).set(1 if health_reason == active_reason else 0)
 
 
-def set_queue_size(model_name: str, size: int) -> None:
-    try:
-        BATCH_QUEUE_SIZE.labels(model=model_name).set(max(0, int(size)))
-    except Exception:
-        pass
-
-
 def set_engine_health(model_name: str, snapshot: BatcherHealthSnapshot) -> None:
     for status in BatcherHealthStatus:
         INFERENCE_ENGINE_HEALTH_STATUS.labels(model=model_name, status=status.value).set(
@@ -294,18 +287,8 @@ def record_document_request(operation: str, model_name: str, status: str) -> Non
         pass
 
 
-def observe_document_plan(operation: str, model_name: str, input_chars: int, chunk_count: int) -> None:
-    INFERENCE_DOCUMENT_INPUT_CHARS.labels(operation=operation, model=model_name).observe(input_chars)
-    INFERENCE_DOCUMENT_CHUNK_COUNT.labels(operation=operation, model=model_name).observe(chunk_count)
-
-
-def track_document_chunk_started(operation: str, model_name: str) -> None:
-    INFERENCE_DOCUMENT_INFLIGHT_CHUNKS.labels(operation=operation, model=model_name).inc()
-
-
-def track_document_chunk_finished(operation: str, model_name: str) -> None:
-    INFERENCE_DOCUMENT_INFLIGHT_CHUNKS.labels(operation=operation, model=model_name).dec()
-
-
-def record_document_chunk_processed(operation: str, model_name: str) -> None:
-    INFERENCE_DOCUMENT_CHUNKS_PROCESSED_TOTAL.labels(operation=operation, model=model_name).inc()
+def record_document_chunk_failed(operation: str, model_name: str, reason: str = "error") -> None:
+    try:
+        INFERENCE_DOCUMENT_CHUNKS_FAILED_TOTAL.labels(operation=operation, model=model_name, reason=reason).inc()
+    except Exception:
+        pass

@@ -59,7 +59,6 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
         model_key = _normalize_model_id(request)
         if model_key not in self.analysis_service.engines:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Unsupported analysis model: {model_key[:_MAX_MODEL_ID_LEN]}")
-            return
 
         try:
             score = await self.analysis_service.analyze(
@@ -73,13 +72,11 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
             raise
         except Exception as e:
             await self._abort(context, e, model_key.capitalize())
-            return
 
     async def AnalyzeDocument(self, request, context):
         model_key = _normalize_model_id(request)
         if model_key not in self.analysis_service.engines:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Unsupported analysis model: {model_key[:_MAX_MODEL_ID_LEN]}")
-            return
 
         model_name = model_key.capitalize()
 
@@ -110,18 +107,14 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
             raise
         except Exception as e:
             await self._abort(context, e, model_name)
-            return
 
     async def _abort(self, context, error: Exception, model_name: str):
         if isinstance(error, (InvalidInputError, ValueError)):
             # Map pipeline ValueError (unknown model, no chunks, misaligned) to INVALID_ARGUMENT
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error)[:_MAX_TEXT_LOG_LEN])
-            return
-
-        if isinstance(error, ServiceOverloadedError):
+        elif isinstance(error, ServiceOverloadedError):
             logger.warning("inference_overloaded", model=model_name, error=str(error)[:_MAX_TEXT_LOG_LEN])
             await context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED, str(error)[:_MAX_TEXT_LOG_LEN])
-            return
-
-        logger.error("inference_error", model=model_name, error=str(error)[:_MAX_TEXT_LOG_LEN], exc_info=True)
-        await context.abort(grpc.StatusCode.INTERNAL, "Internal Inference Error")
+        else:
+            logger.error("inference_error", model=model_name, error=str(error)[:_MAX_TEXT_LOG_LEN], exc_info=True)
+            await context.abort(grpc.StatusCode.INTERNAL, "Internal Inference Error")

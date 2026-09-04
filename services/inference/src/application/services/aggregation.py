@@ -63,8 +63,6 @@ class ResultAggregator:
         active: list[tuple[DocumentChunk, float]] = []
         idx = 0
         for start, end in zip(boundaries, boundaries[1:]):
-            if end <= start:
-                continue
             # Add chunks starting before end
             while idx < len(pairs) and pairs[idx][0].char_start < end:
                 active.append(pairs[idx])
@@ -74,8 +72,6 @@ class ResultAggregator:
             if not active:
                 continue
             overlapping = [prob for chunk, prob in active if chunk.char_start < end and chunk.char_end > start]
-            if not overlapping:
-                continue
 
             ai_probability = sum(overlapping) / len(overlapping)
 
