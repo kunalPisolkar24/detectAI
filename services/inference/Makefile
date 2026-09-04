@@ -60,13 +60,19 @@ lint:
 deps:
 	poetry install --extras cpu
 
-# Self-contained load test: compose brings up ai-service + k6 on dedicated network, no dependency on main stack.
+# Self-contained load test: compose brings up ai-service + k6 on dedicated network.
+# No dependency on the main stack. Direct run mirrors gateway/document-parser.
+# Usage:
+#   make load-test SCENARIO=smoke GPU=0 VUS=1
+#   make load-test SCENARIO=detect GPU=1 VUS=50 STAGES=30s:10,1m:20,30s:0 RPS=10 MAX_VUS=100
+#   make load-test SCENARIO=analyze GPU=0 VUS=8 DURATION=10m
 # Elegant vars: SCENARIO=smoke|detect|analyze|soak GPU=0|1 VUS= RPS= STAGES= DURATION= MAX_VUS=
 # Specific overrides still work: INFERENCE_LOAD_DETECT_STAGES=, INFERENCE_LOAD_ANALYZE_VUS= etc
 load-test:
 	@GPU=$${GPU:-0}; SCENARIO=$${SCENARIO:-smoke}; \
 	VUS_VAL="$(VUS)"; RPS_VAL="$(RPS)"; STAGES_VAL="$(STAGES)"; DURATION_VAL="$(DURATION)"; MAX_VUS_VAL="$(MAX_VUS)"; \
 	echo "Load test SCENARIO=$$SCENARIO GPU=$$GPU VUS=$${VUS_VAL:-} RPS=$${RPS_VAL:-} DURATION=$${DURATION_VAL:-} STAGES=$${STAGES_VAL:-}"; \
+	# Map elegant vars to underlying INFERENCE_LOAD_* envs \
 	if [ -n "$$VUS_VAL" ]; then \
 		export INFERENCE_LOAD_SMOKE_VUS=$$VUS_VAL; export INFERENCE_LOAD_DETECT_PREALLOCATED_VUS=$$VUS_VAL; \
 		export INFERENCE_LOAD_ANALYZE_VUS=$$VUS_VAL; export INFERENCE_LOAD_SOAK_VUS=$$VUS_VAL; \
@@ -75,8 +81,10 @@ load-test:
 	if [ -n "$$STAGES_VAL" ]; then export INFERENCE_LOAD_DETECT_STAGES=$$STAGES_VAL; fi; \
 	if [ -n "$$DURATION_VAL" ]; then export INFERENCE_LOAD_ANALYZE_DURATION=$$DURATION_VAL; export INFERENCE_LOAD_SOAK_DURATION=$$DURATION_VAL; fi; \
 	if [ -n "$$MAX_VUS_VAL" ]; then export INFERENCE_LOAD_DETECT_MAX_VUS=$$MAX_VUS_VAL; fi; \
-	TOKEN=$${INFERENCE_LOAD_AUTH_TOKEN:-$$(python3 load/scripts/generate_token.py --secret $${AI_SERVICE_API_KEY:-$${INFERENCE_LOAD_AUTH_TOKEN_SECRET:-dev-secret-key-16chars-at-least}} 2>/dev/null || echo "")}; \
-	if [ -z "$$TOKEN" ]; then TOKEN=$$(python3 load/scripts/generate_token.py --secret dev-secret-key-16chars-at-least 2>/dev/null || echo test-token); fi; \
+	# Generate Bearer token if not provided (uses AI_SERVICE_API_KEY or dev fallback) \
+	SECRET=$${AI_SERVICE_API_KEY:-$${INFERENCE_LOAD_AUTH_TOKEN_SECRET:-dev-secret-key-16chars-at-least}}; \
+	TOKEN=$${INFERENCE_LOAD_AUTH_TOKEN:-$$(python3 load/scripts/generate_token.py --secret "$$SECRET" 2>/dev/null || echo "")}; \
+	if [ -z "$$TOKEN" ]; then TOKEN=$$(python3 load/scripts/generate_token.py --secret "dev-secret-key-16chars-at-least" 2>/dev/null || echo "test-token"); fi; \
 	export INFERENCE_LOAD_AUTH_TOKEN=$$TOKEN; export SCENARIO=$$SCENARIO; \
 	COMPOSE="docker compose -f infra/compose.load.yml"; \
 	if [ "$$GPU" = "1" ]; then COMPOSE="$$COMPOSE -f infra/compose.gpu.yml"; echo "GPU mode enabled (Dockerfile + nvidia)"; else echo "CPU mode (Dockerfile.local)"; fi; \
