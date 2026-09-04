@@ -1,5 +1,6 @@
 import { MetricsService } from "../monitoring/MetricsService";
 import { Logger } from "../logging/Logger";
+import { withTimeout } from "../utils/withTimeout";
 
 type HealthResult = boolean | { healthy: boolean; checks?: Record<string, unknown> };
 type HealthCheck = () => HealthResult | Promise<HealthResult>;
@@ -13,19 +14,6 @@ export class WorkerServer {
         private readonly healthCheck: HealthCheck,
         private readonly readyCheck: HealthCheck = healthCheck
     ) {}
-
-    private async withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-        let timeout: ReturnType<typeof setTimeout> | undefined;
-        const timeoutPromise = new Promise<T>(resolve => { timeout = setTimeout(() => resolve(fallback), ms); });
-        // Prevent unhandled rejection if promise rejects after race
-        promise.catch(() => {});
-        try {
-            const result = await Promise.race([promise, timeoutPromise]);
-            return result;
-        } finally {
-            if (timeout) clearTimeout(timeout);
-        }
-    }
 
     private normalizeHealthResult(result: HealthResult): { healthy: boolean; checks?: Record<string, unknown> } {
         if (typeof result === "boolean") return { healthy: result };
@@ -44,7 +32,7 @@ export class WorkerServer {
 
                     if (url.pathname === "/health") {
                         try {
-                            const raw = await this.withTimeout(Promise.resolve(this.healthCheck()), 3000, false);
+                            const raw = await withTimeout(Promise.resolve(this.healthCheck()), 3000, false);
                             const { healthy, checks } = this.normalizeHealthResult(raw as HealthResult);
                             return this.booleanResponse(healthy, "ok", "error", checks);
                         } catch (error) {
@@ -55,7 +43,7 @@ export class WorkerServer {
 
                     if (url.pathname === "/ready") {
                         try {
-                            const raw = await this.withTimeout(Promise.resolve(this.readyCheck()), 3000, { healthy: false, checks: { timeout: true } });
+                            const raw = await withTimeout(Promise.resolve(this.readyCheck()), 3000, { healthy: false, checks: { timeout: true } });
                             const { healthy, checks } = this.normalizeHealthResult(raw as HealthResult);
                             return this.booleanResponse(healthy, "ready", "not_ready", checks);
                         } catch (error) {

@@ -74,13 +74,4 @@ beforeEach(async () => {
     }
 }, 30000);
 
-// We don't stop containers between files in bun test if we want them to persist
-// But bun test doesn't have a global afterAll easily.
-// Testcontainers will clean up via Ryuk anyway.
-/*
-afterAll(async () => {
-    if (postgres) await postgres.stop();
-    if (redis) await redis.stop();
-    if (rabbitmq) await rabbitmq.stop();
-});
-*/
+

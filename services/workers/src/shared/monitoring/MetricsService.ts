@@ -273,22 +273,6 @@ export class MetricsService {
         return this.registry.contentType;
     }
 
-    private static readonly ALLOWED_EVENT_TYPES = new Set([
-        "subscription.created",
-        "subscription.updated",
-        "subscription.canceled",
-        "subscription.activated",
-        "user.cancel_subscription",
-        "usage_event",
-        "sweep_expired",
-        "other",
-    ]);
-
-    public sanitizeEventType(raw?: string): string {
-        if (!raw || typeof raw !== "string") return "other";
-        return MetricsService.ALLOWED_EVENT_TYPES.has(raw) ? raw : "other";
-    }
-
     private readonly registeredPools = new Set<string>();
 
     public registerPool(name: string, pool: Pick<import("pg").Pool, "totalCount" | "idleCount" | "waitingCount">): void {

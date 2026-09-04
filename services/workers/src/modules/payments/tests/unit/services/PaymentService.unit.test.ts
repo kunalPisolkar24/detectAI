@@ -85,9 +85,10 @@ describe("PaymentService", () => {
             event_type: "subscription.updated",
             data: {}
         };
-        await service.handleEvent(event as any);
+        await expect(service.handleEvent(event as any)).rejects.toThrow("userId");
         expect(mockSubscriptionHandler.handle).not.toHaveBeenCalled();
         expect(metricsMock.jobTotal.inc).not.toHaveBeenCalled();
+        expect(metricsMock.jobErrors.inc).toHaveBeenCalledWith({ job_type: "subscription.updated", error_type: "missing_userId" });
     });
 
     test("logs warning and ignores unknown event types", async () => {

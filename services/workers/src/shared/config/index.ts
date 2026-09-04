@@ -32,11 +32,8 @@ export const baseEnvSchema = z
     RABBITMQ_QUEUE_TYPE: z.enum(["classic", "quorum"]).default("classic"),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     PORT: z.coerce.number().int().min(1).max(65535).default(7777),
-    POOL_MAX: z.coerce.number().int().min(1).max(100).optional(),
     OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional().or(z.literal("").optional()),
     OTEL_SERVICE_NAME: z.string().optional(),
-    OTEL_TRACES_SAMPLER: z.string().optional(),
-    OTEL_TRACES_SAMPLER_ARG: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.REDIS_MODE === "sentinel") {
@@ -97,16 +94,6 @@ export const createConfig = <T extends z.ZodTypeAny>(
     } else {
       Logger.warn(`RABBITMQ_URL not set, using default for ${config.NODE_ENV}`, { workerName });
     }
-  }
-
-  if (config.DATABASE_URL && !config.DATABASE_URL_REPLICA) {
-    config.DATABASE_URL_REPLICA = config.DATABASE_URL;
-    Logger.info(`DATABASE_URL_REPLICA not set, falling back to DATABASE_URL for [${workerName}]`);
-  }
-
-  // Normalize POOL_MAX default (10) — actual Pool creation reads env directly, but keep config consistent
-  if (!config.POOL_MAX) {
-    config.POOL_MAX = 10;
   }
 
   Logger.info(`Environment variables loaded for [${workerName}]`);

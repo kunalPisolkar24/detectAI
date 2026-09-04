@@ -11,7 +11,6 @@ export interface SubscriptionUpdateData {
     status: SubscriptionStatus;
     endsAt: Date | null;
     cancellationScheduled?: boolean;
-    eventTimestamp?: Date;
 }
 
 export interface BulkSubscriptionUpdate {

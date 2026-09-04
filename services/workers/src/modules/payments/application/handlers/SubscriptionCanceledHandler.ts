@@ -4,7 +4,6 @@ import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { type RedisClient } from "@shared/cache/RedisClient";
 import { EventDeduplicator } from "@shared/cache/EventDeduplicator";
 import { MetricsService } from "@shared/monitoring/MetricsService";
-import { Logger } from "@shared/logging/Logger";
 import { type PaddleEventData } from "../../domain/types";
 import type { IPaymentEventHandler } from "./IPaymentEventHandler";
 import { UserNotFoundError, MissingFieldError } from "../../domain/errors";

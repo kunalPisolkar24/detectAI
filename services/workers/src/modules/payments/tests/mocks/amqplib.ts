@@ -8,6 +8,8 @@ export const mockAssertExchange = mock(() => Promise.resolve());
 export const mockBindQueue = mock(() => Promise.resolve());
 export const mockPrefetch = mock(() => Promise.resolve());
 export const mockOn = mock();
+export const mockPublish = mock(() => true);
+export const mockCancel = mock(() => Promise.resolve());
 
 export const mockChannel = {
     assertQueue: mockAssertQueue,
@@ -17,12 +19,16 @@ export const mockChannel = {
     consume: mockConsume,
     ack: mockAck,
     nack: mockNack,
+    publish: mockPublish,
+    cancel: mockCancel,
+    close: mock(() => Promise.resolve()),
     on: mock(() => {}),
 };
 
 export const mockConnection = {
     createChannel: mock(() => Promise.resolve(mockChannel)),
     on: mockOn,
+    close: mock(() => Promise.resolve()),
 };
 
 export const amqpMock = {

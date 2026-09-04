@@ -4,14 +4,18 @@ import { CacheKeys } from "@shared/cache/keys";
 import { type RedisClient } from "@shared/cache/RedisClient";
 import { Logger } from "@shared/logging/Logger";
 import { MetricsService } from "@shared/monitoring/MetricsService";
+import { UserCacheInvalidator } from "@shared/cache/invalidation";
 
 export class AnalyticsService {
+  private readonly cacheInvalidator: UserCacheInvalidator;
   constructor(
     private readonly userRepository: IUserRepository,
     private readonly mainClient: RedisClient,
     private readonly metrics: MetricsService,
     private readonly deduplicator?: UsageEventDeduplicator
-  ) {}
+  ) {
+    this.cacheInvalidator = new UserCacheInvalidator(mainClient, metrics);
+  }
 
   async handleUsageEvent(userId: string, count: number, eventId?: string): Promise<void> {
     const timer = this.metrics.jobDuration.startTimer({ job_type: "usage_event" });
@@ -33,22 +37,15 @@ export class AnalyticsService {
       await this.userRepository.incrementUsage(userId, count);
 
       try {
-        const keys = [CacheKeys.user(userId)];
-        // Also invalidate email key if we can resolve it (best-effort)
+        let email: string | null = null;
         try {
           const user = await this.userRepository.findUniqueById(userId);
-          if (user?.email) keys.push(CacheKeys.userByEmail(user.email));
+          if (user?.email) email = user.email;
         } catch {}
-        if (keys.length === 1) {
-          await this.mainClient.del(keys[0]!);
+        if (email) {
+          await this.cacheInvalidator.invalidateUser(userId, email);
         } else {
-          // Use pipeline where possible for multi-key delete
-          try {
-            await this.mainClient.del(...keys);
-          } catch {
-            // Fallback per-key for cluster CROSSSLOT
-            for (const k of keys) try { await this.mainClient.del(k); } catch {}
-          }
+          await this.mainClient.del(CacheKeys.user(userId));
         }
       } catch (error) {
         Logger.warn("Cache invalidation failed after usage flush", { userId, error });

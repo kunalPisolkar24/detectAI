@@ -2,8 +2,9 @@ import amqp, { type Channel, type ConsumeMessage, type ChannelModel } from "amqp
 import { Logger } from "../logging/Logger";
 import { MetricsService } from "../monitoring/MetricsService";
 import { trace, SpanStatusCode, propagation, context } from "@opentelemetry/api";
-import { UserNotFoundError, MissingFieldError } from "@modules/payments/domain/errors";
-import { InvalidTransitionError } from "@modules/payments/domain/stateMachine";
+import { isRetryableError } from "../errors/isRetryableError";
+import { simpleBackoffWithJitter } from "../retry/backoff";
+import { abortableSleep } from "../utils/abortableSleep";
 
 type MessageHandler = (msg: any) => Promise<void>;
 
@@ -115,27 +116,13 @@ export class RabbitMQWorker {
                 this.isConnected = false;
                 this.metrics.rabbitmqConnectionStatus.set(0);
                 if (this.isShuttingDown) break;
-                const base = Math.min(Math.pow(2, attempt) * 1000, maxBackoff);
-                const jitter = Math.random() * 1000;
-                const backoff = base + jitter;
+                const backoff = simpleBackoffWithJitter(attempt, maxBackoff);
                 Logger.warn("Failed to connect to RabbitMQ, retrying...", { attempt, nextRetryIn: `${Math.round(backoff)}ms`, error: e });
-                await this.abortableDelay(backoff);
+                await abortableSleep(backoff, this.abortController.signal);
             }
         }
 
         this.isConnecting = false;
-    }
-
-    private abortableDelay(ms: number): Promise<void> {
-        if (this.isShuttingDown || this.abortController.signal.aborted) return Promise.resolve();
-        return new Promise<void>((resolve) => {
-            const timer = setTimeout(resolve, ms);
-            const onAbort = () => {
-                clearTimeout(timer);
-                resolve();
-            };
-            this.abortController.signal.addEventListener("abort", onAbort, { once: true });
-        });
     }
 
     private handleDisconnect() {
@@ -249,19 +236,6 @@ export class RabbitMQWorker {
         }
     }
 
-    private isRetryableError(error: unknown): boolean {
-        if (error instanceof UserNotFoundError) return false;
-        if (error instanceof MissingFieldError) return false;
-        if (error instanceof InvalidTransitionError) return false;
-        // Check by name as fallback (for mocked errors in tests or JSON round-trip)
-        const name = (error as any)?.name;
-        if (name === "UserNotFoundError" || name === "MissingFieldError" || name === "InvalidTransitionError") return false;
-        // Poison JSON is not retryable
-        if (error instanceof SyntaxError) return false;
-        if ((error as any)?.name === "SyntaxError") return false;
-        return true;
-    }
-
     private async onMessage(msg: ConsumeMessage | null) {
         const deliveryChannel = this.channel;
         if (!msg || !deliveryChannel) return;
@@ -304,7 +278,7 @@ export class RabbitMQWorker {
             this.safeAck(msg, deliveryChannel);
         } catch (error) {
             try { span.recordException(error as Error); span.setStatus({ code: SpanStatusCode.ERROR }); } catch {}
-            const retryable = this.isRetryableError(error);
+            const retryable = isRetryableError(error);
             const retryCount = this.getRetryCount(msg);
             const maxRetries = 5;
 

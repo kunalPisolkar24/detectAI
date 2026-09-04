@@ -52,7 +52,8 @@ describe("EventDeduplicator", () => {
 
     const result = await dedup.isStale("user_1", new Date("2024-01-01T00:00:00Z"));
 
-    expect(result).toBe(true);
+    // Equal timestamps are NOT stale — DB lockAndUpdateSubscription is authoritative (see EventDeduplicator.ts:37-43)
+    expect(result).toBe(false);
   });
 
   test("isStale returns false when Redis get fails", async () => {
@@ -96,7 +97,8 @@ describe("EventDeduplicator", () => {
     await dedup.markProcessed("user_1", new Date("2024-01-01T00:00:00Z"));
 
     const after = await dedup.isStale("user_1", new Date("2024-01-01T00:00:00Z"));
-    expect(after).toBe(true);
+    // Same timestamp not stale — DB is authoritative
+    expect(after).toBe(false);
   });
 
   test("uses custom prefix when provided", async () => {

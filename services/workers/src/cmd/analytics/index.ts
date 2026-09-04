@@ -4,7 +4,7 @@ initTracing("worker-analytics");
 import { z } from "zod";
 import { RabbitMQWorker } from "@shared/messaging/RabbitMQWorker";
 import { AnalyticsService } from "@modules/analytics/application/services/AnalyticsService";
-import { prisma, prismaPrimary, getPgPool, closePrisma } from "@shared/database/PrismaService";
+import { prisma, prismaPrimary, closePrisma } from "@shared/database/PrismaService";
 import { Logger } from "@shared/logging/Logger";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { MetricsService } from "@shared/monitoring/MetricsService";
@@ -12,6 +12,8 @@ import { WorkerServer } from "@shared/infrastructure/WorkerServer";
 import { config } from "./config";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
 import { UsageEventDeduplicator } from "@modules/analytics/infrastructure/UsageEventDeduplicator";
+import { withTimeout } from "@shared/utils/withTimeout";
+import { registerPools, wireRedisMetrics, getPoolWaiting, isPoolPressured, checkDb, checkRedis } from "@shared/health/checks";
 
 const QUEUE_NAME = "analytics.usage";
 
@@ -45,22 +47,11 @@ const dedupClient = cfgAny.EVENT_REDIS_URL
   : mainClient;
 
 const metricsService = new MetricsService("worker-analytics");
-try {
-  const primaryPool = getPgPool("primary");
-  if (primaryPool) metricsService.registerPool("primary", primaryPool);
-  const replicaPool = getPgPool("replica");
-  if (replicaPool && replicaPool !== primaryPool) metricsService.registerPool("replica", replicaPool);
-} catch {}
+registerPools(metricsService);
 
-mainClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 1));
-mainClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 1));
-mainClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 0));
-mainClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 0));
+wireRedisMetrics(mainClient, metricsService, "AnalyticsMain");
 if (dedupClient !== mainClient) {
-  dedupClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsDedup" }, 1));
-  dedupClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsDedup" }, 1));
-  dedupClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsDedup" }, 0));
-  dedupClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsDedup" }, 0));
+  wireRedisMetrics(dedupClient, metricsService, "AnalyticsDedup");
 }
 
 const userRepository = new PrismaUserRepository(prismaPrimary, prisma, undefined, metricsService);
@@ -89,18 +80,6 @@ const worker = new RabbitMQWorker(
 
 let isShuttingDown = false;
 
-async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<T>(resolve => { timeout = setTimeout(() => resolve(fallback), ms); });
-  promise.catch(() => {});
-  try {
-    const result = await Promise.race([promise, timeoutPromise]);
-    return result;
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
-
 const server = new WorkerServer(
   metricsService,
   config.PORT,
@@ -110,37 +89,13 @@ const server = new WorkerServer(
   },
   async () => {
     if (isShuttingDown) return { healthy: false, checks: { isShuttingDown: true } };
-    const pool = getPgPool("primary");
-    const waiting = pool ? pool.waitingCount : 0;
-    const poolPressured = waiting > 5;
-
-    const dbOk = await withTimeout(
-      prismaPrimary.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
-      3000,
-      false
-    );
-    const redisOk = await withTimeout(
-      (async () => {
-        try {
-          const res = await mainClient.ping();
-          return res === "PONG" || mainClient.status === "ready";
-        } catch { return false; }
-      })(),
-      3000,
-      false
-    );
+    const waiting = getPoolWaiting();
+    const poolPressured = isPoolPressured();
+    const dbOk = await checkDb();
+    const redisOk = await checkRedis(mainClient);
     let dedupOk = true;
     if (dedupClient !== mainClient) {
-      dedupOk = await withTimeout(
-        (async () => {
-          try {
-            const res = await dedupClient.ping();
-            return res === "PONG" || dedupClient.status === "ready";
-          } catch { return false; }
-        })(),
-        3000,
-        false
-      );
+      dedupOk = await checkRedis(dedupClient);
     }
     const workerOk = worker.getStatus();
     const healthy = dbOk && redisOk && dedupOk && workerOk && !poolPressured;

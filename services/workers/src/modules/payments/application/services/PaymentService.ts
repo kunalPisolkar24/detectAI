@@ -6,6 +6,7 @@ import { UserNotFoundError, MissingFieldError } from "../../domain/errors";
 import { InvalidTransitionError } from "../../domain/stateMachine";
 import type { IPaymentEventHandler } from "../handlers/IPaymentEventHandler";
 import { type IdempotencyStore } from "@shared/cache/IdempotencyStore";
+import { isRetryableError } from "@shared/errors/isRetryableError";
 
 function stableStringify(value: unknown): string {
     if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "";
@@ -47,15 +48,6 @@ export class PaymentService {
         } catch {
             return `fallback_${event.event_type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         }
-    }
-
-    private isRetryableError(error: unknown): boolean {
-        if (error instanceof UserNotFoundError) return false;
-        if (error instanceof MissingFieldError) return false;
-        if (error instanceof InvalidTransitionError) return false;
-        const name = (error as any)?.name;
-        if (name === "UserNotFoundError" || name === "MissingFieldError" || name === "InvalidTransitionError") return false;
-        return true;
     }
 
     public async handleEvent(event: PaymentEvent): Promise<void> {
@@ -130,7 +122,7 @@ export class PaymentService {
             }
         } catch (error) {
             // Release claim for retryable errors so redelivery can succeed
-            if (claimed && this.isRetryableError(error)) {
+            if (claimed && isRetryableError(error)) {
                 try {
                     await this.idempotencyStore?.release(eventId);
                 } catch {}

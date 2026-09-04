@@ -2,7 +2,7 @@ import { initTracing } from "@shared/tracing/instrumentation";
 initTracing("worker-cron");
 
 import { SubscriptionSweeper } from "@modules/cron/application/services/SubscriptionSweeper";
-import { prismaPrimary, getPgPool, closePrisma } from "@shared/database/PrismaService";
+import { prismaPrimary, closePrisma } from "@shared/database/PrismaService";
 import { prisma } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { Logger } from "@shared/logging/Logger";
@@ -10,6 +10,10 @@ import { MetricsService } from "@shared/monitoring/MetricsService";
 import { WorkerServer } from "@shared/infrastructure/WorkerServer";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
 import { config } from "./config";
+import { withTimeout } from "@shared/utils/withTimeout";
+import { abortableSleep } from "@shared/utils/abortableSleep";
+import { jitteredInterval } from "@shared/retry/backoff";
+import { registerPools, wireRedisMetrics, getPoolWaiting, isPoolPressured, checkDb, checkRedis } from "@shared/health/checks";
 
 const BATCH_COOLDOWN_MS = 5000;
 const ERROR_COOLDOWN_MS = 60000;
@@ -25,19 +29,11 @@ const redisClient = RedisFactory.createClient({
 });
 
 const metricsService = new MetricsService("worker-cron");
-try {
-    const primaryPool = getPgPool("primary");
-    if (primaryPool) metricsService.registerPool("primary", primaryPool);
-    const replicaPool = getPgPool("replica");
-    if (replicaPool && replicaPool !== primaryPool) metricsService.registerPool("replica", replicaPool);
-} catch {}
+registerPools(metricsService);
 metricsService.cronConfig.set({ param: "check_interval_ms" }, config.CRON_CHECK_INTERVAL_MS);
 metricsService.cronConfig.set({ param: "batch_size" }, config.CRON_BATCH_SIZE);
 
-redisClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 1));
-redisClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 1));
-redisClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 0));
-redisClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "CronRedis" }, 0));
+wireRedisMetrics(redisClient, metricsService, "CronRedis");
 
 const userRepository = new PrismaUserRepository(prismaPrimary, prisma, undefined, metricsService);
 const sweeper = new SubscriptionSweeper(userRepository, redisClient, metricsService, config.CRON_BATCH_SIZE);
@@ -50,34 +46,7 @@ const bootTime = Date.now();
 let loopStarted = false;
 const abort = new AbortController();
 
-function jitter(intervalMs: number): number {
-    return Math.round(intervalMs * (0.9 + Math.random() * 0.2));
-}
 
-function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
-    return new Promise(resolve => {
-        if (signal.aborted) return resolve();
-        const timer = setTimeout(resolve, ms);
-        signal.addEventListener("abort", () => {
-            clearTimeout(timer);
-            try { metricsService.shutdownAbortsTotal.inc({ reason: "sleep_aborted" }); } catch {}
-            resolve();
-        }, { once: true });
-    });
-}
-
-async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<T>(resolve => { timeout = setTimeout(() => resolve(fallback), ms); });
-    // Prevent unhandled rejection on the losing promise
-    promise.catch(() => {});
-    try {
-        const result = await Promise.race([promise, timeoutPromise]);
-        return result;
-    } finally {
-        if (timeout) clearTimeout(timeout);
-    }
-}
 
 async function updateSubscriptionStatusGauges(): Promise<void> {
     try {
@@ -103,7 +72,7 @@ async function updateSubscriptionStatusGauges(): Promise<void> {
 
 const server = new WorkerServer(
     metricsService,
-    config.PORT || 7777,
+    config.PORT,
     () => {
         // Liveness: process alive, not shutting down. Do NOT check downstream or lastSuccess.
         if (isShuttingDown) return { healthy: false, checks: { isShuttingDown: true, reason: "shutting_down" } };
@@ -115,33 +84,12 @@ const server = new WorkerServer(
     },
     async () => {
         if (isShuttingDown) return { healthy: false, checks: { isShuttingDown: true, reason: "shutting_down" } };
-        const pool = getPgPool("primary");
-        const waiting = pool ? pool.waitingCount : 0;
-        const poolPressured = waiting > 5;
-
+        const waiting = getPoolWaiting();
+        const poolPressured = isPoolPressured();
         const age = Date.now() - lastSuccess;
         const threshold = 2 * config.CRON_CHECK_INTERVAL_MS;
         const loopStale = age > threshold;
-
-        const dbCheck = withTimeout(
-            prismaPrimary.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
-            3000,
-            false
-        );
-        const redisCheck = withTimeout(
-            (async () => {
-                try {
-                    const res = await redisClient.ping();
-                    return res === "PONG" || redisClient.status === "ready";
-                } catch {
-                    return false;
-                }
-            })(),
-            3000,
-            false
-        );
-
-        const [dbOk, redisOk] = await Promise.all([dbCheck, redisCheck]);
+        const [dbOk, redisOk] = await Promise.all([checkDb(), checkRedis(redisClient)]);
         const healthy = dbOk && redisOk && !poolPressured && !loopStale;
         return { healthy, checks: { db: dbOk, redis: redisOk, poolWaiting: waiting, poolPressured, lastSuccessAgeMs: age, thresholdMs: threshold, loopStale, isShuttingDown } };
     }
@@ -185,13 +133,13 @@ async function startWorker(): Promise<void> {
             if (processedCount > 0) {
                 metricsService.loopIterationsTotal.inc({ result: "success" });
                 Logger.info(`Sweeper processed ${processedCount} records. Checking for more in ${BATCH_COOLDOWN_MS}ms...`);
-                await abortableSleep(BATCH_COOLDOWN_MS, abort.signal);
+                await abortableSleep(BATCH_COOLDOWN_MS, abort.signal, () => { try { metricsService.shutdownAbortsTotal.inc({ reason: "sleep_aborted" }); } catch {} });
             } else {
                 metricsService.loopIterationsTotal.inc({ result: "empty" });
-                const sleepMs = jitter(config.CRON_CHECK_INTERVAL_MS);
+                const sleepMs = jitteredInterval(config.CRON_CHECK_INTERVAL_MS, 0.1);
                 try { metricsService.jitterSeconds.observe(sleepMs / 1000); } catch {}
                 Logger.info(`No expired subscriptions found. Sleeping for ${Math.round(sleepMs / 1000)}s.`);
-                await abortableSleep(sleepMs, abort.signal);
+                await abortableSleep(sleepMs, abort.signal, () => { try { metricsService.shutdownAbortsTotal.inc({ reason: "sleep_aborted" }); } catch {} });
                 await updateSubscriptionStatusGauges();
             }
         } catch (error) {
@@ -199,7 +147,7 @@ async function startWorker(): Promise<void> {
             metricsService.loopIterationsTotal.inc({ result: "error" });
             Logger.error("Critical error in Cron loop", error);
             metricsService.jobErrors.inc({ job_type: "cron_loop", error_type: "critical" });
-            await abortableSleep(ERROR_COOLDOWN_MS, abort.signal);
+            await abortableSleep(ERROR_COOLDOWN_MS, abort.signal, () => { try { metricsService.shutdownAbortsTotal.inc({ reason: "sleep_aborted" }); } catch {} });
         }
     }
 }

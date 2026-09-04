@@ -40,12 +40,13 @@ describe("IdempotencyStore", () => {
 
   test("isDuplicate returns false and sets NX EX 7d on first claim", async () => {
     redis.set.mockResolvedValue("OK");
+    prisma.processedWebhook.findUnique.mockResolvedValue(null);
 
     const result = await store.isDuplicate("evt_test_123");
 
     expect(result).toBe(false);
     expect(redis.set).toHaveBeenCalledWith("paddle:evt:evt_test_123", "1", "EX", 604800, "NX");
-    expect(prisma.processedWebhook.findUnique).not.toHaveBeenCalled();
+    expect(prisma.processedWebhook.findUnique).toHaveBeenCalledWith({ where: { eventId: "evt_test_123" } });
   });
 
   test("isDuplicate returns true when Redis NX fails (duplicate)", async () => {
@@ -59,10 +60,12 @@ describe("IdempotencyStore", () => {
 
   test("isDuplicate handles cluster return 1 as success", async () => {
     redis.set.mockResolvedValue(1 as any);
+    prisma.processedWebhook.findUnique.mockResolvedValue(null);
 
     const result = await store.isDuplicate("evt_cluster");
 
     expect(result).toBe(false);
+    expect(prisma.processedWebhook.findUnique).toHaveBeenCalledWith({ where: { eventId: "evt_cluster" } });
   });
 
   test("isDuplicate falls back to DB on Redis error and returns true if found", async () => {

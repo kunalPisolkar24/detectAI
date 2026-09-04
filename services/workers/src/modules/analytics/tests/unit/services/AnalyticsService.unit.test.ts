@@ -2,6 +2,7 @@ import { describe, test, expect, mock, beforeEach } from "bun:test";
 import { mockMainClient } from "../../mocks/redis";
 import { UsageEventDeduplicator } from "../../../infrastructure/UsageEventDeduplicator";
 import { MetricsService } from "@shared/monitoring/MetricsService";
+import { CacheKeys } from "@shared/cache/keys";
 
 const mockLogger = { info: mock(), error: mock(), warn: mock() };
 mock.module("@shared/logging/Logger", () => ({
@@ -13,13 +14,17 @@ const { AnalyticsService } = await import("../../../application/services/Analyti
 describe("AnalyticsService", () => {
   let service: InstanceType<typeof AnalyticsService>;
   let metricsMock: MetricsService;
-  let mockUserRepository: { incrementUsage: ReturnType<typeof mock> };
+  let mockUserRepository: { incrementUsage: ReturnType<typeof mock>; findUniqueById: ReturnType<typeof mock> };
 
   beforeEach(() => {
     mockUserRepository = {
-      incrementUsage: mock(() => Promise.resolve())
+      incrementUsage: mock(() => Promise.resolve()),
+      findUniqueById: mock(() => Promise.resolve(null)),
     };
     mockMainClient.del.mockClear();
+    // also clear unlink/pipeline if present
+    (mockMainClient as any).unlink?.mockClear?.();
+    (mockMainClient as any).pipeline?.mockClear?.();
     mockLogger.info.mockClear();
     mockLogger.error.mockClear();
     mockLogger.warn.mockClear();
@@ -36,6 +41,9 @@ describe("AnalyticsService", () => {
       redisConnectionStatus: { set: mock() },
       messageSizeBytes: { observe: mock() },
       deadLetteredTotal: { inc: mock() },
+      cacheInvalidateDurationSeconds: { startTimer: mock(() => mock()) },
+      cacheInvalidateRetriesTotal: { inc: mock() },
+      staleEventsFilteredTotal: { inc: mock() },
     } as unknown as MetricsService;
 
     service = new AnalyticsService(
@@ -86,7 +94,7 @@ describe("AnalyticsService", () => {
     await service.handleUsageEvent("user_1", 10);
 
     expect(mockUserRepository.incrementUsage).toHaveBeenCalledWith("user_1", 10);
-    expect(mockMainClient.del).toHaveBeenCalledWith("user:id:user_1");
+    expect(mockMainClient.del).toHaveBeenCalledWith(CacheKeys.user("user_1"));
     expect(metricsMock.jobTotal.inc).toHaveBeenCalledWith({ job_type: "usage_event" });
     expect(metricsMock.domainOperationsVolume.inc).toHaveBeenCalledWith({ operation_type: "usage_flushed" }, 10);
   });

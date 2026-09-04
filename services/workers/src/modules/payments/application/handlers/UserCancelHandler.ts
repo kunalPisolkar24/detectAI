@@ -82,10 +82,6 @@ export class UserCancelHandler implements IPaymentEventHandler {
 
     if (result && !result.stale) {
       await this.deduplicator.markProcessed(resolvedUserId, eventTimestamp);
-    } else if (result?.stale) {
-      // Do not update dedup watermark for stale events
-    } else {
-      await this.deduplicator.markProcessed(resolvedUserId, eventTimestamp);
     }
   }
 

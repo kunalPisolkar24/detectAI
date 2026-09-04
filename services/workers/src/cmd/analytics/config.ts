@@ -10,14 +10,10 @@ const analyticsEnvSchema = baseEnvSchema
     REDIS_MASTER_NAME: true,
     REDIS_PASSWORD: true,
     RABBITMQ_URL: true,
-    RABBITMQ_QUEUE_TYPE: true,
     NODE_ENV: true,
     PORT: true,
-    POOL_MAX: true,
     OTEL_EXPORTER_OTLP_ENDPOINT: true,
     OTEL_SERVICE_NAME: true,
-    OTEL_TRACES_SAMPLER: true,
-    OTEL_TRACES_SAMPLER_ARG: true,
   })
   .extend({
     EVENT_REDIS_URL: baseEnvSchema.shape.REDIS_URL.optional(),

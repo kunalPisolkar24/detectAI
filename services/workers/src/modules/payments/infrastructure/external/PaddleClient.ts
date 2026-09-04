@@ -1,5 +1,6 @@
 import { Logger } from "@shared/logging/Logger";
 import { type MetricsService } from "@shared/monitoring/MetricsService";
+import { exponentialBackoff } from "@shared/retry/backoff";
 
 export interface IPaddleClient {
     cancelSubscription(subscriptionId: string): Promise<void>;
@@ -43,7 +44,7 @@ export class PaddleClient implements IPaddleClient {
                     this.metrics?.paddleRequestDuration.observe({ status: "error" }, duration);
                 } catch {}
                 if (attempt < maxAttempts - 1) {
-                    const backoff = this.jitterBackoff(attempt);
+                    const backoff = exponentialBackoff(attempt);
                     await this.sleep(Math.min(backoff, 30000));
                     continue;
                 }
@@ -73,7 +74,7 @@ export class PaddleClient implements IPaddleClient {
                     try { await response.body?.cancel(); } catch {}
                     const retryAfter = this.parseRetryAfter(response.headers.get("Retry-After"));
                     const cappedRetryAfter = retryAfter !== null ? Math.min(retryAfter, 30000) : null;
-                    const backoff = cappedRetryAfter ?? this.jitterBackoff(attempt);
+                    const backoff = cappedRetryAfter ?? exponentialBackoff(attempt);
                     const cappedBackoff = Math.min(backoff, 30000);
                     Logger.warn("Paddle retryable error, retrying", { subscriptionId, status: response.status, attempt, backoff: cappedBackoff });
                     await this.sleep(cappedBackoff);
@@ -110,12 +111,6 @@ export class PaddleClient implements IPaddleClient {
             return null;
         }
         return null;
-    }
-
-    private jitterBackoff(attempt: number): number {
-        const base = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
-        const jitter = Math.random() * 0.5 * base; // up to 50% jitter
-        return Math.min(base + jitter, 30000);
     }
 
     private sleep(ms: number): Promise<void> {
