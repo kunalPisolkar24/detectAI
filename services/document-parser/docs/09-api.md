@@ -4,8 +4,8 @@
 
 | Method | Path | Body | Success | Errors |
 |---|---|---|---|---|
-| `GET` | `/health` | — | `200 {"status":"ok"}` | `503 {"status":"unavailable"}` if pool saturated |
-| `GET` | `/ready` | — | `200 {"status":"ready"}` | `503` if `busy>=max` or `queued>=50` |
+| `GET` | `/health` | — | `200 {"status":"ok"}` | `503 {"status":"unavailable"}` if `is_process_pool_healthy()==False` (pool `None` or `_shutdown`) |
+| `GET` | `/ready` | — | `200 {"status":"ready"}` | `503` if not healthy or `busy>=max` or `queued>=READINESS_MAX_QUEUE_DEPTH(50)` via `_pool_snapshot` |
 | `GET` | `/metrics` | — | Prometheus text | — |
 | `POST` | `/extract` | `multipart file` | `200 ExtractionResponse{text, truncated}` | `413` too large, `415` unsupported, `422` page/zip bomb, `504` timeout |
 
@@ -40,6 +40,6 @@ curl http://localhost:8000/health
 | `415` | `mime not in {pdf,docx,txt}` |
 | `422` | `pages>1000` or `uncompressed>100 MB` |
 | `504` | `ThreadPool` timeout `30s` |
-| `503` | `health/ready` when pool saturated |
+| `503` | `health` when pool not healthy, `ready` when `busy/queued` saturated or race `stats is None` |
 
 See `02-validation.md` for sniff and `03-internals.md` for factory.
