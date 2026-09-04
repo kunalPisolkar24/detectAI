@@ -17,6 +17,9 @@ export class UsageEventDeduplicator {
 
     /** Returns true when this caller owns processing; false for already-seen events. */
     async tryBegin(eventId: string): Promise<boolean> {
+        if (!eventId || typeof eventId !== "string" || !eventId.trim()) {
+            return true;
+        }
         try {
             const result = await this.redis.set(
                 `${this.prefix}${eventId}`,
@@ -25,10 +28,19 @@ export class UsageEventDeduplicator {
                 this.ttlSeconds,
                 "NX"
             );
-            return result === "OK" || result === 1;
+            return result === "OK" || (result as unknown) === 1;
         } catch (error) {
             Logger.warn("Usage event dedup check failed; treating event as new", { eventId, error });
             return true;
+        }
+    }
+
+    async release(eventId: string): Promise<void> {
+        if (!eventId || !eventId.trim()) return;
+        try {
+            await this.redis.del(`${this.prefix}${eventId}`);
+        } catch (error) {
+            Logger.warn("Failed to release usage dedup claim", { eventId, error });
         }
     }
 }

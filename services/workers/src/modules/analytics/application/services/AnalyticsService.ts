@@ -17,20 +17,39 @@ export class AnalyticsService {
     const timer = this.metrics.jobDuration.startTimer({ job_type: "usage_event" });
 
     this.metrics.activeJobs.inc({ job_type: "usage_event" });
+    let claimed = false;
     try {
       if (this.deduplicator && eventId) {
         const isNew = await this.deduplicator.tryBegin(eventId);
         if (!isNew) {
           Logger.info("Duplicate usage event skipped", { userId, eventId });
+          try { this.metrics.staleEventsFilteredTotal.inc({ reason: "duplicate" }); } catch {}
           timer({ status: "duplicate" });
           return;
         }
+        claimed = true;
       }
 
       await this.userRepository.incrementUsage(userId, count);
 
       try {
-        await this.mainClient.del(CacheKeys.user(userId));
+        const keys = [CacheKeys.user(userId)];
+        // Also invalidate email key if we can resolve it (best-effort)
+        try {
+          const user = await this.userRepository.findUniqueById(userId);
+          if (user?.email) keys.push(CacheKeys.userByEmail(user.email));
+        } catch {}
+        if (keys.length === 1) {
+          await this.mainClient.del(keys[0]!);
+        } else {
+          // Use pipeline where possible for multi-key delete
+          try {
+            await this.mainClient.del(...keys);
+          } catch {
+            // Fallback per-key for cluster CROSSSLOT
+            for (const k of keys) try { await this.mainClient.del(k); } catch {}
+          }
+        }
       } catch (error) {
         Logger.warn("Cache invalidation failed after usage flush", { userId, error });
       }
@@ -40,7 +59,11 @@ export class AnalyticsService {
 
       timer({ status: "success" });
     } catch (error) {
-      this.metrics.jobErrors.inc({ job_type: "usage_event", error_type: "db_error" });
+      // Release dedup claim for retryable DB errors so redelivery can succeed
+      if (claimed && eventId && this.deduplicator) {
+        try { await this.deduplicator.release(eventId); } catch {}
+      }
+      try { this.metrics.jobErrors.inc({ job_type: "usage_event", error_type: "db_error" }); } catch {}
       timer({ status: "error" });
       throw error;
     } finally {

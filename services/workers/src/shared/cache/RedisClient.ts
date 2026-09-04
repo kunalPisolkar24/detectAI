@@ -31,8 +31,9 @@ export class RedisFactory {
     }
 
     const client = new Redis(config.url, {
-      maxRetriesPerRequest: null,
-      enableReadyCheck: false,
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: true,
+      enableOfflineQueue: false,
       retryStrategy(times) {
         return Math.min(times * 50, 2000);
       },
@@ -53,9 +54,10 @@ export class RedisFactory {
 
     const sentinels = config.sentinels.split(",").map((entry) => {
       const [host, port] = entry.split(":");
-
+      const h = host?.trim();
+      if (!h) throw new Error(`Invalid sentinel entry: ${entry}`);
       return {
-        host,
+        host: h,
         port: parseInt(port || "26379", 10),
       };
     });
@@ -65,8 +67,9 @@ export class RedisFactory {
       name: config.masterName,
       password: config.password,
       sentinelPassword: config.password,
-      maxRetriesPerRequest: null,
-      enableReadyCheck: false,
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: true,
+      enableOfflineQueue: false,
       family: 4,
       keepAlive: 10000,
       lazyConnect: false,
@@ -85,23 +88,38 @@ export class RedisFactory {
     }
 
     const nodes: ClusterNode[] = config.url.split(",").map((url) => {
-      const cleanUrl = url.replace("redis://", "");
-      const [host, port] = cleanUrl.split(":");
+      const trimmed = url.trim();
+      if (!trimmed) throw new Error(`Invalid cluster URL entry: ${url}`);
+      let parsed: URL;
+      try {
+        parsed = new URL(trimmed);
+      } catch {
+        // Fallback for bare host:port
+        const [host, port] = trimmed.replace(/^rediss?:\/\//, "").split(":");
+        return {
+          host,
+          port: parseInt(port || "6379", 10),
+        };
+      }
+      if (parsed.protocol !== "redis:" && parsed.protocol !== "rediss:") {
+        throw new Error(`Unsupported Redis protocol: ${parsed.protocol} in ${trimmed}`);
+      }
       return {
-        host,
-        port: parseInt(port || "6379", 10),
+        host: parsed.hostname,
+        port: parseInt(parsed.port || "6379", 10),
       };
     });
 
     const cluster = new Cluster(nodes, {
       redisOptions: {
         password: config.password,
-        maxRetriesPerRequest: null,
-        enableReadyCheck: false,
+        maxRetriesPerRequest: 3,
+        enableReadyCheck: true,
+        enableOfflineQueue: false,
       } as RedisOptions,
       retryDelayOnFailover: 100,
       slotsRefreshTimeout: 2000,
-      scaleReads: "slave",
+      scaleReads: "master",
     });
 
     RedisFactory.attachListeners(cluster, config.name);
