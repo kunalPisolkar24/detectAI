@@ -223,7 +223,7 @@ groups:
                 type: prometheus
                 uid: prometheus
               editorMode: code
-              expr: db_pool_connections{service="worker-cron", state="waiting"} > 0
+              expr: db_pool_connections{service="worker-cron", pool_name="primary", state="waiting"} > 0 or db_pool_connections{service="worker-cron", pool_name="replica", state="waiting"} > 0
               instant: true
               range: false
               refId: A
@@ -363,3 +363,310 @@ groups:
           summary: worker-cron no sweep progress for 30 minutes while backlog >0
         labels:
           severity: warning
+      - title: DLQGrowth
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: rate(worker_dead_lettered_total[5m]) > 0
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker DLQ growth detected (dead_lettered_total > 0)
+        labels:
+          severity: critical
+      - title: IdempotencyRedisErrors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: rate(worker_idempotency_redis_errors_total[5m]) > 0.1
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker idempotency Redis errors > 0.1/sec
+        labels:
+          severity: warning
+      - title: RetryStorm
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: rate(worker_retry_total[5m]) > 0.5
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker retry storm >0.5/sec
+        labels:
+          severity: warning
+      - title: DuplicateRateAnomaly
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: rate(worker_duplicate_events_total[5m]) > 1
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: high duplicate event rate >1/sec
+        labels:
+          severity: warning
+      - title: WorkerPaymentsDown
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: up{service="worker-payments"} == 0
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-payments down for 2 minutes
+        labels:
+          severity: critical
+      - title: WorkerAnalyticsDown
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: up{service="worker-analytics"} == 0
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: worker-analytics down for 2 minutes
+        labels:
+          severity: critical
+

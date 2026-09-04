@@ -80,7 +80,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * avg(up{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"})",
+          "expr": "100 * avg(up{service=~\"worker-analytics|worker-cron|worker-payments\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -146,7 +146,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(worker_jobs_processed_total{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}[5m]))",
+          "expr": "sum(rate(worker_jobs_processed_total{service=~\"worker-analytics|worker-cron|worker-payments\"}[5m]))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -212,7 +212,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(worker_job_duration_seconds_bucket{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(worker_job_duration_seconds_bucket{service=~\"worker-analytics|worker-cron|worker-payments\"}[5m])) by (le))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -278,7 +278,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(worker_active_instances{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"})",
+          "expr": "sum(worker_active_instances{service=~\"worker-analytics|worker-cron|worker-payments\"})",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -323,7 +323,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(worker_jobs_processed_total{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}[5m])) by (service, job_type)",
+          "expr": "sum(rate(worker_jobs_processed_total{service=~\"worker-analytics|worker-cron|worker-payments\"}[5m])) by (service, job_type)",
           "legendFormat": "{{service}} {{job_type}}",
           "range": true,
           "refId": "A"
@@ -368,7 +368,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(worker_job_duration_seconds_bucket{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}[5m])) by (service, job_type, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(worker_job_duration_seconds_bucket{service=~\"worker-analytics|worker-cron|worker-payments\"}[5m])) by (service, job_type, le))",
           "legendFormat": "{{service}} {{job_type}}",
           "range": true,
           "refId": "A"
@@ -413,7 +413,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(worker_active_instances{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}) by (service, job)",
+          "expr": "sum(worker_active_instances{service=~\"worker-analytics|worker-cron|worker-payments\"}) by (service, job)",
           "legendFormat": "{{service}} {{job}}",
           "range": true,
           "refId": "A"
@@ -458,7 +458,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(cache_operations_total{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}[5m])) by (service, cache_type, operation)",
+          "expr": "sum(rate(cache_operations_total{service=~\"worker-analytics|worker-cron|worker-payments\"}[5m])) by (service, cache_type, operation)",
           "legendFormat": "{{service}} {{cache_type}} {{operation}}",
           "range": true,
           "refId": "A"
@@ -503,21 +503,21 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "nodejs_eventloop_lag_p99_seconds{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}",
+          "expr": "nodejs_eventloop_lag_p99_seconds{service=~\"worker-analytics|worker-cron|worker-payments\"}",
           "legendFormat": "{{job}} lag",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "nodejs_heap_size_used_bytes{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}",
+          "expr": "nodejs_heap_size_used_bytes{service=~\"worker-analytics|worker-cron|worker-payments\"}",
           "legendFormat": "{{job}} heap",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "nodejs_active_handles{job=~\".*(worker-analytics|worker-cron|worker-payments).*\"}",
+          "expr": "nodejs_active_handles{service=~\"worker-analytics|worker-cron|worker-payments\"}",
           "legendFormat": "{{job}} handles",
           "range": true,
           "refId": "C"
@@ -704,21 +704,21 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rabbitmq_connection_status{job=~\"${workerJobs}\"}",
+          "expr": "rabbitmq_connection_status{service=~\"${workerJobs}\"}",
           "legendFormat": "{{job}} RabbitMQ status",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(rabbitmq_reconnections_total{job=~\"${workerJobs}\"}[5m])) by (job)",
+          "expr": "sum(rate(rabbitmq_reconnections_total{service=~\"${workerJobs}\"}[5m])) by (job)",
           "legendFormat": "{{job}} RabbitMQ reconns",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "redis_connection_status{job=~\"${workerJobs}\"}",
+          "expr": "redis_connection_status{service=~\"${workerJobs}\"}",
           "legendFormat": "{{job}} Redis status",
           "range": true,
           "refId": "C"
@@ -763,7 +763,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "db_pool_connections{job=~\"${workerJobs}\"}",
+          "expr": "db_pool_connections{service=~\"${workerJobs}\"}",
           "legendFormat": "{{job}} pool {{pool_name}} {{state}}",
           "range": true,
           "refId": "A"
@@ -808,14 +808,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(worker_active_jobs{job=~\"${workerJobs}\"}) by (job_type)",
+          "expr": "sum(worker_active_jobs{service=~\"${workerJobs}\"}) by (job_type)",
           "legendFormat": "{{job_type}} active",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(worker_message_size_bytes_bucket{job=~\"${workerJobs}\"}[5m])) by (job_type, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(worker_message_size_bytes_bucket{service=~\"${workerJobs}\"}[5m])) by (job_type, le))",
           "legendFormat": "{{job_type}} size p95 bytes",
           "range": true,
           "refId": "B"
@@ -860,21 +860,21 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(worker_job_errors_total{job=~\"${workerJobs}\"}[5m])) by (job_type, error_type)",
+          "expr": "sum(rate(worker_job_errors_total{service=~\"${workerJobs}\"}[5m])) by (job_type, error_type)",
           "legendFormat": "{{job_type}} error {{error_type}}",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(worker_dead_lettered_total{job=~\"${workerJobs}\"}[5m])) by (job_type)",
+          "expr": "sum(rate(worker_dead_lettered_total{service=~\"${workerJobs}\"}[5m])) by (job_type)",
           "legendFormat": "{{job_type}} dead lettered",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(worker_domain_operations_volume_total{job=~\"${workerJobs}\"}[5m])) by (domain_op)",
+          "expr": "sum(rate(worker_domain_operations_volume_total{service=~\"${workerJobs}\"}[5m])) by (domain_op)",
           "legendFormat": "Domain op {{domain_op}}",
           "range": true,
           "refId": "C"

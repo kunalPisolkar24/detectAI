@@ -31,6 +31,19 @@ const mainClient = RedisFactory.createClient({
   password: (config as any).REDIS_PASSWORD,
 });
 
+// Use persistent EventRedis for dedup if configured, otherwise fallback to main (LRU risk documented)
+const cfgAny = config as any;
+const dedupClient = cfgAny.EVENT_REDIS_URL
+  ? RedisFactory.createClient({
+      mode: cfgAny.EVENT_REDIS_MODE ?? "standalone",
+      name: "AnalyticsDedup",
+      url: cfgAny.EVENT_REDIS_URL,
+      sentinels: cfgAny.EVENT_REDIS_SENTINELS,
+      masterName: cfgAny.EVENT_REDIS_MASTER_NAME,
+      password: cfgAny.EVENT_REDIS_PASSWORD,
+    })
+  : mainClient;
+
 const metricsService = new MetricsService("worker-analytics");
 try {
   const primaryPool = getPgPool("primary");
@@ -43,11 +56,18 @@ mainClient.on("connect", () => metricsService.redisConnectionStatus.set({ client
 mainClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 1));
 mainClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 0));
 mainClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsMain" }, 0));
+if (dedupClient !== mainClient) {
+  dedupClient.on("connect", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsDedup" }, 1));
+  dedupClient.on("ready", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsDedup" }, 1));
+  dedupClient.on("close", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsDedup" }, 0));
+  dedupClient.on("error", () => metricsService.redisConnectionStatus.set({ client_name: "AnalyticsDedup" }, 0));
+}
 
 const userRepository = new PrismaUserRepository(prismaPrimary, prisma, undefined, metricsService);
-const usageDeduplicator = new UsageEventDeduplicator(mainClient);
+const usageDeduplicator = new UsageEventDeduplicator(dedupClient);
 const analyticsService = new AnalyticsService(userRepository, mainClient, metricsService, usageDeduplicator);
 
+// analytics.usage publisher (web) asserts quorum; consumer must match to avoid 406
 const worker = new RabbitMQWorker(
   (config as any).RABBITMQ_URL,
   QUEUE_NAME,
@@ -64,7 +84,7 @@ const worker = new RabbitMQWorker(
     await analyticsService.handleUsageEvent(result.data.userId, result.data.count, result.data.eventId);
   },
   metricsService,
-  (config as any).RABBITMQ_QUEUE_TYPE ?? "classic"
+  "quorum"
 );
 
 let isShuttingDown = false;
@@ -109,9 +129,22 @@ const server = new WorkerServer(
       3000,
       false
     );
+    let dedupOk = true;
+    if (dedupClient !== mainClient) {
+      dedupOk = await withTimeout(
+        (async () => {
+          try {
+            const res = await dedupClient.ping();
+            return res === "PONG" || dedupClient.status === "ready";
+          } catch { return false; }
+        })(),
+        3000,
+        false
+      );
+    }
     const workerOk = worker.getStatus();
-    const healthy = dbOk && redisOk && workerOk && !poolPressured;
-    return { healthy, checks: { db: dbOk, redis: redisOk, rabbitmq: workerOk, poolWaiting: waiting, poolPressured, isShuttingDown } };
+    const healthy = dbOk && redisOk && dedupOk && workerOk && !poolPressured;
+    return { healthy, checks: { db: dbOk, redis: redisOk, dedupRedis: dedupOk, rabbitmq: workerOk, poolWaiting: waiting, poolPressured, isShuttingDown } };
   }
 );
 
@@ -120,6 +153,7 @@ async function bootstrap(): Promise<void> {
     try {
       await withTimeout(prismaPrimary.$queryRaw`SELECT 1`, 3000, null as any);
       await withTimeout(mainClient.ping(), 3000, null as any);
+      if (dedupClient !== mainClient) await withTimeout(dedupClient.ping(), 3000, null as any);
       break;
     } catch (e: any) {
       Logger.warn(`Analytics bootstrap waiting for deps (attempt ${attempt}/5)`, { error: e instanceof Error ? e.message : String(e) });
@@ -150,6 +184,11 @@ const shutdown = async () => {
   try {
     await Promise.race([mainClient.quit(), new Promise((_, rej) => setTimeout(() => rej(new Error("quit timeout")), 5000))]);
   } catch {}
+  if (dedupClient !== mainClient) {
+    try {
+      await Promise.race([dedupClient.quit(), new Promise((_, rej) => setTimeout(() => rej(new Error("quit timeout")), 5000))]);
+    } catch {}
+  }
   try { await closePrisma(); } catch {}
   Logger.info("Analytics Worker exited gracefully");
   process.exit(0);
