@@ -208,7 +208,7 @@ graph TB
     Filter --> Sem[Semaphore 4 concurrent]
     Sem --> Exec[run_in_executor predict_batch 30s]
     Exec --> Dist[zip results -> futures set_result]
-    Worker --> HealthSnap[health_snapshot SERVING|QUEUE_FULL|WORKER_UNAVAILABLE etc]
+    Worker --> HealthSnap[health_snapshot SERVING, QUEUE_FULL, WORKER_UNAVAILABLE etc]
 ```
 
 * Metrics: `model_batch_size`, `model_batch_queue_size` gauge, `model_batch_queue_wait_seconds`, `model_batch_processing_seconds` (30s timeout), `inference_batch_queue_rejected_total{reason}`, `inference_batch_errors_total{error_type}`.
