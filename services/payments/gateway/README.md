@@ -137,11 +137,20 @@ Alerts configured:
 
 ## Testing
 
+All test commands are wrapped with `make` — check `Makefile` for details.
+
 ```bash
-make test              # go test -v ./...
-make test-coverage     # go test -v -coverprofile=coverage.out ./... + go tool cover -func
-make test-integration  # go test -v -tags=integration ./test/integration/... (testcontainers)
-make load-test SCENARIO=spike TARGET_VUS=100  # k6 spike/stress/soak/internal
+# Run unit tests
+make test
+
+# Run tests with coverage report
+make test-coverage
+
+# Run integration tests (needs Docker, testcontainers)
+make test-integration
+
+# Run load tests
+make load-test
 ```
 
 See [Load Testing](test/load/README.md) for scenarios and env.

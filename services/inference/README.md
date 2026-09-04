@@ -422,15 +422,24 @@ Alerts configured:
 
 ## Testing
 
-```bash
-make proto               # grpc_tools.protoc + sed fix + __init__.py
-make test                # pytest tests/unit -v --cov=src --cov-report=term-missing
-make test-coverage       # pytest --cov=src --cov-report=term-missing --cov-report=html --cov-report=xml tests/unit
-make test-integration    # pytest tests/integration -v (needs HF cache or offline)
-make lint                # ruff check .
-```
+All test commands are wrapped with `make` — check `Makefile` for details.
 
-Coverage omits `src/main.py` and `src/generated/*` (`pyproject.toml:53`). Tests use `API_KEY=ci-dummy-key-16chars-long`, `asyncio_mode=auto`.
+```bash
+# Generate gRPC code from proto
+make proto
+
+# Run unit tests
+make test
+
+# Run tests with coverage report
+make test-coverage
+
+# Run integration tests (needs HF cache or offline)
+make test-integration
+
+# Check code style
+make lint
+```
 
 ## Docker
 

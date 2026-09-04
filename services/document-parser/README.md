@@ -134,11 +134,20 @@ Alerts configured:
 
 ## Testing
 
+All test commands are wrapped with `make` — check `Makefile` for details.
+
 ```bash
-make test              # poetry run pytest -v
-make test-coverage     # poetry run pytest --cov=app --cov-report=term-missing --cov-report=html --cov-report=xml
-make test-integration  # poetry run pytest -m integration -v
-make load-test VUS=5 DURATION=10s  # k6 ramping-vus / ramping-arrival-rate via infra/compose.load.yml
+# Run unit tests
+make test
+
+# Run tests with coverage report
+make test-coverage
+
+# Run integration tests
+make test-integration
+
+# Run load tests
+make load-test
 ```
 
 See [Load Testing](load/README.md) for scenarios and env.
