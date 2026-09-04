@@ -21,9 +21,6 @@ Stateless service handling `POST /webhook/paddle` (HMAC) and `POST /internal/eve
 | `compress`, `xxhash`, `perks` | Prometheus internals |
 | `testcontainers`, `rabbitmq` | Integration |
 | `testify` | Mocks |
-| `mergo`, `ansiterm`, `winnio`, `purego`, `go-ole`, `uuid` | Testcontainers deps |
-| `moby`, `docker/go-connections` | Docker |
-| `logr`, `yaml`, `gopsutil` | OTel/config |
 
 See `go.mod` for full list.
 
@@ -41,55 +38,7 @@ graph LR
     RQ --> RMQ
 ```
 
-```mermaid
-sequenceDiagram
-    participant Paddle
-    participant GW as Gateway
-    participant Val as Validator
-    participant RMQ as RabbitMQ
-    Paddle->>GW: POST webhook
-    GW->>Val: Validate signature
-    alt invalid
-        GW-->>Paddle: 401 Invalid
-    else valid
-        GW->>RMQ: Publish
-        RMQ-->>GW: Acked
-        GW-->>Paddle: 200 queued
-    end
-```
-
-```mermaid
-graph TB
-    MainQ[ payment_events ] --> Rex[ retry_exchange ]
-    Rex --> RQ[ retry queue TTL 5000 ]
-    RQ --> MainQ
-    MainQ --> DLX[ dlx ]
-    DLX --> DLQ[ dlq ]
-```
-
-- `ProcessWebhook` vs `ProcessInternalEvent` with `event_id` tracing.
-- Quorum vs classic via `RABBITMQ_QUEUE_TYPE` (quorum in prod).
-
-## Webhook Validation
-
-```mermaid
-sequenceDiagram
-    participant Paddle
-    participant GW as Gateway
-    participant Val as Validator
-    participant RMQ as RabbitMQ
-    Paddle->>GW: POST webhook with signature
-    GW->>Val: Extract ts and h1
-    Val->>Val: Check ts within 5min
-    Val->>Val: HMAC SHA256 ts body with secret
-    alt valid
-        GW->>RMQ: Publish persistent
-        RMQ-->>GW: Acked
-        GW-->>Paddle: 200 queued
-    else invalid
-        GW-->>Paddle: 401 Invalid
-    end
-```
+`ProcessWebhook` vs `ProcessInternalEvent` with `event_id` tracing; quorum vs classic via `RABBITMQ_QUEUE_TYPE`. See [Architecture](docs/01-architecture.md) for sequence and DLQ class view.
 
 ## Configuration
 
@@ -103,6 +52,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT=     # optional, disables tracing
 OTEL_SERVICE_NAME=payment-gateway # optional
 ```
 
+See `docs/08-configuration.md` for full reference.
+
 ## API
 
 ```text
@@ -112,6 +63,8 @@ GET  /metrics          -> Prometheus
 POST /webhook/paddle   (Paddle-Signature) -> 200 queued | 400 401 500
 POST /internal/events  (X-Internal-Key)   -> 200 queued | 401 400 500
 ```
+
+See `docs/09-api.md` for validation and error codes.
 
 ## Observability
 
@@ -135,6 +88,8 @@ Alerts configured:
 - DLQ depth — more than 10 messages stuck in dead letter queue for 5 minutes
 - Retry queue depth — more than 50 messages waiting to retry for 5 minutes
 
+See `docs/10-observability.md` for PromQL.
+
 ## Testing
 
 All test commands are wrapped with `make` — check `Makefile` for details.
@@ -146,38 +101,48 @@ make test
 # Run tests with coverage report
 make test-coverage
 
-# Run integration tests (needs Docker, testcontainers)
+# Run integration tests (needs Docker)
 make test-integration
 
 # Run load tests
 make load-test
 ```
 
-See [Load Testing](test/load/README.md) for scenarios and env.
+See `docs/11-testing.md` and `test/load/README.md` for scenarios.
 
 ## Docker
 
-All Docker commands are wrapped with `make` for simplicity — no need to remember `docker build` or `compose` flags.
+All Docker commands are wrapped with `make` for simplicity.
 
 ```bash
 # Build the gateway image
 make gateway-build
 
-# Start gateway with RabbitMQ and management UI (default, full stack)
+# Start gateway with RabbitMQ and management UI (default)
 make gateway-up
 
-# Start gateway only, without RabbitMQ (for testing the service alone)
+# Start gateway only, without RabbitMQ
 make gateway-up WITH_RABBITMQ=0
 
-# View live logs from the gateway
+# View live logs and running containers
 make gateway-logs
-
-# Check which containers are running
 make gateway-ps
 
-# Stop the service
+# Stop and clean up
 make gateway-down
-
-# Stop and clean up volumes (removes RabbitMQ data)
 make gateway-down-v
 ```
+
+## Documentation
+
+| Guide | What |
+|---|---|
+| [Architecture](docs/01-architecture.md) | High-level, sequence, DLQ, class view |
+| [Validation](docs/02-validation.md) | HMAC, timestamp, internal key flow |
+| [Internals](docs/03-internals.md) | RabbitMQ adapter, retry/DLQ, quorum |
+| [Configuration](docs/08-configuration.md) | Full env reference |
+| [API](docs/09-api.md) | Endpoints, status codes |
+| [Observability](docs/10-observability.md) | Metrics, alerts, dashboards |
+| [Testing](docs/11-testing.md) | Unit, integration, load |
+
+Full index: [docs/README.md](docs/README.md).

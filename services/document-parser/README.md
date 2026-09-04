@@ -37,55 +37,7 @@ graph LR
     Cleaner --> Resp[ExtractionResponse]
 ```
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant DP as Parser
-    participant V as Validator
-    participant Pool as ThreadPool
-    Client->>DP: POST /extract multipart
-    DP->>V: Validate size + magic sniff
-    alt invalid
-        DP-->>Client: 413/415
-    else valid
-        DP->>Pool: run_extraction_task
-        Pool-->>DP: ExtractionResult
-        DP-->>Client: 200 cleaned text
-    end
-```
-
-```mermaid
-graph TB
-    PoolState["Pool busy/queued/max"] --> Check{"busy < max and queued < 50?"}
-    Check -->|yes| Ready["200 ready"]
-    Check -->|no| NotReady["503 not_ready"]
-    Ready --> EP["/extract"]
-    NotReady --> Block["reject /ready"]
-```
-
-- `PdfExtractionStrategy` vs `DocxExtractionStrategy` vs `TxtExtractionStrategy` via `ExtractorFactory` with `TextCleaner`.
-- Pool-aware readiness via `READINESS_MAX_QUEUE_DEPTH=50` and `WORKER_THREADS` (busy >= max or queued >= 50 → 503).
-
-## Document Validation
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant DP as Parser
-    participant V as Validator
-    participant S as Strategy
-    Client->>DP: POST /extract with file
-    DP->>V: Read 4096 bytes + magic sniff
-    V->>V: Check size <= 10 MiB
-    V->>V: Check mime in ALLOWED
-    alt valid
-        DP->>S: Write tmp file + extract
-        S-->>DP: Raw text + truncated
-        DP-->>Client: 200 ExtractionResponse
-    else invalid
-        DP-->>Client: 413/415
-    end
-```
+Pool-aware readiness (`busy < max` and `queued < 50`). See [Architecture](docs/01-architecture.md) for sequence and class view.
 
 ## Configuration
 
@@ -101,6 +53,8 @@ PORT=8000                             # optional
 OTEL_EXPORTER_OTLP_ENDPOINT=          # optional, disables tracing
 ```
 
+See `docs/08-configuration.md` for full reference.
+
 ## API
 
 ```text
@@ -109,6 +63,8 @@ GET  /ready           -> 200 {"status":"ready"} | 503 {"status":"not_ready"}
 GET  /metrics         -> Prometheus
 POST /extract         (multipart file) -> 200 ExtractionResponse | 413 415 422 504
 ```
+
+See `docs/09-api.md` for request flow and error codes.
 
 ## Observability
 
@@ -132,6 +88,8 @@ Alerts configured:
 - High rejection rate — more than 1 rejection per second for 15 minutes
 - Pool saturation — pool saturated and queue depth >10 for 10 minutes
 
+See `docs/10-observability.md` for PromQL.
+
 ## Testing
 
 All test commands are wrapped with `make` — check `Makefile` for details.
@@ -150,11 +108,11 @@ make test-integration
 make load-test
 ```
 
-See [Load Testing](load/README.md) for scenarios and env.
+See `docs/11-testing.md` and `load/README.md` for scenarios.
 
 ## Docker
 
-All Docker commands are wrapped with `make` for simplicity — no need to remember `docker build` or `compose` flags.
+All Docker commands are wrapped with `make` for simplicity.
 
 ```bash
 # Build the parser image
@@ -163,15 +121,25 @@ make parser-build
 # Start the service
 make parser-up
 
-# View live logs from the service
+# View live logs and running containers
 make parser-logs
-
-# Check which containers are running
 make parser-ps
 
-# Stop the service
+# Stop and clean up
 make parser-down
-
-# Stop and clean up volumes (fresh start)
 make parser-down-v
 ```
+
+## Documentation
+
+| Guide | What |
+|---|---|
+| [Architecture](docs/01-architecture.md) | High-level, sequence, readiness, class view |
+| [Validation](docs/02-validation.md) | Size, MIME sniff, limits |
+| [Internals](docs/03-internals.md) | Strategies, factory, pool, temp files |
+| [Configuration](docs/08-configuration.md) | Full env reference |
+| [API](docs/09-api.md) | Endpoints, status codes |
+| [Observability](docs/10-observability.md) | Metrics, alerts, dashboards |
+| [Testing](docs/11-testing.md) | Unit, integration, load |
+
+Full index: [docs/README.md](docs/README.md).
