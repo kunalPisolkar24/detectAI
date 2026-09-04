@@ -462,18 +462,3 @@ make inference-down-v
 make inference-up-prod GPU=1
 ```
 
-* `infra/compose.yml:9` healthcheck `grpc_health_probe -addr=:50051` interval `30s` `start_period 10m` `start_interval 5s`; ports `50051:50051 8333:8333`; network `detectai_net`.
-* `infra/compose.gpu.yml:2` overrides to `Dockerfile` + `CUDAExecutionProvider` with `deploy.resources.limits memory 16G cpus 8` and `nvidia` device.
-* Env via `infra/.env.example` (also `AI_SERVICE_API_KEY` required). Root `infra/docker/prod/compose.yml:16` includes `services/inference/infra/compose.yml` for full stack.
-
-## Proto Generation
-
-```bash
-make proto                     # poetry run python -m grpc_tools.protoc -I./protos ...
-docker build ...               # also generates inside image (no host make needed)
-```
-
-Generated files in `src/generated/` (`ai_service_pb2.py`, `ai_service_pb2_grpc.py` with `from . import ai_service_pb2`) are committed for convenience but regenerated in CI (`service-inference.yaml:48`) and by `make test` (which depends on `proto`).
-
-See [Load Testing](load/README.md) for `ramping-arrival-rate` vs `constant-vus` scenarios and `VUS/RPS/STAGES` tuning.
-
