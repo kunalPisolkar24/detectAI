@@ -68,7 +68,12 @@ classDiagram
         +record_auth_failure()
         +set_service_health()
         +set_engine_health()
+        +record_queue_rejected()
+        +record_batch_error()
         +observe_queue_wait()
+        +record_provider_fallback()
+        +record_document_request()
+        +record_document_chunk_failed()
     }
     PrometheusTelemetryReporter ..> Metrics
 ```

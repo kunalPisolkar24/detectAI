@@ -31,7 +31,7 @@ sequenceDiagram
 ```
 
 * `model_id` normalized at `servicers.py:18` (truncate 64 → `lower().strip()` → default `spark`), unknown → `INVALID_ARGUMENT`.
-* `DocumentAnalysisService:328` checks `health_snapshot()` before dispatch; `QUEUE_FULL`/`WORKER_UNAVAILABLE` → `ServiceOverloaded` → `RESOURCE_EXHAUSTED`.
+* `DocumentAnalysisService._get_engine()` checks `health_snapshot()` before dispatch; `QUEUE_FULL`/`WORKER_UNAVAILABLE`/`CIRCUIT_OPEN` → `ServiceOverloaded` → `RESOURCE_EXHAUSTED`.
 * Per-chunk `asyncio.wait_for(..., timeout=30s)` in `ConcurrencyDispatcher`.
 
 ## AnalyzeDocument (server-streaming)

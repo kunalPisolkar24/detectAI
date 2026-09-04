@@ -82,7 +82,8 @@ classDiagram
         -aggregator: ResultAggregator
         +analyze(text, model_key): DocumentScore
         +stream(text, model_key): AsyncGenerator
-        +health_snapshot(): BatcherHealthSnapshot
+        +shutdown(): void
+        -get_engine(model_key): IAsyncInferenceEngine
     }
     class BatchingProxy {
         -queue: asyncio.Queue
