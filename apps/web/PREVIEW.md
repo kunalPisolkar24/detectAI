@@ -2,7 +2,10 @@
 
 Run the frontend without any backend services (DB, Redis, gRPC, Turnstile, Paddle, RabbitMQ). All integrations are mocked; chats persist in the browser via IndexedDB (Dexie), inference is simulated in-memory.
 
-Flag: `NEXT_PUBLIC_PREVIEW_MODE=true` (build-time, inlined by Next.js).
+Flags: `NEXT_PUBLIC_PREVIEW_MODE=true` (build-time, inlined for the browser bundle)
++ `PREVIEW_MODE=true` (runtime, read on the server). Set BOTH — the server
+check uses `PREVIEW_MODE` so `next start` does not crash with
+`Requires the name of master` even if `.next` is stale.
 
 ## What is mocked in preview
 
@@ -28,12 +31,16 @@ pnpm preview:dev
 # → http://localhost:3000
 
 # Production build + serve (two steps or via compose)
-pnpm preview:build
-pnpm preview:start
+# Use make targets (recommended) or pnpm directly:
+make preview-run
+# equivalent to:
+#   pnpm preview:build
+#   pnpm preview:start
 ```
 
-Scripts set internally:
+Scripts set internally (both flags):
 ```
+PREVIEW_MODE=true
 NEXT_PUBLIC_PREVIEW_MODE=true
 NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
 TURNSTILE_SECRET_KEY=1x00000000000000000000AA
@@ -41,6 +48,11 @@ NEXTAUTH_SECRET=preview-secret-for-local-dev-only-32chars
 NEXTAUTH_URL=http://localhost:3000
 SKIP_ENV_VALIDATION=true
 ```
+
+> `preview:start` alone requires a prior `preview:build` — the browser bundle
+> inlines `NEXT_PUBLIC_PREVIEW_MODE` at build time. If you previously ran a
+> regular `pnpm build`, rebuild with `pnpm preview:build` first or the UI
+> will not show preview behavior (server is runtime-safe via `PREVIEW_MODE`).
 
 To use a custom `.env`, copy `.env.preview.example` to `.env` and adjust `NEXTAUTH_SECRET`/`NEXTAUTH_URL`.
 

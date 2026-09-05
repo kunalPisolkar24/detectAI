@@ -1,7 +1,7 @@
 import Redis, { Cluster, ClusterNode, RedisOptions } from "ioredis"
 import { env } from "@/lib/config/env"
 
-const isPreviewMode = () => process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+const isPreviewMode = () => process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
 
 const createPreviewUsageRedis = () =>
   new Proxy(
@@ -85,7 +85,7 @@ const createClient = (): RedisClient => {
   return client
 }
 
-export const usageRedis = globalForRedis.usageRedis || createClient()
+export const usageRedis = isPreviewMode() ? createClient() : globalForRedis.usageRedis || createClient()
 
 if (!isPreviewMode() && env.NODE_ENV !== "production") {
   globalForRedis.usageRedis = usageRedis

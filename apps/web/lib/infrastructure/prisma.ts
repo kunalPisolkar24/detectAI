@@ -5,7 +5,7 @@ import { env } from '@/lib/config/env';
 import { metrics } from '@/lib/infrastructure/metrics';
 import { logger } from '@/lib/infrastructure/logger';
 
-const isPreviewMode = () => process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+const isPreviewMode = () => process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
 
 const READ_OPERATIONS = [
   'findUnique',
@@ -89,7 +89,7 @@ const createExtendedClient = () => {
   }) as unknown as PrismaClient;
 };
 
-export const prisma = globalForPrisma.prisma || createExtendedClient();
+export const prisma = isPreviewMode() ? createPreviewPrisma() : globalForPrisma.prisma || createExtendedClient();
 
 if (!isPreviewMode() && env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;

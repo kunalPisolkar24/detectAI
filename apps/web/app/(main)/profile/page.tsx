@@ -19,7 +19,7 @@ export default async function ProfilePage() {
     redirect("/login?callbackUrl=/profile")
   }
 
-  if (process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+  if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
     // Mock user data from session + local premium flag is handled client-side;
     // server renders a neutral preview snapshot (premium false). Client then upgrades via localStorage.
     const isPreviewPremium = false // client will override via useEffect

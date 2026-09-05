@@ -10,7 +10,7 @@ import { LoginSchema } from "@/schemas/auth"
 import { env } from "@/lib/config/env"
 import { userService } from "@/features/auth/services/user-service"
 
-const isPreviewMode = () => process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+const isPreviewMode = () => process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
 const previewDummyId = "preview-dummy"
 const previewDummySecret = "preview-dummy-secret"
 

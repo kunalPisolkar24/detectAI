@@ -12,7 +12,7 @@ export type AnalyzeActionResponse =
   | { success: false, error: string, isRateLimit?: boolean }
 
 export async function analyzeText(content: string, model: ModelType): Promise<AnalyzeActionResponse> {
-  const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+  const isPreview = process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
   if (!isPreview) {
     // isPremium refreshed via jwt fallback (auth-options.ts) and pendingUpgrade resume; authoritative DB is Subscription.status
     const session = await getServerSession(authOptions)

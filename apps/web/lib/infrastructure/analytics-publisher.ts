@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import amqp from "amqplib"
 import { env } from "@/lib/config/env"
 
-const isPreviewMode = () => process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+const isPreviewMode = () => process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
 
 const QUEUE = "analytics.usage"
 

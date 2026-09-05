@@ -9,10 +9,12 @@ services:
         NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
         NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: dummy
         NEXT_PUBLIC_PREVIEW_MODE: "true"
+        PREVIEW_MODE: "true"
     restart: "no"
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_PREVIEW_MODE=true
+      - PREVIEW_MODE=true
       - SKIP_ENV_VALIDATION=true
       - NEXTAUTH_SECRET=preview-secret-for-docker-only-32chars
       - NEXTAUTH_URL=http://localhost:3000

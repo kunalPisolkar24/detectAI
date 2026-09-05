@@ -1,7 +1,7 @@
 import Redis, { RedisOptions } from "ioredis"
 import { env } from "@/lib/config/env"
 
-const isPreviewMode = () => process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+const isPreviewMode = () => process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
 
 const createPreviewRedis = () =>
   new Proxy(
@@ -42,15 +42,15 @@ const getStandaloneConfig = (): { url: string; options: RedisOptions } => {
 }
 
 const getSentinelConfig = (): RedisOptions => {
-  const sentinelStr = env.REDIS_SENTINELS || "localhost:26379"
+  const sentinelStr = env.REDIS_SENTINELS || "localhost:26379,localhost:26380,localhost:26381"
   const sentinels = sentinelStr.split(",").map((s) => {
     const [host, port] = s.split(":")
-    return { host, port: parseInt(port, 10) }
+    return { host: host || "localhost", port: parseInt(port || "26379", 10) }
   })
 
   return {
     sentinels,
-    name: env.REDIS_MASTER_NAME,
+    name: env.REDIS_MASTER_NAME || "mymaster",
     password: env.REDIS_PASSWORD,
     sentinelPassword: env.REDIS_PASSWORD,
     retryStrategy: (times) => Math.min(times * 50, 2000),
@@ -96,9 +96,11 @@ const createRedisClients = () => {
   return { writer, reader }
 }
 
-const clients = globalForRedis.redisWriter && globalForRedis.redisReader
-  ? { writer: globalForRedis.redisWriter, reader: globalForRedis.redisReader }
-  : createRedisClients()
+const clients = isPreviewMode()
+  ? createRedisClients()
+  : globalForRedis.redisWriter && globalForRedis.redisReader
+    ? { writer: globalForRedis.redisWriter, reader: globalForRedis.redisReader }
+    : createRedisClients()
 
 export const redisWriter = clients.writer
 export const redisReader = clients.reader

@@ -14,7 +14,7 @@ type ActionState = {
 }
 
 export async function cancelSubscriptionAction(): Promise<ActionState> {
-  if (process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+  if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
     return { success: true }
   }
   try {

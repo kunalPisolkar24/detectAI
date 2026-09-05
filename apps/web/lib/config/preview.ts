@@ -2,9 +2,18 @@ export const PREVIEW_TOOLTIP = "Not available in preview mode"
 export const PREVIEW_PREMIUM_KEY = "preview:isPremium"
 export const PREVIEW_DONT_SHOW_NOTICE_KEY = "preview:dontShowNotice"
 export const PREVIEW_FLAG = "NEXT_PUBLIC_PREVIEW_MODE"
+export const PREVIEW_SERVER_FLAG = "PREVIEW_MODE"
 
+/**
+ * Server-side preview check (runtime-safe).
+ *
+ * NEXT_PUBLIC_ vars are inlined at build time by Next.js, so a regular
+ * `next build` followed by `next start` with the flag set at runtime would
+ * still evaluate to false. PREVIEW_MODE is NOT inlined, so it works at
+ * request time even when the build was not a preview build.
+ */
 export function isPreviewMode(): boolean {
-  return process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+  return process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
 }
 
 export function isPreviewModeClient(): boolean {

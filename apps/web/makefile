@@ -19,9 +19,11 @@ clean:
 restart: down dev
 
 # Preview Mode Targets (frontend-only, no backend)
-# Bare metal (no Docker): pnpm preview:dev  → HMR dev | pnpm preview:build && pnpm preview:start → prod
+# Bare metal (no Docker): make preview-dev → HMR dev | make preview-run → prod build + start
+# NOTE: preview-start requires a preview build first (client bundle inlines
+# NEXT_PUBLIC_PREVIEW_MODE at build time). Use preview-run if unsure.
 # Docker (no local Node): make preview / make preview-build
-.PHONY: preview preview-build preview-down preview-logs preview-clean preview-restart preview-dev preview-build-standalone preview-start
+.PHONY: preview preview-build preview-down preview-logs preview-clean preview-restart preview-dev preview-build-standalone preview-start preview-run
 
 preview:
 	docker compose -f compose.preview.yml up -d
@@ -47,7 +49,10 @@ preview-build-standalone:
 	pnpm preview:build
 
 preview-start:
+	@if [ ! -d ".next" ]; then echo "No .next build found. Run 'make preview-build-standalone' first (or 'make preview-run')."; exit 1; fi
 	pnpm preview:start
+
+preview-run: preview-build-standalone preview-start
 
 # Load Testing Targets
 .PHONY: load-up load-down load-test

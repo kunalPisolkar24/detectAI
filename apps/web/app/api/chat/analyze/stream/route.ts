@@ -30,7 +30,7 @@ const requestSchema = z.object({
 })
 
 export async function POST(request: Request) {
-  const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+  const isPreview = process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
   if (isPreview) {
     try {
       const body = await request.json()

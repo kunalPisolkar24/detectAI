@@ -31,7 +31,7 @@ export async function registerAction(
       return { error: "Security check failed. Please try again." }
     }
 
-    if (process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+    if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
       // In preview, any signup succeeds without DB
       return { success: true }
     }

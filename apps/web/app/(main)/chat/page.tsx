@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 }
 
 export default async function ChatPage() {
-  if (process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+  if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
     return (
       <main className="h-full w-full overflow-hidden">
         <ChatView initialRateLimited={false} />

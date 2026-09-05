@@ -4,7 +4,7 @@ import * as protoLoader from "@grpc/proto-loader"
 import path from "path"
 import { env } from "@/lib/config/env"
 
-const isPreviewMode = () => process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+const isPreviewMode = () => process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
 
 const PROTO_PATH = path.join(process.cwd(), "lib/shared/proto/ai_service.proto")
 

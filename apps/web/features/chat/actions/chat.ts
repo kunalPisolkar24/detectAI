@@ -49,7 +49,7 @@ export async function getChatHistoryAction(): Promise<ActionResponse<ChatHistory
 
 export async function sendMessageAction(chatId: string, content: string, model: ModelType): Promise<ActionResponse<Message>> {
   try {
-    const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+    const isPreview = process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
     if (!isPreview) {
       const session = await getServerSession(authOptions)
       if (!session?.user?.id) {
@@ -72,7 +72,7 @@ export async function sendMessageAction(chatId: string, content: string, model: 
 
     const message = await chatService.sendMessage(chatId, content, model)
 
-    if (process.env.NEXT_PUBLIC_PREVIEW_MODE !== "true") {
+    if (process.env.PREVIEW_MODE !== "true" && process.env.NEXT_PUBLIC_PREVIEW_MODE !== "true") {
       const session = await getServerSession(authOptions)
       if (session?.user?.id) await rateLimitService.trackUsage(session.user.id)
     }

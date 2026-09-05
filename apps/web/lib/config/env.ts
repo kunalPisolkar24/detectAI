@@ -7,6 +7,7 @@ export const env = createEnv({
     DATABASE_URL_REPLICA: z.string().url().optional(),
     NEXTAUTH_SECRET: z.string().min(1),
     NEXTAUTH_URL: z.string().url().optional(),
+    PREVIEW_MODE: z.enum(["true", "false"]).default("false"),
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
     GOOGLE_ID: z.string().min(1),
@@ -42,6 +43,7 @@ export const env = createEnv({
     DATABASE_URL_REPLICA: process.env.DATABASE_URL_REPLICA,
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
+    PREVIEW_MODE: process.env.PREVIEW_MODE,
     NODE_ENV: process.env.NODE_ENV,
     LOG_LEVEL: process.env.LOG_LEVEL,
     GOOGLE_ID: process.env.GOOGLE_ID,
@@ -70,6 +72,9 @@ export const env = createEnv({
     PROMETHEUS_WEB_SCRAPE_TOKEN: process.env.PROMETHEUS_WEB_SCRAPE_TOKEN,
     RABBITMQ_URL: process.env.RABBITMQ_URL,
   },
-  skipValidation: !!process.env.SKIP_ENV_VALIDATION || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true",
+  skipValidation:
+    !!process.env.SKIP_ENV_VALIDATION ||
+    process.env.NEXT_PUBLIC_PREVIEW_MODE === "true" ||
+    process.env.PREVIEW_MODE === "true",
   emptyStringAsUndefined: true,
 })
