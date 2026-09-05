@@ -39,8 +39,9 @@ export default async function ProfilePage() {
       subscriptionEndsAt: isPreviewPremium ? endsAt : null,
       paddleSubscriptionStatus: isPreviewPremium ? "ACTIVE" : null,
       paddleCancellationScheduled: false,
-      apiCallCountDaily: 12,
-      apiCallCountTotal: 340,
+      // Start at 0 and grow with each analysis (client upgrades via localStorage preview:usage:*
+      apiCallCountDaily: 0,
+      apiCallCountTotal: 0,
     }
     return (
       <div className="flex-1 h-full overflow-y-auto">

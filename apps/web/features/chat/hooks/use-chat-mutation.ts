@@ -309,6 +309,12 @@ export const useSendMessage = () => {
             }
           })
 
+          // Preview analytics: increment daily/total to replicate real trackUsage
+          try {
+            const { incrementPreviewUsage } = await import("@/features/preview/lib/preview-usage")
+            incrementPreviewUsage()
+          } catch {}
+
           // Also update chat history title if first message
           await queryClient.invalidateQueries({ queryKey: ["chat-history"] })
 

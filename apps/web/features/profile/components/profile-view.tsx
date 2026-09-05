@@ -9,6 +9,7 @@ import { teko } from "@/lib/core/fonts"
 import { GeneralTab } from "./general-tab"
 import { BillingTab } from "./billing-tab"
 import { isPreviewModeClient } from "@/lib/config/preview"
+import { getPreviewUsage, subscribePreviewUsage, type PreviewUsage } from "@/features/preview/lib/preview-usage"
 
 type TabType = "general" | "billing"
 
@@ -72,10 +73,13 @@ export const ProfileView = ({ user }: ProfileViewProps) => {
   const isPreview = isPreviewModeClient()
   const [previewPremium, setPreviewPremium] = useState(user.isPremium)
   const [previewEndsAt, setPreviewEndsAt] = useState<Date | null>(user.subscriptionEndsAt)
+  const [previewUsage, setPreviewUsage] = useState<PreviewUsage>(() =>
+    isPreviewModeClient() ? getPreviewUsage() : { dailyCount: user.apiCallCountDaily, totalCount: user.apiCallCountTotal },
+  )
 
   useEffect(() => {
     if (!isPreview) return
-    const sync = () => {
+    const syncPremium = () => {
       try {
         const val = localStorage.getItem("preview:isPremium") === "true"
         setPreviewPremium(val)
@@ -87,13 +91,15 @@ export const ProfileView = ({ user }: ProfileViewProps) => {
         }
       } catch {}
     }
-    sync()
-    const handler = () => sync()
+    syncPremium()
+    const handler = () => syncPremium()
     window.addEventListener("storage", handler)
     window.addEventListener("preview:premium-change", handler as EventListener)
+    const unsubscribeUsage = subscribePreviewUsage(setPreviewUsage)
     return () => {
       window.removeEventListener("storage", handler)
       window.removeEventListener("preview:premium-change", handler as EventListener)
+      unsubscribeUsage()
     }
   }, [isPreview])
 
@@ -104,6 +110,8 @@ export const ProfileView = ({ user }: ProfileViewProps) => {
         subscriptionEndsAt: previewPremium ? previewEndsAt : null,
         paddleSubscriptionStatus: previewPremium ? "ACTIVE" : null,
         paddleCancellationScheduled: false,
+        apiCallCountDaily: previewUsage.dailyCount,
+        apiCallCountTotal: previewUsage.totalCount,
       }
     : user
 
