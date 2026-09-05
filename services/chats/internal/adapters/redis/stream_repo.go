@@ -16,6 +16,12 @@ type StreamRepository struct {
 }
 
 func NewStreamRepository(client redis.UniversalClient, partitions int) *StreamRepository {
+	if partitions <= 0 {
+		partitions = 1
+	}
+	if partitions > 128 {
+		partitions = 128
+	}
 	return &StreamRepository{
 		client:     client,
 		partitions: partitions,
@@ -23,6 +29,12 @@ func NewStreamRepository(client redis.UniversalClient, partitions int) *StreamRe
 }
 
 func (r *StreamRepository) Publish(ctx context.Context, msg *domain.Message) error {
+	if msg == nil {
+		return fmt.Errorf("nil message")
+	}
+	if msg.ChatID == "" {
+		return fmt.Errorf("chat_id is required")
+	}
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -33,6 +45,8 @@ func (r *StreamRepository) Publish(ctx context.Context, msg *domain.Message) err
 
 	return r.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: streamKey,
+		MaxLen: 100000,
+		Approx: true,
 		Values: map[string]interface{}{
 			"data": data,
 		},

@@ -10,12 +10,13 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/grpc"
 	mongoRepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/mongo"
 	redisRepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/redis"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/worker"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/usecase"
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/worker"
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/database"
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/logger"
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/metrics"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.uber.org/zap"
 )
 
@@ -36,13 +37,19 @@ func main() {
 	if err != nil {
 		logger.Log.Fatal("Failed to connect to Mongo", zap.Error(err))
 	}
-	defer mongoClient.Disconnect(context.Background())
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = mongoClient.Disconnect(ctx)
+	}()
 
 	redisClient, err := redisRepo.NewClient(cfg)
 	if err != nil {
 		logger.Log.Fatal("Failed to connect to Redis", zap.Error(err))
 	}
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	mongoDB := mongoClient.Database(cfg.MongoDatabase)
 	if err := mongoRepo.EnsureIndexes(ctx, mongoDB); err != nil {
@@ -66,8 +73,10 @@ func main() {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					mErr := mongoClient.Ping(context.Background(), nil)
-					rErr := redisClient.Ping(context.Background()).Err()
+					healthCtx, hCancel := context.WithTimeout(context.Background(), 3*time.Second)
+					mErr := mongoClient.Ping(healthCtx, readpref.Primary())
+					rErr := redisClient.Ping(healthCtx).Err()
+					hCancel()
 					healthy := mErr == nil && rErr == nil
 					server.SetHealth(healthy)
 					if !healthy {
@@ -85,6 +94,6 @@ func main() {
 		consumer := worker.NewConsumer(redisClient, persistenceRepo, cfg, logger.Log, promMetrics)
 		consumer.Start(ctx)
 	} else {
-		logger.Log.Fatal("Invalid ServiceRole")
+		logger.Log.Fatal("Invalid ServiceRole", zap.String("role", cfg.ServiceRole))
 	}
 }

@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/logger"
 	"github.com/prometheus/client_golang/prometheus"
@@ -14,7 +15,7 @@ var (
 		Name: "chat_messages_ingested_total",
 		Help: "Total number of messages successfully ingested into MongoDB",
 	})
-	
+
 	StreamLag = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "chat_redis_stream_lag",
 		Help: "Current lag of the Redis stream consumer group",
@@ -50,6 +51,8 @@ var (
 		Name: "chat_database_errors_total",
 		Help: "Total number of database operation errors",
 	}, []string{"operation"})
+
+	initOnce sync.Once
 )
 
 type PrometheusMetrics struct{}
@@ -87,23 +90,32 @@ func (p *PrometheusMetrics) IncDatabaseErrors(operation string) {
 }
 
 func Init() {
-	prometheus.MustRegister(
-		MessagesIngested,
-		StreamLag,
-		CacheHits,
-		CacheMisses,
-		RequestLatency,
-		DLQMessages,
-		StreamErrors,
-		DatabaseErrors,
-	)
+	initOnce.Do(func() {
+		prometheus.MustRegister(
+			MessagesIngested,
+			StreamLag,
+			CacheHits,
+			CacheMisses,
+			RequestLatency,
+			DLQMessages,
+			StreamErrors,
+			DatabaseErrors,
+		)
+	})
 }
 
 func StartMetricsServer(port string) {
-	http.Handle("/metrics", promhttp.Handler())
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
 	go func() {
-		if err := http.ListenAndServe(port, nil); err != nil {
-			logger.Log.Error("Metrics server failed", zap.Error(err))
+		if err := http.ListenAndServe(port, mux); err != nil && err != http.ErrServerClosed {
+			if logger.Log != nil {
+				logger.Log.Error("Metrics server failed", zap.Error(err))
+			}
 		}
 	}()
 }

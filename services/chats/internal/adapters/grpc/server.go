@@ -51,27 +51,38 @@ func (s *Server) Run(ctx context.Context) error {
 	s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 	s.healthServer.SetServingStatus("chat.ChatService", healthpb.HealthCheckResponse_SERVING)
 
-	reflection.Register(grpcServer)
+	// Reflection is useful for debugging but should not be enabled in production.
+	// We enable only when not production to reduce attack surface.
+	if s.cfg.AppEnv != "production" {
+		reflection.Register(grpcServer)
+	}
 
 	go func() {
 		<-ctx.Done()
-		logger.Log.Info("Shutting down gRPC server...")
+		if logger.Log != nil {
+			logger.Log.Info("Shutting down gRPC server...")
+		}
 		s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
+		s.healthServer.SetServingStatus("chat.ChatService", healthpb.HealthCheckResponse_NOT_SERVING)
 		grpcServer.GracefulStop()
 	}()
 
-	logger.Log.Info("Starting gRPC server", zap.String("port", s.cfg.GRPCPort))
+	if logger.Log != nil {
+		logger.Log.Info("Starting gRPC server", zap.String("port", s.cfg.GRPCPort))
+	}
 	return grpcServer.Serve(listener)
 }
 
 func (s *Server) SetHealth(healthy bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	status := healthpb.HealthCheckResponse_NOT_SERVING
 	if healthy {
 		status = healthpb.HealthCheckResponse_SERVING
 	}
-	s.healthServer.SetServingStatus("", status)
-	s.healthServer.SetServingStatus("chat.ChatService", status)
+	if s.healthServer != nil {
+		s.healthServer.SetServingStatus("", status)
+		s.healthServer.SetServingStatus("chat.ChatService", status)
+	}
 }

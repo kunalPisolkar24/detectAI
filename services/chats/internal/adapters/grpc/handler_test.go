@@ -37,14 +37,50 @@ func TestCreateChat_Success(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
+func TestCreateChat_WithHeader(t *testing.T) {
+	svc := new(mocks.MockChatService)
+	h := NewHandler(svc)
+	ctx := ctxWithUserID("user-1")
+
+	svc.On("CreateSession", ctx, "user-1", "Test Chat").Return(&domain.ChatSession{ID: "chat-uuid"}, nil)
+
+	resp, err := h.CreateChat(ctx, &pb.CreateChatRequest{UserId: "user-1", Title: "Test Chat"})
+
+	assert.NoError(t, err)
+	assert.Equal(t, "chat-uuid", resp.ChatId)
+}
+
+func TestCreateChat_HeaderMismatch(t *testing.T) {
+	svc := new(mocks.MockChatService)
+	h := NewHandler(svc)
+	ctx := ctxWithUserID("user-1")
+
+	_, err := h.CreateChat(ctx, &pb.CreateChatRequest{UserId: "attacker", Title: "Test Chat"})
+
+	assert.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+	svc.AssertNotCalled(t, "CreateSession", mock.Anything, mock.Anything, mock.Anything)
+}
+
 func TestCreateChat_ServiceError(t *testing.T) {
 	svc := new(mocks.MockChatService)
 	h := NewHandler(svc)
 	ctx := context.Background()
 
-	svc.On("CreateSession", ctx, "", "title").Return(nil, domain.ErrInvalidInput)
-
+	// Missing auth should be unauthenticated, not forwarded to service
 	_, err := h.CreateChat(ctx, &pb.CreateChatRequest{UserId: "", Title: "title"})
+
+	assert.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Unauthenticated, st.Code())
+}
+
+func TestCreateChat_NilRequest(t *testing.T) {
+	svc := new(mocks.MockChatService)
+	h := NewHandler(svc)
+
+	_, err := h.CreateChat(context.Background(), nil)
 
 	assert.Error(t, err)
 	st, _ := status.FromError(err)
@@ -97,6 +133,17 @@ func TestGetChat_NotFound(t *testing.T) {
 	assert.Equal(t, codes.NotFound, st.Code())
 }
 
+func TestGetChat_MissingAuth(t *testing.T) {
+	svc := new(mocks.MockChatService)
+	h := NewHandler(svc)
+
+	_, err := h.GetChat(context.Background(), &pb.GetChatRequest{ChatId: "chat-1"})
+
+	assert.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Unauthenticated, st.Code())
+}
+
 // --- GetUserChats ---
 
 func TestGetUserChats_Success(t *testing.T) {
@@ -108,7 +155,7 @@ func TestGetUserChats_Success(t *testing.T) {
 		{ID: "c1", Title: "First", UpdatedAt: time.Now()},
 		{ID: "c2", Title: "Second", UpdatedAt: time.Now()},
 	}
-	svc.On("GetUserSessions", ctx, "user-1").Return(sessions, nil)
+	svc.On("GetUserSessions", ctx, "user-1", 50).Return(sessions, nil)
 
 	resp, err := h.GetUserChats(ctx, &pb.GetUserChatsRequest{UserId: "user-1"})
 
@@ -119,18 +166,58 @@ func TestGetUserChats_Success(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
+func TestGetUserChats_WithHeaderLimit(t *testing.T) {
+	svc := new(mocks.MockChatService)
+	h := NewHandler(svc)
+	ctx := ctxWithUserID("user-1")
+
+	sessions := []*domain.ChatSession{{ID: "c1", Title: "First", UpdatedAt: time.Now()}}
+	svc.On("GetUserSessions", ctx, "user-1", 10).Return(sessions, nil)
+
+	resp, err := h.GetUserChats(ctx, &pb.GetUserChatsRequest{UserId: "user-1", Limit: 10})
+
+	assert.NoError(t, err)
+	assert.Len(t, resp.Chats, 1)
+}
+
+func TestGetUserChats_LimitClamping(t *testing.T) {
+	svc := new(mocks.MockChatService)
+	h := NewHandler(svc)
+	ctx := context.Background()
+
+	sessions := []*domain.ChatSession{{ID: "c1", Title: "First", UpdatedAt: time.Now()}}
+	// 200 should clamp to 100
+	svc.On("GetUserSessions", ctx, "user-1", 100).Return(sessions, nil)
+
+	_, err := h.GetUserChats(ctx, &pb.GetUserChatsRequest{UserId: "user-1", Limit: 200})
+
+	assert.NoError(t, err)
+}
+
 func TestGetUserChats_ServiceError(t *testing.T) {
 	svc := new(mocks.MockChatService)
 	h := NewHandler(svc)
 	ctx := context.Background()
 
-	svc.On("GetUserSessions", ctx, "").Return(nil, domain.ErrInvalidInput)
+	// Provide user via body but service returns InvalidInput
+	svc.On("GetUserSessions", mock.Anything, "user-1", 50).Return(nil, domain.ErrInvalidInput)
 
-	_, err := h.GetUserChats(ctx, &pb.GetUserChatsRequest{UserId: ""})
+	_, err := h.GetUserChats(ctx, &pb.GetUserChatsRequest{UserId: "user-1"})
 
 	assert.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.InvalidArgument, st.Code())
+}
+
+func TestGetUserChats_MissingAuth(t *testing.T) {
+	svc := new(mocks.MockChatService)
+	h := NewHandler(svc)
+
+	_, err := h.GetUserChats(context.Background(), &pb.GetUserChatsRequest{UserId: ""})
+
+	assert.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Unauthenticated, st.Code())
 }
 
 // --- RenameChat ---
@@ -161,6 +248,17 @@ func TestRenameChat_Unauthorized(t *testing.T) {
 	assert.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.PermissionDenied, st.Code())
+}
+
+func TestRenameChat_MissingAuth(t *testing.T) {
+	svc := new(mocks.MockChatService)
+	h := NewHandler(svc)
+
+	_, err := h.RenameChat(context.Background(), &pb.RenameChatRequest{ChatId: "chat-1", NewTitle: "x"})
+
+	assert.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Unauthenticated, st.Code())
 }
 
 // --- DeleteChat ---
@@ -220,6 +318,18 @@ func TestSaveMessage_Success(t *testing.T) {
 	assert.NotZero(t, resp.Timestamp)
 }
 
+func TestSaveMessage_WithHeaderMismatch(t *testing.T) {
+	svc := new(mocks.MockChatService)
+	h := NewHandler(svc)
+	ctx := ctxWithUserID("user-1")
+
+	_, err := h.SaveMessage(ctx, &pb.SaveMessageRequest{ChatId: "chat-1", UserId: "attacker", Content: "hi", Role: "user"})
+
+	assert.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+}
+
 func TestSaveMessage_ServiceError(t *testing.T) {
 	svc := new(mocks.MockChatService)
 	h := NewHandler(svc)
@@ -228,6 +338,18 @@ func TestSaveMessage_ServiceError(t *testing.T) {
 	svc.On("ProcessMessage", ctx, mock.Anything).Return(domain.ErrInvalidInput)
 
 	_, err := h.SaveMessage(ctx, &pb.SaveMessageRequest{ChatId: "chat-1", UserId: "user-1", Content: "hi", Role: "user"})
+
+	assert.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.InvalidArgument, st.Code())
+}
+
+func TestSaveMessage_MissingChatID(t *testing.T) {
+	svc := new(mocks.MockChatService)
+	h := NewHandler(svc)
+	ctx := context.Background()
+
+	_, err := h.SaveMessage(ctx, &pb.SaveMessageRequest{UserId: "user-1", Content: "hi", Role: "user"})
 
 	assert.Error(t, err)
 	st, _ := status.FromError(err)
@@ -269,34 +391,39 @@ func TestGetChatHistory_NotFound(t *testing.T) {
 	assert.Equal(t, codes.NotFound, st.Code())
 }
 
-// --- extractUserID ---
-
-func TestExtractUserID_MissingMetadata(t *testing.T) {
+func TestGetChatHistory_MissingAuth(t *testing.T) {
 	svc := new(mocks.MockChatService)
 	h := NewHandler(svc)
 
-	svc.On("GetSession", mock.Anything, "chat-1", "").Return(nil, domain.ErrUnauthorized)
+	_, err := h.GetChatHistory(context.Background(), &pb.GetChatHistoryRequest{ChatId: "chat-1"})
+
+	assert.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Unauthenticated, st.Code())
+}
+
+// --- extractUserID ---
+
+func TestExtractUserID_MissingMetadata(t *testing.T) {
+	h := &Handler{}
 
 	_, err := h.GetChat(context.Background(), &pb.GetChatRequest{ChatId: "chat-1"})
 
 	assert.Error(t, err)
 	st, _ := status.FromError(err)
-	assert.Equal(t, codes.PermissionDenied, st.Code())
+	assert.Equal(t, codes.Unauthenticated, st.Code())
 }
 
 func TestExtractUserID_EmptyHeader(t *testing.T) {
-	svc := new(mocks.MockChatService)
-	h := NewHandler(svc)
+	h := &Handler{}
 	md := metadata.New(map[string]string{})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
-
-	svc.On("GetSession", mock.Anything, "chat-1", "").Return(nil, domain.ErrUnauthorized)
 
 	_, err := h.GetChat(ctx, &pb.GetChatRequest{ChatId: "chat-1"})
 
 	assert.Error(t, err)
 	st, _ := status.FromError(err)
-	assert.Equal(t, codes.PermissionDenied, st.Code())
+	assert.Equal(t, codes.Unauthenticated, st.Code())
 }
 
 // --- mapError (table-driven) ---
@@ -312,6 +439,8 @@ func TestMapError_AllCodes(t *testing.T) {
 		{"not found", domain.ErrNotFound, codes.NotFound},
 		{"unauthorized", domain.ErrUnauthorized, codes.PermissionDenied},
 		{"invalid input", domain.ErrInvalidInput, codes.InvalidArgument},
+		{"deadline", context.DeadlineExceeded, codes.DeadlineExceeded},
+		{"canceled", context.Canceled, codes.Canceled},
 		{"generic error", errors.New("unknown failure"), codes.Internal},
 	}
 
@@ -323,4 +452,12 @@ func TestMapError_AllCodes(t *testing.T) {
 			assert.Equal(t, tc.wantCode, st.Code())
 		})
 	}
+}
+
+func TestParseTimestamp_Millis(t *testing.T) {
+	// seconds 1700000000 vs millis 1700000000000
+	sec := parseTimestamp(1700000000)
+	milli := parseTimestamp(1700000000000)
+	// millis version should be roughly same as seconds version (1700000000 seconds)
+	assert.WithinDuration(t, sec, milli, time.Second)
 }

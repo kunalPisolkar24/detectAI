@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/go-redis/redismock/v9"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
@@ -40,6 +41,7 @@ func TestProcessBatch_EndToEnd(t *testing.T) {
 	})).Return(nil)
 
 	mockMetrics.On("AddIngestedMessages", 1.0).Return()
+	mockMetrics.On("IncStreamErrors", "unmarshal").Return()
 
 	mockRedis.ExpectXAck("stream-1", "test-group", "1-0", "2-0").SetVal(2)
 
@@ -52,14 +54,14 @@ func TestProcessBatch_EndToEnd(t *testing.T) {
 	}
 }
 
-func TestProcessBatch_DBFailure_NoAck(t *testing.T) {
+func TestProcessBatch_DBFailure_MovesToDLQ(t *testing.T) {
 	db, mockRedis := redismock.NewClusterMock()
 	mockRepo := new(mocks.MockChatPersistenceRepository)
 	mockMetrics := new(mocks.MockMetricsCollector)
 	processor := NewProcessor(mockRepo, 50, zap.NewNop(), mockMetrics)
 	ctx := context.Background()
 
-	msg := domain.Message{ID: "msg-1"}
+	msg := domain.Message{ID: "msg-1", ChatID: "chat-1", Content: "hello"}
 	msgData, _ := json.Marshal(msg)
 
 	streams := []redis.XStream{
@@ -72,14 +74,79 @@ func TestProcessBatch_DBFailure_NoAck(t *testing.T) {
 	}
 
 	mockRepo.On("BulkUpsertMessages", ctx, mock.Anything).Return(assert.AnError)
-	mockMetrics.On("IncDatabaseErrors", mock.Anything).Return()
-	mockMetrics.On("IncStreamErrors", mock.Anything).Return()
+	mockMetrics.On("IncDatabaseErrors", "bulk_upsert").Return()
+	mockMetrics.On("IncStreamErrors", mock.Anything).Return().Maybe()
 	mockMetrics.On("IncDLQMessages", mock.Anything).Return()
+
+	// Expect DLQ SAdd + Expire + XAck via pipeline
+	mockRedis.ExpectSAdd("chat:dlq:messages", "1-0").SetVal(1)
+	mockRedis.ExpectExpire("chat:dlq:messages", 7*24*time.Hour).SetVal(true)
+	mockRedis.ExpectXAck("stream-1", "test-group", "1-0").SetVal(1)
 
 	processor.ProcessBatch(ctx, streams, db, "test-group")
 
 	mockRepo.AssertExpectations(t)
 	mockMetrics.AssertNotCalled(t, "AddIngestedMessages", mock.Anything)
+	if err := mockRedis.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestProcessBatch_AllPoison_Acks(t *testing.T) {
+	db, mockRedis := redismock.NewClusterMock()
+	mockRepo := new(mocks.MockChatPersistenceRepository)
+	mockMetrics := new(mocks.MockMetricsCollector)
+	processor := NewProcessor(mockRepo, 50, zap.NewNop(), mockMetrics)
+	ctx := context.Background()
+
+	streams := []redis.XStream{
+		{
+			Stream: "stream-1",
+			Messages: []redis.XMessage{
+				{ID: "1-0", Values: map[string]interface{}{"data": "bad-json"}},
+				{ID: "2-0", Values: map[string]interface{}{"missing": "field"}},
+			},
+		},
+	}
+
+	mockMetrics.On("IncStreamErrors", mock.Anything).Return()
+
+	mockRedis.ExpectXAck("stream-1", "test-group", "1-0", "2-0").SetVal(2)
+
+	processor.ProcessBatch(ctx, streams, db, "test-group")
+
+	mockRepo.AssertNotCalled(t, "BulkUpsertMessages", mock.Anything)
+	if err := mockRedis.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestProcessBatch_BytesPayload(t *testing.T) {
+	db, mockRedis := redismock.NewClusterMock()
+	mockRepo := new(mocks.MockChatPersistenceRepository)
+	mockMetrics := new(mocks.MockMetricsCollector)
+	processor := NewProcessor(mockRepo, 50, zap.NewNop(), mockMetrics)
+	ctx := context.Background()
+
+	msg := domain.Message{ID: "msg-1", ChatID: "chat-1", Content: "Test"}
+	msgData, _ := json.Marshal(msg)
+
+	streams := []redis.XStream{
+		{
+			Stream: "stream-1",
+			Messages: []redis.XMessage{
+				{ID: "1-0", Values: map[string]interface{}{"data": msgData}}, // []byte
+			},
+		},
+	}
+
+	mockRepo.On("BulkUpsertMessages", ctx, mock.Anything).Return(nil)
+	mockMetrics.On("AddIngestedMessages", 1.0).Return()
+	mockRedis.ExpectXAck("stream-1", "test-group", "1-0").SetVal(1)
+
+	processor.ProcessBatch(ctx, streams, db, "test-group")
+
+	mockRepo.AssertExpectations(t)
 	if err := mockRedis.ExpectationsWereMet(); err != nil {
 		t.Error(err)
 	}
