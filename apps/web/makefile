@@ -18,6 +18,37 @@ clean:
 
 restart: down dev
 
+# Preview Mode Targets (frontend-only, no backend)
+# Bare metal (no Docker): pnpm preview:dev  → HMR dev | pnpm preview:build && pnpm preview:start → prod
+# Docker (no local Node): make preview / make preview-build
+.PHONY: preview preview-build preview-down preview-logs preview-clean preview-restart preview-dev preview-build-standalone preview-start
+
+preview:
+	docker compose -f compose.preview.yml up -d
+
+preview-build:
+	docker compose -f compose.preview.yml up -d --build
+
+preview-down:
+	docker compose -f compose.preview.yml down --remove-orphans
+
+preview-logs:
+	docker compose -f compose.preview.yml logs -f
+
+preview-clean:
+	docker compose -f compose.preview.yml down -v --remove-orphans
+
+preview-restart: preview-down preview
+
+preview-dev:
+	pnpm preview:dev
+
+preview-build-standalone:
+	pnpm preview:build
+
+preview-start:
+	pnpm preview:start
+
 # Load Testing Targets
 .PHONY: load-up load-down load-test
 
