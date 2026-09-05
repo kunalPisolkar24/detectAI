@@ -11,13 +11,7 @@ import (
 )
 
 const (
-	maxCacheSize = 100
 	// Lua script atomically de-duplicates by message ID, inserts, trims and expires.
-	// KEYS[1] = sorted set key
-	// ARGV[1] = new member JSON
-	// ARGV[2] = new message ID
-	// ARGV[3] = score (unix nanos as string, parsed as double)
-	// ARGV[4] = ttl seconds (0 = no expire)
 	saveToCacheScript = `
 local key = KEYS[1]
 local newData = ARGV[1]
@@ -25,8 +19,6 @@ local newID = ARGV[2]
 local score = tonumber(ARGV[3])
 local ttl = tonumber(ARGV[4])
 local maxSize = tonumber(ARGV[5])
-
--- Scan existing members for duplicate ID
 local members = redis.call('ZRANGE', key, 0, -1)
 for _, member in ipairs(members) do
   local ok, decoded = pcall(cjson.decode, member)
@@ -35,7 +27,6 @@ for _, member in ipairs(members) do
     break
   end
 end
-
 redis.call('ZADD', key, score, newData)
 redis.call('ZREMRANGEBYRANK', key, 0, -(maxSize+1))
 if ttl > 0 then
@@ -68,8 +59,6 @@ func scoreFor(t time.Time) float64 {
 	if t.IsZero() {
 		t = time.Now().UTC()
 	}
-	// Use seconds + fractional nanoseconds to stay within float64 precise integer range.
-	// UnixNano as int64 (~1.7e18) exceeds 2^53 (~9e15) so precision is lost.
 	return float64(t.Unix()) + float64(t.Nanosecond())/1e9
 }
 
@@ -84,18 +73,12 @@ func (r *CacheRepository) SaveToCache(ctx context.Context, msg *domain.Message) 
 
 	key := cacheKey(msg.ChatID)
 	ttlSec := int64(r.ttl.Seconds())
-	if ttlSec < 0 {
-		ttlSec = 0
-	}
 	score := scoreFor(msg.CreatedAt)
 
-	// Prefer Lua atomic path when available (cluster may not support EVAL in all modes).
-	// Fallback to pipeline if Lua fails (e.g. in tests with miniredis lacking cjson).
-	res := r.client.Eval(ctx, saveToCacheScript, []string{key}, string(data), msg.ID, fmt.Sprintf("%.9f", score), fmt.Sprintf("%d", ttlSec), fmt.Sprintf("%d", maxCacheSize))
+	res := r.client.Eval(ctx, saveToCacheScript, []string{key}, string(data), msg.ID, fmt.Sprintf("%.9f", score), fmt.Sprintf("%d", ttlSec), fmt.Sprintf("%d", domain.MaxCacheSize))
 	if res.Err() == nil {
 		return nil
 	}
-	// Fallback: legacy pipeline with optimistic handling (best-effort)
 	return r.saveToCacheFallback(ctx, key, data, msg, score, ttlSec)
 }
 
@@ -114,7 +97,7 @@ func (r *CacheRepository) saveToCacheFallback(ctx context.Context, key string, d
 		}
 		if cached.ID == msg.ID {
 			pipe.ZRem(ctx, key, item)
-			break // only one duplicate possible after dedup; break to save work
+			break
 		}
 	}
 
@@ -123,7 +106,7 @@ func (r *CacheRepository) saveToCacheFallback(ctx context.Context, key string, d
 		Member: data,
 	})
 
-	pipe.ZRemRangeByRank(ctx, key, 0, -(maxCacheSize + 1))
+	pipe.ZRemRangeByRank(ctx, key, 0, -(domain.MaxCacheSize + 1))
 	if ttlSec > 0 {
 		pipe.Expire(ctx, key, time.Duration(ttlSec)*time.Second)
 	}
@@ -133,16 +116,12 @@ func (r *CacheRepository) saveToCacheFallback(ctx context.Context, key string, d
 }
 
 func (r *CacheRepository) PopulateCache(ctx context.Context, chatID string, messages []*domain.Message) error {
-	if len(messages) == 0 {
-		return nil
-	}
-	if chatID == "" {
+	if len(messages) == 0 || chatID == "" {
 		return nil
 	}
 
 	key := cacheKey(chatID)
 
-	// Deduplicate input batch by ID (keep last occurrence)
 	seen := make(map[string]*domain.Message, len(messages))
 	order := make([]string, 0, len(messages))
 	for _, m := range messages {
@@ -158,7 +137,6 @@ func (r *CacheRepository) PopulateCache(ctx context.Context, chatID string, mess
 		return nil
 	}
 
-	// Fetch existing IDs to avoid adding duplicates already in cache
 	existing, err := r.client.ZRange(ctx, key, 0, -1).Result()
 	if err != nil && err != redis.Nil {
 		return err
@@ -177,9 +155,8 @@ func (r *CacheRepository) PopulateCache(ctx context.Context, chatID string, mess
 	pipe := r.client.Pipeline()
 	for _, id := range order {
 		msg := seen[id]
-		if _, alreadyInCache := existingIDs[msg.ID]; alreadyInCache {
-			// Replace stale cached entry with fresh DB version
-			pipe.ZRem(ctx, key, existingIDs[msg.ID])
+		if old, exists := existingIDs[msg.ID]; exists {
+			pipe.ZRem(ctx, key, old)
 		}
 		data, jerr := json.Marshal(msg)
 		if jerr != nil {
@@ -191,7 +168,7 @@ func (r *CacheRepository) PopulateCache(ctx context.Context, chatID string, mess
 		})
 	}
 
-	pipe.ZRemRangeByRank(ctx, key, 0, -(maxCacheSize + 1))
+	pipe.ZRemRangeByRank(ctx, key, 0, -(domain.MaxCacheSize + 1))
 	pipe.Expire(ctx, key, r.ttl)
 
 	_, err = pipe.Exec(ctx)
@@ -222,7 +199,6 @@ func (r *CacheRepository) GetRecentMessages(ctx context.Context, chatID string) 
 		if err := json.Unmarshal([]byte(item), &msg); err != nil {
 			continue
 		}
-		// Skip entries missing ID (corrupt)
 		if msg.ID == "" {
 			continue
 		}

@@ -1,5 +1,5 @@
 .PHONY: all proto deps run build test docker-build
-K6 ?= $(shell which k6 2>/dev/null || echo "/home/zeus/content/detectAI/services/workers/bin/k6")
+K6 ?= $(shell which k6 2>/dev/null || echo "./bin/k6")
 
 all: deps proto build
 

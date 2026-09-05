@@ -19,10 +19,8 @@ type Config struct {
 	MongoDatabase        string        `envconfig:"MONGO_DATABASE" default:"chat_db"`
 	RedisMode            string        `envconfig:"CHAT_REDIS_MODE" default:"cluster"`
 	RedisAddrs           []string      `envconfig:"CHAT_REDIS_ADDRS"`
-	LegacyRedisAddrs     []string      `envconfig:"REDIS_CLUSTER_ADDRS"`
 	RedisPassword        string        `envconfig:"REDIS_PASSWORD"`
 	RedisPoolSize        int           `envconfig:"REDIS_POOL_SIZE" default:"100"`
-	WorkerConcurrency    int           `envconfig:"WORKER_CONCURRENCY" default:"10"`
 	BatchSize            int           `envconfig:"BATCH_SIZE" default:"50"`
 	StreamPartitionCount int           `envconfig:"STREAM_PARTITION_COUNT" default:"16"`
 	CacheTTL             time.Duration `envconfig:"CACHE_TTL" default:"24h"`
@@ -37,10 +35,6 @@ func Load() (*Config, error) {
 	err := envconfig.Process("", &cfg)
 	if err != nil {
 		return nil, err
-	}
-
-	if len(cfg.RedisAddrs) == 0 {
-		cfg.RedisAddrs = cfg.LegacyRedisAddrs
 	}
 
 	if len(cfg.RedisAddrs) == 0 {
@@ -66,13 +60,6 @@ func Load() (*Config, error) {
 	}
 	if cfg.RedisPoolSize > 500 {
 		return nil, fmt.Errorf("REDIS_POOL_SIZE must be <= 500, got %d", cfg.RedisPoolSize)
-	}
-
-	if cfg.WorkerConcurrency <= 0 {
-		cfg.WorkerConcurrency = 10
-	}
-	if cfg.WorkerConcurrency > 100 {
-		return nil, fmt.Errorf("WORKER_CONCURRENCY must be <= 100, got %d", cfg.WorkerConcurrency)
 	}
 
 	if cfg.BatchSize <= 0 {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/ports"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -32,20 +33,13 @@ func NewConsumer(
 ) *Consumer {
 	batch := cfg.BatchSize
 	if batch <= 0 {
-		batch = 50
+		batch = domain.DefaultPageSize
 	}
-	partitions := cfg.StreamPartitionCount
-	if partitions <= 0 {
-		partitions = 1
-	}
-	// Ensure cfg reflects normalized values for workers already created.
-	cfg.BatchSize = batch
-	cfg.StreamPartitionCount = partitions
 	return &Consumer{
 		client:    client,
 		repo:      repo,
 		cfg:       cfg,
-		processor: NewProcessor(repo, batch, logger, metrics),
+		processor: NewProcessor(repo, logger, metrics),
 		logger:    logger,
 		metrics:   metrics,
 	}
@@ -58,11 +52,16 @@ func (c *Consumer) Start(ctx context.Context) {
 		hostname = fmt.Sprintf("chat-worker-%d", time.Now().UnixNano())
 	}
 
-	for i := 0; i < c.cfg.StreamPartitionCount; i++ {
+	partitions := c.cfg.StreamPartitionCount
+	if partitions <= 0 {
+		partitions = 1
+	}
+
+	for i := 0; i < partitions; i++ {
 		wg.Add(1)
 		go func(partitionID int) {
 			defer wg.Done()
-			c.runWorker(ctx, partitionID, hostname)
+			c.runWorker(ctx, partitionID, hostname, &wg)
 		}(i)
 	}
 
@@ -75,14 +74,12 @@ func (c *Consumer) Start(ctx context.Context) {
 	wg.Wait()
 }
 
-func (c *Consumer) runWorker(ctx context.Context, partitionID int, consumerName string) {
+func (c *Consumer) runWorker(ctx context.Context, partitionID int, consumerName string, wg *sync.WaitGroup) {
 	group := "chat_persistence_group"
 	consumer := fmt.Sprintf("%s-p%d-%d", consumerName, partitionID, time.Now().UnixNano()%10000)
 	stream := fmt.Sprintf("global:ingest:{%d}", partitionID)
 
 	ensureGroup := func() error {
-		// Use "0" so that any messages produced while the worker was down are not lost.
-		// If the group already exists, BUSYGROUP is returned and we keep the existing offset.
 		err := c.client.XGroupCreateMkStream(ctx, stream, group, "0").Err()
 		if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
 			return err
@@ -103,14 +100,19 @@ func (c *Consumer) runWorker(ctx context.Context, partitionID int, consumerName 
 		break
 	}
 
-	// Lag reporting in background so that blocking XReadGroup doesn't starve it.
-	go c.lagReporter(ctx, stream, group)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.lagReporter(ctx, stream, group)
+	}()
 
 	streams := []string{stream, ">"}
 	batchSize := int64(c.cfg.BatchSize)
+	if batchSize <= 0 {
+		batchSize = int64(domain.DefaultPageSize)
+	}
 
 	for {
-		// Graceful shutdown check before blocking
 		select {
 		case <-ctx.Done():
 			return
@@ -122,12 +124,11 @@ func (c *Consumer) runWorker(ctx context.Context, partitionID int, consumerName 
 			Consumer: consumer,
 			Streams:  streams,
 			Count:    batchSize,
-			Block:    2 * time.Second,
+			Block:    domain.ReadBlockDuration,
 		}).Result()
 
 		if err != nil {
 			if err == redis.Nil {
-				// Timeout with no messages; continue to allow ctx cancellation check.
 				continue
 			}
 			if ctx.Err() != nil {
@@ -140,7 +141,6 @@ func (c *Consumer) runWorker(ctx context.Context, partitionID int, consumerName 
 					c.logger.Error("Failed to re-create missing group", zap.Error(gErr))
 				}
 			}
-			// Respect context during backoff
 			select {
 			case <-ctx.Done():
 				return
@@ -156,7 +156,7 @@ func (c *Consumer) runWorker(ctx context.Context, partitionID int, consumerName 
 }
 
 func (c *Consumer) lagReporter(ctx context.Context, stream, group string) {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(domain.LagReportInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -170,7 +170,7 @@ func (c *Consumer) lagReporter(ctx context.Context, stream, group string) {
 
 func (c *Consumer) runRecovery(ctx context.Context, consumerName string) {
 	group := "chat_persistence_group"
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(domain.RecoveryInterval)
 	defer ticker.Stop()
 
 	for {
@@ -178,14 +178,17 @@ func (c *Consumer) runRecovery(ctx context.Context, consumerName string) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			for i := 0; i < c.cfg.StreamPartitionCount; i++ {
+			partitions := c.cfg.StreamPartitionCount
+			if partitions <= 0 {
+				partitions = 1
+			}
+			for i := 0; i < partitions; i++ {
 				if ctx.Err() != nil {
 					return
 				}
 				stream := fmt.Sprintf("global:ingest:{%d}", i)
 				recoverConsumer := fmt.Sprintf("%s-recover-%d", consumerName, i)
 
-				// Cursor-based loop to drain all pending messages beyond Count limit.
 				start := "0-0"
 				for {
 					if ctx.Err() != nil {
@@ -195,7 +198,7 @@ func (c *Consumer) runRecovery(ctx context.Context, consumerName string) {
 						Stream:   stream,
 						Group:    group,
 						Consumer: recoverConsumer,
-						MinIdle:  60 * time.Second,
+						MinIdle:  domain.RecoveryIdle,
 						Count:    50,
 						Start:    start,
 					}).Result()
@@ -216,7 +219,6 @@ func (c *Consumer) runRecovery(ctx context.Context, consumerName string) {
 						c.processor.ProcessBatch(ctx, streams, c.client, group)
 					}
 
-					// nextCursor "0-0" means we've completed a full iteration
 					if nextCursor == "0-0" || len(result) == 0 {
 						break
 					}
@@ -230,7 +232,6 @@ func (c *Consumer) runRecovery(ctx context.Context, consumerName string) {
 func (c *Consumer) updateSingleLag(ctx context.Context, stream, group string) {
 	info, err := c.client.XInfoGroups(ctx, stream).Result()
 	if err != nil {
-		// Stream may not exist yet; not an error to log at error level.
 		if err != redis.Nil && !strings.Contains(err.Error(), "no such key") && !strings.Contains(err.Error(), "NOGROUP") {
 			c.logger.Warn("Failed to get stream info", zap.String("stream", stream), zap.Error(err))
 		}

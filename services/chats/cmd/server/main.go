@@ -12,6 +12,7 @@ import (
 	redisRepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/redis"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/worker"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/usecase"
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/database"
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/logger"
@@ -60,20 +61,21 @@ func main() {
 	streamRepo := redisRepo.NewStreamRepository(redisClient, cfg.StreamPartitionCount)
 	cacheRepo := redisRepo.NewCacheRepository(redisClient, cfg.CacheTTL)
 
-	if cfg.ServiceRole == "api" {
+	switch cfg.ServiceRole {
+	case "api":
 		promMetrics := metrics.NewPrometheusMetrics()
 		svc := usecase.NewChatService(cacheRepo, streamRepo, persistenceRepo, logger.Log, promMetrics)
 		server := grpc.NewServer(cfg, svc)
 
 		go func() {
-			ticker := time.NewTicker(10 * time.Second)
+			ticker := time.NewTicker(domain.HealthCheckInterval)
 			defer ticker.Stop()
 			for {
 				select {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					healthCtx, hCancel := context.WithTimeout(context.Background(), 3*time.Second)
+					healthCtx, hCancel := context.WithTimeout(context.Background(), domain.HealthPingTimeout)
 					mErr := mongoClient.Ping(healthCtx, readpref.Primary())
 					rErr := redisClient.Ping(healthCtx).Err()
 					hCancel()
@@ -89,11 +91,9 @@ func main() {
 		if err := server.Run(ctx); err != nil {
 			logger.Log.Fatal("Server crashed", zap.Error(err))
 		}
-	} else if cfg.ServiceRole == "worker" {
+	case "worker":
 		promMetrics := metrics.NewPrometheusMetrics()
 		consumer := worker.NewConsumer(redisClient, persistenceRepo, cfg, logger.Log, promMetrics)
 		consumer.Start(ctx)
-	} else {
-		logger.Log.Fatal("Invalid ServiceRole", zap.String("role", cfg.ServiceRole))
 	}
 }

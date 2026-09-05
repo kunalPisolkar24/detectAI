@@ -10,6 +10,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -332,7 +333,14 @@ func TestGetHistory_CacheMiss_ReadRepair(t *testing.T) {
 	assert.False(t, hasMore)
 	assert.Len(t, result, 2)
 
-	time.Sleep(100 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		for _, call := range cacheRepo.Calls {
+			if call.Method == "PopulateCache" {
+				return true
+			}
+		}
+		return false
+	}, time.Second, 10*time.Millisecond, "PopulateCache should be called asynchronously")
 	cacheRepo.AssertExpectations(t)
 }
 

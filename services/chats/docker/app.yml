@@ -16,7 +16,6 @@ services:
       - CHAT_REDIS_ADDRS=${CHAT_REDIS_ADDRS:-chat_redis_1:7010,chat_redis_2:7011,chat_redis_3:7012}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_POOL_SIZE=${CHAT_REDIS_POOL_SIZE:-100}
-      - WORKER_CONCURRENCY=${CHAT_WORKER_CONCURRENCY:-10}
       - STREAM_PARTITION_COUNT=${CHAT_STREAM_PARTITION_COUNT:-16}
       - CACHE_TTL=${CHAT_CACHE_TTL:-24h}
       - BATCH_SIZE=${CHAT_BATCH_SIZE:-50}
@@ -46,7 +45,6 @@ services:
     environment:
       - APP_ENV=${CHAT_APP_ENV:-production}
       - SERVICE_ROLE=worker
-      - GRPC_PORT=${CHAT_GRPC_PORT:-:50051}
       - METRICS_PORT=${CHAT_WORKER_METRICS_PORT:-:9099}
       - MONGO_URI=${CHAT_MONGO_URI:-mongodb://chat_mongo_router:27017}
       - MONGO_DATABASE=${CHAT_MONGO_DB:-chat_db}
@@ -54,10 +52,8 @@ services:
       - CHAT_REDIS_ADDRS=${CHAT_REDIS_ADDRS:-chat_redis_1:7010,chat_redis_2:7011,chat_redis_3:7012}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_POOL_SIZE=${CHAT_REDIS_POOL_SIZE:-100}
-      - WORKER_CONCURRENCY=${CHAT_WORKER_CONCURRENCY:-10}
       - BATCH_SIZE=${CHAT_BATCH_SIZE:-50}
       - STREAM_PARTITION_COUNT=${CHAT_STREAM_PARTITION_COUNT:-16}
-      - CACHE_TTL=${CHAT_CACHE_TTL:-24h}
     ports:
       - "9099:9099"
     networks:

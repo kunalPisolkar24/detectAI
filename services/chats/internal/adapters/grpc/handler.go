@@ -43,16 +43,16 @@ func (h *Handler) GetChat(ctx context.Context, req *pb.GetChatRequest) (*pb.GetC
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request body is required")
 	}
-	userID := h.extractUserID(ctx)
-	if strings.TrimSpace(userID) == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing authentication: x-user-id header required")
+	userID, err := h.requireAuth(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(req.ChatId) == "" {
 		return nil, status.Error(codes.InvalidArgument, "chat_id is required")
 	}
-	session, err := h.service.GetSession(ctx, req.ChatId, userID)
-	if err != nil {
-		return nil, h.mapError(err)
+	session, svcErr := h.service.GetSession(ctx, req.ChatId, userID)
+	if svcErr != nil {
+		return nil, h.mapError(svcErr)
 	}
 
 	return &pb.GetChatResponse{
@@ -74,10 +74,10 @@ func (h *Handler) GetUserChats(ctx context.Context, req *pb.GetUserChatsRequest)
 	}
 	limit := int(req.Limit)
 	if limit <= 0 {
-		limit = 50
+		limit = domain.DefaultUserChatsLimit
 	}
-	if limit > 100 {
-		limit = 100
+	if limit > domain.MaxUserChatsLimit {
+		limit = domain.MaxUserChatsLimit
 	}
 	chats, svcErr := h.service.GetUserSessions(ctx, userID, limit)
 	if svcErr != nil {
@@ -103,9 +103,9 @@ func (h *Handler) RenameChat(ctx context.Context, req *pb.RenameChatRequest) (*p
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request body is required")
 	}
-	userID := h.extractUserID(ctx)
-	if strings.TrimSpace(userID) == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing authentication: x-user-id header required")
+	userID, err := h.requireAuth(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(req.ChatId) == "" {
 		return nil, status.Error(codes.InvalidArgument, "chat_id is required")
@@ -113,9 +113,8 @@ func (h *Handler) RenameChat(ctx context.Context, req *pb.RenameChatRequest) (*p
 	if strings.TrimSpace(req.NewTitle) == "" {
 		return nil, status.Error(codes.InvalidArgument, "new_title is required")
 	}
-	err := h.service.RenameSession(ctx, req.ChatId, userID, req.NewTitle)
-	if err != nil {
-		return nil, h.mapError(err)
+	if svcErr := h.service.RenameSession(ctx, req.ChatId, userID, req.NewTitle); svcErr != nil {
+		return nil, h.mapError(svcErr)
 	}
 	return &pb.RenameChatResponse{Success: true}, nil
 }
@@ -124,15 +123,14 @@ func (h *Handler) DeleteChat(ctx context.Context, req *pb.DeleteChatRequest) (*p
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request body is required")
 	}
-	userID := h.extractUserID(ctx)
-	if strings.TrimSpace(userID) == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing authentication: x-user-id header required")
+	userID, err := h.requireAuth(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(req.ChatId) == "" {
 		return nil, status.Error(codes.InvalidArgument, "chat_id is required")
 	}
-	err := h.service.DeleteSession(ctx, req.ChatId, userID)
-	if err != nil {
+	if err := h.service.DeleteSession(ctx, req.ChatId, userID); err != nil {
 		return nil, h.mapError(err)
 	}
 	return &pb.DeleteChatResponse{Success: true}, nil
@@ -157,7 +155,7 @@ func (h *Handler) SaveMessage(ctx context.Context, req *pb.SaveMessageRequest) (
 		ChatID:   strings.TrimSpace(req.ChatId),
 		UserID:   userID,
 		Role:     strings.TrimSpace(req.Role),
-		Content:  req.Content, // service will trim and validate length
+		Content:  req.Content,
 		Metadata: req.Metadata,
 		ID:       strings.TrimSpace(req.MessageId),
 	}
@@ -189,16 +187,16 @@ func (h *Handler) GetChatHistory(ctx context.Context, req *pb.GetChatHistoryRequ
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request body is required")
 	}
-	userID := h.extractUserID(ctx)
-	if strings.TrimSpace(userID) == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing authentication: x-user-id header required")
+	userID, err := h.requireAuth(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(req.ChatId) == "" {
 		return nil, status.Error(codes.InvalidArgument, "chat_id is required")
 	}
-	messages, hasMore, err := h.service.GetHistory(ctx, req.ChatId, userID, req.Page, req.PageSize)
-	if err != nil {
-		return nil, h.mapError(err)
+	messages, hasMore, svcErr := h.service.GetHistory(ctx, req.ChatId, userID, req.Page, req.PageSize)
+	if svcErr != nil {
+		return nil, h.mapError(svcErr)
 	}
 
 	pbMessages := make([]*pb.Message, len(messages))
@@ -262,17 +260,17 @@ func (h *Handler) extractUserID(ctx context.Context) string {
 	if len(ids) > 0 {
 		return strings.TrimSpace(ids[0])
 	}
-	// Also support lowercase variant for compatibility with some gateways
-	ids = md.Get("x-user-ID")
-	if len(ids) > 0 {
-		return strings.TrimSpace(ids[0])
-	}
 	return ""
 }
 
-// resolveUserID prefers the authenticated header. If the header is present it must match
-// the body user_id when both are supplied; if header is absent the body is accepted for
-// backward compatibility. An empty result after resolution is treated as unauthenticated.
+func (h *Handler) requireAuth(ctx context.Context) (string, error) {
+	userID := h.extractUserID(ctx)
+	if strings.TrimSpace(userID) == "" {
+		return "", status.Error(codes.Unauthenticated, "missing authentication: x-user-id header required")
+	}
+	return userID, nil
+}
+
 func (h *Handler) resolveUserID(ctx context.Context, bodyUserID string) (string, error) {
 	headerID := h.extractUserID(ctx)
 	bodyID := strings.TrimSpace(bodyUserID)
@@ -290,18 +288,8 @@ func (h *Handler) resolveUserID(ctx context.Context, bodyUserID string) (string,
 	return "", status.Error(codes.Unauthenticated, "missing authentication: x-user-id header or user_id field required")
 }
 
-// parseTimestamp handles both seconds and milliseconds epoch values.
-// Values > 1e11 are interpreted as milliseconds to protect against client confusion.
-// Values beyond year 2100 in seconds are also treated as milliseconds.
 func parseTimestamp(ts int64) time.Time {
-	// Current epoch seconds ~1.7e9, millis ~1.7e12
-	// Threshold 1e11 = 5138-11-16 in seconds, so any seconds value above that must be millis.
 	if ts > 1e11 {
-		// Could be milliseconds or microseconds; heuristically treat >1e14 as microseconds
-		if ts > 1e14 {
-			// microseconds
-			return time.Unix(ts/1e6, (ts%1e6)*1000).UTC()
-		}
 		return time.UnixMilli(ts).UTC()
 	}
 	return time.Unix(ts, 0).UTC()

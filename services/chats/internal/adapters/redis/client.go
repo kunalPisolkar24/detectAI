@@ -8,9 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type Client = redis.UniversalClient
-
-func NewClient(cfg *config.Config) (Client, error) {
+func NewClient(cfg *config.Config) (redis.UniversalClient, error) {
 	options := &redis.UniversalOptions{
 		Addrs:        cfg.RedisAddrs,
 		Password:     cfg.RedisPassword,

@@ -12,34 +12,26 @@ import (
 )
 
 type Processor struct {
-	repo      ports.ChatPersistenceRepository
-	batchSize int
-	logger    *zap.Logger
-	metrics   ports.MetricsCollector
+	repo    ports.ChatPersistenceRepository
+	logger  *zap.Logger
+	metrics ports.MetricsCollector
 }
 
 func NewProcessor(
 	repo ports.ChatPersistenceRepository,
-	batchSize int,
 	logger *zap.Logger,
 	metrics ports.MetricsCollector,
 ) *Processor {
-	if batchSize <= 0 {
-		batchSize = 50
-	}
 	return &Processor{
-		repo:      repo,
-		batchSize: batchSize,
-		logger:    logger,
-		metrics:   metrics,
+		repo:    repo,
+		logger:  logger,
+		metrics: metrics,
 	}
 }
 
 func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, client redis.UniversalClient, group string) {
 	messages := make([]*domain.Message, 0)
 	msgIDs := make(map[string][]string)
-	// Keep raw payloads for DLQ inspection if needed
-	_ = msgIDs
 
 	for _, stream := range streams {
 		for _, xMsg := range stream.Messages {
@@ -109,17 +101,12 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 func (p *Processor) handleFailure(ctx context.Context, msgIDs map[string][]string, client redis.UniversalClient, group string) {
 	pipe := client.Pipeline()
 	for stream, ids := range msgIDs {
-		// Store in DLQ set for manual inspection. We store the Redis stream entry ID;
-		// operators can XRange the original stream by ID if payload is needed.
-		// Also cap DLQ size implicitly via pipeline; the set grows but is inspected manually.
 		for _, id := range ids {
 			pipe.SAdd(ctx, "chat:dlq:messages", id)
 		}
-		// Also publish per-stream DLQ with TTL to aid debugging without unbounded growth
-		// (best-effort, no error handling if fails)
-		pipe.Expire(ctx, "chat:dlq:messages", 7*24*60*60*1000000000) // 7 days
 		pipe.XAck(ctx, stream, group, ids...)
 	}
+	pipe.Expire(ctx, "chat:dlq:messages", domain.DLQTTL)
 	if _, err := pipe.Exec(ctx); err != nil {
 		p.logger.Error("Failed to move messages to DLQ", zap.Error(err))
 		p.metrics.IncStreamErrors("dlq_push")

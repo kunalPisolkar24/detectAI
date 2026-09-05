@@ -21,39 +21,32 @@ func EnsureIndexes(ctx context.Context, db *mongo.Database) error {
 		return err
 	}
 
-	_, err = db.Collection("messages").Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{
-			{Key: "chat_id", Value: 1},
-			{Key: "bucket_index", Value: -1},
+	models := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "chat_id", Value: 1},
+				{Key: "bucket_index", Value: -1},
+			},
+			Options: options.Index().SetName("idx_chat_history_lookup"),
 		},
-		Options: options.Index().SetName("idx_chat_history_lookup"),
-	})
-	if err != nil {
-		return err
+		{
+			Keys: bson.D{
+				{Key: "chat_id", Value: 1},
+				{Key: "messages._id", Value: 1},
+			},
+			Options: options.Index().SetName("idx_chat_message_id"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "chat_id", Value: 1},
+				{Key: "count", Value: 1},
+				{Key: "end_date", Value: 1},
+			},
+			Options: options.Index().SetName("idx_bucket_capacity"),
+		},
 	}
 
-	// Supports idempotent BulkUpsertMessages lookup: {chat_id, messages._id}
-	_, err = db.Collection("messages").Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{
-			{Key: "chat_id", Value: 1},
-			{Key: "messages._id", Value: 1},
-		},
-		Options: options.Index().SetName("idx_chat_message_id"),
-	})
-	if err != nil {
-		return err
-	}
-
-	// Helpful for TTL-like bucket selection: {chat_id, count, end_date}
-	_, err = db.Collection("messages").Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{
-			{Key: "chat_id", Value: 1},
-			{Key: "count", Value: 1},
-			{Key: "end_date", Value: 1},
-		},
-		Options: options.Index().SetName("idx_bucket_capacity"),
-	})
-	if err != nil {
+	if _, err := db.Collection("messages").Indexes().CreateMany(ctx, models); err != nil {
 		return err
 	}
 

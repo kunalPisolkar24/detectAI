@@ -3,7 +3,6 @@ package mongo
 import (
 	"context"
 	"errors"
-	"sort"
 	"time"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
@@ -45,10 +44,10 @@ func (r *MongoRepository) GetChat(ctx context.Context, chatID string) (*domain.C
 
 func (r *MongoRepository) GetUserChats(ctx context.Context, userID string, limit int) ([]*domain.ChatSession, error) {
 	if limit <= 0 {
-		limit = 50
+		limit = domain.DefaultUserChatsLimit
 	}
-	if limit > 100 {
-		limit = 100
+	if limit > domain.MaxUserChatsLimit {
+		limit = domain.MaxUserChatsLimit
 	}
 	opts := options.Find().
 		SetSort(bson.D{{Key: "updated_at", Value: -1}}).
@@ -112,7 +111,6 @@ func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*do
 			msg.CreatedAt = now
 		}
 
-		// Try to update existing message in place (idempotent)
 		updateExistingResult, err := r.messageColl.UpdateOne(
 			ctx,
 			bson.M{
@@ -133,17 +131,15 @@ func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*do
 			continue
 		}
 
-		// Insert into a bucket that still has capacity and is recent.
-		// bucket_index is tied to the message time to keep ordering deterministic.
 		bucketTime := msg.CreatedAt
 		if bucketTime.After(now) {
 			bucketTime = now
 		}
 		filter := bson.M{
 			"chat_id": msg.ChatID,
-			"count":   bson.M{"$lt": 50},
+			"count":   bson.M{"$lt": domain.BucketCapacity},
 			"end_date": bson.M{
-				"$gt": now.Add(-24 * time.Hour),
+				"$gt": now.Add(-domain.BucketWindow),
 			},
 		}
 
@@ -168,24 +164,18 @@ func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*do
 
 func (r *MongoRepository) GetHistory(ctx context.Context, chatID string, offset, limit int) ([]*domain.Message, error) {
 	if limit <= 0 {
-		limit = 20
+		limit = domain.DefaultPageSize
 	}
-	if limit > 100 {
-		limit = 100
+	if limit > domain.MaxPageSize {
+		limit = domain.MaxPageSize
 	}
 	if offset < 0 {
 		offset = 0
 	}
-	// Need enough buckets to cover offset+limit messages (each bucket holds <=50).
-	// Add 2 extra buckets for fragmentation / boundary.
 	needed := offset + limit
-	bucketLimit := (needed / 50) + 2
-	// Cap to avoid unbounded memory on absurd offsets (which usecase already guards).
-	if bucketLimit > 500 {
-		bucketLimit = 500
-	}
-	if bucketLimit < 1 {
-		bucketLimit = 1
+	bucketLimit := (needed / domain.BucketCapacity) + 2
+	if bucketLimit > domain.MaxBucketsFetch {
+		bucketLimit = domain.MaxBucketsFetch
 	}
 
 	findOpts := options.Find().
@@ -203,25 +193,15 @@ func (r *MongoRepository) GetHistory(ctx context.Context, chatID string, offset,
 		return nil, err
 	}
 
-	// Buckets are sorted by bucket_index desc. Messages inside each bucket are in insertion order.
-	// We collect all then sort globally to guarantee stable descending order regardless of bucket boundaries.
-	var allMessages []*domain.Message
-	allMessages = make([]*domain.Message, 0, len(buckets)*50)
+	allMessages := make([]*domain.Message, 0, len(buckets)*domain.BucketCapacity)
 	for _, bucket := range buckets {
 		for i := range bucket.Messages {
-			// Copy to avoid aliasing loop variable
 			msgCopy := bucket.Messages[i]
 			allMessages = append(allMessages, &msgCopy)
 		}
 	}
 
-	// Global sort descending (newest first), tie-break by ID for determinism
-	sort.Slice(allMessages, func(i, j int) bool {
-		if allMessages[i].CreatedAt.Equal(allMessages[j].CreatedAt) {
-			return allMessages[i].ID > allMessages[j].ID
-		}
-		return allMessages[i].CreatedAt.After(allMessages[j].CreatedAt)
-	})
+	domain.SortMessagesDesc(allMessages)
 
 	if offset >= len(allMessages) {
 		return []*domain.Message{}, nil

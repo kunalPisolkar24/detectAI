@@ -45,8 +45,8 @@ func (r *StreamRepository) Publish(ctx context.Context, msg *domain.Message) err
 
 	return r.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: streamKey,
-		MaxLen: 100000,
-		Approx: true,
+		MaxLen: domain.StreamMaxLen,
+		Approx: domain.StreamApproxTrim,
 		Values: map[string]interface{}{
 			"data": data,
 		},

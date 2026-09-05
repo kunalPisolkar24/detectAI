@@ -3,7 +3,6 @@ package usecase
 import (
 	"context"
 	"errors"
-	"sort"
 	"strings"
 	"time"
 
@@ -12,23 +11,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/ports"
 	"go.uber.org/zap"
 )
-
-const (
-	defaultPageSize = 20
-	maxPageSize     = 100
-	maxTitleLen     = 200
-	maxContentLen   = 20000
-	maxRoleLen      = 20
-	defaultUserChatsLimit = 50
-	maxUserChatsLimit     = 100
-)
-
-var validRoles = map[string]struct{}{
-	"user":      {},
-	"assistant": {},
-	"system":    {},
-	"tool":      {},
-}
 
 type ChatService struct {
 	cache       ports.ChatCacheRepository
@@ -54,17 +36,13 @@ func NewChatService(
 	}
 }
 
-// withTimeout returns a context with a 10s timeout only if the parent has no deadline.
-// This prevents nested calls (e.g. Rename -> GetSession) from extending the overall deadline.
 func (s *ChatService) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	if _, ok := ctx.Deadline(); ok {
 		return context.WithCancel(ctx)
 	}
-	return context.WithTimeout(ctx, 10*time.Second)
+	return context.WithTimeout(ctx, domain.RequestTimeout)
 }
 
-// fetchSession retrieves a chat session without applying a new timeout.
-// Caller must have already applied withTimeout.
 func (s *ChatService) fetchSession(ctx context.Context, chatID string) (*domain.ChatSession, error) {
 	session, err := s.persistence.GetChat(ctx, chatID)
 	if err != nil {
@@ -84,6 +62,18 @@ func (s *ChatService) fetchSession(ctx context.Context, chatID string) (*domain.
 	return session, nil
 }
 
+// fetchAuthorizedSession retrieves a chat and verifies ownership in one place.
+func (s *ChatService) fetchAuthorizedSession(ctx context.Context, chatID, userID string) (*domain.ChatSession, error) {
+	session, err := s.fetchSession(ctx, chatID)
+	if err != nil {
+		return nil, err
+	}
+	if session.UserID != userID {
+		return nil, domain.ErrUnauthorized
+	}
+	return session, nil
+}
+
 func (s *ChatService) CreateSession(ctx context.Context, userID, title string) (*domain.ChatSession, error) {
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
@@ -94,7 +84,7 @@ func (s *ChatService) CreateSession(ctx context.Context, userID, title string) (
 	if userID == "" || title == "" {
 		return nil, domain.ErrInvalidInput
 	}
-	if len(title) > maxTitleLen {
+	if len(title) > domain.MaxTitleLen {
 		return nil, domain.ErrInvalidInput
 	}
 
@@ -128,16 +118,7 @@ func (s *ChatService) GetSession(ctx context.Context, chatID, userID string) (*d
 		return nil, domain.ErrInvalidInput
 	}
 
-	session, err := s.fetchSession(ctx, chatID)
-	if err != nil {
-		return nil, err
-	}
-
-	if session.UserID != userID {
-		return nil, domain.ErrUnauthorized
-	}
-
-	return session, nil
+	return s.fetchAuthorizedSession(ctx, chatID, userID)
 }
 
 func (s *ChatService) GetUserSessions(ctx context.Context, userID string, limit int) ([]*domain.ChatSession, error) {
@@ -149,10 +130,10 @@ func (s *ChatService) GetUserSessions(ctx context.Context, userID string, limit 
 		return nil, domain.ErrInvalidInput
 	}
 	if limit <= 0 {
-		limit = defaultUserChatsLimit
+		limit = domain.DefaultUserChatsLimit
 	}
-	if limit > maxUserChatsLimit {
-		limit = maxUserChatsLimit
+	if limit > domain.MaxUserChatsLimit {
+		limit = domain.MaxUserChatsLimit
 	}
 	sessions, err := s.persistence.GetUserChats(ctx, userID, limit)
 	if err != nil {
@@ -169,12 +150,6 @@ func (s *ChatService) GetUserSessions(ctx context.Context, userID string, limit 
 	return sessions, nil
 }
 
-// GetUserSessionsLegacy is kept for backward compatibility with callers that do not supply limit.
-// Deprecated: use GetUserSessions with explicit limit.
-func (s *ChatService) GetUserSessionsLegacy(ctx context.Context, userID string) ([]*domain.ChatSession, error) {
-	return s.GetUserSessions(ctx, userID, defaultUserChatsLimit)
-}
-
 func (s *ChatService) RenameSession(ctx context.Context, chatID, userID, newTitle string) error {
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
@@ -186,16 +161,12 @@ func (s *ChatService) RenameSession(ctx context.Context, chatID, userID, newTitl
 	if newTitle == "" || chatID == "" || userID == "" {
 		return domain.ErrInvalidInput
 	}
-	if len(newTitle) > maxTitleLen {
+	if len(newTitle) > domain.MaxTitleLen {
 		return domain.ErrInvalidInput
 	}
 
-	session, err := s.fetchSession(ctx, chatID)
-	if err != nil {
+	if _, err := s.fetchAuthorizedSession(ctx, chatID, userID); err != nil {
 		return err
-	}
-	if session.UserID != userID {
-		return domain.ErrUnauthorized
 	}
 
 	if err := s.persistence.UpdateChatTitle(ctx, chatID, newTitle); err != nil {
@@ -223,12 +194,8 @@ func (s *ChatService) DeleteSession(ctx context.Context, chatID, userID string) 
 		return domain.ErrInvalidInput
 	}
 
-	session, err := s.fetchSession(ctx, chatID)
-	if err != nil {
+	if _, err := s.fetchAuthorizedSession(ctx, chatID, userID); err != nil {
 		return err
-	}
-	if session.UserID != userID {
-		return domain.ErrUnauthorized
 	}
 
 	if err := s.persistence.DeleteChat(ctx, chatID); err != nil {
@@ -265,26 +232,22 @@ func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) e
 	if msg.ChatID == "" || msg.UserID == "" || msg.Content == "" {
 		return domain.ErrInvalidInput
 	}
-	if len(msg.Content) > maxContentLen {
+	if len(msg.Content) > domain.MaxContentLen {
 		return domain.ErrInvalidInput
 	}
 	if msg.Role != "" {
-		if len(msg.Role) > maxRoleLen {
+		if len(msg.Role) > domain.MaxRoleLen {
 			return domain.ErrInvalidInput
 		}
-		if _, ok := validRoles[msg.Role]; !ok {
+		if _, ok := domain.ValidRoles[msg.Role]; !ok {
 			return domain.ErrInvalidInput
 		}
 	} else {
 		msg.Role = "user"
 	}
 
-	session, err := s.fetchSession(ctx, msg.ChatID)
-	if err != nil {
+	if _, err := s.fetchAuthorizedSession(ctx, msg.ChatID, msg.UserID); err != nil {
 		return err
-	}
-	if session.UserID != msg.UserID {
-		return domain.ErrUnauthorized
 	}
 
 	if msg.ID == "" {
@@ -294,7 +257,6 @@ func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) e
 		msg.CreatedAt = time.Now().UTC()
 	} else {
 		msg.CreatedAt = msg.CreatedAt.UTC()
-		// Reject timestamps far in the future (clock skew / millis confusion)
 		if msg.CreatedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
 			return domain.ErrInvalidInput
 		}
@@ -326,30 +288,23 @@ func (s *ChatService) GetHistory(ctx context.Context, chatID, userID string, pag
 		return nil, false, domain.ErrInvalidInput
 	}
 
-	session, err := s.fetchSession(ctx, chatID)
-	if err != nil {
+	if _, err := s.fetchAuthorizedSession(ctx, chatID, userID); err != nil {
 		return nil, false, err
 	}
-	if session.UserID != userID {
-		return nil, false, domain.ErrUnauthorized
-	}
 
-	// Normalize pagination
 	if page <= 0 {
 		page = 1
 	}
 	if pageSize <= 0 {
-		pageSize = defaultPageSize
+		pageSize = domain.DefaultPageSize
 	}
-	if pageSize > maxPageSize {
-		pageSize = maxPageSize
+	if pageSize > domain.MaxPageSize {
+		pageSize = domain.MaxPageSize
 	}
 
 	limit := int(pageSize)
-	// Use int64 to avoid overflow on (page-1)*pageSize
 	offset64 := int64(page-1) * int64(pageSize)
-	if offset64 > int64(1_000_000) {
-		// Guard against absurd offsets that would force huge DB scans
+	if offset64 > int64(domain.MaxOffsetGuard) {
 		return []*domain.Message{}, false, nil
 	}
 	offset := int(offset64)
@@ -377,8 +332,6 @@ func (s *ChatService) GetHistory(ctx context.Context, chatID, userID string, pag
 			return merged, hasMore, nil
 		}
 		if err != nil {
-			// Only log unexpected cache errors; cache miss is not an error path for most implementations
-			// but we treat any error as miss. Do not propagate.
 			s.logger.Warn("cache retrieval failed, falling back to DB", zap.Error(err), zap.String("chat_id", chatID))
 		}
 		s.metrics.IncCacheMiss()
@@ -393,16 +346,13 @@ func (s *ChatService) GetHistory(ctx context.Context, chatID, userID string, pag
 		}
 
 		if len(dbMessages) > 0 {
-			dbCopy := dbMessages
-			cid := chatID
 			go func(cid string, msgs []*domain.Message) {
-				// Use a context that carries tracing values but is not cancelled by the parent.
-				bgCtx, bgCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				bgCtx, bgCancel := context.WithTimeout(context.WithoutCancel(ctx), domain.CachePopulateTimeout)
 				defer bgCancel()
 				if err := s.cache.PopulateCache(bgCtx, cid, msgs); err != nil {
 					s.logger.Warn("failed to populate cache in background", zap.Error(err), zap.String("chat_id", cid))
 				}
-			}(cid, dbCopy)
+			}(chatID, dbMessages)
 		}
 
 		hasMore := len(dbMessages) == limit
@@ -431,40 +381,20 @@ func mergeMessages(primary []*domain.Message, secondary []*domain.Message) []*do
 	seen := make(map[string]struct{}, len(primary)+len(secondary))
 	merged := make([]*domain.Message, 0, len(primary)+len(secondary))
 
-	for _, msg := range primary {
-		if msg == nil {
-			continue
+	for _, batch := range [][]*domain.Message{primary, secondary} {
+		for _, msg := range batch {
+			if msg == nil || msg.ID == "" {
+				continue
+			}
+			if _, exists := seen[msg.ID]; exists {
+				continue
+			}
+			seen[msg.ID] = struct{}{}
+			merged = append(merged, msg)
 		}
-		if msg.ID == "" {
-			continue
-		}
-		if _, exists := seen[msg.ID]; exists {
-			continue
-		}
-		seen[msg.ID] = struct{}{}
-		merged = append(merged, msg)
 	}
 
-	for _, msg := range secondary {
-		if msg == nil {
-			continue
-		}
-		if msg.ID == "" {
-			continue
-		}
-		if _, exists := seen[msg.ID]; exists {
-			continue
-		}
-		seen[msg.ID] = struct{}{}
-		merged = append(merged, msg)
-	}
-
-	sort.SliceStable(merged, func(i, j int) bool {
-		if merged[i].CreatedAt.Equal(merged[j].CreatedAt) {
-			return merged[i].ID > merged[j].ID
-		}
-		return merged[i].CreatedAt.After(merged[j].CreatedAt)
-	})
+	domain.SortMessagesDesc(merged)
 
 	return merged
 }
