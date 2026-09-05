@@ -1,5 +1,6 @@
 import Dexie, { Table } from "dexie"
 import type { ChatHistoryItem, ChatSession, Message, AnalysisResult, ModelType } from "@/features/chat/types"
+import { orderMessagesForDisplay } from "@/features/chat/utils/order-messages-for-display"
 
 interface PreviewChatRow {
   id: string
@@ -107,11 +108,12 @@ export async function previewGetChat(chatId: string): Promise<ChatSession> {
       .sort((a, b) => a.createdAt - b.createdAt)
   }
 
+  const mapped = messageRows.map(mapRowToMessage)
   return {
     id: chatRow.id,
     title: chatRow.title,
     updatedAt: new Date(chatRow.updatedAt),
-    messages: messageRows.map(mapRowToMessage),
+    messages: orderMessagesForDisplay(mapped),
   }
 }
 

@@ -7,7 +7,10 @@ export const orderMessagesForDisplay = (messages: Message[]): Message[] => {
   const movedAssistantIds = new Set<string>()
 
   for (const message of oldestFirstMessages) {
-    const sourceMessageId = message.analysisLink?.sourceMessageId
+    const sourceMessageId =
+      message.analysisLink?.sourceMessageId ??
+      message.streamingProgress?.sourceMessageId ??
+      message.analysisStatus?.sourceMessageId
 
     if (message.role !== "assistant" || !sourceMessageId || !messageIds.has(sourceMessageId)) {
       continue

@@ -7,6 +7,7 @@ import { useChatSession } from "../hooks/use-chat-history"
 import { useSendMessage } from "../hooks/use-chat-mutation"
 import { MessageItem } from "./message-item"
 import { Message } from "../types"
+import { orderMessagesForDisplay } from "../utils/order-messages-for-display"
 
 export const MessageList = () => {
   const { currentChatId } = useChatUIStore()
@@ -15,10 +16,11 @@ export const MessageList = () => {
   const { data: chat } = useChatSession(currentChatId)
   const { retryAnalysis, isAnalyzing } = useSendMessage()
 
-  const messages = useMemo(() => chat?.messages || [], [chat?.messages])
+  const rawMessages = useMemo(() => chat?.messages || [], [chat?.messages])
+  const messages = useMemo(() => orderMessagesForDisplay(rawMessages), [rawMessages])
   const contentById = useMemo(
-    () => new Map(messages.map((message) => [message.id, message.content])),
-    [messages],
+    () => new Map(rawMessages.map((message) => [message.id, message.content])),
+    [rawMessages],
   )
 
   useEffect(() => {

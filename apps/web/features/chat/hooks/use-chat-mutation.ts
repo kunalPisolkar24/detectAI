@@ -209,8 +209,9 @@ export const useSendMessage = () => {
           if (input.kind === "new" && optimisticUserId) {
             const { previewPersistUserMessage, previewPersistAssistantRunning } = await import("@/features/preview/lib/preview-db")
             const now = new Date()
+            const assistantCreatedAt = new Date(now.getTime() + 1)
             await previewPersistUserMessage(activeChatId, optimisticUserId, input.content, now)
-            await previewPersistAssistantRunning(activeChatId, streamingAssistantId, now, effectiveModel, optimisticUserId)
+            await previewPersistAssistantRunning(activeChatId, streamingAssistantId, assistantCreatedAt, effectiveModel, optimisticUserId)
           } else if (input.kind === "retry") {
             const { previewSaveAssistantMessage } = await import("@/features/preview/lib/preview-db")
             await previewSaveAssistantMessage(activeChatId, {
