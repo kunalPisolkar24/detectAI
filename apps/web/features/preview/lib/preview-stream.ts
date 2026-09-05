@@ -4,7 +4,9 @@ import type { AnalysisParams } from "@/features/chat/services/analysis-orchestra
 import { chatService } from "@/features/chat/services"
 
 export async function createPreviewStream(params: AnalysisParams, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
-  const isRetry = Boolean(params.assistantMessageId)
+  // Retry intent is signalled by sourceMessageId. New analyses may carry
+  // client-generated user/assistant IDs for optimistic-cache identity.
+  const isRetry = Boolean(params.assistantMessageId && params.sourceMessageId)
   let persistedAssistantMessage
   let persistedSourceMessageId: string
 
@@ -18,9 +20,19 @@ export async function createPreviewStream(params: AnalysisParams, signal: AbortS
       sourceMessageId: persistedSourceMessageId,
     })
   } else {
-    const userMessage = await chatService.saveUserMessage(params.chatId, params.userId, params.content)
+    // Reuse client-generated IDs when provided so the optimistic cache and
+    // persisted rows share identity (prevents reorder/flicker in preview and
+    // in flag-mismatched clients driving the fetch path).
+    const userMessage = params.userMessageId
+      ? await chatService.saveUserMessage(params.chatId, params.userId, params.content, {
+          messageId: params.userMessageId,
+          createdAt: params.userCreatedAt ? new Date(params.userCreatedAt) : new Date(),
+        })
+      : await chatService.saveUserMessage(params.chatId, params.userId, params.content)
     persistedSourceMessageId = userMessage.id
     persistedAssistantMessage = await chatService.saveAssistantAnalysisMessage(params.chatId, params.userId, {
+      ...(params.assistantMessageId ? { messageId: params.assistantMessageId } : {}),
+      ...(params.assistantCreatedAt ? { createdAt: new Date(params.assistantCreatedAt) } : {}),
       state: "running",
       model: params.model,
       sourceMessageId: persistedSourceMessageId,

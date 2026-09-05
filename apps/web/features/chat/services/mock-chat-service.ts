@@ -35,8 +35,8 @@ export class MockChatService implements IChatService {
     })
   }
 
-  async saveUserMessage(chatId: string, _userId: string, content: string): Promise<Message> {
-    return previewSaveUserMessage(chatId, content)
+  async saveUserMessage(chatId: string, _userId: string, content: string, options?: { messageId?: string; createdAt?: Date }): Promise<Message> {
+    return previewSaveUserMessage(chatId, content, options)
   }
 
   async saveAssistantAnalysis(_chatId: string, _userId: string, analysisResult: AnalysisResult): Promise<Message> {

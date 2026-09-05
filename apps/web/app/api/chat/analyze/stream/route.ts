@@ -16,12 +16,15 @@ const requestSchema = z.object({
   assistantMessageId: z.string().min(1).optional(),
   assistantCreatedAt: z.string().datetime().optional(),
   sourceMessageId: z.string().min(1).optional(),
+  userMessageId: z.string().min(1).optional(),
+  userCreatedAt: z.string().datetime().optional(),
 }).superRefine((value, ctx) => {
-  const hasRetryFields = Boolean(value.assistantMessageId || value.assistantCreatedAt || value.sourceMessageId)
-  if (!hasRetryFields) {
+  // Retry intent is signalled by sourceMessageId; new analyses may still send
+  // client-generated user/assistant IDs for cache identity reuse.
+  if (!value.sourceMessageId) {
     return
   }
-  if (!value.assistantMessageId || !value.assistantCreatedAt || !value.sourceMessageId) {
+  if (!value.assistantMessageId || !value.assistantCreatedAt) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Retry requests must include assistant message details",

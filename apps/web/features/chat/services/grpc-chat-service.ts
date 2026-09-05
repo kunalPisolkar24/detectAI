@@ -121,8 +121,8 @@ export class GrpcChatService implements IChatService {
     return assistantMessage
   }
 
-  async saveUserMessage(chatId: string, userId: string, content: string): Promise<Message> {
-    return this.saveToBackend(chatId, userId, "user", content)
+  async saveUserMessage(chatId: string, userId: string, content: string, options?: { messageId?: string; createdAt?: Date }): Promise<Message> {
+    return this.saveToBackend(chatId, userId, "user", content, undefined, options)
   }
 
   async saveAssistantAnalysis(chatId: string, userId: string, analysisResult: AnalysisResult): Promise<Message> {

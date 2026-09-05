@@ -138,22 +138,41 @@ export const useSendMessage = () => {
       const streamingAssistantId = input.kind === "retry" ? input.assistantMessageId : crypto.randomUUID()
       const controller = new AbortController()
       let activeAssistantMessageId = streamingAssistantId
+      // Distinct timestamps keep oldest-first sort stable so the assistant
+      // never renders before its source user message.
+      const optimisticUserCreatedAt = new Date()
+      const optimisticAssistantCreatedAt = new Date(optimisticUserCreatedAt.getTime() + 1)
+      // The assistant is always linked to its source so ordering helpers can
+      // group it after the user message during streaming and after completion.
+      const optimisticSourceMessageId =
+        input.kind === "new" ? optimisticUserId! : input.sourceMessageId
+
+      // Cancel any in-flight session fetch so it cannot overwrite the
+      // optimistic progress card below.
+      await queryClient.cancelQueries({ queryKey: ["chat", activeChatId] })
 
       if (input.kind === "new") {
         const optimisticUserMessage: Message = {
           id: optimisticUserId!,
           role: "user",
           content: input.content,
-          createdAt: new Date(),
+          createdAt: optimisticUserCreatedAt,
         }
 
         const streamingAssistantMessage: Message = {
           id: streamingAssistantId,
           role: "assistant",
           content: "",
-          createdAt: new Date(),
+          createdAt: optimisticAssistantCreatedAt,
           isStreaming: true,
-          streamingProgress: createStreamingProgress(effectiveModel, input.content),
+          analysisStatus: {
+            state: "running",
+            model: effectiveModel,
+            sourceMessageId: optimisticSourceMessageId,
+          },
+          streamingProgress: createStreamingProgress(effectiveModel, input.content, {
+            sourceMessageId: optimisticSourceMessageId,
+          }),
         }
 
         queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
@@ -187,8 +206,14 @@ export const useSendMessage = () => {
                           state: "running",
                           error: undefined,
                         }
-                      : message.analysisStatus,
-                    streamingProgress: createStreamingProgress(effectiveModel, input.content),
+                      : {
+                          state: "running",
+                          model: effectiveModel,
+                          sourceMessageId: input.sourceMessageId,
+                        },
+                    streamingProgress: createStreamingProgress(effectiveModel, input.content, {
+                      sourceMessageId: input.sourceMessageId,
+                    }),
                   }
                 : message,
             ),
@@ -208,10 +233,8 @@ export const useSendMessage = () => {
         if (isPreview) {
           if (input.kind === "new" && optimisticUserId) {
             const { previewPersistUserMessage, previewPersistAssistantRunning } = await import("@/features/preview/lib/preview-db")
-            const now = new Date()
-            const assistantCreatedAt = new Date(now.getTime() + 1)
-            await previewPersistUserMessage(activeChatId, optimisticUserId, input.content, now)
-            await previewPersistAssistantRunning(activeChatId, streamingAssistantId, assistantCreatedAt, effectiveModel, optimisticUserId)
+            await previewPersistUserMessage(activeChatId, optimisticUserId, input.content, optimisticUserCreatedAt)
+            await previewPersistAssistantRunning(activeChatId, streamingAssistantId, optimisticAssistantCreatedAt, effectiveModel, optimisticUserId)
           } else if (input.kind === "retry") {
             const { previewSaveAssistantMessage } = await import("@/features/preview/lib/preview-db")
             await previewSaveAssistantMessage(activeChatId, {
@@ -248,7 +271,10 @@ export const useSendMessage = () => {
                               totalChunks: event.totalChunks,
                               status: "running",
                               retryContent: input.content,
-                              sourceMessageId: message.analysisStatus?.sourceMessageId,
+                              sourceMessageId:
+                                message.streamingProgress?.sourceMessageId ??
+                                message.analysisStatus?.sourceMessageId ??
+                                optimisticSourceMessageId,
                             },
                           }
                         : message,
@@ -271,7 +297,10 @@ export const useSendMessage = () => {
                               totalChunks: event.totalChunks,
                               status: "running",
                               retryContent: input.content,
-                              sourceMessageId: message.analysisStatus?.sourceMessageId,
+                              sourceMessageId:
+                                message.streamingProgress?.sourceMessageId ??
+                                message.analysisStatus?.sourceMessageId ??
+                                optimisticSourceMessageId,
                             },
                           }
                         : message,
@@ -335,8 +364,15 @@ export const useSendMessage = () => {
             chatId: activeChatId,
             content: input.content,
             model: effectiveModel,
-            assistantMessageId: input.kind === "retry" ? input.assistantMessageId : undefined,
-            assistantCreatedAt: input.kind === "retry" ? input.assistantCreatedAt.toISOString() : undefined,
+            // New analyses share the optimistic IDs so server rows and the
+            // cache keep the same identity (no duplicate user message, the
+            // `accepted` source ID always resolves, order stays stable).
+            userMessageId: input.kind === "new" ? optimisticUserId : undefined,
+            userCreatedAt: input.kind === "new" ? optimisticUserCreatedAt.toISOString() : undefined,
+            assistantMessageId: input.kind === "retry" ? input.assistantMessageId : streamingAssistantId,
+            assistantCreatedAt: input.kind === "retry"
+              ? input.assistantCreatedAt.toISOString()
+              : optimisticAssistantCreatedAt.toISOString(),
             sourceMessageId: input.kind === "retry" ? input.sourceMessageId : undefined,
           }),
         })
@@ -397,11 +433,18 @@ export const useSendMessage = () => {
                       ? {
                           ...acceptedMessage,
                           isStreaming: true,
+                          analysisStatus: acceptedMessage.analysisStatus ?? {
+                            state: "running",
+                            model: effectiveModel,
+                            sourceMessageId: optimisticSourceMessageId,
+                          },
                           streamingProgress: message.streamingProgress ?? createStreamingProgress(
                             effectiveModel,
                             input.content,
                             {
-                              sourceMessageId: acceptedMessage.analysisStatus?.sourceMessageId,
+                              sourceMessageId:
+                                acceptedMessage.analysisStatus?.sourceMessageId ??
+                                optimisticSourceMessageId,
                             },
                           ),
                         }
@@ -431,7 +474,10 @@ export const useSendMessage = () => {
                             totalChunks: event.totalChunks,
                             status: "running",
                             retryContent: input.content,
-                            sourceMessageId: message.analysisStatus?.sourceMessageId,
+                            sourceMessageId:
+                              message.streamingProgress?.sourceMessageId ??
+                              message.analysisStatus?.sourceMessageId ??
+                              optimisticSourceMessageId,
                           },
                         }
                       : message,
@@ -460,7 +506,10 @@ export const useSendMessage = () => {
                             totalChunks: event.totalChunks,
                             status: "running",
                             retryContent: input.content,
-                            sourceMessageId: message.analysisStatus?.sourceMessageId,
+                            sourceMessageId:
+                              message.streamingProgress?.sourceMessageId ??
+                              message.analysisStatus?.sourceMessageId ??
+                              optimisticSourceMessageId,
                           },
                         }
                       : message,
@@ -542,7 +591,7 @@ export const useSendMessage = () => {
             return {
               ...old,
               messages: old.messages.filter((message) => {
-                if (message.id === streamingAssistantId) {
+                if (message.id === streamingAssistantId || message.id === activeAssistantMessageId) {
                   return false
                 }
 
@@ -566,7 +615,10 @@ export const useSendMessage = () => {
                 return [message]
               }
 
-              const previousProgress = message.streamingProgress ?? createStreamingProgress(effectiveModel, input.content)
+              const previousProgress = message.streamingProgress ?? createStreamingProgress(effectiveModel, input.content, {
+                sourceMessageId:
+                  message.analysisStatus?.sourceMessageId ?? optimisticSourceMessageId,
+              })
 
               return [{
                 ...message,

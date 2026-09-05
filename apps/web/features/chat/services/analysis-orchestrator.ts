@@ -13,6 +13,8 @@ export interface AnalysisParams {
   assistantMessageId?: string
   assistantCreatedAt?: string
   sourceMessageId?: string
+  userMessageId?: string
+  userCreatedAt?: string
 }
 
 export class AnalysisOrchestrator {
@@ -23,7 +25,9 @@ export class AnalysisOrchestrator {
   ) {}
 
   async execute(params: AnalysisParams, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
-    const isRetry = Boolean(params.assistantMessageId)
+    // Retry intent is signalled by sourceMessageId. New analyses may carry
+    // client-generated user/assistant IDs for optimistic-cache identity.
+    const isRetry = Boolean(params.assistantMessageId && params.sourceMessageId)
     
     let persistedAssistantMessage: Message
     let persistedSourceMessageId: string
@@ -38,9 +42,19 @@ export class AnalysisOrchestrator {
         sourceMessageId: persistedSourceMessageId,
       })
     } else {
-      const userMessage = await this.chatService.saveUserMessage(params.chatId, params.userId, params.content)
+      // Reuse client-generated IDs when provided so the optimistic cache and
+      // persisted rows share identity (prevents reorder/flicker). Otherwise
+      // fall back to server-generated IDs (existing behavior).
+      const userMessage = params.userMessageId
+        ? await this.chatService.saveUserMessage(params.chatId, params.userId, params.content, {
+            messageId: params.userMessageId,
+            createdAt: params.userCreatedAt ? new Date(params.userCreatedAt) : new Date(),
+          })
+        : await this.chatService.saveUserMessage(params.chatId, params.userId, params.content)
       persistedSourceMessageId = userMessage.id
       persistedAssistantMessage = await this.chatService.saveAssistantAnalysisMessage(params.chatId, params.userId, {
+        ...(params.assistantMessageId ? { messageId: params.assistantMessageId } : {}),
+        ...(params.assistantCreatedAt ? { createdAt: new Date(params.assistantCreatedAt) } : {}),
         state: "running",
         model: params.model,
         sourceMessageId: persistedSourceMessageId,

@@ -161,9 +161,13 @@ export async function previewRenameChat(chatId: string, newTitle: string): Promi
   }
 }
 
-export async function previewSaveUserMessage(chatId: string, content: string): Promise<Message> {
-  const id = crypto.randomUUID()
-  const now = Date.now()
+export async function previewSaveUserMessage(
+  chatId: string,
+  content: string,
+  options?: { messageId?: string; createdAt?: Date },
+): Promise<Message> {
+  const id = options?.messageId ?? crypto.randomUUID()
+  const now = options?.createdAt ? options.createdAt.getTime() : Date.now()
   const row: PreviewMessageRow = {
     id,
     chatId,
