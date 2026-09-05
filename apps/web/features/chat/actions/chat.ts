@@ -49,15 +49,18 @@ export async function getChatHistoryAction(): Promise<ActionResponse<ChatHistory
 
 export async function sendMessageAction(chatId: string, content: string, model: ModelType): Promise<ActionResponse<Message>> {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return { success: false, error: "Unauthorized" }
-    }
+    const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+    if (!isPreview) {
+      const session = await getServerSession(authOptions)
+      if (!session?.user?.id) {
+        return { success: false, error: "Unauthorized" }
+      }
 
-    const { allowed } = await rateLimitService.checkLimit(session.user.id, session.user.isPremium ?? false)
+      const { allowed } = await rateLimitService.checkLimit(session.user.id, session.user.isPremium ?? false)
 
-    if (!allowed) {
-      return { success: false, error: "Rate limit exceeded", isRateLimit: true }
+      if (!allowed) {
+        return { success: false, error: "Rate limit exceeded", isRateLimit: true }
+      }
     }
 
     if (content.length > MAX_LIVE_ANALYSIS_CHARS) {
@@ -69,7 +72,10 @@ export async function sendMessageAction(chatId: string, content: string, model: 
 
     const message = await chatService.sendMessage(chatId, content, model)
 
-    await rateLimitService.trackUsage(session.user.id)
+    if (process.env.NEXT_PUBLIC_PREVIEW_MODE !== "true") {
+      const session = await getServerSession(authOptions)
+      if (session?.user?.id) await rateLimitService.trackUsage(session.user.id)
+    }
 
     return { success: true, data: message }
   } catch (error) {

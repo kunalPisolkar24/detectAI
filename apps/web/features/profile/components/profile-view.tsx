@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { m, AnimatePresence } from "framer-motion"
 import { User, CreditCard } from "lucide-react"
 
@@ -8,6 +8,7 @@ import { cn } from "@/lib/core/utils"
 import { teko } from "@/lib/core/fonts"
 import { GeneralTab } from "./general-tab"
 import { BillingTab } from "./billing-tab"
+import { isPreviewModeClient } from "@/lib/config/preview"
 
 type TabType = "general" | "billing"
 
@@ -68,6 +69,43 @@ const SidebarNav = ({ activeTab, onTabChange }: SidebarNavProps) => {
 
 export const ProfileView = ({ user }: ProfileViewProps) => {
   const [activeTab, setActiveTab] = useState<TabType>("general")
+  const isPreview = isPreviewModeClient()
+  const [previewPremium, setPreviewPremium] = useState(user.isPremium)
+  const [previewEndsAt, setPreviewEndsAt] = useState<Date | null>(user.subscriptionEndsAt)
+
+  useEffect(() => {
+    if (!isPreview) return
+    const sync = () => {
+      try {
+        const val = localStorage.getItem("preview:isPremium") === "true"
+        setPreviewPremium(val)
+        if (val) {
+          const ends = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+          setPreviewEndsAt(ends)
+        } else {
+          setPreviewEndsAt(null)
+        }
+      } catch {}
+    }
+    sync()
+    const handler = () => sync()
+    window.addEventListener("storage", handler)
+    window.addEventListener("preview:premium-change", handler as EventListener)
+    return () => {
+      window.removeEventListener("storage", handler)
+      window.removeEventListener("preview:premium-change", handler as EventListener)
+    }
+  }, [isPreview])
+
+  const mergedUser = isPreview
+    ? {
+        ...user,
+        isPremium: previewPremium || user.isPremium,
+        subscriptionEndsAt: previewPremium ? previewEndsAt : null,
+        paddleSubscriptionStatus: previewPremium ? "ACTIVE" : null,
+        paddleCancellationScheduled: false,
+      }
+    : user
 
   return (
     <div className="flex flex-col md:flex-row gap-8 lg:gap-12 min-h-[calc(100vh-100px)]">
@@ -114,7 +152,7 @@ export const ProfileView = ({ user }: ProfileViewProps) => {
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.2 }}
             >
-              <GeneralTab user={user} />
+              <GeneralTab user={mergedUser} />
             </m.div>
           ) : (
             <m.div
@@ -124,7 +162,7 @@ export const ProfileView = ({ user }: ProfileViewProps) => {
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.2 }}
             >
-              <BillingTab user={user} paddleCancellationScheduled={user.paddleCancellationScheduled} />
+              <BillingTab user={mergedUser} paddleCancellationScheduled={mergedUser.paddleCancellationScheduled} />
             </m.div>
           )}
         </AnimatePresence>

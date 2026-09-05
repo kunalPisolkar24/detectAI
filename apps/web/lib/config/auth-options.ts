@@ -10,17 +10,21 @@ import { LoginSchema } from "@/schemas/auth"
 import { env } from "@/lib/config/env"
 import { userService } from "@/features/auth/services/user-service"
 
+const isPreviewMode = () => process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+const previewDummyId = "preview-dummy"
+const previewDummySecret = "preview-dummy-secret"
+
 interface ExtendedProfile extends Profile {
   firstName?: string
   lastName?: string
 }
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  adapter: isPreviewMode() ? (undefined as unknown as ReturnType<typeof PrismaAdapter>) : PrismaAdapter(prisma),
   providers: [
     GithubProvider({
-      clientId: env.GITHUB_ID,
-      clientSecret: env.GITHUB_SECRET,
+      clientId: (env.GITHUB_ID as string) || previewDummyId,
+      clientSecret: (env.GITHUB_SECRET as string) || previewDummySecret,
       allowDangerousEmailAccountLinking: false,
       profile(profile) {
         return {
@@ -34,8 +38,8 @@ export const authOptions: NextAuthOptions = {
       },
     }),
     GoogleProvider({
-      clientId: env.GOOGLE_ID,
-      clientSecret: env.GOOGLE_SECRET,
+      clientId: (env.GOOGLE_ID as string) || previewDummyId,
+      clientSecret: (env.GOOGLE_SECRET as string) || previewDummySecret,
       allowDangerousEmailAccountLinking: false,
       profile(profile) {
         return {
@@ -63,6 +67,22 @@ export const authOptions: NextAuthOptions = {
           return null
         }
         const { email, password } = loginValidated.data
+        if (isPreviewMode()) {
+          // Any syntactically valid credentials succeed in preview mode
+          const localPart = email.split("@")[0] ?? "Preview"
+          const firstName = localPart.split(/[._-]/)[0] ?? "Preview"
+          const lastName = localPart.split(/[._-]/).slice(1).join(" ") || "User"
+          // isPremium is not authoritative here; JWT update() can flip it client-side
+          return {
+            id: `preview-${email}`,
+            name: `${firstName} ${lastName}`.trim(),
+            email,
+            firstName,
+            lastName,
+            image: undefined,
+            isPremium: false,
+          }
+        }
         const user = await prisma.user.findUnique({ 
           where: { email },
           include: { subscription: true }
@@ -91,7 +111,7 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
     maxAge: 60 * 60,
   },
-  secret: env.NEXTAUTH_SECRET,
+  secret: (env.NEXTAUTH_SECRET as string) || previewDummySecret,
   callbacks: {
     async jwt({ token, user, trigger, session }) {
       if (user) {
@@ -111,8 +131,10 @@ export const authOptions: NextAuthOptions = {
 
       // Fallback revalidate for non-premium: single DB query, 60s throttle, no new API route
       // Covers refresh/close after pay when pendingUpgrade flag expired or JWT stale 1h
-      if (trigger !== "update" && token.isPremium === false && token.id) {
+      // Skip in preview mode — no DB access
+      if (!isPreviewMode() && trigger !== "update" && token.isPremium === false && token.id) {
         const nowSec = Date.now() / 1000
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const lastCheck = (token as any)._lastPremiumCheck as number | undefined
         const iat = (token.iat as number) ?? 0
         const shouldCheck = lastCheck ? nowSec - lastCheck > 60 : nowSec - iat > 60
@@ -123,6 +145,7 @@ export const authOptions: NextAuthOptions = {
               include: { subscription: true },
             })
             const isPremium = dbUser?.subscription?.status === SubscriptionStatus.ACTIVE
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             ;(token as any)._lastPremiumCheck = nowSec
             token.isPremium = isPremium
           } catch {}
@@ -144,6 +167,7 @@ export const authOptions: NextAuthOptions = {
   },
   events: {
     async linkAccount(message) {
+      if (isPreviewMode()) return
       if (!message.user.id) return
 
       const user = await prisma.user.findUnique({ where: { id: message.user.id } })

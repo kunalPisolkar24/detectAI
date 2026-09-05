@@ -9,6 +9,9 @@ type ExtractFileState = {
 }
 
 export async function extractTextFromFile(formData: FormData): Promise<ExtractFileState> {
+  if (process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+    return { error: "Document parsing is not available in preview mode" }
+  }
   try {
     const text = await fileExtractionService.extract(formData)
 

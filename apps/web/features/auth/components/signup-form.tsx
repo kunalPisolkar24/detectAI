@@ -18,12 +18,14 @@ import { CardWrapper } from "./card-wrapper"
 import { teko } from "@/lib/core/fonts"
 import { useTurnstile } from "@/features/auth/hooks/use-turnstile"
 import { registerAction } from "@/features/auth/actions/register"
+import { isPreviewModeClient } from "@/lib/config/preview"
 
 export const SignupForm = () => {
   const [isPending, startTransition] = useTransition()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const isPreview = isPreviewModeClient()
 
   const {
     token,
@@ -91,6 +93,11 @@ export const SignupForm = () => {
     >
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          {isPreview && (
+            <div className="rounded-md border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 px-3 py-2.5 text-sm text-blue-700 dark:text-blue-300 flex gap-2">
+              <span className="font-medium">Preview mode:</span> any credentials will create a mock account.
+            </div>
+          )}
           {formError && (
             <m.div
               initial={{ opacity: 0, y: -10 }}

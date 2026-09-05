@@ -5,6 +5,8 @@ import { env } from '@/lib/config/env';
 import { metrics } from '@/lib/infrastructure/metrics';
 import { logger } from '@/lib/infrastructure/logger';
 
+const isPreviewMode = () => process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+
 const READ_OPERATIONS = [
   'findUnique',
   'findUniqueOrThrow',
@@ -20,7 +22,22 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient;
 };
 
+const createPreviewPrisma = (): PrismaClient => {
+  const handler: ProxyHandler<object> = {
+    get(_target, prop) {
+      if (prop === "then") return undefined
+      return () => {
+        throw new Error(`Prisma.${String(prop)} is not available in preview mode`)
+      }
+    },
+  }
+  return new Proxy({}, handler) as unknown as PrismaClient
+}
+
 const createExtendedClient = () => {
+  if (isPreviewMode()) {
+    return createPreviewPrisma()
+  }
   const poolPrimary = new Pool({ connectionString: env.DATABASE_URL });
   const poolReplica = new Pool({ connectionString: env.DATABASE_URL_REPLICA ?? env.DATABASE_URL });
 
@@ -74,6 +91,6 @@ const createExtendedClient = () => {
 
 export const prisma = globalForPrisma.prisma || createExtendedClient();
 
-if (env.NODE_ENV !== 'production') {
+if (!isPreviewMode() && env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }

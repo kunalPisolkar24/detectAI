@@ -30,6 +30,39 @@ const requestSchema = z.object({
 })
 
 export async function POST(request: Request) {
+  const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+  if (isPreview) {
+    try {
+      const body = await request.json()
+      const parsed = requestSchema.safeParse(body)
+      if (!parsed.success) {
+        return NextResponse.json({ error: "Invalid request payload" }, { status: 400 })
+      }
+      const { content } = parsed.data
+      if (content.length > MAX_LIVE_ANALYSIS_CHARS) {
+        return NextResponse.json(
+          { error: `Text exceeds maximum length of ${MAX_LIVE_ANALYSIS_CHARS} characters` },
+          { status: 400 },
+        )
+      }
+      const previewUserId = "preview-user"
+      const { createPreviewStream } = await import("@/features/preview/lib/preview-stream")
+      const stream = await createPreviewStream({ ...parsed.data, userId: previewUserId }, request.signal)
+      return new Response(stream, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/x-ndjson; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+        },
+      })
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Internal Server Error" },
+        { status: 500 },
+      )
+    }
+  }
+
   const internalKey = request.headers.get("X-Internal-Key")
   const isLoadTest = internalKey && env.INTERNAL_API_KEY && internalKey === env.INTERNAL_API_KEY
   

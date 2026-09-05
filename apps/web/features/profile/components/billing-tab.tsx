@@ -21,6 +21,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { cancelSubscriptionAction } from "../actions/cancel-subscription"
+import { isPreviewModeClient, setPreviewPremium } from "@/lib/config/preview"
+import { useSession } from "next-auth/react"
 
 interface BillingTabProps {
   user: {
@@ -33,10 +35,23 @@ interface BillingTabProps {
 
 export const BillingTab = ({ user, paddleCancellationScheduled }: BillingTabProps) => {
   const router = useRouter()
+  const { update: updateSession } = useSession()
+  const isPreview = isPreviewModeClient()
   const [isPending, startTransition] = useTransition()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
 
   const handleConfirmCancel = () => {
+    if (isPreview) {
+      startTransition(async () => {
+        setPreviewPremium(false)
+        try {
+          await updateSession({ isPremium: false })
+        } catch {}
+        toast.success("Premium removed — reverted to Free (preview).")
+        setIsDialogOpen(false)
+      })
+      return
+    }
     startTransition(async () => {
       const result = await cancelSubscriptionAction()
 
@@ -205,9 +220,13 @@ export const BillingTab = ({ user, paddleCancellationScheduled }: BillingTabProp
             <CreditCard size={20} />
           </div>
           <p className="text-sm text-muted-foreground">
-            {user.isPremium
-              ? "Payment details are managed securely via Paddle. Check your email for invoice history."
-              : "No payment method on file."}
+            {isPreview
+              ? user.isPremium
+                ? "Preview mode — no real payment method. Upgrade/cancel is local only."
+                : "Preview mode — no payment required."
+              : user.isPremium
+                ? "Payment details are managed securely via Paddle. Check your email for invoice history."
+                : "No payment method on file."}
           </p>
         </div>
       </section>

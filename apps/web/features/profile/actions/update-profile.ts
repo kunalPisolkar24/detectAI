@@ -12,6 +12,9 @@ const UpdateProfileSchema = z.object({
 })
 
 export async function updateProfileAction(values: z.infer<typeof UpdateProfileSchema>) {
+  if (process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+    return { success: true }
+  }
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.id) {

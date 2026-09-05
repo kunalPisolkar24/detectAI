@@ -9,7 +9,7 @@ vi.mock('@paddle/paddle-js', () => ({
   initializePaddle: vi.fn(),
 }))
 
-vi.mock('../actions/confirm-upgrade', () => ({
+vi.mock('../../actions/confirm-upgrade', () => ({
   confirmUpgradeAction: vi.fn().mockResolvedValue({ isPremium: false }),
 }))
 
@@ -128,7 +128,7 @@ describe('UpgradeView', () => {
   })
 
   it('resumes pendingUpgrade on mount and activates premium', async () => {
-    const { confirmUpgradeAction } = await import('../actions/confirm-upgrade')
+    const { confirmUpgradeAction } = await import('../../actions/confirm-upgrade')
     vi.mocked(confirmUpgradeAction).mockResolvedValueOnce({ isPremium: false }).mockResolvedValueOnce({ isPremium: true })
     // first mount: webhook not yet, second call true simulates webhook at ~10s
     // For test we mock single mount that directly returns true (webhook already arrived)
@@ -145,7 +145,7 @@ describe('UpgradeView', () => {
   })
 
   it('does not poll when pendingUpgrade expired beyond 2hr', async () => {
-    const { confirmUpgradeAction } = await import('../actions/confirm-upgrade')
+    const { confirmUpgradeAction } = await import('../../actions/confirm-upgrade')
     vi.mocked(confirmUpgradeAction).mockClear()
     localStorage.setItem('pendingUpgrade', JSON.stringify({ ts: Date.now() - 7200000 - 1000 }))
 
@@ -158,7 +158,7 @@ describe('UpgradeView', () => {
   })
 
   it('clears pendingUpgrade when already premium', async () => {
-    const { confirmUpgradeAction } = await import('../actions/confirm-upgrade')
+    const { confirmUpgradeAction } = await import('../../actions/confirm-upgrade')
     vi.mocked(confirmUpgradeAction).mockClear()
     localStorage.setItem('pendingUpgrade', JSON.stringify({ ts: Date.now() }))
     vi.mocked(useSession).mockReturnValue({

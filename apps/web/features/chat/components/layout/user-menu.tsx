@@ -1,8 +1,10 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useTheme } from "next-themes"
 import { useRouter } from "next/navigation"
+import { isPreviewModeClient } from "@/lib/config/preview"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,8 +34,23 @@ export const UserMenu = ({ isCollapsed }: UserMenuProps) => {
   const router = useRouter()
   const { data: session } = useSession()
   const { setTheme, resolvedTheme } = useTheme()
-
-  const user = session?.user
+  const isPreview = isPreviewModeClient()
+  const [previewPremium, setPreviewPremium] = useState(false)
+  useEffect(() => {
+    if (!isPreview) return
+    const sync = () => {
+      try { setPreviewPremium(localStorage.getItem("preview:isPremium") === "true") } catch {}
+    }
+    sync()
+    window.addEventListener("storage", sync)
+    window.addEventListener("preview:premium-change", sync as EventListener)
+    return () => {
+      window.removeEventListener("storage", sync)
+      window.removeEventListener("preview:premium-change", sync as EventListener)
+    }
+  }, [isPreview])
+  const rawUser = session?.user
+  const user = rawUser ? { ...rawUser, isPremium: isPreview ? (previewPremium || rawUser.isPremium) : rawUser.isPremium } : rawUser
 
   const initials = user?.name
     ? user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()

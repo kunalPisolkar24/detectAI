@@ -35,6 +35,7 @@ export const env = createEnv({
   client: {
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1),
     NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: z.string().min(1),
+    NEXT_PUBLIC_PREVIEW_MODE: z.enum(["true", "false"]).default("false"),
   },
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
@@ -60,6 +61,7 @@ export const env = createEnv({
     USE_REDIS_CLUSTER: process.env.USE_REDIS_CLUSTER, 
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
     NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
+    NEXT_PUBLIC_PREVIEW_MODE: process.env.NEXT_PUBLIC_PREVIEW_MODE,
     AI_SERVICE_URL: process.env.AI_SERVICE_URL,
     AI_SERVICE_API_KEY: process.env.AI_SERVICE_API_KEY,
     CHAT_SERVICE_URL: process.env.CHAT_SERVICE_URL,
@@ -68,6 +70,6 @@ export const env = createEnv({
     PROMETHEUS_WEB_SCRAPE_TOKEN: process.env.PROMETHEUS_WEB_SCRAPE_TOKEN,
     RABBITMQ_URL: process.env.RABBITMQ_URL,
   },
-  skipValidation: !!process.env.SKIP_ENV_VALIDATION,
+  skipValidation: !!process.env.SKIP_ENV_VALIDATION || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true",
   emptyStringAsUndefined: true,
 })

@@ -10,6 +10,13 @@ export const metadata: Metadata = {
 }
 
 export default async function ChatPage() {
+  if (process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+    return (
+      <main className="h-full w-full overflow-hidden">
+        <ChatView initialRateLimited={false} />
+      </main>
+    )
+  }
   // session.user.isPremium is refreshed via jwt fallback revalidate (auth-options.ts:96, 60s throttle) and pendingUpgrade resume (upgrade-view.tsx)
   const session = await getServerSession(authOptions)
   let isRateLimited = false

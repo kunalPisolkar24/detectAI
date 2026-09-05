@@ -22,13 +22,32 @@ import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 import { extractTextFromFile } from "../actions/extract-file"
 import { LIVE_ANALYSIS_WARNING_CHARS, MAX_LIVE_ANALYSIS_CHARS, MIN_ANALYSIS_WORDS } from "../constants"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
+import { isPreviewModeClient, PREVIEW_TOOLTIP } from "@/lib/config/preview"
 
 export const ChatInput = () => {
   const router = useRouter()
   const pathname = usePathname()
   const { data: session } = useSession()
   const { data: history } = useChatHistory()
-  const isPremium = session?.user?.isPremium ?? false
+  const isPreview = isPreviewModeClient()
+  const [previewPremium, setPreviewPremium] = useState(false)
+  useEffect(() => {
+    if (!isPreview) return
+    const read = () => {
+      try { setPreviewPremium(localStorage.getItem("preview:isPremium") === "true") } catch {}
+    }
+    read()
+    const handler = () => read()
+    window.addEventListener("storage", handler)
+    window.addEventListener("preview:premium-change", handler as EventListener)
+    return () => {
+      window.removeEventListener("storage", handler)
+      window.removeEventListener("preview:premium-change", handler as EventListener)
+    }
+  }, [isPreview])
+  // In preview, premium is controlled by local mock; merge with JWT premium
+  const isPremium = isPreview ? (previewPremium || (session?.user?.isPremium ?? false)) : (session?.user?.isPremium ?? false)
   const [localInput, setLocalInput] = useState("")
   const [isExtracting, setIsExtracting] = useState(false)
   const { selectedModel, setModel, isRateLimited, currentChatId, setCurrentChatId } = useChatUIStore()
@@ -40,6 +59,7 @@ export const ChatInput = () => {
   const isOverLimit = currentCharCount > MAX_LIVE_ANALYSIS_CHARS
   const isCurrentChatAnalyzing = Boolean(activeAnalysisChatId && activeAnalysisChatId === currentChatId)
   const isAnotherChatAnalyzing = Boolean(activeAnalysisChatId && activeAnalysisChatId !== currentChatId)
+  const isAttachmentDisabled = isPreview || isCurrentChatAnalyzing || isExtracting || (isRateLimited && !isPremium)
   const runningChatTitle = history?.find((chat) => chat.id === activeAnalysisChatId)?.title
 
   useEffect(() => {
@@ -217,7 +237,7 @@ export const ChatInput = () => {
 
         <div className="flex items-center justify-between px-3 pb-3 pt-1">
           <div className="flex items-center gap-2">
-            <m.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <m.div whileHover={{ scale: isAttachmentDisabled ? undefined : 1.05 }} whileTap={{ scale: isAttachmentDisabled ? undefined : 0.95 }}>
               <input
                 type="file"
                 ref={fileInputRef}
@@ -226,20 +246,27 @@ export const ChatInput = () => {
                 onChange={handleFileSelect}
                 aria-label="Upload document"
               />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-neutral-500 hover:text-blue-600 hover:bg-blue-50/50 dark:text-neutral-400 dark:hover:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                disabled={isCurrentChatAnalyzing || isExtracting || (isRateLimited && !isPremium)}
-                onClick={() => fileInputRef.current?.click()}
-                aria-label="Attach file"
-              >
-                {isExtracting ? (
-                  <Loader2 size={18} className="animate-spin text-blue-600 dark:text-blue-400" />
-                ) : (
-                  <Paperclip size={18} aria-hidden="true" />
-                )}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-neutral-500 hover:text-blue-600 hover:bg-blue-50/50 dark:text-neutral-400 dark:hover:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors disabled:opacity-50"
+                      disabled={isAttachmentDisabled}
+                      onClick={() => fileInputRef.current?.click()}
+                      aria-label="Attach file"
+                    >
+                      {isExtracting ? (
+                        <Loader2 size={18} className="animate-spin text-blue-600 dark:text-blue-400" />
+                      ) : (
+                        <Paperclip size={18} aria-hidden="true" />
+                      )}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {isPreview && <TooltipContent>{PREVIEW_TOOLTIP}</TooltipContent>}
+              </Tooltip>
             </m.div>
 
             <DropdownMenu>

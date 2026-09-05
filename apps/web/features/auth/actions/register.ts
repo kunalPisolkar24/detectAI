@@ -31,6 +31,11 @@ export async function registerAction(
       return { error: "Security check failed. Please try again." }
     }
 
+    if (process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+      // In preview, any signup succeeds without DB
+      return { success: true }
+    }
+
     const { email, password, firstName, lastName } = validatedFields.data
 
     const existingUser = await userService.getUserByEmail(email)

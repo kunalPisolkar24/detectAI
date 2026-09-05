@@ -1,6 +1,26 @@
 import Redis, { Cluster, ClusterNode, RedisOptions } from "ioredis"
 import { env } from "@/lib/config/env"
 
+const isPreviewMode = () => process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+
+const createPreviewUsageRedis = () =>
+  new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (prop === "then") return undefined
+        if (prop === "pipeline") {
+          return () => ({
+            incr: function () { return this },
+            expire: function () { return this },
+            exec: async () => [],
+          })
+        }
+        return async () => null
+      },
+    },
+  ) as unknown as RedisClient
+
 type RedisClient = Redis | Cluster
 
 const globalForRedis = global as unknown as { usageRedis: RedisClient }
@@ -25,6 +45,7 @@ const getClusterNodes = (urlString: string): ClusterNode[] => {
 }
 
 const createClient = (): RedisClient => {
+  if (isPreviewMode()) return createPreviewUsageRedis()
   if (getUsageMode() === "cluster") {
     const nodes = getClusterNodes(env.REDIS_USAGE_URL)
 
@@ -66,6 +87,6 @@ const createClient = (): RedisClient => {
 
 export const usageRedis = globalForRedis.usageRedis || createClient()
 
-if (env.NODE_ENV !== "production") {
+if (!isPreviewMode() && env.NODE_ENV !== "production") {
   globalForRedis.usageRedis = usageRedis
 }

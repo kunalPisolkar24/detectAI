@@ -4,6 +4,7 @@ import { useChatUIStore } from "../stores/ui-store"
 import { Message, ChatSession, ChatHistoryItem, ModelType, StreamingAnalysisProgress } from "../types"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { isPreviewModeClient } from "@/lib/config/preview"
 
 interface SerializedMessage extends Omit<Message, "createdAt"> {
   createdAt: string
@@ -93,26 +94,40 @@ export const useSendMessage = () => {
         throw new Error("An analysis is already running")
       }
 
+      const isPreview = isPreviewModeClient()
+
       let activeChatId = currentChatId
       const effectiveModel = input.kind === "retry" ? input.model : selectedModel
 
       if (input.kind === "new" && !activeChatId) {
-        const createResult = await createChatAction(input.content)
+        if (isPreview) {
+          const { previewCreateChat } = await import("@/features/preview/lib/preview-db")
+          const newChat = await previewCreateChat(input.content)
+          activeChatId = newChat.id
+          setCurrentChatId(activeChatId)
+          queryClient.setQueryData<ChatSession>(["chat", activeChatId], {
+            ...newChat,
+            messages: [],
+          })
+          await queryClient.invalidateQueries({ queryKey: ["chat-history"] })
+        } else {
+          const createResult = await createChatAction(input.content)
 
-        if (!createResult.success) {
-          throw new Error(createResult.error)
+          if (!createResult.success) {
+            throw new Error(createResult.error)
+          }
+
+          const newChat = createResult.data
+          activeChatId = newChat.id
+          setCurrentChatId(activeChatId)
+
+          queryClient.setQueryData<ChatSession>(["chat", activeChatId], {
+            ...newChat,
+            messages: [],
+          })
+
+          await queryClient.invalidateQueries({ queryKey: ["chat-history"] })
         }
-
-        const newChat = createResult.data
-        activeChatId = newChat.id
-        setCurrentChatId(activeChatId)
-
-        queryClient.setQueryData<ChatSession>(["chat", activeChatId], {
-          ...newChat,
-          messages: [],
-        })
-
-        await queryClient.invalidateQueries({ queryKey: ["chat-history"] })
       }
 
       if (!activeChatId) {
@@ -190,6 +205,119 @@ export const useSendMessage = () => {
       let shouldRollbackUserMessage = input.kind === "new"
       let shouldRetainAssistantMessage = input.kind === "retry"
       try {
+        if (isPreview) {
+          if (input.kind === "new" && optimisticUserId) {
+            const { previewPersistUserMessage, previewPersistAssistantRunning } = await import("@/features/preview/lib/preview-db")
+            const now = new Date()
+            await previewPersistUserMessage(activeChatId, optimisticUserId, input.content, now)
+            await previewPersistAssistantRunning(activeChatId, streamingAssistantId, now, effectiveModel, optimisticUserId)
+          } else if (input.kind === "retry") {
+            const { previewSaveAssistantMessage } = await import("@/features/preview/lib/preview-db")
+            await previewSaveAssistantMessage(activeChatId, {
+              messageId: streamingAssistantId,
+              state: "running",
+              model: effectiveModel,
+              sourceMessageId: input.sourceMessageId,
+            })
+          }
+          shouldRollbackUserMessage = false
+          shouldRetainAssistantMessage = true
+
+          const { mockStreamDocument } = await import("@/features/preview/lib/mock-inference")
+          const { previewPersistAssistantFinal } = await import("@/features/preview/lib/preview-db")
+          let mockFinalAnalysis: import("@/features/chat/types").AnalysisResult | null = null
+
+          await mockStreamDocument(input.content, effectiveModel, {
+            signal: controller.signal,
+            onEvent: (event) => {
+              if (controller.signal.aborted) return
+              if (event.type === "started") {
+                queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
+                  if (!old) return undefined
+                  return {
+                    ...old,
+                    messages: old.messages.map((message) =>
+                      message.id === activeAssistantMessageId
+                        ? {
+                            ...message,
+                            isStreaming: true,
+                            streamingProgress: {
+                              model: effectiveModel,
+                              processedChunks: 0,
+                              totalChunks: event.totalChunks,
+                              status: "running",
+                              retryContent: input.content,
+                              sourceMessageId: message.analysisStatus?.sourceMessageId,
+                            },
+                          }
+                        : message,
+                    ),
+                  }
+                })
+              } else if (event.type === "progress") {
+                queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
+                  if (!old) return undefined
+                  return {
+                    ...old,
+                    messages: old.messages.map((message) =>
+                      message.id === activeAssistantMessageId
+                        ? {
+                            ...message,
+                            isStreaming: true,
+                            streamingProgress: {
+                              model: effectiveModel,
+                              processedChunks: event.processedChunks,
+                              totalChunks: event.totalChunks,
+                              status: "running",
+                              retryContent: input.content,
+                              sourceMessageId: message.analysisStatus?.sourceMessageId,
+                            },
+                          }
+                        : message,
+                    ),
+                  }
+                })
+              } else if (event.type === "final") {
+                mockFinalAnalysis = event.result
+              }
+            },
+          })
+
+          if (controller.signal.aborted) {
+            throw new DOMException("Aborted", "AbortError")
+          }
+
+          if (!mockFinalAnalysis) {
+            throw new Error("Analysis did not produce a final result")
+          }
+
+          const sourceId = input.kind === "retry" ? input.sourceMessageId : optimisticUserId!
+          const finalPersisted = await previewPersistAssistantFinal(activeChatId, streamingAssistantId, mockFinalAnalysis, sourceId)
+          const finalMessage: Message = {
+            ...finalPersisted,
+            isStreaming: false,
+            streamingProgress: undefined,
+          }
+
+          queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
+            if (!old) return undefined
+            return {
+              ...old,
+              messages: old.messages.map((message) =>
+                message.id === activeAssistantMessageId ? finalMessage : message,
+              ),
+            }
+          })
+
+          // Also update chat history title if first message
+          await queryClient.invalidateQueries({ queryKey: ["chat-history"] })
+
+          return {
+            chatId: activeChatId,
+            message: finalMessage,
+          }
+        }
+
         const response = await fetch("/api/chat/analyze/stream", {
           method: "POST",
           headers: {
@@ -380,6 +508,24 @@ export const useSendMessage = () => {
                 shouldRetainAssistantMessage,
               )
 
+        // Persist failure to IndexedDB in preview mode
+        if (isPreview) {
+          try {
+            if (failure.rollbackUserMessage && optimisticUserId) {
+              const { previewDeleteMessage } = await import("@/features/preview/lib/preview-db")
+              await previewDeleteMessage(optimisticUserId)
+              await previewDeleteMessage(activeAssistantMessageId)
+            } else if (!failure.retainAssistantMessage) {
+              const { previewDeleteMessage } = await import("@/features/preview/lib/preview-db")
+              await previewDeleteMessage(activeAssistantMessageId)
+            } else {
+              const { previewPersistAssistantFailed } = await import("@/features/preview/lib/preview-db")
+              const sourceId = input.kind === "retry" ? input.sourceMessageId : (optimisticUserId ?? "")
+              await previewPersistAssistantFailed(activeChatId, activeAssistantMessageId, effectiveModel, sourceId, failure.message, failure.kind === "cancelled" ? "cancelled" : "failed")
+            }
+          } catch {}
+        }
+
         queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
           if (!old) {
             return undefined
@@ -487,6 +633,11 @@ export const useChatMutations = () => {
 
   const deleteChat = useMutation({
     mutationFn: async (chatId: string) => {
+      if (isPreviewModeClient()) {
+        const { previewDeleteChat } = await import("@/features/preview/lib/preview-db")
+        await previewDeleteChat(chatId)
+        return
+      }
       const result = await deleteChatAction(chatId)
       if (!result.success) throw new Error(result.error)
       return result.data
@@ -506,15 +657,21 @@ export const useChatMutations = () => {
 
   const renameChat = useMutation({
     mutationFn: async ({ id, title }: { id: string, title: string }) => {
+      if (isPreviewModeClient()) {
+        const { previewRenameChat } = await import("@/features/preview/lib/preview-db")
+        const updated = await previewRenameChat(id, title)
+        return updated
+      }
       const result = await renameChatAction(id, title)
       if (!result.success) throw new Error(result.error)
       return result.data
     },
     onSuccess: (updatedChat) => {
+      if (!updatedChat) return
       queryClient.setQueryData<ChatHistoryItem[]>(["chat-history"], (old) =>
-        old?.map(c => c.id === updatedChat.id ? updatedChat : c) || [],
+        old?.map(c => c.id === (updatedChat as ChatHistoryItem).id ? (updatedChat as ChatHistoryItem) : c) || [],
       )
-      queryClient.invalidateQueries({ queryKey: ["chat", updatedChat.id] })
+      if (updatedChat) queryClient.invalidateQueries({ queryKey: ["chat", (updatedChat as ChatHistoryItem).id] })
     },
     onError: () => toast.error("Failed to rename chat"),
   })

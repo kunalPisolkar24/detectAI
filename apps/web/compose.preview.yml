@@ -1,0 +1,39 @@
+services:
+  frontend:
+    container_name: detect_ai_frontend_preview
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Use Cloudflare Turnstile test keys that always pass (1x...AA)
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+        NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: dummy
+        NEXT_PUBLIC_PREVIEW_MODE: "true"
+    restart: "no"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_PREVIEW_MODE=true
+      - SKIP_ENV_VALIDATION=true
+      - NEXTAUTH_SECRET=preview-secret-for-docker-only-32chars
+      - NEXTAUTH_URL=http://localhost:3000
+      # Turnstile test secret that always validates
+      - TURNSTILE_SECRET_KEY=1x00000000000000000000AA
+      - NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+      - NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=dummy
+      # Dummy backends — not used in preview (all mocked)
+      - DATABASE_URL=postgresql://preview:preview@localhost:5432/preview
+      - DATABASE_URL_REPLICA=postgresql://preview:preview@localhost:5432/preview
+      - REDIS_MODE=sentinel
+      - REDIS_SENTINELS=localhost:26379
+      - REDIS_MASTER_NAME=mymaster
+      - REDIS_USAGE_URL=redis://localhost:6379
+      - FILE_EXTRACTOR_API_URL=http://localhost:8080
+      - AI_SERVICE_URL=localhost:50051
+      - AI_SERVICE_API_KEY=dummy
+      - CHAT_SERVICE_URL=localhost:50051
+      - PAYMENT_GATEWAY_URL=http://payment-gateway:8080
+      - RABBITMQ_URL=amqp://guest:guest@localhost:5672
+      - LOG_LEVEL=info
+    ports:
+      - "3000:3000"
+    # No depends_on — frontend runs standalone in preview

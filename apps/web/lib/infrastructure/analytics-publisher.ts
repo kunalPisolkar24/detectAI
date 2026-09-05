@@ -1,14 +1,16 @@
 import amqp from "amqplib"
 import { env } from "@/lib/config/env"
 
+const isPreviewMode = () => process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+
 const QUEUE = "analytics.usage"
 
 class AnalyticsPublisher {
-  private channel: amqp.Channel | null = null
-  private connection: amqp.Connection | null = null
+  private channel: any | null = null
+  private connection: any | null = null
   private connecting: Promise<void> | null = null
 
-  private async ensureChannel(): Promise<amqp.Channel> {
+  private async ensureChannel(): Promise<any> {
     if (this.channel) return this.channel
     if (this.connecting) await this.connecting
     if (this.channel) return this.channel
@@ -51,6 +53,7 @@ class AnalyticsPublisher {
   }
 
   async publish(userId: string, count: number): Promise<void> {
+    if (isPreviewMode()) return
     const payload = Buffer.from(
       JSON.stringify({ eventId: crypto.randomUUID(), userId, count, timestamp: new Date().toISOString() })
     )

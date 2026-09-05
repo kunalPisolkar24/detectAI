@@ -1,5 +1,6 @@
 import { Sidebar } from "@/features/chat/components/layout/sidebar"
 import { MobileHeader } from "@/features/chat/components/layout/mobile-header"
+import { PreviewModeDialog } from "@/features/preview/components/preview-mode-dialog"
 
 export default function MainLayout({
   children,
@@ -13,6 +14,7 @@ export default function MainLayout({
         <MobileHeader />
         {children}
       </div>
+      <PreviewModeDialog variant="app" />
     </div>
   )
 }

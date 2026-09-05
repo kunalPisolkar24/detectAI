@@ -1,6 +1,20 @@
 import Redis, { RedisOptions } from "ioredis"
 import { env } from "@/lib/config/env"
 
+const isPreviewMode = () => process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+
+const createPreviewRedis = () =>
+  new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (prop === "then") return undefined
+        // Return no-op async functions for any Redis method in preview
+        return async () => null
+      },
+    },
+  ) as unknown as Redis
+
 const globalForRedis = global as unknown as {
   redisWriter: Redis
   redisReader: Redis
@@ -49,6 +63,10 @@ const getSentinelConfig = (): RedisOptions => {
 }
 
 const createRedisClients = () => {
+  if (isPreviewMode()) {
+    const preview = createPreviewRedis()
+    return { writer: preview, reader: preview }
+  }
   const mode = getRedisMode()
   const standaloneConfig = mode === "standalone" ? getStandaloneConfig() : null
   const writer =
@@ -85,7 +103,7 @@ const clients = globalForRedis.redisWriter && globalForRedis.redisReader
 export const redisWriter = clients.writer
 export const redisReader = clients.reader
 
-if (env.NODE_ENV !== "production") {
+if (!isPreviewMode() && env.NODE_ENV !== "production") {
   globalForRedis.redisWriter = redisWriter
   globalForRedis.redisReader = redisReader
 }

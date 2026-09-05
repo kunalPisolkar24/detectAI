@@ -12,6 +12,17 @@ import { env } from "@/lib/config/env"
 import { teko } from "@/lib/core/fonts"
 import { Button } from "@/components/ui/button"
 import { Pricing } from "@/features/landing/pricing"
+import { isPreviewModeClient, setPreviewPremium } from "@/lib/config/preview"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 const PREMIUM_MONTHLY_PRICE_ID = "pri_01jr2gqggwjakpc1hd9xzym7fy"
 const PREMIUM_YEARLY_PRICE_ID = "pri_01jr2gs8ckz66srr8sd1byh7n4"
@@ -19,8 +30,11 @@ const PREMIUM_YEARLY_PRICE_ID = "pri_01jr2gs8ckz66srr8sd1byh7n4"
 export const UpgradeView = () => {
   const router = useRouter()
   const { data: session, status, update: updateSession } = useSession()
+  const isPreview = isPreviewModeClient()
   const [paddle, setPaddle] = useState<Paddle | undefined>()
-  const [isPaddleInitializing, setIsPaddleInitializing] = useState(true)
+  const [isPaddleInitializing, setIsPaddleInitializing] = useState(!isPreview)
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
+  const [pendingCycle, setPendingCycle] = useState<"monthly" | "yearly">("monthly")
 
   const PENDING_KEY = "pendingUpgrade"
   const PENDING_TTL_MS = 7200000 // 2hr covers JWT 1h + buffer
@@ -55,6 +69,10 @@ export const UpgradeView = () => {
   }
 
   useEffect(() => {
+    if (isPreview) {
+      setIsPaddleInitializing(false)
+      return
+    }
     const initPaddle = async () => {
       try {
         if (env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN) {
@@ -79,9 +97,10 @@ export const UpgradeView = () => {
 
     initPaddle()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [isPreview])
 
   useEffect(() => {
+    if (isPreview) return
     if (typeof window === "undefined") return
     if (status !== "authenticated") return
     if (session?.user.isPremium) {
@@ -105,21 +124,37 @@ export const UpgradeView = () => {
       } catch {}
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, session?.user.isPremium])
+  }, [status, session?.user.isPremium, isPreview])
+
+  const handleConfirmPreviewUpgrade = async () => {
+    setPreviewPremium(true)
+    try {
+      await updateSession({ isPremium: true })
+    } catch {}
+    toast.success("Premium activated! Welcome to Flare. (Preview mode — no payment)")
+    setPreviewDialogOpen(false)
+    router.push("/chat?upgrade_success=true")
+  }
 
   const handlePlanSelect = (planId: string, billingCycle: "monthly" | "yearly") => {
     if (planId !== "flare") {
       return
     }
 
-    if (!paddle) {
-      toast.error("Payment system is still loading. Please try again.")
-      return
-    }
-
     if (status !== "authenticated" || !session?.user) {
       toast.error("Please log in to upgrade.")
       router.push("/login?callbackUrl=/upgrade")
+      return
+    }
+
+    if (isPreview) {
+      setPendingCycle(billingCycle)
+      setPreviewDialogOpen(true)
+      return
+    }
+
+    if (!paddle) {
+      toast.error("Payment system is still loading. Please try again.")
       return
     }
 
@@ -169,6 +204,26 @@ export const UpgradeView = () => {
           isProcessing={isPaddleInitializing}
         />
       </div>
+
+      {isPreview && (
+        <AlertDialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className={cn(teko.className, "text-xl")}>Upgrade to Premium? (Preview)</AlertDialogTitle>
+              <AlertDialogDescription>
+                You are in preview mode. No payment will be processed. Your account will be upgraded to Premium locally
+                ({pendingCycle}) and unlock Flare immediately. You can cancel anytime from Profile.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className={cn(teko.className, "text-base")}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmPreviewUpgrade} className={cn(teko.className, "text-base bg-gradient-to-r from-blue-600 to-purple-600 text-white")}>
+                Yes, upgrade my account
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   )
 }

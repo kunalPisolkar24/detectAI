@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { AuthHeader } from "./auth-header"
 import { BackButton } from "./back-button"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
+import { isPreviewModeClient, PREVIEW_TOOLTIP } from "@/lib/config/preview"
 
 interface CardWrapperProps {
   children: ReactNode
@@ -27,7 +29,9 @@ export const CardWrapper = ({
   children,
   showSocial = true
 }: CardWrapperProps) => {
+  const isPreview = isPreviewModeClient()
   const handleSocialLogin = (provider: "google" | "github") => {
+    if (isPreview) return
     signIn(provider, { callbackUrl: "/chat" })
   }
 
@@ -51,22 +55,40 @@ export const CardWrapper = ({
           {showSocial && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <Button
-                  variant="outline"
-                  onClick={() => handleSocialLogin("google")}
-                  className="w-full bg-transparent border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5"
-                >
-                  <FaGoogle className="mr-2 h-4 w-4" />
-                  Google
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => handleSocialLogin("github")}
-                  className="w-full bg-transparent border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5"
-                >
-                  <FaGithub className="mr-2 h-4 w-4" />
-                  Github
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="w-full">
+                      <Button
+                        variant="outline"
+                        onClick={() => handleSocialLogin("google")}
+                        disabled={isPreview}
+                        aria-disabled={isPreview}
+                        className="w-full bg-transparent border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <FaGoogle className="mr-2 h-4 w-4" />
+                        Google
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {isPreview && <TooltipContent>{PREVIEW_TOOLTIP}</TooltipContent>}
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="w-full">
+                      <Button
+                        variant="outline"
+                        onClick={() => handleSocialLogin("github")}
+                        disabled={isPreview}
+                        aria-disabled={isPreview}
+                        className="w-full bg-transparent border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <FaGithub className="mr-2 h-4 w-4" />
+                        Github
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {isPreview && <TooltipContent>{PREVIEW_TOOLTIP}</TooltipContent>}
+                </Tooltip>
               </div>
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
