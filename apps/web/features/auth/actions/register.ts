@@ -22,6 +22,14 @@ export async function registerAction(
       return { error: "Invalid input fields" }
     }
 
+    if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+      // In preview, any non-empty token succeeds without Cloudflare verification
+      if (!turnstileToken) {
+        return { error: "Please complete the captcha verification" }
+      }
+      return { success: true }
+    }
+
     if (!turnstileToken) {
       return { error: "Please complete the captcha verification" }
     }
@@ -29,11 +37,6 @@ export async function registerAction(
     const isHuman = await validateTurnstileToken(turnstileToken)
     if (!isHuman) {
       return { error: "Security check failed. Please try again." }
-    }
-
-    if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
-      // In preview, any signup succeeds without DB
-      return { success: true }
     }
 
     const { email, password, firstName, lastName } = validatedFields.data

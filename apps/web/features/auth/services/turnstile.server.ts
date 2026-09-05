@@ -9,6 +9,10 @@ interface TurnstileResponse {
 }
 
 export async function validateTurnstileToken(token: string): Promise<boolean> {
+  // Preview: accept any non-empty token without Cloudflare round-trip (covers test keys and offline)
+  if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+    return !!token
+  }
   const secretKey = env.TURNSTILE_SECRET_KEY
 
   const formData = new FormData()
