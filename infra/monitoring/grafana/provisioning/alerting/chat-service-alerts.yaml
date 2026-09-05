@@ -1,0 +1,314 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: chat-service
+    folder: Detect-AI
+    interval: 1m
+    rules:
+      - title: ChatServiceDown
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: up{job=~".*(chat-service|chats-api).*"} == 0
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: chat-service target unreachable for 2 minutes
+        labels:
+          severity: critical
+      - title: ChatServiceHighErrorRate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: 100 * sum(rate(grpc_request_duration_seconds_count{job=~".*(chat-service|chats-api).*",status!="OK"}[5m])) / clamp_min(sum(rate(grpc_request_duration_seconds_count{job=~".*(chat-service|chats-api).*"}[5m])), 0.001)
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 5
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: chat-service gRPC error rate above 5% for 10 minutes
+        labels:
+          severity: critical
+      - title: ChatServiceHighLatency
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: histogram_quantile(0.95, sum(rate(grpc_request_duration_seconds_bucket{job=~".*(chat-service|chats-api).*" }[5m])) by (le))
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: chat-service p95 latency above 1s for 10 minutes
+        labels:
+          severity: warning
+      - title: ChatServiceDatabaseErrors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(rate(chat_database_errors_total{job=~".*(chat-service|chats-api).*"}[5m])) > 0.02
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: chat-service DB errors sustained >0.02/sec for 10 minutes (covers get_chat, create_chat, get_history etc)
+        labels:
+          severity: warning
+      - title: ChatServiceStreamPublishErrors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(rate(chat_stream_errors_total{job=~".*(chat-service|chats-api).*",operation="publish"}[5m])) > 0.02
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: chat-service Redis publish errors >0.02/sec for 10 minutes (writes failing)
+        labels:
+          severity: warning
+      - title: ChatServiceCacheHitRatioLow
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: (100 * sum(rate(chat_cache_hits_total{job=~".*(chat-service|chats-api).*"}[5m])) / clamp_min(sum(rate(chat_cache_hits_total{job=~".*(chat-service|chats-api).*"}[5m])) + sum(rate(chat_cache_misses_total{job=~".*(chat-service|chats-api).*"}[5m])), 0.001) < 50) and (sum(rate(chat_cache_hits_total{job=~".*(chat-service|chats-api).*"}[5m])) + sum(rate(chat_cache_misses_total{job=~".*(chat-service|chats-api).*"}[5m])) > 0.1)
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: chat-service cache hit ratio below 50% for 15 minutes (volume guard >0.1 ops/s)
+        labels:
+          severity: warning

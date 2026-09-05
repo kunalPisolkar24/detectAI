@@ -1223,9 +1223,12 @@ function buildChatWorkerOverview() {
       stat({ title: "Max Stream Lag", expr: `max(chat_redis_stream_lag{${jobSelector("chat-worker")}})`, gridPos: { h: 4, w: 6, x: 12, y: 0 }, unit: "short", decimals: 0 }),
       stat({ title: "CPU Cores", expr: `rate(process_cpu_seconds_total{${jobSelector("chat-worker")}}[5m])`, gridPos: { h: 4, w: 6, x: 18, y: 0 }, unit: "short", decimals: 3 }),
       timeseries({
-        title: "Messages Ingested",
+        title: "Publish vs Ingest Rate",
         gridPos: { h: 8, w: 12, x: 0, y: 4 },
-        targets: [query(`rate(chat_messages_ingested_total{${jobSelector("chat-worker")}}[5m])`, "ingested")],
+        targets: [
+          query(`sum(rate(chat_messages_published_total{${jobSelector("chat-service")}}[5m]))`, "published (API)", "A"),
+          query(`sum(rate(chat_messages_ingested_total{${jobSelector("chat-worker")}}[5m]))`, "ingested (worker)", "B"),
+        ],
         unit: "ops",
       }),
       timeseries({

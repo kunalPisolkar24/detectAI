@@ -16,6 +16,11 @@ var (
 		Help: "Total number of messages successfully ingested into MongoDB",
 	})
 
+	MessagesPublished = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "chat_messages_published_total",
+		Help: "Total number of messages successfully published to Redis stream",
+	})
+
 	StreamLag = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "chat_redis_stream_lag",
 		Help: "Current lag of the Redis stream consumer group",
@@ -73,6 +78,10 @@ func (p *PrometheusMetrics) AddIngestedMessages(count float64) {
 	MessagesIngested.Add(count)
 }
 
+func (p *PrometheusMetrics) IncPublishedMessages(count float64) {
+	MessagesPublished.Add(count)
+}
+
 func (p *PrometheusMetrics) SetStreamLag(partition string, lag float64) {
 	StreamLag.WithLabelValues(partition).Set(lag)
 }
@@ -93,6 +102,7 @@ func Init() {
 	initOnce.Do(func() {
 		prometheus.MustRegister(
 			MessagesIngested,
+			MessagesPublished,
 			StreamLag,
 			CacheHits,
 			CacheMisses,

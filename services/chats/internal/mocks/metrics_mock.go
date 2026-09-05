@@ -18,6 +18,10 @@ func (m *MockMetricsCollector) AddIngestedMessages(count float64) {
 	m.Called(count)
 }
 
+func (m *MockMetricsCollector) IncPublishedMessages(count float64) {
+	m.Called(count)
+}
+
 func (m *MockMetricsCollector) SetStreamLag(partition string, lag float64) {
 	m.Called(partition, lag)
 }

@@ -336,13 +336,20 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "rate(chat_messages_ingested_total{job=~\".*(chat-worker|chats-worker).*\"}[5m])",
-              "legendFormat": "ingested",
+              "expr": "sum(rate(chat_messages_published_total{job=~\".*(chat-service|chats-api).*\"}[5m]))",
+              "legendFormat": "published (API)",
               "range": true,
               "refId": "A"
+            },
+            {
+              "editorMode": "code",
+              "expr": "sum(rate(chat_messages_ingested_total{job=~\".*(chat-worker|chats-worker).*\"}[5m]))",
+              "legendFormat": "ingested (worker)",
+              "range": true,
+              "refId": "B"
             }
           ],
-          "title": "Messages Ingested",
+          "title": "Publish vs Ingest Rate",
           "type": "timeseries"
         },
         {

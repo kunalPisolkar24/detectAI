@@ -270,6 +270,7 @@ func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) e
 		s.metrics.IncStreamErrors("publish")
 		return err
 	}
+	s.metrics.IncPublishedMessages(1)
 
 	if err := s.cache.SaveToCache(ctx, msg); err != nil {
 		s.logger.Warn("failed to save message to cache", zap.Error(err), zap.String("chat_id", msg.ChatID))

@@ -252,12 +252,13 @@ func TestDeleteSession_CacheError_IsGraceful(t *testing.T) {
 // --- ProcessMessage ---
 
 func TestProcessMessage_Success(t *testing.T) {
-	dbRepo, cacheRepo, streamRepo, _, svc := newTestService()
+	dbRepo, cacheRepo, streamRepo, metricsCollector, svc := newTestService()
 	ctx := context.Background()
 
 	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
 	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
 	streamRepo.On("Publish", mock.Anything, mock.Anything).Return(nil)
+	metricsCollector.On("IncPublishedMessages", 1.0).Return()
 	cacheRepo.On("SaveToCache", mock.Anything, mock.Anything).Return(nil)
 
 	err := svc.ProcessMessage(ctx, &domain.Message{ChatID: "chat-1", UserID: "user-1", Content: "hello"})
