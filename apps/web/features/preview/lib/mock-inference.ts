@@ -8,6 +8,85 @@ function hashString(str: string): number {
   return hash
 }
 
+const MOCK_HIGHLIGHT_CHARS_PER_SPAN = 180
+const MOCK_HIGHLIGHT_MAX_SPANS = 8
+
+const isWordChar = (char: string | undefined): boolean =>
+  char !== undefined && /[\p{L}\p{N}_]/u.test(char)
+
+/**
+ * Snap a candidate range to word boundaries so highlights never cut
+ * mid-word (matching the live chunk-level spans). Start moves forward to
+ * the next word start, end moves forward to the current word end.
+ */
+function snapSpanToWordBounds(text: string, start: number, end: number): [number, number] {
+  let snappedStart = Math.max(0, Math.min(text.length, start))
+  let snappedEnd = Math.max(0, Math.min(text.length, end))
+
+  if (snappedStart > 0 && isWordChar(text[snappedStart - 1]) && isWordChar(text[snappedStart])) {
+    while (snappedStart < snappedEnd && isWordChar(text[snappedStart])) snappedStart++
+    while (snappedStart < snappedEnd && !isWordChar(text[snappedStart])) snappedStart++
+  }
+
+  while (snappedEnd < text.length && isWordChar(text[snappedEnd - 1]) && isWordChar(text[snappedEnd])) snappedEnd++
+
+  return [snappedStart, snappedEnd]
+}
+
+function mixHash(base: number, salt: number): number {
+  return (Math.imul(base ^ 0x9e3779b9, 31 + salt * 7) + salt * 131) >>> 0
+}
+
+/**
+ * Build deterministic, non-overlapping, word-aligned highlight spans spread
+ * across the full text. Labels mostly follow the overall verdict with a
+ * realistic mixed minority, like the live chunk-level confidence map.
+ */
+function buildMockHighlightSpans(
+  text: string,
+  model: ModelType,
+  overallLabel: "AI" | "Human",
+): AnalysisHighlightSpan[] {
+  if (!text) return []
+
+  const baseHash = hashString(`${model}:${text.length}:${text.slice(0, 64)}`)
+  const spanCount = Math.max(
+    1,
+    Math.min(MOCK_HIGHLIGHT_MAX_SPANS, Math.floor(text.length / MOCK_HIGHLIGHT_CHARS_PER_SPAN)),
+  )
+  const windowLength = text.length / spanCount
+  const spans: AnalysisHighlightSpan[] = []
+
+  for (let i = 0; i < spanCount; i++) {
+    const windowStart = i * windowLength
+    const spanHash = mixHash(baseHash, i)
+    // Cover the middle ~40% of the window with a small deterministic jitter.
+    const jitter = spanHash % Math.max(1, Math.floor(windowLength * 0.08))
+    const candidateStart = windowStart + windowLength * 0.3 + jitter
+    const candidateEnd = windowStart + windowLength * 0.7 + jitter
+
+    const [charStart, charEnd] = snapSpanToWordBounds(text, Math.floor(candidateStart), Math.floor(candidateEnd))
+    if (charEnd <= charStart) continue
+    // Guard against overlap with the previous span after word snapping.
+    const previous = spans[spans.length - 1]
+    const start = previous ? Math.max(charStart, previous.charEnd) : charStart
+    if (charEnd <= start) continue
+
+    const followsOverall = spanHash % 10 < 6
+    const label = followsOverall ? overallLabel : overallLabel === "AI" ? "Human" : "AI"
+    const spanConfidence = 0.55 + (spanHash % 40) / 100
+
+    spans.push({
+      charStart: start,
+      charEnd,
+      aiConfidence: label === "AI" ? spanConfidence : 1 - spanConfidence,
+      label,
+    })
+  }
+
+  return spans
+}
+
 export function generateMockAnalysis(text: string, model: ModelType): AnalysisResult {
   const hash = hashString(text + model)
   const isAI = hash % 2 === 0
@@ -15,24 +94,7 @@ export function generateMockAnalysis(text: string, model: ModelType): AnalysisRe
   const aiScore = isAI ? confidence : 1 - confidence
   const humanScore = 1 - aiScore
 
-  const highlights: AnalysisHighlightSpan[] = []
-  if (text.length > 80) {
-    const spanCount = Math.min(3, Math.floor(text.length / 120) + 1)
-    const chunk = Math.floor(text.length / (spanCount + 1))
-    for (let i = 0; i < spanCount; i++) {
-      const start = i * chunk + 10 + (hash % 20)
-      const end = Math.min(text.length, start + 40 + (hash % 60))
-      if (start < end) {
-        const spanConfidence = 0.55 + ((hash + i * 13) % 40) / 100
-        highlights.push({
-          charStart: start,
-          charEnd: end,
-          aiConfidence: isAI ? spanConfidence : 1 - spanConfidence,
-          label: isAI ? "AI" : "Human",
-        })
-      }
-    }
-  }
+  const highlights = buildMockHighlightSpans(text, model, isAI ? "AI" : "Human")
 
   return {
     model,

@@ -9,7 +9,7 @@ import { confirmUpgradeAction } from "../actions/confirm-upgrade"
 import { toast } from "sonner"
 import { cn } from "@/lib/core/utils"
 import { env } from "@/lib/config/env"
-import { teko } from "@/lib/core/fonts"
+import { teko, inter } from "@/lib/core/fonts"
 import { Button } from "@/components/ui/button"
 import { Pricing } from "@/features/landing/pricing"
 import { isPreviewModeClient, setPreviewPremium } from "@/lib/config/preview"
@@ -209,7 +209,12 @@ export const UpgradeView = () => {
         <AlertDialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle className={cn(teko.className, "text-xl")}>Upgrade to Premium? (Preview)</AlertDialogTitle>
+              <AlertDialogTitle className={cn("flex items-center gap-2 tracking-wide", teko.className)}>
+                <span className="text-xl">Upgrade to Premium?</span>
+                <span className={cn("rounded-md border border-blue-500/20 bg-blue-500/10 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300", inter.className)}>
+                  Preview
+                </span>
+              </AlertDialogTitle>
               <AlertDialogDescription>
                 You are in preview mode. No payment will be processed. Your account will be upgraded to Premium locally
                 ({pendingCycle}) and unlock Flare immediately. You can cancel anytime from Profile.

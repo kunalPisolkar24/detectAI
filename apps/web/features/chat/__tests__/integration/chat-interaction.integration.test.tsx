@@ -59,7 +59,7 @@ describe('Chat Interaction Integration', () => {
 
     expect(screen.getByLabelText(/text to analyze/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/analyze text/i)).toBeInTheDocument()
-    expect(screen.getByText(/was this written by human or ai/i)).toBeInTheDocument()
+    expect(screen.getByText(/Know in seconds\./i)).toBeInTheDocument()
   })
 
   it('submits text and displays analysis result', async () => {
@@ -98,7 +98,7 @@ describe('Chat Interaction Integration', () => {
   it('shows empty state when no messages exist', () => {
     render(<ChatView />)
 
-    expect(screen.getByText(/was this written by human or ai/i)).toBeInTheDocument()
-    expect(screen.getByText(/analyze patterns to detect artificial authorship/i)).toBeInTheDocument()
+    expect(screen.getByText(/Know in seconds\./i)).toBeInTheDocument()
+    expect(screen.getByText(/chunk-level analysis/i)).toBeInTheDocument()
   })
 })
