@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { signIn } from "next-auth/react"
 import { m } from "framer-motion"
-import { Eye, EyeOff, User, Mail, Lock, AlertCircle } from "lucide-react"
+import { Eye, EyeOff, User, Mail, Lock, AlertCircle, FlaskConical } from "lucide-react"
 import type { z } from "zod"
 
 import { cn } from "@/lib/core/utils"
@@ -94,8 +94,13 @@ export const SignupForm = () => {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           {isPreview && (
-            <div className="rounded-md border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 px-3 py-2.5 text-sm text-blue-700 dark:text-blue-300 flex gap-2">
-              <span className="font-medium">Preview mode:</span> any credentials will create a mock account.
+            <div className="flex items-start gap-2.5 rounded-xl border border-blue-500/20 bg-blue-500/10 px-3.5 py-3 text-sm leading-relaxed text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200">
+              <FlaskConical size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <p>
+                <span className="font-semibold">Preview mode</span>
+                <span aria-hidden="true"> — </span>
+                any credentials will create a mock account.
+              </p>
             </div>
           )}
           {formError && (

@@ -69,7 +69,10 @@ export const PreviewModeDialog = ({ variant }: PreviewModeDialogProps) => {
 
   return (
     <AlertDialog open={open} onOpenChange={(v) => { if (!v) handleClose(); else setOpen(v) }}>
-      <AlertDialogContent className="relative my-2 max-h-[calc(100svh-2rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain sm:max-w-md">
+      {/* NOTE: do not add positioning utilities (relative/absolute/etc.) here —
+          tailwind-merge would drop the shell's `fixed` centering and the popup
+          falls to the bottom of the page. `fixed` already anchors the hairline. */}
+      <AlertDialogContent className="my-2 max-h-[calc(100svh-2rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain sm:max-w-md">
         <div aria-hidden="true" className="absolute inset-x-6 top-0 h-[3px] rounded-b-full bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 opacity-70" />
         <AlertDialogHeader>
           <div className="flex items-start gap-3.5 pt-1 text-left">
