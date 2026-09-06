@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@/test/test-utils'
+import userEvent from '@testing-library/user-event'
 import { ChatHeader } from '../../../../components/layout/chat-header'
 import { useChatUIStore } from '../../../../stores/ui-store'
 import { useChatSession } from '../../../../hooks/use-chat-history'
@@ -48,59 +49,55 @@ describe('ChatHeader', () => {
     expect(container.firstChild).toBeNull()
   })
 
-  it.skip('handles rename dialog', async () => {
+  it('handles rename dialog', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
     vi.mocked(useChatSession).mockReturnValue({
       data: { title: 'Test Chat' },
       isLoading: false,
     } as any)
 
     render(<ChatHeader />)
-    
-    // Open dropdown
-    const trigger = screen.getByRole('button')
-    fireEvent.click(trigger)
-    
+
+    // Open dropdown (Radix menus respond to pointer events, not bare clicks)
+    await user.click(screen.getByRole('button'))
+
     // Click rename
-    const renameButton = screen.getByText(/rename/i)
-    fireEvent.click(renameButton)
-    
-    expect(screen.getByText(/rename chat/i)).toBeInTheDocument()
-    
-    // Change title and save
-    const input = screen.getByPlaceholderText(/chat title/i)
+    await user.click(await screen.findByText(/rename/i))
+
+    expect(await screen.findByText(/rename chat/i)).toBeInTheDocument()
+
+    // Change title and save (user.click() on the submit button does not
+    // trigger jsdom's form submission, so submit the form directly)
+    const input = await screen.findByPlaceholderText(/chat title/i)
     fireEvent.change(input, { target: { value: 'New Title' } })
-    
-    const saveButton = screen.getByText(/save/i)
-    fireEvent.click(saveButton)
-    
+    fireEvent.submit(input.closest('form')!)
+
     expect(mockRenameChat.mutate).toHaveBeenCalledWith({
       id: 'chat-1',
       title: 'New Title'
     })
   })
 
-  it.skip('handles delete dialog', async () => {
+  it('handles delete dialog', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
     vi.mocked(useChatSession).mockReturnValue({
       data: { title: 'Test Chat' },
       isLoading: false,
     } as any)
 
     render(<ChatHeader />)
-    
-    // Open dropdown
-    const trigger = screen.getByRole('button')
-    fireEvent.click(trigger)
-    
+
+    // Open dropdown (Radix menus respond to pointer events, not bare clicks)
+    await user.click(screen.getByRole('button'))
+
     // Click delete
-    const deleteButton = screen.getByText(/delete/i)
-    fireEvent.click(deleteButton)
-    
-    expect(screen.getByText(/delete chat\?/i)).toBeInTheDocument()
-    
+    await user.click(await screen.findByText(/^delete$/i))
+
+    expect(await screen.findByText(/delete chat\?/i)).toBeInTheDocument()
+
     // Confirm delete
-    const confirmButton = screen.getByRole('button', { name: /delete/i })
-    fireEvent.click(confirmButton)
-    
+    await user.click(screen.getByRole('button', { name: /^delete$/i }))
+
     expect(mockDeleteChat.mutate).toHaveBeenCalledWith('chat-1')
   })
 })

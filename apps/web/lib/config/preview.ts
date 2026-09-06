@@ -1,8 +1,6 @@
 export const PREVIEW_TOOLTIP = "Not available in preview mode"
 export const PREVIEW_PREMIUM_KEY = "preview:isPremium"
 export const PREVIEW_DONT_SHOW_NOTICE_KEY = "preview:dontShowNotice"
-export const PREVIEW_FLAG = "NEXT_PUBLIC_PREVIEW_MODE"
-export const PREVIEW_SERVER_FLAG = "PREVIEW_MODE"
 /** Prefix for per-user preview identities (`preview-<email>`, see auth-options). */
 export const PREVIEW_USER_PREFIX = "preview-"
 /** Owner id backfilled onto pre-scoping rows. Reads never match it: archived. */

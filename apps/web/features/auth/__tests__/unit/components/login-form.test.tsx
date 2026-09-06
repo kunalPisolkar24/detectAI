@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@/test/test-utils'
+import { render, screen, waitFor, fireEvent } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { axe } from 'jest-axe'
 import { signIn } from 'next-auth/react'
@@ -58,6 +58,7 @@ const defaultTurnstile = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.localStorage.clear()
 
   vi.mocked(useTurnstile).mockReturnValue({ ...defaultTurnstile, reset: mockReset })
 
@@ -78,11 +79,12 @@ beforeEach(() => {
 const fillAndSubmitLoginForm = async (user: ReturnType<typeof userEvent.setup>, email: string, pass: string) => {
   const emailInput = await screen.findByLabelText(/^email$/i)
   const passwordInput = await screen.findByLabelText(/^password$/i)
-  const submitButton = await screen.findByRole('button', { name: /sign in/i })
 
   await user.type(emailInput, email)
   await user.type(passwordInput, pass)
-  await user.click(submitButton)
+  // NOTE: user.click() on the submit button does not trigger jsdom's form
+  // submission activation behavior in this setup, so submit the form directly.
+  fireEvent.submit(emailInput.closest('form')!)
 }
 
 describe('LoginForm', () => {
@@ -172,7 +174,7 @@ describe('LoginForm', () => {
     })
   })
 
-  describe.skip('happy path submission', () => {
+  describe('happy path submission', () => {
     it('calls signIn with correct credentials on valid form submission', async () => {
       const user = userEvent.setup({ pointerEventsCheck: 0 })
       render(<LoginForm />)
@@ -209,7 +211,7 @@ describe('LoginForm', () => {
     })
   })
 
-  describe.skip('error edge cases', () => {
+  describe('error edge cases', () => {
     it('shows error when signIn fails', async () => {
       const user = userEvent.setup({ pointerEventsCheck: 0 })
       vi.mocked(signIn).mockResolvedValueOnce({ error: 'CredentialsSignin', ok: false, status: 401, url: null })

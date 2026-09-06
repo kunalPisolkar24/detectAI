@@ -6,15 +6,6 @@ import { prisma } from "@/lib/infrastructure/prisma"
 import { SubscriptionStatus } from "@/lib/shared/generated/prisma/client"
 import { cacheService } from "@/lib/services/cache-service"
 
-export async function checkSubscriptionOnce(userId: string): Promise<boolean> {
-  if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") return true
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: { subscription: true },
-  })
-  return user?.subscription?.status === SubscriptionStatus.ACTIVE
-}
-
 export async function confirmUpgradeAction(): Promise<{ isPremium: boolean }> {
   if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
     return { isPremium: true }

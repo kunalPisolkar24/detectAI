@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@/test/test-utils'
+import { render, screen, waitFor, fireEvent } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { axe } from 'jest-axe'
 import { signIn } from 'next-auth/react'
@@ -46,6 +46,7 @@ const defaultTurnstile = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.localStorage.clear()
 
   vi.mocked(useTurnstile).mockReturnValue({ ...defaultTurnstile, reset: mockReset })
 
@@ -121,20 +122,21 @@ describe('SignupForm', () => {
     })
   })
 
-  describe.skip('form submission', () => {
-    // Skipping async submission tests as per plan for now
+  describe('form submission', () => {
     it('calls registerAction and signIn on valid submission', async () => {
       const user = userEvent.setup({ pointerEventsCheck: 0 })
       render(<SignupForm />)
-      
+
       await user.type(await screen.findByLabelText(/first name/i), 'John')
       await user.type(await screen.findByLabelText(/last name/i), 'Doe')
-      await user.type(await screen.findByLabelText(/^email$/i), 'john@example.com')
+      const emailInput = await screen.findByLabelText(/^email$/i)
+      await user.type(emailInput, 'john@example.com')
       await user.type(await screen.findByLabelText(/^password$/i), 'password123')
-      await user.type(await screen.findByLabelText(/confirm password/i), 'password123')
-      
-      const submitButton = await screen.findByRole('button', { name: /create account/i })
-      await user.click(submitButton)
+      await user.type(await screen.findByLabelText(/^confirm password$/i), 'password123')
+
+      // NOTE: user.click() on the submit button does not trigger jsdom's form
+      // submission activation behavior in this setup, so submit directly.
+      fireEvent.submit(emailInput.closest('form')!)
 
       await waitFor(() => {
         expect(registerAction).toHaveBeenCalled()

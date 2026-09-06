@@ -122,13 +122,3 @@ export function subscribePreviewUsage(callback: (usage: PreviewUsage) => void, u
   }
 }
 
-export function resetPreviewUsage(userId?: string | null): void {
-  if (typeof window === "undefined") return
-  try {
-    const keys = scopedKeys(userId)
-    localStorage.removeItem(keys.daily)
-    localStorage.removeItem(keys.total)
-    localStorage.removeItem(keys.date)
-    window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: { dailyCount: 0, totalCount: 0 } }))
-  } catch {}
-}

@@ -1,13 +1,11 @@
 "use server"
 
 import { chatService } from "@/features/chat/services"
-import { MAX_LIVE_ANALYSIS_CHARS } from "@/features/chat/constants"
-import { ModelType, ChatSession, Message, ChatHistoryItem } from "@/features/chat/types"
+import { ChatSession, ChatHistoryItem } from "@/features/chat/types"
 import { authOptions } from "@/lib/config/auth-options"
 import { getServerSession } from "next-auth"
 import { getPreviewUserId } from "@/lib/config/preview"
 import type { ChatServiceScope } from "@/features/chat/services/chat-service.interface"
-import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
 
 type ActionResponse<T> =
   | { success: true; data: T }
@@ -60,54 +58,6 @@ export async function getChatHistoryAction(): Promise<ActionResponse<ChatHistory
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to retrieve history"
-    }
-  }
-}
-
-export async function sendMessageAction(chatId: string, content: string, model: ModelType): Promise<ActionResponse<Message>> {
-  try {
-    const isPreview = process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
-    if (!isPreview) {
-      const session = await getServerSession(authOptions)
-      if (!session?.user?.id) {
-        return { success: false, error: "Unauthorized" }
-      }
-
-      const { allowed } = await rateLimitService.checkLimit(session.user.id, session.user.isPremium ?? false)
-
-      if (!allowed) {
-        return { success: false, error: "Rate limit exceeded", isRateLimit: true }
-      }
-    }
-
-    if (content.length > MAX_LIVE_ANALYSIS_CHARS) {
-      return {
-        success: false,
-        error: `Text exceeds maximum length of ${MAX_LIVE_ANALYSIS_CHARS} characters`
-      }
-    }
-
-    const scope = await previewScope()
-    const message = scope
-      ? await chatService.sendMessage(chatId, content, model, scope)
-      : await chatService.sendMessage(chatId, content, model)
-
-    if (process.env.PREVIEW_MODE !== "true" && process.env.NEXT_PUBLIC_PREVIEW_MODE !== "true") {
-      const session = await getServerSession(authOptions)
-      if (session?.user?.id) await rateLimitService.trackUsage(session.user.id)
-    }
-
-    return { success: true, data: message }
-  } catch (error) {
-    const isRateLimit = error instanceof Error && (
-      error.message.includes("Rate limit") ||
-      error.message.includes("429")
-    )
-
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to send message",
-      isRateLimit
     }
   }
 }

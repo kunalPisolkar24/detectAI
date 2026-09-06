@@ -4,6 +4,7 @@ import { UpgradeView } from '../../components/upgrade-view'
 import { useSession } from 'next-auth/react'
 import { initializePaddle } from '@paddle/paddle-js'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 vi.mock('@paddle/paddle-js', () => ({
   initializePaddle: vi.fn(),
@@ -121,10 +122,22 @@ describe('UpgradeView', () => {
     expect(mockPush).toHaveBeenCalledWith('/login?callbackUrl=/upgrade')
   })
 
-  it.skip('shows error when paddle not yet initialized', async () => {
-    // This branch (line 78-80) is difficult to reach because paddle initializes
-    // asynchronously and the UI shows the upgrade button only after initialization.
-    // Skipping per policy on difficult async tests.
+  it('shows error when paddle is not initialized', async () => {
+    // Initialization finishes but yields no instance, so the upgrade button
+    // is enabled while `paddle` is still undefined.
+    vi.mocked(initializePaddle).mockResolvedValue(undefined as any)
+
+    render(<UpgradeView />)
+    await waitFor(() => expect(initializePaddle).toHaveBeenCalled())
+
+    const upgradeButton = await screen.findByRole('button', { name: /Upgrade Now/i })
+    await waitFor(() => expect(upgradeButton).toBeEnabled())
+    fireEvent.click(upgradeButton)
+
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+      'Payment system is still loading. Please try again.',
+    )
+    expect(mockPush).not.toHaveBeenCalledWith('/login?callbackUrl=/upgrade')
   })
 
   it('resumes pendingUpgrade on mount and activates premium', async () => {

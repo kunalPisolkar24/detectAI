@@ -29,6 +29,3 @@ export const LoginSchema = z.object({
     message: "Please enter your password",
   }),
 })
-
-export type LoginSchemaType = z.infer<typeof LoginSchema>
-export type SignupSchemaType = z.infer<typeof SignupSchema>
