@@ -1,3 +1,5 @@
+# Self-contained load-test rig (throwaway postgres/redis, mock-server, k6).
+# Isolated from the main stack by design: `make load-test`.
 services:
   postgres:
     image: postgres:16-alpine
@@ -25,7 +27,7 @@ services:
 
   mock-server:
     build:
-      context: .
+      context: ..
       dockerfile: test/load/mock-server/Dockerfile
     environment:
       - PROTO_DIR=/app/lib/shared/proto
@@ -35,7 +37,7 @@ services:
 
   frontend:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
@@ -73,7 +75,7 @@ services:
   k6:
     image: grafana/k6
     volumes:
-      - ./test/load/scripts:/scripts
+      - ../test/load/scripts:/scripts
     environment:
       - BASE_URL=http://frontend:3000
     depends_on:

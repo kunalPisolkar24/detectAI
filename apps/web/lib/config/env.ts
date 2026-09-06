@@ -1,12 +1,52 @@
 import { createEnv } from "@t3-oss/env-nextjs"
 import { z } from "zod"
 
+/**
+ * Canonical preview switch. `PREVIEW=true` is the only flick preview mode
+ * needs: validation is skipped and every variable below resolves to a canned
+ * default (passed-in values are ignored), so no real credentials are
+ * required. The backends behind these values are never dialed in preview —
+ * all integrations are mocked — they only satisfy validation and types.
+ *
+ * Boundaries (Dockerfile, compose, makefile, package.json) derive the legacy
+ * `PREVIEW_MODE` / `NEXT_PUBLIC_PREVIEW_MODE` flags from this switch, so the
+ * direct `process.env.*` checks across the codebase keep working untouched.
+ */
+const isPreview = process.env.PREVIEW === "true"
+
+const previewDefaults = {
+  DATABASE_URL: "postgresql://preview:preview@localhost:5432/preview",
+  DATABASE_URL_REPLICA: "postgresql://preview:preview@localhost:5432/preview",
+  NEXTAUTH_SECRET: "preview-secret-for-preview-only-32chars",
+  NEXTAUTH_URL: "http://localhost:3000",
+  PREVIEW_MODE: "true",
+  GOOGLE_ID: "dummy",
+  GOOGLE_SECRET: "dummy",
+  GITHUB_ID: "dummy",
+  GITHUB_SECRET: "dummy",
+  TURNSTILE_SECRET_KEY: "1x00000000000000000000AA",
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
+  NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: "dummy",
+  NEXT_PUBLIC_PREVIEW_MODE: "true",
+  REDIS_USAGE_URL: "redis://localhost:6379",
+  FILE_EXTRACTOR_API_URL: "http://localhost:8080",
+  AI_SERVICE_URL: "localhost:50051",
+  AI_SERVICE_API_KEY: "dummy",
+  RABBITMQ_URL: "amqp://guest:guest@localhost:5672",
+} as const
+
+/** Real value normally; canned preview default when `PREVIEW=true`. */
+function pick(value: string | undefined, fallback: string): string | undefined {
+  return isPreview ? fallback : value
+}
+
 export const env = createEnv({
   server: {
     DATABASE_URL: z.string().url(),
     DATABASE_URL_REPLICA: z.string().url().optional(),
     NEXTAUTH_SECRET: z.string().min(1),
     NEXTAUTH_URL: z.string().url().optional(),
+    PREVIEW: z.enum(["true", "false"]).default("false"),
     PREVIEW_MODE: z.enum(["true", "false"]).default("false"),
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
@@ -39,18 +79,19 @@ export const env = createEnv({
     NEXT_PUBLIC_PREVIEW_MODE: z.enum(["true", "false"]).default("false"),
   },
   runtimeEnv: {
-    DATABASE_URL: process.env.DATABASE_URL,
-    DATABASE_URL_REPLICA: process.env.DATABASE_URL_REPLICA,
-    NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
-    PREVIEW_MODE: process.env.PREVIEW_MODE,
+    DATABASE_URL: pick(process.env.DATABASE_URL, previewDefaults.DATABASE_URL),
+    DATABASE_URL_REPLICA: pick(process.env.DATABASE_URL_REPLICA, previewDefaults.DATABASE_URL_REPLICA),
+    NEXTAUTH_SECRET: pick(process.env.NEXTAUTH_SECRET, previewDefaults.NEXTAUTH_SECRET),
+    NEXTAUTH_URL: pick(process.env.NEXTAUTH_URL, previewDefaults.NEXTAUTH_URL),
+    PREVIEW: process.env.PREVIEW,
+    PREVIEW_MODE: pick(process.env.PREVIEW_MODE, previewDefaults.PREVIEW_MODE),
     NODE_ENV: process.env.NODE_ENV,
     LOG_LEVEL: process.env.LOG_LEVEL,
-    GOOGLE_ID: process.env.GOOGLE_ID,
-    GOOGLE_SECRET: process.env.GOOGLE_SECRET,
-    GITHUB_ID: process.env.GITHUB_ID,
-    GITHUB_SECRET: process.env.GITHUB_SECRET,
-    TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY,
+    GOOGLE_ID: pick(process.env.GOOGLE_ID, previewDefaults.GOOGLE_ID),
+    GOOGLE_SECRET: pick(process.env.GOOGLE_SECRET, previewDefaults.GOOGLE_SECRET),
+    GITHUB_ID: pick(process.env.GITHUB_ID, previewDefaults.GITHUB_ID),
+    GITHUB_SECRET: pick(process.env.GITHUB_SECRET, previewDefaults.GITHUB_SECRET),
+    TURNSTILE_SECRET_KEY: pick(process.env.TURNSTILE_SECRET_KEY, previewDefaults.TURNSTILE_SECRET_KEY),
     REDIS_MODE: process.env.REDIS_MODE,
     REDIS_URL: process.env.REDIS_URL,
     REDIS_SENTINELS: process.env.REDIS_SENTINELS,
@@ -58,22 +99,23 @@ export const env = createEnv({
     REDIS_PASSWORD: process.env.REDIS_PASSWORD,
     REDIS_USAGE_MODE: process.env.REDIS_USAGE_MODE,
     REDIS_USAGE_PASSWORD: process.env.REDIS_USAGE_PASSWORD,
-    FILE_EXTRACTOR_API_URL: process.env.FILE_EXTRACTOR_API_URL,
-    REDIS_USAGE_URL: process.env.REDIS_USAGE_URL,
+    FILE_EXTRACTOR_API_URL: pick(process.env.FILE_EXTRACTOR_API_URL, previewDefaults.FILE_EXTRACTOR_API_URL),
+    REDIS_USAGE_URL: pick(process.env.REDIS_USAGE_URL, previewDefaults.REDIS_USAGE_URL),
     USE_REDIS_CLUSTER: process.env.USE_REDIS_CLUSTER, 
-    NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
-    NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
-    NEXT_PUBLIC_PREVIEW_MODE: process.env.NEXT_PUBLIC_PREVIEW_MODE,
-    AI_SERVICE_URL: process.env.AI_SERVICE_URL,
-    AI_SERVICE_API_KEY: process.env.AI_SERVICE_API_KEY,
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY: pick(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY, previewDefaults.NEXT_PUBLIC_TURNSTILE_SITE_KEY),
+    NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: pick(process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN, previewDefaults.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN),
+    NEXT_PUBLIC_PREVIEW_MODE: pick(process.env.NEXT_PUBLIC_PREVIEW_MODE, previewDefaults.NEXT_PUBLIC_PREVIEW_MODE),
+    AI_SERVICE_URL: pick(process.env.AI_SERVICE_URL, previewDefaults.AI_SERVICE_URL),
+    AI_SERVICE_API_KEY: pick(process.env.AI_SERVICE_API_KEY, previewDefaults.AI_SERVICE_API_KEY),
     CHAT_SERVICE_URL: process.env.CHAT_SERVICE_URL,
     PAYMENT_GATEWAY_URL: process.env.PAYMENT_GATEWAY_URL,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
     PROMETHEUS_WEB_SCRAPE_TOKEN: process.env.PROMETHEUS_WEB_SCRAPE_TOKEN,
-    RABBITMQ_URL: process.env.RABBITMQ_URL,
+    RABBITMQ_URL: pick(process.env.RABBITMQ_URL, previewDefaults.RABBITMQ_URL),
   },
   skipValidation:
     !!process.env.SKIP_ENV_VALIDATION ||
+    process.env.PREVIEW === "true" ||
     process.env.NEXT_PUBLIC_PREVIEW_MODE === "true" ||
     process.env.PREVIEW_MODE === "true",
   emptyStringAsUndefined: true,

@@ -1,7 +1,14 @@
+# Unified web stack (start-only, no dev/HMR mode).
+#
+# Preview needs a single flick: PREVIEW=true (see infra/.env.preview and
+# `make preview`). The legacy PREVIEW_MODE / NEXT_PUBLIC_PREVIEW_MODE flags
+# are derived from PREVIEW at the boundaries; the app treats any of them as
+# preview. Preview runs skip backends via `up --no-deps frontend`, so no
+# separate compose file is needed.
 services:
   db-migrate:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile
       target: migrate
     restart: "no"
@@ -16,13 +23,18 @@ services:
   frontend:
     container_name: detect_ai_frontend
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile
       args:
+        PREVIEW: ${PREVIEW:-false}
         NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
         NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
     restart: always
     environment:
+      # Preview switch (single flick; see header)
+      - PREVIEW=${PREVIEW:-false}
+      - PREVIEW_MODE=${PREVIEW_MODE:-false}
+      - NEXT_PUBLIC_PREVIEW_MODE=${NEXT_PUBLIC_PREVIEW_MODE:-false}
       # Environment
       - NODE_ENV=${NODE_ENV}
       - LOG_LEVEL=${LOG_LEVEL}

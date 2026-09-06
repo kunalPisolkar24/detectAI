@@ -2,10 +2,18 @@
 
 Run the frontend without any backend services (DB, Redis, gRPC, Turnstile, Paddle, RabbitMQ). All integrations are mocked; chats persist in the browser via IndexedDB (Dexie), inference is simulated in-memory.
 
-Flags: `NEXT_PUBLIC_PREVIEW_MODE=true` (build-time, inlined for the browser bundle)
-+ `PREVIEW_MODE=true` (runtime, read on the server). Set BOTH — the server
-check uses `PREVIEW_MODE` so `next start` does not crash with
-`Requires the name of master` even if `.next` is stale.
+Single flick: `PREVIEW=true`. When set, `lib/config/env.ts` skips validation
+and resolves every other variable to canned preview defaults (passed-in values
+are ignored), so no real credentials are needed. The `Dockerfile`, compose
+file, makefile, and `pnpm preview:*` scripts derive the legacy `PREVIEW_MODE`
+/ `NEXT_PUBLIC_PREVIEW_MODE` flags from this switch — set `PREVIEW` and
+nothing else.
+
+Flags: `PREVIEW=true` (canonical switch)
++ `NEXT_PUBLIC_PREVIEW_MODE=true` (build-time, inlined for the browser bundle)
++ `PREVIEW_MODE=true` (runtime, read on the server). The last two are derived
+automatically; the server check uses the runtime flag so `next start` does not
+crash even if `.next` is stale.
 
 ## What is mocked in preview
 
@@ -20,70 +28,60 @@ check uses `PREVIEW_MODE` so `next start` does not crash with
 
 ## Option A — Bare metal (no Docker)
 
-Requires Node 20 + pnpm 9.
+Requires Node 20 + pnpm 9. Start-only (no dev/HMR preview mode).
 
 ```bash
 cd apps/web
 pnpm install
 
-# Development (HMR, inlined preview flag + test Turnstile keys)
-pnpm preview:dev
+# Production build + serve (single flick lives in the scripts)
+pnpm preview:build
+pnpm preview:start
 # → http://localhost:3000
-
-# Production build + serve (two steps or via compose)
-# Use make targets (recommended) or pnpm directly:
-make preview-run
-# equivalent to:
-#   pnpm preview:build
-#   pnpm preview:start
 ```
 
-Scripts set internally (both flags):
+Scripts set internally (from the single switch):
 ```
+PREVIEW=true
 PREVIEW_MODE=true
 NEXT_PUBLIC_PREVIEW_MODE=true
 NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
 TURNSTILE_SECRET_KEY=1x00000000000000000000AA
 NEXTAUTH_SECRET=preview-secret-for-local-dev-only-32chars
 NEXTAUTH_URL=http://localhost:3000
-SKIP_ENV_VALIDATION=true
+NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=dummy
 ```
 
 > `preview:start` alone requires a prior `preview:build` — the browser bundle
 > inlines `NEXT_PUBLIC_PREVIEW_MODE` at build time. If you previously ran a
 > regular `pnpm build`, rebuild with `pnpm preview:build` first or the UI
-> will not show preview behavior (server is runtime-safe via `PREVIEW_MODE`).
-
-To use a custom `.env`, copy `.env.preview.example` to `.env` and adjust `NEXTAUTH_SECRET`/`NEXTAUTH_URL`.
+> will not show preview behavior (server is runtime-safe via `PREVIEW`).
 
 Storage: chats live in `indexedDB` → `preview-db`. Clearing site data resets history. `preview:isPremium` and `preview:dontShowNotice` are in `localStorage`.
 
-## Option B — Docker (no local Node, no compose dev stack)
+## Option B — Docker (no local Node)
 
-Standalone image, no `db`/`redis`/`ai-service`/`chat-service`/`document-parser`/`payment-gateway`/`rabbitmq` dependencies.
+Standalone image, no `db`/`redis`/`ai-service`/`chat-service`/`document-parser`/`payment-gateway`/`rabbitmq` dependencies. Single flick via `infra/.env.preview`.
 
 ```bash
 cd apps/web
 
 # Build and run preview frontend only (production standalone)
-docker compose -f compose.preview.yml up --build
+make preview
 # → http://localhost:3000
 
 # Stop and remove
-docker compose -f compose.preview.yml down
-
-# Rebuild after code changes
-docker compose -f compose.preview.yml up --build --force-recreate
+make preview-down
 ```
 
-`compose.preview.yml` builds `Dockerfile` with `ARG NEXT_PUBLIC_PREVIEW_MODE=true` (so the client bundle is preview) and runs with `SKIP_ENV_VALIDATION=true` plus dummy `DATABASE_URL`/`REDIS`/`RABBITMQ` values. No `depends_on`.
+`make preview` runs `docker compose --env-file infra/.env.preview -f infra/compose.yml up --build --no-deps frontend`: same unified compose file as the real stack, but only the frontend starts (backends skipped, no separate compose file). Canned values live in `infra/.env.preview` and in code (`lib/config/env.ts`); passed-in values are ignored when `PREVIEW=true`.
 
 ## Switching back to normal mode
 
 - Bare: `pnpm dev` / `pnpm build && pnpm start` (ensure real `.env` with `DATABASE_URL`, `NEXTAUTH_SECRET`, `REDIS_*`, `AI_SERVICE_URL`, `CHAT_SERVICE_URL`, `FILE_EXTRACTOR_API_URL`, `RABBITMQ_URL`, `GOOGLE_ID/SECRET`, `GITHUB_ID/SECRET`, `TURNSTILE_*`, `PADDLE_*`).
-- Docker dev stack: `make dev` / `docker compose -f compose.yml -f compose.dev.yml up -d` (as in root README).
+- Docker: `make start` (requires real `apps/web/.env`; fails fast if missing).
 
-Note: preview flag is **build-time**. Switching requires a rebuild (`pnpm preview:build` or `docker compose -f compose.preview.yml up --build`).
+Note: preview flag is **build-time**. Switching requires a rebuild (`pnpm preview:build` or `make preview`, which builds).
 
 ## Verification checklist
 

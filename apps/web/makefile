@@ -1,67 +1,43 @@
-# Local Development Targets
-.PHONY: dev build-dev down logs clean restart
+# Start-only targets (no dev/HMR mode).
+# Preview needs a single flick: `make preview` (PREVIEW=true via infra/.env.preview).
+.PHONY: start preview preview-down down logs clean restart load-up load-down load-test
 
-dev:
-	docker compose -f compose.yml -f compose.dev.yml up -d
+COMPOSE := docker compose -f infra/compose.yml
+PREVIEW_COMPOSE := docker compose --env-file infra/.env.preview -f infra/compose.yml
+LOAD_COMPOSE := docker compose -f infra/compose.load.yml
+# Must match detect_ai_network in infra/.env.preview.
+PREVIEW_NETWORK ?= detectai_net
 
-build-dev:
-	docker compose -f compose.yml -f compose.dev.yml up -d --build
-
-down:
-	docker compose -f compose.yml -f compose.dev.yml down --remove-orphans
-
-logs:
-	docker compose -f compose.yml -f compose.dev.yml logs -f
-
-clean:
-	docker compose -f compose.yml -f compose.dev.yml down -v --remove-orphans
-
-restart: down dev
-
-# Preview Mode Targets (frontend-only, no backend)
-# Bare metal (no Docker): make preview-dev → HMR dev | make preview-run → prod build + start
-# NOTE: preview-start requires a preview build first (client bundle inlines
-# NEXT_PUBLIC_PREVIEW_MODE at build time). Use preview-run if unsure.
-# Docker (no local Node): make preview / make preview-build
-.PHONY: preview preview-build preview-down preview-logs preview-clean preview-restart preview-dev preview-build-standalone preview-start preview-run
+start:
+	@if [ ! -f .env ]; then echo "Missing apps/web/.env with real values (preview needs nothing: use 'make preview')."; exit 1; fi
+	$(COMPOSE) up -d --build
 
 preview:
-	docker compose -f compose.preview.yml up -d
-
-preview-build:
-	docker compose -f compose.preview.yml up -d --build
+	@docker network inspect $(PREVIEW_NETWORK) >/dev/null 2>&1 || docker network create $(PREVIEW_NETWORK)
+	$(PREVIEW_COMPOSE) up -d --build --no-deps frontend
 
 preview-down:
-	docker compose -f compose.preview.yml down --remove-orphans
+	$(PREVIEW_COMPOSE) down --remove-orphans
 
-preview-logs:
-	docker compose -f compose.preview.yml logs -f
+down:
+	$(COMPOSE) down --remove-orphans
 
-preview-clean:
-	docker compose -f compose.preview.yml down -v --remove-orphans
+logs:
+	$(COMPOSE) logs -f
 
-preview-restart: preview-down preview
+clean:
+	$(COMPOSE) down -v --remove-orphans
 
-preview-dev:
-	pnpm preview:dev
-
-preview-build-standalone:
-	pnpm preview:build
-
-preview-start:
-	@if [ ! -d ".next" ]; then echo "No .next build found. Run 'make preview-build-standalone' first (or 'make preview-run')."; exit 1; fi
-	pnpm preview:start
-
-preview-run: preview-build-standalone preview-start
+restart: down start
 
 # Load Testing Targets
 .PHONY: load-up load-down load-test
 
 load-up:
-	docker compose -f compose.load.yml up -d --build
+	$(LOAD_COMPOSE) up -d --build
 
 load-down:
-	docker compose -f compose.load.yml down --remove-orphans
+	$(LOAD_COMPOSE) down --remove-orphans
 
 load-test: load-down load-up
 	@echo "Waiting for frontend to be ready..."
@@ -70,7 +46,7 @@ load-test: load-down load-up
 		sleep 2; \
 	done
 	@echo "\nRunning k6 load tests (VUS=$(VUS), DURATION=$(DURATION), SCRIPT=$(SCRIPT))..."
-	docker compose -f compose.load.yml run --rm \
+	$(LOAD_COMPOSE) run --rm \
 		-e VUS=$(VUS) \
 		-e DURATION=$(DURATION) \
 		k6 run /scripts/$(or $(SCRIPT),landing.k6.js)

@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-// Runs against a preview build (pnpm preview:dev / preview image), where the
-// credentials provider accepts any email + password without Turnstile.
+// Runs against a preview build (pnpm preview:build + preview:start, or
+// `make preview`), where the credentials provider accepts any email +
+// password without Turnstile.
 test.describe('Chat Interaction', () => {
   test.beforeEach(async ({ page }) => {
     // Sign in via the credentials callback in the page's own context so the
