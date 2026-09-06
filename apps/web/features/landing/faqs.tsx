@@ -13,7 +13,7 @@ export const Faqs = () => {
   return (
     <section
       id="faqs"
-      className="w-full relative overflow-hidden flex flex-col items-center justify-center bg-background text-foreground transition-colors duration-300 py-16 md:py-24 px-4 sm:px-6 lg:px-8"
+      className="w-full relative overflow-hidden flex flex-col items-center justify-center bg-background text-foreground transition-colors duration-300 py-16 md:py-24 px-4 sm:px-6 lg:px-8 scroll-mt-20"
     >
       <div className="absolute inset-0 -z-10 overflow-hidden opacity-15 sm:opacity-20 pointer-events-none">
         <m.div
