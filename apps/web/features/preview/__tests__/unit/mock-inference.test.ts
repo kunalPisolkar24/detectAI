@@ -8,8 +8,8 @@ const SAMPLE_TEXT =
     3,
   )
 
-const isWordChar = (char: string | undefined): boolean =>
-  char !== undefined && /[\p{L}\p{N}_]/u.test(char)
+const coveredLength = (highlights: Array<{ charStart: number; charEnd: number }>): number =>
+  highlights.reduce((total, span) => total + (span.charEnd - span.charStart), 0)
 
 describe("generateMockAnalysis highlights", () => {
   it("produces bounded, sorted, non-overlapping spans", () => {
@@ -36,33 +36,39 @@ describe("generateMockAnalysis highlights", () => {
     }
   })
 
-  it("aligns spans to word boundaries", () => {
-    const { highlights } = generateMockAnalysis(SAMPLE_TEXT, "spark")
-    expect(highlights.length).toBeGreaterThan(0)
-
-    for (const span of highlights) {
-      const cutsWordAtStart =
-        span.charStart > 0 &&
-        isWordChar(SAMPLE_TEXT[span.charStart - 1]) &&
-        isWordChar(SAMPLE_TEXT[span.charStart])
-      const cutsWordAtEnd =
-        span.charEnd < SAMPLE_TEXT.length &&
-        isWordChar(SAMPLE_TEXT[span.charEnd - 1]) &&
-        isWordChar(SAMPLE_TEXT[span.charEnd])
-
-      expect(cutsWordAtStart).toBe(false)
-      expect(cutsWordAtEnd).toBe(false)
+  it("covers (nearly) the whole text like the live confidence map", () => {
+    for (const model of ["spark", "flare"] as const) {
+      const { highlights } = generateMockAnalysis(SAMPLE_TEXT, model)
+      expect(coveredLength(highlights) / SAMPLE_TEXT.length).toBeGreaterThanOrEqual(0.9)
     }
   })
 
-  it("keeps span labels consistent with their confidence", () => {
-    const { highlights } = generateMockAnalysis(SAMPLE_TEXT, "flare")
+  it("merges adjacent same-label intervals so neighbors always differ", () => {
+    const { highlights } = generateMockAnalysis(SAMPLE_TEXT, "spark")
+    expect(highlights.length).toBeGreaterThan(0)
 
-    for (const span of highlights) {
-      if (span.label === "AI") {
-        expect(span.aiConfidence).toBeGreaterThanOrEqual(0.5)
+    for (let i = 1; i < highlights.length; i++) {
+      expect(highlights[i].label).not.toBe(highlights[i - 1].label)
+    }
+  })
+
+  it("keeps the headline consistent with the confidence map", () => {
+    for (const model of ["spark", "flare"] as const) {
+      const result = generateMockAnalysis(SAMPLE_TEXT, model)
+
+      expect(result.scores.ai + result.scores.human).toBeCloseTo(1, 10)
+      expect(result.confidence).toBe(Math.max(result.scores.ai, result.scores.human))
+      if (result.label === "AI") {
+        expect(result.scores.ai).toBeGreaterThanOrEqual(result.scores.human)
       } else {
-        expect(span.aiConfidence).toBeLessThanOrEqual(0.5)
+        expect(result.scores.human).toBeGreaterThanOrEqual(result.scores.ai)
+      }
+      for (const span of result.highlights) {
+        if (span.label === "AI") {
+          expect(span.aiConfidence).toBeGreaterThanOrEqual(0.5)
+        } else {
+          expect(span.aiConfidence).toBeLessThanOrEqual(0.5)
+        }
       }
     }
   })
@@ -71,13 +77,23 @@ describe("generateMockAnalysis highlights", () => {
     const first = generateMockAnalysis(SAMPLE_TEXT, "spark")
     const second = generateMockAnalysis(SAMPLE_TEXT, "spark")
 
-    expect(second.highlights).toEqual(first.highlights)
-    expect(second.label).toBe(first.label)
+    expect(second).toEqual(first)
   })
 
-  it("still highlights short texts", () => {
-    const { highlights } = generateMockAnalysis("Hello world, this is a short sample.", "spark")
-    expect(highlights.length).toBeGreaterThan(0)
+  it("covers short texts with a single span", () => {
+    const text = "Hello world, this is a short sample."
+    const { highlights } = generateMockAnalysis(text, "spark")
+
+    expect(highlights).toHaveLength(1)
+    expect(highlights[0].charStart).toBe(0)
+    expect(highlights[0].charEnd).toBe(text.length)
+  })
+
+  it("handles empty text without spans", () => {
+    const result = generateMockAnalysis("", "spark")
+
+    expect(result.highlights).toEqual([])
+    expect(result.scores.ai + result.scores.human).toBeCloseTo(1, 10)
   })
 
   it("renders the full source text through the highlight panel segments", () => {
