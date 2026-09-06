@@ -10,14 +10,19 @@ export interface AssistantAnalysisMessageInput {
   analysis?: AnalysisResult
 }
 
+export interface ChatServiceScope {
+  /** Preview owner id (`preview-<email>`). Ignored by the gRPC service, where the session is authoritative. */
+  userId?: string
+}
+
 export interface IChatService {
-  createChat(initialMessage: string): Promise<ChatSession>
-  getChat(chatId: string): Promise<ChatSession>
-  getHistory(): Promise<ChatHistoryItem[]>
-  sendMessage(chatId: string, content: string, model: ModelType): Promise<Message>
+  createChat(initialMessage: string, scope?: ChatServiceScope): Promise<ChatSession>
+  getChat(chatId: string, scope?: ChatServiceScope): Promise<ChatSession>
+  getHistory(scope?: ChatServiceScope): Promise<ChatHistoryItem[]>
+  sendMessage(chatId: string, content: string, model: ModelType, scope?: ChatServiceScope): Promise<Message>
   saveUserMessage(chatId: string, userId: string, content: string, options?: { messageId?: string; createdAt?: Date }): Promise<Message>
   saveAssistantAnalysis(chatId: string, userId: string, analysisResult: AnalysisResult): Promise<Message>
   saveAssistantAnalysisMessage(chatId: string, userId: string, input: AssistantAnalysisMessageInput): Promise<Message>
-  deleteChat(chatId: string): Promise<void>
-  renameChat(chatId: string, newTitle: string): Promise<ChatHistoryItem>
+  deleteChat(chatId: string, scope?: ChatServiceScope): Promise<void>
+  renameChat(chatId: string, newTitle: string, scope?: ChatServiceScope): Promise<ChatHistoryItem>
 }

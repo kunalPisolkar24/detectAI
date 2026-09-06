@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import "server-only"
-import { AssistantAnalysisMessageInput, IChatService } from "./chat-service.interface"
+import type { AssistantAnalysisMessageInput, IChatService } from "./chat-service.interface"
 import { AnalysisResult, ChatSession, ChatHistoryItem, Message, ModelType } from "../types"
 import { getChatGrpcClient } from "@/lib/shared/grpc/chat-client"
 import { inferenceService } from "./inference-service"

@@ -3,8 +3,9 @@ import { createChatAction, deleteChatAction, renameChatAction } from "@/features
 import { useChatUIStore } from "../stores/ui-store"
 import { Message, ChatSession, ChatHistoryItem, ModelType, StreamingAnalysisProgress } from "../types"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { toast } from "sonner"
-import { isPreviewModeClient } from "@/lib/config/preview"
+import { getPreviewUserId, isPreviewModeClient } from "@/lib/config/preview"
 
 interface SerializedMessage extends Omit<Message, "createdAt"> {
   createdAt: string
@@ -77,6 +78,7 @@ const deserializeMessage = (message: SerializedMessage): Message => ({
 
 export const useSendMessage = () => {
   const queryClient = useQueryClient()
+  const { data: session } = useSession()
   const currentChatId = useChatUIStore((state) => state.currentChatId)
   const selectedModel = useChatUIStore((state) => state.selectedModel)
   const setCurrentChatId = useChatUIStore((state) => state.setCurrentChatId)
@@ -95,6 +97,12 @@ export const useSendMessage = () => {
       }
 
       const isPreview = isPreviewModeClient()
+      // Preview storage is namespaced per login (session id `preview-<email>`),
+      // so each set of credentials gets its own chats, premium, and usage.
+      const previewUserId = isPreview ? getPreviewUserId(session?.user) : null
+      if (isPreview && !previewUserId) {
+        throw new Error("Not authenticated")
+      }
 
       let activeChatId = currentChatId
       const effectiveModel = input.kind === "retry" ? input.model : selectedModel
@@ -102,7 +110,7 @@ export const useSendMessage = () => {
       if (input.kind === "new" && !activeChatId) {
         if (isPreview) {
           const { previewCreateChat } = await import("@/features/preview/lib/preview-db")
-          const newChat = await previewCreateChat(input.content)
+          const newChat = await previewCreateChat(previewUserId!, input.content)
           activeChatId = newChat.id
           setCurrentChatId(activeChatId)
           queryClient.setQueryData<ChatSession>(["chat", activeChatId], {
@@ -233,11 +241,11 @@ export const useSendMessage = () => {
         if (isPreview) {
           if (input.kind === "new" && optimisticUserId) {
             const { previewPersistUserMessage, previewPersistAssistantRunning } = await import("@/features/preview/lib/preview-db")
-            await previewPersistUserMessage(activeChatId, optimisticUserId, input.content, optimisticUserCreatedAt)
-            await previewPersistAssistantRunning(activeChatId, streamingAssistantId, optimisticAssistantCreatedAt, effectiveModel, optimisticUserId)
+            await previewPersistUserMessage(previewUserId!, activeChatId, optimisticUserId, input.content, optimisticUserCreatedAt)
+            await previewPersistAssistantRunning(previewUserId!, activeChatId, streamingAssistantId, optimisticAssistantCreatedAt, effectiveModel, optimisticUserId)
           } else if (input.kind === "retry") {
             const { previewSaveAssistantMessage } = await import("@/features/preview/lib/preview-db")
-            await previewSaveAssistantMessage(activeChatId, {
+            await previewSaveAssistantMessage(previewUserId!, activeChatId, {
               messageId: streamingAssistantId,
               state: "running",
               model: effectiveModel,
@@ -322,7 +330,7 @@ export const useSendMessage = () => {
           }
 
           const sourceId = input.kind === "retry" ? input.sourceMessageId : optimisticUserId!
-          const finalPersisted = await previewPersistAssistantFinal(activeChatId, streamingAssistantId, mockFinalAnalysis, sourceId)
+          const finalPersisted = await previewPersistAssistantFinal(previewUserId!, activeChatId, streamingAssistantId, mockFinalAnalysis, sourceId)
           const finalMessage: Message = {
             ...finalPersisted,
             isStreaming: false,
@@ -342,7 +350,7 @@ export const useSendMessage = () => {
           // Preview analytics: increment daily/total to replicate real trackUsage
           try {
             const { incrementPreviewUsage } = await import("@/features/preview/lib/preview-usage")
-            incrementPreviewUsage()
+            incrementPreviewUsage(previewUserId)
           } catch {}
 
           // Also update chat history title if first message
@@ -569,15 +577,15 @@ export const useSendMessage = () => {
           try {
             if (failure.rollbackUserMessage && optimisticUserId) {
               const { previewDeleteMessage } = await import("@/features/preview/lib/preview-db")
-              await previewDeleteMessage(optimisticUserId)
-              await previewDeleteMessage(activeAssistantMessageId)
+              await previewDeleteMessage(previewUserId!, optimisticUserId)
+              await previewDeleteMessage(previewUserId!, activeAssistantMessageId)
             } else if (!failure.retainAssistantMessage) {
               const { previewDeleteMessage } = await import("@/features/preview/lib/preview-db")
-              await previewDeleteMessage(activeAssistantMessageId)
+              await previewDeleteMessage(previewUserId!, activeAssistantMessageId)
             } else {
               const { previewPersistAssistantFailed } = await import("@/features/preview/lib/preview-db")
               const sourceId = input.kind === "retry" ? input.sourceMessageId : (optimisticUserId ?? "")
-              await previewPersistAssistantFailed(activeChatId, activeAssistantMessageId, effectiveModel, sourceId, failure.message, failure.kind === "cancelled" ? "cancelled" : "failed")
+              await previewPersistAssistantFailed(previewUserId!, activeChatId, activeAssistantMessageId, effectiveModel, sourceId, failure.message, failure.kind === "cancelled" ? "cancelled" : "failed")
             }
           } catch {}
         }
@@ -688,13 +696,20 @@ export const useSendMessage = () => {
 export const useChatMutations = () => {
   const queryClient = useQueryClient()
   const router = useRouter()
+  const { data: session } = useSession()
   const { currentChatId, setCurrentChatId } = useChatUIStore()
+
+  const requirePreviewUserId = (): string => {
+    const userId = getPreviewUserId(session?.user)
+    if (!userId) throw new Error("Not authenticated")
+    return userId
+  }
 
   const deleteChat = useMutation({
     mutationFn: async (chatId: string) => {
       if (isPreviewModeClient()) {
         const { previewDeleteChat } = await import("@/features/preview/lib/preview-db")
-        await previewDeleteChat(chatId)
+        await previewDeleteChat(requirePreviewUserId(), chatId)
         return
       }
       const result = await deleteChatAction(chatId)
@@ -718,7 +733,7 @@ export const useChatMutations = () => {
     mutationFn: async ({ id, title }: { id: string, title: string }) => {
       if (isPreviewModeClient()) {
         const { previewRenameChat } = await import("@/features/preview/lib/preview-db")
-        const updated = await previewRenameChat(id, title)
+        const updated = await previewRenameChat(requirePreviewUserId(), id, title)
         return updated
       }
       const result = await renameChatAction(id, title)

@@ -23,7 +23,7 @@ import { toast } from "sonner"
 import { extractTextFromFile } from "../actions/extract-file"
 import { LIVE_ANALYSIS_WARNING_CHARS, MAX_LIVE_ANALYSIS_CHARS, MIN_ANALYSIS_WORDS } from "../constants"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
-import { isPreviewModeClient, PREVIEW_TOOLTIP } from "@/lib/config/preview"
+import { isPreviewModeClient, getPreviewPremium, getPreviewUserId, PREVIEW_TOOLTIP } from "@/lib/config/preview"
 
 export const ChatInput = () => {
   const router = useRouter()
@@ -35,7 +35,7 @@ export const ChatInput = () => {
   useEffect(() => {
     if (!isPreview) return
     const read = () => {
-      try { setPreviewPremium(localStorage.getItem("preview:isPremium") === "true") } catch {}
+      setPreviewPremium(getPreviewPremium(getPreviewUserId(session?.user)))
     }
     read()
     const handler = () => read()
@@ -45,7 +45,7 @@ export const ChatInput = () => {
       window.removeEventListener("storage", handler)
       window.removeEventListener("preview:premium-change", handler as EventListener)
     }
-  }, [isPreview])
+  }, [isPreview, session?.user?.id])
   // In preview, premium is controlled by local mock; merge with JWT premium
   const isPremium = isPreview ? (previewPremium || (session?.user?.isPremium ?? false)) : (session?.user?.isPremium ?? false)
   const [localInput, setLocalInput] = useState("")

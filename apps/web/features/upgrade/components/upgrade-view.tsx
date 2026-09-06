@@ -12,7 +12,7 @@ import { env } from "@/lib/config/env"
 import { teko, inter } from "@/lib/core/fonts"
 import { Button } from "@/components/ui/button"
 import { Pricing } from "@/features/landing/pricing"
-import { isPreviewModeClient, setPreviewPremium } from "@/lib/config/preview"
+import { isPreviewModeClient, getPreviewUserId, setPreviewPremium } from "@/lib/config/preview"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -127,7 +127,7 @@ export const UpgradeView = () => {
   }, [status, session?.user.isPremium, isPreview])
 
   const handleConfirmPreviewUpgrade = async () => {
-    setPreviewPremium(true)
+    setPreviewPremium(true, getPreviewUserId(session?.user))
     try {
       await updateSession({ isPremium: true })
     } catch {}

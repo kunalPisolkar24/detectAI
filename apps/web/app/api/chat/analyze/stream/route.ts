@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/config/auth-options"
 import { MAX_LIVE_ANALYSIS_CHARS } from "@/features/chat/constants"
 import { analysisOrchestrator } from "@/features/chat/services/analysis-orchestrator"
 import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
+import { getPreviewUserId } from "@/lib/config/preview"
 import { env } from "@/lib/config/env"
 
 export const runtime = "nodejs"
@@ -48,7 +49,10 @@ export async function POST(request: Request) {
           { status: 400 },
         )
       }
-      const previewUserId = "preview-user"
+      const previewUserId = getPreviewUserId((await getServerSession(authOptions))?.user)
+      if (!previewUserId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      }
       const { createPreviewStream } = await import("@/features/preview/lib/preview-stream")
       const stream = await createPreviewStream({ ...parsed.data, userId: previewUserId }, request.signal)
       return new Response(stream, {

@@ -1,16 +1,19 @@
 import Dexie, { Table } from "dexie"
 import type { ChatHistoryItem, ChatSession, Message, AnalysisResult, ModelType } from "@/features/chat/types"
 import { orderMessagesForDisplay } from "@/features/chat/utils/order-messages-for-display"
+import { PREVIEW_LEGACY_USER_ID } from "@/lib/config/preview"
 
 interface PreviewChatRow {
   id: string
   title: string
   updatedAt: number
+  userId: string
 }
 
 interface PreviewMessageRow {
   id: string
   chatId: string
+  userId: string
   role: "user" | "assistant"
   content: string
   createdAt: number
@@ -31,6 +34,27 @@ class PreviewDB extends Dexie {
       chats: "id, updatedAt",
       messages: "id, chatId, createdAt",
     })
+    // v2 scopes every row to a preview user. Pre-scoping rows are backfilled
+    // as legacy and never match a real user query: archived, not migrated.
+    this.version(2)
+      .stores({
+        chats: "id, updatedAt, userId",
+        messages: "id, chatId, createdAt, userId, [chatId+userId]",
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table("chats")
+          .toCollection()
+          .modify((chat: PreviewChatRow) => {
+            chat.userId = PREVIEW_LEGACY_USER_ID
+          })
+        await tx
+          .table("messages")
+          .toCollection()
+          .modify((message: PreviewMessageRow) => {
+            message.userId = PREVIEW_LEGACY_USER_ID
+          })
+      })
   }
 }
 
@@ -75,11 +99,29 @@ function mapRowToHistory(row: PreviewChatRow): ChatHistoryItem {
   }
 }
 
-export async function previewCreateChat(initialMessage: string): Promise<ChatSession> {
+async function getOwnedChat(userId: string, chatId: string): Promise<PreviewChatRow> {
+  const row = isClient() ? await getDB()!.chats.get(chatId) : serverMemory.chats.get(chatId)
+  if (!row || row.userId !== userId) throw new Error("Chat not found")
+  return row
+}
+
+async function touchChat(userId: string, chatId: string, timestamp: number): Promise<void> {
+  if (isClient()) {
+    const db = getDB()!
+    await db.chats.update(chatId, { updatedAt: timestamp })
+  } else {
+    const chat = serverMemory.chats.get(chatId)
+    if (chat && chat.userId === userId) {
+      serverMemory.chats.set(chatId, { ...chat, updatedAt: timestamp })
+    }
+  }
+}
+
+export async function previewCreateChat(userId: string, initialMessage: string): Promise<ChatSession> {
   const id = crypto.randomUUID()
   const title = initialMessage.slice(0, 40) || "New Chat"
   const now = Date.now()
-  const row: PreviewChatRow = { id, title, updatedAt: now }
+  const row: PreviewChatRow = { id, title, updatedAt: now, userId }
 
   if (isClient()) {
     const db = getDB()!
@@ -91,20 +133,16 @@ export async function previewCreateChat(initialMessage: string): Promise<ChatSes
   return { id, title, messages: [], updatedAt: new Date(now) }
 }
 
-export async function previewGetChat(chatId: string): Promise<ChatSession> {
-  let chatRow: PreviewChatRow | undefined
+export async function previewGetChat(userId: string, chatId: string): Promise<ChatSession> {
+  const chatRow = await getOwnedChat(userId, chatId)
   let messageRows: PreviewMessageRow[] = []
 
   if (isClient()) {
     const db = getDB()!
-    chatRow = await db.chats.get(chatId)
-    if (!chatRow) throw new Error("Chat not found")
-    messageRows = await db.messages.where("chatId").equals(chatId).sortBy("createdAt")
+    messageRows = await db.messages.where("[chatId+userId]").equals([chatId, userId]).sortBy("createdAt")
   } else {
-    chatRow = serverMemory.chats.get(chatId)
-    if (!chatRow) throw new Error("Chat not found")
     messageRows = Array.from(serverMemory.messages.values())
-      .filter((m) => m.chatId === chatId)
+      .filter((m) => m.chatId === chatId && m.userId === userId)
       .sort((a, b) => a.createdAt - b.createdAt)
   }
 
@@ -117,44 +155,47 @@ export async function previewGetChat(chatId: string): Promise<ChatSession> {
   }
 }
 
-export async function previewGetHistory(): Promise<ChatHistoryItem[]> {
+export async function previewGetHistory(userId: string): Promise<ChatHistoryItem[]> {
   let rows: PreviewChatRow[]
   if (isClient()) {
     const db = getDB()!
-    rows = await db.chats.orderBy("updatedAt").reverse().toArray()
+    rows = await db.chats.where("userId").equals(userId).sortBy("updatedAt")
+    rows.reverse()
   } else {
-    rows = Array.from(serverMemory.chats.values()).sort((a, b) => b.updatedAt - a.updatedAt)
+    rows = Array.from(serverMemory.chats.values())
+      .filter((c) => c.userId === userId)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
   }
   return rows.map(mapRowToHistory)
 }
 
-export async function previewDeleteChat(chatId: string): Promise<void> {
+export async function previewDeleteChat(userId: string, chatId: string): Promise<void> {
+  await getOwnedChat(userId, chatId)
   if (isClient()) {
     const db = getDB()!
     await db.transaction("rw", db.chats, db.messages, async () => {
       await db.chats.delete(chatId)
-      await db.messages.where("chatId").equals(chatId).delete()
+      await db.messages.where("[chatId+userId]").equals([chatId, userId]).delete()
     })
   } else {
     serverMemory.chats.delete(chatId)
     for (const [id, msg] of serverMemory.messages) {
-      if (msg.chatId === chatId) serverMemory.messages.delete(id)
+      if (msg.chatId === chatId && msg.userId === userId) serverMemory.messages.delete(id)
     }
   }
 }
 
-export async function previewRenameChat(chatId: string, newTitle: string): Promise<ChatHistoryItem> {
+export async function previewRenameChat(userId: string, chatId: string, newTitle: string): Promise<ChatHistoryItem> {
   const now = Date.now()
   if (isClient()) {
     const db = getDB()!
-    const existing = await db.chats.get(chatId)
-    if (!existing) throw new Error("Chat not found")
+    await getOwnedChat(userId, chatId)
     await db.chats.update(chatId, { title: newTitle, updatedAt: now })
     const updated = await db.chats.get(chatId)
     return mapRowToHistory(updated!)
   } else {
-    const existing = serverMemory.chats.get(chatId)
-    if (!existing) throw new Error("Chat not found")
+    await getOwnedChat(userId, chatId)
+    const existing = serverMemory.chats.get(chatId)!
     const updated = { ...existing, title: newTitle, updatedAt: now }
     serverMemory.chats.set(chatId, updated)
     return mapRowToHistory(updated)
@@ -162,15 +203,18 @@ export async function previewRenameChat(chatId: string, newTitle: string): Promi
 }
 
 export async function previewSaveUserMessage(
+  userId: string,
   chatId: string,
   content: string,
   options?: { messageId?: string; createdAt?: Date },
 ): Promise<Message> {
+  await getOwnedChat(userId, chatId)
   const id = options?.messageId ?? crypto.randomUUID()
   const now = options?.createdAt ? options.createdAt.getTime() : Date.now()
   const row: PreviewMessageRow = {
     id,
     chatId,
+    userId,
     role: "user",
     content,
     createdAt: now,
@@ -179,25 +223,26 @@ export async function previewSaveUserMessage(
   if (isClient()) {
     const db = getDB()!
     await db.messages.put(row)
-    await db.chats.update(chatId, { updatedAt: now })
   } else {
     serverMemory.messages.set(id, row)
-    const chat = serverMemory.chats.get(chatId)
-    if (chat) serverMemory.chats.set(chatId, { ...chat, updatedAt: now })
   }
+  await touchChat(userId, chatId, now)
 
   return mapRowToMessage(row)
 }
 
 export async function previewPersistUserMessage(
+  userId: string,
   chatId: string,
   id: string,
   content: string,
   createdAt: Date,
 ): Promise<void> {
+  await getOwnedChat(userId, chatId)
   const row: PreviewMessageRow = {
     id,
     chatId,
+    userId,
     role: "user",
     content,
     createdAt: createdAt.getTime(),
@@ -206,24 +251,25 @@ export async function previewPersistUserMessage(
   if (isClient()) {
     const db = getDB()!
     await db.messages.put(row)
-    await db.chats.update(chatId, { updatedAt: now })
   } else {
     serverMemory.messages.set(id, row)
-    const chat = serverMemory.chats.get(chatId)
-    if (chat) serverMemory.chats.set(chatId, { ...chat, updatedAt: now })
   }
+  await touchChat(userId, chatId, now)
 }
 
 export async function previewPersistAssistantRunning(
+  userId: string,
   chatId: string,
   id: string,
   createdAt: Date,
   model: ModelType,
   sourceMessageId: string,
 ): Promise<void> {
+  await getOwnedChat(userId, chatId)
   const row: PreviewMessageRow = {
     id,
     chatId,
+    userId,
     role: "assistant",
     content: "",
     createdAt: createdAt.getTime(),
@@ -234,22 +280,21 @@ export async function previewPersistAssistantRunning(
   if (isClient()) {
     const db = getDB()!
     await db.messages.put(row)
-    await db.chats.update(chatId, { updatedAt: now })
   } else {
     serverMemory.messages.set(id, row)
-    const chat = serverMemory.chats.get(chatId)
-    if (chat) serverMemory.chats.set(chatId, { ...chat, updatedAt: now })
   }
+  await touchChat(userId, chatId, now)
 }
 
 export async function previewPersistAssistantFinal(
+  userId: string,
   chatId: string,
   id: string,
   analysis: AnalysisResult,
   sourceMessageId: string,
 ): Promise<Message> {
   // Reuse previewSaveAssistantMessage for completion
-  return previewSaveAssistantMessage(chatId, {
+  return previewSaveAssistantMessage(userId, chatId, {
     messageId: id,
     state: "completed",
     model: analysis.model,
@@ -259,6 +304,7 @@ export async function previewPersistAssistantFinal(
 }
 
 export async function previewPersistAssistantFailed(
+  userId: string,
   chatId: string,
   id: string,
   model: ModelType,
@@ -266,7 +312,7 @@ export async function previewPersistAssistantFailed(
   error: string,
   state: "failed" | "cancelled",
 ): Promise<void> {
-  await previewSaveAssistantMessage(chatId, {
+  await previewSaveAssistantMessage(userId, chatId, {
     messageId: id,
     state,
     model,
@@ -276,6 +322,7 @@ export async function previewPersistAssistantFailed(
 }
 
 export async function previewSaveAssistantMessage(
+  userId: string,
   chatId: string,
   input: {
     messageId?: string
@@ -287,6 +334,7 @@ export async function previewSaveAssistantMessage(
     analysis?: AnalysisResult
   },
 ): Promise<Message> {
+  await getOwnedChat(userId, chatId)
   const isUpdate = !!input.messageId
   const id = input.messageId ?? crypto.randomUUID()
   const createdAtMs = input.createdAt ? input.createdAt.getTime() : Date.now()
@@ -299,9 +347,12 @@ export async function previewSaveAssistantMessage(
   } else {
     existing = serverMemory.messages.get(id)
   }
+  if (existing && existing.userId !== userId) throw new Error("Message not found")
+  if (existing && existing.chatId !== chatId) throw new Error("Message not found")
   const row: PreviewMessageRow = {
     id,
     chatId,
+    userId,
     role: "assistant",
     content: shouldStoreAnalysis ? "" : existing?.content ?? "",
     createdAt: existing ? existing.createdAt : createdAtMs,
@@ -336,20 +387,22 @@ export async function previewSaveAssistantMessage(
   if (isClient()) {
     const db = getDB()!
     await db.messages.put(row)
-    await db.chats.update(chatId, { updatedAt: now })
   } else {
     serverMemory.messages.set(id, row)
-    const chat = serverMemory.chats.get(chatId)
-    if (chat) serverMemory.chats.set(chatId, { ...chat, updatedAt: now })
   }
+  await touchChat(userId, chatId, now)
   return mapRowToMessage(row)
 }
 
-export async function previewDeleteMessage(messageId: string): Promise<void> {
+export async function previewDeleteMessage(userId: string, messageId: string): Promise<void> {
   if (isClient()) {
     const db = getDB()!
+    const existing = await db.messages.get(messageId)
+    if (!existing || existing.userId !== userId) return
     await db.messages.delete(messageId)
   } else {
+    const existing = serverMemory.messages.get(messageId)
+    if (!existing || existing.userId !== userId) return
     serverMemory.messages.delete(messageId)
   }
 }

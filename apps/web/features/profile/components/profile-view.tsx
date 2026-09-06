@@ -8,7 +8,7 @@ import { cn } from "@/lib/core/utils"
 import { teko } from "@/lib/core/fonts"
 import { GeneralTab } from "./general-tab"
 import { BillingTab } from "./billing-tab"
-import { isPreviewModeClient } from "@/lib/config/preview"
+import { isPreviewModeClient, getPreviewPremium, getPreviewUserId } from "@/lib/config/preview"
 import { getPreviewUsage, subscribePreviewUsage, type PreviewUsage } from "@/features/preview/lib/preview-usage"
 
 type TabType = "general" | "billing"
@@ -71,17 +71,18 @@ const SidebarNav = ({ activeTab, onTabChange }: SidebarNavProps) => {
 export const ProfileView = ({ user }: ProfileViewProps) => {
   const [activeTab, setActiveTab] = useState<TabType>("general")
   const isPreview = isPreviewModeClient()
+  const previewUserId = isPreview ? getPreviewUserId(user) : null
   const [previewPremium, setPreviewPremium] = useState(user.isPremium)
   const [previewEndsAt, setPreviewEndsAt] = useState<Date | null>(user.subscriptionEndsAt)
   const [previewUsage, setPreviewUsage] = useState<PreviewUsage>(() =>
-    isPreviewModeClient() ? getPreviewUsage() : { dailyCount: user.apiCallCountDaily, totalCount: user.apiCallCountTotal },
+    isPreviewModeClient() ? getPreviewUsage(previewUserId) : { dailyCount: user.apiCallCountDaily, totalCount: user.apiCallCountTotal },
   )
 
   useEffect(() => {
     if (!isPreview) return
     const syncPremium = () => {
       try {
-        const val = localStorage.getItem("preview:isPremium") === "true"
+        const val = getPreviewPremium(previewUserId)
         setPreviewPremium(val)
         if (val) {
           const ends = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
@@ -95,13 +96,13 @@ export const ProfileView = ({ user }: ProfileViewProps) => {
     const handler = () => syncPremium()
     window.addEventListener("storage", handler)
     window.addEventListener("preview:premium-change", handler as EventListener)
-    const unsubscribeUsage = subscribePreviewUsage(setPreviewUsage)
+    const unsubscribeUsage = subscribePreviewUsage(setPreviewUsage, previewUserId)
     return () => {
       window.removeEventListener("storage", handler)
       window.removeEventListener("preview:premium-change", handler as EventListener)
       unsubscribeUsage()
     }
-  }, [isPreview])
+  }, [isPreview, previewUserId])
 
   const mergedUser = isPreview
     ? {

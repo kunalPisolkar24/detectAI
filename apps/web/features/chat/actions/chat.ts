@@ -5,15 +5,32 @@ import { MAX_LIVE_ANALYSIS_CHARS } from "@/features/chat/constants"
 import { ModelType, ChatSession, Message, ChatHistoryItem } from "@/features/chat/types"
 import { authOptions } from "@/lib/config/auth-options"
 import { getServerSession } from "next-auth"
+import { getPreviewUserId } from "@/lib/config/preview"
+import type { ChatServiceScope } from "@/features/chat/services/chat-service.interface"
 import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
 
 type ActionResponse<T> =
   | { success: true; data: T }
   | { success: false; error: string; isRateLimit?: boolean }
 
+const isPreviewServer = () =>
+  process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+
+/**
+ * Resolve the preview storage scope from the session. Returns undefined
+ * outside preview mode (the gRPC service ignores it; the session there is
+ * authoritative). Inside preview, a missing session fails closed downstream.
+ */
+async function previewScope(): Promise<ChatServiceScope | undefined> {
+  if (!isPreviewServer()) return undefined
+  const session = await getServerSession(authOptions)
+  const userId = getPreviewUserId(session?.user)
+  return userId ? { userId } : undefined
+}
+
 export async function createChatAction(initialMessage: string): Promise<ActionResponse<ChatSession>> {
   try {
-    const chat = await chatService.createChat(initialMessage)
+    const chat = await chatService.createChat(initialMessage, await previewScope())
     return { success: true, data: chat }
   } catch (error) {
     return {
@@ -25,7 +42,7 @@ export async function createChatAction(initialMessage: string): Promise<ActionRe
 
 export async function getChatAction(chatId: string): Promise<ActionResponse<ChatSession>> {
   try {
-    const chat = await chatService.getChat(chatId)
+    const chat = await chatService.getChat(chatId, await previewScope())
     return { success: true, data: chat }
   } catch (error) {
     return {
@@ -37,7 +54,7 @@ export async function getChatAction(chatId: string): Promise<ActionResponse<Chat
 
 export async function getChatHistoryAction(): Promise<ActionResponse<ChatHistoryItem[]>> {
   try {
-    const history = await chatService.getHistory()
+    const history = await chatService.getHistory(await previewScope())
     return { success: true, data: history }
   } catch (error) {
     return {
@@ -70,7 +87,10 @@ export async function sendMessageAction(chatId: string, content: string, model: 
       }
     }
 
-    const message = await chatService.sendMessage(chatId, content, model)
+    const scope = await previewScope()
+    const message = scope
+      ? await chatService.sendMessage(chatId, content, model, scope)
+      : await chatService.sendMessage(chatId, content, model)
 
     if (process.env.PREVIEW_MODE !== "true" && process.env.NEXT_PUBLIC_PREVIEW_MODE !== "true") {
       const session = await getServerSession(authOptions)
@@ -94,7 +114,7 @@ export async function sendMessageAction(chatId: string, content: string, model: 
 
 export async function deleteChatAction(chatId: string): Promise<ActionResponse<void>> {
   try {
-    await chatService.deleteChat(chatId)
+    await chatService.deleteChat(chatId, await previewScope())
     return { success: true, data: undefined }
   } catch (error) {
     return {
@@ -106,7 +126,7 @@ export async function deleteChatAction(chatId: string): Promise<ActionResponse<v
 
 export async function renameChatAction(chatId: string, newTitle: string): Promise<ActionResponse<ChatHistoryItem>> {
   try {
-    const result = await chatService.renameChat(chatId, newTitle)
+    const result = await chatService.renameChat(chatId, newTitle, await previewScope())
     return { success: true, data: result }
   } catch (error) {
     return {

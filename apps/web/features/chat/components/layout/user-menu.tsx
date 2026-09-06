@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useTheme } from "next-themes"
 import { useRouter } from "next/navigation"
-import { isPreviewModeClient } from "@/lib/config/preview"
+import { getPreviewPremium, getPreviewUserId, isPreviewModeClient } from "@/lib/config/preview"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +39,7 @@ export const UserMenu = ({ isCollapsed }: UserMenuProps) => {
   useEffect(() => {
     if (!isPreview) return
     const sync = () => {
-      try { setPreviewPremium(localStorage.getItem("preview:isPremium") === "true") } catch {}
+      setPreviewPremium(getPreviewPremium(getPreviewUserId(session?.user)))
     }
     sync()
     window.addEventListener("storage", sync)
@@ -48,7 +48,7 @@ export const UserMenu = ({ isCollapsed }: UserMenuProps) => {
       window.removeEventListener("storage", sync)
       window.removeEventListener("preview:premium-change", sync as EventListener)
     }
-  }, [isPreview])
+  }, [isPreview, session?.user?.id])
   const rawUser = session?.user
   const user = rawUser ? { ...rawUser, isPremium: isPreview ? (previewPremium || rawUser.isPremium) : rawUser.isPremium } : rawUser
 

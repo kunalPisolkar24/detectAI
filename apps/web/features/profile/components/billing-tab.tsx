@@ -21,7 +21,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { cancelSubscriptionAction } from "../actions/cancel-subscription"
-import { isPreviewModeClient, setPreviewPremium } from "@/lib/config/preview"
+import { isPreviewModeClient, getPreviewUserId, setPreviewPremium } from "@/lib/config/preview"
 import { useSession } from "next-auth/react"
 
 interface BillingTabProps {
@@ -35,7 +35,7 @@ interface BillingTabProps {
 
 export const BillingTab = ({ user, paddleCancellationScheduled }: BillingTabProps) => {
   const router = useRouter()
-  const { update: updateSession } = useSession()
+  const { data: session, update: updateSession } = useSession()
   const isPreview = isPreviewModeClient()
   const [isPending, startTransition] = useTransition()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -43,7 +43,7 @@ export const BillingTab = ({ user, paddleCancellationScheduled }: BillingTabProp
   const handleConfirmCancel = () => {
     if (isPreview) {
       startTransition(async () => {
-        setPreviewPremium(false)
+        setPreviewPremium(false, getPreviewUserId(session?.user))
         try {
           await updateSession({ isPremium: false })
         } catch {}
