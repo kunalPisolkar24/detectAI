@@ -42,31 +42,33 @@ deps:
 	go get github.com/testcontainers/testcontainers-go
 	go get github.com/testcontainers/testcontainers-go/modules/rabbitmq
 
-# Gateway with RabbitMQ via infra compose files
+# Gateway with RabbitMQ via shared infra atoms (infra/docker/rabbitmq/*)
 # Usage: make gateway-up [WITH_RABBITMQ=0|1] [WITH_UI=0|1]
 #   gateway only:              make gateway-up WITH_RABBITMQ=0
 #   gateway + rabbitmq:        make gateway-up WITH_UI=0
 #   gateway + rabbitmq + ui:   make gateway-up  (default)
+# RabbitMQ templates live at infra/docker/rabbitmq/standalone.yml (+ management.yml)
+# Any service can `include: path: ../../../infra/docker/rabbitmq/standalone.yml`.
 gateway-build:
 	docker build -t payment-gateway .
 
 gateway-up:
 	@WITH_RABBITMQ=$${WITH_RABBITMQ:-1} WITH_UI=$${WITH_UI:-1}; \
 	COMPOSE="docker compose -f infra/compose.yml"; \
-	if [ "$$WITH_RABBITMQ" = "1" ]; then COMPOSE="$$COMPOSE -f infra/compose.with-rabbit.yml"; fi; \
-	if [ "$$WITH_UI" = "1" ] && [ "$$WITH_RABBITMQ" = "1" ]; then COMPOSE="$$COMPOSE -f infra/compose.with-ui.yml"; fi; \
+	if [ "$$WITH_RABBITMQ" = "1" ]; then COMPOSE="$$COMPOSE -f ../../../infra/docker/rabbitmq/standalone.yml"; fi; \
+	if [ "$$WITH_UI" = "1" ] && [ "$$WITH_RABBITMQ" = "1" ]; then COMPOSE="$$COMPOSE -f ../../../infra/docker/rabbitmq/management.yml"; fi; \
 	echo "Starting gateway with WITH_RABBITMQ=$$WITH_RABBITMQ WITH_UI=$$WITH_UI"; \
 	$$COMPOSE up --build -d; \
 	$$COMPOSE ps
 
 gateway-down:
-	docker compose -f infra/compose.yml -f infra/compose.with-rabbit.yml -f infra/compose.with-ui.yml down --remove-orphans
+	docker compose -f infra/compose.yml -f ../../../infra/docker/rabbitmq/standalone.yml -f ../../../infra/docker/rabbitmq/management.yml down --remove-orphans
 
 gateway-down-v:
-	docker compose -f infra/compose.yml -f infra/compose.with-rabbit.yml -f infra/compose.with-ui.yml down -v --remove-orphans
+	docker compose -f infra/compose.yml -f ../../../infra/docker/rabbitmq/standalone.yml -f ../../../infra/docker/rabbitmq/management.yml down -v --remove-orphans
 
 gateway-logs:
-	docker compose -f infra/compose.yml -f infra/compose.with-rabbit.yml -f infra/compose.with-ui.yml logs -f payment-gateway
+	docker compose -f infra/compose.yml -f ../../../infra/docker/rabbitmq/standalone.yml -f ../../../infra/docker/rabbitmq/management.yml logs -f payment-gateway
 
 gateway-ps:
-	docker compose -f infra/compose.yml -f infra/compose.with-rabbit.yml -f infra/compose.with-ui.yml ps
+	docker compose -f infra/compose.yml -f ../../../infra/docker/rabbitmq/standalone.yml -f ../../../infra/docker/rabbitmq/management.yml ps

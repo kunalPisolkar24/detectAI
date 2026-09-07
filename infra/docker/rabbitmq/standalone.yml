@@ -1,0 +1,37 @@
+# Standalone rabbitmq template (single instance, no HA).
+#
+# Importable atom: reference it from a stack via compose `include:`
+# (paths resolve relative to the including file), e.g.:
+#   include:
+#     - path: ../../../infra/docker/rabbitmq/standalone.yml
+# or merge it with `-f` (`docker compose -f standalone.yml -f management.yml`).
+# Everything varying is a variable (see infra/docker/rabbitmq/.env.example);
+# importing projects isolate volumes and networks by project name. No
+# `networks:` / `container_name` here so multiple projects can run side by
+# side. Standalone uses `management-alpine` image but only publishes 5672;
+# for the management UI add the overlay:
+#   include:
+#     - path: ../../../infra/docker/rabbitmq/management.yml
+x-rabbitmq: &rabbitmq
+  image: rabbitmq:3-management-alpine
+  restart: unless-stopped
+  environment:
+    RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+    RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+  healthcheck:
+    test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+    interval: 5s
+    timeout: 10s
+    retries: 10
+    start_period: 10s
+
+services:
+  rabbitmq:
+    <<: *rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+volumes:
+  rabbitmq_data:

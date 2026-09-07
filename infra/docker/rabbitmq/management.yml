@@ -1,0 +1,16 @@
+# RabbitMQ management UI overlay.
+#
+# Additive to standalone.yml: publishes the management UI port.
+# Include after standalone.yml (or merge with `-f`):
+#   include:
+#     - path: ../../../infra/docker/rabbitmq/standalone.yml
+#     - path: ../../../infra/docker/rabbitmq/management.yml
+# NOTE: for `include:` merging the image from standalone is kept;
+# standalone already uses `3-management-alpine` so only the port is needed
+# here. The `image:` line below is kept for `-f` merging where it overrides
+# a plain `3-alpine` standalone if one was used.
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "${RABBITMQ_UI_PORT:-15672}:15672"

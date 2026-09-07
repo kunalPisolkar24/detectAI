@@ -13,9 +13,3 @@ services:
       - GIN_MODE=${GIN_MODE:-release}
     ports:
       - "${PORT_GATEWAY:-8080}:8080"
-    networks:
-      - detectai_net
-
-networks:
-  detectai_net:
-    name: ${detect_ai_network:-detect-ai-network}

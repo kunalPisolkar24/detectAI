@@ -24,6 +24,6 @@ Failed validation → service exits `log.Fatal`.
 ## Compose
 
 * `infra/compose.yml` — gateway only (for `WITH_RABBITMQ=0`).
-* `infra/compose.with-rabbit.yml` — adds `rabbitmq:5672` + `15672` UI.
-* `infra/compose.with-ui.yml` — adds management UI (needs rabbit).
-* `infra/compose.load.yml` — `rabbitmq + gateway + k6` for `make load-test`.
+* `infra/docker/rabbitmq/standalone.yml` — shared RabbitMQ atom (single instance, `5672`, volume `rabbitmq_data`).
+* `infra/docker/rabbitmq/management.yml` — UI overlay (adds `15672`, switches to `management-alpine`). Include after `standalone.yml`.
+* `infra/compose.load.yml` — `rabbitmq + gateway + k6` for `make load-test` (now `include:` the two atoms above, isolated on `gateway_loadnet`).

@@ -1,12 +1,9 @@
+include:
+  - path: ../../../../infra/docker/rabbitmq/standalone.yml
+  - path: ../../../../infra/docker/rabbitmq/management.yml
+
 services:
   rabbitmq:
-    image: rabbitmq:3-management-alpine
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 5s
-      timeout: 10s
-      retries: 10
-      start_period: 10s
     networks:
       - gateway_loadnet
 
