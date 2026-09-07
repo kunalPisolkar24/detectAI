@@ -90,6 +90,12 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL}
     ports:
       - "${PORT_FRONTEND:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/readyz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
     depends_on:
       db-migrate:
         condition: service_completed_successfully
