@@ -7,7 +7,7 @@ COPY prisma ./prisma
 
 RUN bun install --frozen-lockfile
 
-RUN DATABASE_URL=postgresql://127.0.0.1:5432/dummy bun prisma generate
+RUN DATABASE_URL=postgresql://127.0.0.1:5432/mock-db-not-configured bun prisma generate
 
 COPY . .
 

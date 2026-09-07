@@ -22,7 +22,7 @@ crash even if `.next` is stale.
 - **Inference** – `features/preview/lib/mock-inference.ts` (`generateMockAnalysis` + `mockStreamDocument`). `/api/chat/analyze/stream` returns a synthetic NDJSON stream (`accepted → started → progress×n → final`) and `features/chat/hooks/use-chat-mutation.ts` drives the same UI state as production, including cancel.
 - **Document parsing** – `extractTextFromFile` returns `{ error: "Document parsing is not available in preview mode" }`; attach button (`chat-input.tsx`) is disabled and wrapped in `Tooltip` with the same message.
 - **Payments** – No `initializePaddle` / `Checkout.open`. `UpgradeView` opens a local `AlertDialog` ("Are you sure you want to upgrade?") → writes `localStorage preview:isPremium=true` → `updateSession({isPremium:true})` → `router.push("/chat")`. `confirmUpgradeAction`/`cancelSubscriptionAction`/`updateProfileAction` early-return success in preview. `Profile/page.tsx` renders a static preview user; `ProfileView`/`BillingTab` read `preview:isPremium` from localStorage and expose a local downgrade.
-- **Rate limiting / analytics / metrics / infra** – `prisma.ts`/`redis.ts`/`redis-limit.ts`/`grpc-client.ts`/`chat-client.ts`/`analytics-publisher.ts` all return no-op proxies when preview so imports don’t crash even with dummy env. `app/(main)/chat/page.tsx` skips `rateLimitService.checkLimit`.
+- **Rate limiting / analytics / metrics / infra** – `prisma.ts`/`redis.ts`/`redis-limit.ts`/`grpc-client.ts`/`chat-client.ts`/`analytics-publisher.ts` all return no-op proxies when preview so imports don’t crash even with mock env. `app/(main)/chat/page.tsx` skips `rateLimitService.checkLimit`.
 - **Notices** – `features/preview/components/preview-mode-dialog.tsx` dialog on `/login` & `/signup` (“any credentials work”) and on `/chat`/`/profile`/`/upgrade` when authenticated. Checkbox writes `preview:dontShowNotice`.
 - **Model gating** – `Flare` stays locked until mock premium, mirroring production.
 
@@ -49,7 +49,7 @@ NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
 TURNSTILE_SECRET_KEY=1x00000000000000000000AA
 NEXTAUTH_SECRET=preview-secret-for-local-dev-only-32chars
 NEXTAUTH_URL=http://localhost:3000
-NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=dummy
+NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=mock-paddle-client-token-not-configured
 ```
 
 > `preview:start` alone requires a prior `preview:build` — the browser bundle

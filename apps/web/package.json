@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "preview:build": "PREVIEW=true PREVIEW_MODE=true NEXT_PUBLIC_PREVIEW_MODE=true NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA TURNSTILE_SECRET_KEY=1x00000000000000000000AA NEXTAUTH_SECRET=preview-secret-for-local-dev-only-32chars NEXTAUTH_URL=http://localhost:3000 NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=dummy next build",
+    "preview:build": "PREVIEW=true PREVIEW_MODE=true NEXT_PUBLIC_PREVIEW_MODE=true NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA TURNSTILE_SECRET_KEY=1x00000000000000000000AA NEXTAUTH_SECRET=preview-secret-for-local-dev-only-32chars NEXTAUTH_URL=http://localhost:3000 NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=mock-paddle-client-token-not-configured next build",
     "preview:start": "PREVIEW=true PREVIEW_MODE=true NEXT_PUBLIC_PREVIEW_MODE=true NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA TURNSTILE_SECRET_KEY=1x00000000000000000000AA NEXTAUTH_SECRET=preview-secret-for-local-dev-only-32chars NEXTAUTH_URL=http://localhost:3000 next start",
     "build": "next build",
     "start": "next start",

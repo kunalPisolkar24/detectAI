@@ -41,12 +41,12 @@ services:
       - NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
       - NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=load-test-token
       - TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
-      - GITHUB_ID=dummy
-      - GITHUB_SECRET=dummy
-      - GOOGLE_ID=dummy
-      - GOOGLE_SECRET=dummy
+      - GITHUB_ID=mock-github-client-id-not-configured
+      - GITHUB_SECRET=mock-github-client-secret-not-configured
+      - GOOGLE_ID=mock-google-client-id-not-configured
+      - GOOGLE_SECRET=mock-google-client-secret-not-configured
       - REDIS_USAGE_URL=redis://:load-redis-password@redis-app:6379
-      - AI_SERVICE_API_KEY=dummy
+      - AI_SERVICE_API_KEY=mock-ai-service-api-key-not-configured
     depends_on:
       postgres:
         condition: service_healthy

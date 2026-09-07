@@ -57,22 +57,22 @@ jobs:
       - name: Build Application
         env:
           SKIP_ENV_VALIDATION: true
-          DATABASE_URL: "postgresql://localhost:5432/dummy"
-          DATABASE_URL_REPLICA: "postgresql://localhost:5432/dummy"
-          NEXTAUTH_SECRET: "dummy-secret"
+          DATABASE_URL: "postgresql://localhost:5432/mock-db-not-configured"
+          DATABASE_URL_REPLICA: "postgresql://localhost:5432/mock-db-not-configured"
+          NEXTAUTH_SECRET: "mock-nextauth-secret-not-configured"
           NEXTAUTH_URL: "http://localhost:3000"
           REDIS_USAGE_URL: "redis://localhost:6379"
           REDIS_MASTER_NAME: "mymaster"
           FILE_EXTRACTOR_API_URL: "http://localhost:8080"
-          NEXT_PUBLIC_TURNSTILE_SITE_KEY: "dummy"
-          NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: "dummy"
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: "mock-turnstile-site-key-not-configured"
+          NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: "mock-paddle-client-token-not-configured"
           AI_SERVICE_URL: "localhost:50051"
-          AI_SERVICE_API_KEY: "dummy"
-          GOOGLE_ID: "dummy"
-          GOOGLE_SECRET: "dummy"
-          GITHUB_ID: "dummy"
-          GITHUB_SECRET: "dummy"
-          TURNSTILE_SECRET_KEY: "dummy"
+          AI_SERVICE_API_KEY: "mock-ai-service-api-key-not-configured"
+          GOOGLE_ID: "mock-google-client-id-not-configured"
+          GOOGLE_SECRET: "mock-google-client-secret-not-configured"
+          GITHUB_ID: "mock-github-client-id-not-configured"
+          GITHUB_SECRET: "mock-github-client-secret-not-configured"
+          TURNSTILE_SECRET_KEY: "mock-turnstile-secret-key-not-configured"
         run: pnpm build
 
       - name: Run Unit & UI Integration Tests
@@ -117,8 +117,10 @@ jobs:
           NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${{ secrets.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN || vars.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN }}
         run: |
           test -n "$NEXT_PUBLIC_TURNSTILE_SITE_KEY"
+          test "$NEXT_PUBLIC_TURNSTILE_SITE_KEY" != "mock-turnstile-site-key-not-configured"
           test "$NEXT_PUBLIC_TURNSTILE_SITE_KEY" != "dummy"
           test -n "$NEXT_PUBLIC_PADDLE_CLIENT_TOKEN"
+          test "$NEXT_PUBLIC_PADDLE_CLIENT_TOKEN" != "mock-paddle-client-token-not-configured"
           test "$NEXT_PUBLIC_PADDLE_CLIENT_TOKEN" != "dummy"
 
       - name: Build and Push

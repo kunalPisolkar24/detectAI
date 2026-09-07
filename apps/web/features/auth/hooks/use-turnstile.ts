@@ -1,7 +1,11 @@
 import { useCallback, useMemo, useState } from "react"
 import { env } from "@/lib/config/env"
 
-const PLACEHOLDER_SITE_KEYS = new Set(["dummy"])
+const PLACEHOLDER_SITE_KEYS = new Set([
+  "mock-turnstile-site-key-not-configured",
+  // Legacy fallback — older .env.example used plain "dummy".
+  "dummy",
+])
 
 const ERROR_MESSAGES: Record<string, string> = {
   expired: "Verification expired. Retry to continue.",
