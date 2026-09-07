@@ -1,4 +1,5 @@
 import { redisWriter } from "@/lib/infrastructure/redis"
+import { logger } from "@/lib/infrastructure/logger"
 
 const RETRY_COUNT = 10
 const RETRY_DELAY_MS = 200
@@ -12,17 +13,29 @@ export const lockService = {
     const lockValue = crypto.randomUUID()
 
     for (let attempt = 0; attempt <= RETRY_COUNT; attempt++) {
-      const acquired = await redisWriter.set(lockKey, lockValue, "PX", ttlMs, "NX")
+      let acquired: string | null = null
+      try {
+        acquired = await redisWriter.set(lockKey, lockValue, "PX", ttlMs, "NX")
+      } catch (error) {
+        // Redis unavailable — degrade to postgres-only mode: run without lock.
+        logger.warn({ msg: "Lock store unavailable, running without lock", resource, error })
+        return await task()
+      }
+
       if (acquired) {
         try {
           return await task()
         } finally {
-          await redisWriter.eval(
-            `if redis.call("GET", KEYS[1]) == ARGV[1] then redis.call("DEL", KEYS[1]) end`,
-            1,
-            lockKey,
-            lockValue
-          )
+          try {
+            await redisWriter.eval(
+              `if redis.call("GET", KEYS[1]) == ARGV[1] then redis.call("DEL", KEYS[1]) end`,
+              1,
+              lockKey,
+              lockValue
+            )
+          } catch (error) {
+            logger.warn({ msg: "Failed to release lock", resource, error })
+          }
         }
       }
 
@@ -32,7 +45,10 @@ export const lockService = {
       }
     }
 
-    throw new Error("Could not acquire lock")
+    // Contended without Redis error — also degrade rather than throw, so a
+    // transient lock race does not fail the request when Redis is usable but busy.
+    logger.warn({ msg: "Could not acquire lock, running without lock", resource })
+    return await task()
   },
 
   async executeMulti<T>(keys: string[], task: () => Promise<T>, ttlMs = 5000): Promise<T> {

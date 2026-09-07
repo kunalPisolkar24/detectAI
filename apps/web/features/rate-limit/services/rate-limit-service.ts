@@ -40,14 +40,30 @@ export class RedisRateLimitService implements IRateLimitService {
         remaining: Math.max(0, RedisRateLimitService.FREE_TIER_LIMIT - currentUsage),
       }
     } catch (error) {
-      logger.error({ msg: "Rate limit check failed", userId, error })
-      return { allowed: true, remaining: 1 }
+      logger.error({ msg: "Rate limit check failed, falling back to DB", userId, error })
+
+      try {
+        const usage = await prisma.usage.findUnique({ where: { userId } })
+        const currentUsage = usage?.apiCallCountDaily ?? 0
+        const allowed = currentUsage < RedisRateLimitService.FREE_TIER_LIMIT
+
+        if (!allowed) {
+          metrics.rateLimitHits.inc({ tier: 'free' })
+        }
+
+        return {
+          allowed,
+          remaining: Math.max(0, RedisRateLimitService.FREE_TIER_LIMIT - currentUsage),
+        }
+      } catch (dbError) {
+        logger.error({ msg: "DB fallback failed for rate limit check", userId, error: dbError })
+        return { allowed: true, remaining: 1 }
+      }
     }
   }
 
   public async trackUsage(userId: string): Promise<void> {
     const dailyKey = this.getDailyKey(userId)
-
     const userPipeline = usageRedis.pipeline()
     userPipeline.incr(dailyKey)
     userPipeline.expire(dailyKey, RedisRateLimitService.RATE_LIMIT_TTL)
@@ -57,8 +73,23 @@ export class RedisRateLimitService implements IRateLimitService {
         userPipeline.exec(),
         analyticsPublisher.publish(userId, 1),
       ])
+      return
     } catch (error) {
-      logger.error({ msg: "Failed to track usage metrics", userId, error })
+      logger.error({ msg: "Failed to track usage metrics, falling back to DB", userId, error })
+    }
+
+    // Redis unavailable — best-effort direct DB increment so daily counts
+    // stay consistent in postgres-only mode (the queue will be stale).
+    try {
+      const now = new Date()
+      const start = startOfDay(now)
+      await prisma.usage.upsert({
+        where: { userId },
+        create: { userId, apiCallCountDaily: 1, apiCallCountTotal: 1, lastApiCallReset: start },
+        update: { apiCallCountDaily: { increment: 1 }, apiCallCountTotal: { increment: 1 } },
+      })
+    } catch (dbError) {
+      logger.error({ msg: "DB fallback failed for trackUsage", userId, error: dbError })
     }
   }
 
