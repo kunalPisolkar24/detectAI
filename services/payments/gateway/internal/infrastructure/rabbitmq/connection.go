@@ -1,14 +1,18 @@
 package rabbitmq
 
 import (
-	"fmt"
-	"gateway/internal/domain/ports"
-	"gateway/internal/logger"
+	"math/rand"
 	"sync"
 	"time"
 
+	"gateway/internal/domain/ports"
+	"gateway/internal/logger"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
+
+// ErrNotConnected is re-exported for callers that import rabbitmq directly.
+var ErrNotConnected = ports.ErrNotConnected
 
 type ConnectionManager struct {
 	url             string
@@ -60,10 +64,12 @@ func (cm *ConnectionManager) handleReconnect() {
 					goto connected
 				}
 				cm.logger.Error("Failed to connect to RabbitMQ, retrying...", "error", err)
+				// 5s + jitter up to 1s to avoid thundering herd
+				jitter := time.Duration(rand.Int63n(1000)) * time.Millisecond
 				select {
 				case <-cm.done:
 					return
-				case <-time.After(5 * time.Second):
+				case <-time.After(5*time.Second + jitter):
 				}
 			}
 		}
@@ -127,7 +133,7 @@ func (cm *ConnectionManager) GetChannel() (ports.AMQPChannel, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	if !cm.isConnected {
-		return nil, fmt.Errorf("not connected to RabbitMQ")
+		return nil, ErrNotConnected
 	}
 	return cm.channel, nil
 }

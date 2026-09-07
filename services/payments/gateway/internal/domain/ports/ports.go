@@ -2,8 +2,13 @@ package ports
 
 import (
 	"context"
+	"errors"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
+
+// ErrNotConnected signals RabbitMQ is down and the request is retryable (503).
+var ErrNotConnected = errors.New("not connected to RabbitMQ")
 
 // Infrastructure Ports (Outbound)
 
