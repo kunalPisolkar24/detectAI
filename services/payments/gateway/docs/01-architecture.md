@@ -30,8 +30,15 @@ sequenceDiagram
         GW-->>Paddle: 401 Invalid
     else valid
         GW->>RMQ: Publish
-        RMQ-->>GW: Acked
-        GW-->>Paddle: 200 queued
+        alt rabbitmq down
+            RMQ-->>GW: ErrNotConnected / timeout
+            GW-->>Paddle: 503 retryable + Retry-After:5 (fast-fail, no buffering)
+        else acked
+            RMQ-->>GW: Acked
+            GW-->>Paddle: 200 queued
+        else nacked
+            GW-->>Paddle: 500
+        end
     end
 ```
 

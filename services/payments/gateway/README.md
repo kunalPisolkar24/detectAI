@@ -58,10 +58,11 @@ See `docs/08-configuration.md` for full reference.
 
 ```text
 GET  /healthz          -> 200 {"status":"ok"}
-GET  /readyz           -> 200 or 503 if RabbitMQ down
+GET  /readyz           -> 200 or 503 if RabbitMQ down (rabbitmq_connection_status 0)
 GET  /metrics          -> Prometheus
-POST /webhook/paddle   (Paddle-Signature) -> 200 queued | 400 401 500
-POST /internal/events  (X-Internal-Key)   -> 200 queued | 401 400 500
+POST /webhook/paddle   (Paddle-Signature) -> 200 queued | 400 401 503 (retryable, Retry-After:5) 500
+POST /internal/events  (X-Internal-Key)   -> 200 queued | 401 400 503 (retryable) 500
+# 503 = fast-fail when RabbitMQ down (ErrNotConnected/context timeout), no buffering — Paddle retries
 ```
 
 See `docs/09-api.md` for validation and error codes.

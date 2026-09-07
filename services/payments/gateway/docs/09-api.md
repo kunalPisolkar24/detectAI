@@ -7,8 +7,8 @@
 | `GET` | `/healthz` | — | `200 {"status":"ok"}` | — |
 | `GET` | `/readyz` | — | `200` if RabbitMQ up | `503` if down |
 | `GET` | `/metrics` | — | Prometheus text | — |
-| `POST` | `/webhook/paddle` | `Paddle-Signature: ts=...;h1=...` | `200 {"status":"queued"}` | `400` oversize, `401` bad sig, `500` publish fail |
-| `POST` | `/internal/events` | `X-Internal-Key: s3cr3t` | `200 {"status":"queued"}` | `401` bad key, `400`, `500` |
+| `POST` | `/webhook/paddle` | `Paddle-Signature: ts=...;h1=...` | `200 {"status":"queued"}` | `400` oversize, `401` bad sig, `503` rabbitmq down (`{retryable:true}` + `Retry-After: 5`), `500` nacked/timeout |
+| `POST` | `/internal/events` | `X-Internal-Key: s3cr3t` | `200 {"status":"queued"}` | `401` bad key, `400`, `503` rabbitmq down, `500` |
 
 ```mermaid
 classDiagram
@@ -34,11 +34,13 @@ curl -H "X-Internal-Key: s3cr3t" -d '{"event_type":"user.cancel_subscription"}' 
 
 ## Status mapping
 
-| Code | When |
-|---|---|
-| `400` | Body `>1 MiB` or invalid JSON |
-| `401` | HMAC mismatch, `ts` drift, bad `X-Internal-Key` |
-| `500` | Publisher not acked / timeout `5s` |
-| `503` | `readyz` when `IsConnected()==false` |
+| Code | When | Retryable | Headers |
+|---|---|---|---|
+| `400` | Body `>1 MiB` or invalid JSON | no | — |
+| `401` | HMAC mismatch, `ts` drift, bad `X-Internal-Key` | no | — |
+| `500` | Publisher nacked / confirm timeout `5s` (connected) | no | — |
+| `503` | RabbitMQ down: `readyz` when `IsConnected()==false` **or** `POST` publish `ErrNotConnected` / `context.DeadlineExceeded` | **yes** — Paddle/WebApp should retry | `Retry-After: 5` + `{"retryable":true}` |
+
+No buffering: gateway fast-fails `503` instead of queuing; Paddle retries, buffered data would be lost on gateway crash. See `handler.go:isRetryablePublishError`.
 
 See `internal/transport/http/handler.go` for Gin binding and `domain/service.go` for publishing.

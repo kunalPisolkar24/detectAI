@@ -49,11 +49,13 @@ sequenceDiagram
 
 ## Failure branch
 
-| Input | Code | Metric |
-|---|---|---|
-| Missing/invalid signature | `401 Invalid` | `invalid_signatures` + `grpc_auth_failures` |
-| `ts` drift >5min | `401` | `invalid_signatures` |
-| Oversize `>1 MiB` | `400` | `http_requests_total{code=400}` |
-| RabbitMQ down | `503` via `readyz` | `rabbitmq_connection_status 0` |
+| Input | Code | Metric | Retryable |
+|---|---|---|---|
+| Missing/invalid signature | `401 Invalid` | `invalid_signatures` + `grpc_auth_failures` | no |
+| `ts` drift >5min | `401` | `invalid_signatures` | no |
+| Oversize `>1 MiB` | `400` | `http_requests_total{code=400}` | no |
+| RabbitMQ down (`readyz`) | `503 {rabbitmq: disconnected}` | `rabbitmq_connection_status 0` | yes — caller retries |
+| RabbitMQ down (`POST`) | `503 {retryable:true}` + `Retry-After: 5` | `payment_events_published_total{status=error}` / `rabbitmq_connection_status 0` | yes — Paddle retries, gateway **fast-fails** (no buffering) |
+| Publish nacked / timeout `5s` | `500` | `payment_events_published_total{status=error}` | no |
 
-`400` vs `401` vs `500` mapped in `transport/http/handler.go`.
+Stateless fast-fail: gateway never buffers when RabbitMQ is down (buffer would be lost on gateway crash); `503` signals retryable. `400` vs `401` vs `500` vs `503` mapped in `transport/http/handler.go:61-138` (`isRetryablePublishError` checks `ports.ErrNotConnected` / `context.DeadlineExceeded`).

@@ -4,14 +4,16 @@ Logs are JSON to stdout. Tracing is OTel if `OTEL_EXPORTER_OTLP_ENDPOINT` set. M
 
 ## Metrics
 
-| Metric | Type | Labels |
-|---|---|---|
-| `http_requests_total` | Counter | `method, route, code` |
-| `http_request_duration_seconds` | Histogram | `method, route` |
-| `payment_webhooks_received_total` | Counter | `event_type` |
-| `invalid_signatures_total` | Counter | — |
-| `published_events_total` | Counter | `event_type, status` |
-| `rabbitmq_connection_status` | Gauge | — |
+| Metric | Type | Labels | Notes |
+|---|---|---|---|
+| `http_requests_total` | Counter | `method, route, code` | `503` spike = fast-fail when down |
+| `http_request_duration_seconds` | Histogram | `method, route` | fast-fail `503` < `500`*5s* |
+| `payment_webhooks_received_total` | Counter | `event_type` | |
+| `invalid_signatures_total` | Counter | — | |
+| `published_events_total` | Counter | `event_type, status` | `status=error` on `503`/`500` |
+| `rabbitmq_connection_status` | Gauge | — | `1` up `0` down, drives `503` |
+| `rabbitmq_reconnections_total` | Counter | — | increments on `handleReconnect` (5s+jitter) |
+| `rabbitmq_publish_duration_seconds` | Histogram | — | only on `conf.Done()` acked |
 
 Code at `internal/monitoring/monitoring.go` via `prometheus` + `otel`.
 
