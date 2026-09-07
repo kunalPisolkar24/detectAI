@@ -79,7 +79,19 @@ make preview-down
 ## Switching back to normal mode
 
 - Bare: `pnpm dev` / `pnpm build && pnpm start` (ensure real `.env` with `DATABASE_URL`, `NEXTAUTH_SECRET`, `REDIS_*`, `AI_SERVICE_URL`, `CHAT_SERVICE_URL`, `FILE_EXTRACTOR_API_URL`, `RABBITMQ_URL`, `GOOGLE_ID/SECRET`, `GITHUB_ID/SECRET`, `TURNSTILE_*`, `PADDLE_*`).
-- Docker: `make start` (requires real `apps/web/.env`; fails fast if missing).
+- Docker: `make start` (requires real `apps/web/.env`; fails fast if missing). To also spin up standalone postgres + user redis: `make start WITH_DATA=1` (merges `infra/docker/data/compose.yml`; same flag on `down`/`clean` includes the data containers). Minimal datastore section for that mode:
+
+```
+DATABASE_URL=postgresql://user:password@postgres:5432/detect_ai
+DATABASE_URL_REPLICA=postgresql://user:password@postgres:5432/detect_ai
+REDIS_MODE=standalone
+REDIS_URL=redis://:user_cache_password@redis-app:6379
+REDIS_PASSWORD=user_cache_password
+REDIS_USAGE_URL=redis://:user_cache_password@redis-app:6379
+RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+```
+
+(`REDIS_USAGE_URL` points at the same instance until a dedicated analytics redis exists; `RABBITMQ_URL` must be set for validation — without a broker, analytics publishes are logged and dropped. Backend URLs `AI_SERVICE_URL`, `CHAT_SERVICE_URL`, `FILE_EXTRACTOR_API_URL`, `PAYMENT_GATEWAY_URL` come from the root local stack or the services' own composes.)
 
 Note: preview flag is **build-time**. Switching requires a rebuild (`pnpm preview:build` or `make preview`, which builds).
 

@@ -20,5 +20,3 @@ include:
   - path: ../../../services/payments/gateway/infra/compose.yml
   - path: ../../../services/payments/gateway/infra/compose.prod.yml
   - path: ../../../services/chats/compose.yml
-  
-  - path: ../../../apps/web/compose.yml

@@ -2,18 +2,28 @@
 # Preview needs a single flick: `make preview` (PREVIEW=true via infra/.env.preview).
 .PHONY: start preview preview-down down logs clean restart load-up load-down load-test
 
-COMPOSE := docker compose -f infra/compose.yml
+# Optional standalone datastores (postgres + user redis): `make start WITH_DATA=1`
+# merges ../../infra/docker/data/compose.yml into this project (shared
+# default network, DNS by service name). Plain `make start` uses the
+# datastore URLs from .env instead. Use the same flag on down/clean to
+# include the data containers (clean -v removes their volumes too).
+# NOTE: this block must stay above COMPOSE — COMPOSE uses immediate (:=)
+# expansion, so DATA_COMPOSE has to be set first.
+WITH_DATA ?= 0
+DATA_COMPOSE := $(if $(filter 1 true yes,$(WITH_DATA)),-f ../../infra/docker/data/compose.yml)
+
+COMPOSE := docker compose -f infra/compose.yml $(DATA_COMPOSE)
 PREVIEW_COMPOSE := docker compose --env-file infra/.env.preview -f infra/compose.yml
 LOAD_COMPOSE := docker compose -f infra/compose.load.yml
-# Must match detect_ai_network in infra/.env.preview.
-PREVIEW_NETWORK ?= detectai_net
 
 start:
 	@if [ ! -f .env ]; then echo "Missing apps/web/.env with real values (preview needs nothing: use 'make preview')."; exit 1; fi
+ifneq ($(DATA_COMPOSE),)
+	$(COMPOSE) up -d --wait postgres redis-app
+endif
 	$(COMPOSE) up -d --build
 
 preview:
-	@docker network inspect $(PREVIEW_NETWORK) >/dev/null 2>&1 || docker network create $(PREVIEW_NETWORK)
 	$(PREVIEW_COMPOSE) up -d --build --no-deps frontend
 
 preview-down:
