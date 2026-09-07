@@ -1,0 +1,112 @@
+# Load-test rig for chats service (k6 only, isolated infra).
+# Reuses chat-* atoms but with no host ports for datastores, so it can run
+# side-by-side with the main stack (`compose.yml` publishes 27018/6381).
+# Usage:
+#   docker compose -f services/chats/infra/compose.load.yml up -d --build
+#   docker compose -f services/chats/infra/compose.load.yml run --rm k6 run /scripts/scenarios/smoke.js
+include:
+  - path: ../../../infra/docker/chat-mongo/standalone.yml
+  - path: ../../../infra/docker/chat-redis/standalone.yml
+
+services:
+  # chat-* atoms have no host ports by default (template has no ports);
+  # `compose.yml` publishes 27018/6381, load keeps internal-only for isolation
+  chat-mongo:
+    networks:
+      - chat_loadnet
+
+  chat-redis:
+    networks:
+      - chat_loadnet
+
+  chat-service:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${CHAT_APP_ENV:-production}
+      SERVICE_ROLE: api
+      GRPC_PORT: ${CHAT_GRPC_PORT:-:50051}
+      METRICS_PORT: ${CHAT_METRICS_PORT:-:9091}
+      MONGO_URI: ${CHAT_MONGO_URI:-mongodb://chat-mongo:27017}
+      MONGO_DATABASE: ${CHAT_MONGO_DB:-chat_db}
+      CHAT_REDIS_MODE: ${CHAT_REDIS_MODE:-standalone}
+      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-chat-redis:6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-test_redis_password}
+      REDIS_POOL_SIZE: ${CHAT_REDIS_POOL_SIZE:-25}
+      BATCH_SIZE: ${CHAT_BATCH_SIZE:-25}
+      STREAM_PARTITION_COUNT: ${CHAT_STREAM_PARTITION_COUNT:-4}
+      CACHE_TTL: ${CHAT_CACHE_TTL:-24h}
+    depends_on:
+      chat-mongo:
+        condition: service_healthy
+      chat-redis:
+        condition: service_healthy
+    networks:
+      - chat_loadnet
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  chat-worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${CHAT_APP_ENV:-production}
+      SERVICE_ROLE: worker
+      GRPC_PORT: ${CHAT_GRPC_PORT:-:50051}
+      METRICS_PORT: ${CHAT_WORKER_METRICS_PORT:-:9099}
+      MONGO_URI: ${CHAT_MONGO_URI:-mongodb://chat-mongo:27017}
+      MONGO_DATABASE: ${CHAT_MONGO_DB:-chat_db}
+      CHAT_REDIS_MODE: ${CHAT_REDIS_MODE:-standalone}
+      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-chat-redis:6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-test_redis_password}
+      REDIS_POOL_SIZE: ${CHAT_REDIS_POOL_SIZE:-25}
+      BATCH_SIZE: ${CHAT_BATCH_SIZE:-25}
+      STREAM_PARTITION_COUNT: ${CHAT_STREAM_PARTITION_COUNT:-4}
+      CACHE_TTL: ${CHAT_CACHE_TTL:-24h}
+    depends_on:
+      chat-mongo:
+        condition: service_healthy
+      chat-redis:
+        condition: service_healthy
+    networks:
+      - chat_loadnet
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9099/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  k6:
+    image: grafana/k6:latest
+    command: run /scripts/scenarios/${SCENARIO:-smoke}.js
+    environment:
+      BASE_URL: http://chat-service:50051
+      TARGET_VUS: ${TARGET_VUS:-20}
+      RAMP_UP: ${RAMP_UP:-10s}
+      RAMP_DOWN: ${RAMP_DOWN:-10s}
+      DURATION: ${DURATION:-30s}
+    volumes:
+      - ../tests/load:/scripts:ro
+    depends_on:
+      chat-service:
+        condition: service_healthy
+    networks:
+      - chat_loadnet
+
+networks:
+  chat_loadnet:
+
+volumes:
+  chat_mongo_data:
+    name: chat_load_mongo_data
+  chat_redis_data:
+    name: chat_load_redis_data

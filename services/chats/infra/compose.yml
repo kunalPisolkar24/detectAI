@@ -1,36 +1,18 @@
 # Standalone chats stack (single mongo + single redis, no HA).
-# This is the non-HA variant for local testing.
+# Datastores are importable atoms (same pattern as rabbitmq/redis/postgres).
 # Usage (from repo root or services/chats):
-#   docker compose -f services/chats/infra/compose.standalone.yml up -d --build
-# For HA (sharded mongo + cluster redis): docker compose -f services/chats/compose.yml up -d
+#   docker compose -f services/chats/infra/compose.yml up -d --build
+include:
+  - path: ../../../infra/docker/chat-mongo/standalone.yml
+  - path: ../../../infra/docker/chat-redis/standalone.yml
 
 services:
   chat-mongo:
-    image: mongo:6.0
-    restart: unless-stopped
-    command: mongod --bind_ip_all --port 27017
     ports:
-      - "27018:27017"
-    volumes:
-      - chat_mongo_data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
-  redis-chat:
-    image: redis:7.2-alpine
-    restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    volumes:
-      - redis_chat_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      - "${CHAT_MONGO_PORT:-27018}:27017"
+  chat-redis:
+    ports:
+      - "${CHAT_REDIS_PORT:-6381}:6379"
 
   chat-service:
     build:
@@ -45,19 +27,19 @@ services:
       MONGO_URI: ${CHAT_MONGO_URI:-mongodb://chat-mongo:27017}
       MONGO_DATABASE: ${CHAT_MONGO_DB:-chat_db}
       CHAT_REDIS_MODE: ${CHAT_REDIS_MODE:-standalone}
-      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-redis-chat:6379}
+      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-chat-redis:6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       REDIS_POOL_SIZE: ${CHAT_REDIS_POOL_SIZE:-25}
       BATCH_SIZE: ${CHAT_BATCH_SIZE:-25}
       STREAM_PARTITION_COUNT: ${CHAT_STREAM_PARTITION_COUNT:-4}
       CACHE_TTL: ${CHAT_CACHE_TTL:-24h}
     ports:
-      - "50052:50051"
-      - "9095:9091"
+      - "${CHAT_GRPC_HOST_PORT:-50052}:50051"
+      - "${CHAT_METRICS_HOST_PORT:-9095}:9091"
     depends_on:
       chat-mongo:
         condition: service_healthy
-      redis-chat:
+      chat-redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/metrics"]
@@ -79,18 +61,18 @@ services:
       MONGO_URI: ${CHAT_MONGO_URI:-mongodb://chat-mongo:27017}
       MONGO_DATABASE: ${CHAT_MONGO_DB:-chat_db}
       CHAT_REDIS_MODE: ${CHAT_REDIS_MODE:-standalone}
-      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-redis-chat:6379}
+      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-chat-redis:6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       REDIS_POOL_SIZE: ${CHAT_REDIS_POOL_SIZE:-25}
       BATCH_SIZE: ${CHAT_BATCH_SIZE:-25}
       STREAM_PARTITION_COUNT: ${CHAT_STREAM_PARTITION_COUNT:-4}
       CACHE_TTL: ${CHAT_CACHE_TTL:-24h}
     ports:
-      - "9099:9099"
+      - "${CHAT_WORKER_METRICS_PORT_HOST:-9099}:9099"
     depends_on:
       chat-mongo:
         condition: service_healthy
-      redis-chat:
+      chat-redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9099/metrics"]
@@ -98,7 +80,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
-
-volumes:
-  chat_mongo_data:
-  redis_chat_data:
