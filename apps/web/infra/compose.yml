@@ -1,10 +1,9 @@
 # Unified web stack (start-only, no dev/HMR mode).
 #
-# Preview needs a single flick: PREVIEW=true (see infra/.env.preview and
-# `make preview`). The legacy PREVIEW_MODE / NEXT_PUBLIC_PREVIEW_MODE flags
-# are derived from PREVIEW at the boundaries; the app treats any of them as
-# preview. Preview runs skip backends via `up --no-deps frontend`, so no
-# separate compose file is needed.
+# Preview needs a single flick: PREVIEW=true (see `make preview`). The legacy
+# PREVIEW_MODE / NEXT_PUBLIC_PREVIEW_MODE flags are derived from PREVIEW at
+# the boundaries; the app treats any of them as preview. Preview runs skip
+# backends via `up --no-deps frontend`, so no separate compose file is needed.
 #
 # Datastores (postgres + user redis) come from the shared atoms below and
 # always start with the web stack (same project, shared default network).
@@ -90,7 +89,7 @@ services:
       # RabbitMQ
       - RABBITMQ_URL=${RABBITMQ_URL}
     ports:
-      - "${PORT_FRONTEND}:3000"
+      - "${PORT_FRONTEND:-3000}:3000"
     depends_on:
       db-migrate:
         condition: service_completed_successfully

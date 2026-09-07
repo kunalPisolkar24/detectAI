@@ -61,7 +61,7 @@ Storage: chats live in `indexedDB` → `preview-db`. Clearing site data resets h
 
 ## Option B — Docker (no local Node)
 
-Standalone image, no `db`/`redis`/`ai-service`/`chat-service`/`document-parser`/`payment-gateway`/`rabbitmq` dependencies. Single flick via `infra/.env.preview`.
+Standalone image, no `db`/`redis`/`ai-service`/`chat-service`/`document-parser`/`payment-gateway`/`rabbitmq` dependencies. Single flick, no env file.
 
 ```bash
 cd apps/web
@@ -74,12 +74,20 @@ make preview
 make preview-down
 ```
 
-`make preview` runs `docker compose --env-file infra/.env.preview -f infra/compose.yml up --build --no-deps frontend`: same unified compose file as the real stack, but only the frontend starts (backends skipped, no separate compose file). Canned values live in `infra/.env.preview` and in code (`lib/config/env.ts`); passed-in values are ignored when `PREVIEW=true`.
+`make preview` runs `PREVIEW=true docker compose -f infra/compose.yml up --build --no-deps frontend`: same unified compose file as the real stack, but only the frontend starts (backends skipped, no separate compose file). Canned values live in code (`lib/config/env.ts`); passed-in values are ignored when `PREVIEW=true`.
 
 ## Switching back to normal mode
 
-- Bare: `pnpm dev` / `pnpm build && pnpm start` (ensure real `.env` with `DATABASE_URL`, `NEXTAUTH_SECRET`, `REDIS_*`, `AI_SERVICE_URL`, `CHAT_SERVICE_URL`, `FILE_EXTRACTOR_API_URL`, `RABBITMQ_URL`, `GOOGLE_ID/SECRET`, `GITHUB_ID/SECRET`, `TURNSTILE_*`, `PADDLE_*`).
-- Docker: `make start` (requires real `apps/web/.env`; fails fast if missing). Standalone postgres + user redis (from the shared atoms in `infra/docker`) always start with the web stack; `make down` stops them, `make clean -v` removes their volumes too. Datastore section for `.env`:
+- Bare: `pnpm dev` / `pnpm build && pnpm start` (uses `apps/web/.env`, auto-loaded by Next.js).
+- Docker: `make start` (requires `apps/web/.env`; fails fast if missing). First-time setup is one copy:
+
+```bash
+cd apps/web
+cp infra/.env.example .env
+# then adjust secrets (NEXTAUTH_SECRET, OAuth, Turnstile, Paddle)
+```
+
+Standalone postgres + user redis (from the shared atoms in `infra/docker`) always start with the web stack; `make down` stops them, `make clean -v` removes their volumes too. The `.env.example` datastore section already points at them:
 
 ```
 POSTGRES_USER=user

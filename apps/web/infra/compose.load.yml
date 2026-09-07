@@ -1,8 +1,8 @@
 # Self-contained load-test rig (throwaway postgres/redis, mock-server, k6).
 # Isolated from the main stack by design: `make load-test`.
-# Datastores come from the shared atoms (values via infra/.env.load);
-# separate project, host ports, and project-prefixed volumes keep them
-# hermetic.
+# Datastores come from the shared atoms; their values are fixed inline in
+# the makefile (LOAD_ENV) — reproducible, no env file. Keep the hardcoded
+# frontend URLs below in sync with LOAD_ENV (db name, redis password).
 include:
   - path: ../../../infra/docker/postgres/standalone.yml
   - path: ../../../infra/docker/redis/standalone.yml
