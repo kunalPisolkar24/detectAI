@@ -35,7 +35,7 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 # ...except the checked-in serving base template (no secrets)
-!infra/.env.example
+!.env.example
 
 # vercel
 .vercel

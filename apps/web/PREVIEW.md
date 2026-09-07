@@ -83,7 +83,7 @@ make preview-down
 
 ```bash
 cd apps/web
-cp infra/.env.example .env
+cp .env.example .env
 # then adjust secrets (NEXTAUTH_SECRET, OAuth, Turnstile, Paddle)
 ```
 

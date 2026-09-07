@@ -1,5 +1,5 @@
 # Start-only targets (no dev/HMR mode).
-# Serving reads apps/web/.env (copy infra/.env.example once). Preview runs
+# Serving reads apps/web/.env (copy .env.example once). Preview runs
 # on PREVIEW=true alone (canned defaults live in lib/config/env.ts). Load
 # values are fixed inline below (LOAD_ENV) — reproducible, no env file.
 .PHONY: start preview preview-down down logs clean restart load-up load-down load-test
@@ -15,7 +15,7 @@ LOAD_COMPOSE := docker compose -f infra/compose.load.yml
 LOAD_ENV := POSTGRES_USER=postgres POSTGRES_PASSWORD=postgres POSTGRES_DB=detectai_load POSTGRES_PORT=5433 REDIS_PASSWORD=load-redis-password REDIS_PORT=6380
 
 start:
-	@if [ ! -f .env ]; then echo "Missing apps/web/.env (copy infra/.env.example once and adjust secrets)."; exit 1; fi
+	@if [ ! -f .env ]; then echo "Missing apps/web/.env (copy .env.example once and adjust secrets)."; exit 1; fi
 	$(COMPOSE) up -d --build
 
 preview:
