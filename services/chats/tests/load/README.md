@@ -64,7 +64,7 @@ Elegant `VUS/DURATION/RPS` map generically (see `../infra/compose.load.yml:93` +
 graph LR
     K6[k6 VU] --> GRPC[grpc.Client load chat_service.proto]
     GRPC --> Svc[chat-service:50051<br/>Handler + ChatService]
-    Svc --> Stream[(global:ingest:{p} XAdd)]
+    Svc --> Stream["global:ingest:{p} XAdd"]
     Svc --> Cache[(chat hot ZSET)]
     Stream --> Worker[chat-worker<br/>XReadGroup + BulkUpsert]
     K6 --> Met[Trend/Rate]

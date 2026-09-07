@@ -8,7 +8,7 @@ Redis Streams buffer writes between API and worker. `N = STREAM_PARTITION_COUNT`
 graph TB
     Msg[Message chat_id] --> CRC[crc32 IEEE chat_id]
     CRC --> Mod[% N]
-    Mod --> Key[global:ingest:{p}]
+    Mod --> Key["global:ingest:{p}"]
     Key --> XAdd[XAdd MaxLen 100000 Approx data=json]
 ```
 
