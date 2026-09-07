@@ -1,6 +1,7 @@
 "use server"
 
 import { fileExtractionService } from "../services/file-extraction.service"
+import { DOCUMENT_PARSER_UNAVAILABLE_TOOLTIP } from "@/lib/config/preview"
 
 type ExtractFileState = {
   success?: boolean
@@ -9,7 +10,7 @@ type ExtractFileState = {
 }
 
 export async function extractTextFromFile(formData: FormData): Promise<ExtractFileState> {
-  if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+  if (process.env.PREVIEW === "true" || process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
     return { error: "Document parsing is not available in preview mode" }
   }
   try {
@@ -19,9 +20,14 @@ export async function extractTextFromFile(formData: FormData): Promise<ExtractFi
   } catch (error) {
     console.error("File extraction error:", error)
 
-    const errorMessage = error instanceof Error
-      ? error.message
-      : "Service unavailable. Please try again later."
+    const raw = error instanceof Error ? error.message : ""
+    // Align toast with the disabled-button tooltip when the parser is unreachable.
+    const isUnreachable =
+      !raw ||
+      /fetch failed|ECONNREFUSED|Failed to fetch|Service unavailable/i.test(raw)
+    const errorMessage = isUnreachable
+      ? DOCUMENT_PARSER_UNAVAILABLE_TOOLTIP
+      : raw || "Service unavailable. Please try again later."
 
     return { error: errorMessage }
   }

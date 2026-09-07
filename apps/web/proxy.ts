@@ -10,7 +10,7 @@ export async function proxy(request: NextRequest) {
 
   let response = NextResponse.next()
 
-  if (pathname.startsWith("/api/auth") || pathname.startsWith("/_next") || pathname.includes("favicon.ico") || pathname.startsWith("/api/metrics") || pathname.startsWith("/api/healthz") || pathname.startsWith("/api/readyz")) {
+  if (pathname.startsWith("/api/auth") || pathname.startsWith("/_next") || pathname.includes("favicon.ico") || pathname.startsWith("/api/metrics") || pathname.startsWith("/api/healthz") || pathname.startsWith("/api/readyz") || pathname.startsWith("/api/services/document-parser/status")) {
     return response
   }
 

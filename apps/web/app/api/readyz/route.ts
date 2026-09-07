@@ -57,24 +57,57 @@ async function checkRedis(): Promise<CheckResult> {
   }
 }
 
+async function checkDocumentParser(): Promise<CheckResult> {
+  if (isPreviewMode()) return { status: "skipped" }
+  const start = performance.now()
+  try {
+    const { env } = await import("@/lib/config/env")
+    const url = `${env.FILE_EXTRACTOR_API_URL.replace(/\/$/, "")}/health`
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 2000)
+    try {
+      const res = await fetch(url, { signal: controller.signal, cache: "no-store" })
+      if (!res.ok) return { status: "error", error: `health ${res.status}` }
+      return { status: "ok", latencyMs: Math.round(performance.now() - start) }
+    } finally {
+      clearTimeout(timer)
+    }
+  } catch (err) {
+    return { status: "error", error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 /**
- * Readiness probe — postgres + redis are reachable.
- * In preview mode both checks are skipped (backends mocked, no real DB/Redis).
- * Returns 200 when ready, 503 when any required check fails.
+ * Readiness probe — postgres + redis are required; document parser is optional
+ * (degraded, not 503 — paste still works). In preview mode all are skipped.
+ * Returns 200 when required checks pass, 503 when any required check fails.
  */
 export async function GET() {
   if (isPreviewMode()) {
     return NextResponse.json(
-      { status: "ready", mode: "preview", checks: { postgres: { status: "skipped" }, redis: { status: "skipped" } } },
+      {
+        status: "ready",
+        mode: "preview",
+        checks: {
+          postgres: { status: "skipped" },
+          redis: { status: "skipped" },
+          documentParser: { status: "skipped" },
+        },
+      },
       { headers: { "Cache-Control": "no-store, private" } },
     )
   }
 
-  const [postgres, redis] = await Promise.all([checkPostgres(), checkRedis()])
+  const [postgres, redis, documentParser] = await Promise.all([
+    checkPostgres(),
+    checkRedis(),
+    checkDocumentParser(),
+  ])
   const ready = postgres.status === "ok" && redis.status === "ok"
+  const status = ready ? (documentParser.status === "error" ? "degraded" : "ready") : "not_ready"
 
   return NextResponse.json(
-    { status: ready ? "ready" : "not_ready", checks: { postgres, redis } },
+    { status, checks: { postgres, redis, documentParser } },
     {
       status: ready ? 200 : 503,
       headers: { "Cache-Control": "no-store, private" },

@@ -23,7 +23,8 @@ import { toast } from "sonner"
 import { extractTextFromFile } from "../actions/extract-file"
 import { LIVE_ANALYSIS_WARNING_CHARS, MAX_LIVE_ANALYSIS_CHARS, MIN_ANALYSIS_WORDS } from "../constants"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
-import { isPreviewModeClient, getPreviewPremium, getPreviewUserId, PREVIEW_TOOLTIP } from "@/lib/config/preview"
+import { isPreviewModeClient, getPreviewPremium, getPreviewUserId, PREVIEW_TOOLTIP, DOCUMENT_PARSER_UNAVAILABLE_TOOLTIP } from "@/lib/config/preview"
+import { useDocumentParserStatus } from "../hooks/use-document-parser-status"
 
 export const ChatInput = () => {
   const router = useRouter()
@@ -59,7 +60,14 @@ export const ChatInput = () => {
   const isOverLimit = currentCharCount > MAX_LIVE_ANALYSIS_CHARS
   const isCurrentChatAnalyzing = Boolean(activeAnalysisChatId && activeAnalysisChatId === currentChatId)
   const isAnotherChatAnalyzing = Boolean(activeAnalysisChatId && activeAnalysisChatId !== currentChatId)
-  const isAttachmentDisabled = isPreview || isCurrentChatAnalyzing || isExtracting || (isRateLimited && !isPremium)
+  const { isDown: isDocumentParserDown } = useDocumentParserStatus()
+  // Preview takes precedence — same tooltip pattern, different message when parser is down.
+  const isAttachmentDisabled = isPreview || isDocumentParserDown || isCurrentChatAnalyzing || isExtracting || (isRateLimited && !isPremium)
+  const attachmentTooltip = isPreview
+    ? PREVIEW_TOOLTIP
+    : isDocumentParserDown
+      ? DOCUMENT_PARSER_UNAVAILABLE_TOOLTIP
+      : null
   const runningChatTitle = history?.find((chat) => chat.id === activeAnalysisChatId)?.title
 
   useEffect(() => {
@@ -265,7 +273,7 @@ export const ChatInput = () => {
                     </Button>
                   </span>
                 </TooltipTrigger>
-                {isPreview && <TooltipContent>{PREVIEW_TOOLTIP}</TooltipContent>}
+                {attachmentTooltip && <TooltipContent>{attachmentTooltip}</TooltipContent>}
               </Tooltip>
             </m.div>
 
