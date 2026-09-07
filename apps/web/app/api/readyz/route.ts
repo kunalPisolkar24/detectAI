@@ -5,6 +5,11 @@ export const dynamic = "force-dynamic"
 
 type CheckResult = { status: "ok" | "skipped" | "error"; latencyMs?: number; error?: string }
 
+// Cache postgres/redis results for 10s to avoid 10s cold-start on every probe
+let pgCache: { at: number; result: CheckResult } | null = null
+let redisCache: { at: number; result: CheckResult } | null = null
+const PG_REDIS_TTL_MS = 10_000
+
 async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<T>((resolve) => {
@@ -18,42 +23,62 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Pro
 }
 
 async function checkPostgres(): Promise<CheckResult> {
+  const now = Date.now()
+  if (pgCache && now - pgCache.at < PG_REDIS_TTL_MS) return pgCache.result
   const start = performance.now()
+  let pool: import("pg").Pool | null = null
   try {
-    // Lazy import so preview proxy never tries to create pools at eval time.
-    const { prisma } = await import("@/lib/infrastructure/prisma")
-    const ok = await withTimeout(
-      prisma.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
-      2000,
-      false,
-    )
-    if (!ok) return { status: "error", error: "query failed or timed out" }
-    return { status: "ok", latencyMs: Math.round(performance.now() - start) }
+    const { Pool } = await import("pg")
+    const { env } = await import("@/lib/config/env")
+    if (!env.DATABASE_URL) return { status: "error", error: "DATABASE_URL not set" }
+    pool = new Pool({ connectionString: env.DATABASE_URL })
+    const result = await pool.query("SELECT 1")
+    const res: CheckResult = { status: "ok", latencyMs: Math.round(performance.now() - start) }
+    pgCache = { at: Date.now(), result: res }
+    return res
   } catch (err) {
-    return { status: "error", error: err instanceof Error ? err.message : String(err) }
+    console.error("checkPostgres error:", err instanceof Error ? err.message : err)
+    const result: CheckResult = { status: "error", error: err instanceof Error ? err.message : String(err) }
+    pgCache = { at: Date.now(), result }
+    return result
+  } finally {
+    try {
+      await pool?.end()
+    } catch {}
   }
 }
 
 async function checkRedis(): Promise<CheckResult> {
+  const now = Date.now()
+  if (redisCache && now - redisCache.at < PG_REDIS_TTL_MS) return redisCache.result
   const start = performance.now()
+  let client: import("ioredis").Redis | null = null
   try {
-    const { redisWriter } = await import("@/lib/infrastructure/redis")
-    const ok = await withTimeout(
-      (async () => {
-        try {
-          const res = await redisWriter.ping()
-          return res === "PONG" || (redisWriter.status === "ready")
-        } catch {
-          return false
-        }
-      })(),
-      2000,
-      false,
-    )
-    if (!ok) return { status: "error", error: "ping failed or timed out" }
-    return { status: "ok", latencyMs: Math.round(performance.now() - start) }
+    const Redis = (await import("ioredis")).default
+    const { env } = await import("@/lib/config/env")
+    if (!env.REDIS_URL) return { status: "error", error: "REDIS_URL not set" }
+    client = new Redis(env.REDIS_URL)
+    const res = await client.ping()
+    if (res !== "PONG") {
+      const result: CheckResult = { status: "error", error: "ping failed" }
+      redisCache = { at: Date.now(), result }
+      return result
+    }
+    const result: CheckResult = { status: "ok", latencyMs: Math.round(performance.now() - start) }
+    redisCache = { at: Date.now(), result }
+    return result
   } catch (err) {
-    return { status: "error", error: err instanceof Error ? err.message : String(err) }
+    console.error("checkRedis error:", err instanceof Error ? err.message : err)
+    const result: CheckResult = { status: "error", error: err instanceof Error ? err.message : String(err) }
+    redisCache = { at: Date.now(), result }
+    return result
+  } finally {
+    try {
+      await client?.quit()
+    } catch {}
+    try {
+      client?.disconnect()
+    } catch {}
   }
 }
 
