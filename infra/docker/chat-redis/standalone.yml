@@ -12,9 +12,9 @@
 x-chat-redis: &chat-redis
   image: redis:7-alpine
   restart: unless-stopped
-  command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+  command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-test_redis_password}
   healthcheck:
-    test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+    test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-test_redis_password}", "ping"]
     interval: 5s
     timeout: 3s
     retries: 10

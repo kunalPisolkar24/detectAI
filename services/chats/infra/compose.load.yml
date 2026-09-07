@@ -1,9 +1,8 @@
 # Load-test rig for chats service (k6 only, isolated infra).
 # Reuses chat-* atoms but with no host ports for datastores, so it can run
 # side-by-side with the main stack (`compose.yml` publishes 27018/6381).
-# Usage:
-#   docker compose -f services/chats/infra/compose.load.yml up -d --build
-#   docker compose -f services/chats/infra/compose.load.yml run --rm k6 run /scripts/scenarios/smoke.js
+# Usage: make load-test SCENARIO=smoke VUS=1 DURATION=10s RPS=10
+name: chats-load
 include:
   - path: ../../../infra/docker/chat-mongo/standalone.yml
   - path: ../../../infra/docker/chat-redis/standalone.yml
@@ -89,13 +88,23 @@ services:
     image: grafana/k6:latest
     command: run /scripts/scenarios/${SCENARIO:-smoke}.js
     environment:
-      BASE_URL: http://chat-service:50051
-      TARGET_VUS: ${TARGET_VUS:-20}
-      RAMP_UP: ${RAMP_UP:-10s}
-      RAMP_DOWN: ${RAMP_DOWN:-10s}
-      DURATION: ${DURATION:-30s}
+      CHAT_SERVICE_ADDR: chat-service:50051
+      PROTO_DIR: /proto
+      # single-knob overrides (generic wins, per-scenario vars kept as fallback in config.js)
+      VUS: ${VUS:-}
+      DURATION: ${DURATION:-}
+      RPS: ${RPS:-}
+      SMOKE_VUS: ${SMOKE_VUS:-}
+      SMOKE_DURATION: ${SMOKE_DURATION:-}
+      LOAD_VUS: ${LOAD_VUS:-}
+      LOAD_DURATION: ${LOAD_DURATION:-}
+      STRESS_VUS: ${STRESS_VUS:-}
+      STRESS_DURATION: ${STRESS_DURATION:-}
+      SOAK_VUS: ${SOAK_VUS:-}
+      SOAK_DURATION: ${SOAK_DURATION:-}
     volumes:
       - ../tests/load:/scripts:ro
+      - ../api/proto:/proto:ro
     depends_on:
       chat-service:
         condition: service_healthy

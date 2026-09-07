@@ -2,6 +2,7 @@
 # Datastores are importable atoms (same pattern as rabbitmq/redis/postgres).
 # Usage (from repo root or services/chats):
 #   docker compose -f services/chats/infra/compose.yml up -d --build
+name: chats
 include:
   - path: ../../../infra/docker/chat-mongo/standalone.yml
   - path: ../../../infra/docker/chat-redis/standalone.yml

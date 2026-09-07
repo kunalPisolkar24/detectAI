@@ -1,3 +1,16 @@
+function intOr(env, fallback) {
+    const v = parseInt(__ENV[env] || '');
+    return Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
+function strOr(env, fallback) {
+    return __ENV[env] || fallback;
+}
+
+const genericVUs = intOr('VUS', 0);
+const genericDuration = strOr('DURATION', '');
+const genericRps = intOr('RPS', 0);
+
 export const config = {
     target: __ENV.CHAT_SERVICE_ADDR || 'localhost:50051',
     plaintext: __ENV.CHAT_SERVICE_PLAINTEXT !== 'false',
@@ -5,15 +18,17 @@ export const config = {
     rpcTimeoutMs: parseInt(__ENV.RPC_TIMEOUT_MS || '2000'),
     e2eTimeoutMs: parseInt(__ENV.E2E_TIMEOUT_MS || '5000'),
     e2ePollingIntervalMs: parseInt(__ENV.E2E_POLLING_INTERVAL_MS || '200'),
-    // Load control
-    smokeVUs: parseInt(__ENV.SMOKE_VUS || '1'),
-    smokeDuration: __ENV.SMOKE_DURATION || '10s',
-    loadVUs: parseInt(__ENV.LOAD_VUS || '10'),
-    loadDuration: __ENV.LOAD_DURATION || '2m',
-    stressVUs: parseInt(__ENV.STRESS_VUS || '50'),
-    stressDuration: __ENV.STRESS_DURATION || '5m',
-    soakVUs: parseInt(__ENV.SOAK_VUS || '5'),
-    soakDuration: __ENV.SOAK_DURATION || '10m',
+    // Single-knob overrides: VUS/DURATION/RPS win over per-scenario vars
+    rps: genericRps,
+    // Load control (generic VUS/DURATION first, per-scenario fallback)
+    smokeVUs: genericVUs || intOr('SMOKE_VUS', 1),
+    smokeDuration: genericDuration || strOr('SMOKE_DURATION', '10s'),
+    loadVUs: genericVUs || intOr('LOAD_VUS', 10),
+    loadDuration: genericDuration || strOr('LOAD_DURATION', '2m'),
+    stressVUs: genericVUs || intOr('STRESS_VUS', 50),
+    stressDuration: genericDuration || strOr('STRESS_DURATION', '5m'),
+    soakVUs: genericVUs || intOr('SOAK_VUS', 5),
+    soakDuration: genericDuration || strOr('SOAK_DURATION', '10m'),
 };
 
 export const thresholds = {
