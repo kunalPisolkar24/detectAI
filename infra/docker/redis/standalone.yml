@@ -5,6 +5,7 @@
 #   include:
 #     - path: ../../../infra/docker/redis/standalone.yml
 # or merge it with `-f`. Everything varying is a variable (see
+# infra/docker/redis/.env.example or the aggregate
 # infra/docker/data/.env.example); importing projects isolate volumes
 # and networks by project name. No `networks:` / `container_name` here
 # so multiple projects can run side by side.
