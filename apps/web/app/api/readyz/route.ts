@@ -97,11 +97,35 @@ async function checkPaymentGateway(): Promise<CheckResult> {
   }
 }
 
+async function checkAnalysis(): Promise<CheckResult & { checks?: { inference: CheckResult; chatService: CheckResult } }> {
+  if (isPreviewMode()) return { status: "skipped" }
+  try {
+    const { checkGrpcHealth } = await import("@/lib/infrastructure/service-health")
+    const { env } = await import("@/lib/config/env")
+    const [inferenceRes, chatRes] = await Promise.all([
+      checkGrpcHealth(env.AI_SERVICE_URL, "aidetection.AIService"),
+      checkGrpcHealth(env.CHAT_SERVICE_URL, "chat.ChatService"),
+    ])
+    const inference: CheckResult = inferenceRes.ok
+      ? { status: "ok", latencyMs: inferenceRes.latencyMs }
+      : { status: "error", error: inferenceRes.error }
+    const chatService: CheckResult = chatRes.ok
+      ? { status: "ok", latencyMs: chatRes.latencyMs }
+      : { status: "error", error: chatRes.error }
+    const ok = inference.status === "ok" && chatService.status === "ok"
+    return ok
+      ? { status: "ok", checks: { inference, chatService } }
+      : { status: "error", error: inference.status === "error" ? inference.error : chatService.error, checks: { inference, chatService } }
+  } catch (err) {
+    return { status: "error", error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 /**
- * Readiness probe — postgres + redis are required; document parser and payment
- * gateway are optional (degraded, not 503 — core routes still work). In preview
- * mode all are skipped. Returns 200 when required checks pass, 503 when any
- * required check fails.
+ * Readiness probe — postgres + redis are required; document parser, payment
+ * gateway, and analysis (inference+chat) are optional (degraded, not 503 —
+ * core routes still work). In preview mode all are skipped. Returns 200
+ * when required checks pass, 503 when any required check fails.
  */
 export async function GET() {
   if (isPreviewMode()) {
@@ -114,25 +138,27 @@ export async function GET() {
           redis: { status: "skipped" },
           documentParser: { status: "skipped" },
           paymentGateway: { status: "skipped" },
+          analysis: { status: "skipped" },
         },
       },
       { headers: { "Cache-Control": "no-store, private" } },
     )
   }
 
-  const [postgres, redis, documentParser, paymentGateway] = await Promise.all([
+  const [postgres, redis, documentParser, paymentGateway, analysis] = await Promise.all([
     checkPostgres(),
     checkRedis(),
     checkDocumentParser(),
     checkPaymentGateway(),
+    checkAnalysis(),
   ])
   const ready = postgres.status === "ok" && redis.status === "ok"
   const degraded =
-    documentParser.status === "error" || paymentGateway.status === "error"
+    documentParser.status === "error" || paymentGateway.status === "error" || analysis.status === "error"
   const status = ready ? (degraded ? "degraded" : "ready") : "not_ready"
 
   return NextResponse.json(
-    { status, checks: { postgres, redis, documentParser, paymentGateway } },
+    { status, checks: { postgres, redis, documentParser, paymentGateway, analysis } },
     {
       status: ready ? 200 : 503,
       headers: { "Cache-Control": "no-store, private" },

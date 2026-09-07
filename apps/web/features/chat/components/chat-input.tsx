@@ -23,8 +23,9 @@ import { toast } from "sonner"
 import { extractTextFromFile } from "../actions/extract-file"
 import { LIVE_ANALYSIS_WARNING_CHARS, MAX_LIVE_ANALYSIS_CHARS, MIN_ANALYSIS_WORDS } from "../constants"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
-import { isPreviewModeClient, getPreviewPremium, getPreviewUserId, PREVIEW_TOOLTIP, DOCUMENT_PARSER_UNAVAILABLE_TOOLTIP } from "@/lib/config/preview"
+import { isPreviewModeClient, getPreviewPremium, getPreviewUserId, PREVIEW_TOOLTIP, DOCUMENT_PARSER_UNAVAILABLE_TOOLTIP, ANALYSIS_SERVICE_UNAVAILABLE_TOOLTIP } from "@/lib/config/preview"
 import { useDocumentParserStatus } from "../hooks/use-document-parser-status"
+import { useAnalysisStatus } from "../hooks/use-analysis-status"
 
 export const ChatInput = () => {
   const router = useRouter()
@@ -61,13 +62,17 @@ export const ChatInput = () => {
   const isCurrentChatAnalyzing = Boolean(activeAnalysisChatId && activeAnalysisChatId === currentChatId)
   const isAnotherChatAnalyzing = Boolean(activeAnalysisChatId && activeAnalysisChatId !== currentChatId)
   const { isDown: isDocumentParserDown } = useDocumentParserStatus()
-  // Preview takes precedence — same tooltip pattern, different message when parser is down.
+  const { isDown: isAnalysisDown } = useAnalysisStatus()
+  // Preview takes precedence — same tooltip pattern, different message when parser/analysis is down.
   const isAttachmentDisabled = isPreview || isDocumentParserDown || isCurrentChatAnalyzing || isExtracting || (isRateLimited && !isPremium)
   const attachmentTooltip = isPreview
     ? PREVIEW_TOOLTIP
     : isDocumentParserDown
       ? DOCUMENT_PARSER_UNAVAILABLE_TOOLTIP
       : null
+  // Submit blocked only when analysis service (inference or chat) is down; STOP must stay enabled.
+  const isAnalysisBlocked = !isPreview && isAnalysisDown && !isCurrentChatAnalyzing
+  const analysisTooltip = isPreview ? null : isAnalysisBlocked ? ANALYSIS_SERVICE_UNAVAILABLE_TOOLTIP : null
   const runningChatTitle = history?.find((chat) => chat.id === activeAnalysisChatId)?.title
 
   useEffect(() => {
@@ -78,6 +83,10 @@ export const ChatInput = () => {
   }, [localInput])
 
   const handleSubmit = () => {
+    if (isAnalysisBlocked) {
+      toast.error(ANALYSIS_SERVICE_UNAVAILABLE_TOOLTIP)
+      return
+    }
     if (!localInput.trim() || isAnalyzing) return
 
     if (isOverLimit) {
@@ -352,60 +361,68 @@ export const ChatInput = () => {
               whileHover={isCurrentChatAnalyzing || localInput.trim() ? { scale: 1.02 } : {}}
               whileTap={isCurrentChatAnalyzing || localInput.trim() ? { scale: 0.98 } : {}}
             >
-              <Button
-                onClick={isCurrentChatAnalyzing ? cancelActiveAnalysis : handleSubmit}
-                disabled={
-                  isCancelling ||
-                  isExtracting ||
-                  (!isCurrentChatAnalyzing && (!localInput.trim() || isOverLimit || isAnalyzing || (isRateLimited && !isPremium)))
-                }
-                className={cn(
-                  "h-9 min-w-[36px] rounded-lg transition-all duration-300 px-3 sm:px-5",
-                  isCurrentChatAnalyzing
-                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/20 hover:shadow-amber-500/30 hover:from-amber-400 hover:to-orange-400"
-                    : "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md shadow-blue-500/20 hover:shadow-blue-500/30 hover:from-blue-500 hover:to-purple-500",
-                  "disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none",
-                  teko.className
-                )}
-                aria-label={isCurrentChatAnalyzing ? "Cancel analysis" : "Analyze text"}
-              >
-                <AnimatePresence mode="wait">
-                  {isCancelling ? (
-                    <m.div
-                      key="loader"
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.5 }}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-block">
+                    <Button
+                      onClick={isCurrentChatAnalyzing ? cancelActiveAnalysis : handleSubmit}
+                      disabled={
+                        isCancelling ||
+                        isExtracting ||
+                        isAnalysisBlocked ||
+                        (!isCurrentChatAnalyzing && (!localInput.trim() || isOverLimit || isAnalyzing || (isRateLimited && !isPremium)))
+                      }
+                      className={cn(
+                        "h-9 min-w-[36px] rounded-lg transition-all duration-300 px-3 sm:px-5",
+                        isCurrentChatAnalyzing
+                          ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/20 hover:shadow-amber-500/30 hover:from-amber-400 hover:to-orange-400"
+                          : "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md shadow-blue-500/20 hover:shadow-blue-500/30 hover:from-blue-500 hover:to-purple-500",
+                        "disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none",
+                        teko.className
+                      )}
+                      aria-label={isCurrentChatAnalyzing ? "Cancel analysis" : "Analyze text"}
                     >
-                      <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-                    </m.div>
-                  ) : isCurrentChatAnalyzing ? (
-                    <m.div
-                      key="stop"
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.5 }}
-                      className="flex items-center gap-2"
-                    >
-                      <span className="hidden sm:inline text-lg tracking-wide pt-0.5">STOP</span>
-                      <Square size={14} strokeWidth={2.5} fill="currentColor" aria-hidden="true" />
-                    </m.div>
-                  ) : (
-                    <m.div
-                      key="arrow"
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.5 }}
-                      className="flex items-center gap-2"
-                    >
-                      <span className="hidden sm:inline text-lg tracking-wide pt-0.5">
-                        {isAnotherChatAnalyzing ? "WAIT" : "ANALYZE"}
-                      </span>
-                      <ArrowUp size={16} strokeWidth={2.5} aria-hidden="true" />
-                    </m.div>
-                  )}
-                </AnimatePresence>
-              </Button>
+                      <AnimatePresence mode="wait">
+                        {isCancelling ? (
+                          <m.div
+                            key="loader"
+                            initial={{ opacity: 0, scale: 0.5 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.5 }}
+                          >
+                            <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                          </m.div>
+                        ) : isCurrentChatAnalyzing ? (
+                          <m.div
+                            key="stop"
+                            initial={{ opacity: 0, scale: 0.5 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.5 }}
+                            className="flex items-center gap-2"
+                          >
+                            <span className="hidden sm:inline text-lg tracking-wide pt-0.5">STOP</span>
+                            <Square size={14} strokeWidth={2.5} fill="currentColor" aria-hidden="true" />
+                          </m.div>
+                        ) : (
+                          <m.div
+                            key="arrow"
+                            initial={{ opacity: 0, scale: 0.5 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.5 }}
+                            className="flex items-center gap-2"
+                          >
+                            <span className="hidden sm:inline text-lg tracking-wide pt-0.5">
+                              {isAnotherChatAnalyzing ? "WAIT" : "ANALYZE"}
+                            </span>
+                            <ArrowUp size={16} strokeWidth={2.5} aria-hidden="true" />
+                          </m.div>
+                        )}
+                      </AnimatePresence>
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {analysisTooltip && <TooltipContent>{analysisTooltip}</TooltipContent>}
+              </Tooltip>
             </m.div>
           </div>
         </div>
