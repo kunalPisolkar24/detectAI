@@ -5,7 +5,7 @@
 #   docker compose -f infra/docker/data/compose.yml up -d   # from repo root
 # NOTE: these `include:` paths resolve from the main compose file, so other
 # stacks merging this bundle via `-f` must import the atoms directly
-# instead (see apps/web `WITH_DATA`). Variable names match
+# instead. Variable names match
 # infra/docker/local/.env.example so one env file serves both; see
 # infra/docker/data/.env.example for the knob interface.
 include:

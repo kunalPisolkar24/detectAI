@@ -79,9 +79,12 @@ make preview-down
 ## Switching back to normal mode
 
 - Bare: `pnpm dev` / `pnpm build && pnpm start` (ensure real `.env` with `DATABASE_URL`, `NEXTAUTH_SECRET`, `REDIS_*`, `AI_SERVICE_URL`, `CHAT_SERVICE_URL`, `FILE_EXTRACTOR_API_URL`, `RABBITMQ_URL`, `GOOGLE_ID/SECRET`, `GITHUB_ID/SECRET`, `TURNSTILE_*`, `PADDLE_*`).
-- Docker: `make start` (requires real `apps/web/.env`; fails fast if missing). To also spin up standalone postgres + user redis: `make start WITH_DATA=1` (merges `infra/docker/data/compose.yml`; same flag on `down`/`clean` includes the data containers). Minimal datastore section for that mode:
+- Docker: `make start` (requires real `apps/web/.env`; fails fast if missing). Standalone postgres + user redis (from the shared atoms in `infra/docker`) always start with the web stack; `make down` stops them, `make clean -v` removes their volumes too. Datastore section for `.env`:
 
 ```
+POSTGRES_USER=user
+POSTGRES_PASSWORD=password
+POSTGRES_DB=detect_ai
 DATABASE_URL=postgresql://user:password@postgres:5432/detect_ai
 DATABASE_URL_REPLICA=postgresql://user:password@postgres:5432/detect_ai
 REDIS_MODE=standalone

@@ -6,13 +6,16 @@
 # preview. Preview runs skip backends via `up --no-deps frontend`, so no
 # separate compose file is needed.
 #
-# Datastores (postgres + user redis) are NOT defined here. Either point
-# .env at an existing instance, or import the standalone atoms:
-#   make start WITH_DATA=1
-# which merges the postgres/redis templates into this project.
-# NOTE: no depends_on the data services here — `depends_on` requires the
-# target to exist in the merged project, so startup ordering with WITH_DATA
-# is enforced by the makefile (`up --wait` on healthy datastores first).
+# Datastores (postgres + user redis) come from the shared atoms below and
+# always start with the web stack (same project, shared default network).
+# Either fill .env with real datastore values, or point the URLs at an
+# external instance — the local postgres/redis-app still start but stay
+# unused in that case. Preview runs skip everything via
+# `up --no-deps frontend`.
+include:
+  - path: ../../../infra/docker/postgres/standalone.yml
+  - path: ../../../infra/docker/redis/standalone.yml
+
 services:
   db-migrate:
     build:
@@ -22,6 +25,9 @@ services:
     restart: "no"
     environment:
       - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   frontend:
     container_name: detect_ai_frontend
@@ -88,3 +94,7 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis-app:
+        condition: service_healthy

@@ -2,27 +2,15 @@
 # Preview needs a single flick: `make preview` (PREVIEW=true via infra/.env.preview).
 .PHONY: start preview preview-down down logs clean restart load-up load-down load-test
 
-# Optional standalone datastores (postgres + user redis): `make start WITH_DATA=1`
-# merges the atoms below into this project (shared default network, DNS by
-# service name). The atoms are imported directly rather than via the data
-# bundle because compose `include:` paths resolve from the main file, not
-# the including file. Plain `make start` uses the datastore URLs from .env
-# instead. Use the same flag on down/clean to include the data containers
-# (clean -v removes their volumes too).
-# NOTE: this block must stay above COMPOSE — COMPOSE uses immediate (:=)
-# expansion, so DATA_COMPOSE has to be set first.
-WITH_DATA ?= 0
-DATA_COMPOSE := $(if $(filter 1 true yes,$(WITH_DATA)),-f ../../infra/docker/postgres/standalone.yml -f ../../infra/docker/redis/standalone.yml)
-
-COMPOSE := docker compose -f infra/compose.yml $(DATA_COMPOSE)
+# Datastores (postgres + user redis) are included in infra/compose.yml and
+# always start with the web stack. `down` stops them; `clean -v` removes
+# their volumes too.
+COMPOSE := docker compose -f infra/compose.yml
 PREVIEW_COMPOSE := docker compose --env-file infra/.env.preview -f infra/compose.yml
 LOAD_COMPOSE := docker compose --env-file infra/.env.load -f infra/compose.load.yml
 
 start:
 	@if [ ! -f .env ]; then echo "Missing apps/web/.env with real values (preview needs nothing: use 'make preview')."; exit 1; fi
-ifneq ($(DATA_COMPOSE),)
-	$(COMPOSE) up -d --wait postgres redis-app
-endif
 	$(COMPOSE) up -d --build
 
 preview:
