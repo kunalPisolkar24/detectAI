@@ -107,10 +107,27 @@ describe('cancelSubscriptionAction', () => {
 
     const result = await cancelSubscriptionAction()
 
-    expect(prismaMock.subscription.update).toHaveBeenCalledWith({
-      where: { userId: mockUserId },
-      data: { cancellationScheduled: false }
-    })
+    // Gateway-first: DB is untouched when gateway fails (no partial state to revert)
+    expect(prismaMock.subscription.update).not.toHaveBeenCalled()
+    expect(result).toEqual({ error: 'Failed to communicate with payment provider. Please try again.' })
+  })
+
+  it('does not update database if gateway fetch throws', async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: mockUserId } } as any)
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: mockUserId,
+      email: mockEmail,
+      subscription: {
+        paddleSubscriptionId: 'sub-1',
+        status: SubscriptionStatus.ACTIVE,
+      }
+    } as any)
+
+    vi.mocked(fetch).mockRejectedValue(new Error('ECONNREFUSED'))
+
+    const result = await cancelSubscriptionAction()
+
+    expect(prismaMock.subscription.update).not.toHaveBeenCalled()
     expect(result).toEqual({ error: 'Failed to communicate with payment provider. Please try again.' })
   })
 

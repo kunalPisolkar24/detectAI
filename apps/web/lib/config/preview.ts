@@ -1,5 +1,6 @@
 export const PREVIEW_TOOLTIP = "Not available in preview mode"
 export const DOCUMENT_PARSER_UNAVAILABLE_TOOLTIP = "Document parsing is temporarily unavailable"
+export const PAYMENT_GATEWAY_UNAVAILABLE_TOOLTIP = "Payments temporarily unavailable"
 export const PREVIEW_PREMIUM_KEY = "preview:isPremium"
 export const PREVIEW_DONT_SHOW_NOTICE_KEY = "preview:dontShowNotice"
 /** Prefix for per-user preview identities (`preview-<email>`, see auth-options). */

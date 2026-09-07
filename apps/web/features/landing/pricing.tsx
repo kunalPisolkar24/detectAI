@@ -15,9 +15,10 @@ interface PricingProps {
   onPlanSelect?: (planId: string, billingCycle: "monthly" | "yearly") => void
   isProcessing?: boolean
   isUpgradePage?: boolean
+  isGatewayDown?: boolean
 }
 
-export const Pricing = ({ onPlanSelect, isProcessing = false, isUpgradePage = false }: PricingProps) => {
+export const Pricing = ({ onPlanSelect, isProcessing = false, isUpgradePage = false, isGatewayDown = false }: PricingProps) => {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly")
 
   const handleCardAction = (planId: string) => {
@@ -123,6 +124,7 @@ export const Pricing = ({ onPlanSelect, isProcessing = false, isUpgradePage = fa
                 onAction={isUpgradePage ? handleCardAction : undefined}
                 isLoading={isProcessingThisCard}
                 disabled={isDisabled}
+                gatewayDisabled={isGatewayDown && isUpgradePage}
               />
             )
           })}

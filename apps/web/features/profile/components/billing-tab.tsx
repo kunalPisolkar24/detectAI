@@ -9,6 +9,7 @@ import { CreditCard, Sparkles, Loader2, AlertTriangle, Clock } from "lucide-reac
 import { cn } from "@/lib/core/utils"
 import { teko, inter } from "@/lib/core/fonts"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,8 +22,9 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { cancelSubscriptionAction } from "../actions/cancel-subscription"
-import { isPreviewModeClient, getPreviewUserId, setPreviewPremium } from "@/lib/config/preview"
+import { isPreviewModeClient, getPreviewUserId, setPreviewPremium, PAYMENT_GATEWAY_UNAVAILABLE_TOOLTIP } from "@/lib/config/preview"
 import { useSession } from "next-auth/react"
+import { usePaymentGatewayStatus } from "@/features/upgrade/hooks/use-payment-gateway-status"
 
 interface BillingTabProps {
   user: {
@@ -37,6 +39,10 @@ export const BillingTab = ({ user, paddleCancellationScheduled }: BillingTabProp
   const router = useRouter()
   const { data: session, update: updateSession } = useSession()
   const isPreview = isPreviewModeClient()
+  const { isDown: isPaymentGatewayDown } = usePaymentGatewayStatus()
+  // Preview already has local upgrade/cancel; gateway check only matters outside preview.
+  const isUpgradeBlocked = !isPreview && isPaymentGatewayDown
+  const isCancelBlocked = !isPreview && isPaymentGatewayDown && !paddleCancellationScheduled
   const [isPending, startTransition] = useTransition()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
 
@@ -136,74 +142,89 @@ export const BillingTab = ({ user, paddleCancellationScheduled }: BillingTabProp
 
                 {!paddleCancellationScheduled && (
                   <div className="pt-4 flex gap-3">
-                    <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          disabled={isPending}
-                          className={cn(
-                            "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500",
-                            "dark:hover:bg-red-950/20 transition-all duration-200 tracking-wide text-lg",
-                            teko.className
-                          )}
-                        >
-                          CANCEL SUBSCRIPTION
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle className={cn("flex items-center gap-2", teko.className)}>
-                            <AlertTriangle className="h-5 w-5 text-red-500" />
-                            Confirm Cancellation
-                          </AlertDialogTitle>
-                          <AlertDialogDescription className="text-muted-foreground">
-                            Are you sure you want to cancel your subscription?
-                            <br /><br />
-                            Your plan will remain active until <span className="font-medium text-foreground">{user.subscriptionEndsAt ? format(new Date(user.subscriptionEndsAt), "MMMM d, yyyy") : "the period ends"}</span>. After that, your account will revert to the Free tier.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel
-                            disabled={isPending}
-                            className={cn("text-base tracking-wide", teko.className)}
-                          >
-                            KEEP SUBSCRIPTION
-                          </AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={(e) => {
-                              e.preventDefault()
-                              handleConfirmCancel()
-                            }}
-                            disabled={isPending}
-                            className={cn(
-                              "bg-red-600 hover:bg-red-700 text-white border-red-600 dark:border-red-600 tracking-wide text-lg",
-                              teko.className
-                            )}
-                          >
-                            {isPending ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              "YES, CANCEL PLAN"
-                            )}
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                disabled={isPending || isCancelBlocked}
+                                className={cn(
+                                  "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500",
+                                  "dark:hover:bg-red-950/20 transition-all duration-200 tracking-wide text-lg",
+                                  teko.className
+                                )}
+                              >
+                                CANCEL SUBSCRIPTION
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle className={cn("flex items-center gap-2", teko.className)}>
+                                  <AlertTriangle className="h-5 w-5 text-red-500" />
+                                  Confirm Cancellation
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="text-muted-foreground">
+                                  Are you sure you want to cancel your subscription?
+                                  <br /><br />
+                                  Your plan will remain active until <span className="font-medium text-foreground">{user.subscriptionEndsAt ? format(new Date(user.subscriptionEndsAt), "MMMM d, yyyy") : "the period ends"}</span>. After that, your account will revert to the Free tier.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel
+                                  disabled={isPending}
+                                  className={cn("text-base tracking-wide", teko.className)}
+                                >
+                                  KEEP SUBSCRIPTION
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    handleConfirmCancel()
+                                  }}
+                                  disabled={isPending || isCancelBlocked}
+                                  className={cn(
+                                    "bg-red-600 hover:bg-red-700 text-white border-red-600 dark:border-red-600 tracking-wide text-lg",
+                                    teko.className
+                                  )}
+                                >
+                                  {isPending ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  ) : (
+                                    "YES, CANCEL PLAN"
+                                  )}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </span>
+                      </TooltipTrigger>
+                      {isCancelBlocked && <TooltipContent>{PAYMENT_GATEWAY_UNAVAILABLE_TOOLTIP}</TooltipContent>}
+                    </Tooltip>
                   </div>
                 )}
               </div>
             ) : (
               <div className="pt-4">
-                <Button
-                  onClick={() => router.push("/upgrade")}
-                  className={cn(
-                    "w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700",
-                    "text-white border-0 text-xl tracking-wide shadow-lg hover:shadow-xl transition-all duration-200",
-                    teko.className
-                  )}
-                >
-                  UPGRADE NOW
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="block">
+                      <Button
+                        onClick={() => router.push("/upgrade")}
+                        disabled={isUpgradeBlocked}
+                        className={cn(
+                          "w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700",
+                          "text-white border-0 text-xl tracking-wide shadow-lg hover:shadow-xl transition-all duration-200",
+                          teko.className
+                        )}
+                      >
+                        UPGRADE NOW
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {isUpgradeBlocked && <TooltipContent>{PAYMENT_GATEWAY_UNAVAILABLE_TOOLTIP}</TooltipContent>}
+                </Tooltip>
               </div>
             )}
           </div>

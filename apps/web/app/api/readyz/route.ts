@@ -77,10 +77,31 @@ async function checkDocumentParser(): Promise<CheckResult> {
   }
 }
 
+async function checkPaymentGateway(): Promise<CheckResult> {
+  if (isPreviewMode()) return { status: "skipped" }
+  const start = performance.now()
+  try {
+    const { env } = await import("@/lib/config/env")
+    const url = `${env.PAYMENT_GATEWAY_URL.replace(/\/$/, "")}/readyz`
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 2000)
+    try {
+      const res = await fetch(url, { signal: controller.signal, cache: "no-store" })
+      if (!res.ok) return { status: "error", error: `readyz ${res.status}` }
+      return { status: "ok", latencyMs: Math.round(performance.now() - start) }
+    } finally {
+      clearTimeout(timer)
+    }
+  } catch (err) {
+    return { status: "error", error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 /**
- * Readiness probe — postgres + redis are required; document parser is optional
- * (degraded, not 503 — paste still works). In preview mode all are skipped.
- * Returns 200 when required checks pass, 503 when any required check fails.
+ * Readiness probe — postgres + redis are required; document parser and payment
+ * gateway are optional (degraded, not 503 — core routes still work). In preview
+ * mode all are skipped. Returns 200 when required checks pass, 503 when any
+ * required check fails.
  */
 export async function GET() {
   if (isPreviewMode()) {
@@ -92,22 +113,26 @@ export async function GET() {
           postgres: { status: "skipped" },
           redis: { status: "skipped" },
           documentParser: { status: "skipped" },
+          paymentGateway: { status: "skipped" },
         },
       },
       { headers: { "Cache-Control": "no-store, private" } },
     )
   }
 
-  const [postgres, redis, documentParser] = await Promise.all([
+  const [postgres, redis, documentParser, paymentGateway] = await Promise.all([
     checkPostgres(),
     checkRedis(),
     checkDocumentParser(),
+    checkPaymentGateway(),
   ])
   const ready = postgres.status === "ok" && redis.status === "ok"
-  const status = ready ? (documentParser.status === "error" ? "degraded" : "ready") : "not_ready"
+  const degraded =
+    documentParser.status === "error" || paymentGateway.status === "error"
+  const status = ready ? (degraded ? "degraded" : "ready") : "not_ready"
 
   return NextResponse.json(
-    { status, checks: { postgres, redis, documentParser } },
+    { status, checks: { postgres, redis, documentParser, paymentGateway } },
     {
       status: ready ? 200 : 503,
       headers: { "Cache-Control": "no-store, private" },

@@ -12,7 +12,8 @@ import { env } from "@/lib/config/env"
 import { teko, inter } from "@/lib/core/fonts"
 import { Button } from "@/components/ui/button"
 import { Pricing } from "@/features/landing/pricing"
-import { isPreviewModeClient, getPreviewUserId, setPreviewPremium } from "@/lib/config/preview"
+import { isPreviewModeClient, getPreviewUserId, setPreviewPremium, PAYMENT_GATEWAY_UNAVAILABLE_TOOLTIP } from "@/lib/config/preview"
+import { usePaymentGatewayStatus } from "../hooks/use-payment-gateway-status"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +32,7 @@ export const UpgradeView = () => {
   const router = useRouter()
   const { data: session, status, update: updateSession } = useSession()
   const isPreview = isPreviewModeClient()
+  const { isDown: isPaymentGatewayDown } = usePaymentGatewayStatus()
   const [paddle, setPaddle] = useState<Paddle | undefined>()
   const [isPaddleInitializing, setIsPaddleInitializing] = useState(!isPreview)
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
@@ -153,6 +155,11 @@ export const UpgradeView = () => {
       return
     }
 
+    if (!isPreview && isPaymentGatewayDown) {
+      toast.error(PAYMENT_GATEWAY_UNAVAILABLE_TOOLTIP)
+      return
+    }
+
     if (!paddle) {
       toast.error("Payment system is still loading. Please try again.")
       return
@@ -202,6 +209,7 @@ export const UpgradeView = () => {
           isUpgradePage={true}
           onPlanSelect={handlePlanSelect}
           isProcessing={isPaddleInitializing}
+          isGatewayDown={!isPreview && isPaymentGatewayDown}
         />
       </div>
 
