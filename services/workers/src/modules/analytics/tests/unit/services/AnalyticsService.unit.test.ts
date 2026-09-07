@@ -65,9 +65,9 @@ describe("AnalyticsService", () => {
     const tryBegin = mock(() => Promise.resolve(false));
     const dedupedService = buildServiceWithDedupe(tryBegin);
 
-    await dedupedService.handleUsageEvent("user_1", 10, "evt-1");
+    await dedupedService.handleUsageEvent("user_1", 10, "123e4567-e89b-12d3-a456-426614174000");
 
-    expect(tryBegin).toHaveBeenCalledWith("evt-1");
+    expect(tryBegin).toHaveBeenCalledWith("123e4567-e89b-12d3-a456-426614174000");
     expect(mockUserRepository.incrementUsage).not.toHaveBeenCalled();
     expect(mockMainClient.del).not.toHaveBeenCalled();
   });
@@ -77,21 +77,20 @@ describe("AnalyticsService", () => {
     const dedupedService = buildServiceWithDedupe(tryBegin);
     mockMainClient.del.mockRejectedValueOnce(new Error("redis down"));
 
-    await dedupedService.handleUsageEvent("user_1", 10, "evt-2");
+    await dedupedService.handleUsageEvent("user_1", 10, "123e4567-e89b-12d3-a456-426614174001");
 
-    expect(tryBegin).toHaveBeenCalledWith("evt-2");
+    expect(tryBegin).toHaveBeenCalledWith("123e4567-e89b-12d3-a456-426614174001");
     expect(mockUserRepository.incrementUsage).toHaveBeenCalledWith("user_1", 10);
     expect(metricsMock.jobTotal.inc).toHaveBeenCalledWith({ job_type: "usage_event" });
   });
 
-  test("should process events without eventId when no deduplicator impact", async () => {
-    await service.handleUsageEvent("user_1", 3, "evt-3");
-
-    expect(mockUserRepository.incrementUsage).toHaveBeenCalledWith("user_1", 3);
+  test("should reject events without eventId (dedup would be bypassed)", async () => {
+    await expect(service.handleUsageEvent("user_1", 3, "" as any)).rejects.toThrow(/eventId/);
+    expect(mockUserRepository.incrementUsage).not.toHaveBeenCalled();
   });
 
   test("should increment usage and invalidate cache", async () => {
-    await service.handleUsageEvent("user_1", 10);
+    await service.handleUsageEvent("user_1", 10, "123e4567-e89b-12d3-a456-426614174002");
 
     expect(mockUserRepository.incrementUsage).toHaveBeenCalledWith("user_1", 10);
     expect(mockMainClient.del).toHaveBeenCalledWith(CacheKeys.user("user_1"));
@@ -102,7 +101,7 @@ describe("AnalyticsService", () => {
   test("should propagate error on db failure", async () => {
     mockUserRepository.incrementUsage.mockRejectedValue(new Error("DB Connection Error"));
 
-    await expect(service.handleUsageEvent("user_1", 5)).rejects.toThrow("DB Connection Error");
+    await expect(service.handleUsageEvent("user_1", 5, "123e4567-e89b-12d3-a456-426614174003")).rejects.toThrow("DB Connection Error");
     expect(metricsMock.jobErrors.inc).toHaveBeenCalledWith({ job_type: "usage_event", error_type: "db_error" });
     expect(mockMainClient.del).not.toHaveBeenCalled();
   });

@@ -141,16 +141,40 @@ export class PrismaUserRepository implements IUserRepository {
         }
     }
 
+    /**
+     * Atomically increments usage, resetting the daily counter on UTC day
+     * rollover. `lastApiCallReset` is the day marker: when it is NULL or from
+     * a previous UTC day, today's count starts at `count` instead of +=.
+     * Single-statement UPSERT — safe under concurrent flush.
+     */
     async incrementUsage(userId: string, count: number): Promise<void> {
         await this.prismaWriter.$executeRaw`
             INSERT INTO "Usage" ("id", "userId", "apiCallCountTotal", "apiCallCountDaily", "lastApiCallReset", "updatedAt", "createdAt")
             VALUES (gen_random_uuid(), ${userId}, ${count}, ${count}, NOW(), NOW(), NOW())
             ON CONFLICT ("userId") DO UPDATE SET
-                "apiCallCountTotal" = "Usage"."apiCallCountTotal" + ${count},
-                "apiCallCountDaily" = "Usage"."apiCallCountDaily" + ${count},
-                "lastApiCallReset" = "Usage"."lastApiCallReset",
+                "apiCallCountTotal" = "Usage"."apiCallCountTotal" + EXCLUDED."apiCallCountTotal",
+                "apiCallCountDaily" = CASE
+                    WHEN ("Usage"."lastApiCallReset" IS NULL OR ("Usage"."lastApiCallReset" AT TIME ZONE 'UTC')::date < (NOW() AT TIME ZONE 'UTC')::date)
+                    THEN EXCLUDED."apiCallCountDaily"
+                    ELSE "Usage"."apiCallCountDaily" + EXCLUDED."apiCallCountDaily"
+                END,
+                "lastApiCallReset" = NOW(),
                 "updatedAt" = NOW()
         `;
+    }
+
+    /**
+     * Safety-net reset for rows the hot path never touches (e.g. writes that
+     * landed just before midnight, or rows predating the atomic reset).
+     * Idempotent: only touches rows whose marker is not today (UTC).
+     * Returns the number of rows reset.
+     */
+    async resetStaleDailyUsage(): Promise<number> {
+        const count = await this.prismaWriter.$executeRaw`
+            UPDATE "Usage" SET "apiCallCountDaily" = 0, "lastApiCallReset" = NOW(), "updatedAt" = NOW()
+            WHERE "lastApiCallReset" IS NULL OR ("lastApiCallReset" AT TIME ZONE 'UTC')::date < (NOW() AT TIME ZONE 'UTC')::date
+        `;
+        return typeof count === "number" ? count : Number(count) || 0;
     }
 
     async lockAndUpdateSubscription(

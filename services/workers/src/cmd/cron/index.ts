@@ -2,6 +2,7 @@ import { initTracing } from "@shared/tracing/instrumentation";
 initTracing("worker-cron");
 
 import { SubscriptionSweeper } from "@modules/cron/application/services/SubscriptionSweeper";
+import { UsageResetter } from "@modules/cron/application/services/UsageResetter";
 import { prismaPrimary, closePrisma } from "@shared/database/PrismaService";
 import { prisma } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
@@ -37,6 +38,7 @@ wireRedisMetrics(redisClient, metricsService, "CronRedis");
 
 const userRepository = new PrismaUserRepository(prismaPrimary, prisma, undefined, metricsService);
 const sweeper = new SubscriptionSweeper(userRepository, redisClient, metricsService, config.CRON_BATCH_SIZE);
+const usageResetter = new UsageResetter(userRepository, metricsService);
 
 // liveness heartbeat + shutdown flag — must be defined before WorkerServer so healthCheck can close over them
 let isShuttingDown = false;
@@ -125,7 +127,16 @@ async function startWorker(): Promise<void> {
 
     while (!isShuttingDown) {
         try {
-            currentJob = sweeper.processExpiredSubscriptions();
+            currentJob = (async () => {
+                const swept = await sweeper.processExpiredSubscriptions();
+                // Safety net: no-op most hours, resets rows the hot path missed.
+                try {
+                    await usageResetter.resetIfDue();
+                } catch {
+                    // Logged inside; sweep success takes precedence.
+                }
+                return swept;
+            })();
             const processedCount = await currentJob;
             currentJob = null;
             lastSuccess = Date.now();

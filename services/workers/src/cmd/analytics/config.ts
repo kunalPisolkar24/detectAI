@@ -1,4 +1,11 @@
+import { z } from "zod";
 import { baseEnvSchema, createConfig } from "@shared/config";
+
+// Compose always exports `VAR=${VAR:-}` (empty string when unset); treat ""
+// as unset so local runs without EVENT_REDIS_* fall back to REDIS_URL instead
+// of crashing validation.
+const emptyToUndefined = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (v === "" ? undefined : v), schema.optional());
 
 const analyticsEnvSchema = baseEnvSchema
   .pick({
@@ -16,11 +23,11 @@ const analyticsEnvSchema = baseEnvSchema
     OTEL_SERVICE_NAME: true,
   })
   .extend({
-    EVENT_REDIS_URL: baseEnvSchema.shape.REDIS_URL.optional(),
-    EVENT_REDIS_MODE: baseEnvSchema.shape.REDIS_MODE.optional(),
-    EVENT_REDIS_SENTINELS: baseEnvSchema.shape.REDIS_SENTINELS.optional(),
-    EVENT_REDIS_MASTER_NAME: baseEnvSchema.shape.REDIS_MASTER_NAME.optional(),
-    EVENT_REDIS_PASSWORD: baseEnvSchema.shape.REDIS_PASSWORD.optional(),
+    EVENT_REDIS_URL: emptyToUndefined(baseEnvSchema.shape.REDIS_URL),
+    EVENT_REDIS_MODE: emptyToUndefined(baseEnvSchema.shape.REDIS_MODE),
+    EVENT_REDIS_SENTINELS: emptyToUndefined(baseEnvSchema.shape.REDIS_SENTINELS),
+    EVENT_REDIS_MASTER_NAME: emptyToUndefined(baseEnvSchema.shape.REDIS_MASTER_NAME),
+    EVENT_REDIS_PASSWORD: emptyToUndefined(baseEnvSchema.shape.REDIS_PASSWORD),
   });
 
 export const config = createConfig(analyticsEnvSchema, "Analytics");

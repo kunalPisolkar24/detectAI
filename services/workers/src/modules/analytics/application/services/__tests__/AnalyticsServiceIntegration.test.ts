@@ -38,7 +38,7 @@ describe("AnalyticsService Integration", () => {
         const userId = user.id;
         await redis.set(CacheKeys.user(userId), "cached-data");
 
-        await service.handleUsageEvent(userId, 10);
+        await service.handleUsageEvent(userId, 10, crypto.randomUUID());
 
         const usage = await prismaPrimary.usage.findUnique({ where: { userId } });
         expect(usage?.apiCallCountTotal).toBe(10);

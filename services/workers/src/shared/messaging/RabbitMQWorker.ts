@@ -145,7 +145,13 @@ export class RabbitMQWorker {
         const retryQueue = `${this.queueName}_retry`;
 
         await this.channel.assertExchange(dlxName, "direct", { durable: true });
-        await this.channel.assertQueue(dlqName, { durable: true });
+        // DLQ durability must match the main queue: a classic DLQ behind a
+        // quorum pipeline is an operational inconsistency (ordering + durability).
+        const dlqArgs: Record<string, unknown> = {};
+        if (this.queueType === "quorum") {
+            dlqArgs["x-queue-type"] = "quorum";
+        }
+        await this.channel.assertQueue(dlqName, Object.keys(dlqArgs).length > 0 ? { durable: true, arguments: dlqArgs } : { durable: true });
         await this.channel.bindQueue(dlqName, dlxName, this.queueName);
 
         // Retry exchange/queue with TTL and DLX back to main queue

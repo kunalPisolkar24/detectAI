@@ -55,4 +55,18 @@ export const metrics = {
     labelNames: ["tier"],
     registers: [registry],
   })),
+
+  analyticsPublishFailures: getOrCreateMetric('analytics_publish_failures_total', () => new Counter({
+    name: "analytics_publish_failures_total",
+    help: "Total analytics publish failures by stage (publish, retry, dropped)",
+    labelNames: ["stage"],
+    registers: [registry],
+  })),
+
+  usageRedisErrors: getOrCreateMetric('usage_redis_errors_total', () => new Counter({
+    name: "usage_redis_errors_total",
+    help: "Total usage-Redis errors by operation (get, incr, corrupt_value)",
+    labelNames: ["operation"],
+    registers: [registry],
+  })),
 }

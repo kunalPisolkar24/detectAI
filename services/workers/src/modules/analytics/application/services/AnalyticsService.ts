@@ -17,13 +17,22 @@ export class AnalyticsService {
     this.cacheInvalidator = new UserCacheInvalidator(mainClient, metrics);
   }
 
-  async handleUsageEvent(userId: string, count: number, eventId?: string): Promise<void> {
+  /**
+   * Persist one usage event exactly once per `eventId`.
+   *
+   * `eventId` is required: without it redeliveries cannot dedupe. The queue
+   * schema enforces this; this guard is defense-in-depth for direct callers.
+   */
+  async handleUsageEvent(userId: string, count: number, eventId: string): Promise<void> {
     const timer = this.metrics.jobDuration.startTimer({ job_type: "usage_event" });
 
     this.metrics.activeJobs.inc({ job_type: "usage_event" });
     let claimed = false;
     try {
-      if (this.deduplicator && eventId) {
+      if (!eventId || typeof eventId !== "string" || !eventId.trim()) {
+        throw new Error("handleUsageEvent requires a non-empty eventId");
+      }
+      if (this.deduplicator) {
         const isNew = await this.deduplicator.tryBegin(eventId);
         if (!isNew) {
           Logger.info("Duplicate usage event skipped", { userId, eventId });

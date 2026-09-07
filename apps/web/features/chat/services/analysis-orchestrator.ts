@@ -15,6 +15,14 @@ export interface AnalysisParams {
   sourceMessageId?: string
   userMessageId?: string
   userCreatedAt?: string
+  /**
+   * Idempotency key for usage accounting. When omitted a fresh UUID is
+   * generated in `trackUsage`. Pass a caller-owned key when the same logical
+   * analysis may be submitted more than once (e.g. HTTP retry) so the worker
+   * dedupes it. Each genuinely new analysis should use a new key (and is
+   * counted separately — inference ran again).
+   */
+  eventId?: string
 }
 
 export class AnalysisOrchestrator {
@@ -108,7 +116,11 @@ export class AnalysisOrchestrator {
         finalized = true
 
         try {
-          await this.rateLimitService.trackUsage(params.userId)
+          if (params.eventId) {
+            await this.rateLimitService.trackUsage(params.userId, { eventId: params.eventId })
+          } else {
+            await this.rateLimitService.trackUsage(params.userId)
+          }
         } catch {
         }
 

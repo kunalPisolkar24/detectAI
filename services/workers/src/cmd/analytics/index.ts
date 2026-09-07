@@ -13,12 +13,25 @@ import { config } from "./config";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
 import { UsageEventDeduplicator } from "@modules/analytics/infrastructure/UsageEventDeduplicator";
 import { withTimeout } from "@shared/utils/withTimeout";
+import { MissingFieldError } from "@modules/payments/domain/errors";
 import { registerPools, wireRedisMetrics, getPoolWaiting, isPoolPressured, checkDb, checkRedis } from "@shared/health/checks";
 
 const QUEUE_NAME = "analytics.usage";
 
+/**
+ * Usage event contract v1 (must match `apps/web/lib/infrastructure/analytics-publisher.ts`).
+ *
+ * - `eventId` is REQUIRED: it is the idempotency key for exactly-once
+ *   processing via `UsageEventDeduplicator`. Producers that omit it bypass
+ *   dedup and double-count on redelivery.
+ * - `event_type` is accepted for metric routing (`usage_event`); legacy
+ *   producers without it still validate but are labeled `other` at the
+ *   transport layer until they upgrade.
+ */
 const UsageEventSchema = z.object({
-  eventId: z.string().uuid().optional(),
+  event_type: z.literal("usage_event").optional(),
+  type: z.literal("usage_event").optional(),
+  eventId: z.string().uuid(),
   userId: z.string().min(1),
   count: z.number().int().positive(),
   timestamp: z.string().datetime().optional(),
@@ -46,6 +59,10 @@ const dedupClient = cfgAny.EVENT_REDIS_URL
     })
   : mainClient;
 
+if (dedupClient === mainClient) {
+  Logger.warn("EVENT_REDIS_URL not set; analytics dedup shares AnalyticsMain (allkeys-lru can evict dedup keys and cause double-count under memory pressure)");
+}
+
 const metricsService = new MetricsService("worker-analytics");
 registerPools(metricsService);
 
@@ -58,24 +75,34 @@ const userRepository = new PrismaUserRepository(prismaPrimary, prisma, undefined
 const usageDeduplicator = new UsageEventDeduplicator(dedupClient);
 const analyticsService = new AnalyticsService(userRepository, mainClient, metricsService, usageDeduplicator);
 
-// analytics.usage publisher (web) asserts quorum; consumer must match to avoid 406
+// analytics.usage publisher (web) asserts quorum; consumer must match to avoid 406.
+// `allowedJobTypes` bounds the `job_type` metric label: `usage_event` passes
+// through, anything else is labeled `other` (no cardinality explosion).
 const worker = new RabbitMQWorker(
   (config as any).RABBITMQ_URL,
   QUEUE_NAME,
   async (event: any) => {
+    // Reject preview traffic server-side: the web preview path must never
+    // publish, but direct producers (load proxy, scripts) might. Counting
+    // `preview-*` ids would pollute billing.
+    if (typeof event?.userId === "string" && event.userId.startsWith("preview-")) {
+      Logger.warn("Dropping preview usage event", { userId: event.userId });
+      try { metricsService.staleEventsFilteredTotal.inc({ reason: "preview" }); } catch {}
+      return;
+    }
     const result = UsageEventSchema.safeParse(event);
     if (!result.success) {
       Logger.warn("Invalid analytics usage event", { errors: result.error.format(), event });
-      // Count as DLQ — don't silently ACK
-      try { metricsService.deadLetteredTotal.inc({ job_type: "usage_event" }); } catch {}
-      // Throw MissingFieldError-equivalent to route to DLQ via RabbitMQWorker isRetryable logic?
-      // For now, return after metric — RabbitMQWorker will ACK (we handle DLQ here). Future group will throw.
-      return;
+      // Throw non-retryable so RabbitMQWorker routes to the DLQ (nack) instead
+      // of ACKing. Previously this `return`ed, silently dropping poison
+      // messages while incrementing the dead-letter metric.
+      throw new MissingFieldError("usage_event: eventId/userId/count failed validation");
     }
     await analyticsService.handleUsageEvent(result.data.userId, result.data.count, result.data.eventId);
   },
   metricsService,
-  "quorum"
+  "quorum",
+  ["usage_event"]
 );
 
 let isShuttingDown = false;
@@ -104,16 +131,27 @@ const server = new WorkerServer(
 );
 
 async function bootstrap(): Promise<void> {
+  // `withTimeout` resolves to the fallback instead of rejecting, so an
+  // explicit null/false check is required — otherwise the worker starts with
+  // dead dependencies and only readiness protects it.
+  let ready = false;
   for (let attempt = 1; attempt <= 5; attempt++) {
-    try {
-      await withTimeout(prismaPrimary.$queryRaw`SELECT 1`, 3000, null as any);
-      await withTimeout(mainClient.ping(), 3000, null as any);
-      if (dedupClient !== mainClient) await withTimeout(dedupClient.ping(), 3000, null as any);
-      break;
-    } catch (e: any) {
-      Logger.warn(`Analytics bootstrap waiting for deps (attempt ${attempt}/5)`, { error: e instanceof Error ? e.message : String(e) });
-      if (attempt < 5) await new Promise(r => setTimeout(r, 2000));
+    const db = await withTimeout(prismaPrimary.$queryRaw`SELECT 1`.then(() => true).catch(() => null), 3000, null as any);
+    const redis = await withTimeout(mainClient.ping().then(() => true).catch(() => null), 3000, null as any);
+    let dedup: unknown = true;
+    if (dedupClient !== mainClient) {
+      dedup = await withTimeout(dedupClient.ping().then(() => true).catch(() => null), 3000, null as any);
     }
+    if (db && redis && dedup) {
+      ready = true;
+      break;
+    }
+    Logger.warn(`Analytics bootstrap waiting for deps (attempt ${attempt}/5)`, { dbOk: !!db, redisOk: !!redis, dedupOk: !!dedup });
+    if (attempt < 5) await new Promise(r => setTimeout(r, 2000));
+  }
+  if (!ready) {
+    Logger.error("Analytics bootstrap failed: dependencies unreachable after 5 attempts");
+    process.exit(1);
   }
   server.start();
   metricsService.activeWorkers.inc();

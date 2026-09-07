@@ -139,6 +139,8 @@ spec:
     image: {{ $exporterImage | quote }}
     tag: {{ $exporterTag | quote }}
     imagePullPolicy: IfNotPresent
+  redisConfig:
+    maxmemory-policy: {{ .Values.databases.redis.usage.maxmemoryPolicy | quote }}
   storage:
     volumeClaimTemplate:
       spec:

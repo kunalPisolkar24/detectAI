@@ -276,6 +276,10 @@ databases:
       maxmemoryPolicy: "allkeys-lru"
     usage:
       storageSize: "1Gi"
+      # Rate-limit counters rely on TTL expiry, never eviction — noeviction so
+      # a full instance errors (and falls back to DB) instead of silently
+      # resetting quotas via LRU eviction.
+      maxmemoryPolicy: "noeviction"
     events:
       # Persistent dedup store for payment:event:ts:* — must not use cache-only (--save "" --appendonly no)
       storageSize: "1Gi"

@@ -23,16 +23,16 @@ vi.mock('@/lib/infrastructure/prisma', () => ({
   prisma: {
     usage: {
       findUnique: vi.fn(),
-      upsert: vi.fn(),
     },
+    $executeRaw: vi.fn(),
   },
 }))
 
 describe('RedisRateLimitService', () => {
   let service: RedisRateLimitService
   const mockPipeline = {
-    incr: vi.fn().mockReturnThis(),
-    expire: vi.fn().mockReturnThis(),
+    incrby: vi.fn().mockReturnThis(),
+    expireat: vi.fn().mockReturnThis(),
     exec: vi.fn(),
   }
 
@@ -42,16 +42,18 @@ describe('RedisRateLimitService', () => {
     vi.setSystemTime(new Date('2026-04-25T12:00:00Z'))
     service = new RedisRateLimitService()
     vi.mocked(usageRedis.pipeline).mockReturnValue(mockPipeline as any)
-    mockPipeline.incr.mockReturnThis()
-    mockPipeline.expire.mockReturnThis()
-    mockPipeline.exec.mockResolvedValue([])
+    mockPipeline.incrby.mockReturnThis()
+    mockPipeline.expireat.mockReturnThis()
+    mockPipeline.exec.mockResolvedValue([[null, 1], [null, 1]])
+    vi.mocked(analyticsPublisher.publish).mockResolvedValue('evt-123' as any)
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
   })
 
   afterEach(() => {
     vi.useRealTimers()
   })
 
-  it('generates correct daily key based on current date', async () => {
+  it('generates correct UTC daily key based on current date', async () => {
     vi.mocked(usageRedis.get).mockResolvedValue('0')
     await service.checkLimit('user-1', false)
     expect(usageRedis.get).toHaveBeenCalledWith('rate_limit:{user-1}:daily:2026-04-25')
@@ -83,11 +85,24 @@ describe('RedisRateLimitService', () => {
       expect(result).toEqual({ allowed: false, remaining: 0 })
     })
 
-    it('fails open and logs error if redis call fails', async () => {
+    it('treats corrupt redis values as zero instead of NaN', async () => {
+      vi.mocked(usageRedis.get).mockResolvedValue('not-a-number')
+      const result = await service.checkLimit('user-free', false)
+      expect(result).toEqual({ allowed: true, remaining: 100 })
+      expect(metrics.usageRedisErrors.inc).toHaveBeenCalledWith({ operation: 'corrupt_value' })
+    })
+
+    it('treats missing redis key as zero', async () => {
+      vi.mocked(usageRedis.get).mockResolvedValue(null)
+      const result = await service.checkLimit('user-free', false)
+      expect(result).toEqual({ allowed: true, remaining: 100 })
+    })
+
+    it('fails open and logs error if redis and DB both fail', async () => {
       vi.mocked(usageRedis.get).mockRejectedValue(new Error('Redis down'))
       vi.mocked(prisma.usage.findUnique).mockRejectedValue(new Error('DB down'))
       const result = await service.checkLimit('user-free', false)
-      
+
       expect(result).toEqual({ allowed: true, remaining: 1 })
       expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({
         msg: 'Rate limit check failed, falling back to DB',
@@ -99,48 +114,118 @@ describe('RedisRateLimitService', () => {
       }))
     })
 
-    it('falls back to DB if redis fails', async () => {
+    it('falls back to DB if redis fails and reset is today', async () => {
       vi.mocked(usageRedis.get).mockRejectedValue(new Error('Redis down'))
-      vi.mocked(prisma.usage.findUnique).mockResolvedValue({ apiCallCountDaily: 20 } as any)
+      vi.mocked(prisma.usage.findUnique).mockResolvedValue({
+        apiCallCountDaily: 20,
+        lastApiCallReset: new Date('2026-04-25T01:00:00Z'),
+      } as any)
       const result = await service.checkLimit('user-free', false)
       expect(result).toEqual({ allowed: true, remaining: 80 })
+    })
+
+    it('treats stale DB daily as zero when reset is from a previous UTC day', async () => {
+      vi.mocked(usageRedis.get).mockRejectedValue(new Error('Redis down'))
+      vi.mocked(prisma.usage.findUnique).mockResolvedValue({
+        apiCallCountDaily: 150,
+        lastApiCallReset: new Date('2026-04-24T23:00:00Z'),
+      } as any)
+      const result = await service.checkLimit('user-free', false)
+      expect(result).toEqual({ allowed: true, remaining: 100 })
+    })
+
+    it('uses DB fallback for unsafe userIds without touching redis', async () => {
+      vi.mocked(prisma.usage.findUnique).mockResolvedValue({
+        apiCallCountDaily: 10,
+        lastApiCallReset: new Date('2026-04-25T00:00:00Z'),
+      } as any)
+      const result = await service.checkLimit('user}evil', false)
+      expect(usageRedis.get).not.toHaveBeenCalled()
+      expect(result).toEqual({ allowed: true, remaining: 90 })
     })
   })
 
   describe('trackUsage', () => {
-    it('increments daily key and publishes to rabbitmq', async () => {
-      mockPipeline.exec.mockResolvedValue([])
+    const midnightUTC = Math.floor(Date.UTC(2026, 3, 26, 0, 0, 0, 0) / 1000)
+
+    it('increments UTC daily key with midnight expiry and publishes with one eventId', async () => {
       await service.trackUsage('user-1')
 
       const dailyKey = 'rate_limit:{user-1}:daily:2026-04-25'
 
-      expect(mockPipeline.incr).toHaveBeenCalledWith(dailyKey)
-      expect(mockPipeline.expire).toHaveBeenCalledWith(dailyKey, 86400)
+      expect(mockPipeline.incrby).toHaveBeenCalledWith(dailyKey, 1)
+      expect(mockPipeline.expireat).toHaveBeenCalledWith(dailyKey, midnightUTC)
       expect(mockPipeline.exec).toHaveBeenCalled()
-      expect(analyticsPublisher.publish).toHaveBeenCalledWith('user-1', 1)
+      expect(analyticsPublisher.publish).toHaveBeenCalledWith('user-1', 1, expect.stringMatching(/^[0-9a-f-]{36}$/i))
+      expect(prisma.$executeRaw).not.toHaveBeenCalled()
     })
 
-    it('logs error if pipeline execution fails', async () => {
-      mockPipeline.exec.mockRejectedValue(new Error('Pipeline failed'))
-      vi.mocked(prisma.usage.upsert).mockResolvedValue({} as any)
+    it('reuses a caller-provided eventId for queue idempotency', async () => {
+      const eventId = '123e4567-e89b-12d3-a456-426614174000'
+      await service.trackUsage('user-1', { eventId })
+      expect(analyticsPublisher.publish).toHaveBeenCalledWith('user-1', 1, eventId)
+      expect(prisma.$executeRaw).not.toHaveBeenCalled()
+    })
+
+    it('does NOT direct-write DB when Redis fails but queue succeeds (avoids double count)', async () => {
+      mockPipeline.exec.mockRejectedValue(new Error('Redis down'))
+      vi.mocked(analyticsPublisher.publish).mockResolvedValue('evt-1' as any)
       await service.trackUsage('user-1')
 
+      expect(prisma.$executeRaw).not.toHaveBeenCalled()
       expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({
-        msg: 'Failed to track usage metrics, falling back to DB',
-        userId: 'user-1'
+        msg: 'Usage Redis unavailable, relying on queue flush for persistence',
       }))
-      expect(prisma.usage.upsert).toHaveBeenCalled()
     })
 
-    it('logs DB fallback error if both redis and DB fail', async () => {
-      mockPipeline.exec.mockRejectedValue(new Error('Pipeline failed'))
-      vi.mocked(prisma.usage.upsert).mockRejectedValue(new Error('DB down'))
+    it('does NOT direct-write DB when publish fails but Redis succeeded (avoids double count)', async () => {
+      vi.mocked(analyticsPublisher.publish).mockRejectedValue(new Error('Rabbit down'))
+      await service.trackUsage('user-1')
+
+      expect(prisma.$executeRaw).not.toHaveBeenCalled()
+      expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({
+        msg: 'Analytics publish failed after Redis increment; DB will lag until queue recovers',
+      }))
+    })
+
+    it('falls back to date-aware DB upsert only when both Redis and queue fail', async () => {
+      mockPipeline.exec.mockRejectedValue(new Error('Redis down'))
+      vi.mocked(analyticsPublisher.publish).mockRejectedValue(new Error('Rabbit down'))
+      await service.trackUsage('user-1')
+
+      expect(prisma.$executeRaw).toHaveBeenCalled()
+      expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({
+        msg: 'Failed to track usage via Redis and queue, falling back to DB',
+        userId: 'user-1'
+      }))
+    })
+
+    it('treats per-command pipeline errors as Redis failure', async () => {
+      mockPipeline.exec.mockResolvedValue([[new Error('INCR failed'), null], [null, 1]])
+      vi.mocked(analyticsPublisher.publish).mockResolvedValue('evt-1' as any)
+      await service.trackUsage('user-1')
+
+      // Queue succeeded so still no DB write — but Redis path counted as failed.
+      expect(prisma.$executeRaw).not.toHaveBeenCalled()
+    })
+
+    it('logs DB fallback error if all three paths fail', async () => {
+      mockPipeline.exec.mockRejectedValue(new Error('Redis down'))
+      vi.mocked(analyticsPublisher.publish).mockRejectedValue(new Error('Rabbit down'))
+      vi.mocked(prisma.$executeRaw).mockRejectedValue(new Error('DB down'))
       await service.trackUsage('user-1')
 
       expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({
         msg: 'DB fallback failed for trackUsage',
         userId: 'user-1'
       }))
+    })
+
+    it('skips invalid counts without side effects', async () => {
+      await service.trackUsage('user-1', { count: 0 })
+      expect(mockPipeline.exec).not.toHaveBeenCalled()
+      expect(analyticsPublisher.publish).not.toHaveBeenCalled()
+      expect(prisma.$executeRaw).not.toHaveBeenCalled()
     })
   })
 
@@ -153,7 +238,7 @@ describe('RedisRateLimitService', () => {
       expect(prisma.usage.findUnique).not.toHaveBeenCalled()
     })
 
-    it('returns zero if key does not exist in redis', async () => {
+    it('returns zero if key does not exist in redis and DB is empty', async () => {
       vi.mocked(usageRedis.get).mockResolvedValue(null)
       vi.mocked(prisma.usage.findUnique).mockResolvedValue(null as any)
 
@@ -161,9 +246,41 @@ describe('RedisRateLimitService', () => {
       expect(result).toEqual({ dailyCount: 0 })
     })
 
+    it('returns zero for corrupt redis values', async () => {
+      vi.mocked(usageRedis.get).mockResolvedValue('garbage')
+
+      const result = await service.getRealTimeUsage('user-1')
+      expect(result).toEqual({ dailyCount: 0 })
+    })
+
+    it('falls back to db if redis misses and reset is today', async () => {
+      vi.mocked(usageRedis.get).mockResolvedValue(null)
+      vi.mocked(prisma.usage.findUnique).mockResolvedValue({
+        apiCallCountDaily: 25,
+        lastApiCallReset: new Date('2026-04-25T05:00:00Z'),
+      } as any)
+
+      const result = await service.getRealTimeUsage('user-1')
+      expect(result).toEqual({ dailyCount: 25 })
+    })
+
+    it('returns zero when DB daily is stale (previous UTC day)', async () => {
+      vi.mocked(usageRedis.get).mockResolvedValue(null)
+      vi.mocked(prisma.usage.findUnique).mockResolvedValue({
+        apiCallCountDaily: 99,
+        lastApiCallReset: new Date('2026-04-20T00:00:00Z'),
+      } as any)
+
+      const result = await service.getRealTimeUsage('user-1')
+      expect(result).toEqual({ dailyCount: 0 })
+    })
+
     it('falls back to db if redis fails', async () => {
       vi.mocked(usageRedis.get).mockRejectedValue(new Error('Redis error'))
-      vi.mocked(prisma.usage.findUnique).mockResolvedValue({ apiCallCountDaily: 25 } as any)
+      vi.mocked(prisma.usage.findUnique).mockResolvedValue({
+        apiCallCountDaily: 25,
+        lastApiCallReset: new Date('2026-04-25T00:00:00Z'),
+      } as any)
 
       const result = await service.getRealTimeUsage('user-1')
       expect(result).toEqual({ dailyCount: 25 })

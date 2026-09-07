@@ -105,8 +105,10 @@ const server = serve({
                         update: {}
                     });
 
+                    // Contract v1: eventId (idempotency key) + event_type required.
+                    const eventId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
                     if (amqpChannel) {
-                        amqpChannel.sendToQueue("analytics.usage", Buffer.from(JSON.stringify({ userId, count, timestamp: new Date().toISOString() })), { persistent: true });
+                        amqpChannel.sendToQueue("analytics.usage", Buffer.from(JSON.stringify({ event_type: "usage_event", eventId, userId, count, timestamp: new Date().toISOString() })), { persistent: true });
                     }
                 }
 

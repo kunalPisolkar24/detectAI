@@ -27,6 +27,11 @@ export interface IUserRepository {
         onSelected?: (users: ExpiredSubscription[]) => Promise<void>
     ): Promise<ExpiredSubscription[]>;
     incrementUsage(userId: string, count: number): Promise<void>;
+    /**
+     * Idempotent UTC-day reset for stale `Usage` rows. Returns rows reset.
+     * Safety net for the atomic rollover in `incrementUsage`.
+     */
+    resetStaleDailyUsage(): Promise<number>;
     lockAndUpdateSubscription(
         userId: string,
         eventTimestamp: Date,

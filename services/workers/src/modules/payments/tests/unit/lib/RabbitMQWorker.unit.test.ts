@@ -110,6 +110,12 @@ describe("RabbitMQWorker", () => {
                 "x-queue-type": "quorum"
             })
         }));
+        // DLQ durability must match the main queue (quorum pipeline, quorum DLQ).
+        expect(mockChannel.assertQueue).toHaveBeenCalledWith("test_queue_dlq", expect.objectContaining({
+            arguments: expect.objectContaining({
+                "x-queue-type": "quorum"
+            })
+        }));
     });
 
     test("should handle connection close event without exiting", async () => {

@@ -18,6 +18,13 @@ services:
       - REDIS_MODE=${REDIS_MODE:-standalone}
       - RABBITMQ_URL=${RABBITMQ_URL}
       - RABBITMQ_QUEUE_TYPE=${RABBITMQ_QUEUE_TYPE:-quorum}
+      # Dedup store: falls back to REDIS_URL when unset (LRU eviction risk).
+      # Wire EVENT_REDIS_* to the persistent events instance in real envs.
+      - EVENT_REDIS_URL=${EVENT_REDIS_URL:-}
+      - EVENT_REDIS_MODE=${EVENT_REDIS_MODE:-standalone}
+      - EVENT_REDIS_SENTINELS=${EVENT_REDIS_SENTINELS:-}
+      - EVENT_REDIS_MASTER_NAME=${EVENT_REDIS_MASTER_NAME:-}
+      - EVENT_REDIS_PASSWORD=${EVENT_REDIS_PASSWORD:-}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-worker-analytics}
       - OTEL_TRACES_SAMPLER=${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}

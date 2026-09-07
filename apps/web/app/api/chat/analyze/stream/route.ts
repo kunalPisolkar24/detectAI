@@ -109,9 +109,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 })
     }
 
+    // One idempotency key per HTTP attempt. The Redis INCR and the queue
+    // message share it, so a broker redelivery dedupes in the worker. A
+    // genuinely new analysis (including client retry with new inference) gets
+    // a new key and is counted separately.
+    const eventId = crypto.randomUUID()
+
     const stream = await analysisOrchestrator.execute({
       ...parsed.data,
       userId: userId!,
+      eventId,
     }, request.signal)
 
     return new Response(stream, {
