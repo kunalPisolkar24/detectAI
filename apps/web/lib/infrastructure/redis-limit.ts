@@ -65,6 +65,9 @@ const createClient = (): RedisClient => {
     cluster.on("error", (err) => {
       console.error("Redis Cluster Error:", err.message)
     })
+    cluster.on("close", () => {
+      console.error("Redis Cluster closed")
+    })
 
     return cluster
   }
@@ -73,13 +76,20 @@ const createClient = (): RedisClient => {
     lazyConnect: true,
     password: env.REDIS_USAGE_PASSWORD,
     keepAlive: 10000,
-    retryStrategy: (times) => Math.min(times * 50, 2000),
+    // Same fail-fast rationale as redis.ts — degrade to DB quickly.
+    retryStrategy: (times) => (times > 3 ? null : Math.min(times * 50, 500)),
+    maxRetriesPerRequest: 2,
+    enableOfflineQueue: false,
+    enableReadyCheck: true,
   }
 
   const client = new Redis(env.REDIS_USAGE_URL, options)
   
   client.on("error", (err) => {
     console.error("Redis Usage Client Error:", err.message)
+  })
+  client.on("close", () => {
+    console.error("Redis Usage Client closed")
   })
 
   return client

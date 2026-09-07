@@ -31,9 +31,13 @@ const getStandaloneConfig = (): { url: string; options: RedisOptions } => {
     url: env.REDIS_URL,
     options: {
       password: env.REDIS_PASSWORD,
-      retryStrategy: (times) => Math.min(times * 50, 2000),
-      enableReadyCheck: false,
-      maxRetriesPerRequest: null,
+      // Fail fast so cache/lock callers degrade to postgres-only mode quickly
+      // instead of hanging on retries (lock-service/readyz already have their own 2s timeouts,
+      // but maxRetriesPerRequest:null would queue forever offline).
+      retryStrategy: (times) => (times > 3 ? null : Math.min(times * 50, 500)),
+      enableReadyCheck: true,
+      maxRetriesPerRequest: 2,
+      enableOfflineQueue: false,
       family: 4,
       keepAlive: 10000,
       lazyConnect: true,
@@ -53,9 +57,10 @@ const getSentinelConfig = (): RedisOptions => {
     name: env.REDIS_MASTER_NAME || "mymaster",
     password: env.REDIS_PASSWORD,
     sentinelPassword: env.REDIS_PASSWORD,
-    retryStrategy: (times) => Math.min(times * 50, 2000),
-    enableReadyCheck: false,
-    maxRetriesPerRequest: null,
+    retryStrategy: (times) => (times > 3 ? null : Math.min(times * 50, 500)),
+    enableReadyCheck: true,
+    maxRetriesPerRequest: 2,
+    enableOfflineQueue: false,
     family: 4,
     keepAlive: 10000,
     lazyConnect: true,
@@ -88,9 +93,15 @@ const createRedisClients = () => {
   writer.on("error", (err) => {
     console.error("Redis Writer Error:", err.message)
   })
+  writer.on("close", () => {
+    console.error("Redis Writer closed")
+  })
 
   reader.on("error", (err) => {
     console.error("Redis Reader Error:", err.message)
+  })
+  reader.on("close", () => {
+    console.error("Redis Reader closed")
   })
 
   return { writer, reader }
