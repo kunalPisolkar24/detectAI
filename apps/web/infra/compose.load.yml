@@ -1,30 +1,13 @@
 # Self-contained load-test rig (throwaway postgres/redis, mock-server, k6).
 # Isolated from the main stack by design: `make load-test`.
+# Datastores come from the shared atoms (values via infra/.env.load);
+# separate project, host ports, and project-prefixed volumes keep them
+# hermetic.
+include:
+  - path: ../../../infra/docker/postgres/standalone.yml
+  - path: ../../../infra/docker/redis/standalone.yml
+
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=detectai_load
-    ports:
-      - "5433:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6380:6379"
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   mock-server:
     build:
       context: ..
@@ -45,7 +28,8 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/detectai_load
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:load-redis-password@redis-app:6379
+      - REDIS_PASSWORD=load-redis-password
       - REDIS_MODE=standalone
       - NEXTAUTH_SECRET=load-test-secret
       - NEXTAUTH_URL=http://frontend:3000
@@ -61,13 +45,12 @@ services:
       - GITHUB_SECRET=dummy
       - GOOGLE_ID=dummy
       - GOOGLE_SECRET=dummy
-      - REDIS_USAGE_URL=redis://redis:6379
-      - REDIS_MASTER_NAME=mymaster
+      - REDIS_USAGE_URL=redis://:load-redis-password@redis-app:6379
       - AI_SERVICE_API_KEY=dummy
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+      redis-app:
         condition: service_healthy
     ports:
       - "3001:3000"

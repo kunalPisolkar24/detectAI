@@ -1,0 +1,30 @@
+# Standalone redis template (single user-cache instance, no HA).
+#
+# Importable atom: reference it from a stack via compose `include:`
+# (paths resolve relative to the including file), e.g.:
+#   include:
+#     - path: ../../../infra/docker/redis/standalone.yml
+# or merge it with `-f`. Everything varying is a variable (see
+# infra/docker/data/.env.example); importing projects isolate volumes
+# and networks by project name. No `networks:` / `container_name` here
+# so multiple projects can run side by side.
+x-redis: &redis
+  image: redis:7-alpine
+  restart: unless-stopped
+  command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+  healthcheck:
+    test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+    interval: 5s
+    timeout: 3s
+    retries: 10
+
+services:
+  redis-app:
+    <<: *redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_app_data:/data
+
+volumes:
+  redis_app_data:

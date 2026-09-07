@@ -7,9 +7,9 @@
 # separate compose file is needed.
 #
 # Datastores (postgres + user redis) are NOT defined here. Either point
-# .env at an existing instance, or import the standalone data stack:
+# .env at an existing instance, or import the standalone atoms:
 #   make start WITH_DATA=1
-# which merges ../../infra/docker/data/compose.yml into this project.
+# which merges the postgres/redis templates into this project.
 # NOTE: no depends_on the data services here — `depends_on` requires the
 # target to exist in the merged project, so startup ordering with WITH_DATA
 # is enforced by the makefile (`up --wait` on healthy datastores first).

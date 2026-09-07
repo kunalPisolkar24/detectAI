@@ -1,0 +1,33 @@
+# Standalone postgres template (single instance, no HA).
+#
+# Importable atom: reference it from a stack via compose `include:`
+# (paths resolve relative to the including file), e.g.:
+#   include:
+#     - path: ../../../infra/docker/postgres/standalone.yml
+# or merge it with `-f`. Everything varying is a variable (see
+# infra/docker/data/.env.example); importing projects isolate volumes
+# and networks by project name. No `networks:` / `container_name` here
+# so multiple projects can run side by side.
+x-postgres: &postgres
+  image: postgres:16-alpine
+  restart: unless-stopped
+  environment:
+    POSTGRES_USER: ${POSTGRES_USER}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    POSTGRES_DB: ${POSTGRES_DB}
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+    interval: 5s
+    timeout: 5s
+    retries: 10
+
+services:
+  postgres:
+    <<: *postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

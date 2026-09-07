@@ -34,8 +34,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-# ...except the checked-in canned preview defaults (test keys/dummies only, no secrets)
+# ...except the checked-in canned preview/load defaults (test keys/dummies only, no secrets)
 !infra/.env.preview
+!infra/.env.load
 
 # vercel
 .vercel
