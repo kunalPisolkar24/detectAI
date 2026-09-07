@@ -1,3 +1,5 @@
+name: gateway-load
+
 include:
   - path: ../../../../infra/docker/rabbitmq/standalone.yml
   - path: ../../../../infra/docker/rabbitmq/management.yml
@@ -12,7 +14,7 @@ services:
       context: ..
       dockerfile: Dockerfile
     environment:
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
       PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET:-test_webhook_secret}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-test_internal_key}
       PORT: "8080"

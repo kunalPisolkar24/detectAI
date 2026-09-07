@@ -8,7 +8,7 @@ sequenceDiagram
     participant GW as Gateway
     participant Val as Validator
     participant RMQ as RabbitMQ
-    Paddle->>GW: POST webhook with Paddle-Signature: ts=...;h1=...
+    Paddle->>GW: "POST webhook with Paddle-Signature: ts=...;h1=..."
     GW->>Val: Extract ts and h1
     Val->>Val: Check ts within 5min
     Val->>Val: HMAC SHA256 ts:body with secret

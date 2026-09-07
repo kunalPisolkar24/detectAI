@@ -37,11 +37,15 @@ Set secrets if needed (defaults to `test_*`):
 PADDLE_WEBHOOK_SECRET=whsec_... INTERNAL_API_KEY=s3cr3t make load-test SCENARIO=internal TARGET_VUS=50
 ```
 
+Load publishes `5673/15673` (not `5672/15672`), so it runs side-by-side with `make gateway-up`. Override via `RABBITMQ_PORT` / `RABBITMQ_UI_PORT`.
+
 ## Env
 
 | Var | Default | Used |
 |---|---|---|
 | `BASE_URL` | `http://payment-gateway:8080` | k6 target |
+| `RABBITMQ_URL` | `amqp://guest:guest@rabbitmq:5672/` | gateway dial (container port, unaffected by host publish) |
+| `RABBITMQ_PORT` / `RABBITMQ_UI_PORT` | `5673` / `15673` (load), `5672` / `15672` (main) | host publish |
 | `PADDLE_WEBHOOK_SECRET` | `test_secret` | `utils.js` HMAC |
 | `INTERNAL_API_KEY` | `test_internal_key` | internal |
 | `TARGET_VUS` | `20` (spike) | `options.stages` |

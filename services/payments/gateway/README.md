@@ -122,8 +122,11 @@ make gateway-build
 # Start gateway with RabbitMQ and management UI (default)
 make gateway-up
 
-# Start gateway only, without RabbitMQ
-make gateway-up WITH_RABBITMQ=0
+# Start gateway only, without RabbitMQ (needs external broker)
+make gateway-up WITH_RABBITMQ=0 RABBITMQ_URL=amqp://user:pass@host:5672/
+
+# Start without the management UI
+make gateway-up WITH_UI=0
 
 # View live logs and running containers
 make gateway-logs

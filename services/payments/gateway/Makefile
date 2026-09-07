@@ -18,8 +18,10 @@ test-integration:
 
 # Self-contained load test: compose brings up rabbitmq + gateway + k6 on a
 # dedicated network, no dependency on the main detect_ai stack.
+# Load publishes 5673/15673 (not 5672/15672) so it runs side-by-side with `gateway-up`.
 # Usage: make load-test SCENARIO=spike TARGET_VUS=100 DURATION=60s
 load-test:
+	RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
 	docker compose -f infra/compose.load.yml up --abort-on-container-exit --exit-code-from k6
 
 load-down:
@@ -43,10 +45,11 @@ deps:
 	go get github.com/testcontainers/testcontainers-go/modules/rabbitmq
 
 # Gateway with RabbitMQ via shared infra atoms (infra/docker/rabbitmq/*)
-# Usage: make gateway-up [WITH_RABBITMQ=0|1] [WITH_UI=0|1]
-#   gateway only:              make gateway-up WITH_RABBITMQ=0
+# Usage: make gateway-up [WITH_RABBITMQ=0|1] [WITH_UI=0|1] [RABBITMQ_URL=...]
+#   gateway only:              make gateway-up WITH_RABBITMQ=0 RABBITMQ_URL=amqp://user:pass@host:5672/
 #   gateway + rabbitmq:        make gateway-up WITH_UI=0
 #   gateway + rabbitmq + ui:   make gateway-up  (default)
+# WITH_RABBITMQ=0 needs an external RABBITMQ_URL (gateway fast-fails 503 otherwise).
 # RabbitMQ templates live at infra/docker/rabbitmq/standalone.yml (+ management.yml)
 # Any service can `include: path: ../../../infra/docker/rabbitmq/standalone.yml`.
 gateway-build:
@@ -54,6 +57,8 @@ gateway-build:
 
 gateway-up:
 	@WITH_RABBITMQ=$${WITH_RABBITMQ:-1} WITH_UI=$${WITH_UI:-1}; \
+	if [ "$$WITH_UI" = "1" ] && [ "$$WITH_RABBITMQ" != "1" ]; then echo "WARNING: WITH_UI needs WITH_RABBITMQ=1, ignoring UI"; WITH_UI=0; fi; \
+	if [ "$$WITH_RABBITMQ" != "1" ] && [ -z "$${RABBITMQ_URL:-}" ]; then echo "WARNING: WITH_RABBITMQ=0 without RABBITMQ_URL — gateway will fast-fail 503 until an external broker is set"; fi; \
 	COMPOSE="docker compose -f infra/compose.yml"; \
 	if [ "$$WITH_RABBITMQ" = "1" ]; then COMPOSE="$$COMPOSE -f ../../../infra/docker/rabbitmq/standalone.yml"; fi; \
 	if [ "$$WITH_UI" = "1" ] && [ "$$WITH_RABBITMQ" = "1" ]; then COMPOSE="$$COMPOSE -f ../../../infra/docker/rabbitmq/management.yml"; fi; \

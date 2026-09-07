@@ -23,7 +23,9 @@ Failed validation → service exits `log.Fatal`.
 
 ## Compose
 
-* `infra/compose.yml` — gateway only (for `WITH_RABBITMQ=0`).
-* `infra/docker/rabbitmq/standalone.yml` — shared RabbitMQ atom (single instance, `5672`, volume `rabbitmq_data`).
-* `infra/docker/rabbitmq/management.yml` — UI overlay (adds `15672`, switches to `management-alpine`). Include after `standalone.yml`.
-* `infra/compose.load.yml` — `rabbitmq + gateway + k6` for `make load-test` (now `include:` the two atoms above, isolated on `gateway_loadnet`).
+* `infra/compose.yml` (`name: gateway`) — gateway only, no `include`, no `depends_on` (app fast-fails `503` when the broker is down instead of gating startup).
+* `infra/docker/rabbitmq/standalone.yml` — shared RabbitMQ atom (single instance, `${RABBITMQ_PORT:-5672}:5672`, volume `rabbitmq_data`).
+* `infra/docker/rabbitmq/management.yml` — UI overlay (adds `${RABBITMQ_UI_PORT:-15672}:15672`, switches to `management-alpine`). Include after `standalone.yml`.
+* `infra/compose.load.yml` (`name: gateway-load`) — `rabbitmq + gateway + k6` for `make load-test` (`include:` the two atoms above, isolated on `gateway_loadnet`). Load publishes `5673/15673` (via `Makefile`), so it runs side-by-side with the main stack (`5672/15672`).
+
+Opt-out (`make gateway-up WITH_RABBITMQ=0`) needs an external `RABBITMQ_URL` — without it the gateway fast-fails `503` (`Retry-After: 5`). `WITH_UI=1` requires `WITH_RABBITMQ=1` and is ignored otherwise (with a warning).

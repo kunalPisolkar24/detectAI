@@ -1,3 +1,5 @@
+name: gateway
+
 services:
   payment-gateway:
     container_name: payment_gateway
