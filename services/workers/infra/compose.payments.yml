@@ -1,17 +1,14 @@
-# Payments worker stack: postgres-users + redis-users + redis-events + rabbitmq.
-# redis-events is Paddle-only (paddle:evt:* 7d + payment:event:ts:* 30d,
-# AOF + noeviction) — required here, nowhere else.
-# Self-contained: own project/network/volumes (`name:` below), so one
-# stack's up/down never disturbs another. Run with:
-#   make worker-up WORKER=payments   # from services/workers
+# Payments worker service definition (datastores merged via -f, see Makefile).
+# Needs postgres-users + redis-users + redis-events (Paddle-only:
+# paddle:evt:* 7d + payment:event:ts:* 30d, AOF + noeviction) + rabbitmq.
+#
+# No depends_on gates on purpose: the worker boots degraded (liveness ok,
+# readiness reflects dep state), the broker consumer reconnects on its own,
+# Redis fails open (DB ledger is authoritative), and handler DB failures
+# requeue instead of DLQing.
+# Always boot via `make worker-up WORKER=payments` (from services/workers),
+# which merges this file with the needed infra atoms.
 name: detect-ai-workers-payments
-
-include:
-  - path: ./compose.migrate.yml
-  - path: ../../../infra/docker/postgres-users/standalone.yml
-  - path: ../../../infra/docker/redis-users/standalone.yml
-  - path: ../../../infra/docker/redis-events/standalone.yml
-  - path: ../../../infra/docker/rabbitmq/standalone.yml
 
 services:
   worker-payments:
@@ -47,17 +44,8 @@ services:
       - PORT=7003
     ports:
       - "${WORKER_PAYMENTS_PORT:-7003}:7003"
-    depends_on:
-      db-migrate:
-        condition: service_completed_successfully
-      postgres-users:
-        condition: service_healthy
-      redis-users:
-        condition: service_healthy
-      redis-events:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "bun", "-e", "const r = await fetch('http://localhost:7003/ready'); if (!r.ok) process.exit(1);"]
       interval: 30s

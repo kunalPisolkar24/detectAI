@@ -5,6 +5,7 @@ import { trace, SpanStatusCode, propagation, context } from "@opentelemetry/api"
 import { isRetryableError } from "../errors/isRetryableError";
 import { simpleBackoffWithJitter } from "../retry/backoff";
 import { abortableSleep } from "../utils/abortableSleep";
+import { checkDb } from "../health/checks";
 
 type MessageHandler = (msg: any) => Promise<void>;
 
@@ -18,6 +19,13 @@ export class RabbitMQWorker {
     private inflight = 0;
     private abortController = new AbortController();
     private readonly prefetch: number;
+    // Backpressure pause before requeueing on infra failure. Prefetch is 1,
+    // so this only parks this consumer — no tight redelivery loop, no DLQ.
+    // Tunable via env for tests (INFRA_REQUEUE_DELAY_MS=0 to skip the wait).
+    private static readonly INFRA_REQUEUE_DELAY_MS = (() => {
+        const n = parseInt(process.env.INFRA_REQUEUE_DELAY_MS ?? "", 10);
+        return Number.isFinite(n) && n >= 0 ? n : 5000;
+    })();
 
     constructor(
         private readonly queueUrl: string,
@@ -284,6 +292,22 @@ export class RabbitMQWorker {
             this.safeAck(msg, deliveryChannel);
         } catch (error) {
             try { span.recordException(error as Error); span.setStatus({ code: SpanStatusCode.ERROR }); } catch {}
+            // System at fault (not the event): postgres — the authoritative
+            // store behind every handler — is unreachable. Requeue so the
+            // message stays queued in order instead of burning retries or
+            // landing in the DLQ. Redis is excluded on purpose: dedup and
+            // invalidation already fail open, so a Redis-only outage must
+            // not stall the queue.
+            let dbOk = true;
+            try { dbOk = await checkDb(); } catch { dbOk = false; }
+            if (!dbOk) {
+                try { (this.metrics as any).infraRequeuedTotal?.inc({ job_type: jobType, dep: "postgres" }); } catch {}
+                Logger.warn("Postgres unavailable, requeueing message (no retry burn, no DLQ)", { jobType, queue: this.queueName, error });
+                await abortableSleep(RabbitMQWorker.INFRA_REQUEUE_DELAY_MS, this.abortController.signal);
+                if (this.isShuttingDown) return;
+                this.safeNack(msg, deliveryChannel, true);
+                return;
+            }
             const retryable = isRetryableError(error);
             const retryCount = this.getRetryCount(msg);
             const maxRetries = 5;

@@ -100,7 +100,9 @@ const server = new WorkerServer(
 );
 
 async function bootstrap(): Promise<void> {
-    // Ensure DB/Redis are reachable before consuming — avoids immediate crash loops
+    // Degraded boot: probe deps for logs only, then start regardless. The
+    // broker consumer reconnects on its own, Redis fails open (DB ledger is
+    // authoritative), and handler DB failures requeue instead of DLQing.
     const maxAttempts = 5;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {

@@ -23,6 +23,7 @@ export class MetricsService {
     public readonly workerDuplicateEventsTotal: Counter;
     public readonly workerIdempotencyRedisErrorsTotal: Counter;
     public readonly workerRetryTotal: Counter;
+    public readonly infraRequeuedTotal: Counter;
     public readonly paddleCancelTotal: Counter;
     public readonly paddleRequestDuration: Histogram;
     public readonly cacheInvalidateDurationSeconds: Histogram;
@@ -182,6 +183,13 @@ export class MetricsService {
             name: "worker_retry_total",
             help: "Total retry attempts before DLQ",
             labelNames: ["job_type"],
+            registers: [this.registry]
+        });
+
+        this.infraRequeuedTotal = new Counter({
+            name: "worker_infra_requeued_total",
+            help: "Total messages nacked with requeue because infra (not the event) was at fault — no retry burn, no DLQ",
+            labelNames: ["job_type", "dep"],
             registers: [this.registry]
         });
 

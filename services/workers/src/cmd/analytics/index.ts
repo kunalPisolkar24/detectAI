@@ -107,23 +107,17 @@ const server = new WorkerServer(
 );
 
 async function bootstrap(): Promise<void> {
+  // Degraded boot: never exit for missing infra. The HTTP server starts
+  // immediately (liveness ok, readiness reflects dep state), the broker
+  // consumer reconnects on its own, Redis fails open (dedup treats events
+  // as new), and handler DB failures requeue instead of DLQing — so the
+  // worker self-heals with zero restarts and zero message loss.
   // `withTimeout` resolves to the fallback instead of rejecting, so an
-  // explicit null/false check is required — otherwise the worker starts with
-  // dead dependencies and only readiness protects it.
-  let ready = false;
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    const db = await withTimeout(prismaPrimary.$queryRaw`SELECT 1`.then(() => true).catch(() => null), 3000, null as any);
-    const redis = await withTimeout(mainClient.ping().then(() => true).catch(() => null), 3000, null as any);
-    if (db && redis) {
-      ready = true;
-      break;
-    }
-    Logger.warn(`Analytics bootstrap waiting for deps (attempt ${attempt}/5)`, { dbOk: !!db, redisOk: !!redis, dedupOk: !!redis });
-    if (attempt < 5) await new Promise(r => setTimeout(r, 2000));
-  }
-  if (!ready) {
-    Logger.error("Analytics bootstrap failed: dependencies unreachable after 5 attempts");
-    process.exit(1);
+  // explicit null/false check is required for the log line below.
+  const db = await withTimeout(prismaPrimary.$queryRaw`SELECT 1`.then(() => true).catch(() => null), 3000, null as any);
+  const redis = await withTimeout(mainClient.ping().then(() => true).catch(() => null), 3000, null as any);
+  if (!db || !redis) {
+    Logger.warn("Analytics starting degraded (deps will be retried in background)", { dbOk: !!db, redisOk: !!redis, dedupOk: !!redis });
   }
   server.start();
   metricsService.activeWorkers.inc();

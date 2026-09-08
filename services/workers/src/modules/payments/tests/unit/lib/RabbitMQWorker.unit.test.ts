@@ -1,12 +1,24 @@
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
-import { amqpMock, mockChannel, mockAck, mockNack, mockOn, mockAssertExchange, mockBindQueue } from "../../mocks/amqplib";
+import { amqpMock, mockChannel, mockAck, mockNack, mockOn, mockAssertExchange, mockBindQueue, mockPublish } from "../../mocks/amqplib";
 import { MetricsService } from "@shared/monitoring/MetricsService";
+
+// Skip the 5s infra-requeue backoff (env is read at worker module load).
+process.env.INFRA_REQUEUE_DELAY_MS = "0";
 
 const originalExit = process.exit;
 const mockExit = mock(() => { throw new Error("process.exit called"); });
 process.exit = mockExit as any;
 
 mock.module("amqplib", () => amqpMock);
+
+// The worker probes postgres on handler failure to tell infra faults apart
+// from poison events. Default: DB healthy (existing DLQ/retry semantics);
+// individual tests override per-case.
+const mockCheckDb = mock(() => Promise.resolve(true));
+mock.module("@shared/health/checks", () => ({
+    checkDb: (...args: unknown[]) => (mockCheckDb as any)(...args),
+    checkRedis: mock(() => Promise.resolve(true)),
+}));
 
 const { RabbitMQWorker } = await import("@shared/messaging/RabbitMQWorker");
 
@@ -19,6 +31,9 @@ describe("RabbitMQWorker", () => {
         mockHandler = mock(() => Promise.resolve());
         mockAck.mockClear();
         mockNack.mockClear();
+        mockPublish.mockClear();
+        mockCheckDb.mockReset();
+        mockCheckDb.mockImplementation(() => Promise.resolve(true));
         mockChannel.consume.mockClear();
         mockChannel.assertQueue.mockClear();
         mockChannel.assertExchange.mockClear();
@@ -181,6 +196,73 @@ describe("RabbitMQWorker", () => {
         // Should not throw even though channel is null — safeNack/publish handles it
         // Delivery may go to retry exchange or DLQ via deliveryChannel
         expect(mockNack.mock.calls.length + mockAck.mock.calls.length).toBeGreaterThanOrEqual(0);
+    });
+
+    test("should requeue (no retry burn, no DLQ) when postgres is down", async () => {
+        mockCheckDb.mockImplementation(() => Promise.resolve(false));
+        const failingHandler = mock(() => Promise.reject(new Error("connect ECONNREFUSED postgres:5432")));
+        worker = new RabbitMQWorker("amqp://localhost", "test_queue", failingHandler, metrics);
+        await worker.start();
+        const dlqSpy = mock(() => {});
+        const requeueSpy = mock(() => {});
+        (metrics as any).deadLetteredTotal.inc = dlqSpy;
+        (metrics as any).infraRequeuedTotal.inc = requeueSpy;
+
+        const onMessageCallback = mockChannel.consume.mock.calls[0]![1];
+        const fakeMsg = {
+            content: Buffer.from(JSON.stringify({ event_type: "test" })),
+            properties: { headers: {} },
+        } as any;
+        await onMessageCallback(fakeMsg);
+
+        expect(failingHandler).toHaveBeenCalled();
+        // Requeued head-of-queue: nack(msg, false, requeue=true)
+        expect(mockNack).toHaveBeenCalledWith(fakeMsg, false, true);
+        // No retry-exchange publish (retry counter untouched), no DLQ
+        expect(mockPublish).not.toHaveBeenCalled();
+        expect(dlqSpy).not.toHaveBeenCalled();
+        expect(requeueSpy).toHaveBeenCalledWith({ job_type: "other", dep: "postgres" });
+    });
+
+    test("should not burn retries across redeliveries during an outage", async () => {
+        mockCheckDb.mockImplementation(() => Promise.resolve(false));
+        const failingHandler = mock(() => Promise.reject(new Error("connect ECONNREFUSED postgres:5432")));
+        worker = new RabbitMQWorker("amqp://localhost", "test_queue", failingHandler, metrics);
+        await worker.start();
+
+        const onMessageCallback = mockChannel.consume.mock.calls[0]![1];
+        const fakeMsg = {
+            content: Buffer.from(JSON.stringify({ event_type: "test" })),
+            properties: { headers: {} },
+        } as any;
+        // Same delivery twice = broker redelivery after requeue
+        await onMessageCallback(fakeMsg);
+        await onMessageCallback(fakeMsg);
+
+        expect(mockPublish).not.toHaveBeenCalled();
+        expect(fakeMsg.properties.headers["x-retry-count"]).toBeUndefined();
+        expect(mockNack.mock.calls.filter((c: any) => c[2] === true).length).toBe(2);
+    });
+
+    test("should resume normal DLQ routing once postgres recovers", async () => {
+        const failingHandler = mock(() => Promise.reject(new Error("boom")));
+        worker = new RabbitMQWorker("amqp://localhost", "test_queue", failingHandler, metrics);
+        await worker.start();
+        const onMessageCallback = mockChannel.consume.mock.calls[0]![1];
+        const fakeMsg = {
+            content: Buffer.from(JSON.stringify({ event_type: "test" })),
+            properties: { headers: {} },
+        } as any;
+
+        // Outage: requeue, no retry publish
+        mockCheckDb.mockImplementation(() => Promise.resolve(false));
+        await onMessageCallback(fakeMsg);
+        expect(mockPublish).not.toHaveBeenCalled();
+
+        // Recovered: retryable error goes to the delayed retry exchange
+        mockCheckDb.mockImplementation(() => Promise.resolve(true));
+        await onMessageCallback(fakeMsg);
+        expect(mockPublish).toHaveBeenCalled();
     });
 
     test("should swallow channel errors during acknowledge", async () => {

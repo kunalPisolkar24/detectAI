@@ -1,14 +1,13 @@
-# Cron worker stack (subscription sweeper + usage resetter).
-# Needs postgres-users + redis-users only — no queue, no events-redis.
-# Self-contained: own project/network/volumes (`name:` below), so one
-# stack's up/down never disturbs another. Run with:
-#   make worker-up WORKER=cron   # from services/workers
+# Cron worker service definition (datastores merged via -f, see Makefile).
+# Subscription sweeper + usage resetter. Needs postgres-users + redis-users
+# only — no queue, no events-redis.
+#
+# No depends_on gates on purpose: the worker boots degraded (liveness ok,
+# readiness reflects dep state) and the loop catches per-iteration errors
+# with a 60s cooldown, so it self-heals with zero restarts.
+# Always boot via `make worker-up WORKER=cron` (from services/workers),
+# which merges this file with the needed infra atoms.
 name: detect-ai-workers-cron
-
-include:
-  - path: ./compose.migrate.yml
-  - path: ../../../infra/docker/postgres-users/standalone.yml
-  - path: ../../../infra/docker/redis-users/standalone.yml
 
 services:
   worker-cron:
@@ -36,13 +35,8 @@ services:
       - PORT=7002
     ports:
       - "${WORKER_CRON_PORT:-7002}:7002"
-    depends_on:
-      db-migrate:
-        condition: service_completed_successfully
-      postgres-users:
-        condition: service_healthy
-      redis-users:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "bun", "-e", "const r = await fetch('http://localhost:7002/health'); if (!r.ok) process.exit(1);"]
       interval: 30s

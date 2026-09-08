@@ -1,16 +1,13 @@
-# Analytics worker stack: postgres-users + redis-users + rabbitmq.
+# Analytics worker service definition (datastores merged via -f, see Makefile).
 # Usage events flow: web INCRs redis-users, publishes analytics.usage;
 # worker-analytics dedupes (redis-users) and UPSERTs postgres Usage.
-# Self-contained: own project/network/volumes (`name:` below), so one
-# stack's up/down never disturbs another. Run with:
-#   make worker-up WORKER=analytics   # from services/workers
+#
+# No depends_on gates on purpose: the worker boots degraded (liveness ok,
+# readiness reflects dep state), the broker consumer reconnects on its own,
+# Redis fails open, and handler DB failures requeue instead of DLQing.
+# Always boot via `make worker-up WORKER=analytics` (from services/workers),
+# which merges this file with the needed infra atoms.
 name: detect-ai-workers-analytics
-
-include:
-  - path: ./compose.migrate.yml
-  - path: ../../../infra/docker/postgres-users/standalone.yml
-  - path: ../../../infra/docker/redis-users/standalone.yml
-  - path: ../../../infra/docker/rabbitmq/standalone.yml
 
 services:
   worker-analytics:
@@ -39,15 +36,8 @@ services:
       - PORT=7001
     ports:
       - "${WORKER_ANALYTICS_PORT:-7001}:7001"
-    depends_on:
-      db-migrate:
-        condition: service_completed_successfully
-      postgres-users:
-        condition: service_healthy
-      redis-users:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "bun", "-e", "const r = await fetch('http://localhost:7001/ready'); if (!r.ok) process.exit(1);"]
       interval: 30s

@@ -6,10 +6,25 @@ SEED_COUNT ?= 50
 # Worker selector for the docker targets below.
 # Usage: make worker-up WORKER=payments
 # Valid values mirror the compose files in infra/ and the bun scripts:
-#   analytics -> infra/compose.analytics.yml (postgres + redis-cache + rabbitmq)
-#   cron      -> infra/compose.cron.yml      (postgres + redis-cache)
-#   payments  -> infra/compose.payments.yml  (postgres + redis-cache + redis-events + rabbitmq)
+#   analytics -> infra/compose.analytics.yml (postgres + redis-users + rabbitmq)
+#   cron      -> infra/compose.cron.yml      (postgres + redis-users)
+#   payments  -> infra/compose.payments.yml  (postgres + redis-users + redis-events + rabbitmq)
 WORKER ?=
+
+# Infra toggles (default 1 = boot the datastore with the stack).
+# Set to 0 to reuse a datastore owned by another terminal/stack instead of
+# spinning up a second copy (which would start with different data):
+#   terminal 1:  make worker-up WORKER=cron
+#   terminal 2:  make worker-up WORKER=payments WITH_POSTGRES=0 WITH_REDIS=0 \
+#                  DATABASE_URL=postgresql://user:password@host.docker.internal:5432/detect_ai \
+#                  REDIS_URL=redis://:user_cache_password@host.docker.internal:6379
+# WITH_X=0 requires the matching *_URL to point outside this stack — the
+# Makefile fails fast otherwise (see guard below). WITH_EVENTS / WITH_RABBITMQ
+# are ignored (with a warning) for workers that don't depend on them.
+WITH_POSTGRES ?= 1
+WITH_REDIS ?= 1
+WITH_EVENTS ?= 1
+WITH_RABBITMQ ?= 1
 
 # Local Infrastructure Defaults (pointing to ports mapped by the worker stacks)
 DATABASE_URL ?= postgresql://user:password@localhost:5432/detect_ai
@@ -33,6 +48,13 @@ help:
 	@echo "  make worker-build WORKER=...    - Build the worker image"
 	@echo "  make worker-config WORKER=...   - Render the compose config"
 	@echo ""
+	@echo "Infra toggles (share datastores across terminals instead of duplicating):"
+	@echo "  WITH_POSTGRES=0|1 WITH_REDIS=0|1 WITH_EVENTS=0|1 WITH_RABBITMQ=0|1 (default 1)"
+	@echo "  WITH_X=0 needs the matching *_URL exported at a shared instance, e.g.:"
+	@echo "    make worker-up WORKER=payments WITH_POSTGRES=0 WITH_REDIS=0 \\"
+	@echo "      DATABASE_URL=postgresql://user:password@host.docker.internal:5432/detect_ai \\"
+	@echo "      REDIS_URL=redis://:user_cache_password@host.docker.internal:6379"
+	@echo ""
 	@echo "Load Testing:"
 	@echo "  make proxy           - Start the load testing proxy (required for tests)"
 	@echo "  make proxy-stop      - Kill any existing proxy process on port 9999"
@@ -50,13 +72,57 @@ help:
 	@echo "  make test-integration - Run integration tests"
 
 # Env resolution: infra/.env wins when present, otherwise the checked-in
-# infra/.env.example supplies working local defaults (same project name, so
-# stacks share datastore volumes side by side). Shell-exported vars win over
-# either file. This keeps `make worker-up WORKER=cron` working with zero setup.
+# infra/.env.example supplies working local defaults. Shell-exported vars
+# win over either file. Stacks are isolated compose projects (see `name:`
+# in infra/compose.*.yml), so `down -v` on one never touches another.
 ENV_FILE := $(if $(wildcard infra/.env),infra/.env,infra/.env.example)
-COMPOSE = docker compose --env-file $(ENV_FILE) -f infra/compose.$(WORKER).yml
 
-# Resolve + validate WORKER, then run docker compose on its stack file.
+ATOM_DIR := ../../infra/docker
+WORKER_FILE := infra/compose.$(WORKER).yml
+
+# Infra file list per worker, minus anything toggled off. Mirrors the
+# dependency matrix in infra/.env.example. (Gateway precedent: conditional
+# -f merging; compose has no conditional include/depends_on.)
+ifeq ($(WORKER),analytics)
+ATOM_FILES := $(if $(filter 1,$(WITH_POSTGRES)),-f $(ATOM_DIR)/postgres-users/standalone.yml -f infra/compose.migrate.yml)
+ATOM_FILES += $(if $(filter 1,$(WITH_REDIS)),-f $(ATOM_DIR)/redis-users/standalone.yml)
+ATOM_FILES += $(if $(filter 1,$(WITH_RABBITMQ)),-f $(ATOM_DIR)/rabbitmq/standalone.yml)
+endif
+ifeq ($(WORKER),payments)
+ATOM_FILES := $(if $(filter 1,$(WITH_POSTGRES)),-f $(ATOM_DIR)/postgres-users/standalone.yml -f infra/compose.migrate.yml)
+ATOM_FILES += $(if $(filter 1,$(WITH_REDIS)),-f $(ATOM_DIR)/redis-users/standalone.yml)
+ATOM_FILES += $(if $(filter 1,$(WITH_EVENTS)),-f $(ATOM_DIR)/redis-events/standalone.yml)
+ATOM_FILES += $(if $(filter 1,$(WITH_RABBITMQ)),-f $(ATOM_DIR)/rabbitmq/standalone.yml)
+endif
+ifeq ($(WORKER),cron)
+ATOM_FILES := $(if $(filter 1,$(WITH_POSTGRES)),-f $(ATOM_DIR)/postgres-users/standalone.yml -f infra/compose.migrate.yml)
+ATOM_FILES += $(if $(filter 1,$(WITH_REDIS)),-f $(ATOM_DIR)/redis-users/standalone.yml)
+endif
+
+COMPOSE = docker compose --env-file $(ENV_FILE) -f $(WORKER_FILE) $(ATOM_FILES)
+
+# Effective value of a *_URL as compose will interpolate it: shell/command
+# line wins, else the env file. Used by the WITH_X=0 guard below.
+eff-url = $(if $(filter environment command line,$(origin $1)),$($1),$(shell grep -E '^$1=' $(ENV_FILE) 2>/dev/null | tail -1 | cut -d= -f2-))
+
+# Guard: WITH_X=0 with a URL still pointing at this stack's service DNS can
+# never resolve — fail fast with the sharing recipe instead of a cryptic
+# connection error after boot.
+define guard-shared-url
+@if [ "$($1)" = "0" ]; then \
+  url='$(call eff-url,$3)'; \
+  case "$$url" in \
+    *"$(strip $2)"*) \
+      echo "ERROR: $1=0 but $3 points inside this stack ($$url)."; \
+      echo "Export $3 at the shared instance, e.g.:"; \
+      echo "  $3=$(strip $4) make worker-up WORKER=$(WORKER) $1=0 ..."; \
+      exit 1;; \
+  esac; \
+  if [ -z "$$url" ]; then echo "ERROR: $1=0 requires $3 to be set."; exit 1; fi; \
+fi
+endef
+
+# Resolve + validate WORKER and flags, then run docker compose on the stack.
 worker-%:
 	@if [ -z "$(WORKER)" ]; then \
 		echo "WORKER is required. Use WORKER=analytics, WORKER=payments or WORKER=cron."; \
@@ -66,6 +132,28 @@ worker-%:
 		echo "Invalid WORKER '$(WORKER)'. Use WORKER=analytics, WORKER=payments or WORKER=cron."; \
 		exit 1; \
 	fi
+	@for f in WITH_POSTGRES WITH_REDIS WITH_EVENTS WITH_RABBITMQ; do \
+		case $$f in \
+		WITH_POSTGRES) v="$(WITH_POSTGRES)";; \
+		WITH_REDIS) v="$(WITH_REDIS)";; \
+		WITH_EVENTS) v="$(WITH_EVENTS)";; \
+		WITH_RABBITMQ) v="$(WITH_RABBITMQ)";; \
+		esac; \
+		if [ "$$v" != "0" ] && [ "$$v" != "1" ]; then \
+			echo "Invalid $$f='$$v'. Use 0 or 1."; exit 1; \
+		fi; \
+	done
+	@if [ "$(WORKER)" != "payments" ] && [ "$(WITH_EVENTS)" = "0" ]; then \
+		echo "WARNING: WITH_EVENTS is ignored for WORKER=$(WORKER) (no events-redis dependency)."; \
+	fi
+	@if [ "$(WORKER)" = "cron" ] && [ "$(WITH_RABBITMQ)" = "0" ]; then \
+		echo "WARNING: WITH_RABBITMQ is ignored for WORKER=cron (no broker dependency)."; \
+	fi
+	$(call guard-shared-url,WITH_POSTGRES,postgres-users,DATABASE_URL,postgresql://user:password@host.docker.internal:5432/detect_ai)
+	$(call guard-shared-url,WITH_POSTGRES,postgres-users,DATABASE_URL_REPLICA,postgresql://user:password@host.docker.internal:5432/detect_ai)
+	$(call guard-shared-url,WITH_REDIS,redis-users,REDIS_URL,redis://:user_cache_password@host.docker.internal:6379)
+	$(call guard-shared-url,WITH_EVENTS,redis-events,EVENT_REDIS_URL,redis://:events_password@host.docker.internal:6381)
+	$(call guard-shared-url,WITH_RABBITMQ,rabbitmq,RABBITMQ_URL,amqp://guest:guest@host.docker.internal:5672/)
 
 worker-up: worker-%
 	$(COMPOSE) up --build -d

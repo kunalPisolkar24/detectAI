@@ -1,7 +1,8 @@
 # Shared db-migrate fragment for the workers stacks.
-# Included by compose.analytics.yml / compose.cron.yml / compose.payments.yml
-# (single definition, no duplication). Runs `prisma migrate deploy` from
-# workers/prisma before the worker starts.
+# Merged by the Makefile ONLY when WITH_POSTGRES=1 (its depends_on needs
+# postgres-users defined). With WITH_POSTGRES=0 the pointed-at DB is owned
+# (and migrated) by whoever runs postgres — skip migrate, don't duplicate it.
+# Runs `prisma migrate deploy` from workers/prisma (idempotent no-op if current).
 services:
   db-migrate:
     build:
@@ -11,6 +12,8 @@ services:
     restart: "no"
     environment:
       - DATABASE_URL=${DATABASE_URL}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres-users:
         condition: service_healthy
