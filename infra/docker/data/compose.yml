@@ -1,4 +1,4 @@
-# Standalone data layer bundle for local development: postgres + redis-cache.
+# Standalone data layer bundle for local development: postgres-users + redis-users.
 #
 # Thin wrapper — the services live in the importable atoms below (single
 # definition each, no duplication). Run it directly:
@@ -9,8 +9,7 @@
 # NOTE: these `include:` paths resolve from the main compose file, so other
 # stacks merging this bundle via `-f` must import the atoms directly
 # instead. Variable names match
-# infra/docker/local/.env.example so one env file serves both; see
 # infra/docker/data/.env.example for the knob interface.
 include:
-  - path: ../postgres/standalone.yml
-  - path: ../redis/standalone.yml
+  - path: ../postgres-users/standalone.yml
+  - path: ../redis-users/standalone.yml

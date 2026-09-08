@@ -5,15 +5,15 @@
 # the boundaries; the app treats any of them as preview. Preview runs skip
 # backends via `up --no-deps frontend`, so no separate compose file is needed.
 #
-# Datastores (postgres + user redis) come from the shared atoms below and
-# always start with the web stack (same project, shared default network).
+# Datastores (postgres-users + redis-users) come from the shared atoms below
+# and always start with the web stack (same project, shared default network).
 # Either fill .env with real datastore values, or point the URLs at an
-# external instance — the local postgres/redis-app still start but stay
+# external instance — the local postgres-users/redis-users still start but stay
 # unused in that case. Preview runs skip everything via
 # `up --no-deps frontend`.
 include:
-  - path: ../../../infra/docker/postgres/standalone.yml
-  - path: ../../../infra/docker/redis/standalone.yml
+  - path: ../../../infra/docker/postgres-users/standalone.yml
+  - path: ../../../infra/docker/redis-users/standalone.yml
 
 services:
   db-migrate:
@@ -25,7 +25,7 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
     depends_on:
-      postgres:
+      postgres-users:
         condition: service_healthy
 
   frontend:
@@ -63,7 +63,7 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_MASTER_NAME=${REDIS_MASTER_NAME:-mymaster}
       - REDIS_SENTINELS=${REDIS_SENTINELS:-redis-sentinel-1:26379}
-      # Usage counters + analytics dedup live in redis-cache (REDIS_URL).
+      # Usage counters + analytics dedup live in redis-users (REDIS_URL).
       # redis-events (Paddle-only) is wired in workers only.
       # Cloudflare Turnstile
       - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
@@ -98,7 +98,7 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
-      postgres:
+      postgres-users:
         condition: service_healthy
-      redis-app:
+      redis-users:
         condition: service_healthy

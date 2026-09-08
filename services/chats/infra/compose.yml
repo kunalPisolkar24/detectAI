@@ -4,16 +4,16 @@
 #   docker compose -f services/chats/infra/compose.yml up -d --build
 name: chats
 include:
-  - path: ../../../infra/docker/chat-mongo/standalone.yml
-  - path: ../../../infra/docker/chat-redis/standalone.yml
+  - path: ../../../infra/docker/mongo-chat/standalone.yml
+  - path: ../../../infra/docker/redis-chat/standalone.yml
 
 services:
-  chat-mongo:
+  mongo-chat:
     ports:
-      - "${CHAT_MONGO_PORT:-27018}:27017"
-  chat-redis:
+      - "${MONGO_CHAT_PORT:-27018}:27017"
+  redis-chat:
     ports:
-      - "${CHAT_REDIS_PORT:-6381}:6379"
+      - "${REDIS_CHAT_PORT:-6381}:6379"
 
   chat-service:
     build:
@@ -25,11 +25,12 @@ services:
       SERVICE_ROLE: api
       GRPC_PORT: ${CHAT_GRPC_PORT:-:50051}
       METRICS_PORT: ${CHAT_METRICS_PORT:-:9091}
-      MONGO_URI: ${CHAT_MONGO_URI:-mongodb://chat-mongo:27017}
+      MONGO_URI: ${CHAT_MONGO_URI:-mongodb://mongo-chat:27017}
       MONGO_DATABASE: ${CHAT_MONGO_DB:-chat_db}
       CHAT_REDIS_MODE: ${CHAT_REDIS_MODE:-standalone}
-      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-chat-redis:6379}
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-redis-chat:6379}
+      REDIS_CHAT_PASSWORD: ${REDIS_CHAT_PASSWORD:-test_redis_password}
+      REDIS_PASSWORD: ${REDIS_CHAT_PASSWORD:-test_redis_password}
       REDIS_POOL_SIZE: ${CHAT_REDIS_POOL_SIZE:-25}
       BATCH_SIZE: ${CHAT_BATCH_SIZE:-25}
       STREAM_PARTITION_COUNT: ${CHAT_STREAM_PARTITION_COUNT:-4}
@@ -38,9 +39,9 @@ services:
       - "${CHAT_GRPC_HOST_PORT:-50052}:50051"
       - "${CHAT_METRICS_HOST_PORT:-9095}:9091"
     depends_on:
-      chat-mongo:
+      mongo-chat:
         condition: service_healthy
-      chat-redis:
+      redis-chat:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/metrics"]
@@ -59,11 +60,12 @@ services:
       SERVICE_ROLE: worker
       GRPC_PORT: ${CHAT_GRPC_PORT:-:50051}
       METRICS_PORT: ${CHAT_WORKER_METRICS_PORT:-:9099}
-      MONGO_URI: ${CHAT_MONGO_URI:-mongodb://chat-mongo:27017}
+      MONGO_URI: ${CHAT_MONGO_URI:-mongodb://mongo-chat:27017}
       MONGO_DATABASE: ${CHAT_MONGO_DB:-chat_db}
       CHAT_REDIS_MODE: ${CHAT_REDIS_MODE:-standalone}
-      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-chat-redis:6379}
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-redis-chat:6379}
+      REDIS_CHAT_PASSWORD: ${REDIS_CHAT_PASSWORD:-test_redis_password}
+      REDIS_PASSWORD: ${REDIS_CHAT_PASSWORD:-test_redis_password}
       REDIS_POOL_SIZE: ${CHAT_REDIS_POOL_SIZE:-25}
       BATCH_SIZE: ${CHAT_BATCH_SIZE:-25}
       STREAM_PARTITION_COUNT: ${CHAT_STREAM_PARTITION_COUNT:-4}
@@ -71,9 +73,9 @@ services:
     ports:
       - "${CHAT_WORKER_METRICS_PORT_HOST:-9099}:9099"
     depends_on:
-      chat-mongo:
+      mongo-chat:
         condition: service_healthy
-      chat-redis:
+      redis-chat:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9099/metrics"]

@@ -33,8 +33,8 @@ See `go.mod` for full list.
 ```mermaid
 graph LR
     Web[k6 / web] --> API[chat-service :50051<br/>SERVICE_ROLE=api]
-    API --> Mongo[(chat-mongo :27017<br/>chat_db)]
-    API --> Redis[(chat-redis :6379<br/>standalone)]
+    API --> Mongo[(mongo-chat :27017<br/>chat_db)]
+    API --> Redis[(redis-chat :6379<br/>standalone)]
     API --> Stream["global:ingest:{p}<br/>partitions 16"]
     Stream --> Worker[chat-worker :9099<br/>SERVICE_ROLE=worker]
     Worker --> Mongo
@@ -49,8 +49,8 @@ Async ingest (`XAdd` → `BulkUpsert` → `XAck`, poison-ack + DLQ) keeps writes
 
 ```ini
 SERVICE_ROLE=api                 # required, api|worker
-MONGO_URI=mongodb://chat-mongo:27017  # required
-CHAT_REDIS_ADDRS=chat-redis:6379      # required
+MONGO_URI=mongodb://mongo-chat:27017  # required
+CHAT_REDIS_ADDRS=redis-chat:6379      # required
 MONGO_DATABASE=chat_db          # optional
 CHAT_REDIS_MODE=standalone      # optional, standalone|cluster
 GRPC_PORT=:50051                # optional
@@ -61,7 +61,7 @@ STREAM_PARTITION_COUNT=16       # optional, 1..128
 CACHE_TTL=24h                   # optional
 ```
 
-See `docs/08-configuration.md` for full reference and `infra/docker/chat-mongo/.env.example`, `infra/docker/chat-redis/.env.example` for datastore knobs.
+See `docs/08-configuration.md` for full reference and `infra/docker/mongo-chat/.env.example`, `infra/docker/redis-chat/.env.example` for datastore knobs.
 
 ## API
 
@@ -129,7 +129,7 @@ See `docs/11-testing.md` and `tests/load/README.md` for scenarios.
 ## Docker
 
 ```bash
-# Start standalone stack (chat-mongo 27018 + chat-redis 6381 + service + worker)
+# Start standalone stack (mongo-chat 27018 + redis-chat 6381 + service + worker)
 docker compose -f infra/compose.yml up -d --build
 
 # Self-contained load rig (isolated chat_loadnet, no host ports + k6)
@@ -137,7 +137,7 @@ make load-test SCENARIO=smoke VUS=1 DURATION=10s
 make load-down
 ```
 
-`infra/compose.yml` (`name: chats`) reuses `infra/docker/chat-mongo|chat-redis` atoms; `infra/compose.load.yml` (`name: chats-load`) keeps datastores internal-only so both stacks run side-by-side.
+`infra/compose.yml` (`name: chats`) reuses `infra/docker/mongo-chat|redis-chat` atoms; `infra/compose.load.yml` (`name: chats-load`) keeps datastores internal-only so both stacks run side-by-side.
 
 ## Documentation
 

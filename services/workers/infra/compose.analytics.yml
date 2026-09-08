@@ -1,6 +1,6 @@
-# Analytics worker stack: postgres + redis-cache + rabbitmq.
-# Usage events flow: web INCRs redis-cache, publishes analytics.usage;
-# worker-analytics dedupes (redis-cache) and UPSERTs postgres Usage.
+# Analytics worker stack: postgres-users + redis-users + rabbitmq.
+# Usage events flow: web INCRs redis-users, publishes analytics.usage;
+# worker-analytics dedupes (redis-users) and UPSERTs postgres Usage.
 # Self-contained: own project/network/volumes (`name:` below), so one
 # stack's up/down never disturbs another. Run with:
 #   make worker-up WORKER=analytics   # from services/workers
@@ -8,8 +8,8 @@ name: detect-ai-workers-analytics
 
 include:
   - path: ./compose.migrate.yml
-  - path: ../../../infra/docker/postgres/standalone.yml
-  - path: ../../../infra/docker/redis/standalone.yml
+  - path: ../../../infra/docker/postgres-users/standalone.yml
+  - path: ../../../infra/docker/redis-users/standalone.yml
   - path: ../../../infra/docker/rabbitmq/standalone.yml
 
 services:
@@ -42,9 +42,9 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
-      postgres:
+      postgres-users:
         condition: service_healthy
-      redis-app:
+      redis-users:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy

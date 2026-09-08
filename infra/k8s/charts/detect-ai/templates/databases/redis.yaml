@@ -9,12 +9,12 @@
 {{- $psc := .Values.global.podSecurityContext }}
 
 ---
-# 1. User Cache Redis — Sentinel HA (prod) or Standalone (dev)
-{{- if .Values.databases.redis.userCache.sentinel.enabled }}
+# 1. Redis Users — Sentinel HA (prod) or Standalone (dev)
+{{- if .Values.databases.redis.users.sentinel.enabled }}
 apiVersion: redis.redis.opstreelabs.in/v1beta2
 kind: RedisReplication
 metadata:
-  name: {{ $fullname }}-redis-usercache
+  name: {{ $fullname }}-redis-users
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "detect-ai.labels" . | nindent 4 }}
@@ -42,14 +42,14 @@ spec:
     tag: {{ $exporterTag | quote }}
     imagePullPolicy: IfNotPresent
   redisConfig:
-    maxmemory: {{ .Values.databases.redis.userCache.maxmemory | quote }}
-    maxmemory-policy: {{ .Values.databases.redis.userCache.maxmemoryPolicy | quote }}
+    maxmemory: {{ .Values.databases.redis.users.maxmemory | quote }}
+    maxmemory-policy: {{ .Values.databases.redis.users.maxmemoryPolicy | quote }}
   sentinel:
     enabled: true
     image: {{ $sentinelImage | quote }}
     tag: {{ $sentinelTag | quote }}
     imagePullPolicy: IfNotPresent
-    size: {{ .Values.databases.redis.userCache.sentinelSize }}
+    size: {{ .Values.databases.redis.users.sentinelSize }}
     parallelSyncs: "1"
     failoverTimeout: "60000"
     downAfterMilliseconds: "5000"
@@ -60,14 +60,14 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            storage: {{ .Values.databases.redis.userCache.storageSize }}
+            storage: {{ .Values.databases.redis.users.storageSize }}
   podSecurityContext:
     {{- toYaml $psc | nindent 4 }}
 {{- else }}
 apiVersion: redis.redis.opstreelabs.in/v1beta2
 kind: Redis
 metadata:
-  name: {{ $fullname }}-redis-usercache
+  name: {{ $fullname }}-redis-users
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "detect-ai.labels" . | nindent 4 }}
@@ -94,8 +94,8 @@ spec:
     tag: {{ $exporterTag | quote }}
     imagePullPolicy: IfNotPresent
   redisConfig:
-    maxmemory: {{ .Values.databases.redis.userCache.maxmemory | quote }}
-    maxmemory-policy: {{ .Values.databases.redis.userCache.maxmemoryPolicy | quote }}
+    maxmemory: {{ .Values.databases.redis.users.maxmemory | quote }}
+    maxmemory-policy: {{ .Values.databases.redis.users.maxmemoryPolicy | quote }}
   storage:
     volumeClaimTemplate:
       spec:
@@ -103,7 +103,7 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            storage: {{ .Values.databases.redis.userCache.storageSize }}
+            storage: {{ .Values.databases.redis.users.storageSize }}
   podSecurityContext:
     {{- toYaml $psc | nindent 4 }}
 {{- end }}

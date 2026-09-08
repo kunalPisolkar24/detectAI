@@ -18,13 +18,13 @@ data:
   #   REDIS_PASSWORD, EVENT_REDIS_PASSWORD
   # Apps must pass these as the `password` option to the Redis client constructor
   # (the plain URL omits the password intentionally to keep it out of the ConfigMap).
-  # 2 Redis: redis-cache (user basic/sub + rate-limit + analytics dedup) and
+  # 2 Redis: redis-users (user basic/sub + rate-limit + analytics dedup) and
   # redis-events (Paddle-only: paddle:evt:*, payment:event:ts:*).
-  {{- if .Values.databases.redis.userCache.sentinel.enabled }}
+  {{- if .Values.databases.redis.users.sentinel.enabled }}
   REDIS_MASTER_NAME: "mymaster"
-  REDIS_SENTINELS: "{{ include "detect-ai.fullname" . }}-redis-usercache:26379"
+  REDIS_SENTINELS: "{{ include "detect-ai.fullname" . }}-redis-users:26379"
   {{- else }}
-  REDIS_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-usercache:6379"
+  REDIS_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-users:6379"
   {{- end }}
 
   EVENT_REDIS_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-events:6379"
@@ -45,7 +45,7 @@ data:
   MONGO_URL: "mongodb://{{ include "detect-ai.fullname" . }}-mongodb-standalone-service:27017/{{ $mongoDb }}"
   {{- end }}
 
-  POSTGRES_HOST: "{{ include "detect-ai.fullname" . }}-postgres"
+  POSTGRES_HOST: "{{ include "detect-ai.fullname" . }}-postgres-users"
   POSTGRES_DB: "detect-ai"
   POSTGRES_PORT: "5432"
   # NOTE: RABBITMQ_URL must be injected via the detect-ai-secrets Secret (key: RABBITMQ_URL)

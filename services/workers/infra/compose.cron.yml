@@ -1,5 +1,5 @@
 # Cron worker stack (subscription sweeper + usage resetter).
-# Needs postgres + redis-cache only — no queue, no events-redis.
+# Needs postgres-users + redis-users only — no queue, no events-redis.
 # Self-contained: own project/network/volumes (`name:` below), so one
 # stack's up/down never disturbs another. Run with:
 #   make worker-up WORKER=cron   # from services/workers
@@ -7,8 +7,8 @@ name: detect-ai-workers-cron
 
 include:
   - path: ./compose.migrate.yml
-  - path: ../../../infra/docker/postgres/standalone.yml
-  - path: ../../../infra/docker/redis/standalone.yml
+  - path: ../../../infra/docker/postgres-users/standalone.yml
+  - path: ../../../infra/docker/redis-users/standalone.yml
 
 services:
   worker-cron:
@@ -39,9 +39,9 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
-      postgres:
+      postgres-users:
         condition: service_healthy
-      redis-app:
+      redis-users:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "bun", "-e", "const r = await fetch('http://localhost:7002/health'); if (!r.ok) process.exit(1);"]

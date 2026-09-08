@@ -1,4 +1,4 @@
-# Payments worker stack: postgres + redis-cache + redis-events + rabbitmq.
+# Payments worker stack: postgres-users + redis-users + redis-events + rabbitmq.
 # redis-events is Paddle-only (paddle:evt:* 7d + payment:event:ts:* 30d,
 # AOF + noeviction) — required here, nowhere else.
 # Self-contained: own project/network/volumes (`name:` below), so one
@@ -8,8 +8,8 @@ name: detect-ai-workers-payments
 
 include:
   - path: ./compose.migrate.yml
-  - path: ../../../infra/docker/postgres/standalone.yml
-  - path: ../../../infra/docker/redis/standalone.yml
+  - path: ../../../infra/docker/postgres-users/standalone.yml
+  - path: ../../../infra/docker/redis-users/standalone.yml
   - path: ../../../infra/docker/redis-events/standalone.yml
   - path: ../../../infra/docker/rabbitmq/standalone.yml
 
@@ -50,9 +50,9 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
-      postgres:
+      postgres-users:
         condition: service_healthy
-      redis-app:
+      redis-users:
         condition: service_healthy
       redis-events:
         condition: service_healthy

@@ -222,7 +222,7 @@ workers:
 # Self-Hosted Databases & Stateful Services
 databases:
   storageClass: "local-path"
-  postgres:
+  postgresUsers:
     enabled: true
     storageSize: "5Gi"
     resources:
@@ -263,8 +263,8 @@ databases:
     exporter:
       image: "quay.io/opstree/redis-exporter"
       tag: "v1.44.0"
-    userCache:
-      # redis-cache: user basic (3600) + sub (600) + rate-limit (midnight TTL)
+    users:
+      # redis-users: user basic (3600) + sub (600) + rate-limit (midnight TTL)
       # + analytics dedup (7d). All keys TTL'd → volatile-ttl so dedup keys
       # are never evicted ahead of expiry (allkeys-lru would double-count).
       sentinel:

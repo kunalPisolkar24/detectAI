@@ -1,6 +1,6 @@
 # Load Testing
 
-Simple k6 gRPC load tests for the chats service. Uses `infra/compose.load.yml` to spin `chat-mongo + chat-redis + service + worker + k6` isolated on `chat_loadnet` (`name: chats-load`), no dependency on the main stack or local k6 binary. Proto mounted at `/proto` (`PROTO_DIR`), target `chat-service:50051`.
+Simple k6 gRPC load tests for the chats service. Uses `infra/compose.load.yml` to spin `mongo-chat + redis-chat + service + worker + k6` isolated on `chat_loadnet` (`name: chats-load`), no dependency on the main stack or local k6 binary. Proto mounted at `/proto` (`PROTO_DIR`), target `chat-service:50051`.
 
 ## Scenarios
 
@@ -73,7 +73,7 @@ graph LR
 
 ```mermaid
 graph TB
-    Compose[infra/compose.load.yml chat-mongo + chat-redis + service + worker + k6 on chat_loadnet] --> Health[healthcheck mongosh/redis-cli/wget metrics]
+    Compose[infra/compose.load.yml mongo-chat + redis-chat + service + worker + k6 on chat_loadnet] --> Health[healthcheck mongosh/redis-cli/wget metrics]
     Health --> K6C[k6 depends_on chat-service healthy]
     Compose --> Env[env VUS/DURATION/RPS + PROTO_DIR=/proto]
     Compose --> Vol[volumes ../tests/load:/scripts:ro + ../api/proto:/proto:ro]

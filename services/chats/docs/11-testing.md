@@ -17,7 +17,7 @@ make test-coverage
 # Build images (uses infra/compose.yml via docker compose)
 make docker-build
 
-# Self-contained load (chat-mongo + chat-redis + service + worker + k6)
+# Self-contained load (mongo-chat + redis-chat + service + worker + k6)
 make load-test SCENARIO=smoke VUS=1 DURATION=10s RPS=5
 make load-down
 ```

@@ -1,15 +1,15 @@
-# Standalone chat-mongo template (single instance, no HA).
+# Standalone mongo-chat template (chats documents, no HA).
 #
 # Importable atom: reference it from a stack via compose `include:`
 # (paths resolve relative to the including file), e.g.:
 #   include:
-#     - path: ../../../infra/docker/chat-mongo/standalone.yml
+#     - path: ../../../infra/docker/mongo-chat/standalone.yml
 # or merge it with `-f`. Everything varying is a variable (see
-# infra/docker/chat-mongo/.env.example); importing projects isolate
+# infra/docker/mongo-chat/.env.example); importing projects isolate
 # volumes and networks by project name. No `networks:` / `container_name`
 # here so multiple projects can run side by side. Isolated from generic
-# `mongo` (27017) via host port 27018 and volume `chat_mongo_data`.
-x-chat-mongo: &chat-mongo
+# `postgres-users` via host port 27018 and volume `mongo_chat_data`.
+x-mongo-chat: &mongo-chat
   image: mongo:6.0
   restart: unless-stopped
   command: mongod --bind_ip_all --port 27017
@@ -21,10 +21,10 @@ x-chat-mongo: &chat-mongo
     start_period: 10s
 
 services:
-  chat-mongo:
-    <<: *chat-mongo
+  mongo-chat:
+    <<: *mongo-chat
     volumes:
-      - chat_mongo_data:/data/db
+      - mongo_chat_data:/data/db
 
 volumes:
-  chat_mongo_data:
+  mongo_chat_data:

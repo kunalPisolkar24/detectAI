@@ -1,20 +1,20 @@
 # Load-test rig for chats service (k6 only, isolated infra).
-# Reuses chat-* atoms but with no host ports for datastores, so it can run
+# Reuses mongo-chat/redis-chat atoms but with no host ports for datastores, so it can run
 # side-by-side with the main stack (`compose.yml` publishes 27018/6381).
 # Usage: make load-test SCENARIO=smoke VUS=1 DURATION=10s RPS=10
 name: chats-load
 include:
-  - path: ../../../infra/docker/chat-mongo/standalone.yml
-  - path: ../../../infra/docker/chat-redis/standalone.yml
+  - path: ../../../infra/docker/mongo-chat/standalone.yml
+  - path: ../../../infra/docker/redis-chat/standalone.yml
 
 services:
-  # chat-* atoms have no host ports by default (template has no ports);
+  # mongo-chat/redis-chat atoms have no host ports by default (template has no ports);
   # `compose.yml` publishes 27018/6381, load keeps internal-only for isolation
-  chat-mongo:
+  mongo-chat:
     networks:
       - chat_loadnet
 
-  chat-redis:
+  redis-chat:
     networks:
       - chat_loadnet
 
@@ -28,19 +28,20 @@ services:
       SERVICE_ROLE: api
       GRPC_PORT: ${CHAT_GRPC_PORT:-:50051}
       METRICS_PORT: ${CHAT_METRICS_PORT:-:9091}
-      MONGO_URI: ${CHAT_MONGO_URI:-mongodb://chat-mongo:27017}
+      MONGO_URI: ${CHAT_MONGO_URI:-mongodb://mongo-chat:27017}
       MONGO_DATABASE: ${CHAT_MONGO_DB:-chat_db}
       CHAT_REDIS_MODE: ${CHAT_REDIS_MODE:-standalone}
-      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-chat-redis:6379}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-test_redis_password}
+      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-redis-chat:6379}
+      REDIS_CHAT_PASSWORD: ${REDIS_CHAT_PASSWORD:-test_redis_password}
+      REDIS_PASSWORD: ${REDIS_CHAT_PASSWORD:-test_redis_password}
       REDIS_POOL_SIZE: ${CHAT_REDIS_POOL_SIZE:-25}
       BATCH_SIZE: ${CHAT_BATCH_SIZE:-25}
       STREAM_PARTITION_COUNT: ${CHAT_STREAM_PARTITION_COUNT:-4}
       CACHE_TTL: ${CHAT_CACHE_TTL:-24h}
     depends_on:
-      chat-mongo:
+      mongo-chat:
         condition: service_healthy
-      chat-redis:
+      redis-chat:
         condition: service_healthy
     networks:
       - chat_loadnet
@@ -61,19 +62,20 @@ services:
       SERVICE_ROLE: worker
       GRPC_PORT: ${CHAT_GRPC_PORT:-:50051}
       METRICS_PORT: ${CHAT_WORKER_METRICS_PORT:-:9099}
-      MONGO_URI: ${CHAT_MONGO_URI:-mongodb://chat-mongo:27017}
+      MONGO_URI: ${CHAT_MONGO_URI:-mongodb://mongo-chat:27017}
       MONGO_DATABASE: ${CHAT_MONGO_DB:-chat_db}
       CHAT_REDIS_MODE: ${CHAT_REDIS_MODE:-standalone}
-      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-chat-redis:6379}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-test_redis_password}
+      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-redis-chat:6379}
+      REDIS_CHAT_PASSWORD: ${REDIS_CHAT_PASSWORD:-test_redis_password}
+      REDIS_PASSWORD: ${REDIS_CHAT_PASSWORD:-test_redis_password}
       REDIS_POOL_SIZE: ${CHAT_REDIS_POOL_SIZE:-25}
       BATCH_SIZE: ${CHAT_BATCH_SIZE:-25}
       STREAM_PARTITION_COUNT: ${CHAT_STREAM_PARTITION_COUNT:-4}
       CACHE_TTL: ${CHAT_CACHE_TTL:-24h}
     depends_on:
-      chat-mongo:
+      mongo-chat:
         condition: service_healthy
-      chat-redis:
+      redis-chat:
         condition: service_healthy
     networks:
       - chat_loadnet
@@ -115,7 +117,7 @@ networks:
   chat_loadnet:
 
 volumes:
-  chat_mongo_data:
+  mongo_chat_data:
     name: chat_load_mongo_data
-  chat_redis_data:
+  redis_chat_data:
     name: chat_load_redis_data

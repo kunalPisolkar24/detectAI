@@ -5,8 +5,8 @@
 ```mermaid
 graph LR
     Web[k6 / web] --> API[chat-service :50051<br/>SERVICE_ROLE=api]
-    API --> Mongo[(chat-mongo :27017<br/>chat_db)]
-    API --> Redis[(chat-redis :6379<br/>standalone)]
+    API --> Mongo[(mongo-chat :27017<br/>chat_db)]
+    API --> Redis[(redis-chat :6379<br/>standalone)]
     API --> Stream["global:ingest:{p}<br/>partitions 16"]
     Stream --> Worker[chat-worker :9099<br/>SERVICE_ROLE=worker]
     Worker --> Mongo

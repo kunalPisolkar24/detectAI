@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "detect-ai.fullname" . }}-postgres
+  name: {{ include "detect-ai.fullname" . }}-postgres-users
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "detect-ai.labels" . | nindent 4 }}
-    app: postgres
+    app: postgres-users
 spec:
-  serviceName: {{ include "detect-ai.fullname" . }}-postgres-headless
+  serviceName: {{ include "detect-ai.fullname" . }}-postgres-users-headless
   replicas: 1
   selector:
     matchLabels:
       {{- include "detect-ai.selectorLabels" . | nindent 6 }}
-      app: postgres
+      app: postgres-users
   template:
     metadata:
       labels:
         {{- include "detect-ai.selectorLabels" . | nindent 8 }}
-        app: postgres
+        app: postgres-users
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9187"
@@ -67,9 +67,9 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 20
           resources:
-            {{- toYaml .Values.databases.postgres.resources | nindent 12 }}
+            {{- toYaml .Values.databases.postgresUsers.resources | nindent 12 }}
           volumeMounts:
-            - name: postgres-data
+            - name: postgres-users-data
               mountPath: /var/lib/postgresql/data
         # sidecar postgres-exporter for Prometheus scraping
         - name: postgres-exporter
@@ -96,22 +96,22 @@ spec:
               memory: "64Mi"
   volumeClaimTemplates:
     - metadata:
-        name: postgres-data
+        name: postgres-users-data
       spec:
         accessModes: [ "ReadWriteOnce" ]
         storageClassName: {{ .Values.databases.storageClass | quote }}
         resources:
           requests:
-            storage: {{ .Values.databases.postgres.storageSize }}
+            storage: {{ .Values.databases.postgresUsers.storageSize }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "detect-ai.fullname" . }}-postgres
+  name: {{ include "detect-ai.fullname" . }}-postgres-users
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "detect-ai.labels" . | nindent 4 }}
-    app: postgres
+    app: postgres-users
 spec:
   ports:
     - port: 5432
@@ -124,17 +124,17 @@ spec:
       name: metrics
   selector:
     {{- include "detect-ai.selectorLabels" . | nindent 4 }}
-    app: postgres
+    app: postgres-users
 ---
 # Headless service for stable pod DNS identities (required by StatefulSet)
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "detect-ai.fullname" . }}-postgres-headless
+  name: {{ include "detect-ai.fullname" . }}-postgres-users-headless
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "detect-ai.labels" . | nindent 4 }}
-    app: postgres
+    app: postgres-users
 spec:
   clusterIP: None
   ports:
@@ -144,4 +144,4 @@ spec:
       name: postgres
   selector:
     {{- include "detect-ai.selectorLabels" . | nindent 4 }}
-    app: postgres
+    app: postgres-users

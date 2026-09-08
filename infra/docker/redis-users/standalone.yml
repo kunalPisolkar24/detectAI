@@ -1,6 +1,6 @@
-# Standalone redis template (redis-cache instance, no HA).
+# Standalone redis-users template (users cache + rate-limit, no HA).
 #
-# - redis-app: redis-cache (user basic/sub + rate-limit + analytics dedup).
+# - redis-users: user basic/sub + rate-limit + analytics dedup.
 #   All keys TTL'd → volatile-ttl so dedup keys are never evicted early.
 #
 # Paddle-only dedup lives in a separate atom:
@@ -9,13 +9,13 @@
 # Importable atom: reference it from a stack via compose `include:`
 # (paths resolve relative to the including file), e.g.:
 #   include:
-#     - path: ../../../infra/docker/redis/standalone.yml
+#     - path: ../../../infra/docker/redis-users/standalone.yml
 # or merge it with `-f`. Everything varying is a variable (see
-# infra/docker/redis/.env.example or the aggregate
+# infra/docker/redis-users/.env.example or the aggregate
 # infra/docker/data/.env.example); importing projects isolate volumes
 # and networks by project name. No `networks:` / `container_name` here
 # so multiple projects can run side by side.
-x-redis-cache: &redis-cache
+x-redis-users: &redis-users
   image: redis:7-alpine
   restart: unless-stopped
   command: redis-server --appendonly yes --maxmemory-policy volatile-ttl --requirepass ${REDIS_PASSWORD}
@@ -26,12 +26,12 @@ x-redis-cache: &redis-cache
     retries: 10
 
 services:
-  redis-app:
-    <<: *redis-cache
+  redis-users:
+    <<: *redis-users
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
-      - redis_app_data:/data
+      - redis_users_data:/data
 
 volumes:
-  redis_app_data:
+  redis_users_data:

@@ -12,5 +12,5 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
     depends_on:
-      postgres:
+      postgres-users:
         condition: service_healthy

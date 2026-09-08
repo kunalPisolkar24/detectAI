@@ -1,15 +1,17 @@
-# Standalone postgres template (single instance, no HA).
+# Standalone postgres-users template (single instance, no HA).
+#
+# Holds the users domain: User / Subscription / Usage / ProcessedWebhook.
 #
 # Importable atom: reference it from a stack via compose `include:`
 # (paths resolve relative to the including file), e.g.:
 #   include:
-#     - path: ../../../infra/docker/postgres/standalone.yml
+#     - path: ../../../infra/docker/postgres-users/standalone.yml
 # or merge it with `-f`. Everything varying is a variable (see
-# infra/docker/postgres/.env.example or the aggregate
+# infra/docker/postgres-users/.env.example or the aggregate
 # infra/docker/data/.env.example); importing projects isolate volumes
 # and networks by project name. No `networks:` / `container_name` here
 # so multiple projects can run side by side.
-x-postgres: &postgres
+x-postgres-users: &postgres-users
   image: postgres:16-alpine
   restart: unless-stopped
   environment:
@@ -23,12 +25,12 @@ x-postgres: &postgres
     retries: 10
 
 services:
-  postgres:
-    <<: *postgres
+  postgres-users:
+    <<: *postgres-users
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_users_data:/var/lib/postgresql/data
 
 volumes:
-  postgres_data:
+  postgres_users_data:
