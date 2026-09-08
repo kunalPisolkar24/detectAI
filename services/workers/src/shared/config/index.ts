@@ -62,13 +62,9 @@ export const baseEnvSchema = z
         });
       }
     }
-    if (!data.RABBITMQ_URL && data.NODE_ENV === "production") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "RABBITMQ_URL is required in production (no default)",
-        path: ["RABBITMQ_URL"],
-      });
-    }
+    // NOTE: no RABBITMQ_URL requirement here on purpose — worker-cron runs
+    // without a broker. Workers that consume the queue (analytics, payments)
+    // enforce it in their own cmd config.
   });
 
 export const createConfig = <T extends z.ZodTypeAny>(

@@ -1,8 +1,11 @@
-# Standalone data layer bundle for local development: postgres + user redis.
+# Standalone data layer bundle for local development: postgres + redis-cache.
 #
 # Thin wrapper — the services live in the importable atoms below (single
 # definition each, no duplication). Run it directly:
 #   docker compose -f infra/docker/data/compose.yml up -d   # from repo root
+# Paddle-only events-redis is intentionally NOT included here; stacks that
+# need it (e.g. worker-payments) include
+# infra/docker/redis-events/standalone.yml directly.
 # NOTE: these `include:` paths resolve from the main compose file, so other
 # stacks merging this bundle via `-f` must import the atoms directly
 # instead. Variable names match

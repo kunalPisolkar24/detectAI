@@ -12,6 +12,13 @@ const paymentEnvSchema = baseEnvSchema
     EVENT_REDIS_PASSWORD: z.string().optional(),
   })
   .superRefine((data, ctx) => {
+    if (!data.RABBITMQ_URL && data.NODE_ENV === "production") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "RABBITMQ_URL is required in production (no default)",
+        path: ["RABBITMQ_URL"],
+      });
+    }
     if (!data.PADDLE_ENVIRONMENT) {
       if (data.NODE_ENV === "production") {
         ctx.addIssue({

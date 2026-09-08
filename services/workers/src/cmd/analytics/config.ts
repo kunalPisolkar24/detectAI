@@ -1,18 +1,19 @@
+import { z } from "zod";
 import { baseEnvSchema, createConfig } from "@shared/config";
 
-const analyticsEnvSchema = baseEnvSchema.pick({
-  DATABASE_URL: true,
-  DATABASE_URL_REPLICA: true,
-  REDIS_URL: true,
-  REDIS_MODE: true,
-  REDIS_SENTINELS: true,
-  REDIS_MASTER_NAME: true,
-  REDIS_PASSWORD: true,
-  RABBITMQ_URL: true,
-  NODE_ENV: true,
-  PORT: true,
-  OTEL_EXPORTER_OTLP_ENDPOINT: true,
-  OTEL_SERVICE_NAME: true,
+// NOTE: baseEnvSchema carries refinements, and zod v4 forbids `.pick()` on
+// refined object schemas — use the full base instead. Unknown env vars are
+// stripped by safeParse, so the extra fields are harmless. Analytics needs
+// DATABASE_URL, REDIS_* (cache), RABBITMQ_URL, and PORT from the base;
+// EVENT_REDIS_* is intentionally absent (redis-events is Paddle-only).
+const analyticsEnvSchema = baseEnvSchema.superRefine((data, ctx) => {
+  if (!data.RABBITMQ_URL && data.NODE_ENV === "production") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "RABBITMQ_URL is required in production (no default)",
+      path: ["RABBITMQ_URL"],
+    });
+  }
 });
 
 export const config = createConfig(analyticsEnvSchema, "Analytics");

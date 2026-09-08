@@ -1,9 +1,10 @@
-# Standalone redis template (2 instances, no HA).
+# Standalone redis template (redis-cache instance, no HA).
 #
-# - redis-app:    redis-cache (user basic/sub + rate-limit + analytics dedup).
+# - redis-app: redis-cache (user basic/sub + rate-limit + analytics dedup).
 #   All keys TTL'd → volatile-ttl so dedup keys are never evicted early.
-# - redis-events: Paddle-only (paddle:evt:* 7d + payment:event:ts:* 30d).
-#   AOF + noeviction — never cache-only, loss = double-credit.
+#
+# Paddle-only dedup lives in a separate atom:
+# infra/docker/redis-events/standalone.yml (AOF + noeviction).
 #
 # Importable atom: reference it from a stack via compose `include:`
 # (paths resolve relative to the including file), e.g.:
@@ -24,16 +25,6 @@ x-redis-cache: &redis-cache
     timeout: 3s
     retries: 10
 
-x-redis-events: &redis-events
-  image: redis:7-alpine
-  restart: unless-stopped
-  command: redis-server --appendonly yes --save "900 1 300 10" --maxmemory-policy noeviction --requirepass ${EVENT_REDIS_PASSWORD:-${REDIS_PASSWORD}}
-  healthcheck:
-    test: ["CMD", "redis-cli", "-a", "${EVENT_REDIS_PASSWORD:-${REDIS_PASSWORD}}", "ping"]
-    interval: 5s
-    timeout: 3s
-    retries: 10
-
 services:
   redis-app:
     <<: *redis-cache
@@ -42,14 +33,5 @@ services:
     volumes:
       - redis_app_data:/data
 
-  redis-events:
-    <<: *redis-events
-    profiles: ["events"]
-    ports:
-      - "${EVENT_REDIS_PORT:-6381}:6379"
-    volumes:
-      - redis_events_data:/data
-
 volumes:
   redis_app_data:
-  redis_events_data:
