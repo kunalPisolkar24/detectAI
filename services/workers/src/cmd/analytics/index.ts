@@ -46,23 +46,13 @@ const mainClient = RedisFactory.createClient({
   password: (config as any).REDIS_PASSWORD,
 });
 
-// Analytics dedup (`analytics:usage:event:*`) lives in redis-cache alongside
-// rate-limit counters. redis-events is Paddle-only. EVENT_REDIS_* is ignored
-// here (kept optional in config for rolling deploys) — wiring it would split
-// usage dedup away from its counters for no benefit.
-const cfgAny = config as any;
-if (cfgAny.EVENT_REDIS_URL) {
-  Logger.warn("EVENT_REDIS_URL is set but ignored for analytics dedup (paddle-only events instance); using redis-cache");
-}
-const dedupClient = mainClient;
-
 const metricsService = new MetricsService("worker-analytics");
 registerPools(metricsService);
 
 wireRedisMetrics(mainClient, metricsService, "AnalyticsMain");
 
 const userRepository = new PrismaUserRepository(prismaPrimary, prisma, undefined, metricsService);
-const usageDeduplicator = new UsageEventDeduplicator(dedupClient);
+const usageDeduplicator = new UsageEventDeduplicator(mainClient);
 const analyticsService = new AnalyticsService(userRepository, metricsService, usageDeduplicator);
 
 // analytics.usage publisher (web) asserts quorum; consumer must match to avoid 406.

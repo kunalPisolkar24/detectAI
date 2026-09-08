@@ -27,8 +27,6 @@ export async function registerShutdownHandlers(): Promise<void> {
       await Promise.allSettled([redisWriter.quit().catch(() => {}), redisReader.quit().catch(() => {})])
     } catch {}
 
-    // usageRedis is an alias of redisWriter (redis-cache) — already quit above.
-
     // Let Next.js standalone server close; exit after a short grace.
     setTimeout(() => process.exit(0), 500).unref()
   }

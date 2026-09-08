@@ -1621,7 +1621,6 @@ function buildRedisOverview() {
         gridPos: { h: 8, w: 12, x: 12, y: 28 },
         targets: [
           query('redis_master_link_up{job=~"redis-slave-1|redis-slave-2"}', "{{job}} master link", "A"),
-          query('redis_cluster_state{job=~"redis-usage-0|redis-usage-1|redis-usage-2"}', "{{job}} cluster state", "B"),
         ],
         unit: "short",
       }),

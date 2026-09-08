@@ -109,51 +109,7 @@ spec:
 {{- end }}
 
 ---
-# 2. Usage Redis — Standalone
-apiVersion: redis.redis.opstreelabs.in/v1beta2
-kind: Redis
-metadata:
-  name: {{ $fullname }}-redis-usage
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "detect-ai.labels" . | nindent 4 }}
-spec:
-  kubernetesConfig:
-    image: {{ $redisImage | quote }}
-    imagePullPolicy: IfNotPresent
-    {{- if $redisSecret }}
-    redisSecret:
-      name: {{ $redisSecret }}
-    {{- end }}
-    service:
-      serviceType: ClusterIP
-    resources:
-      requests:
-        cpu: "50m"
-        memory: "64Mi"
-      limits:
-        cpu: "100m"
-        memory: "128Mi"
-  redisExporter:
-    enabled: true
-    image: {{ $exporterImage | quote }}
-    tag: {{ $exporterTag | quote }}
-    imagePullPolicy: IfNotPresent
-  redisConfig:
-    maxmemory-policy: {{ .Values.databases.redis.usage.maxmemoryPolicy | quote }}
-  storage:
-    volumeClaimTemplate:
-      spec:
-        storageClassName: {{ $sc }}
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: {{ .Values.databases.redis.usage.storageSize }}
-  podSecurityContext:
-    {{- toYaml $psc | nindent 4 }}
-
----
-# 3. Events Redis — Standalone
+# 2. Events Redis — Standalone
 apiVersion: redis.redis.opstreelabs.in/v1beta2
 kind: Redis
 metadata:
@@ -199,7 +155,7 @@ spec:
     {{- toYaml $psc | nindent 4 }}
 
 ---
-# 4. Chat Redis — Cluster (prod) or Standalone (dev)
+# 3. Chat Redis — Cluster (prod) or Standalone (dev)
 {{- if .Values.databases.redis.chat.cluster.enabled }}
 apiVersion: redis.redis.opstreelabs.in/v1beta2
 kind: RedisCluster

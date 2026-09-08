@@ -102,21 +102,6 @@ scrape_configs:
       - targets:
           - redis-exporter-slave-2:9121
 
-  - job_name: redis-usage-0
-    static_configs:
-      - targets:
-          - redis-exporter-usage-0:9121
-
-  - job_name: redis-usage-1
-    static_configs:
-      - targets:
-          - redis-exporter-usage-1:9121
-
-  - job_name: redis-usage-2
-    static_configs:
-      - targets:
-          - redis-exporter-usage-2:9121
-
   - job_name: redis-chat-1
     static_configs:
       - targets:

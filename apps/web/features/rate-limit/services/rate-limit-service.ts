@@ -1,9 +1,24 @@
-import { usageRedis } from "@/lib/infrastructure/redis-limit"
+import { redisWriter } from "@/lib/infrastructure/redis"
 import { metrics } from "@/lib/infrastructure/metrics"
 import { logger } from "@/lib/infrastructure/logger"
 import { analyticsPublisher } from "@/lib/infrastructure/analytics-publisher"
 import { prisma } from "@/lib/infrastructure/prisma"
 import { CacheKeys } from "@/lib/services/cache-keys"
+
+const isPreviewMode = () => process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+
+const previewRedis = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      if (prop === "then") return undefined
+      if (prop === "eval") return async () => 1
+      return async () => null
+    },
+  },
+) as unknown as typeof redisWriter
+
+const usageRedis = isPreviewMode() ? previewRedis : redisWriter
 
 export interface IRateLimitService {
   checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }>

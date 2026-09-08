@@ -51,13 +51,13 @@ spec:
             description: "Redis instance {{ `{{ $labels.app }}` }} is evicting {{ `{{ $value | humanize }}` }} keys/sec. Check TTL policies (expected for usercache LRU, should be 0 for events noeviction)."
 
         - alert: RedisUnexpectedEvictions
-          expr: sum by (app) (rate(redis_evicted_keys_total{app=~"{{ $fullname }}-redis-usage.*|{{ $fullname }}-redis-events.*"}[5m])) > 0
+          expr: sum by (app) (rate(redis_evicted_keys_total{app=~"{{ $fullname }}-redis-events.*"}[5m])) > 0
           for: 5m
           labels:
             severity: critical
           annotations:
             summary: "Redis {{ `{{ $labels.app }}` }} must never evict keys"
-            description: "Redis instance {{ `{{ $labels.app }}` }} is evicting {{ `{{ $value | humanize }}` }} keys/sec. usage/events use noeviction: eviction means rate-limit quotas or dedup keys are being lost (double-count / bypass risk). Check memory and maxmemory-policy."
+            description: "Redis instance {{ `{{ $labels.app }}` }} is evicting {{ `{{ $value | humanize }}` }} keys/sec. events uses noeviction: eviction means dedup keys are being lost (double-count risk). Check memory and maxmemory-policy."
 
         - alert: RedisHighConnections
           expr: redis_connected_clients{app=~"{{ $fullname }}-redis-.*"} > 100

@@ -20,50 +20,6 @@ describe('userRepository', () => {
     vi.clearAllMocks()
   })
 
-  describe('findById', () => {
-    it('finds a user by id', async () => {
-      const mockUser = { id: '1', email: 'test@example.com' }
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(mockUser as any)
-
-      const result = await userRepository.findById('1')
-
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: '1' },
-        include: {
-          subscription: true,
-          usage: true
-        }
-      })
-      expect(result).toEqual(mockUser)
-    })
-
-    it('returns null if user not found', async () => {
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(null)
-
-      const result = await userRepository.findById('non-existent')
-
-      expect(result).toBeNull()
-    })
-  })
-
-  describe('findByEmail', () => {
-    it('finds a user by email', async () => {
-      const mockUser = { id: '1', email: 'test@example.com' }
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(mockUser as any)
-
-      const result = await userRepository.findByEmail('test@example.com')
-
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({
-        where: { email: 'test@example.com' },
-        include: {
-          subscription: true,
-          usage: true
-        }
-      })
-      expect(result).toEqual(mockUser)
-    })
-  })
-
   describe('findBasicById', () => {
     it('finds profile row without joins', async () => {
       const mockUser = { id: '1', email: 'test@example.com' }

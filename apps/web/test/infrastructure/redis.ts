@@ -44,13 +44,8 @@ export const setupRedisMocks = () => {
     }
   })
 
-  // Mock internal redis instances
   vi.mock('@/lib/infrastructure/redis', () => ({
     redisReader: mockRedis,
     redisWriter: mockRedis,
-  }))
-
-  vi.mock('@/lib/infrastructure/redis-limit', () => ({
-    usageRedis: mockRedis,
   }))
 }

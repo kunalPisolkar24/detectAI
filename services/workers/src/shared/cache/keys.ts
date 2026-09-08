@@ -17,23 +17,7 @@ export const CacheKeys = {
   userBasic: (id: string) => `user:basic:${id}`,
   userBasicByEmail: (email: string) => `user:basic:email:${emailHash(email)}`,
   userSub: (id: string) => `user:sub:${id}`,
-  dailyUsage: (userId: string, utcDay: string) => `rate_limit:{${userId}}:daily:${utcDay}`,
   analyticsDedup: (eventId: string) => `analytics:usage:event:${eventId}`,
-
-  /**
-   * Transitional: canonical user invalidation targets for the post-split
-   * world (basic + sub + email pointer).
-   */
-  user: (id: string) => `user:basic:${id}`,
-  userByEmail: (email: string) => `user:basic:email:${emailHash(email)}`,
-
-  /** Transitional DEL targets — old schemes, remove after one release. */
-  legacy: {
-    webUser: (id: string) => `user:id:${id}`,
-    webUserByEmail: (email: string) => `user:email:${email}`,
-    workerUser: (id: string) => `v1:user:id:${id}`,
-    workerUserByEmail: (email: string) => `v1:user:email:${emailHash(email)}`,
-  },
 } as const;
 
 export const CacheTTL = {

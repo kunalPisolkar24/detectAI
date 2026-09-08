@@ -678,13 +678,6 @@ data:
               "legendFormat": "{{job}} master link",
               "range": true,
               "refId": "A"
-            },
-            {
-              "editorMode": "code",
-              "expr": "redis_cluster_state{job=~\"redis-usage-0|redis-usage-1|redis-usage-2\"}",
-              "legendFormat": "{{job}} cluster state",
-              "range": true,
-              "refId": "B"
             }
           ],
           "title": "Replication and Cluster Health",

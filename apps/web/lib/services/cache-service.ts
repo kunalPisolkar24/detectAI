@@ -3,25 +3,20 @@ import { metrics } from "@/lib/infrastructure/metrics"
 import { logger } from "@/lib/infrastructure/logger"
 import { type ICacheStorage, RedisCacheAdapter } from "@/lib/infrastructure/redis-cache-adapter"
 
-import { CacheKeys as UnifiedKeys, CacheTTL as UnifiedTTL } from "@/lib/services/cache-keys"
+import { CacheKeys, CacheTTL } from "@/lib/services/cache-keys"
 
 export const TTL = {
-  USER: 3600,
-  USER_BASIC: UnifiedTTL.USER_BASIC,
-  USER_SUB: UnifiedTTL.USER_SUB,
+  USER_BASIC: CacheTTL.USER_BASIC,
+  USER_SUB: CacheTTL.USER_SUB,
 }
 
 export class CacheService {
   constructor(private storage: ICacheStorage) {}
 
   public keys = {
-    /** @deprecated pre-split blob — use userBasic/userSub, kept for transitional DELs. */
-    user: (id: string) => UnifiedKeys.legacy.webUser(id),
-    /** @deprecated plain-email key (PII) — use userBasicByEmail, kept for transitional DELs. */
-    userByEmail: (email: string) => UnifiedKeys.legacy.webUserByEmail(email),
-    userBasic: (id: string) => UnifiedKeys.userBasic(id),
-    userBasicByEmail: (email: string) => UnifiedKeys.userBasicByEmail(email),
-    userSub: (id: string) => UnifiedKeys.userSub(id),
+    userBasic: (id: string) => CacheKeys.userBasic(id),
+    userBasicByEmail: (email: string) => CacheKeys.userBasicByEmail(email),
+    userSub: (id: string) => CacheKeys.userSub(id),
   }
 
   async get<T>(key: string): Promise<T | null> {

@@ -19,7 +19,6 @@ export function makeRedisMock(overrides: Record<string, unknown> = {}) {
 }
 
 export const mockRedisClient = makeRedisMock();
-export const mockMainClient = makeRedisMock();
 
 export const redisFactoryMock = {
     RedisFactory: {

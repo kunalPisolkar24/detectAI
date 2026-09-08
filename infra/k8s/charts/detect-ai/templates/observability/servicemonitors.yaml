@@ -47,7 +47,7 @@ spec:
 {{- end }}
 
 # 3. Redis Exporter Monitors (operator-managed)
-{{- range $redis := list "redis-usercache" "redis-usage" "redis-events" "redis-chat-leader" "redis-chat-follower" }}
+{{- range $redis := list "redis-usercache" "redis-events" "redis-chat-leader" "redis-chat-follower" }}
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
