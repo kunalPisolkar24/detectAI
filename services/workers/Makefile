@@ -6,7 +6,6 @@ SEED_COUNT ?= 50
 # Local Infrastructure Defaults (pointing to ports mapped by make local-up)
 DATABASE_URL ?= postgresql://user:password@localhost:5432/detect_ai
 REDIS_URL ?= redis://:user_cache_password@localhost:6379
-REDIS_USAGE_URL ?= redis://:usage_cache_password@localhost:6382
 RABBITMQ_URL ?= amqp://guest:guest@localhost:5672
 
 .PHONY: help proxy load-payments load-analytics load-cron dev-payments dev-analytics dev-cron test test-integration build-all
@@ -38,7 +37,6 @@ proxy:
 	@echo "Starting Load Testing Proxy on http://localhost:9999..."
 	@DATABASE_URL=$(DATABASE_URL) \
 	 REDIS_URL=$(REDIS_URL) \
-	 REDIS_USAGE_URL=$(REDIS_USAGE_URL) \
 	 RABBITMQ_URL=$(RABBITMQ_URL) \
 	 bun run src/tests/load/proxy.ts
 

@@ -46,34 +46,24 @@ const mainClient = RedisFactory.createClient({
   password: (config as any).REDIS_PASSWORD,
 });
 
-// Use persistent EventRedis for dedup if configured, otherwise fallback to main (LRU risk documented)
+// Analytics dedup (`analytics:usage:event:*`) lives in redis-cache alongside
+// rate-limit counters. redis-events is Paddle-only. EVENT_REDIS_* is ignored
+// here (kept optional in config for rolling deploys) — wiring it would split
+// usage dedup away from its counters for no benefit.
 const cfgAny = config as any;
-const dedupClient = cfgAny.EVENT_REDIS_URL
-  ? RedisFactory.createClient({
-      mode: cfgAny.EVENT_REDIS_MODE ?? "standalone",
-      name: "AnalyticsDedup",
-      url: cfgAny.EVENT_REDIS_URL,
-      sentinels: cfgAny.EVENT_REDIS_SENTINELS,
-      masterName: cfgAny.EVENT_REDIS_MASTER_NAME,
-      password: cfgAny.EVENT_REDIS_PASSWORD,
-    })
-  : mainClient;
-
-if (dedupClient === mainClient) {
-  Logger.warn("EVENT_REDIS_URL not set; analytics dedup shares AnalyticsMain (allkeys-lru can evict dedup keys and cause double-count under memory pressure)");
+if (cfgAny.EVENT_REDIS_URL) {
+  Logger.warn("EVENT_REDIS_URL is set but ignored for analytics dedup (paddle-only events instance); using redis-cache");
 }
+const dedupClient = mainClient;
 
 const metricsService = new MetricsService("worker-analytics");
 registerPools(metricsService);
 
 wireRedisMetrics(mainClient, metricsService, "AnalyticsMain");
-if (dedupClient !== mainClient) {
-  wireRedisMetrics(dedupClient, metricsService, "AnalyticsDedup");
-}
 
 const userRepository = new PrismaUserRepository(prismaPrimary, prisma, undefined, metricsService);
 const usageDeduplicator = new UsageEventDeduplicator(dedupClient);
-const analyticsService = new AnalyticsService(userRepository, mainClient, metricsService, usageDeduplicator);
+const analyticsService = new AnalyticsService(userRepository, metricsService, usageDeduplicator);
 
 // analytics.usage publisher (web) asserts quorum; consumer must match to avoid 406.
 // `allowedJobTypes` bounds the `job_type` metric label: `usage_event` passes
@@ -120,13 +110,9 @@ const server = new WorkerServer(
     const poolPressured = isPoolPressured();
     const dbOk = await checkDb();
     const redisOk = await checkRedis(mainClient);
-    let dedupOk = true;
-    if (dedupClient !== mainClient) {
-      dedupOk = await checkRedis(dedupClient);
-    }
     const workerOk = worker.getStatus();
-    const healthy = dbOk && redisOk && dedupOk && workerOk && !poolPressured;
-    return { healthy, checks: { db: dbOk, redis: redisOk, dedupRedis: dedupOk, rabbitmq: workerOk, poolWaiting: waiting, poolPressured, isShuttingDown } };
+    const healthy = dbOk && redisOk && workerOk && !poolPressured;
+    return { healthy, checks: { db: dbOk, redis: redisOk, dedupRedis: redisOk, rabbitmq: workerOk, poolWaiting: waiting, poolPressured, isShuttingDown } };
   }
 );
 
@@ -138,15 +124,11 @@ async function bootstrap(): Promise<void> {
   for (let attempt = 1; attempt <= 5; attempt++) {
     const db = await withTimeout(prismaPrimary.$queryRaw`SELECT 1`.then(() => true).catch(() => null), 3000, null as any);
     const redis = await withTimeout(mainClient.ping().then(() => true).catch(() => null), 3000, null as any);
-    let dedup: unknown = true;
-    if (dedupClient !== mainClient) {
-      dedup = await withTimeout(dedupClient.ping().then(() => true).catch(() => null), 3000, null as any);
-    }
-    if (db && redis && dedup) {
+    if (db && redis) {
       ready = true;
       break;
     }
-    Logger.warn(`Analytics bootstrap waiting for deps (attempt ${attempt}/5)`, { dbOk: !!db, redisOk: !!redis, dedupOk: !!dedup });
+    Logger.warn(`Analytics bootstrap waiting for deps (attempt ${attempt}/5)`, { dbOk: !!db, redisOk: !!redis, dedupOk: !!redis });
     if (attempt < 5) await new Promise(r => setTimeout(r, 2000));
   }
   if (!ready) {
@@ -177,11 +159,6 @@ const shutdown = async () => {
   try {
     await Promise.race([mainClient.quit(), new Promise((_, rej) => setTimeout(() => rej(new Error("quit timeout")), 5000))]);
   } catch {}
-  if (dedupClient !== mainClient) {
-    try {
-      await Promise.race([dedupClient.quit(), new Promise((_, rej) => setTimeout(() => rej(new Error("quit timeout")), 5000))]);
-    } catch {}
-  }
   try { await closePrisma(); } catch {}
   Logger.info("Analytics Worker exited gracefully");
   process.exit(0);

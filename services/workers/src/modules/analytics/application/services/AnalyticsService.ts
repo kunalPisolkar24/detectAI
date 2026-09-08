@@ -1,27 +1,26 @@
 import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { type UsageEventDeduplicator } from "../../infrastructure/UsageEventDeduplicator";
-import { CacheKeys } from "@shared/cache/keys";
-import { type RedisClient } from "@shared/cache/RedisClient";
 import { Logger } from "@shared/logging/Logger";
 import { MetricsService } from "@shared/monitoring/MetricsService";
-import { UserCacheInvalidator } from "@shared/cache/invalidation";
 
 export class AnalyticsService {
-  private readonly cacheInvalidator: UserCacheInvalidator;
   constructor(
     private readonly userRepository: IUserRepository,
-    private readonly mainClient: RedisClient,
     private readonly metrics: MetricsService,
     private readonly deduplicator?: UsageEventDeduplicator
-  ) {
-    this.cacheInvalidator = new UserCacheInvalidator(mainClient, metrics);
-  }
+  ) {}
 
   /**
    * Persist one usage event exactly once per `eventId`.
    *
    * `eventId` is required: without it redeliveries cannot dedupe. The queue
    * schema enforces this; this guard is defense-in-depth for direct callers.
+   *
+   * No cache invalidation: cached rows (`user:basic:*`, `user:sub:*`) exclude
+   * usage counters, and `rate_limit:*` counters expire at midnight UTC.
+   * Usage tracking (async here, sync fallback in web `trackUsage`) never
+   * touches user cache — this removes the pre-split churn where every
+   * increment evicted the whole user blob.
    */
   async handleUsageEvent(userId: string, count: number, eventId: string): Promise<void> {
     const timer = this.metrics.jobDuration.startTimer({ job_type: "usage_event" });
@@ -44,21 +43,6 @@ export class AnalyticsService {
       }
 
       await this.userRepository.incrementUsage(userId, count);
-
-      try {
-        let email: string | null = null;
-        try {
-          const user = await this.userRepository.findUniqueById(userId);
-          if (user?.email) email = user.email;
-        } catch {}
-        if (email) {
-          await this.cacheInvalidator.invalidateUser(userId, email);
-        } else {
-          await this.mainClient.del(CacheKeys.user(userId));
-        }
-      } catch (error) {
-        Logger.warn("Cache invalidation failed after usage flush", { userId, error });
-      }
 
       this.metrics.jobTotal.inc({ job_type: "usage_event" });
       this.metrics.domainOperationsVolume.inc({ operation_type: "usage_flushed" }, count);

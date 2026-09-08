@@ -15,6 +15,7 @@ export const mockRedis = {
   del: vi.fn().mockResolvedValue(0),
   on: vi.fn(),
   pipeline: vi.fn(() => mockPipeline),
+  eval: vi.fn().mockResolvedValue(1),
   sadd: vi.fn().mockResolvedValue(1),
   smembers: vi.fn().mockResolvedValue([]),
   srem: vi.fn().mockResolvedValue(1),

@@ -69,4 +69,11 @@ export const metrics = {
     labelNames: ["operation"],
     registers: [registry],
   })),
+
+  usageSyncFallback: getOrCreateMetric('usage_sync_fallback_total', () => new Counter({
+    name: "usage_sync_fallback_total",
+    help: "Total sync DB fallback writes when RabbitMQ is down (no queue message, no double-count)",
+    labelNames: ["reason"],
+    registers: [registry],
+  })),
 }

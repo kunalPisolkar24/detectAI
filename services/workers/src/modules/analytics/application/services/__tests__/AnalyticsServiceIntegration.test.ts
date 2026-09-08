@@ -5,7 +5,6 @@ import { prismaPrimary, prisma } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
-import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { AnalyticsService } from "../AnalyticsService";
 import { UsageEventDeduplicator } from "../../../infrastructure/UsageEventDeduplicator";
 
@@ -23,11 +22,12 @@ describe("AnalyticsService Integration", () => {
         });
         const metrics = new MetricsService("test-analytics");
         userRepository = new PrismaUserRepository(prismaPrimary, prisma);
+        // Dedup lives in redis-cache (same instance as counters).
         usageDeduplicator = new UsageEventDeduplicator(redis);
-        service = new AnalyticsService(userRepository, redis, metrics, usageDeduplicator);
+        service = new AnalyticsService(userRepository, metrics, usageDeduplicator);
     });
 
-    test("should handle usage event: increment db and invalidate cache", async () => {
+    test("should handle usage event: increment db without touching user cache", async () => {
         const user = await prismaPrimary.user.create({
             data: {
                 email: "analytics-handle-event@example.com",
@@ -36,15 +36,17 @@ describe("AnalyticsService Integration", () => {
         });
 
         const userId = user.id;
-        await redis.set(CacheKeys.user(userId), "cached-data");
+        // Split layout: usage must NOT evict basic/sub entries.
+        await redis.set(CacheKeys.userBasic(userId), "cached-data", "EX", 3600);
+        await redis.set(CacheKeys.userSub(userId), "cached-sub", "EX", 600);
 
         await service.handleUsageEvent(userId, 10, crypto.randomUUID());
 
         const usage = await prismaPrimary.usage.findUnique({ where: { userId } });
         expect(usage?.apiCallCountTotal).toBe(10);
 
-        const cached = await redis.get(CacheKeys.user(userId));
-        expect(cached).toBeNull();
+        expect(await redis.get(CacheKeys.userBasic(userId))).toBe("cached-data");
+        expect(await redis.get(CacheKeys.userSub(userId))).toBe("cached-sub");
     });
 
     test("should count duplicate event ids exactly once", async () => {

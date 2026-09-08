@@ -63,11 +63,8 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_MASTER_NAME=${REDIS_MASTER_NAME:-mymaster}
       - REDIS_SENTINELS=${REDIS_SENTINELS:-redis-sentinel-1:26379}
-      # Redis analytics (points at the same standalone instance for now)
-      - REDIS_USAGE_MODE=${REDIS_USAGE_MODE}
-      - USE_REDIS_CLUSTER=${USE_REDIS_CLUSTER:-false}
-      - REDIS_USAGE_URL=${REDIS_USAGE_URL}
-      - REDIS_USAGE_PASSWORD=${REDIS_USAGE_PASSWORD}
+      # Usage counters + analytics dedup live in redis-cache (REDIS_URL).
+      # redis-events (Paddle-only) is wired in workers only.
       # Cloudflare Turnstile
       - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
       - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}

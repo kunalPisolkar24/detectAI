@@ -46,8 +46,9 @@ describe("SubscriptionUpdatedHandler Integration", () => {
             },
         });
 
-        // 2. Set some initial cache
-        await redis.set(CacheKeys.user(user.id), "initial-cache");
+        // 2. Set some initial cache (split layout: basic + sub)
+        await redis.set(CacheKeys.userBasic(user.id), "initial-cache");
+        await redis.set(CacheKeys.userSub(user.id), "initial-sub");
 
         // 3. Prepare Paddle event
         const eventData = {
@@ -76,8 +77,8 @@ describe("SubscriptionUpdatedHandler Integration", () => {
         expect(updatedUser?.subscription?.status).toBe(SubscriptionStatus.ACTIVE);
         expect(updatedUser?.subscription?.paddleSubscriptionId).toBe("sub_123");
 
-        // 6. Verify cache invalidation
-        const cachedUser = await redis.get(CacheKeys.user(user.id));
-        expect(cachedUser).toBeNull();
+        // 6. Verify cache invalidation (basic + sub + legacy)
+        expect(await redis.get(CacheKeys.userBasic(user.id))).toBeNull();
+        expect(await redis.get(CacheKeys.userSub(user.id))).toBeNull();
     });
 });

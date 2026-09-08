@@ -62,7 +62,9 @@ export const env = createEnv({
     REDIS_PASSWORD: z.string().optional(),
     REDIS_USAGE_MODE: z.enum(["standalone", "cluster"]).optional(),
     REDIS_USAGE_PASSWORD: z.string().optional(),
-    REDIS_USAGE_URL: z.string().min(1),
+    /** @deprecated usage lives in redis-cache (REDIS_URL); ignored if set. */
+    REDIS_USAGE_URL: z.string().min(1).optional(),
+    /** @deprecated cluster removed with usage Redis; ignored if set. */
     USE_REDIS_CLUSTER: z.string().transform((s) => s === "true").pipe(z.boolean()).optional(),
     FILE_EXTRACTOR_API_URL: z.string().url(),
     AI_SERVICE_URL: z.string().min(1),

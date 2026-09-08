@@ -19,8 +19,6 @@ secrets:
   POSTGRES_PASSWORD: "CHANGE_ME"
   REDIS_PASSWORD: "CHANGE_ME"
   REDIS_URL: "redis://:CHANGE_ME@detect-ai-redis-usercache:6379"
-  REDIS_USAGE_URL: "redis://:CHANGE_ME@detect-ai-redis-usage:6379"
-  REDIS_USAGE_PASSWORD: "CHANGE_ME"
   EVENT_REDIS_URL: "redis://:CHANGE_ME@detect-ai-redis-events:6379"
   EVENT_REDIS_PASSWORD: "CHANGE_ME"
   RABBITMQ_URL: "amqp://guest:guest@detect-ai-rabbitmq:5672/"
@@ -266,22 +264,19 @@ databases:
       image: "quay.io/opstree/redis-exporter"
       tag: "v1.44.0"
     userCache:
-      # LRU eviction for user cache (SETEX 3600) — isolated from events noeviction
+      # redis-cache: user basic (3600) + sub (600) + rate-limit (midnight TTL)
+      # + analytics dedup (7d). All keys TTL'd → volatile-ttl so dedup keys
+      # are never evicted ahead of expiry (allkeys-lru would double-count).
       sentinel:
         enabled: false
       clusterSize: 3
       sentinelSize: 3
       storageSize: "2Gi"
       maxmemory: "1gb"
-      maxmemoryPolicy: "allkeys-lru"
-    usage:
-      storageSize: "1Gi"
-      # Rate-limit counters rely on TTL expiry, never eviction — noeviction so
-      # a full instance errors (and falls back to DB) instead of silently
-      # resetting quotas via LRU eviction.
-      maxmemoryPolicy: "noeviction"
+      maxmemoryPolicy: "volatile-ttl"
     events:
-      # Persistent dedup store for payment:event:ts:* — must not use cache-only (--save "" --appendonly no)
+      # Paddle-only: paddle:evt:* (7d) + payment:event:ts:* (30d).
+      # Must not use cache-only (--save "" --appendonly no) — wipes dedup.
       storageSize: "1Gi"
       appendonly: "yes"
       save: "900 1 300 10"

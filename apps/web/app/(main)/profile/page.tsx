@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/config/auth-options"
 import { userService } from "@/features/auth/services/user-service"
 import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
+import { prisma } from "@/lib/infrastructure/prisma"
 import { SubscriptionStatus } from "@/lib/shared/generated/prisma/client"
 import { ProfileView } from "@/features/profile/components/profile-view"
 
@@ -53,10 +54,13 @@ export default async function ProfilePage() {
     )
   }
 
-  // DB-authoritative read (never stale); chat gate relies on session.user.isPremium refreshed via jwt fallback
-  const [user, realTimeUsage] = await Promise.all([
-    userService.getUserById(session.user.id),
-    rateLimitService.getRealTimeUsage(session.user.id)
+  // Split reads: basic (cached 1h) + subscription (cached 10m) + usage
+  // daily (Redis counter) + usage total (DB-authoritative). Usage increments
+  // never invalidate user cache.
+  const [user, realTimeUsage, usageRow] = await Promise.all([
+    userService.getUserWithSubscription(session.user.id),
+    rateLimitService.getRealTimeUsage(session.user.id),
+    prisma.usage.findUnique({ where: { userId: session.user.id } }),
   ])
 
   if (!user) {
@@ -72,7 +76,7 @@ export default async function ProfilePage() {
     paddleSubscriptionStatus: user.subscription?.status as string | null,
     paddleCancellationScheduled: user.subscription?.cancellationScheduled ?? false,
     apiCallCountDaily: realTimeUsage.dailyCount,
-    apiCallCountTotal: user.usage?.apiCallCountTotal ?? 0
+    apiCallCountTotal: usageRow?.apiCallCountTotal ?? 0
   }
 
   return (

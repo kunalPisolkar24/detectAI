@@ -6,7 +6,7 @@ import { analyticsPublisher } from '@/lib/infrastructure/analytics-publisher'
 vi.mock('@/lib/infrastructure/redis-limit', () => ({
   usageRedis: {
     get: vi.fn(),
-    pipeline: vi.fn(),
+    eval: vi.fn(),
   },
 }))
 
@@ -55,20 +55,19 @@ describe('RedisRateLimitService Integration', () => {
     expect(result.remaining).toBe(-1)
   })
 
-  it('tracks usage by incrementing UTC daily key and publishing with eventId', async () => {
-    const mockPipeline = {
-      incrby: vi.fn().mockReturnThis(),
-      expireat: vi.fn().mockReturnThis(),
-      exec: vi.fn().mockResolvedValue([[null, 1], [null, 1]]),
-    }
-    vi.mocked(usageRedis.pipeline).mockReturnValue(mockPipeline as any)
+  it('tracks usage by atomically incrementing UTC daily key and publishing with eventId', async () => {
+    vi.mocked(usageRedis.eval as any).mockResolvedValue(1)
     vi.mocked(analyticsPublisher.publish).mockResolvedValue('evt-1' as any)
 
     await rateLimitService.trackUsage('user-1')
 
-    expect(usageRedis.pipeline).toHaveBeenCalled()
-    expect(mockPipeline.incrby).toHaveBeenCalled()
-    expect(mockPipeline.expireat).toHaveBeenCalled()
+    expect(usageRedis.eval).toHaveBeenCalledWith(
+      expect.stringContaining('INCRBY'),
+      1,
+      expect.stringContaining('rate_limit:{user-1}:daily:'),
+      '1',
+      expect.any(String),
+    )
     expect(analyticsPublisher.publish).toHaveBeenCalledWith('user-1', 1, expect.any(String))
   })
 

@@ -3,6 +3,7 @@ import { metrics } from "@/lib/infrastructure/metrics"
 import { logger } from "@/lib/infrastructure/logger"
 import { analyticsPublisher } from "@/lib/infrastructure/analytics-publisher"
 import { prisma } from "@/lib/infrastructure/prisma"
+import { CacheKeys } from "@/lib/services/cache-keys"
 
 export interface IRateLimitService {
   checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }>
@@ -11,20 +12,40 @@ export interface IRateLimitService {
 }
 
 /**
- * Rate-limit + usage accounting.
+ * Rate-limit + usage accounting (2-Redis world).
  *
- * Contract:
- * - Real-time enforcement lives in `usageRedis` (`REDIS_USAGE_URL`):
+ * - Real-time enforcement lives in `redis-cache` (`REDIS_URL`):
  *   key `rate_limit:{userId}:daily:YYYY-MM-DD` (UTC date), expiry at next UTC
- *   midnight. The worker never writes these keys.
+ *   midnight. Atomic Lua `INCRBY+EXPIREAT` (no leak on crash between cmds).
+ *   Reads AND writes go to the master (`usageRedis` === `redisWriter`) —
+ *   slave reads would lag and over-allow.
  * - Authoritative billing lives in Postgres `Usage` (written asynchronously by
- *   `worker-analytics` via RabbitMQ `analytics.usage`).
- * - `trackUsage` writes BOTH independently. The DB fallback runs ONLY when
- *   both Redis and the queue fail — otherwise it would double-count
- *   (Redis + DB, or queue-flush + DB).
+ *   `worker-analytics` via RabbitMQ `analytics.usage`, or synchronously by
+ *   the fallback below when the queue is down).
+ * - `analytics:usage:event:{id}` dedup lives in `redis-cache`. `redis-events`
+ *   is Paddle-only.
+ * - Cached user rows (`user:basic:*`, `user:sub:*`) exclude usage counters,
+ *   so usage tracking NEVER invalidates user cache.
+ *
+ * `trackUsage` truth table (no double-count — fallback never publishes):
+ * - redisOk && publishOk    → return (worker will UPSERT via queue)
+ * - !redisOk && publishOk   → return, log (worker will UPSERT; Redis undercounts)
+ * - redisOk && !publishOk   → Redis INCR kept + sync DB UPSERT (queue lost it)
+ * - !redisOk && !publishOk  → sync DB UPSERT (postgres-only mode)
  */
 export class RedisRateLimitService implements IRateLimitService {
   private static readonly FREE_TIER_LIMIT = 100
+
+  /**
+   * Atomic increment + expiry. A two-command pipeline can leak a persistent
+   * key if the process crashes between INCRBY and EXPIREAT (next-day
+   * overcount) — Lua keeps it atomic.
+   */
+  private static readonly INCR_EXPIRE_LUA = `
+    local current = redis.call('INCRBY', KEYS[1], ARGV[1])
+    redis.call('EXPIREAT', KEYS[1], ARGV[2])
+    return current
+  `
 
   /** UTC calendar day, e.g. `2026-04-25`. All writers/readers must use UTC. */
   private getUTCDay(now: Date = new Date()): string {
@@ -32,7 +53,7 @@ export class RedisRateLimitService implements IRateLimitService {
   }
 
   private getDailyKey(userId: string, now: Date = new Date()): string {
-    return `rate_limit:{${userId}}:daily:${this.getUTCDay(now)}`
+    return CacheKeys.dailyUsage(userId, this.getUTCDay(now))
   }
 
   /** Unix seconds of next UTC midnight — keys expire at the day boundary, not sliding 24h. */
@@ -49,7 +70,7 @@ export class RedisRateLimitService implements IRateLimitService {
   }
 
   /** Parse a Redis counter defensively: corrupt values degrade to 0 + metric, never NaN. */
-  private parseCounter(raw: string | null, userId: string, operation: string): number {
+  private parseCounter(raw: string | null, userId: string, _operation: string): number {
     if (raw === null) return 0
     const n = parseInt(raw, 10)
     if (!Number.isFinite(n) || n < 0) {
@@ -140,19 +161,15 @@ export class RedisRateLimitService implements IRateLimitService {
       redisError = new Error("unsafe userId for Redis hash-tag")
     } else {
       try {
-        const pipeline = usageRedis.pipeline()
-        pipeline.incrby(dailyKey, count)
-        pipeline.expireat(dailyKey, expireAt)
-        const results = await pipeline.exec()
-        // ioredis exec resolves to per-command [err, result] tuples (or null
-        // when the offline queue is disabled). Any entry error = failure.
-        if (!results) {
-          throw new Error("Redis pipeline exec returned null (offline queue disabled)")
-        }
-        const failed = (results as Array<[Error | null, unknown]>).some(([err]) => err != null)
-        if (failed) {
-          throw new Error("Redis pipeline reported per-command error")
-        }
+        await (usageRedis as unknown as {
+          eval: (script: string, numKeys: number, key: string, count: string, expireAt: string) => Promise<unknown>
+        }).eval(
+          RedisRateLimitService.INCR_EXPIRE_LUA,
+          1,
+          dailyKey,
+          String(count),
+          String(expireAt),
+        )
         redisOk = true
       } catch (error) {
         redisError = error
@@ -171,25 +188,21 @@ export class RedisRateLimitService implements IRateLimitService {
 
     if (redisOk && publishOk) return
 
-    if (redisOk && !publishOk) {
-      // Real-time enforcement is correct; the authoritative DB will lag until
-      // the queue recovers. Do NOT direct-write the DB here — that would count
-      // the event twice (Redis says counted, DB says counted, worker later
-      // flushes a third time once RabbitMQ is back... actually twice total).
-      logger.error({ msg: "Analytics publish failed after Redis increment; DB will lag until queue recovers", userId, eventId, error: publishError })
-      return
-    }
-
     if (!redisOk && publishOk) {
       // The worker will persist via the queue; a direct DB write would double
-      // the count (queue flush + this upsert).
+      // the count (queue flush + this upsert). Redis undercounts until the
+      // next event re-creates the key — accepted, worker/DB stay exact.
       logger.error({ msg: "Usage Redis unavailable, relying on queue flush for persistence", userId, eventId, error: redisError })
       return
     }
 
-    // Both paths failed — best-effort direct DB increment so daily counts stay
-    // consistent in postgres-only mode (the queue will be stale until recovery).
-    logger.error({ msg: "Failed to track usage via Redis and queue, falling back to DB", userId, eventId, redisError, publishError })
+    // RabbitMQ is down (with or without Redis): the queue never got this
+    // eventId, so a sync DB UPSERT cannot double-count. This keeps billing
+    // exact instead of letting the DB lag until the broker recovers.
+    // No user-cache invalidation: cached rows exclude usage counters.
+    const reason = !redisOk ? "redis_and_queue_down" : "queue_down"
+    try { metrics.usageSyncFallback.inc({ reason }) } catch {}
+    logger.error({ msg: "Analytics publish failed, falling back to sync DB write", userId, eventId, reason, redisError, publishError })
     try {
       await prisma.$executeRaw`
         INSERT INTO "Usage" ("id", "userId", "apiCallCountTotal", "apiCallCountDaily", "lastApiCallReset", "updatedAt", "createdAt")
@@ -206,6 +219,11 @@ export class RedisRateLimitService implements IRateLimitService {
       `
     } catch (dbError) {
       logger.error({ msg: "DB fallback failed for trackUsage", userId, eventId, error: dbError })
+      // Partial-failure note: if Redis INCR succeeded but this UPSERT failed,
+      // Redis overcounts by `count` while the DB undercounts. The next
+      // successful event self-heals the DB; Redis self-heals at midnight
+      // expiry. Alert on `usage_redis_errors_total` + this log, do NOT
+      // retry-publish the same eventId (would double-count on recovery).
     }
   }
 

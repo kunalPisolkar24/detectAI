@@ -6,6 +6,7 @@ export const setupMetricsMocks = () => {
       rateLimitHits: { inc: vi.fn() },
       analyticsPublishFailures: { inc: vi.fn() },
       usageRedisErrors: { inc: vi.fn() },
+      usageSyncFallback: { inc: vi.fn() },
       cacheOperations: { inc: vi.fn() },
       aiInferenceDuration: { observe: vi.fn() },
       httpRequestDuration: { observe: vi.fn() },

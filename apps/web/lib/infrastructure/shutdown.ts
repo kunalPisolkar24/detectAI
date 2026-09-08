@@ -27,11 +27,7 @@ export async function registerShutdownHandlers(): Promise<void> {
       await Promise.allSettled([redisWriter.quit().catch(() => {}), redisReader.quit().catch(() => {})])
     } catch {}
 
-    try {
-      const { usageRedis } = await import("@/lib/infrastructure/redis-limit")
-      // usageRedis is Redis | Cluster — both have quit/disconnect
-      await (usageRedis as unknown as { quit?: () => Promise<unknown> }).quit?.().catch(() => {})
-    } catch {}
+    // usageRedis is an alias of redisWriter (redis-cache) — already quit above.
 
     // Let Next.js standalone server close; exit after a short grace.
     setTimeout(() => process.exit(0), 500).unref()

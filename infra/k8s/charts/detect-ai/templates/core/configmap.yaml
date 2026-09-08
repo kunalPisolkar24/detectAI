@@ -15,19 +15,18 @@ data:
   
   # Databases and Broker Endpoints
   # NOTE: Redis passwords are injected via the detect-ai-secrets Secret:
-  #   REDIS_PASSWORD, REDIS_USAGE_PASSWORD, EVENT_REDIS_PASSWORD
+  #   REDIS_PASSWORD, EVENT_REDIS_PASSWORD
   # Apps must pass these as the `password` option to the Redis client constructor
   # (the plain URL omits the password intentionally to keep it out of the ConfigMap).
+  # 2 Redis: redis-cache (user basic/sub + rate-limit + analytics dedup) and
+  # redis-events (Paddle-only: paddle:evt:*, payment:event:ts:*).
   {{- if .Values.databases.redis.userCache.sentinel.enabled }}
   REDIS_MASTER_NAME: "mymaster"
   REDIS_SENTINELS: "{{ include "detect-ai.fullname" . }}-redis-usercache:26379"
   {{- else }}
   REDIS_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-usercache:6379"
   {{- end }}
-  
-  REDIS_USAGE_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-usage:6379"
-  REDIS_USAGE_MODE: "standalone"
-  
+
   EVENT_REDIS_URL: "redis://{{ include "detect-ai.fullname" . }}-redis-events:6379"
   EVENT_REDIS_MODE: "standalone"
   

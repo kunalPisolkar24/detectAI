@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/config/auth-options"
 import { prisma } from "@/lib/infrastructure/prisma"
 import { SubscriptionStatus } from "@/lib/shared/generated/prisma/client"
 import { cacheService } from "@/lib/services/cache-service"
+import { CacheKeys } from "@/lib/services/cache-keys"
 
 export async function confirmUpgradeAction(): Promise<{ isPremium: boolean }> {
   if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
@@ -22,8 +23,21 @@ export async function confirmUpgradeAction(): Promise<{ isPremium: boolean }> {
     })
 
     if (user?.subscription?.status === SubscriptionStatus.ACTIVE) {
-      await cacheService.del(cacheService.keys.user(userId))
-      if (user.email) await cacheService.del(cacheService.keys.userByEmail(user.email))
+      // Subscription flip — DEL sub + basic + legacy (DEL → DB-read → DEL).
+      const keys = [
+        cacheService.keys.userSub(userId),
+        cacheService.keys.userBasic(userId),
+        ...(user.email ? [cacheService.keys.userBasicByEmail(user.email)] : []),
+        CacheKeys.legacy.webUser(userId),
+        CacheKeys.legacy.workerUser(userId),
+        ...(user.email
+          ? [
+              CacheKeys.legacy.webUserByEmail(user.email),
+              CacheKeys.legacy.workerUserByEmail(user.email),
+            ]
+          : []),
+      ]
+      await cacheService.del([...new Set(keys)])
       return { isPremium: true }
     }
 

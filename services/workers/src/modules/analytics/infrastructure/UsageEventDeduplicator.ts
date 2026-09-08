@@ -7,6 +7,10 @@ const DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60;
  * Marks usage events as seen via SET NX so redelivered messages are not
  * counted twice. Fails open: if Redis is unavailable the event is treated
  * as new, preserving availability at the cost of a possible double count.
+ *
+ * Lives in `redis-cache` (not `redis-events`, which is Paddle-only).
+ * Requires `volatile-ttl` (never `allkeys-lru`): eviction of these keys
+ * causes double-count on redelivery.
  */
 export class UsageEventDeduplicator {
     constructor(

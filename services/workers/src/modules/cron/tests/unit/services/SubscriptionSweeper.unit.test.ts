@@ -88,16 +88,17 @@ describe("SubscriptionSweeper", () => {
         expect(typeof call[3]).toBe("function");
 
         // UserCacheInvalidator uses chunked pipeline/unlink with fallback to per-key del
-        // With mock lacking pipeline, it falls back to per-key del (4 keys => 4 calls) or pipeline exec
         const allDelArgs = mockRedisClient.del.mock.calls.flat() as string[];
         // If pipeline is available, del may not be called; check via cacheOperations metric instead
         if (mockRedisClient.del.mock.calls.length > 0) {
-            expect(allDelArgs).toContain(CacheKeys.user("u1"));
-            expect(allDelArgs).toContain(CacheKeys.userByEmail("u1@test.com"));
-            expect(allDelArgs).toContain(CacheKeys.user("u2"));
-            expect(allDelArgs).toContain(CacheKeys.userByEmail("u2@test.com"));
+            expect(allDelArgs).toContain(CacheKeys.userBasic("u1"));
+            expect(allDelArgs).toContain(CacheKeys.userBasicByEmail("u1@test.com"));
+            expect(allDelArgs).toContain(CacheKeys.userSub("u1"));
+            expect(allDelArgs).toContain(CacheKeys.userBasic("u2"));
+            expect(allDelArgs).toContain(CacheKeys.userBasicByEmail("u2@test.com"));
+            expect(allDelArgs).toContain(CacheKeys.userSub("u2"));
         } else {
-            // pipeline path — verify cacheOperations metric was incremented for 4 keys
+            // pipeline path — verify cacheOperations metric was incremented
             expect(metricsMock.cacheOperations.inc).toHaveBeenCalled();
         }
     });
