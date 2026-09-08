@@ -1,31 +1,26 @@
 import { serve } from "bun";
-import amqp, { type Channel, type ConsumeMessage, type ChannelModel } from "amqplib";
-import { RedisFactory } from "@shared/cache/RedisClient";
+import amqp, { type Channel, type ChannelModel } from "amqplib";
 import { prismaPrimary as prisma } from "@shared/database/PrismaService";
 import { Logger } from "@shared/logging/Logger";
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
-const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
-const REDIS_MODE = (process.env.REDIS_MODE as any) || "standalone";
-const PORT = 9999;
+const PORT = parseInt(process.env.PROXY_PORT || "9999", 10) || 9999;
 const MOCK_MODE = process.env.MOCK_MODE === "true";
+// Cron rig has no broker (seed-only): REQUIRE_BROKER=0 drops the AMQP
+// requirement from /health and skips connecting altogether.
+const REQUIRE_BROKER = process.env.REQUIRE_BROKER !== "0";
 
 // Connections
 let amqpConn: ChannelModel | null = null;
 let amqpChannel: Channel | null = null;
 
-const redisClient = MOCK_MODE ? null : RedisFactory.createClient({
-    mode: REDIS_MODE,
-    name: "LoadProxyRedis",
-    url: REDIS_URL,
-    sentinels: process.env.REDIS_SENTINELS ? JSON.parse(process.env.REDIS_SENTINELS) : undefined,
-    masterName: process.env.REDIS_MASTER_NAME,
-    password: process.env.REDIS_PASSWORD,
-});
-
 async function initAmqp() {
     if (MOCK_MODE) {
         Logger.info("Proxy running in MOCK_MODE (No real infrastructure connections)");
+        return;
+    }
+    if (!REQUIRE_BROKER) {
+        Logger.info("Proxy running without broker (REQUIRE_BROKER=0, seed-only)");
         return;
     }
     try {
@@ -44,26 +39,53 @@ const server = serve({
     async fetch(req) {
         const url = new URL(req.url);
 
+        if (req.method === "GET" && url.pathname === "/health") {
+            let dbOk = true;
+            try {
+                await prisma.$queryRaw`SELECT 1`;
+            } catch {
+                dbOk = false;
+            }
+            const amqpOk = MOCK_MODE || !REQUIRE_BROKER || !!amqpChannel;
+            const ok = dbOk && amqpOk;
+            return Response.json(
+                { status: ok ? "ok" : "degraded", mock: MOCK_MODE, db: dbOk, amqp: amqpOk },
+                { status: ok ? 200 : 503 },
+            );
+        }
+
         if (req.method === "POST" && url.pathname === "/payments") {
             try {
                 const body = (await req.json()) as any;
+                // Paddle-shaped payload (matches what the handlers parse):
+                // stable sub id per user so repeats form a valid lifecycle
+                // (created -> updated* -> canceled -> created ...) instead of
+                // poison-transition DLQs. Explicit body.data fields win.
+                const eventType = body.event_type || "subscription.updated";
+                const userId = body.userId || `user_${Math.floor(Math.random() * 10000)}`;
+                const now = new Date().toISOString();
                 const payload = {
-                    event_type: body.event_type || "subscription.updated",
+                    event_type: eventType,
+                    event_id: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                    occurred_at: now,
                     data: {
-                        custom_data: { userId: body.userId || `user_${Math.floor(Math.random() * 10000)}` },
-                        paddleCustomerId: `ctm_${Math.random().toString(36).substring(7)}`,
-                        paddleSubscriptionId: `sub_${Math.random().toString(36).substring(7)}`,
-                        paddlePlanId: "pro_monthly",
-                        status: "active",
-                        endsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                        id: `sub_${userId}`,
+                        status: eventType === "subscription.canceled" ? "canceled" : "active",
+                        customer_id: `ctm_${userId}`,
+                        custom_data: { userId },
+                        items: [{ price: { id: "pro_monthly" } }],
+                        current_billing_period: {
+                            ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                        },
+                        canceled_at: eventType === "subscription.canceled" ? now : undefined,
+                        occurred_at: now,
                         ...body.data
                     }
                 };
 
                 if (MOCK_MODE) {
-                    Logger.info(`[MOCK] Payments event: ${payload.event_type} for ${payload.data.custom_data.userId}`);
+                    Logger.info(`[MOCK] Payments event: ${payload.event_type} for ${userId}`);
                 } else {
-                    const userId = payload.data.custom_data.userId;
                     // Ensure user exists so the worker can actually update something
                     await prisma.user.upsert({
                         where: { id: userId },

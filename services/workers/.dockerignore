@@ -13,8 +13,14 @@ README.md
 # Ignore host generated prisma client
 generated/prisma
 
-# Test & load-test assets never needed at runtime
+# Test & load-test assets never needed at runtime, except the load proxy
+# entrypoint (runs in the load rigs via `bun src/tests/load/proxy.ts`).
+# NOTE: a file cannot be re-included while its parent dir is excluded, so
+# the tree is carved level by level instead of excluding src/tests outright.
 **/__tests__
-src/tests
+src/tests/*
+!src/tests/load/
+src/tests/load/*
+!src/tests/load/proxy.ts
 **/*.unit.test.ts
 **/*Integration.test.ts

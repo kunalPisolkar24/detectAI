@@ -1,7 +1,8 @@
-# Variables
+# Variables (VUS empty = per-script default; others match script defaults)
 RPS ?= 5
 DURATION ?= 10s
-SEED_COUNT ?= 50
+SEED_COUNT ?= 1000
+VUS ?=
 
 # Worker selector for the docker targets below.
 # Usage: make worker-up WORKER=payments
@@ -32,7 +33,7 @@ REDIS_URL ?= redis://:user_cache_password@localhost:6379
 EVENT_REDIS_URL ?= redis://:events_password@localhost:6381
 RABBITMQ_URL ?= amqp://guest:guest@localhost:5672
 
-.PHONY: help proxy proxy-stop load-payments load-analytics load-cron \
+.PHONY: help proxy proxy-stop load-test load-down load-payments load-analytics load-cron \
 	dev-payments dev-analytics dev-cron test test-integration \
 	worker-up worker-down worker-down-v worker-logs worker-ps worker-build worker-config
 
@@ -55,12 +56,16 @@ help:
 	@echo "      DATABASE_URL=postgresql://user:password@host.docker.internal:5432/detect_ai \\"
 	@echo "      REDIS_URL=redis://:user_cache_password@host.docker.internal:6379"
 	@echo ""
-	@echo "Load Testing:"
-	@echo "  make proxy           - Start the load testing proxy (required for tests)"
+	@echo "Load Testing (containerized rigs in infra/compose.load-*.yml):"
+	@echo "  make load-test WORKER=analytics|payments|cron - Run k6 in containers (params below)"
+	@echo "    VUS=10 DURATION=2m RPS=50 SEED_COUNT=1000 (cron seed size)"
+	@echo "    e.g. make load-test WORKER=payments VUS=10 DURATION=2m RPS=50"
+	@echo "  make load-down WORKER=... - Tear down the load rig (removes volumes)"
+	@echo "  make proxy           - Start the load testing proxy on host (for local runs)"
 	@echo "  make proxy-stop      - Kill any existing proxy process on port 9999"
-	@echo "  make load-payments   - Run payments load test (params: RPS, DURATION)"
-	@echo "  make load-analytics  - Run analytics load test (params: RPS, DURATION)"
-	@echo "  make load-cron       - Run cron seed (params: SEED_COUNT)"
+	@echo "  make load-payments   - Legacy host run: proxy + local k6 (needs k6 + proxy running)"
+	@echo "  make load-analytics  - Legacy host run: proxy + local k6 (needs k6 + proxy running)"
+	@echo "  make load-cron       - Legacy host run: proxy + local k6 seed (needs k6 + proxy running)"
 	@echo ""
 	@echo "Development (Local Bun):"
 	@echo "  make dev-payments    - Start payments worker in watch mode"
@@ -190,18 +195,44 @@ proxy-stop:
 	@echo "Stopping any existing proxy on port 9999..."
 	@ss -tlnp | grep :9999 | grep -oP 'pid=\K[0-9]+' | xargs -I {} kill -9 {} 2>/dev/null || true
 
-# Load Testing
+# Containerized load testing: worker + proxy + k6 + isolated datastores.
+# Usage: make load-test WORKER=payments VUS=10 DURATION=2m RPS=50
+#        make load-test WORKER=cron SEED_COUNT=1000
+# k6 exit code propagates (--exit-code-from k6), so threshold breaches fail.
+# Load host ports default away from dev stacks so rigs run side by side.
+LOAD_POSTGRES_PORT ?= 5440
+LOAD_REDIS_PORT ?= 6490
+LOAD_EVENTS_PORT ?= 6491
+LOAD_RABBITMQ_PORT ?= 5690
+LOAD_WORKER_PORT ?= 7199
+LOAD_COMPOSE = docker compose --env-file $(ENV_FILE) -f infra/compose.load-$(WORKER).yml
+# Host bindings for the rig (dev defaults are usually taken by dev stacks).
+LOAD_RUN_ENV = POSTGRES_PORT=$(LOAD_POSTGRES_PORT) REDIS_PORT=$(LOAD_REDIS_PORT) \
+	EVENT_REDIS_PORT=$(LOAD_EVENTS_PORT) RABBITMQ_PORT=$(LOAD_RABBITMQ_PORT) \
+	WORKER_ANALYTICS_PORT=$(LOAD_WORKER_PORT) WORKER_CRON_PORT=$(LOAD_WORKER_PORT) \
+	WORKER_PAYMENTS_PORT=$(LOAD_WORKER_PORT)
+
+load-test: worker-%
+	$(LOAD_COMPOSE) build
+	$(LOAD_RUN_ENV) $(LOAD_COMPOSE) -f infra/compose.migrate.yml run --rm db-migrate
+	$(LOAD_RUN_ENV) VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) SEED_COUNT=$(SEED_COUNT) \
+	$(LOAD_COMPOSE) up --build --abort-on-container-exit --exit-code-from k6
+
+load-down: worker-%
+	$(LOAD_COMPOSE) down -v --remove-orphans
+
+# Legacy host runs (proxy on host + local k6 binary; prefer load-test above)
 load-payments:
-	@echo "Running Payments Load Test (RPS=$(RPS), DURATION=$(DURATION))..."
-	RPS=$(RPS) DURATION=$(DURATION) ./bin/k6 run src/tests/load/payments.k6.js
+	@echo "Running Payments Load Test (VUS=$(VUS) RPS=$(RPS), DURATION=$(DURATION))..."
+	VUS=$(VUS) RPS=$(RPS) DURATION=$(DURATION) k6 run src/tests/load/payments.k6.js
 
 load-analytics:
-	@echo "Running Analytics Load Test (RPS=$(RPS), DURATION=$(DURATION))..."
-	RPS=$(RPS) DURATION=$(DURATION) ./bin/k6 run src/tests/load/analytics.k6.js
+	@echo "Running Analytics Load Test (VUS=$(VUS) RPS=$(RPS), DURATION=$(DURATION))..."
+	VUS=$(VUS) RPS=$(RPS) DURATION=$(DURATION) k6 run src/tests/load/analytics.k6.js
 
 load-cron:
 	@echo "Running Cron Seed (SEED_COUNT=$(SEED_COUNT))..."
-	SEED_COUNT=$(SEED_COUNT) ./bin/k6 run src/tests/load/cron.k6.js
+	SEED_COUNT=$(SEED_COUNT) k6 run src/tests/load/cron.k6.js
 
 # Development (Local Bun)
 dev-payments:

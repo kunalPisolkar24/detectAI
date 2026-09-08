@@ -1,0 +1,55 @@
+# Cron load rig: worker-cron + proxy + k6 seed on isolated datastores.
+# Seeds N expired subscriptions via proxy, then the sweeper drains them —
+# measure via worker-cron /metrics (expiryLagSeconds / expiredBacklog).
+# Self-contained project (`name:` below) with its own volumes — load data
+# never touches dev stacks. Datastores stay internal-only (no host ports).
+# Usage (from services/workers):
+#   make load-test WORKER=cron SEED_COUNT=1000
+name: workers-load-cron
+
+# NOTE: db-migrate is NOT included here on purpose — `up
+# --abort-on-container-exit` would tear the rig down as soon as migrate
+# exits 0. The Makefile runs migrate first (`run --rm db-migrate`, which
+# pulls up postgres via depends_on) before starting the rig.
+include:
+  - path: ./compose.cron.yml
+  - path: ../../../infra/docker/postgres-users/standalone.yml
+  - path: ../../../infra/docker/redis-users/standalone.yml
+
+services:
+  proxy:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: ["bun", "src/tests/load/proxy.ts"]
+    restart: "no"
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - REQUIRE_BROKER=0
+      - PROXY_PORT=9999
+    depends_on:
+      postgres-users:
+        condition: service_healthy
+      worker-cron:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bun", "-e", "const r = await fetch('http://localhost:9999/health'); if (!r.ok) process.exit(1);"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  k6:
+    image: grafana/k6:latest
+    command: run /scripts/cron.k6.js
+    environment:
+      - PROXY_URL=http://proxy:9999
+      - SEED_COUNT=${SEED_COUNT:-1000}
+      - THRESHOLD_SUCCESS_RATE=${THRESHOLD_SUCCESS_RATE:-}
+    volumes:
+      - ../src/tests/load:/scripts:ro
+    depends_on:
+      proxy:
+        condition: service_healthy
