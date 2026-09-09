@@ -33,7 +33,7 @@ body:
         - "services/inference"
         - "services/workers"
         - "services/chats"
-        - "infra / k8s / helm"
+        - "infra / docker"
         - "docs / tooling"
         - "unknown / multiple"
       default: 0
