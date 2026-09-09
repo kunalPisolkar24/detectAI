@@ -37,3 +37,11 @@ func (m *MockMetricsCollector) IncStreamErrors(operation string) {
 func (m *MockMetricsCollector) IncDatabaseErrors(operation string) {
 	m.Called(operation)
 }
+
+func (m *MockMetricsCollector) IncSyncFallback(reason string) {
+	m.Called(reason)
+}
+
+func (m *MockMetricsCollector) SetRedisDegraded(v float64) {
+	m.Called(v)
+}

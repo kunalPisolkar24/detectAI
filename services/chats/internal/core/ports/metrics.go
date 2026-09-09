@@ -9,4 +9,6 @@ type MetricsCollector interface {
 	IncDLQMessages(count float64)
 	IncStreamErrors(operation string)
 	IncDatabaseErrors(operation string)
+	IncSyncFallback(reason string)
+	SetRedisDegraded(v float64)
 }

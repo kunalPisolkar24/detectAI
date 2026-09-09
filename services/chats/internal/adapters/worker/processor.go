@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/ports"
@@ -80,10 +81,29 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 	}
 
 	if err := p.repo.BulkUpsertMessages(ctx, messages); err != nil {
-		p.logger.Error("Bulk upsert failed, moving to DLQ", zap.Error(err), zap.Int("count", len(messages)))
-		p.metrics.IncDatabaseErrors("bulk_upsert")
-		p.handleFailure(ctx, msgIDs, client, group)
-		return
+		// Bounded retries for transient DB blips before DLQing.
+		retried := false
+		for attempt := 0; attempt < 3; attempt++ {
+			backoff := time.Duration(200*(1<<attempt)) * time.Millisecond
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			if rErr := p.repo.BulkUpsertMessages(ctx, messages); rErr == nil {
+				retried = true
+				break
+			} else {
+				err = rErr
+			}
+		}
+		if !retried {
+			p.logger.Error("Bulk upsert failed after retries, moving to DLQ", zap.Error(err), zap.Int("count", len(messages)))
+			p.metrics.IncDatabaseErrors("bulk_upsert")
+			p.handleFailure(ctx, msgIDs, client, group)
+			return
+		}
+		p.logger.Info("Bulk upsert succeeded after retry", zap.Int("count", len(messages)))
 	}
 
 	p.metrics.AddIngestedMessages(float64(len(messages)))

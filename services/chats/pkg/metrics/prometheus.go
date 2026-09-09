@@ -57,6 +57,16 @@ var (
 		Help: "Total number of database operation errors",
 	}, []string{"operation"})
 
+	SyncFallback = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "chat_sync_fallback_total",
+		Help: "Total number of sync Mongo fallback writes when Redis stream was unavailable",
+	}, []string{"reason"})
+
+	RedisDegraded = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "chat_redis_degraded",
+		Help: "1 when Redis is degraded/unavailable, 0 when healthy",
+	})
+
 	initOnce sync.Once
 )
 
@@ -98,6 +108,14 @@ func (p *PrometheusMetrics) IncDatabaseErrors(operation string) {
 	DatabaseErrors.WithLabelValues(operation).Inc()
 }
 
+func (p *PrometheusMetrics) IncSyncFallback(reason string) {
+	SyncFallback.WithLabelValues(reason).Inc()
+}
+
+func (p *PrometheusMetrics) SetRedisDegraded(v float64) {
+	RedisDegraded.Set(v)
+}
+
 func Init() {
 	initOnce.Do(func() {
 		prometheus.MustRegister(
@@ -110,6 +128,8 @@ func Init() {
 			DLQMessages,
 			StreamErrors,
 			DatabaseErrors,
+			SyncFallback,
+			RedisDegraded,
 		)
 	})
 }

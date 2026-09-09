@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	redisRepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/redis"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/ports"
 	"go.uber.org/zap"
@@ -265,6 +266,21 @@ func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) e
 	if err := s.stream.Publish(ctx, msg); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return err
+		}
+		if redisRepo.IsRedisConnError(err) {
+			s.logger.Warn("stream publish failed (redis unavailable), falling back to sync Mongo write", zap.Error(err), zap.String("chat_id", msg.ChatID))
+			s.metrics.IncStreamErrors("publish")
+			if bErr := s.persistence.BulkUpsertMessages(ctx, []*domain.Message{msg}); bErr != nil {
+				s.logger.Error("sync fallback BulkUpsert failed", zap.Error(bErr), zap.String("chat_id", msg.ChatID))
+				s.metrics.IncDatabaseErrors("sync_fallback")
+				return bErr
+			}
+			s.metrics.IncSyncFallback("publish")
+			// Best-effort cache after sync write
+			if cErr := s.cache.SaveToCache(ctx, msg); cErr != nil {
+				s.logger.Warn("failed to save message to cache after sync fallback", zap.Error(cErr), zap.String("chat_id", msg.ChatID))
+			}
+			return nil
 		}
 		s.logger.Error("failed to publish message to stream", zap.Error(err), zap.String("chat_id", msg.ChatID))
 		s.metrics.IncStreamErrors("publish")

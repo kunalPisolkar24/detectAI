@@ -248,7 +248,60 @@ func (h *Handler) mapError(err error) error {
 	if errors.Is(err, domain.ErrInvalidInput) {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
+	if isMongoConnError(err) {
+		return status.Error(codes.Unavailable, "database temporarily unavailable")
+	}
 	return status.Error(codes.Internal, "internal server error")
+}
+
+func isMongoConnError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	for _, s := range []string{
+		"connection refused",
+		"connection reset",
+		"no reachable servers",
+		"server selection error",
+		"network error",
+		"timeout",
+		"connection closed",
+	} {
+		if containsFold(msg, s) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsFold(s, substr string) bool {
+	ls := toLower(s)
+	lsub := toLower(substr)
+	return len(ls) >= len(lsub) && indexOf(ls, lsub) >= 0
+}
+
+func toLower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + 32
+		}
+	}
+	return string(b)
+}
+
+func indexOf(s, substr string) int {
+	n := len(substr)
+	if n == 0 {
+		return 0
+	}
+	for i := 0; i <= len(s)-n; i++ {
+		if s[i:i+n] == substr {
+			return i
+		}
+	}
+	return -1
 }
 
 func (h *Handler) extractUserID(ctx context.Context) string {

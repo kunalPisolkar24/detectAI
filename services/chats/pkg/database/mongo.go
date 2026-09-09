@@ -14,7 +14,8 @@ func ConnectMongo(ctx context.Context, uri string) (*mongo.Client, error) {
 		ApplyURI(uri).
 		SetMaxPoolSize(100).
 		SetMinPoolSize(10).
-		SetConnectTimeout(5 * time.Second)
+		SetConnectTimeout(5 * time.Second).
+		SetServerSelectionTimeout(5 * time.Second)
 
 	client, err := mongo.Connect(ctx, opts)
 	if err != nil {
