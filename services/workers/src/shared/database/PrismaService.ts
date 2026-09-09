@@ -47,16 +47,20 @@ function initializeClients() {
     throw new Error("DATABASE_URL is not defined");
   }
 
-  const poolMax = parseInt(process.env.POOL_MAX || "10", 10);
-  const poolConfig = {
-    max: Number.isFinite(poolMax) && poolMax > 0 ? poolMax : 10,
+  const poolMax = parseInt(process.env.POOL_MAX || "5", 10);
+  const needsSSL = primaryUrl.includes("sslmode=require") || primaryUrl.includes("sslmode=verify");
+  const poolConfig: ConstructorParameters<typeof Pool>[0] = {
+    max: Number.isFinite(poolMax) && poolMax > 0 ? poolMax : 5,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: 10000,
+    // Guard runaway queries before they pin a Proxy session; Proxy borrow is 15s so pool surfaces first.
+    options: "-c statement_timeout=30000",
+    ...(needsSSL ? { ssl: { rejectUnauthorized: false } } : {}),
   };
 
   _poolPrimary = new Pool({
     connectionString: primaryUrl,
-    ...poolConfig
+    ...poolConfig,
   });
 
   // Reuse primary pool if replica URL equals primary to avoid 2x connections (20/worker when single DB)

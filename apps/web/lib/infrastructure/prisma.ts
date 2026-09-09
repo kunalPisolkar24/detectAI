@@ -38,8 +38,20 @@ const createExtendedClient = () => {
   if (isPreviewMode()) {
     return createPreviewPrisma()
   }
-  const poolPrimary = new Pool({ connectionString: env.DATABASE_URL });
-  const poolReplica = new Pool({ connectionString: env.DATABASE_URL_REPLICA ?? env.DATABASE_URL });
+  const primaryUrl = env.DATABASE_URL
+  const replicaUrl = env.DATABASE_URL_REPLICA ?? primaryUrl
+  const poolMax = parseInt(process.env.POOL_MAX || "5", 10)
+  const needsSSL = primaryUrl.includes("sslmode=require") || primaryUrl.includes("sslmode=verify")
+  const poolConfig: ConstructorParameters<typeof Pool>[0] = {
+    max: Number.isFinite(poolMax) && poolMax > 0 ? poolMax : 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+    options: "-c statement_timeout=30000",
+    ...(needsSSL ? { ssl: { rejectUnauthorized: false } } : {}),
+  }
+  const poolPrimary = new Pool({ connectionString: primaryUrl, ...poolConfig })
+  // Reuse primary pool when replica resolves to the same URL (standalone / local Floci)
+  const poolReplica = replicaUrl === primaryUrl ? poolPrimary : new Pool({ connectionString: replicaUrl, ...poolConfig })
 
   const adapterPrimary = new PrismaPg(poolPrimary);
   const adapterReplica = new PrismaPg(poolReplica);
