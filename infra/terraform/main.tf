@@ -20,3 +20,14 @@ module "docdb" {
   secret_recovery_window = var.secret_recovery_window
   mode                   = var.docdb_mode
 }
+
+module "redis_chat" {
+  source                       = "./modules/elasticache"
+  identifier                   = var.redis_chat_identifier
+  engine_version               = var.redis_chat_engine_version
+  node_type                    = var.redis_chat_node_type
+  transit_encryption_enabled   = var.redis_chat_transit_encryption_enabled
+  at_rest_encryption_enabled   = var.redis_chat_at_rest_encryption_enabled
+  snapshot_retention_limit     = var.redis_chat_snapshot_retention_limit
+  secret_recovery_window       = var.secret_recovery_window
+}

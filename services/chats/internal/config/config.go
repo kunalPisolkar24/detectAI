@@ -23,9 +23,11 @@ type Config struct {
 	MongoMaxPoolSize     uint64        `envconfig:"MONGO_MAX_POOL_SIZE" default:"0"`
 	MongoMinPoolSize     uint64        `envconfig:"MONGO_MIN_POOL_SIZE" default:"0"`
 	MongoServerTimeout   time.Duration `envconfig:"MONGO_SERVER_SELECTION_TIMEOUT" default:"0s"`
-	RedisMode            string        `envconfig:"CHAT_REDIS_MODE" default:"cluster"`
+	RedisMode            string        `envconfig:"CHAT_REDIS_MODE" default:"standalone"`
 	RedisAddrs           []string      `envconfig:"CHAT_REDIS_ADDRS"`
 	RedisPassword        string        `envconfig:"REDIS_PASSWORD"`
+	RedisTLSEnabled      bool          `envconfig:"REDIS_TLS_ENABLED" default:"false"`
+	RedisTLSCAFile       string        `envconfig:"REDIS_TLS_CA_FILE" default:""`
 	RedisPoolSize        int           `envconfig:"REDIS_POOL_SIZE" default:"100"`
 	BatchSize            int           `envconfig:"BATCH_SIZE" default:"50"`
 	StreamPartitionCount int           `envconfig:"STREAM_PARTITION_COUNT" default:"16"`
@@ -100,6 +102,12 @@ func Load() (*Config, error) {
 	}
 	if cfg.MongoMinPoolSize > cfg.MongoMaxPoolSize {
 		return nil, fmt.Errorf("MONGO_MIN_POOL_SIZE (%d) must be <= MONGO_MAX_POOL_SIZE (%d)", cfg.MongoMinPoolSize, cfg.MongoMaxPoolSize)
+	}
+
+	if cfg.RedisTLSEnabled && cfg.RedisTLSCAFile != "" {
+		if _, err := os.Stat(cfg.RedisTLSCAFile); err != nil {
+			return nil, fmt.Errorf("REDIS_TLS_CA_FILE not readable %q: %w", cfg.RedisTLSCAFile, err)
+		}
 	}
 
 	if cfg.RedisPoolSize <= 0 {

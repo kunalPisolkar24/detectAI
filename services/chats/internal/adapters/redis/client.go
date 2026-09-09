@@ -2,6 +2,10 @@ package redis
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
@@ -18,6 +22,13 @@ func NewClient(cfg *config.Config) (redis.UniversalClient, error) {
 		WriteTimeout: 3 * time.Second,
 		ClientName:   "go-chat-service",
 	}
+	if cfg.RedisTLSEnabled {
+		tlsCfg, err := buildRedisTLSConfig(cfg.RedisTLSCAFile)
+		if err != nil {
+			return nil, fmt.Errorf("build redis TLS config: %w", err)
+		}
+		options.TLSConfig = tlsCfg
+	}
 
 	client := redis.NewUniversalClient(options)
 
@@ -29,4 +40,23 @@ func NewClient(cfg *config.Config) (redis.UniversalClient, error) {
 	}
 
 	return client, nil
+}
+
+func buildRedisTLSConfig(caFile string) (*tls.Config, error) {
+	if caFile == "" {
+		return &tls.Config{InsecureSkipVerify: true}, nil //nolint:gosec
+	}
+	pemData, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, err
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pemData) {
+		return nil, fmt.Errorf("no valid certs in %s", caFile)
+	}
+	return &tls.Config{
+		RootCAs:            pool,
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: false,
+	}, nil
 }

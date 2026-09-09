@@ -93,3 +93,39 @@ variable "docdb_mode" {
   type        = string
   default     = "standalone"
 }
+
+variable "redis_chat_identifier" {
+  description = "ElastiCache replication group identifier for chat streams+cache (primary-for-all)."
+  type        = string
+  default     = "detectai-redis-chat-floci"
+}
+
+variable "redis_chat_engine_version" {
+  description = "Redis engine version. Pinned 7.1 for dev/prod consistency (Floci default valkey overridden)."
+  type        = string
+  default     = "7.1"
+}
+
+variable "redis_chat_node_type" {
+  description = "ElastiCache node type. cache.t3.micro for Floci/dev, cache.r6g.large for prod."
+  type        = string
+  default     = "cache.t3.micro"
+}
+
+variable "redis_chat_transit_encryption_enabled" {
+  description = "Transit encryption (TLS). false for Floci, true for prod (rediss://)."
+  type        = bool
+  default     = false
+}
+
+variable "redis_chat_at_rest_encryption_enabled" {
+  description = "At-rest encryption. false for Floci, true for prod."
+  type        = bool
+  default     = false
+}
+
+variable "redis_chat_snapshot_retention_limit" {
+  description = "Snapshot retention days. 0 for Floci/dev, 7 for prod (streams durability)."
+  type        = number
+  default     = 0
+}

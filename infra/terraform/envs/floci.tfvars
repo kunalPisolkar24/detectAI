@@ -19,3 +19,12 @@ docdb_master_username    = "docdbadmin"
 docdb_instance_class     = "db.r5.large"
 docdb_tls_enabled        = false
 docdb_mode               = "standalone"
+
+# ElastiCache Redis chat (streams+cache) — 1 primary + 1 replica, primary-for-all (cluster mode disabled)
+# Floci: 6379 proxy (172.17.0.2:6379 via bridge, localhost:6379 if host port mapped); real AWS: TLS + snapshots
+redis_chat_identifier                   = "detectai-redis-chat-floci"
+redis_chat_engine_version               = "7.1"
+redis_chat_node_type                    = "cache.t3.micro"
+redis_chat_transit_encryption_enabled   = false
+redis_chat_at_rest_encryption_enabled   = false
+redis_chat_snapshot_retention_limit     = 0

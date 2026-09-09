@@ -48,3 +48,24 @@ output "docdb_mongo_mode" {
 output "docdb_urls_secret_arn" {
   value = module.docdb.urls_secret_arn
 }
+
+output "redis_chat_primary_address" {
+  value = module.redis_chat.primary_endpoint_address
+}
+
+output "redis_chat_port" {
+  value = module.redis_chat.port
+}
+
+output "redis_chat_redis_url" {
+  value     = module.redis_chat.redis_url
+  sensitive = true
+}
+
+output "redis_chat_addrs" {
+  value = module.redis_chat.redis_addrs_primary
+}
+
+output "redis_chat_urls_secret_arn" {
+  value = module.redis_chat.urls_secret_arn
+}
