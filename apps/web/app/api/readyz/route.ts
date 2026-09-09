@@ -151,7 +151,20 @@ async function checkAnalysis(): Promise<CheckResult & { checks?: { inference: Ch
  * gateway, and analysis (inference+chat) are optional (degraded, not 503 —
  * core routes still work). In preview mode all are skipped. Returns 200
  * when required checks pass, 503 when any required check fails.
+ *
+ * Every check is individually bounded AND the whole suite is capped: absent
+ * optional backends (e.g. no inference/chat in a partial stack) must report
+ * degraded, never hang the probe (DNS/gRPC dials have no reliable timeout).
  */
+const CHECK_TIMEOUT_MS = 8_000
+const ALL_CHECKS_TIMEOUT_MS = 20_000
+
+type AnalysisResult = Awaited<ReturnType<typeof checkAnalysis>>
+
+const timedOut = (name: string): CheckResult => ({ status: "error", error: `${name} check timed out` })
+
+const timedOutAnalysis = (): AnalysisResult => ({ status: "error", error: "analysis checks timed out" })
+
 export async function GET() {
   if (isPreviewMode()) {
     return NextResponse.json(
@@ -170,13 +183,29 @@ export async function GET() {
     )
   }
 
-  const [postgres, redis, documentParser, paymentGateway, analysis] = await Promise.all([
-    checkPostgres(),
-    checkRedis(),
-    checkDocumentParser(),
-    checkPaymentGateway(),
-    checkAnalysis(),
-  ])
+  const [postgres, redis, documentParser, paymentGateway, analysis]: [
+    CheckResult,
+    CheckResult,
+    CheckResult,
+    CheckResult,
+    AnalysisResult,
+  ] = await withTimeout(
+    Promise.all([
+      withTimeout(checkPostgres(), CHECK_TIMEOUT_MS, timedOut("postgres")),
+      withTimeout(checkRedis(), CHECK_TIMEOUT_MS, timedOut("redis")),
+      withTimeout(checkDocumentParser(), CHECK_TIMEOUT_MS, timedOut("documentParser")),
+      withTimeout(checkPaymentGateway(), CHECK_TIMEOUT_MS, timedOut("paymentGateway")),
+      withTimeout(checkAnalysis(), CHECK_TIMEOUT_MS, timedOutAnalysis()),
+    ]),
+    ALL_CHECKS_TIMEOUT_MS,
+    [
+      timedOut("postgres"),
+      timedOut("redis"),
+      timedOut("documentParser"),
+      timedOut("paymentGateway"),
+      timedOutAnalysis(),
+    ],
+  )
   const ready = postgres.status === "ok" && redis.status === "ok"
   const degraded =
     documentParser.status === "error" || paymentGateway.status === "error" || analysis.status === "error"
