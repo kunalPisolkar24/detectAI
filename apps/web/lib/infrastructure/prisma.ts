@@ -41,7 +41,11 @@ const createExtendedClient = () => {
   const primaryUrl = env.DATABASE_URL
   const replicaUrl = env.DATABASE_URL_REPLICA ?? primaryUrl
   const poolMax = parseInt(process.env.POOL_MAX || "5", 10)
-  const needsSSL = primaryUrl.includes("sslmode=require") || primaryUrl.includes("sslmode=verify")
+  const needsSSL =
+    primaryUrl.includes("sslmode=require") ||
+    primaryUrl.includes("sslmode=verify") ||
+    replicaUrl.includes("sslmode=require") ||
+    replicaUrl.includes("sslmode=verify")
   const poolConfig: ConstructorParameters<typeof Pool>[0] = {
     max: Number.isFinite(poolMax) && poolMax > 0 ? poolMax : 5,
     idleTimeoutMillis: 30000,
