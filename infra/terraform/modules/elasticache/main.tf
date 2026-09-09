@@ -11,9 +11,9 @@ resource "random_password" "auth" {
 }
 
 resource "aws_secretsmanager_secret" "master" {
-  name                    = "detectai/redis/chat/master"
+  name                    = "detectai/redis/${var.secret_prefix}/master"
   recovery_window_in_days = var.secret_recovery_window
-  description             = "ElastiCache Redis chat auth token (primary-for-all)"
+  description             = "ElastiCache Redis ${var.secret_prefix} auth token"
 }
 
 resource "aws_secretsmanager_secret_version" "master" {
@@ -72,22 +72,31 @@ locals {
 
   # CHAT_REDIS_ADDRS for chats UniversalClient is host:port without scheme (go-redis style)
   redis_addrs_primary = "${local.primary_address}:${local.primary_port}"
+
+  is_events = var.secret_prefix == "events"
 }
 
 resource "aws_secretsmanager_secret" "urls" {
-  name                    = "detectai/redis/chat/urls"
+  name                    = "detectai/redis/${var.secret_prefix}/urls"
   recovery_window_in_days = var.secret_recovery_window
-  description             = "Composed chat Redis URLs (primary-for-all, streams+cache)"
+  description             = "Composed ${var.secret_prefix} Redis URLs"
 }
 
 resource "aws_secretsmanager_secret_version" "urls" {
   secret_id = aws_secretsmanager_secret.urls.id
-  secret_string = jsonencode({
-    CHAT_REDIS_ADDRS = local.redis_addrs_primary
-    REDIS_PASSWORD   = random_password.auth.result
-    CHAT_REDIS_MODE  = "standalone"
-    REDIS_URL        = local.redis_url
-    REDIS_URL_READER = local.redis_url_reader
-    REDIS_TLS_ENABLED = tostring(local.tls_enabled)
-  })
+  secret_string = jsonencode(
+    local.is_events ? {
+      EVENT_REDIS_URL         = local.redis_url
+      EVENT_REDIS_PASSWORD    = random_password.auth.result
+      EVENT_REDIS_MODE        = "standalone"
+      EVENT_REDIS_TLS_ENABLED = tostring(local.tls_enabled)
+    } : {
+      CHAT_REDIS_ADDRS  = local.redis_addrs_primary
+      REDIS_PASSWORD    = random_password.auth.result
+      CHAT_REDIS_MODE   = "standalone"
+      REDIS_URL         = local.redis_url
+      REDIS_URL_READER  = local.redis_url_reader
+      REDIS_TLS_ENABLED = tostring(local.tls_enabled)
+    }
+  )
 }

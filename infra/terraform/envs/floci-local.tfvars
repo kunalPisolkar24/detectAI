@@ -23,3 +23,10 @@ redis_chat_node_type                    = "cache.t3.micro"
 redis_chat_transit_encryption_enabled   = false
 redis_chat_at_rest_encryption_enabled   = false
 redis_chat_snapshot_retention_limit     = 0
+
+redis_events_identifier                   = "detectai-redis-events-local"
+redis_events_engine_version               = "7.1"
+redis_events_node_type                    = "cache.t3.micro"
+redis_events_transit_encryption_enabled   = false
+redis_events_at_rest_encryption_enabled   = false
+redis_events_snapshot_retention_limit     = 0

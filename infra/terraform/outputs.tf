@@ -69,3 +69,24 @@ output "redis_chat_addrs" {
 output "redis_chat_urls_secret_arn" {
   value = module.redis_chat.urls_secret_arn
 }
+
+output "redis_events_primary_address" {
+  value = module.redis_events.primary_endpoint_address
+}
+
+output "redis_events_port" {
+  value = module.redis_events.port
+}
+
+output "redis_events_redis_url" {
+  value     = module.redis_events.redis_url
+  sensitive = true
+}
+
+output "redis_events_addrs" {
+  value = module.redis_events.redis_addrs_primary
+}
+
+output "redis_events_urls_secret_arn" {
+  value = module.redis_events.urls_secret_arn
+}

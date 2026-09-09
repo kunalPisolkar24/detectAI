@@ -86,3 +86,9 @@ variable "secret_recovery_window" {
   type        = number
   default     = 0
 }
+
+variable "secret_prefix" {
+  description = "Secrets prefix for this purpose. chat -> detectai/redis/chat, events -> detectai/redis/events"
+  type        = string
+  default     = "chat"
+}

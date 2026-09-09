@@ -129,3 +129,39 @@ variable "redis_chat_snapshot_retention_limit" {
   type        = number
   default     = 0
 }
+
+variable "redis_events_identifier" {
+  description = "ElastiCache replication group identifier for Paddle dedup (single-node, no replica)."
+  type        = string
+  default     = "detectai-redis-events-floci"
+}
+
+variable "redis_events_engine_version" {
+  description = "Redis engine version for events. Pinned 7.1."
+  type        = string
+  default     = "7.1"
+}
+
+variable "redis_events_node_type" {
+  description = "Node type for events. cache.t3.micro Floci/dev (tiny), cache.t4g.small prod."
+  type        = string
+  default     = "cache.t3.micro"
+}
+
+variable "redis_events_transit_encryption_enabled" {
+  description = "Transit encryption for events. false Floci, true prod."
+  type        = bool
+  default     = false
+}
+
+variable "redis_events_at_rest_encryption_enabled" {
+  description = "At-rest encryption for events. false Floci, true prod."
+  type        = bool
+  default     = false
+}
+
+variable "redis_events_snapshot_retention_limit" {
+  description = "Snapshot retention for events. 0 Floci, 1 prod (AOF + daily RDB)."
+  type        = number
+  default     = 0
+}
