@@ -17,7 +17,7 @@ export function getPoolWaiting(): number {
 export async function checkDb(): Promise<boolean> {
     return withTimeout(
         prismaPrimary.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
-        3000,
+        10000,
         false
     );
 }
