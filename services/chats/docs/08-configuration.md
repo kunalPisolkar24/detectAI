@@ -18,10 +18,13 @@ Full reference for `internal/config/config.go` + `infra/compose*.yml` + atoms.
 | `MONGO_MAX_POOL_SIZE` | `100` standalone / `20` sharded | `1..500` | `MaxPoolSize` for `mongo.Client` |
 | `MONGO_MIN_POOL_SIZE` | `10` standalone / `5` sharded | `0..max` | `MinPoolSize` |
 | `MONGO_SERVER_SELECTION_TIMEOUT` | `5s` standalone / `15s` sharded | `duration` | Router failover needs larger timeout when sharded |
-| `CHAT_REDIS_MODE` | `cluster` | `standalone/cluster` | `standalone` pins to first addr |
-| `CHAT_REDIS_ADDRS` | *(required)* | `host:port[,..]` | default `redis-chat:6379` in compose |
-| `REDIS_CHAT_PASSWORD` | *(empty / `test_redis_password` load)* | `string` | `UniversalClient` + `redis-cli -a` healthcheck; redis-chat atom defaults for local |
+| `CHAT_REDIS_MODE` | `standalone` | `standalone/cluster` | `standalone` pins to first addr (ElastiCache replication group, 1+1 primary-for-all) |
+| `CHAT_REDIS_ADDRS` | *(required)* | `host:port[,..]` | default `redis-chat:6379` in compose; Floci `localhost:6380` auto-translated to bridge backend `172.17.0.5:6379` when `FLOCI_ENDPOINT` set (proxy HELLO bug workaround) |
+| `REDIS_CHAT_PASSWORD` | *(empty / `test_redis_password` load)* | `string` | `UniversalClient` + `redis-cli -a` healthcheck; redis-chat atom defaults for local; ElastiCache `auth_token` via `REDIS_PASSWORD` |
+| `REDIS_TLS_ENABLED` | `false` | `bool` | `true` for ElastiCache `rediss://` (prod) |
+| `REDIS_TLS_CA_FILE` | *(empty)* | `path` | CA bundle when `REDIS_TLS_ENABLED` |
 | `REDIS_POOL_SIZE` | `100` | `1..500` | `<=0→100`, `>500` error |
+| `FLOCI_ENDPOINT` | *(empty)* | `url` | `http://localhost:4566` for Floci; when set, `localhost:6380` Redis is translated to bridge backend to bypass proxy HELLO issue; real AWS ElastiCache handles HELLO correctly so no translation |
 | `BATCH_SIZE` | `50` | `1..500` | consumer `XReadGroup Count`; `<=0→50` |
 | `STREAM_PARTITION_COUNT` | `16` | `1..128` | streams + worker goroutines; `<=0→16` |
 | `CACHE_TTL` | `24h` | `>0` | `NewCacheRepository`, `<=0→24h` |
@@ -40,6 +43,7 @@ require SERVICE_ROLE api|worker (normalized)
 CHAT_REDIS_MODE in {standalone, cluster}
 MONGO_MODE in {standalone, sharded}
 MONGO_TLS_CA_FILE must be readable when MONGO_TLS_ENABLED + set
+REDIS_TLS_CA_FILE must be readable when REDIS_TLS_ENABLED + set
 REDIS_POOL_SIZE 1..500, BATCH_SIZE 1..500, STREAM_PARTITION_COUNT 1..128
 MONGO_MAX_POOL_SIZE 1..500, MONGO_MIN_POOL_SIZE <= max, MONGO_SERVER_SELECTION_TIMEOUT >0
 CACHE_TTL >0 else 24h; GRPC/METRICS_PORT ":port" or "host:port"

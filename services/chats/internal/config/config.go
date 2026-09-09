@@ -32,6 +32,7 @@ type Config struct {
 	BatchSize            int           `envconfig:"BATCH_SIZE" default:"50"`
 	StreamPartitionCount int           `envconfig:"STREAM_PARTITION_COUNT" default:"16"`
 	CacheTTL             time.Duration `envconfig:"CACHE_TTL" default:"24h"`
+	FlociEndpoint        string        `envconfig:"FLOCI_ENDPOINT" default:""`
 }
 
 func Load() (*Config, error) {
