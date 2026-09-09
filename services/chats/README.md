@@ -52,6 +52,10 @@ SERVICE_ROLE=api                 # required, api|worker
 MONGO_URI=mongodb://mongo-chat:27017  # required
 CHAT_REDIS_ADDRS=redis-chat:6379      # required
 MONGO_DATABASE=chat_db          # optional
+MONGO_MODE=standalone            # optional, standalone|sharded (messages on chat_id:hashed when sharded)
+MONGO_TLS_ENABLED=false         # optional, true for DocumentDB TLS
+MONGO_MAX_POOL_SIZE=100         # optional, 1..500 (default 20 when sharded)
+MONGO_MIN_POOL_SIZE=10          # optional, 0..max (default 5 when sharded)
 CHAT_REDIS_MODE=standalone      # optional, standalone|cluster
 GRPC_PORT=:50051                # optional
 METRICS_PORT=:9091              # optional, :9099 worker
@@ -131,13 +135,15 @@ See `docs/11-testing.md` and `tests/load/README.md` for scenarios.
 ```bash
 # Start standalone stack (mongo-chat 27018 + redis-chat 6381 + service + worker)
 docker compose -f infra/compose.yml up -d --build
+# Start sharded stack (mongos 27019 + 2 shards + configsvr, messages sharded on chat_id:hashed, throwaway verification)
+docker compose -f infra/compose.sharded.yml up -d --build
 
 # Self-contained load rig (isolated chat_loadnet, no host ports + k6)
 make load-test SCENARIO=smoke VUS=1 DURATION=10s
 make load-down
 ```
 
-`infra/compose.yml` (`name: chats`) reuses `infra/docker/mongo-chat|redis-chat` atoms; `infra/compose.load.yml` (`name: chats-load`) keeps datastores internal-only so both stacks run side-by-side.
+`infra/compose.yml` (`name: chats`) reuses `infra/docker/mongo-chat|redis-chat` atoms (standalone, `MONGO_MODE=standalone`); `infra/compose.sharded.yml` (`name: chats-sharded`) reuses `mongo-chat/sharded + redis-chat` (mongos `27019`, `MONGO_MODE=sharded`, `messages` hashed on `chat_id`, `chats` stays unsharded); `infra/compose.load.yml` (`name: chats-load`) keeps datastores internal-only so both stacks run side-by-side.
 
 ## Documentation
 

@@ -17,6 +17,12 @@ type Config struct {
 	MetricsPort          string        `envconfig:"METRICS_PORT" default:":9091"`
 	MongoURI             string        `envconfig:"MONGO_URI" required:"true"`
 	MongoDatabase        string        `envconfig:"MONGO_DATABASE" default:"chat_db"`
+	MongoMode            string        `envconfig:"MONGO_MODE" default:"standalone"`
+	MongoTLSEnabled      bool          `envconfig:"MONGO_TLS_ENABLED" default:"false"`
+	MongoTLSCAFile       string        `envconfig:"MONGO_TLS_CA_FILE" default:""`
+	MongoMaxPoolSize     uint64        `envconfig:"MONGO_MAX_POOL_SIZE" default:"0"`
+	MongoMinPoolSize     uint64        `envconfig:"MONGO_MIN_POOL_SIZE" default:"0"`
+	MongoServerTimeout   time.Duration `envconfig:"MONGO_SERVER_SELECTION_TIMEOUT" default:"0s"`
 	RedisMode            string        `envconfig:"CHAT_REDIS_MODE" default:"cluster"`
 	RedisAddrs           []string      `envconfig:"CHAT_REDIS_ADDRS"`
 	RedisPassword        string        `envconfig:"REDIS_PASSWORD"`
@@ -53,6 +59,47 @@ func Load() (*Config, error) {
 	cfg.ServiceRole = strings.ToLower(strings.TrimSpace(cfg.ServiceRole))
 	if cfg.ServiceRole != "api" && cfg.ServiceRole != "worker" {
 		return nil, fmt.Errorf("SERVICE_ROLE must be 'api' or 'worker', got %q", cfg.ServiceRole)
+	}
+
+	cfg.MongoMode = strings.ToLower(strings.TrimSpace(cfg.MongoMode))
+	if cfg.MongoMode == "" {
+		cfg.MongoMode = "standalone"
+	}
+	if cfg.MongoMode != "standalone" && cfg.MongoMode != "sharded" {
+		return nil, fmt.Errorf("MONGO_MODE must be 'standalone' or 'sharded', got %q", cfg.MongoMode)
+	}
+	if cfg.MongoTLSEnabled && cfg.MongoTLSCAFile != "" {
+		if _, err := os.Stat(cfg.MongoTLSCAFile); err != nil {
+			return nil, fmt.Errorf("MONGO_TLS_CA_FILE not readable %q: %w", cfg.MongoTLSCAFile, err)
+		}
+	}
+	// Sensible defaults for pool/timeouts: explicit env wins, otherwise mode-aware defaults.
+	if cfg.MongoMaxPoolSize == 0 {
+		if cfg.MongoMode == "sharded" {
+			cfg.MongoMaxPoolSize = 20
+		} else {
+			cfg.MongoMaxPoolSize = 100
+		}
+	}
+	if cfg.MongoMinPoolSize == 0 {
+		if cfg.MongoMode == "sharded" {
+			cfg.MongoMinPoolSize = 5
+		} else {
+			cfg.MongoMinPoolSize = 10
+		}
+	}
+	if cfg.MongoServerTimeout == 0 {
+		if cfg.MongoMode == "sharded" {
+			cfg.MongoServerTimeout = 15 * time.Second
+		} else {
+			cfg.MongoServerTimeout = 5 * time.Second
+		}
+	}
+	if cfg.MongoMaxPoolSize == 0 || cfg.MongoMaxPoolSize > 500 {
+		return nil, fmt.Errorf("MONGO_MAX_POOL_SIZE must be 1..500, got %d", cfg.MongoMaxPoolSize)
+	}
+	if cfg.MongoMinPoolSize > cfg.MongoMaxPoolSize {
+		return nil, fmt.Errorf("MONGO_MIN_POOL_SIZE (%d) must be <= MONGO_MAX_POOL_SIZE (%d)", cfg.MongoMinPoolSize, cfg.MongoMaxPoolSize)
 	}
 
 	if cfg.RedisPoolSize <= 0 {

@@ -10,8 +10,14 @@ Full reference for `internal/config/config.go` + `infra/compose*.yml` + atoms.
 | `SERVICE_ROLE` | *(required)* | `api/worker` | lowercased/trimmed; `api`=gRPC server, `worker`=consumer |
 | `GRPC_PORT` | `:50051` | `:port` / `host:port` | `net.Listen` in `grpc/server.go:34` |
 | `METRICS_PORT` | `:9091` (`:9099` worker) | `:port` | `StartMetricsServer` `/metrics` + `/healthz` |
-| `MONGO_URI` | *(required)* | `mongodb://...` | `database.ConnectMongo`, default `mongodb://mongo-chat:27017` in compose |
+| `MONGO_URI` | *(required)* | `mongodb://...` | `database.ConnectMongo`, default `mongodb://mongo-chat:27017` standalone, `mongodb://mongos:27017/?retryWrites=false` sharded. `retryWrites=false` required for DocumentDB/elastic and safe on standalone. |
 | `MONGO_DATABASE` | `chat_db` | `string` | `chats` + `messages` collections |
+| `MONGO_MODE` | `standalone` | `standalone/sharded` | `standalone`=single mongod/DocumentDB instance, `sharded`=mongos/elastic. Gates `EnsureSharding(messages on chat_id:hashed)` + pool/tls defaults. |
+| `MONGO_TLS_ENABLED` | `false` | `bool` | `true` for DocumentDB TLS (read `MONGO_TLS_CA_FILE` if set) |
+| `MONGO_TLS_CA_FILE` | *(empty)* | `path` | CA bundle (e.g. `rds-combined-ca-bundle.pem`). When empty + TLS=true, `InsecureSkipVerify` (Floci local). Real AWS always provide bundle. |
+| `MONGO_MAX_POOL_SIZE` | `100` standalone / `20` sharded | `1..500` | `MaxPoolSize` for `mongo.Client` |
+| `MONGO_MIN_POOL_SIZE` | `10` standalone / `5` sharded | `0..max` | `MinPoolSize` |
+| `MONGO_SERVER_SELECTION_TIMEOUT` | `5s` standalone / `15s` sharded | `duration` | Router failover needs larger timeout when sharded |
 | `CHAT_REDIS_MODE` | `cluster` | `standalone/cluster` | `standalone` pins to first addr |
 | `CHAT_REDIS_ADDRS` | *(required)* | `host:port[,..]` | default `redis-chat:6379` in compose |
 | `REDIS_CHAT_PASSWORD` | *(empty / `test_redis_password` load)* | `string` | `UniversalClient` + `redis-cli -a` healthcheck; redis-chat atom defaults for local |
@@ -32,7 +38,10 @@ Full reference for `internal/config/config.go` + `infra/compose*.yml` + atoms.
 require MONGO_URI, CHAT_REDIS_ADDRS non-empty
 require SERVICE_ROLE api|worker (normalized)
 CHAT_REDIS_MODE in {standalone, cluster}
+MONGO_MODE in {standalone, sharded}
+MONGO_TLS_CA_FILE must be readable when MONGO_TLS_ENABLED + set
 REDIS_POOL_SIZE 1..500, BATCH_SIZE 1..500, STREAM_PARTITION_COUNT 1..128
+MONGO_MAX_POOL_SIZE 1..500, MONGO_MIN_POOL_SIZE <= max, MONGO_SERVER_SELECTION_TIMEOUT >0
 CACHE_TTL >0 else 24h; GRPC/METRICS_PORT ":port" or "host:port"
 ```
 
@@ -40,9 +49,11 @@ CACHE_TTL >0 else 24h; GRPC/METRICS_PORT ":port" or "host:port"
 
 ## Compose
 
-* `infra/compose.yml` (`name: chats`) — `include: mongo-chat + redis-chat` atoms, publishes `27018/6381/50052/9095/9099`, `MONGO_URI=mongodb://mongo-chat:27017`, `CHAT_REDIS_ADDRS=redis-chat:6379`, `depends_on` healthy datastores.
+* `infra/compose.yml` (`name: chats`) — `include: mongo-chat + redis-chat` atoms, publishes `27018/6381/50052/9095/9099`, `MONGO_URI=mongodb://mongo-chat:27017`, `CHAT_REDIS_ADDRS=redis-chat:6379`, `depends_on` healthy datastores, `MONGO_MODE=standalone` default.
+* `infra/compose.sharded.yml` (`name: chats-sharded`, throwaway verification) — `include: mongo-chat/sharded + redis-chat`, `mongos` on `27019:27017` + `shard1/2+configsvr+init` (`enableSharding` + `shardCollection(messages,{chat_id:hashed})`, chats stays unsharded), `MONGO_URI=mongodb://mongos:27017/?retryWrites=false`, `MONGO_MODE=sharded`. Delete after `sh.status()` + `explain` prove targeted routing.
 * `infra/compose.load.yml` (`name: chats-load`) — same atoms internal-only on `chat_loadnet` (no host ports), `REDIS_CHAT_PASSWORD=test_redis_password` default, `+k6` (`CHAT_SERVICE_ADDR=chat-service:50051`, `PROTO_DIR=/proto`).
 * `infra/docker/mongo-chat/standalone.yml` — `mongo:6.0`, `mongod --bind_ip_all`, `mongo_chat_data:/data/db`, no `networks/container_name`.
+* `infra/docker/mongo-chat/sharded.yml` — `mongo:7.0` `configsvr+shardsvr+mongos`, dynamic `MONGO_SHARDED_PORT` (default `27019`), `init-sharding.sh` creates indexes then `shardCollection`. Throwaway file — remove after verification.
 * `infra/docker/redis-chat/standalone.yml` — `redis:7-alpine --appendonly yes --requirepass`, `redis_chat_data:/data`.
 
 See `../README.md` for quickstart (repo root) and `09-api.md` for RPC limits.

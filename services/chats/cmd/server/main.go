@@ -37,7 +37,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	mongoClient, err := connectMongoWithRetry(ctx, cfg.MongoURI)
+	mongoClient, err := connectMongoWithRetry(ctx, cfg)
 	if err != nil {
 		logger.Log.Fatal("Failed to connect to Mongo after retries", zap.Error(err))
 	}
@@ -53,6 +53,13 @@ func main() {
 	mongoDB := mongoClient.Database(cfg.MongoDatabase)
 	if err := mongoRepo.EnsureIndexes(ctx, mongoDB); err != nil {
 		logger.Log.Error("Failed to ensure mongo indexes", zap.Error(err))
+	}
+	if err := mongoRepo.EnsureSharding(ctx, mongoClient, cfg.MongoDatabase, cfg.MongoMode); err != nil {
+		// Sharding is best-effort at boot: standalone mongod will return
+		// CommandNotFound, which EnsureSharding already swallows. Log other errors.
+		logger.Log.Warn("EnsureSharding returned error (standalone is expected to no-op)", zap.Error(err), zap.String("mode", cfg.MongoMode))
+	} else if cfg.MongoMode == "sharded" {
+		logger.Log.Info("Sharding ensured", zap.String("db", cfg.MongoDatabase), zap.String("collection", "messages"), zap.String("shard_key", "chat_id:hashed"))
 	}
 
 	persistenceRepo := mongoRepo.NewMongoRepository(mongoDB)
@@ -113,14 +120,23 @@ func main() {
 	}
 }
 
-func connectMongoWithRetry(ctx context.Context, uri string) (*mongo.Client, error) {
+func connectMongoWithRetry(ctx context.Context, cfg *config.Config) (*mongo.Client, error) {
+	mongoCfg := database.MongoConnectConfig{
+		URI:           cfg.MongoURI,
+		MaxPoolSize:   cfg.MongoMaxPoolSize,
+		MinPoolSize:   cfg.MongoMinPoolSize,
+		ServerTimeout: cfg.MongoServerTimeout,
+		TLSEnabled:    cfg.MongoTLSEnabled,
+		TLSCAFile:     cfg.MongoTLSCAFile,
+		Mode:          cfg.MongoMode,
+	}
 	backoff := time.Second
 	var lastErr error
 	for attempt := 0; attempt < 12; attempt++ {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		client, err := database.ConnectMongo(ctx, uri)
+		client, err := database.ConnectMongo(ctx, mongoCfg)
 		if err == nil {
 			if attempt > 0 {
 				logger.Log.Info("Mongo connected after retries", zap.Int("attempt", attempt+1))

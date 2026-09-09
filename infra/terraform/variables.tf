@@ -51,3 +51,45 @@ variable "secret_recovery_window" {
   type        = number
   default     = 0
 }
+
+variable "docdb_cluster_identifier" {
+  description = "DocumentDB cluster identifier for chats."
+  type        = string
+  default     = "detectai-docdb-floci"
+}
+
+variable "docdb_engine_version" {
+  description = "DocumentDB engine version. Floci accepts 3.6.0, 4.0.0, 5.0.0, 5.0.1, 8.0.0, 8.0.1."
+  type        = string
+  default     = "5.0.0"
+}
+
+variable "docdb_database_name" {
+  description = "DocumentDB initial database. Must match chats MONGO_DATABASE."
+  type        = string
+  default     = "chat_db"
+}
+
+variable "docdb_master_username" {
+  description = "DocumentDB master username."
+  type        = string
+  default     = "docdbadmin"
+}
+
+variable "docdb_instance_class" {
+  description = "DocumentDB instance class. Floci accepts any."
+  type        = string
+  default     = "db.r5.large"
+}
+
+variable "docdb_tls_enabled" {
+  description = "TLS for DocumentDB connections. false for Floci, true for real AWS."
+  type        = bool
+  default     = false
+}
+
+variable "docdb_mode" {
+  description = "DocumentDB mode: standalone (Floci, single mongo container) or elastic (real AWS sharded). App derives MONGO_MODE from this."
+  type        = string
+  default     = "standalone"
+}

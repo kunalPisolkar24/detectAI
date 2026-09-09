@@ -14,6 +14,7 @@ provider "aws" {
 
   endpoints {
     rds            = var.floci_endpoint
+    docdb          = var.floci_endpoint
     secretsmanager = var.floci_endpoint
     ssm            = var.floci_endpoint
   }

@@ -1,0 +1,98 @@
+# Sharded chats stack (mongos + 2 shards + configsvr + redis, throwaway verification).
+# Usage (from repo root or services/chats):
+#   docker compose -f services/chats/infra/compose.sharded.yml up -d --build
+#   mongosh mongodb://localhost:27019/chat_db --eval 'sh.status()'
+# Cleanup: docker compose -f services/chats/infra/compose.sharded.yml down -v
+#          rm infra/docker/mongo-chat/sharded.yml services/chats/infra/compose.sharded.yml infra/docker/mongo-chat/scripts/init-sharding.sh
+name: chats-sharded
+include:
+  - path: ../../../infra/docker/mongo-chat/sharded.yml
+  - path: ../../../infra/docker/redis-chat/standalone.yml
+
+services:
+  redis-chat:
+    ports:
+      - "${REDIS_CHAT_PORT:-6381}:6379"
+
+  chat-service:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${CHAT_APP_ENV:-production}
+      SERVICE_ROLE: api
+      GRPC_PORT: ${CHAT_GRPC_PORT:-:50051}
+      METRICS_PORT: ${CHAT_METRICS_PORT:-:9091}
+      MONGO_URI: ${CHAT_MONGO_URI:-mongodb://mongos:27017/?retryWrites=false}
+      MONGO_DATABASE: ${CHAT_MONGO_DB:-chat_db}
+      MONGO_MODE: ${CHAT_MONGO_MODE:-sharded}
+      MONGO_TLS_ENABLED: ${CHAT_MONGO_TLS_ENABLED:-false}
+      MONGO_MAX_POOL_SIZE: ${CHAT_MONGO_MAX_POOL_SIZE:-20}
+      MONGO_MIN_POOL_SIZE: ${CHAT_MONGO_MIN_POOL_SIZE:-5}
+      MONGO_SERVER_SELECTION_TIMEOUT: ${CHAT_MONGO_SERVER_TIMEOUT:-15s}
+      CHAT_REDIS_MODE: ${CHAT_REDIS_MODE:-standalone}
+      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-redis-chat:6379}
+      REDIS_CHAT_PASSWORD: ${REDIS_CHAT_PASSWORD:-test_redis_password}
+      REDIS_PASSWORD: ${REDIS_CHAT_PASSWORD:-test_redis_password}
+      REDIS_POOL_SIZE: ${CHAT_REDIS_POOL_SIZE:-25}
+      BATCH_SIZE: ${CHAT_BATCH_SIZE:-25}
+      STREAM_PARTITION_COUNT: ${CHAT_STREAM_PARTITION_COUNT:-4}
+      CACHE_TTL: ${CHAT_CACHE_TTL:-24h}
+    ports:
+      - "${CHAT_GRPC_HOST_PORT:-50052}:50051"
+      - "${CHAT_METRICS_HOST_PORT:-9095}:9091"
+    depends_on:
+      mongos:
+        condition: service_healthy
+      mongo-sharded-init:
+        condition: service_completed_successfully
+      redis-chat:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  chat-worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${CHAT_APP_ENV:-production}
+      SERVICE_ROLE: worker
+      GRPC_PORT: ${CHAT_GRPC_PORT:-:50051}
+      METRICS_PORT: ${CHAT_WORKER_METRICS_PORT:-:9099}
+      MONGO_URI: ${CHAT_MONGO_URI:-mongodb://mongos:27017/?retryWrites=false}
+      MONGO_DATABASE: ${CHAT_MONGO_DB:-chat_db}
+      MONGO_MODE: ${CHAT_MONGO_MODE:-sharded}
+      MONGO_TLS_ENABLED: ${CHAT_MONGO_TLS_ENABLED:-false}
+      MONGO_MAX_POOL_SIZE: ${CHAT_MONGO_MAX_POOL_SIZE:-20}
+      MONGO_MIN_POOL_SIZE: ${CHAT_MONGO_MIN_POOL_SIZE:-5}
+      MONGO_SERVER_SELECTION_TIMEOUT: ${CHAT_MONGO_SERVER_TIMEOUT:-15s}
+      CHAT_REDIS_MODE: ${CHAT_REDIS_MODE:-standalone}
+      CHAT_REDIS_ADDRS: ${CHAT_REDIS_ADDRS:-redis-chat:6379}
+      REDIS_CHAT_PASSWORD: ${REDIS_CHAT_PASSWORD:-test_redis_password}
+      REDIS_PASSWORD: ${REDIS_CHAT_PASSWORD:-test_redis_password}
+      REDIS_POOL_SIZE: ${CHAT_REDIS_POOL_SIZE:-25}
+      BATCH_SIZE: ${CHAT_BATCH_SIZE:-25}
+      STREAM_PARTITION_COUNT: ${CHAT_STREAM_PARTITION_COUNT:-4}
+      CACHE_TTL: ${CHAT_CACHE_TTL:-24h}
+    ports:
+      - "${CHAT_WORKER_METRICS_PORT_HOST:-9099}:9099"
+    depends_on:
+      mongos:
+        condition: service_healthy
+      mongo-sharded-init:
+        condition: service_completed_successfully
+      redis-chat:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9099/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
