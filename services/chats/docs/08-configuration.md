@@ -49,11 +49,11 @@ CACHE_TTL >0 else 24h; GRPC/METRICS_PORT ":port" or "host:port"
 
 ## Compose
 
-* `infra/compose.yml` (`name: chats`) — `include: mongo-chat + redis-chat` atoms, publishes `27018/6381/50052/9095/9099`, `MONGO_URI=mongodb://mongo-chat:27017`, `CHAT_REDIS_ADDRS=redis-chat:6379`, `depends_on` healthy datastores, `MONGO_MODE=standalone` default.
-* `infra/compose.sharded.yml` (`name: chats-sharded`, throwaway verification) — `include: mongo-chat/sharded + redis-chat`, `mongos` on `27019:27017` + `shard1/2+configsvr+init` (`enableSharding` + `shardCollection(messages,{chat_id:hashed})`, chats stays unsharded), `MONGO_URI=mongodb://mongos:27017/?retryWrites=false`, `MONGO_MODE=sharded`. Delete after `sh.status()` + `explain` prove targeted routing.
+* `infra/compose.yml` (`name: chats`) — `include: mongo-chat + redis-chat` atoms, publishes `27018/6381/50052/9095/9099`, `MONGO_URI=mongodb://mongo-chat:27017`, `CHAT_REDIS_ADDRS=redis-chat:6379`, `depends_on` healthy datastores, `MONGO_MODE=standalone` default. For sharded DocumentDB/elastic (`MONGO_MODE=sharded`, `messages` on `chat_id:hashed`, `chats` stays unsharded) use the same compose with an external `MONGO_URI` (e.g. DocumentDB endpoint via Terraform `detectai/docdb` secret); queries stay targeted on `chat_id` so no compose change is needed.
 * `infra/compose.load.yml` (`name: chats-load`) — same atoms internal-only on `chat_loadnet` (no host ports), `REDIS_CHAT_PASSWORD=test_redis_password` default, `+k6` (`CHAT_SERVICE_ADDR=chat-service:50051`, `PROTO_DIR=/proto`).
 * `infra/docker/mongo-chat/standalone.yml` — `mongo:6.0`, `mongod --bind_ip_all`, `mongo_chat_data:/data/db`, no `networks/container_name`.
-* `infra/docker/mongo-chat/sharded.yml` — `mongo:7.0` `configsvr+shardsvr+mongos`, dynamic `MONGO_SHARDED_PORT` (default `27019`), `init-sharding.sh` creates indexes then `shardCollection`. Throwaway file — remove after verification.
 * `infra/docker/redis-chat/standalone.yml` — `redis:7-alpine --appendonly yes --requirepass`, `redis_chat_data:/data`.
+
+Sharding verification (now removed from compose) was done via a throwaway `mongos+2 shards+configsvr` stack (`enableSharding` + `shardCollection(messages,{chat_id:hashed})`); permanent sharding tests use Floci DocumentDB (`infra/terraform/modules/docdb`, `MONGO_URI` with `authSource=admin&retryWrites=false`).
 
 See `../README.md` for quickstart (repo root) and `09-api.md` for RPC limits.

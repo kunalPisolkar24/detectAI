@@ -135,15 +135,13 @@ See `docs/11-testing.md` and `tests/load/README.md` for scenarios.
 ```bash
 # Start standalone stack (mongo-chat 27018 + redis-chat 6381 + service + worker)
 docker compose -f infra/compose.yml up -d --build
-# Start sharded stack (mongos 27019 + 2 shards + configsvr, messages sharded on chat_id:hashed, throwaway verification)
-docker compose -f infra/compose.sharded.yml up -d --build
 
 # Self-contained load rig (isolated chat_loadnet, no host ports + k6)
 make load-test SCENARIO=smoke VUS=1 DURATION=10s
 make load-down
 ```
 
-`infra/compose.yml` (`name: chats`) reuses `infra/docker/mongo-chat|redis-chat` atoms (standalone, `MONGO_MODE=standalone`); `infra/compose.sharded.yml` (`name: chats-sharded`) reuses `mongo-chat/sharded + redis-chat` (mongos `27019`, `MONGO_MODE=sharded`, `messages` hashed on `chat_id`, `chats` stays unsharded); `infra/compose.load.yml` (`name: chats-load`) keeps datastores internal-only so both stacks run side-by-side.
+`infra/compose.yml` (`name: chats`) reuses `infra/docker/mongo-chat|redis-chat` atoms (standalone, `MONGO_MODE=standalone`); sharded mode (`MONGO_MODE=sharded`, `messages` on `chat_id:hashed`, `chats` stays unsharded) uses the same compose with an external `MONGO_URI` (DocumentDB/elastic via Terraform `detectai/docdb`); queries are `chat_id`-targeted so no compose change is needed. `infra/compose.load.yml` (`name: chats-load`) keeps datastores internal-only so both stacks run side-by-side.
 
 ## Documentation
 
