@@ -55,7 +55,8 @@ locals {
 
   # retryWrites=false required for DocumentDB/elastic and safe on standalone mongod.
   # TLS CA file is provided out-of-band to app (MONGO_TLS_CA_FILE).
-  mongo_uri = "mongodb://${var.master_username}:${random_password.master.result}@${aws_docdb_cluster.this.endpoint}:${aws_docdb_cluster.this.port}/${var.database_name}?tls=${local.tls_param}&retryWrites=false"
+  # urlencode password because random_password may contain $/_/! which are URI-reserved; user in admin DB
+  mongo_uri = "mongodb://${var.master_username}:${urlencode(random_password.master.result)}@${aws_docdb_cluster.this.endpoint}:${aws_docdb_cluster.this.port}/${var.database_name}?tls=${local.tls_param}&retryWrites=false&authSource=admin"
 
   # Elastic mode would use aws_docdbelastic_cluster (not yet in Floci); we expose the same secret shape
   # so app code is identical. For now elastic is var-only; standalone resources above are still created.

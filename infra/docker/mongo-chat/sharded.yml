@@ -69,11 +69,18 @@ services:
   mongo-sharded-init:
     <<: *mongo-sharded-base
     depends_on:
-      mongos:
+      mongo-configsvr:
         condition: service_healthy
+      mongo-shard1:
+        condition: service_healthy
+      mongo-shard2:
+        condition: service_healthy
+      mongos:
+        condition: service_started
     entrypoint: ["/bin/bash", "/scripts/init-sharding.sh"]
     volumes:
       - ./scripts/init-sharding.sh:/scripts/init-sharding.sh:ro
+    restart: "no"
 
 volumes:
   mongo_config_data:
