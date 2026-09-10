@@ -235,6 +235,10 @@ func TestFailover(t *testing.T) {
 | **Credential rotation** | Service works with new credentials |
 | **Connection limits** | Pool handles many connections |
 
+### Sharded Cluster Failure
+
+For sharded deployments, `TestSharded_ShardFailure` (in [Sharded Cluster Tests](sharded.md)) validates a critical HA scenario: killing one shard must never silently return partial data. Reads either return full results from the surviving shard or fail fast with a retryable error.
+
 ## HA Setup Helpers
 
 ### MongoDB Replica Set
@@ -320,3 +324,4 @@ func setupHARedis(ctx context.Context) *Container {
 - [Testing Overview](overview.md) - All testing levels
 - [Unit Tests](unit.md) - Testing individual components
 - [Integration Tests](integration.md) - Testing with real databases
+- [Sharded Cluster Tests](sharded.md) - Shard failure and sharding contract tests

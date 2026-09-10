@@ -69,6 +69,8 @@ grpcurl -plaintext -d '{"chat_id": "your-chat-id", "page": 1, "page_size": 20}' 
 | **Stream** | A buffer that holds messages temporarily before they're saved permanently |
 | **Cache** | Fast storage for frequently accessed data (recent messages) |
 | **DLQ** | Dead Letter Queue - stores messages that failed to process |
+| **Sharding** | Splitting a database collection across multiple servers for scalability |
+| **Mongos** | MongoDB's query router that directs queries to the correct shard |
 | **Hexagonal Architecture** | A design pattern that separates business logic from external systems |
 
 ## Configuration
@@ -122,6 +124,7 @@ See [API Reference](docs/components/api.md) for detailed documentation.
 | [Health](docs/operations/health.md) | Health checks and monitoring |
 | [Observability](docs/operations/observability.md) | Metrics and monitoring |
 | [Testing](docs/testing/overview.md) | How to test the service |
+| [Sharded Cluster Tests](docs/testing/sharded.md) | MongoDB sharding test guide |
 
 ## Development
 
@@ -133,6 +136,9 @@ make test
 
 # Integration tests (requires Docker)
 make test-integration
+
+# Sharded cluster tests (requires Docker, ~60-90s per test)
+make test-sharded
 
 # Load tests
 make load-test SCENARIO=smoke VUS=1 DURATION=10s

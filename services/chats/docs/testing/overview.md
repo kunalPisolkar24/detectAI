@@ -51,9 +51,28 @@ make test-integration
 
 **Example:** Testing that saving a message and retrieving it works end-to-end.
 
+### Sharded Cluster Tests
+
+**What they are:** Tests that check MongoDB sharding works correctly — queries route to the right shard, data is isolated between chats, and chunk distribution spans multiple shards.
+
+**When to use:** When changing database queries, repository code, or sharding configuration.
+
+**Speed:** Slower (60-90s per test for cluster bootstrap).
+
+**Dependencies:** Docker (spins up a real 5-container sharded cluster).
+
+```bash
+# Run sharded cluster tests
+make test-sharded
+```
+
+**Example:** Testing that a query for chat A never accidentally returns messages from chat B when data is spread across shards.
+
+See [Sharded Cluster Tests](sharded.md) for a detailed guide.
+
 ### HA Tests
 
-**What they are:** Tests that check the service works with high-availability setups (replica sets, authentication).
+**What they are:** Tests that check the service works with high-availability setups (replica sets, authentication, failover).
 
 **When to use:** Before deploying to production.
 
@@ -75,6 +94,7 @@ make test-ha
 | Small bug fix | Unit tests |
 | New feature | Unit + Integration |
 | Configuration change | Unit + Integration |
+| Database query or repository change | Unit + Integration + Sharded |
 | Production deployment | All tests |
 | Quick check | Unit tests |
 
@@ -86,19 +106,32 @@ chats/
 │   ├── core/
 │   │   └── usecase/
 │   │       └── chat_service_test.go    # Unit tests for business logic
-│   └── adapters/
-│       └── grpc/
-│           └── handler_test.go         # Unit tests for API handler
+│   ├── adapters/
+│   │   ├── grpc/
+│   │   │   └── handler_test.go         # Unit tests for API handler
+│   │   ├── mongo/
+│   │   │   ├── repository_test.go      # Integration tests for MongoDB
+│   │   │   ├── ha_test.go              # HA tests (replica set)
+│   │   │   └── sharded_test.go         # Sharded cluster tests
+│   │   ├── worker/
+│   │   │   └── sharded_test.go         # Worker E2E against sharded cluster
+│   │   └── redis/
+│   │       └── ha_test.go              # Redis HA tests
+│   └── testutil/
+│       ├── containers_sharded.go       # 5-container sharded cluster fixture
+│       └── ...
 ├── tests/
 │   ├── integration/
 │   │   └── chat_flow_test.go          # Integration tests
 │   └── load/
 │       └── README.md                   # Load test documentation
 └── docs/
-    ├── 11-testing.md                   # This file
-    ├── 11-testing-unit.md             # Unit test details
-    ├── 11-testing-integration.md      # Integration test details
-    └── 11-testing-ha.md              # HA test details
+    └── testing/
+        ├── overview.md                 # This file
+        ├── unit.md                     # Unit test details
+        ├── integration.md              # Integration test details
+        ├── sharded.md                  # Sharded cluster test details
+        └── ha.md                       # HA test details
 ```
 
 ## Writing Tests
@@ -229,9 +262,11 @@ make load-down
 3. **Use descriptive names** - Test names should explain what they test
 4. **Clean up after tests** - Don't leave test data in databases
 5. **Run tests frequently** - Don't wait until the end to test
+6. **Run sharded tests when touching repository code** - They catch routing and isolation issues that standalone MongoDB tests cannot
 
 ## Related Documentation
 
 - [Architecture](../concepts/architecture.md) - How components are structured
 - [Configuration](../getting-started/configuration.md) - Test environment settings
 - [Observability](../operations/observability.md) - Monitor test performance
+- [Sharded Cluster Tests](sharded.md) - Detailed guide for MongoDB sharding tests
