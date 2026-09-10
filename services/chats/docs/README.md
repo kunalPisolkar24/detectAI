@@ -14,7 +14,10 @@ Deep dives for the `chats` service. Start with `01-architecture.md` for the big 
 | [08-configuration](08-configuration.md) | Full env table and validation rules | — |
 | [09-api](09-api.md) | Full proto, methods, status codes, validation notes | — |
 | [10-observability](10-observability.md) | All metrics, dashboards, alerts, PromQL | — |
-| [11-testing](11-testing.md) | Unit, integration, load matrix | — |
+| [11-testing](11-testing.md) | Unit, integration, HA, load | — |
+| [11-testing-unit](11-testing-unit.md) | Unit depth, mocks only | — |
+| [11-testing-integration](11-testing-integration.md) | Integration depth, single-node | — |
+| [11-testing-ha](11-testing-ha.md) | HA depth, replica set and auth | — |
 
 Related:
 
