@@ -49,8 +49,7 @@ resource "aws_elasticache_replication_group" "this" {
 
 locals {
   # Floci reports endpoint as localhost:port (proxy inside Floci container, 6379-6399).
-  # Real AWS reports primary_endpoint_address/reader. For host access via bridge IP,
-  # Go tests replace localhost with 172.17.0.2 (Floci bridge IP) when FLoci is used.
+  # Real AWS reports primary_endpoint_address/reader.
   # Floci currently populates configuration_endpoint_address even for cluster disabled (deviation), so coalesce.
   primary_address = coalesce(
     try(aws_elasticache_replication_group.this.primary_endpoint_address, null),
@@ -70,7 +69,7 @@ locals {
   redis_url         = "${local.scheme}://:${urlencode(random_password.auth.result)}@${local.primary_address}:${local.primary_port}"
   redis_url_reader  = "${local.scheme}://:${urlencode(random_password.auth.result)}@${local.reader_address}:${local.reader_port}"
 
-  # CHAT_REDIS_ADDRS for chats UniversalClient is host:port without scheme (go-redis style)
+  # CHAT_REDIS_ADDR for chats *redis.Client is host:port without scheme (go-redis style)
   redis_addrs_primary = "${local.primary_address}:${local.primary_port}"
 
   is_events = var.secret_prefix == "events"
@@ -97,9 +96,8 @@ resource "aws_secretsmanager_secret_version" "urls" {
       REDIS_MODE        = "standalone"
       REDIS_TLS_ENABLED = tostring(local.tls_enabled)
       } : {
-      CHAT_REDIS_ADDRS  = local.redis_addrs_primary
+      CHAT_REDIS_ADDR   = local.redis_addrs_primary
       REDIS_PASSWORD    = random_password.auth.result
-      CHAT_REDIS_MODE   = "standalone"
       REDIS_URL         = local.redis_url
       REDIS_URL_READER  = local.redis_url_reader
       REDIS_TLS_ENABLED = tostring(local.tls_enabled)

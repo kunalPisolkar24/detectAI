@@ -16,7 +16,7 @@ import (
 )
 
 func TestProcessBatch_EndToEnd(t *testing.T) {
-	db, mockRedis := redismock.NewClusterMock()
+	db, mockRedis := redismock.NewClientMock()
 	mockRepo := new(mocks.MockChatPersistenceRepository)
 	mockMetrics := new(mocks.MockMetricsCollector)
 
@@ -55,7 +55,7 @@ func TestProcessBatch_EndToEnd(t *testing.T) {
 }
 
 func TestProcessBatch_DBFailure_MovesToDLQ(t *testing.T) {
-	db, mockRedis := redismock.NewClusterMock()
+	db, mockRedis := redismock.NewClientMock()
 	mockRepo := new(mocks.MockChatPersistenceRepository)
 	mockMetrics := new(mocks.MockMetricsCollector)
 	processor := NewProcessor(mockRepo, zap.NewNop(), mockMetrics)
@@ -93,7 +93,7 @@ func TestProcessBatch_DBFailure_MovesToDLQ(t *testing.T) {
 }
 
 func TestProcessBatch_AllPoison_Acks(t *testing.T) {
-	db, mockRedis := redismock.NewClusterMock()
+	db, mockRedis := redismock.NewClientMock()
 	mockRepo := new(mocks.MockChatPersistenceRepository)
 	mockMetrics := new(mocks.MockMetricsCollector)
 	processor := NewProcessor(mockRepo, zap.NewNop(), mockMetrics)
@@ -122,7 +122,7 @@ func TestProcessBatch_AllPoison_Acks(t *testing.T) {
 }
 
 func TestProcessBatch_BytesPayload(t *testing.T) {
-	db, mockRedis := redismock.NewClusterMock()
+	db, mockRedis := redismock.NewClientMock()
 	mockRepo := new(mocks.MockChatPersistenceRepository)
 	mockMetrics := new(mocks.MockMetricsCollector)
 	processor := NewProcessor(mockRepo, zap.NewNop(), mockMetrics)

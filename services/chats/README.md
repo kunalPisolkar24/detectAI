@@ -50,13 +50,12 @@ Async ingest (`XAdd` → `BulkUpsert` → `XAck`, poison-ack + DLQ) keeps writes
 ```ini
 SERVICE_ROLE=api                 # required, api|worker
 MONGO_URI=mongodb://mongo-chat:27017  # required
-CHAT_REDIS_ADDRS=redis-chat:6379      # required
+CHAT_REDIS_ADDR=redis-chat:6379       # required (single primary, *redis.Client)
 MONGO_DATABASE=chat_db          # optional
 MONGO_MODE=standalone            # optional, standalone|sharded (messages on chat_id:hashed when sharded)
 MONGO_TLS_ENABLED=false         # optional, true for DocumentDB TLS
 MONGO_MAX_POOL_SIZE=100         # optional, 1..500 (default 20 when sharded)
 MONGO_MIN_POOL_SIZE=10          # optional, 0..max (default 5 when sharded)
-CHAT_REDIS_MODE=standalone      # optional, standalone|cluster
 GRPC_PORT=:50051                # optional
 METRICS_PORT=:9091              # optional, :9099 worker
 REDIS_POOL_SIZE=100             # optional, 1..500

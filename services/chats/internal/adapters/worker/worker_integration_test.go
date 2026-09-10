@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func publishRaw(t *testing.T, client goredis.UniversalClient, streamKey string, msg *domain.Message) {
+func publishRaw(t *testing.T, client *goredis.Client, streamKey string, msg *domain.Message) {
 	t.Helper()
 	data, err := json.Marshal(msg)
 	require.NoError(t, err)

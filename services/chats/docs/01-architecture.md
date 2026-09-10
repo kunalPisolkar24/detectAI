@@ -39,7 +39,7 @@ Ports live in `internal/core/ports/` (`chat_service.go`, `chat_repository.go`, `
 
 ```mermaid
 graph TB
-    Main[main.go] --> Cfg[config.Load required MONGO_URI/CHAT_REDIS_ADDRS]
+    Main[main.go] --> Cfg[config.Load required MONGO_URI/CHAT_REDIS_ADDR]
     Main --> Log[logger.Init APP_ENV]
     Main --> Met[metrics.Init + StartMetricsServer]
     Main --> MongoC[database.ConnectMongo]

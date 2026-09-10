@@ -30,7 +30,7 @@ func NewProcessor(
 	}
 }
 
-func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, client redis.UniversalClient, group string) {
+func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, client *redis.Client, group string) {
 	messages := make([]*domain.Message, 0)
 	msgIDs := make(map[string][]string)
 
@@ -118,7 +118,7 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 	}
 }
 
-func (p *Processor) handleFailure(ctx context.Context, msgIDs map[string][]string, client redis.UniversalClient, group string) {
+func (p *Processor) handleFailure(ctx context.Context, msgIDs map[string][]string, client *redis.Client, group string) {
 	pipe := client.Pipeline()
 	for stream, ids := range msgIDs {
 		for _, id := range ids {

@@ -16,7 +16,7 @@ import (
 )
 
 type Consumer struct {
-	client    redis.UniversalClient
+	client    *redis.Client
 	repo      ports.ChatPersistenceRepository
 	cfg       *config.Config
 	processor *Processor
@@ -25,7 +25,7 @@ type Consumer struct {
 }
 
 func NewConsumer(
-	client redis.UniversalClient,
+	client *redis.Client,
 	repo ports.ChatPersistenceRepository,
 	cfg *config.Config,
 	logger *zap.Logger,

@@ -23,8 +23,7 @@ type Config struct {
 	MongoMaxPoolSize     uint64        `envconfig:"MONGO_MAX_POOL_SIZE" default:"0"`
 	MongoMinPoolSize     uint64        `envconfig:"MONGO_MIN_POOL_SIZE" default:"0"`
 	MongoServerTimeout   time.Duration `envconfig:"MONGO_SERVER_SELECTION_TIMEOUT" default:"0s"`
-	RedisMode            string        `envconfig:"CHAT_REDIS_MODE" default:"standalone"`
-	RedisAddrs           []string      `envconfig:"CHAT_REDIS_ADDRS"`
+	RedisAddr            string        `envconfig:"CHAT_REDIS_ADDR" required:"true"`
 	RedisPassword        string        `envconfig:"REDIS_PASSWORD"`
 	RedisTLSEnabled      bool          `envconfig:"REDIS_TLS_ENABLED" default:"false"`
 	RedisTLSCAFile       string        `envconfig:"REDIS_TLS_CA_FILE" default:""`
@@ -32,7 +31,6 @@ type Config struct {
 	BatchSize            int           `envconfig:"BATCH_SIZE" default:"50"`
 	StreamPartitionCount int           `envconfig:"STREAM_PARTITION_COUNT" default:"16"`
 	CacheTTL             time.Duration `envconfig:"CACHE_TTL" default:"24h"`
-	FlociEndpoint        string        `envconfig:"FLOCI_ENDPOINT" default:""`
 }
 
 func Load() (*Config, error) {
@@ -46,16 +44,11 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	if len(cfg.RedisAddrs) == 0 {
-		return nil, fmt.Errorf("CHAT_REDIS_ADDRS is required")
+	if strings.TrimSpace(cfg.RedisAddr) == "" {
+		return nil, fmt.Errorf("CHAT_REDIS_ADDR is required (host:port, e.g. redis-chat:6379 or ElastiCache primary)")
 	}
-
-	switch cfg.RedisMode {
-	case "standalone":
-		cfg.RedisAddrs = []string{cfg.RedisAddrs[0]}
-	case "cluster":
-	default:
-		return nil, fmt.Errorf("unsupported CHAT_REDIS_MODE: %s", cfg.RedisMode)
+	if !strings.Contains(cfg.RedisAddr, ":") {
+		return nil, fmt.Errorf("CHAT_REDIS_ADDR must be host:port, got %q", cfg.RedisAddr)
 	}
 
 	// Normalize and validate

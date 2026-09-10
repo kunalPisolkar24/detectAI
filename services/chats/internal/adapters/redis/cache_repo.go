@@ -37,11 +37,11 @@ return 1
 )
 
 type CacheRepository struct {
-	client redis.UniversalClient
+	client *redis.Client
 	ttl    time.Duration
 }
 
-func NewCacheRepository(client redis.UniversalClient, ttl time.Duration) *CacheRepository {
+func NewCacheRepository(client *redis.Client, ttl time.Duration) *CacheRepository {
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}

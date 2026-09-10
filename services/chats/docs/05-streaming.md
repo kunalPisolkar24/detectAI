@@ -44,4 +44,4 @@ sequenceDiagram
 | `XAck` pipe fail | `{ack}` | logged, may redeliver (idempotent upsert) |
 | poison (`missing_data/unmarshal/invalid_message`) | same labels | acked immediately to unblock stream |
 
-`UniversalClient` (`redis/client.go:11`) supports `standalone` (single addr) and `cluster` modes (`CHAT_REDIS_MODE`); pool `PoolSize 100 (1..500)`, `MinIdle 10`, `Read/Write 3s`, dial `Ping 5s`.
+`*redis.Client` (`redis/client.go:11`) single primary `CHAT_REDIS_ADDR` (compose `redis-chat:6379` or ElastiCache primary `host:port`, TLS when `REDIS_TLS_ENABLED=true`); pool `PoolSize 100 (1..500)`, `MinIdle 10`, `Read/Write 3s`, dial `Ping 5s`.

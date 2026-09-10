@@ -11,11 +11,11 @@ import (
 )
 
 type StreamRepository struct {
-	client     redis.UniversalClient
+	client     *redis.Client
 	partitions int
 }
 
-func NewStreamRepository(client redis.UniversalClient, partitions int) *StreamRepository {
+func NewStreamRepository(client *redis.Client, partitions int) *StreamRepository {
 	if partitions <= 0 {
 		partitions = 1
 	}

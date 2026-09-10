@@ -158,7 +158,7 @@ func connectMongoWithRetry(ctx context.Context, cfg *config.Config) (*mongo.Clie
 	return nil, lastErr
 }
 
-func connectRedisDegraded(ctx context.Context, cfg *config.Config) (redis.UniversalClient, bool) {
+func connectRedisDegraded(ctx context.Context, cfg *config.Config) (*redis.Client, bool) {
 	client, err := redisRepo.NewClient(cfg)
 	if err == nil {
 		return client, false
@@ -167,7 +167,7 @@ func connectRedisDegraded(ctx context.Context, cfg *config.Config) (redis.Univer
 	return nil, true
 }
 
-func waitForRedis(ctx context.Context, cfg *config.Config) redis.UniversalClient {
+func waitForRedis(ctx context.Context, cfg *config.Config) *redis.Client {
 	backoff := time.Second
 	for {
 		if ctx.Err() != nil {
@@ -215,7 +215,7 @@ func recoverRedisLoop(ctx context.Context, cfg *config.Config, streamRepo *ports
 	}
 }
 
-func healthLoop(ctx context.Context, mongoClient *mongo.Client, redisClient redis.UniversalClient, server *grpc.Server, m *metrics.PrometheusMetrics) {
+func healthLoop(ctx context.Context, mongoClient *mongo.Client, redisClient *redis.Client, server *grpc.Server, m *metrics.PrometheusMetrics) {
 	ticker := time.NewTicker(domain.HealthCheckInterval)
 	defer ticker.Stop()
 	for {

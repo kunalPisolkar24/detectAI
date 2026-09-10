@@ -3,7 +3,7 @@ output "replication_group_id" {
 }
 
 output "primary_endpoint_address" {
-  description = "Primary endpoint address (Floci: localhost or Floci IP; AWS: DNS). For Floci host access replace localhost with 172.17.0.2."
+  description = "Primary endpoint address (Floci: localhost; AWS: DNS)."
   value       = aws_elasticache_replication_group.this.primary_endpoint_address
 }
 
@@ -39,7 +39,7 @@ output "redis_url" {
 }
 
 output "redis_addrs_primary" {
-  description = "host:port for CHAT_REDIS_ADDRS (go-redis UniversalClient)"
+  description = "host:port for CHAT_REDIS_ADDR (go-redis *redis.Client, single primary)"
   value       = local.redis_addrs_primary
 }
 
@@ -51,7 +51,7 @@ output "urls_secret_arn" {
   value = aws_secretsmanager_secret.urls.arn
 }
 
-output "mode" {
-  description = "CHAT_REDIS_MODE for chat service (always standalone for 1+1 replication group)"
-  value       = "standalone"
+output "redis_addr" {
+  description = "host:port for CHAT_REDIS_ADDR (alias of redis_addrs_primary, single primary)"
+  value       = local.redis_addrs_primary
 }
