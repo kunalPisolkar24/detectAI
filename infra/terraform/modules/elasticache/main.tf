@@ -74,6 +74,7 @@ locals {
   redis_addrs_primary = "${local.primary_address}:${local.primary_port}"
 
   is_events = var.secret_prefix == "events"
+  is_users  = var.secret_prefix == "users"
 }
 
 resource "aws_secretsmanager_secret" "urls" {
@@ -90,7 +91,12 @@ resource "aws_secretsmanager_secret_version" "urls" {
       EVENT_REDIS_PASSWORD    = random_password.auth.result
       EVENT_REDIS_MODE        = "standalone"
       EVENT_REDIS_TLS_ENABLED = tostring(local.tls_enabled)
-    } : {
+      } : local.is_users ? {
+      REDIS_URL         = local.redis_url
+      REDIS_PASSWORD    = random_password.auth.result
+      REDIS_MODE        = "standalone"
+      REDIS_TLS_ENABLED = tostring(local.tls_enabled)
+      } : {
       CHAT_REDIS_ADDRS  = local.redis_addrs_primary
       REDIS_PASSWORD    = random_password.auth.result
       CHAT_REDIS_MODE   = "standalone"

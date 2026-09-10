@@ -54,3 +54,21 @@ module "redis_events" {
   automatic_failover_enabled = false
   multi_az_enabled           = false
 }
+
+module "redis_users" {
+  source                       = "./modules/elasticache"
+  identifier                   = var.redis_users_identifier
+  secret_prefix                = "users"
+  description                  = "Users cache + rate-limit + analytics dedup single-node, volatile-ttl, AOF"
+  engine_version               = var.redis_users_engine_version
+  node_type                    = var.redis_users_node_type
+  parameter_group_name         = "default.redis7"
+  transit_encryption_enabled   = var.redis_users_transit_encryption_enabled
+  at_rest_encryption_enabled   = var.redis_users_at_rest_encryption_enabled
+  snapshot_retention_limit     = var.redis_users_snapshot_retention_limit
+  secret_recovery_window       = var.secret_recovery_window
+  # users is cache + counters with DB fallback, single-node, volatile-ttl, AOF
+  num_cache_clusters         = 1
+  automatic_failover_enabled = false
+  multi_az_enabled           = false
+}

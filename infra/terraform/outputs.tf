@@ -90,3 +90,24 @@ output "redis_events_addrs" {
 output "redis_events_urls_secret_arn" {
   value = module.redis_events.urls_secret_arn
 }
+
+output "redis_users_primary_address" {
+  value = module.redis_users.primary_endpoint_address
+}
+
+output "redis_users_port" {
+  value = module.redis_users.port
+}
+
+output "redis_users_redis_url" {
+  value     = module.redis_users.redis_url
+  sensitive = true
+}
+
+output "redis_users_addrs" {
+  value = module.redis_users.redis_addrs_primary
+}
+
+output "redis_users_urls_secret_arn" {
+  value = module.redis_users.urls_secret_arn
+}

@@ -36,3 +36,11 @@ redis_events_node_type                    = "cache.t3.micro"
 redis_events_transit_encryption_enabled   = false
 redis_events_at_rest_encryption_enabled   = false
 redis_events_snapshot_retention_limit     = 0
+
+# ElastiCache Redis users (user cache + rate-limit + analytics dedup) — single-node, volatile-ttl, AOF, DB fallback
+redis_users_identifier                   = "detectai-redis-users-floci"
+redis_users_engine_version               = "7.1"
+redis_users_node_type                    = "cache.t3.micro"
+redis_users_transit_encryption_enabled   = false
+redis_users_at_rest_encryption_enabled   = false
+redis_users_snapshot_retention_limit     = 0

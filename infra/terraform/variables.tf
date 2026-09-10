@@ -165,3 +165,39 @@ variable "redis_events_snapshot_retention_limit" {
   type        = number
   default     = 0
 }
+
+variable "redis_users_identifier" {
+  description = "ElastiCache replication group identifier for users cache+rate-limit (single-node)."
+  type        = string
+  default     = "detectai-redis-users-floci"
+}
+
+variable "redis_users_engine_version" {
+  description = "Redis engine version for users. Pinned 7.1."
+  type        = string
+  default     = "7.1"
+}
+
+variable "redis_users_node_type" {
+  description = "Node type for users. cache.t3.micro Floci/dev, cache.t4g.small prod."
+  type        = string
+  default     = "cache.t3.micro"
+}
+
+variable "redis_users_transit_encryption_enabled" {
+  description = "Transit encryption for users. false Floci, true prod."
+  type        = bool
+  default     = false
+}
+
+variable "redis_users_at_rest_encryption_enabled" {
+  description = "At-rest encryption for users. false Floci, true prod."
+  type        = bool
+  default     = false
+}
+
+variable "redis_users_snapshot_retention_limit" {
+  description = "Snapshot retention for users. 0 Floci, 1 prod (volatile-ttl AOF)."
+  type        = number
+  default     = 0
+}
