@@ -1,132 +1,332 @@
 # Load Testing
 
-Simple k6 gRPC load tests for the chats service. Uses `infra/compose.load.yml` to spin `mongo-chat + redis-chat + service + worker + k6` isolated on `chat_loadnet` (`name: chats-load`), no dependency on the main stack or local k6 binary. Proto mounted at `/proto` (`PROTO_DIR`), target `chat-service:50051`.
+This document explains how to run load tests for the Chats service. Load tests help you understand how the service performs under different levels of traffic.
 
-## Scenarios
+## What is Load Testing?
 
-
-| Scenario | File                  | Shape                                             | Thresholds                                   | Payload                                                          |
-| -------- | --------------------- | ------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------- |
-| `smoke`  | `scenarios/smoke.js`  | `1` VU `10s`                                      | `rate==1.0`                                  | `CreateChat → SaveMessage → E2E poll → GetUserChats`             |
-| `load`   | `scenarios/load.js`   | ramp `30s:10` + steady `DURATION:10VUs` + `30s:0` | `rate>=0.99 p95<100 p99<250 history p95<200` | `CreateChat → 3× SaveMessage + sleep 1-3s → History + UserChats` |
-| `stress` | `scenarios/stress.js` | `1m:20% → 1m:50% → 2m:100% 50VUs 5m → 1m:0`       | shed watch                                   | `CreateChat → SaveMessage` tight `0.5s`                          |
-| `soak`   | `scenarios/soak.js`   | `5` VUs `10m` (`10s` + `5×Save 10s` + `30s`)      | `rate>=0.99`                                 | sustained writes + history                                       |
-
-
-All use `x-user-id` metadata and check `chat created` + `rpc_success_rate` + durations (`chat_create/save/get_history/get_user_chats/e2e` Trends). `rps` throttle applies when `RPS>0`.
+Load testing simulates real-world traffic to:
+- **Find performance limits** - How much traffic can the service handle?
+- **Identify bottlenecks** - What slows down under pressure?
+- **Verify reliability** - Does the service stay stable during high traffic?
+- **Plan capacity** - How many users can the service support?
 
 ## Quick Start
 
+### Run Your First Test
+
 ```bash
-# from services/chats - self-contained (mongo + redis + service + worker + k6)
+# Navigate to the chats service
+cd services/chats
+
+# Run a quick smoke test (1 user for 10 seconds)
 make load-test SCENARIO=smoke VUS=1 DURATION=10s
-make load-test SCENARIO=smoke VUS=1 DURATION=10s RPS=5
-make load-test SCENARIO=load VUS=10 DURATION=2m RPS=50
-make load-test SCENARIO=stress VUS=50 DURATION=5m
-make load-test SCENARIO=soak VUS=5 DURATION=10m
-make load-down                                      # down -v
 ```
 
-Or directly:
+### Run Different Test Types
 
 ```bash
-SCENARIO=smoke VUS=1 DURATION=10s docker compose -f infra/compose.load.yml up --build --abort-on-container-exit --exit-code-from k6
-SCENARIO=load VUS=10 DURATION=2m RPS=50 docker compose -f infra/compose.load.yml up --build --abort-on-container-exit --exit-code-from k6
-docker compose -f infra/compose.load.yml down -v --remove-orphans
+# Smoke test - Quick sanity check
+make load-test SCENARIO=smoke VUS=1 DURATION=10s
+
+# Load test - Realistic traffic
+make load-test SCENARIO=load VUS=10 DURATION=2m RPS=50
+
+# Stress test - Find the breaking point
+make load-test SCENARIO=stress VUS=50 DURATION=5m
+
+# Soak test - Long-running stability
+make load-test SCENARIO=soak VUS=5 DURATION=10m
 ```
 
-Tiny smoke verified: `1 VU 10s → 10 iter, checks 30/30, rpc 40/40 100%, exit 0`.
+### Stop Tests
 
-## Env
-
-
-| Var                                          | Default                                                    | Used                                                       |
-| -------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
-| `CHAT_SERVICE_ADDR`                          | `chat-service:50051` (compose) or `localhost:50051` (host) | `lib/grpc.js` connect                                      |
-| `PROTO_DIR`                                  | `/proto` (compose)                                         | `grpc.js` `client.load([PROTO_DIR, '../../../api/proto'])` |
-| `VUS`                                        | *(empty → per-scenario)*                                   | generic override wins (`config.js`)                        |
-| `DURATION`                                   | *(empty → per-scenario)*                                   | generic override wins                                      |
-| `RPS`                                        | `0` (off)                                                  | `options.rps` throttle when `>0`                           |
-| `SMOKE_VUS` / `SMOKE_DURATION`               | `1` / `10s`                                                | `smoke` fallback                                           |
-| `LOAD_VUS` / `LOAD_DURATION`                 | `10` / `2m`                                                | `load` fallback                                            |
-| `STRESS_VUS` / `STRESS_DURATION`             | `50` / `5m`                                                | `stress` fallback                                          |
-| `SOAK_VUS` / `SOAK_DURATION`                 | `5` / `10m`                                                | `soak` fallback                                            |
-| `CHAT_SERVICE_TIMEOUT`                       | `5s`                                                       | grpc connect                                               |
-| `RPC_TIMEOUT_MS`                             | `2000`                                                     | per-RPC `invoke` timeout                                   |
-| `E2E_TIMEOUT_MS` / `E2E_POLLING_INTERVAL_MS` | `5000` / `200`                                             | `verifyE2ELatency` poll `GetHistory` for `message_id`      |
-| `THRESHOLD_SUCCESS_RATE`                     | `0.99` (`1.0` smoke)                                       | `rate>=`                                                   |
-| `THRESHOLD_SAVE_MESSAGE_P95/P99`             | `100` / `250`                                              | `load`                                                     |
-| `THRESHOLD_GET_HISTORY_P95`                  | `200`                                                      | `load`                                                     |
-| `THRESHOLD_E2E_LATENCY_P95`                  | `1000`                                                     | smoke e2e Trend (informational)                            |
-
-
-Elegant `VUS/DURATION/RPS` map generically (see `../infra/compose.load.yml:93` + `lib/config.js:10`); specific `*_VUS/*_DURATION` still work as fallback.
-
-## Architecture
-
-```mermaid
-graph LR
-    K6[k6 VU] --> GRPC[grpc.Client load chat_service.proto]
-    GRPC --> Svc[chat-service:50051<br/>Handler + ChatService]
-    Svc --> Stream["global:ingest:{p} XAdd"]
-    Svc --> Cache[(chat hot ZSET)]
-    Stream --> Worker[chat-worker<br/>XReadGroup + BulkUpsert]
-    K6 --> Met[Trend/Rate]
-    Met --> Thr[Thresholds rate/p95/p99]
+```bash
+# Stop all test containers
+make load-down
 ```
 
+## Test Types
 
+| Test | What It Does | When to Use |
+|------|--------------|-------------|
+| **Smoke** | Quick check with 1 user | Before deploying to production |
+| **Load** | Realistic traffic with multiple users | Verifying performance requirements |
+| **Stress** | Push the service to its limits | Finding breaking points |
+| **Soak** | Run for extended time | Catching memory leaks or slow issues |
+
+## Test Scenarios Explained
+
+### Smoke Test
+
+**Purpose:** Verify the service works correctly with minimal traffic.
+
+**What it does:**
+1. Creates a new chat
+2. Saves a message
+3. Retrieves chat history
+4. Lists user chats
+
+**When to run:** Before every deployment
+
+```bash
+make load-test SCENARIO=smoke VUS=1 DURATION=10s
+```
+
+**Expected results:**
+- 100% success rate
+- All checks pass
+- Response times under 100ms
+
+### Load Test
+
+**Purpose:** Verify the service handles realistic traffic.
+
+**What it does:**
+1. Ramps up to 10 virtual users
+2. Maintains steady traffic for 2 minutes
+3. Creates chats and saves multiple messages
+4. Retrieves history and lists chats
+
+**When to run:** Before major releases or after changes
+
+```bash
+make load-test SCENARIO=load VUS=10 DURATION=2m RPS=50
+```
+
+**Expected results:**
+- 99%+ success rate
+- 95% of requests under 100ms
+- 99% of requests under 250ms
+
+### Stress Test
+
+**Purpose:** Find the service's breaking point.
+
+**What it does:**
+1. Gradually increases traffic to maximum
+2. Maintains high traffic for several minutes
+3. Creates chats and saves messages rapidly
+
+**When to run:** When planning for growth or finding limits
+
+```bash
+make load-test SCENARIO=stress VUS=50 DURATION=5m
+```
+
+**What to watch for:**
+- Response times increasing
+- Errors appearing
+- Stream lag growing
+- DLQ messages increasing
+
+### Soak Test
+
+**Purpose:** Catch long-running issues like memory leaks.
+
+**What it does:**
+1. Runs with moderate traffic for 10 minutes
+2. Creates and retrieves messages continuously
+3. Tests database and cache stability
+
+**When to run:** Overnight or before major events
+
+```bash
+make load-test SCENARIO=soak VUS=5 DURATION=10m
+```
+
+**What to watch for:**
+- Memory usage growing
+- Response times degrading
+- Database connections failing
+
+## How Load Tests Work
+
+### Architecture
 
 ```mermaid
 graph TB
-    Compose[infra/compose.load.yml mongo-chat + redis-chat + service + worker + k6 on chat_loadnet] --> Health[healthcheck mongosh/redis-cli/wget metrics]
-    Health --> K6C[k6 depends_on chat-service healthy]
-    Compose --> Env[env VUS/DURATION/RPS + PROTO_DIR=/proto]
-    Compose --> Vol[volumes ../tests/load:/scripts:ro + ../api/proto:/proto:ro]
+    subgraph "Load Test Environment"
+        K6[k6 Test Runner]
+        Service[Chat Service]
+        Worker[Chat Worker]
+        Mongo[(MongoDB)]
+        Redis[(Redis)]
+    end
+    
+    K6 -->|gRPC Calls| Service
+    Service -->|Write| Redis
+    Service -->|Read| Mongo
+    Redis -->|Stream| Worker
+    Worker -->|Save| Mongo
 ```
 
+The load test runs in an isolated environment with its own databases, so it doesn't affect your development or production systems.
 
-
-
-
-## How it Works
+### Test Flow
 
 ```mermaid
 sequenceDiagram
-    participant K6 as k6 VU
-    participant C as lib/config.js
-    participant D as lib/data.js
-    participant G as lib/grpc.js
-    participant H as lib/chat.js
-    participant S as chat-service
-    K6->>C: target, timeouts, VUS/DURATION/RPS + thresholds
-    K6->>D: generateUserId/title/message/UUID (global crypto + fallback)
-    K6->>G: ensureConnected(target, plaintext 5s) singleton Client
-    K6->>H: createChat(userID, title) metadata x-user-id
-    H->>S: chat.ChatService/CreateChat
-    S-->>H: chatId (check chat created)
-    H->>S: chat.ChatService/SaveMessage
-    H->>S: chat.ChatService/GetChatHistory poll until message_id
-    H->>S: chat.ChatService/GetUserChats
-    H-->>K6: metrics rpcSuccessRate/durations
+    participant K6 as k6 Test
+    participant Service as Chat Service
+    participant Worker as Worker
+    participant DB as Database
+    
+    K6->>Service: Create Chat
+    Service-->>K6: Chat ID
+    K6->>Service: Save Message
+    Service->>Service: Add to Stream
+    Service-->>K6: Message ID
+    K6->>Service: Get History
+    Service->>DB: Query Messages
+    Service-->>K6: Messages
+    K6->>Service: List Chats
+    Service-->>K6: Chat List
+    Note over K6: Record metrics
 ```
 
+## Configuration
 
+### Environment Variables
 
-- `lib/config.js:1` parses `VUS/RPS` via `intOr` (`>0` else fallback), `DURATION` via `strOr`.
-- `lib/grpc.js:9` loads `[/proto, ../../../api/proto]`, singleton `grpc.Client`, `x-user-id` metadata.
-- `lib/chat.js` wraps `CreateChat/SaveMessage/GetHistory/GetUserChats/verifyE2ELatency` with `chatMetrics` (`Rate chat_rpc_success_rate`, Trends).
-- `lib/data.js` uses global `crypto.randomUUID()` with manual `v4` fallback (no `k6/experimental/webcrypto` — removed in latest k6).
-- Custom k6 metrics: `chat_create_duration`, `chat_save_message_duration`, `chat_get_history_duration`, `chat_get_user_chats_duration`, `chat_e2e_message_latency`, `chat_rpc_success_rate`.
+You can customize test behavior with environment variables:
 
+| Variable | What It Does | Default |
+|----------|--------------|---------|
+| `VUS` | Number of virtual users | Depends on scenario |
+| `DURATION` | How long to run | Depends on scenario |
+| `RPS` | Requests per second (0 = unlimited) | 0 |
+| `CHAT_SERVICE_TIMEOUT` | Connection timeout | 5s |
+| `RPC_TIMEOUT_MS` | Per-request timeout | 2000ms |
 
+### Scenario Defaults
 
-## When to Run
+| Scenario | Virtual Users | Duration |
+|----------|---------------|----------|
+| `smoke` | 1 | 10 seconds |
+| `load` | 10 | 2 minutes |
+| `stress` | 50 | 5 minutes |
+| `soak` | 5 | 10 minutes |
 
-- **Smoke** (`SCENARIO=smoke VUS=1 DURATION=10s`) before deploy — fail fast `rate==1.0`, verifies E2E `Save→History` visibility through worker.
-- **Load** (`VUS=10 DURATION=2m RPS=50`) to verify `p95<100/p99<250` under steady writes + cache merge + `BulkUpsert` keep-up (watch `chat_redis_stream_lag`).
-- **Stress** (`VUS=50`) to find shed point — watch `grpc_req_duration`, `stream_errors`, `database_errors`, DLQ growth.
-- **Soak** (`VUS=5 DURATION=10m`) overnight to catch mongo bucket growth, redis AOF, consumer PEL leaks (`XAutoClaim` recovery).
-- Use `RPS` cap to isolate service latency from open-loop overload.
+### Custom Settings
 
-See `../../docs/` for service config and `../../infra/compose.load.yml` for full env defaults.
+```bash
+# Override default settings
+make load-test SCENARIO=load VUS=20 DURATION=5m RPS=100
+
+# Run with specific thresholds
+THRESHOLD_SUCCESS_RATE=0.95 make load-test SCENARIO=load
+```
+
+## Interpreting Results
+
+### Success Rate
+
+| Rate | Meaning |
+|------|---------|
+| 100% | Perfect - all requests succeeded |
+| 99%+ | Good - minor issues, acceptable for most cases |
+| 95-99% | Warning - investigate failures |
+| <95% | Critical - service has problems |
+
+### Response Times
+
+| Metric | Good | Warning | Critical |
+|--------|------|---------|----------|
+| p50 (median) | <50ms | 50-100ms | >100ms |
+| p95 | <100ms | 100-200ms | >200ms |
+| p99 | <250ms | 250-500ms | >500ms |
+
+### Common Issues
+
+**High response times:**
+- Check database performance
+- Verify cache is working
+- Look at worker processing speed
+
+**Failed requests:**
+- Check service logs
+- Verify database connectivity
+- Look at stream errors
+
+**Stream lag growing:**
+- Worker can't keep up
+- Database is slow
+- Too many messages at once
+
+## Running Tests
+
+### Prerequisites
+
+- Docker and Docker Compose
+- Make (optional, for convenience commands)
+
+### Step-by-Step
+
+1. **Navigate to the chats service:**
+   ```bash
+   cd services/chats
+   ```
+
+2. **Run a smoke test first:**
+   ```bash
+   make load-test SCENARIO=smoke VUS=1 DURATION=10s
+   ```
+
+3. **If smoke passes, run load test:**
+   ```bash
+   make load-test SCENARIO=load VUS=10 DURATION=2m RPS=50
+   ```
+
+4. **Check the results:**
+   - Look for success rate
+   - Check response times
+   - Verify all checks passed
+
+5. **Clean up:**
+   ```bash
+   make load-down
+   ```
+
+### Without Make
+
+```bash
+# Run directly with Docker Compose
+SCENARIO=smoke VUS=1 DURATION=10s \
+  docker compose -f infra/compose.load.yml up \
+  --build --abort-on-container-exit --exit-code-from k6
+
+# Clean up
+docker compose -f infra/compose.load.yml down -v --remove-orphans
+```
+
+## Troubleshooting
+
+### "Connection refused"
+
+- Wait for services to start (health checks take time)
+- Check if Docker is running
+- Verify no port conflicts
+
+### "Tests are slow"
+
+- Check Docker resources (CPU, memory)
+- Verify network connectivity
+- Look at container logs
+
+### "High error rate"
+
+- Check service logs for errors
+- Verify database is healthy
+- Look at stream lag metrics
+
+### "Tests fail to start"
+
+- Verify Docker Compose file exists
+- Check for syntax errors
+- Ensure sufficient disk space
+
+## Related Documentation
+
+- [Testing Overview](../../docs/testing/overview.md) - All testing types
+- [Configuration](../../docs/getting-started/configuration.md) - Service settings
+- [Observability](../../docs/operations/observability.md) - Monitor during tests
