@@ -1,4 +1,4 @@
-.PHONY: all proto deps run build test docker-build load-test load-down
+.PHONY: all proto deps run build test test-integration test-ha test-all docker-build load-test load-down
 
 all: deps proto build
 
@@ -23,6 +23,15 @@ test:
 
 test-coverage:
 	go test -v ./... -cover 
+
+test-integration:
+	go test -v -tags integration -run Test -count=1 ./...
+
+test-ha:
+	go test -v -tags ha -run TestHA -count=1 ./...
+
+test-all:
+	go test -v -tags integration,ha -count=1 ./...
 
 docker-build:
 	docker compose up --build

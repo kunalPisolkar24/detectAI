@@ -31,6 +31,8 @@ func (n *noopMetrics) SetStreamLag(_ string, _ float64) {}
 func (n *noopMetrics) IncDLQMessages(_ float64)         {}
 func (n *noopMetrics) IncStreamErrors(_ string)         {}
 func (n *noopMetrics) IncDatabaseErrors(_ string)       {}
+func (n *noopMetrics) IncSyncFallback(_ string)         {}
+func (n *noopMetrics) SetRedisDegraded(_ float64)       {}
 
 func startTestServer(t *testing.T) (pb.ChatServiceClient, context.CancelFunc) {
 	t.Helper()
