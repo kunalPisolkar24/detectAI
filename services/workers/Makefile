@@ -250,3 +250,6 @@ test:
 
 test-integration:
 	bun run test:integration
+
+test-integration-ha:
+	bun run test:integration:ha

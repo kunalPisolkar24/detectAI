@@ -22,25 +22,35 @@ docdb_mode               = "standalone"
 
 # ElastiCache Redis chat (streams+cache) — 1 primary + 1 replica, primary-for-all (cluster mode disabled)
 # Floci: 6380 proxy (172.17.0.2:6380 via bridge, localhost:6380 if host port mapped); real AWS: TLS + snapshots
-redis_chat_identifier                   = "detectai-redis-chat-floci"
-redis_chat_engine_version               = "7.1"
-redis_chat_node_type                    = "cache.t3.micro"
-redis_chat_transit_encryption_enabled   = false
-redis_chat_at_rest_encryption_enabled   = false
-redis_chat_snapshot_retention_limit     = 0
+redis_chat_identifier                 = "detectai-redis-chat-floci"
+redis_chat_engine_version             = "7.1"
+redis_chat_node_type                  = "cache.t3.micro"
+redis_chat_transit_encryption_enabled = false
+redis_chat_at_rest_encryption_enabled = false
+redis_chat_snapshot_retention_limit   = 0
 
 # ElastiCache Redis events (Paddle dedup) — single-node, no replica, AOF noeviction, DB authoritative
-redis_events_identifier                   = "detectai-redis-events-floci"
-redis_events_engine_version               = "7.1"
-redis_events_node_type                    = "cache.t3.micro"
-redis_events_transit_encryption_enabled   = false
-redis_events_at_rest_encryption_enabled   = false
-redis_events_snapshot_retention_limit     = 0
+redis_events_identifier                 = "detectai-redis-events-floci"
+redis_events_engine_version             = "7.1"
+redis_events_node_type                  = "cache.t3.micro"
+redis_events_transit_encryption_enabled = false
+redis_events_at_rest_encryption_enabled = false
+redis_events_snapshot_retention_limit   = 0
 
 # ElastiCache Redis users (user cache + rate-limit + analytics dedup) — single-node, volatile-ttl, AOF, DB fallback
-redis_users_identifier                   = "detectai-redis-users-floci"
-redis_users_engine_version               = "7.1"
-redis_users_node_type                    = "cache.t3.micro"
-redis_users_transit_encryption_enabled   = false
-redis_users_at_rest_encryption_enabled   = false
-redis_users_snapshot_retention_limit     = 0
+redis_users_identifier                 = "detectai-redis-users-floci"
+redis_users_engine_version             = "7.1"
+redis_users_node_type                  = "cache.t3.micro"
+redis_users_transit_encryption_enabled = false
+redis_users_at_rest_encryption_enabled = false
+redis_users_snapshot_retention_limit   = 0
+
+# Amazon MQ RabbitMQ (payments + analytics quorum queues) — Floci SINGLE_INSTANCE only.
+# Prod uses CLUSTER_MULTI_AZ (see envs/prod.tfvars); Floci rejects multi-AZ modes.
+mq_broker_name        = "detectai-mq-floci"
+mq_engine_version     = "3.13"
+mq_host_instance_type = "mq.m5.large"
+mq_deployment_mode    = "SINGLE_INSTANCE"
+mq_username           = "mqadmin"
+mq_apply_immediately  = true
+mq_queue_type         = "quorum"

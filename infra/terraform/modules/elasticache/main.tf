@@ -34,12 +34,12 @@ resource "aws_elasticache_replication_group" "this" {
   port                 = var.port
   parameter_group_name = var.parameter_group_name
 
-  num_cache_clusters           = var.num_cache_clusters
-  automatic_failover_enabled   = var.automatic_failover_enabled
-  multi_az_enabled             = var.multi_az_enabled
-  at_rest_encryption_enabled   = var.at_rest_encryption_enabled
-  transit_encryption_enabled   = var.transit_encryption_enabled
-  auth_token                   = random_password.auth.result
+  num_cache_clusters         = var.num_cache_clusters
+  automatic_failover_enabled = var.automatic_failover_enabled
+  multi_az_enabled           = var.multi_az_enabled
+  at_rest_encryption_enabled = var.at_rest_encryption_enabled
+  transit_encryption_enabled = var.transit_encryption_enabled
+  auth_token                 = random_password.auth.result
 
   snapshot_retention_limit = var.snapshot_retention_limit
   snapshot_window          = var.snapshot_window != "" ? var.snapshot_window : null
@@ -66,8 +66,8 @@ locals {
   tls_enabled = var.transit_encryption_enabled
   scheme      = local.tls_enabled ? "rediss" : "redis"
   # urlencode auth token (may contain $) like docdb fix 861c916; reader not used but kept for completeness
-  redis_url         = "${local.scheme}://:${urlencode(random_password.auth.result)}@${local.primary_address}:${local.primary_port}"
-  redis_url_reader  = "${local.scheme}://:${urlencode(random_password.auth.result)}@${local.reader_address}:${local.reader_port}"
+  redis_url        = "${local.scheme}://:${urlencode(random_password.auth.result)}@${local.primary_address}:${local.primary_port}"
+  redis_url_reader = "${local.scheme}://:${urlencode(random_password.auth.result)}@${local.reader_address}:${local.reader_port}"
 
   # CHAT_REDIS_ADDR for chats *redis.Client is host:port without scheme (go-redis style)
   redis_addrs_primary = "${local.primary_address}:${local.primary_port}"

@@ -67,6 +67,27 @@ jobs:
           TEST_RABBITMQ_URL: amqp://guest:guest@localhost:5672/
         run: go test -tags=integration -timeout=300s ./... -v -cover
 
+  ha-integration:
+    name: HA Integration (3-node quorum)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: ${{ env.SERVICE_PATH }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: ${{ env.SERVICE_PATH }}/go.sum
+
+      - name: Run HA Integration Tests
+        run: go test -tags=ha_integration -timeout=600s ./test/integration/... -run TestHA -v -cover
+
   build-and-push:
     name: Build & Push Docker Image
     needs: quality-assurance

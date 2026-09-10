@@ -10,11 +10,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.class
-infra/k8s/envs/.env.dev
-infra/k8s/envs/.env.prod
-
-# Helm
-infra/k8s/charts/*/charts/
 
 # Terraform
 **/.terraform/

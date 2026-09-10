@@ -36,10 +36,12 @@ graph TB
 
 | Env | `RABBITMQ_QUEUE_TYPE` | Durable | Replication |
 |---|---|---|---|
-| local | `classic` | yes | single |
-| prod | `quorum` | yes | Raft 3x |
+| local | `classic` | yes | single (standalone atom) |
+| prod | `quorum` | yes | Raft 3x via Amazon MQ `CLUSTER_MULTI_AZ` |
 
-Set via `infra/compose.yml` vs `infra/compose.prod.yml`.
+Set via env (`infra/compose.yml` defaults to `classic` locally; prod sets
+`RABBITMQ_QUEUE_TYPE=quorum` with `RABBITMQ_URL` from Terraform secret
+`detectai/mq/urls`, `amqps://...:5671`).
 
 ## Class view
 

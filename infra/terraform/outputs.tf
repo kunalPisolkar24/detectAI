@@ -111,3 +111,28 @@ output "redis_users_addrs" {
 output "redis_users_urls_secret_arn" {
   value = module.redis_users.urls_secret_arn
 }
+
+output "mq_broker_id" {
+  value = module.mq.broker_id
+}
+
+output "mq_broker_arn" {
+  value = module.mq.broker_arn
+}
+
+output "mq_amqp_endpoint" {
+  value = module.mq.amqp_endpoint
+}
+
+output "mq_console_url" {
+  value = module.mq.console_url
+}
+
+output "mq_amqp_url" {
+  value     = module.mq.amqp_url
+  sensitive = true
+}
+
+output "mq_urls_secret_arn" {
+  value = module.mq.urls_secret_arn
+}

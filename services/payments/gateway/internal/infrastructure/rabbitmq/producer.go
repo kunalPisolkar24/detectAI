@@ -53,7 +53,16 @@ func (p *RabbitMQProducer) setupTopology(ch ports.AMQPChannel) error {
 		return fmt.Errorf("failed to declare DLX: %w", err)
 	}
 
-	if _, err := ch.QueueDeclare(dlqName, true, false, false, false, nil); err != nil {
+	// DLQ durability must match the main queue: a classic DLQ behind a
+	// quorum pipeline is an operational inconsistency (matches worker consumer).
+	var dlqArgs amqp.Table
+	if p.queueType == "quorum" {
+		dlqArgs = amqp.Table{"x-queue-type": "quorum"}
+	}
+	if _, err := ch.QueueDeclare(dlqName, true, false, false, false, dlqArgs); err != nil {
+		if isPreconditionFailed(err) {
+			p.logger.Error("Queue declare 406, quorum vs classic mismatch - delete old queue or use versioned queue payment_events_v2", "queue", dlqName, "error", err)
+		}
 		return fmt.Errorf("failed to declare DLQ: %w", err)
 	}
 

@@ -201,3 +201,57 @@ variable "redis_users_snapshot_retention_limit" {
   type        = number
   default     = 0
 }
+
+variable "mq_broker_name" {
+  description = "Amazon MQ broker name for RabbitMQ (payments + analytics quorum queues)."
+  type        = string
+  default     = "detectai-mq-floci"
+}
+
+variable "mq_engine_version" {
+  description = "RabbitMQ engine version. Pinned 3.13 (Floci + classic/quorum toggle). Never data-source."
+  type        = string
+  default     = "3.13"
+}
+
+variable "mq_host_instance_type" {
+  description = "Broker instance type. mq.m5.large prod parity; mq.t3.micro allowed for Floci/dev."
+  type        = string
+  default     = "mq.m5.large"
+}
+
+variable "mq_deployment_mode" {
+  description = "SINGLE_INSTANCE for Floci/dev, CLUSTER_MULTI_AZ for prod (3 nodes AZ-spread + NLB)."
+  type        = string
+  default     = "SINGLE_INSTANCE"
+}
+
+variable "mq_username" {
+  description = "Single admin username seeded at creation. Extra users via management UI (change forces recreation)."
+  type        = string
+  default     = "mqadmin"
+}
+
+variable "mq_apply_immediately" {
+  description = "Apply broker modifications immediately (brief downtime). true Floci/dev, false prod."
+  type        = bool
+  default     = true
+}
+
+variable "mq_queue_type" {
+  description = "Queue type written to urls secret. quorum for Amazon MQ prod, classic for local standalone."
+  type        = string
+  default     = "quorum"
+}
+
+variable "mq_subnet_ids" {
+  description = "Subnet IDs for real AWS VPC. null for Floci."
+  type        = list(string)
+  default     = null
+}
+
+variable "mq_security_groups" {
+  description = "Security group IDs for real AWS. null for Floci."
+  type        = list(string)
+  default     = null
+}

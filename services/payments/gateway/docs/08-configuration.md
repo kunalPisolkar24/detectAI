@@ -6,8 +6,8 @@
 |---|---|---|---|
 | `PADDLE_WEBHOOK_SECRET` | — | yes | `whsec_...`, 16+ chars, used for HMAC |
 | `INTERNAL_API_KEY` | — | yes | `s3cr3t`, secures `/internal/events` |
-| `RABBITMQ_URL` | `amqp://guest:guest@rabbitmq:5672/` | no | `amqp091-go` dial |
-| `RABBITMQ_QUEUE_TYPE` | `classic` | no | `classic` locally, `quorum` in prod |
+| `RABBITMQ_URL` | `amqp://guest:guest@rabbitmq:5672/` | no | `amqp091-go` dial; prod uses `amqps://...:5671` from Terraform secret `detectai/mq/urls` |
+| `RABBITMQ_QUEUE_TYPE` | `classic` | no | `classic` locally (standalone atom), `quorum` in prod (Amazon MQ `CLUSTER_MULTI_AZ`) |
 | `PORT` | `8080` | no | `gin` listen |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | *(empty)* | no | if empty, tracing disabled |
 | `OTEL_SERVICE_NAME` | `payment-gateway` | no | resource name |
@@ -23,7 +23,7 @@ Failed validation → service exits `log.Fatal`.
 
 ## Compose
 
-* `infra/compose.yml` (`name: gateway`) — gateway only, no `include`, no `depends_on` (app fast-fails `503` when the broker is down instead of gating startup).
+* `infra/compose.yml` (`name: gateway`) — gateway only, no `include`, no `depends_on` (app fast-fails `503` when the broker is down instead of gating startup). Prod points `RABBITMQ_URL` at Amazon MQ (Terraform `detectai/mq/urls`, `amqps://...:5671`) with `RABBITMQ_QUEUE_TYPE=quorum`; no local `rabbitmq-lb` overlay remains.
 * `infra/docker/rabbitmq/standalone.yml` — shared RabbitMQ atom (single instance, `${RABBITMQ_PORT:-5672}:5672`, volume `rabbitmq_data`).
 * `infra/docker/rabbitmq/management.yml` — UI overlay (adds `${RABBITMQ_UI_PORT:-15672}:15672`, switches to `management-alpine`). Include after `standalone.yml`.
 * `infra/compose.load.yml` (`name: gateway-load`) — `rabbitmq + gateway + k6` for `make load-test` (`include:` the two atoms above, isolated on `gateway_loadnet`). Load publishes `5673/15673` (via `Makefile`), so it runs side-by-side with the main stack (`5672/15672`).

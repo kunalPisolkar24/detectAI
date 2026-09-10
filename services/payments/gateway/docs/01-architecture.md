@@ -57,7 +57,7 @@ graph TB
 
 * `payment_events` → `retry_exchange` (TTL 5s) → `payment_events` (retry)
 * `payment_events` → `dlx` → `dlq` (dead-letter after max retries)
-* Quorum vs classic via `RABBITMQ_QUEUE_TYPE` (`quorum` in prod, `classic` locally).
+* Quorum vs classic via `RABBITMQ_QUEUE_TYPE` (`quorum` on Amazon MQ in prod, `classic` on the local standalone atom).
 
 ## Class view
 

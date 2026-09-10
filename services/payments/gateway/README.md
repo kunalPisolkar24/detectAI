@@ -45,8 +45,8 @@ graph LR
 ```ini
 PADDLE_WEBHOOK_SECRET=whsec_...  # required
 INTERNAL_API_KEY=s3cr3t          # required
-RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/  # optional
-RABBITMQ_QUEUE_TYPE=classic      # optional, quorum in prod
+RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/  # optional; prod uses amqps://...:5671 from Terraform secret detectai/mq/urls
+RABBITMQ_QUEUE_TYPE=classic      # optional, quorum in prod (Amazon MQ CLUSTER_MULTI_AZ)
 PORT=8080                        # optional
 OTEL_EXPORTER_OTLP_ENDPOINT=     # optional, disables tracing
 OTEL_SERVICE_NAME=payment-gateway # optional
@@ -104,6 +104,9 @@ make test-coverage
 
 # Run integration tests (needs Docker)
 make test-integration
+
+# Run HA integration (3-node quorum cluster, no Compose)
+make test-integration-ha
 
 # Run load tests
 make load-test

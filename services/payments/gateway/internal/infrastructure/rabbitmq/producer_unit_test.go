@@ -168,7 +168,11 @@ func TestRabbitMQProducer_SetupTopology(t *testing.T) {
 			mch := new(mocks.MockAMQPChannel)
 
 			mch.On("ExchangeDeclare", "payment_events_dlx", "direct", true, false, false, false, amqp.Table(nil)).Return(nil).Once()
-			mch.On("QueueDeclare", "payment_events_dlq", true, false, false, false, amqp.Table(nil)).Return(amqp.Queue{}, nil).Once()
+			var wantDLQ amqp.Table
+			if tt.queueType == "quorum" {
+				wantDLQ = amqp.Table{"x-queue-type": "quorum"}
+			}
+			mch.On("QueueDeclare", "payment_events_dlq", true, false, false, false, wantDLQ).Return(amqp.Queue{}, nil).Once()
 			mch.On("QueueBind", "payment_events_dlq", "payment_events", "payment_events_dlx", false, amqp.Table(nil)).Return(nil).Once()
 			mch.On("ExchangeDeclare", "payment_events_retry_exchange", "direct", true, false, false, false, amqp.Table(nil)).Return(nil).Once()
 			retryArgs := amqp.Table{

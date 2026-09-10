@@ -16,6 +16,9 @@ test-coverage:
 test-integration:
 	go test -v -tags=integration ./test/integration/...
 
+test-integration-ha:
+	go test -v -tags=ha_integration -timeout=600s ./test/integration/... -run TestHA
+
 # Self-contained load test: compose brings up rabbitmq + gateway + k6 on a
 # dedicated network, no dependency on the main detect_ai stack.
 # Load publishes 5673/15673 (not 5672/15672) so it runs side-by-side with `gateway-up`.
