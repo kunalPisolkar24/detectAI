@@ -130,9 +130,13 @@ func TestMongoRepository_BulkUpsertMessages_LargeBatch(t *testing.T) {
 
 	require.NoError(t, repo.BulkUpsertMessages(ctx, messages))
 
-	history, err := repo.GetHistory(ctx, chatID, 0, 200)
+	// Note: GetHistory caps limit at MaxPageSize(100), so page through.
+	p1, err := repo.GetHistory(ctx, chatID, 0, 100)
 	require.NoError(t, err)
-	assert.Len(t, history, count)
+	require.Len(t, p1, 100)
+	p2, err := repo.GetHistory(ctx, chatID, 100, 100)
+	require.NoError(t, err)
+	assert.Len(t, p2, count-100)
 }
 
 func TestMongoRepository_GetHistory_Pagination(t *testing.T) {

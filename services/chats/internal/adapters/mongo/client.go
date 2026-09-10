@@ -103,7 +103,10 @@ func isShardingAlreadyDone(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "already") ||
 		strings.Contains(msg, "alreadyinitialized") ||
-		strings.Contains(msg, "code 23")
+		strings.Contains(msg, "code 23") ||
+		strings.Contains(msg, "code 20") || // NamespaceAlreadySharded on mongos
+		strings.Contains(msg, "shardcollectioninprogress") ||
+		strings.Contains(msg, "operation in progress")
 }
 
 func isNotShardedCapable(err error) bool {

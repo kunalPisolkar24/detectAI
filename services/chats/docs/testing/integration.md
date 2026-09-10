@@ -54,8 +54,44 @@ The tests use testcontainers to manage Docker containers automatically:
 
 | Container | Image | Purpose |
 |-----------|-------|---------|
-| MongoDB | `mongo:7` | Primary database |
+| MongoDB | `mongo:7` | Primary database (standalone) |
 | Redis | `redis:7-alpine` | Cache and streams |
+| Sharded MongoDB | `mongo:7` ×4 | True sharding: 1 configsvr + 2 shards + 1 mongos (see below) |
+
+## Sharded MongoDB Tests (`TestSharded_*`)
+
+Standalone MongoDB cannot prove sharding behavior: `EnsureSharding` soft-skips
+without `mongos`, and there are no chunks to distribute. The `TestSharded_*`
+tests spin up a real 5-container sharded cluster per test
+(`internal/testutil/containers_sharded.go`: 1 configsvr RS + 2 single-node
+shard RSs + 1 mongos + isolated network, `mongo:7` throughout) and assert:
+
+| Test | What it proves |
+|------|----------------|
+| `TestSharded_Contracts/EnsureShardingSucceedsViaMongos` | `enableSharding` + `shardCollection(chat_id:hashed)` succeed via mongos, idempotent; `config.collections` carries the hashed key |
+| `ChatsRemainsUnsharded` | `chats` stays unsharded (small metadata) yet usable via mongos |
+| `StandaloneIsNoopOnMongos` | `MONGO_MODE=standalone` never shards, even when mongos is capable |
+| `CrossChatIsolationViaMongos` | Every messages op filters on `chat_id` (the shard key) through the router |
+| `BulkUpsertIdempotent/LargeBatch/PaginationViaMongos` | Bucketing (`BucketCapacity=50`) and paging survive the router |
+| `TargetedQueryUsesShardKey` | `chat_id`-filtered queries explain as `SINGLE_SHARD` (never scatter) |
+| `TestSharded_ConnectConfig` | `database.ConnectMongo` with sharded defaults (20/5/15s, `retryWrites=false`) works against mongos |
+| `TestSharded_ChunkDistribution` | Hashed pre-split chunks span both shards; writes land readably |
+| `TestSharded_ShardFailure` | Killing a shard fails fast (never silent partial data) |
+| `TestSharded_Worker_EndToEnd` | Full worker stream→`BulkUpsert`→`GetHistory` path on `MONGO_MODE=sharded` |
+
+```bash
+# Sharded tests only (faster iteration than the full suite)
+make test-sharded
+```
+
+Notes:
+
+* Each sharded test takes ~60-90s (cluster bootstrap). Accuracy over speed:
+  CI timeout is 900s (`service-chats.yaml`, `Makefile`).
+* On MongoDB 7 `config.chunks` references collections by `uuid`, not `ns`
+  (`ShardedChunkShards` resolves via `config.collections`).
+* The single-node RS fixtures under `-tags ha` (`containers_ha.go`, local-only)
+  remain for cheap driver/failover coverage; they are NOT sharding tests.
 
 ## Test Structure
 
