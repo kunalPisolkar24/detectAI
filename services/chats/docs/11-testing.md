@@ -30,24 +30,16 @@ See `Makefile` for all targets.
 
 ## Unit
 
-Runs without Docker and relies on mocks for isolated validation.
-
-→ [Unit depth](11-testing-unit.md)
+Runs without Docker and relies on mocks for isolated validation. [Read more on unit tests](11-testing-unit.md)
 
 ## Integration
 
-Runs with Docker against single-node containers.
-
-→ [Integration depth](11-testing-integration.md)
+Runs with Docker against single-node containers. [Read more on integration tests](11-testing-integration.md)
 
 ## HA
 
-Runs with Docker using the same images with HA flags to cover managed ElastiCache and DocumentDB paths.
-
-→ [HA depth](11-testing-ha.md)
+Runs with Docker using the same images with HA flags to cover managed ElastiCache and DocumentDB paths. [Read more on HA tests](11-testing-ha.md)
 
 ## Load
 
-Runs with Docker using k6 against isolated containers to validate performance and resilience.
-
-→ [Scenarios and thresholds](../tests/load/README.md)
+Runs with Docker using k6 against isolated containers to validate performance and resilience. [Scenarios and thresholds](../tests/load/README.md)
