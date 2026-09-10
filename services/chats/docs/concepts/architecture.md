@@ -10,14 +10,25 @@ The Chats service stores chat conversations. It's built as a single program that
 2. **Worker Mode** - Processes messages in the background (saving them to the database)
 
 ```mermaid
-graph LR
-    User[User/App] --> API[API Mode<br/>:50051]
-    API --> Mongo[(MongoDB)]
-    API --> Redis[(Redis)]
-    API --> Stream[Message Stream]
-    Stream --> Worker[Worker Mode]
-    Worker --> Mongo
-    Worker --> Redis
+architecture-beta
+    group users(cloud)[Users]
+    group services(server)[Services]
+    group datastores(database)[Datastores]
+    
+    service user(internet)[User/App] in users
+    service api(server)[API :50051] in services
+    service worker(server)[Worker] in services
+    service mongo(database)[MongoDB] in datastores
+    service redis(database)[Redis Cache] in datastores
+    service stream(disk)[Message Stream] in datastores
+    
+    user:R --> L:api
+    api:B --> T:stream
+    api:R --> L:mongo
+    api:R --> L:redis
+    stream:B --> T:worker
+    worker:R --> L:mongo
+    worker:R --> L:redis
 ```
 
 **Why two modes?**
