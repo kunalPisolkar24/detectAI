@@ -23,8 +23,8 @@ export async function registerShutdownHandlers(): Promise<void> {
     } catch {}
 
     try {
-      const { redisWriter, redisReader } = await import("@/lib/infrastructure/redis")
-      await Promise.allSettled([redisWriter.quit().catch(() => {}), redisReader.quit().catch(() => {})])
+      const { redis } = await import("@/lib/infrastructure/redis")
+      await redis.quit().catch(() => {})
     } catch {}
 
     // Let Next.js standalone server close; exit after a short grace.

@@ -1,4 +1,4 @@
-import { redisWriter } from "@/lib/infrastructure/redis"
+import { redis } from "@/lib/infrastructure/redis"
 import { logger } from "@/lib/infrastructure/logger"
 
 const RETRY_COUNT = 10
@@ -15,7 +15,7 @@ export const lockService = {
     for (let attempt = 0; attempt <= RETRY_COUNT; attempt++) {
       let acquired: string | null = null
       try {
-        acquired = await redisWriter.set(lockKey, lockValue, "PX", ttlMs, "NX")
+        acquired = await redis.set(lockKey, lockValue, "PX", ttlMs, "NX")
       } catch (error) {
         // Redis unavailable — degrade to postgres-only mode: run without lock.
         logger.warn({ msg: "Lock store unavailable, running without lock", resource, error })
@@ -27,7 +27,7 @@ export const lockService = {
           return await task()
         } finally {
           try {
-            await redisWriter.eval(
+            await redis.eval(
               `if redis.call("GET", KEYS[1]) == ARGV[1] then redis.call("DEL", KEYS[1]) end`,
               1,
               lockKey,

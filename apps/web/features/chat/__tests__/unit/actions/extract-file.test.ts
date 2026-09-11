@@ -38,6 +38,6 @@ describe('extractTextFromFile', () => {
     const formData = new FormData()
     const result = await extractTextFromFile(formData)
 
-    expect(result).toEqual({ error: 'Service unavailable. Please try again later.' })
+    expect(result).toEqual({ error: 'Document parsing is temporarily unavailable' })
   })
 })

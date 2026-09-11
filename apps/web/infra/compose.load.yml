@@ -31,7 +31,6 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@postgres-users:5432/detectai_load
       - REDIS_URL=redis://:load-redis-password@redis-users:6379
       - REDIS_PASSWORD=load-redis-password
-      - REDIS_MODE=standalone
       - NEXTAUTH_SECRET=load-test-secret
       - NEXTAUTH_URL=http://frontend:3000
       - AI_SERVICE_URL=mock-server:50051

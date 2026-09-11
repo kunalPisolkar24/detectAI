@@ -10,7 +10,7 @@
 # default network). Either fill .env with real datastore values, or point the
 # URLs at an external instance — the local atoms still start but stay unused
 # in that case. Preview runs skip everything via `up --no-deps frontend`.
-# RabbitMQ here is the local standalone atom (single instance, classic URL);
+# RabbitMQ here is the local standalone atom (single instance, quorum queue);
 # prod overrides RABBITMQ_URL from Terraform secret detectai/mq/urls
 # (amqps://...:5671, quorum queues declared by the publisher).
 include:
@@ -62,14 +62,9 @@ services:
       # Postgres DB (standalone instance; replica URL points at it too)
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
-      # Redis user cache (standalone)
-      - REDIS_MODE=${REDIS_MODE:-standalone}
+      # Redis user cache (standalone docker or ElastiCache users)
       - REDIS_URL=${REDIS_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_MASTER_NAME=${REDIS_MASTER_NAME:-mymaster}
-      - REDIS_SENTINELS=${REDIS_SENTINELS:-redis-sentinel-1:26379}
-      # Usage counters + analytics dedup live in redis-users (REDIS_URL).
-      # redis-events (Paddle-only) is wired in workers only.
       # Cloudflare Turnstile
       - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
       - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}

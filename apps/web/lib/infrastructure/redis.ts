@@ -16,15 +16,12 @@ const createPreviewRedis = () =>
   ) as unknown as Redis
 
 const globalForRedis = global as unknown as {
-  redisWriter: Redis
-  redisReader: Redis
+  redis: Redis
 }
-
-const getRedisMode = () => env.REDIS_MODE ?? "sentinel"
 
 const getStandaloneConfig = (): { url: string; options: RedisOptions } => {
   if (!env.REDIS_URL) {
-    throw new Error("REDIS_URL is required when REDIS_MODE=standalone")
+    throw new Error("REDIS_URL is required")
   }
 
   return {
@@ -45,78 +42,32 @@ const getStandaloneConfig = (): { url: string; options: RedisOptions } => {
   }
 }
 
-const getSentinelConfig = (): RedisOptions => {
-  const sentinelStr = env.REDIS_SENTINELS || "localhost:26379,localhost:26380,localhost:26381"
-  const sentinels = sentinelStr.split(",").map((s) => {
-    const [host, port] = s.split(":")
-    return { host: host || "localhost", port: parseInt(port || "26379", 10) }
-  })
-
-  return {
-    sentinels,
-    name: env.REDIS_MASTER_NAME || "mymaster",
-    password: env.REDIS_PASSWORD,
-    sentinelPassword: env.REDIS_PASSWORD,
-    retryStrategy: (times) => (times > 3 ? null : Math.min(times * 50, 500)),
-    enableReadyCheck: true,
-    maxRetriesPerRequest: 2,
-    enableOfflineQueue: false,
-    family: 4,
-    keepAlive: 10000,
-    lazyConnect: true,
-  }
-}
-
-const createRedisClients = () => {
+const createRedisClient = (): Redis => {
   if (isPreviewMode()) {
-    const preview = createPreviewRedis()
-    return { writer: preview, reader: preview }
+    return createPreviewRedis()
   }
-  const mode = getRedisMode()
-  const standaloneConfig = mode === "standalone" ? getStandaloneConfig() : null
-  const writer =
-    mode === "standalone"
-      ? new Redis(standaloneConfig!.url, standaloneConfig!.options)
-      : new Redis({
-          ...getSentinelConfig(),
-          role: "master",
-        })
+  const { url, options } = getStandaloneConfig()
+  const client = new Redis(url, options)
 
-  const reader =
-    mode === "standalone"
-      ? new Redis(standaloneConfig!.url, standaloneConfig!.options)
-      : new Redis({
-          ...getSentinelConfig(),
-          role: "slave",
-        })
-
-  writer.on("error", (err) => {
-    console.error("Redis Writer Error:", err.message)
+  client.on("error", (err) => {
+    console.error("Redis Error:", err.message)
   })
-  writer.on("close", () => {
-    console.error("Redis Writer closed")
+  client.on("close", () => {
+    console.error("Redis closed")
   })
 
-  reader.on("error", (err) => {
-    console.error("Redis Reader Error:", err.message)
-  })
-  reader.on("close", () => {
-    console.error("Redis Reader closed")
-  })
-
-  return { writer, reader }
+  return client
 }
 
-const clients = isPreviewMode()
-  ? createRedisClients()
-  : globalForRedis.redisWriter && globalForRedis.redisReader
-    ? { writer: globalForRedis.redisWriter, reader: globalForRedis.redisReader }
-    : createRedisClients()
+const client = isPreviewMode()
+  ? createRedisClient()
+  : globalForRedis.redis ?? createRedisClient()
 
-export const redisWriter = clients.writer
-export const redisReader = clients.reader
+export const redis = client
+// Back-compat aliases for incremental migration — all point to the same standalone client
+export const redisWriter = redis
+export const redisReader = redis
 
 if (!isPreviewMode() && env.NODE_ENV !== "production") {
-  globalForRedis.redisWriter = redisWriter
-  globalForRedis.redisReader = redisReader
+  globalForRedis.redis = redis
 }

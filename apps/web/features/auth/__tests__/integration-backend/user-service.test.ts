@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { userService } from '../../services/user-service'
 import { prisma } from '@/lib/infrastructure/prisma'
-import { redisReader, redisWriter } from '@/lib/infrastructure/redis'
+import { redis } from '@/lib/infrastructure/redis'
 
 describe('UserService Integration', () => {
   const mockUser = {
@@ -15,7 +15,7 @@ describe('UserService Integration', () => {
   })
 
   it('fetches basic user by ID and caches the result (no joins)', async () => {
-    vi.mocked(redisReader.get).mockResolvedValue(null)
+    vi.mocked(redis.get).mockResolvedValue(null)
     vi.mocked(prisma.user.findUnique).mockResolvedValue(mockUser as any)
 
     const user = await userService.getUserById('user-1')
@@ -24,7 +24,7 @@ describe('UserService Integration', () => {
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: 'user-1' },
     })
-    expect(redisWriter.setex).toHaveBeenCalledWith(
+    expect(redis.setex).toHaveBeenCalledWith(
       expect.stringContaining('user:basic:user-1'),
       expect.any(Number),
       expect.stringContaining('user-1')
@@ -32,7 +32,7 @@ describe('UserService Integration', () => {
   })
 
   it('returns cached user by ID if available', async () => {
-    vi.mocked(redisReader.get).mockResolvedValue(JSON.stringify(mockUser))
+    vi.mocked(redis.get).mockResolvedValue(JSON.stringify(mockUser))
 
     const user = await userService.getUserById('user-1')
 
@@ -41,25 +41,25 @@ describe('UserService Integration', () => {
   })
 
   it('fetches user by email via id pointer and warms both caches', async () => {
-    vi.mocked(redisReader.get).mockResolvedValue(null)
+    vi.mocked(redis.get).mockResolvedValue(null)
     vi.mocked(prisma.user.findUnique).mockResolvedValue(mockUser as any)
 
     const user = await userService.getUserByEmail('test@example.com')
 
     expect(user).toEqual(mockUser)
     // One for email pointer, one for basic
-    expect(redisWriter.setex).toHaveBeenCalledTimes(2)
+    expect(redis.setex).toHaveBeenCalledTimes(2)
   })
 
   it('fetches subscription separately with short TTL', async () => {
     const sub = { status: 'ACTIVE' }
-    vi.mocked(redisReader.get).mockResolvedValue(null)
+    vi.mocked(redis.get).mockResolvedValue(null)
     vi.mocked(prisma.subscription.findUnique).mockResolvedValue(sub as any)
 
     const result = await userService.getUserSubscription('user-1')
 
     expect(result).toEqual(sub)
-    expect(redisWriter.setex).toHaveBeenCalledWith(
+    expect(redis.setex).toHaveBeenCalledWith(
       expect.stringContaining('user:sub:user-1'),
       600,
       expect.any(String),
@@ -73,7 +73,7 @@ describe('UserService Integration', () => {
     await userService.updateUser('user-1', { name: 'New Name' })
 
     expect(prisma.user.update).toHaveBeenCalled()
-    const deleted = vi.mocked(redisWriter.del).mock.calls.flat() as unknown as string[]
+    const deleted = vi.mocked(redis.del).mock.calls.flat() as unknown as string[]
     expect(deleted).toEqual(
       expect.arrayContaining(['user:basic:user-1', 'user:sub:user-1']),
     )

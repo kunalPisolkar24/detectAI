@@ -1,9 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { rateLimitService } from '../../services/rate-limit-service'
-import { redisWriter } from '@/lib/infrastructure/redis'
+import { redis } from '@/lib/infrastructure/redis'
 import { analyticsPublisher } from '@/lib/infrastructure/analytics-publisher'
 
 vi.mock('@/lib/infrastructure/redis', () => ({
+  redis: {
+    get: vi.fn(),
+    eval: vi.fn(),
+    set: vi.fn(),
+    setex: vi.fn(),
+    del: vi.fn(),
+    on: vi.fn(),
+    quit: vi.fn(),
+  },
   redisWriter: {
     get: vi.fn(),
     eval: vi.fn(),
@@ -37,7 +46,7 @@ describe('RedisRateLimitService Integration', () => {
   })
 
   it('allows request when under limit for free user', async () => {
-    vi.mocked(redisWriter.get).mockResolvedValue('50')
+    vi.mocked(redis.get).mockResolvedValue('50')
 
     const result = await rateLimitService.checkLimit('user-1', false)
 
@@ -46,7 +55,7 @@ describe('RedisRateLimitService Integration', () => {
   })
 
   it('denies request when over limit for free user', async () => {
-    vi.mocked(redisWriter.get).mockResolvedValue('100')
+    vi.mocked(redis.get).mockResolvedValue('100')
 
     const result = await rateLimitService.checkLimit('user-1', false)
 
@@ -62,15 +71,15 @@ describe('RedisRateLimitService Integration', () => {
   })
 
   it('tracks usage by atomically incrementing UTC daily key and publishing with eventId', async () => {
-    vi.mocked(redisWriter.eval as any).mockResolvedValue(1)
+    vi.mocked(redis.eval as any).mockResolvedValue(1)
     vi.mocked(analyticsPublisher.publish).mockResolvedValue('evt-1' as any)
 
     await rateLimitService.trackUsage('user-1')
 
-    expect(redisWriter.eval).toHaveBeenCalledWith(
+    expect(redis.eval).toHaveBeenCalledWith(
       expect.stringContaining('INCRBY'),
       1,
-      expect.stringContaining('rate_limit:{user-1}:daily:'),
+      expect.stringContaining('rate_limit:user-1:daily:'),
       '1',
       expect.any(String),
     )
@@ -78,7 +87,7 @@ describe('RedisRateLimitService Integration', () => {
   })
 
   it('retrieves real-time usage correctly from redis', async () => {
-    vi.mocked(redisWriter.get).mockResolvedValue('42')
+    vi.mocked(redis.get).mockResolvedValue('42')
 
     const usage = await rateLimitService.getRealTimeUsage('user-1')
 

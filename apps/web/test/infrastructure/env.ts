@@ -9,7 +9,6 @@ export const setupEnvMocks = () => {
       TURNSTILE_SECRET_KEY: 'test-secret-key',
       FILE_EXTRACTOR_API_URL: 'http://localhost:8000',
       INFERENCE_SERVICE_URL: 'localhost:50051',
-      REDIS_MODE: 'standalone',
       REDIS_URL: 'redis://localhost:6379',
       REDIS_PASSWORD: 'test-password',
       PAYMENT_GATEWAY_URL: 'http://localhost:8080',

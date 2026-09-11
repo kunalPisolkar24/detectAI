@@ -28,7 +28,6 @@ export const setupRedisMocks = () => {
   vi.mock('ioredis', () => {
     class MockRedis {
       constructor() { return mockRedis }
-      static Cluster = class { constructor() { return mockRedis } }
       pipeline() { return mockPipeline }
       get(key: string) { return mockRedis.get(key) }
       set(key: string, val: string) { return mockRedis.set(key, val) }
@@ -40,11 +39,11 @@ export const setupRedisMocks = () => {
     return {
       default: MockRedis,
       Redis: MockRedis,
-      Cluster: MockRedis.Cluster,
     }
   })
 
   vi.mock('@/lib/infrastructure/redis', () => ({
+    redis: mockRedis,
     redisReader: mockRedis,
     redisWriter: mockRedis,
   }))

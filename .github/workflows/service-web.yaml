@@ -62,7 +62,6 @@ jobs:
           NEXTAUTH_SECRET: "mock-nextauth-secret-not-configured"
           NEXTAUTH_URL: "http://localhost:3000"
           REDIS_URL: "redis://localhost:6379"
-          REDIS_MASTER_NAME: "mymaster"
           FILE_EXTRACTOR_API_URL: "http://localhost:8080"
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: "mock-turnstile-site-key-not-configured"
           NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: "mock-paddle-client-token-not-configured"

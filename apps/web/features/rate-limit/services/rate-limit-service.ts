@@ -1,4 +1,4 @@
-import { redisWriter } from "@/lib/infrastructure/redis"
+import { redis } from "@/lib/infrastructure/redis"
 import { metrics } from "@/lib/infrastructure/metrics"
 import { logger } from "@/lib/infrastructure/logger"
 import { analyticsPublisher } from "@/lib/infrastructure/analytics-publisher"
@@ -16,9 +16,9 @@ const previewRedis = new Proxy(
       return async () => null
     },
   },
-) as unknown as typeof redisWriter
+) as unknown as typeof redis
 
-const usageRedis = isPreviewMode() ? previewRedis : redisWriter
+const usageRedis = isPreviewMode() ? previewRedis : redis
 
 export interface IRateLimitService {
   checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }>
@@ -27,18 +27,15 @@ export interface IRateLimitService {
 }
 
 /**
- * Rate-limit + usage accounting (2-Redis world).
+ * Rate-limit + usage accounting — single Redis (standalone / ElastiCache users).
  *
- * - Real-time enforcement lives in `redis-cache` (`REDIS_URL`):
+ * - Real-time enforcement lives in `REDIS_URL` (redis-users / ElastiCache users):
  *   key `rate_limit:{userId}:daily:YYYY-MM-DD` (UTC date), expiry at next UTC
  *   midnight. Atomic Lua `INCRBY+EXPIREAT` (no leak on crash between cmds).
- *   Reads AND writes go to the master (`usageRedis` === `redisWriter`) —
- *   slave reads would lag and over-allow.
  * - Authoritative billing lives in Postgres `Usage` (written asynchronously by
  *   `worker-analytics` via RabbitMQ `analytics.usage`, or synchronously by
  *   the fallback below when the queue is down).
- * - `analytics:usage:event:{id}` dedup lives in `redis-cache`. `redis-events`
- *   is Paddle-only.
+ * - `analytics:usage:event:{id}` dedup lives in the same Redis.
  * - Cached user rows (`user:basic:*`, `user:sub:*`) exclude usage counters,
  *   so usage tracking NEVER invalidates user cache.
  *
@@ -96,19 +93,9 @@ export class RedisRateLimitService implements IRateLimitService {
     return n
   }
 
-  /** cuid() ids are safe; guard the `{userId}` hash-tag against pathological ids. */
-  private isRedisSafeUserId(userId: string): boolean {
-    return typeof userId === "string" && userId.length > 0 && !userId.includes("{") && !userId.includes("}")
-  }
-
   public async checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }> {
     if (isPremium) {
       return { allowed: true, remaining: -1 }
-    }
-
-    if (!this.isRedisSafeUserId(userId)) {
-      logger.warn({ msg: "Unsafe userId for Redis hash-tag, using DB fallback", userId })
-      return this.checkLimitFromDB(userId)
     }
 
     try {
@@ -172,24 +159,20 @@ export class RedisRateLimitService implements IRateLimitService {
 
     let redisOk = false
     let redisError: unknown = null
-    if (!this.isRedisSafeUserId(userId)) {
-      redisError = new Error("unsafe userId for Redis hash-tag")
-    } else {
-      try {
-        await (usageRedis as unknown as {
-          eval: (script: string, numKeys: number, key: string, count: string, expireAt: string) => Promise<unknown>
-        }).eval(
-          RedisRateLimitService.INCR_EXPIRE_LUA,
-          1,
-          dailyKey,
-          String(count),
-          String(expireAt),
-        )
-        redisOk = true
-      } catch (error) {
-        redisError = error
-        try { metrics.usageRedisErrors.inc({ operation: "incr" }) } catch {}
-      }
+    try {
+      await (usageRedis as unknown as {
+        eval: (script: string, numKeys: number, key: string, count: string, expireAt: string) => Promise<unknown>
+      }).eval(
+        RedisRateLimitService.INCR_EXPIRE_LUA,
+        1,
+        dailyKey,
+        String(count),
+        String(expireAt),
+      )
+      redisOk = true
+    } catch (error) {
+      redisError = error
+      try { metrics.usageRedisErrors.inc({ operation: "incr" }) } catch {}
     }
 
     let publishOk = false
@@ -243,16 +226,14 @@ export class RedisRateLimitService implements IRateLimitService {
   }
 
   public async getRealTimeUsage(userId: string): Promise<{ dailyCount: number }> {
-    if (this.isRedisSafeUserId(userId)) {
-      try {
-        const daily = await usageRedis.get(this.getDailyKey(userId))
-        if (daily !== null) {
-          return { dailyCount: this.parseCounter(daily, userId, "get") }
-        }
-      } catch (error) {
-        try { metrics.usageRedisErrors.inc({ operation: "get" }) } catch {}
-        logger.error({ msg: "Redis read failed, falling back to DB", userId, error })
+    try {
+      const daily = await usageRedis.get(this.getDailyKey(userId))
+      if (daily !== null) {
+        return { dailyCount: this.parseCounter(daily, userId, "get") }
       }
+    } catch (error) {
+      try { metrics.usageRedisErrors.inc({ operation: "get" }) } catch {}
+      logger.error({ msg: "Redis read failed, falling back to DB", userId, error })
     }
 
     try {
