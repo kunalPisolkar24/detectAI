@@ -6,6 +6,7 @@
 include:
   - path: ../../../infra/docker/postgres-users/standalone.yml
   - path: ../../../infra/docker/redis-users/standalone.yml
+  - path: ../../../infra/docker/rabbitmq/standalone.yml
 
 services:
   mock-server:
@@ -46,10 +47,14 @@ services:
       - GOOGLE_ID=mock-google-client-id-not-configured
       - GOOGLE_SECRET=mock-google-client-secret-not-configured
       - AI_SERVICE_API_KEY=mock-ai-service-api-key-not-configured
+      # Local standalone broker (same atom family as compose.yml); prod uses amqps from detectai/mq/urls.
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
     depends_on:
       postgres-users:
         condition: service_healthy
       redis-users:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     ports:
       - "3001:3000"

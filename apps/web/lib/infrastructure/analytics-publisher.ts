@@ -42,13 +42,51 @@ class AnalyticsPublisher {
   private channel: any | null = null
   private connection: any | null = null
   private connecting: Promise<void> | null = null
+  private activeUrl: string | null = null
+  private activeQueue: string = ANALYTICS_QUEUE
+  private urlOverride: string | null = null
 
-  private async ensureChannel(): Promise<any> {
-    if (this.channel) return this.channel
+  /** HA/integration tests: point the singleton at a per-run broker without touching global env. */
+  setUrlForTests(url: string | undefined) {
+    this.urlOverride = url ?? null
+    if (url && this.activeUrl && url !== this.activeUrl) this.invalidateChannel()
+  }
+
+  /** Close broker resources (idempotent). Safe to call when already closed. */
+  async close(): Promise<void> {
+    try { await this.channel?.close().catch(() => {}) } catch {}
+    try { await this.connection?.close().catch(() => {}) } catch {}
+    this.invalidateChannel()
+  }
+
+  /** Reset all cached state for tests (connection + URL override). */
+  resetForTests() {
+    this.channel = null
+    this.connection = null
+    this.connecting = null
+    this.activeUrl = null
+    this.activeQueue = ANALYTICS_QUEUE
+    this.urlOverride = null
+  }
+
+  private resolveUrl(explicit?: string): string {
+    return explicit ?? this.urlOverride ?? env.RABBITMQ_URL
+  }
+
+  private async ensureChannel(explicitUrl?: string, explicitQueue?: string): Promise<any> {
+    const url = this.resolveUrl(explicitUrl)
+    const queue = explicitQueue ?? ANALYTICS_QUEUE
+    if (this.channel && this.activeUrl === url && this.activeQueue === queue) return this.channel
+    if (this.channel && (this.activeUrl !== url || this.activeQueue !== queue)) {
+      // Switching broker/queue between HA test cases: close stale channel first.
+      try { await this.channel.close().catch(() => {}) } catch {}
+      try { await this.connection?.close().catch(() => {}) } catch {}
+      this.invalidateChannel()
+    }
     if (this.connecting) await this.connecting
-    if (this.channel) return this.channel
+    if (this.channel && this.activeUrl === url && this.activeQueue === queue) return this.channel
 
-    this.connecting = this.connect()
+    this.connecting = this.connect(url, queue)
     try {
       await this.connecting
       return this.channel!
@@ -57,10 +95,10 @@ class AnalyticsPublisher {
     }
   }
 
-  private async connect(): Promise<void> {
+  private async connect(url: string, queue: string = ANALYTICS_QUEUE): Promise<void> {
     let conn: any
     try {
-      conn = await amqp.connect(env.RABBITMQ_URL)
+      conn = await amqp.connect(url)
     } catch (err) {
       try { metrics.analyticsPublishFailures.inc({ stage: "connect" }) } catch {}
       throw new AnalyticsPublishError("Failed to connect to RabbitMQ for analytics", { cause: err })
@@ -79,11 +117,11 @@ class AnalyticsPublisher {
     })
 
     try {
-      await ch.assertQueue(ANALYTICS_QUEUE, {
+      await ch.assertQueue(queue, {
         durable: true,
         arguments: {
-          "x-dead-letter-exchange": `${ANALYTICS_QUEUE}_dlx`,
-          "x-dead-letter-routing-key": ANALYTICS_QUEUE,
+          "x-dead-letter-exchange": `${queue}_dlx`,
+          "x-dead-letter-routing-key": queue,
           "x-queue-type": ANALYTICS_QUEUE_TYPE,
         },
       })
@@ -94,7 +132,7 @@ class AnalyticsPublisher {
       try { await conn.close().catch(() => {}) } catch {}
       if (msg.includes("PRECONDITION_FAILED") || msg.includes("406")) {
         throw new AnalyticsPublishError(
-          `Queue declare mismatch (406) for ${ANALYTICS_QUEUE}: broker has incompatible args (classic vs quorum or missing DLX). Delete the stale queue or use a versioned queue name.`,
+          `Queue declare mismatch (406) for ${queue}: broker has incompatible args (classic vs quorum or missing DLX). Delete the stale queue or use a versioned queue name.`,
           { cause: err },
         )
       }
@@ -103,6 +141,8 @@ class AnalyticsPublisher {
 
     this.connection = conn
     this.channel = ch
+    this.activeUrl = url
+    this.activeQueue = queue
   }
 
   private invalidateChannel() {
@@ -118,8 +158,12 @@ class AnalyticsPublisher {
    * @throws {AnalyticsPublishError} when the broker is unreachable or the
    *   queue rejects the message. Callers must NOT swallow this silently —
    *   `trackUsage` uses it to decide whether the DB fallback is safe.
+   *
+   * Test-only overrides (`opts.url` / `opts.queue`) point a single call at a
+   * per-run broker/queue (HA suites) without mutating global env or singleton
+   * state beyond that call's channel.
    */
-  async publish(userId: string, count: number, eventId?: string): Promise<string> {
+  async publish(userId: string, count: number, eventId?: string, opts?: { url?: string; queue?: string }): Promise<string> {
     if (!userId || typeof userId !== "string" || !userId.trim()) {
       throw new AnalyticsPublishError("publish requires a non-empty userId")
     }
@@ -142,7 +186,9 @@ class AnalyticsPublisher {
       timestamp: new Date().toISOString(),
     }
     const payload = Buffer.from(JSON.stringify(event))
-    const opts = {
+    const queue = opts?.queue ?? ANALYTICS_QUEUE
+    const url = opts?.url
+    const sendOpts = {
       persistent: true,
       contentType: "application/json",
       messageId: id,
@@ -151,10 +197,10 @@ class AnalyticsPublisher {
     }
 
     const sendOnce = async (): Promise<void> => {
-      const ch = await this.ensureChannel()
+      const ch = await this.ensureChannel(url, queue)
       let accepted = false
       try {
-        accepted = ch.sendToQueue(ANALYTICS_QUEUE, payload, opts)
+        accepted = ch.sendToQueue(queue, payload, sendOpts)
       } catch (err) {
         this.invalidateChannel()
         throw err

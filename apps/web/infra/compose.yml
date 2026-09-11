@@ -5,15 +5,18 @@
 # the boundaries; the app treats any of them as preview. Preview runs skip
 # backends via `up --no-deps frontend`, so no separate compose file is needed.
 #
-# Datastores (postgres-users + redis-users) come from the shared atoms below
-# and always start with the web stack (same project, shared default network).
-# Either fill .env with real datastore values, or point the URLs at an
-# external instance — the local postgres-users/redis-users still start but stay
-# unused in that case. Preview runs skip everything via
-# `up --no-deps frontend`.
+# Datastores (postgres-users + redis-users + rabbitmq) come from the shared
+# atoms below and always start with the web stack (same project, shared
+# default network). Either fill .env with real datastore values, or point the
+# URLs at an external instance — the local atoms still start but stay unused
+# in that case. Preview runs skip everything via `up --no-deps frontend`.
+# RabbitMQ here is the local standalone atom (single instance, classic URL);
+# prod overrides RABBITMQ_URL from Terraform secret detectai/mq/urls
+# (amqps://...:5671, quorum queues declared by the publisher).
 include:
   - path: ../../../infra/docker/postgres-users/standalone.yml
   - path: ../../../infra/docker/redis-users/standalone.yml
+  - path: ../../../infra/docker/rabbitmq/standalone.yml
 
 services:
   db-migrate:
