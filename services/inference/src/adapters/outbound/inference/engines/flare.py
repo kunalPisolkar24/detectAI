@@ -23,24 +23,9 @@ class FlareEngine(ISyncBatchInferenceEngine, BaseEngine):
             inputs = self.tokenizer(
                 texts, return_tensors="np", padding=True, truncation=True, max_length=self.max_length
             )
-
             ort_inputs = {k: v.astype(np.int64) for k, v in inputs.items() if k in self.input_names}
-
             raw = self.session.run(None, ort_inputs)[0]
-            raw = np.asarray(raw)
-
-            # Handle various output shapes consistently with Spark
-            if raw.ndim == 1:
-                # Single logit per sample -> sigmoid
-                probs = self.sigmoid(raw)
-                return np.clip(probs, 0.0, 1.0).astype(float).tolist()
-            if raw.ndim == 2 and raw.shape[1] == 1:
-                probs = self.sigmoid(raw.flatten())
-                return np.clip(probs, 0.0, 1.0).astype(float).tolist()
-            if raw.ndim == 2 and raw.shape[1] == 2:
-                probs = self.softmax(raw)
-                return probs[:, 1].astype(float).tolist()
-            raise InferenceError(f"Unexpected Flare output shape {raw.shape}, expected (N,1) or (N,2)")
+            return self.decode_logits(raw)
         except InferenceError:
             raise
         except Exception as e:

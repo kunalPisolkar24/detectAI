@@ -22,23 +22,9 @@ class SparkEngine(ISyncBatchInferenceEngine, BaseEngine):
             return []
         outputs = None
         try:
-            # Sparse matrix could be large; keep batch size bounded by caller (BATCH_SIZE)
             vectorized = self.tokenizer.transform(texts).toarray().astype(np.float32)
-
             outputs = self.session.run(None, {self.input_name: vectorized})
-            raw = np.asarray(outputs[0])
-
-            if raw.ndim == 1:
-                # Single logit -> sigmoid and clip to [0,1]
-                probs = self.sigmoid(raw)
-                return np.clip(probs, 0.0, 1.0).astype(float).tolist()
-            if raw.ndim == 2 and raw.shape[1] == 1:
-                probs = self.sigmoid(raw.flatten())
-                return np.clip(probs, 0.0, 1.0).astype(float).tolist()
-            if raw.ndim == 2 and raw.shape[1] == 2:
-                probs = self.softmax(raw)
-                return np.clip(probs[:, 1], 0.0, 1.0).astype(float).tolist()
-            raise InferenceError(f"Unexpected Spark output shape {raw.shape}, expected (N,), (N,1) or (N,2)")
+            return self.decode_logits(outputs[0])
         except InferenceError:
             raise
         except Exception as e:

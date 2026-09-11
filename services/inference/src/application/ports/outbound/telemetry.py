@@ -5,30 +5,46 @@ class ITelemetryReporter(ABC):
     @abstractmethod
     def observe_document_plan(
         self, operation: str, model_name: str, input_chars: int, chunk_count: int
+    ) -> None: ...
+
+    @abstractmethod
+    def track_document_chunk_started(self, operation: str, model_name: str) -> None: ...
+
+    @abstractmethod
+    def track_document_chunk_finished(self, operation: str, model_name: str) -> None: ...
+
+    @abstractmethod
+    def record_document_chunk_processed(self, operation: str, model_name: str) -> None: ...
+
+    def record_document_chunk_failed(
+        self, operation: str, model_name: str, reason: str = "error"
     ) -> None:
-        """Record the initial planning of a document analysis request.
+        return
 
-        Implementations must be non-blocking and must not raise.
-        """
+    def record_document_request(self, operation: str, model_name: str, status: str) -> None:
+        return
 
-    @abstractmethod
-    def track_document_chunk_started(self, operation: str, model_name: str) -> None:
-        """Increment the counter for in-flight document chunks.
+    def record_queue_rejected(self, model_name: str, reason: str) -> None:
+        return
 
-        Must be non-blocking and must not raise — caller will guard with try/except.
-        """
+    def record_batch_error(self, model_name: str, error_type: str) -> None:
+        return
 
-    @abstractmethod
-    def track_document_chunk_finished(self, operation: str, model_name: str) -> None:
-        """Decrement the counter for in-flight document chunks.
+    def observe_queue_wait(self, model_name: str, seconds: float) -> None:
+        return
 
-        Must be non-blocking and must not raise.
-        """
+    def record_provider_fallback(
+        self, model_name: str, requested: str, active: str, trigger: str
+    ) -> None:
+        return
 
-    @abstractmethod
-    def record_document_chunk_processed(self, operation: str, model_name: str) -> None:
-        """Increment the total processed chunks counter. Must not raise."""
+    def observe_confidence(self, model_name: str, ai_probability: float) -> None:
+        return
 
-    def record_document_chunk_failed(self, operation: str, model_name: str, reason: str = "error") -> None:
-        """Record a failed chunk. Optional — default no-op, must not raise."""
+    def record_auth_failure(self, method: str, reason: str) -> None:
+        return
+
+    def observe_grpc_request(
+        self, method: str, code: str, model: str, duration: float
+    ) -> None:
         return

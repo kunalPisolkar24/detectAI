@@ -17,7 +17,7 @@ def setup_tracing(service_name: str | None = None, service_version: str | None =
         return None
 
     try:
-        from opentelemetry import trace, propagate
+        from opentelemetry import trace
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
         from opentelemetry.propagate import set_global_textmap
         from opentelemetry.sdk.resources import Resource

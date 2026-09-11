@@ -1,4 +1,3 @@
-import os
 import pytest
 
 def test_tracing_disabled_without_endpoint(monkeypatch):
@@ -27,7 +26,6 @@ def test_tracing_in_memory_exporter(monkeypatch):
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-    from opentelemetry import trace
 
     exporter = InMemorySpanExporter()
     provider = TracerProvider()

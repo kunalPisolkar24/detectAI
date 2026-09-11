@@ -7,29 +7,30 @@ from src.adapters.inbound.grpc.health import add_health_check
 from src.adapters.inbound.grpc.interceptors import AuthInterceptor, MonitoringInterceptor
 from src.adapters.inbound.grpc.servicers import AIService
 from src.generated import ai_service_pb2_grpc
-from src.infrastructure.config import settings
+from src.infrastructure.config import settings as _global_settings
 import structlog
 
 logger = structlog.get_logger()
+settings = _global_settings
 
 
 class GRPCServer:
-    def __init__(self, analysis_service):
-        self.port = settings.GRPC_PORT
+    def __init__(self, analysis_service, config=None, telemetry=None):
+        cfg = config if config is not None else settings
+        self.port = cfg.GRPC_PORT
         self.analysis_service = analysis_service
-        # Monitoring outer ensures auth failures are also recorded in RED
         self.server = aio.server(
-            interceptors=[MonitoringInterceptor(), AuthInterceptor()],
+            interceptors=[MonitoringInterceptor(telemetry=telemetry), AuthInterceptor(settings=cfg, telemetry=telemetry)],
             options=[
                 ("grpc.max_concurrent_streams", 100),
                 ("grpc.max_send_message_length", 1024 * 1024 * 4),
                 ("grpc.max_receive_message_length", 512 * 1024),
                 ("grpc.so_reuseport", 0),
             ],
-            maximum_concurrent_rpcs=settings.GRPC_MAX_WORKERS,
+            maximum_concurrent_rpcs=cfg.GRPC_MAX_WORKERS,
         )
 
-        servicer = AIService(analysis_service)
+        servicer = AIService(analysis_service, telemetry=telemetry)
         ai_service_pb2_grpc.add_AIServiceServicer_to_server(servicer, self.server)
         self.health_monitor = add_health_check(self.server, self.analysis_service)
         self.done_event = asyncio.Event()

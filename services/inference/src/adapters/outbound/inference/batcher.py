@@ -6,21 +6,11 @@ from typing import List, Set
 
 import structlog
 
-from src.application.ports.outbound.inference import (
-    IAsyncInferenceEngine,
-    IEngineHealthReporter,
-    ISyncBatchInferenceEngine,
-)
-from src.domain.exceptions import InferenceError, ServiceOverloadedError
+from src.application.ports.outbound.health import IEngineHealthReporter
+from src.application.ports.outbound.inference import IAsyncInferenceEngine, ISyncBatchInferenceEngine
+from src.domain.exceptions import ServiceOverloadedError
 from src.domain.models import BatcherHealthSnapshot, BatcherHealthStatus
-from src.infrastructure.metrics import (
-    BATCH_PROCESSING_TIME,
-    BATCH_QUEUE_SIZE,
-    BATCH_SIZE_DISTRIBUTION,
-    observe_queue_wait,
-    record_batch_error,
-    record_queue_rejected,
-)
+from src.infrastructure.metrics import BATCH_QUEUE_SIZE, observe_queue_wait, record_queue_rejected
 
 logger = structlog.get_logger()
 _SHUTDOWN_SENTINEL = object()
@@ -44,7 +34,8 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
         queue_max_size: int,
         executor: concurrent.futures.Executor,
         max_concurrent_batches: int = 4,
-    ):
+        telemetry=None,
+    ) -> None:
         if batch_size <= 0:
             raise ValueError("batch_size must be >0")
         if timeout <= 0:
@@ -66,6 +57,31 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
         self.active_batches: Set[asyncio.Task] = set()
         self._start_lock = asyncio.Lock()
         self._state_lock = asyncio.Lock()
+        self.telemetry = telemetry
+
+    def _record_queue_rejected(self, reason: str) -> None:
+        if self.telemetry is not None:
+            try:
+                self.telemetry.record_queue_rejected(self.model_name, reason)
+                return
+            except Exception:
+                pass
+        try:
+            record_queue_rejected(self.model_name, reason)
+        except Exception:
+            pass
+
+    def _observe_queue_wait(self, seconds: float) -> None:
+        if self.telemetry is not None:
+            try:
+                self.telemetry.observe_queue_wait(self.model_name, seconds)
+                return
+            except Exception:
+                pass
+        try:
+            observe_queue_wait(self.model_name, seconds)
+        except Exception:
+            pass
 
     async def start(self) -> None:
         async with self._start_lock:
@@ -82,21 +98,14 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
                 )
 
     async def predict(self, text: str) -> float:
-        # State checks under lock to avoid race with shutdown
         async with self._state_lock:
             if self.shutdown_flag:
-                try:
-                    record_queue_rejected(self.model_name, "shutting_down")
-                except Exception:
-                    pass
+                self._record_queue_rejected("shutting_down")
                 raise ServiceOverloadedError(f"{self.model_name} service is shutting down")
             if self.worker_task is None:
                 raise RuntimeError(f"{self.model_name} batcher has not been started")
             if self.worker_task.done():
-                try:
-                    record_queue_rejected(self.model_name, "worker_unavailable")
-                except Exception:
-                    pass
+                self._record_queue_rejected("worker_unavailable")
                 raise ServiceOverloadedError(f"{self.model_name} batch worker is unavailable")
 
             loop = asyncio.get_running_loop()
@@ -106,10 +115,7 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
                 BATCH_QUEUE_SIZE.labels(model=self.model_name).inc()
             except asyncio.QueueFull as exc:
                 future.cancel()
-                try:
-                    record_queue_rejected(self.model_name, "queue_full")
-                except Exception:
-                    pass
+                self._record_queue_rejected("queue_full")
                 raise ServiceOverloadedError(f"{self.model_name} inference queue is full") from exc
 
         try:
@@ -191,7 +197,6 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
                 for t in list(self.active_batches):
                     t.cancel()
 
-        # Drain remaining queue items (those not processed by worker)
         drained = 0
         while True:
             try:
@@ -205,10 +210,7 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
                 BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
             except Exception:
                 pass
-            try:
-                record_queue_rejected(self.model_name, "shutting_down")
-            except Exception:
-                pass
+            self._record_queue_rejected("shutting_down")
             if not item.future.done():
                 item.future.set_exception(ServiceOverloadedError(f"{self.model_name} service is shutting down"))
         if drained:
@@ -230,22 +232,18 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
                     BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
                 except Exception:
                     pass
-                try:
-                    if getattr(item, "enqueue_time", 0):
-                        observe_queue_wait(self.model_name, time.monotonic() - item.enqueue_time)
-                except Exception:
-                    pass
+                if getattr(item, "enqueue_time", 0):
+                    self._observe_queue_wait(time.monotonic() - item.enqueue_time)
 
                 batch: List[PendingPrediction] = [item]
-                start_time = time.monotonic()
+                start = time.monotonic()
                 while len(batch) < self.batch_size:
-                    remaining = self.timeout - (time.monotonic() - start_time)
+                    remaining = self.timeout - (time.monotonic() - start)
                     if remaining <= 0:
                         break
                     try:
                         nxt = await asyncio.wait_for(self.queue.get(), timeout=remaining)
                         if nxt is _SHUTDOWN_SENTINEL:
-                            # Put back for outer loop to handle shutdown
                             try:
                                 self.queue.put_nowait(_SHUTDOWN_SENTINEL)
                             except asyncio.QueueFull:
@@ -255,11 +253,8 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
                             BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
                         except Exception:
                             pass
-                        try:
-                            if getattr(nxt, "enqueue_time", 0):
-                                observe_queue_wait(self.model_name, time.monotonic() - nxt.enqueue_time)
-                        except Exception:
-                            pass
+                        if getattr(nxt, "enqueue_time", 0):
+                            self._observe_queue_wait(time.monotonic() - nxt.enqueue_time)
                         batch.append(nxt)
                     except asyncio.TimeoutError:
                         break
@@ -282,77 +277,6 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
             await self._process_batch(batch)
 
     async def _process_batch(self, batch: List[PendingPrediction]) -> None:
-        # Filter cancelled futures before paying GPU cost
-        active = [p for p in batch if not p.future.done() and not p.future.cancelled()]
-        if not active:
-            # All cancelled, adjust metric for filtered size? Already observed actual batch size below
-            return
+        from src.adapters.outbound.inference.batching.processor import process_batch
 
-        loop = asyncio.get_running_loop()
-        BATCH_SIZE_DISTRIBUTION.labels(model=self.model_name).observe(len(active))
-        texts = [p.text for p in active]
-        futures = [p.future for p in active]
-
-        try:
-            with BATCH_PROCESSING_TIME.labels(model=self.model_name).time():
-                results = await asyncio.wait_for(
-                    loop.run_in_executor(self.executor, self._guarded_predict_batch, texts),
-                    timeout=_PROCESSING_TIMEOUT,
-                )
-
-            if len(results) != len(futures):
-                raise RuntimeError("Batch results length mismatch")
-
-            for fut, res in zip(futures, results):
-                if not fut.done():
-                    try:
-                        val = float(res)
-                    except Exception:
-                        try:
-                            record_batch_error(self.model_name, "invalid_result")
-                        except Exception:
-                            pass
-                        if not fut.done():
-                            fut.set_exception(InferenceError(f"Invalid batch result {res!r}"))
-                        continue
-                    import math
-
-                    if not math.isfinite(val):
-                        try:
-                            record_batch_error(self.model_name, "invalid_result")
-                        except Exception:
-                            pass
-                        if not fut.done():
-                            fut.set_exception(InferenceError(f"Non-finite batch result {val}"))
-                        continue
-                    fut.set_result(val)
-
-        except asyncio.CancelledError:
-            try:
-                record_batch_error(self.model_name, "cancelled")
-            except Exception:
-                pass
-            for fut in futures:
-                if not fut.done():
-                    fut.set_exception(asyncio.CancelledError("Batch cancelled"))
-            raise
-        except BaseException as e:
-            # Classify and record
-            try:
-                if isinstance(e, asyncio.TimeoutError):
-                    record_batch_error(self.model_name, "timeout")
-                elif isinstance(e, RuntimeError) and "length mismatch" in str(e).lower():
-                    record_batch_error(self.model_name, "length_mismatch")
-                elif isinstance(e, InferenceError):
-                    record_batch_error(self.model_name, "engine_error")
-                else:
-                    record_batch_error(self.model_name, "engine_error")
-            except Exception:
-                pass
-            for fut in futures:
-                if not fut.done():
-                    if isinstance(e, asyncio.TimeoutError):
-                        fut.set_exception(InferenceError(f"{self.model_name} batch timeout: {e}"))
-                    else:
-                        fut.set_exception(e)
-            raise
+        await process_batch(batch, self._guarded_predict_batch, self.executor, self.model_name, self.telemetry)
