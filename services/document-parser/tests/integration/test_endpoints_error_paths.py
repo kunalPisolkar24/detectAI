@@ -56,7 +56,7 @@ def fast_timeout(mocker):
 def test_oversized_upload_rejected_with_413(client, small_upload_limit):
     files = {"file": ("big.txt", b"x" * 128, "text/plain")}
 
-    response = client.post("/extract", files=files)
+    response = client.post("/api/v1/extract", files=files)
 
     assert response.status_code == 413
     assert "exceeds limit" in response.json()["detail"]
@@ -66,7 +66,7 @@ def test_decompression_bomb_docx_rejected_with_413(client, tiny_docx_limit, mock
     mocker.patch("app.api.deps.magic.from_buffer", return_value=DOCX_MIME)
     files = {"file": ("bomb.docx", _minimal_docx_bytes(), DOCX_MIME)}
 
-    response = client.post("/extract", files=files)
+    response = client.post("/api/v1/extract", files=files)
 
     assert response.status_code == 413
     assert "Document content size" in response.json()["detail"]
@@ -75,7 +75,7 @@ def test_decompression_bomb_docx_rejected_with_413(client, tiny_docx_limit, mock
 def test_corrupt_pdf_returns_sanitized_422(client):
     files = {"file": ("broken.pdf", b"%PDF-1.4 broken xref garbage", "application/pdf")}
 
-    response = client.post("/extract", files=files)
+    response = client.post("/api/v1/extract", files=files)
 
     assert response.status_code == 422
     assert response.json()["detail"] == "Could not extract text from this document."
@@ -88,7 +88,7 @@ def test_slow_extraction_times_out_with_504(client, fast_timeout, mocker):
     )
     files = {"file": ("slow.pdf", b"%PDF-1.4\n", "application/pdf")}
 
-    response = client.post("/extract", files=files)
+    response = client.post("/api/v1/extract", files=files)
 
     assert response.status_code == 504
     assert "timed out" in response.json()["detail"]

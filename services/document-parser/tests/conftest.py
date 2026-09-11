@@ -22,13 +22,19 @@ def _metric_families():
 
 @pytest.fixture(autouse=True)
 def clean_prometheus_registry():
+    import app.infrastructure.executor.extraction_pool as pool_mod
+
     for metric in _metric_families():
         _clear_metric(metric)
-    metrics_module._pool_busy_tasks = 0
+    metrics_module._pool_busy_tasks = 0  # legacy compat
+    pool_mod._pool_busy_tasks = 0
+    pool_mod._busy = 0
     yield
     for metric in _metric_families():
         _clear_metric(metric)
     metrics_module._pool_busy_tasks = 0
+    pool_mod._pool_busy_tasks = 0
+    pool_mod._busy = 0
 
 
 @pytest.fixture(scope="session")

@@ -4,10 +4,10 @@
 
 | Method | Path | Body | Success | Errors |
 |---|---|---|---|---|
-| `GET` | `/health` | — | `200 {"status":"ok"}` | `503 {"status":"unavailable"}` if `is_process_pool_healthy()==False` (pool `None` or `_shutdown`) |
-| `GET` | `/ready` | — | `200 {"status":"ready"}` | `503` if not healthy or `busy>=max` or `queued>=READINESS_MAX_QUEUE_DEPTH(50)` via `_pool_snapshot` |
-| `GET` | `/metrics` | — | Prometheus text | — |
-| `POST` | `/extract` | `multipart file` | `200 ExtractionResponse{text, truncated}` | `413` too large, `415` unsupported, `422` page/zip bomb, `504` timeout |
+| `GET` | `/api/v1/health` | — | `200 {"status":"ok"}` | `503 {"status":"unavailable"}` if pool not healthy |
+| `GET` | `/api/v1/ready` | — | `200 {"status":"ready"}` | `503` if not healthy or `busy>=max` or `queued>=50` |
+| `GET` | `/api/v1/metrics` | — | Prometheus text | — |
+| `POST` | `/api/v1/extract` | `multipart file` | `200 ExtractionResponse{text, truncated}` | `413` too large, `415` unsupported, `422` page/zip bomb, `504` timeout |
 
 ```mermaid
 classDiagram
@@ -26,10 +26,10 @@ classDiagram
 ## Examples
 
 ```bash
-curl -F file=@sample.pdf http://localhost:8000/extract
-curl -F file=@sample.docx http://localhost:8000/extract
-curl -F file=@sample.txt http://localhost:8000/extract
-curl http://localhost:8000/health
+curl -F file=@sample.pdf http://localhost:8000/api/v1/extract
+curl -F file=@sample.docx http://localhost:8000/api/v1/extract
+curl -F file=@sample.txt http://localhost:8000/api/v1/extract
+curl http://localhost:8000/api/v1/health
 ```
 
 ## Status mapping

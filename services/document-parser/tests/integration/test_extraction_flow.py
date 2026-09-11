@@ -13,7 +13,7 @@ def test_full_extraction_txt(client, fixtures_dir):
     file_path = os.path.join(fixtures_dir, "sample.txt")
     with open(file_path, "rb") as f:
         files = {"file": ("sample.txt", f, "text/plain")}
-        response = client.post("/extract", files=files)
+        response = client.post("/api/v1/extract", files=files)
     
     assert response.status_code == 200
     data = response.json()
@@ -25,7 +25,7 @@ def test_full_extraction_pdf(client, fixtures_dir):
     file_path = os.path.join(fixtures_dir, "sample.pdf")
     with open(file_path, "rb") as f:
         files = {"file": ("sample.pdf", f, "application/pdf")}
-        response = client.post("/extract", files=files)
+        response = client.post("/api/v1/extract", files=files)
     
     assert response.status_code == 200
     data = response.json()
@@ -37,7 +37,7 @@ def test_full_extraction_docx(client, fixtures_dir):
     file_path = os.path.join(fixtures_dir, "sample.docx")
     with open(file_path, "rb") as f:
         files = {"file": ("sample.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
-        response = client.post("/extract", files=files)
+        response = client.post("/api/v1/extract", files=files)
     
     assert response.status_code == 200
     data = response.json()
@@ -48,7 +48,7 @@ def test_full_extraction_docx(client, fixtures_dir):
 def test_extraction_unsupported_type_rejected(client):
     # GIF header is detected as image/gif, which is not an allowed type
     files = {"file": ("document.gif", b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00!\xf9\x04\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;", "image/gif")}
-    response = client.post("/extract", files=files)
+    response = client.post("/api/v1/extract", files=files)
 
     assert response.status_code == 415
     assert "Unsupported media type" in response.json()["detail"]
@@ -70,7 +70,7 @@ def test_extract_strips_pdf_header_footer_banners(client, mocker):
         doc.save(buffer)
 
     files = {"file": ("banner.pdf", buffer.getvalue(), "application/pdf")}
-    response = client.post("/extract", files=files)
+    response = client.post("/api/v1/extract", files=files)
 
     assert response.status_code == 200
     text = response.json()["text"]
@@ -115,7 +115,7 @@ def test_extract_excludes_docx_footnote_content(client, mocker):
         archive.writestr("word/footnotes.xml", footnotes_xml)
 
     files = {"file": ("with-footnotes.docx", buffer.getvalue(), DOCX_MIME)}
-    response = client.post("/extract", files=files)
+    response = client.post("/api/v1/extract", files=files)
 
     assert response.status_code == 200
     text = response.json()["text"]

@@ -1,11 +1,4 @@
-from pydantic import BaseModel
+from app.api.v1.schemas.extraction import ExtractionResponse
+from app.api.v1.schemas.health import HealthCheck
 
-class ExtractionResponse(BaseModel):
-    filename: str
-    content_type: str
-    text_length: int
-    text: str
-    truncated: bool = False
-
-class HealthCheck(BaseModel):
-    status: str
+__all__ = ["ExtractionResponse", "HealthCheck"]

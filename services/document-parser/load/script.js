@@ -69,7 +69,7 @@ const docxFile = open('./fixtures/sample.docx', 'b');
 const BASE_URL = __ENV.API_URL || 'http://document-parser:8000';
 
 export function health() {
-  const res = http.get(`${BASE_URL}/health`);
+  const res = http.get(`${BASE_URL}/api/v1/health`);
   const success = check(res, {
     'status is 200': (r) => r.status === 200,
     'status is ok': (r) => r.json('status') === 'ok',
@@ -95,7 +95,7 @@ export function extract() {
     content_type: fileToUpload.type,
   });
 
-  const res = http.post(`${BASE_URL}/extract`, fd.body(), {
+  const res = http.post(`${BASE_URL}/api/v1/extract`, fd.body(), {
     headers: { 'Content-Type': `multipart/form-data; boundary=${fd.boundary}` },
   });
 

@@ -4,7 +4,7 @@ Stateless Python service that extracts clean text from PDF, DOCX and TXT via Thr
 
 ## Overview
 
-Stateless service handling `POST /extract` (multipart `file` + `python-magic` sniff) with `10 MiB` limit, `30s` timeout, `1M` char cap and `1000` page / `100 MB` uncompressed guards, via `ThreadPoolExecutor` with pool-aware readiness.
+Stateless service handling `POST /api/v1/extract` (multipart `file` + `python-magic` sniff) with `10 MiB` limit, `30s` timeout, `1M` char cap and `1000` page / `100 MB` uncompressed guards, via `ThreadPoolExecutor` with pool-aware readiness.
 
 ## Packages
 
@@ -58,17 +58,17 @@ See `docs/08-configuration.md` for full reference.
 ## API
 
 ```text
-GET  /health          -> 200 {"status":"ok"} | 503 {"status":"unavailable"}
-GET  /ready           -> 200 {"status":"ready"} | 503 {"status":"not_ready"}
-GET  /metrics         -> Prometheus
-POST /extract         (multipart file) -> 200 ExtractionResponse | 413 415 422 504
+GET  /api/v1/health          -> 200 {"status":"ok"} | 503 {"status":"unavailable"}
+GET  /api/v1/ready           -> 200 {"status":"ready"} | 503 {"status":"not_ready"}
+GET  /api/v1/metrics         -> Prometheus
+POST /api/v1/extract         (multipart file) -> 200 ExtractionResponse | 413 415 422 504
 ```
 
 See `docs/09-api.md` for request flow and error codes.
 
 ## Observability
 
-Logs are JSON to stdout. Tracing is OTel if an OTLP endpoint is set. Metrics at GET /metrics for Prometheus.
+Logs are JSON to stdout. Tracing is OTel if an OTLP endpoint is set. Metrics at GET /api/v1/metrics for Prometheus.
 
 Metrics configured:
 
