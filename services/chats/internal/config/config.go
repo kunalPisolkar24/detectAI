@@ -23,7 +23,8 @@ type Config struct {
 	MongoMaxPoolSize     uint64        `envconfig:"MONGO_MAX_POOL_SIZE" default:"0"`
 	MongoMinPoolSize     uint64        `envconfig:"MONGO_MIN_POOL_SIZE" default:"0"`
 	MongoServerTimeout   time.Duration `envconfig:"MONGO_SERVER_SELECTION_TIMEOUT" default:"0s"`
-	RedisAddr            string        `envconfig:"CHAT_REDIS_ADDR" required:"true"`
+	RedisAddr            string        `envconfig:"CHAT_REDIS_ADDR"`
+	RedisURL             string        `envconfig:"REDIS_URL"`
 	RedisPassword        string        `envconfig:"REDIS_PASSWORD"`
 	RedisTLSEnabled      bool          `envconfig:"REDIS_TLS_ENABLED" default:"false"`
 	RedisTLSCAFile       string        `envconfig:"REDIS_TLS_CA_FILE" default:""`
@@ -45,13 +46,33 @@ func Load() (*Config, error) {
 	}
 
 	if strings.TrimSpace(cfg.RedisAddr) == "" {
-		return nil, fmt.Errorf("CHAT_REDIS_ADDR is required (host:port, e.g. redis-chat:6379 or ElastiCache primary)")
+		cfg.RedisAddr = strings.TrimSpace(cfg.RedisURL)
+	}
+	cfg.RedisAddr = strings.TrimSpace(cfg.RedisAddr)
+	if strings.HasPrefix(strings.ToLower(cfg.RedisAddr), "rediss://") {
+		cfg.RedisAddr = cfg.RedisAddr[len("rediss://"):]
+		cfg.RedisTLSEnabled = true
+	} else if strings.HasPrefix(strings.ToLower(cfg.RedisAddr), "redis://") {
+		cfg.RedisAddr = cfg.RedisAddr[len("redis://"):]
+	}
+	if at := strings.LastIndex(cfg.RedisAddr, "@"); at >= 0 {
+		creds := cfg.RedisAddr[:at]
+		cfg.RedisAddr = cfg.RedisAddr[at+1:]
+		if cfg.RedisPassword == "" {
+			if i := strings.LastIndex(creds, ":"); i >= 0 {
+				cfg.RedisPassword = creds[i+1:]
+			} else {
+				cfg.RedisPassword = creds
+			}
+		}
+	}
+	if strings.TrimSpace(cfg.RedisAddr) == "" {
+		return nil, fmt.Errorf("CHAT_REDIS_ADDR or REDIS_URL is required (host:port)")
 	}
 	if !strings.Contains(cfg.RedisAddr, ":") {
 		return nil, fmt.Errorf("CHAT_REDIS_ADDR must be host:port, got %q", cfg.RedisAddr)
 	}
 
-	// Normalize and validate
 	cfg.ServiceRole = strings.ToLower(strings.TrimSpace(cfg.ServiceRole))
 	if cfg.ServiceRole != "api" && cfg.ServiceRole != "worker" {
 		return nil, fmt.Errorf("SERVICE_ROLE must be 'api' or 'worker', got %q", cfg.ServiceRole)
@@ -69,7 +90,6 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("MONGO_TLS_CA_FILE not readable %q: %w", cfg.MongoTLSCAFile, err)
 		}
 	}
-	// Sensible defaults for pool/timeouts: explicit env wins, otherwise mode-aware defaults.
 	if cfg.MongoMaxPoolSize == 0 {
 		if cfg.MongoMode == "sharded" {
 			cfg.MongoMaxPoolSize = 20
@@ -129,7 +149,6 @@ func Load() (*Config, error) {
 		cfg.CacheTTL = 24 * time.Hour
 	}
 
-	// Validate ports look like ":9090" or "0.0.0.0:9090"
 	if cfg.GRPCPort != "" && !isValidPort(cfg.GRPCPort) {
 		return nil, fmt.Errorf("GRPC_PORT has invalid format %q", cfg.GRPCPort)
 	}
@@ -144,11 +163,9 @@ func isValidPort(p string) bool {
 	if p == "" {
 		return false
 	}
-	// Allow ":50051"
 	if strings.HasPrefix(p, ":") && len(p) > 1 {
 		return true
 	}
-	// Allow "host:port"
 	if strings.Contains(p, ":") {
 		return true
 	}

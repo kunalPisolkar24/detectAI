@@ -5,6 +5,7 @@ package testutil
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -307,7 +308,7 @@ func NewRedisPrimaryReplicaFixture(t *testing.T) *RedisPrimaryReplicaFixture {
 		rCtx, rCancel := context.WithTimeout(ctx, 2*time.Second)
 		info, iErr := replicaClient.Info(rCtx, "replication").Result()
 		rCancel()
-		if iErr == nil && (contains(info, "master_link_status:up") || contains(info, "role:slave") || contains(info, "role:replica")) {
+		if iErr == nil && (strings.Contains(info, "master_link_status:up") || strings.Contains(info, "role:slave") || strings.Contains(info, "role:replica")) {
 			break
 		}
 		if i >= 29 {
@@ -338,28 +339,7 @@ func NewRedisPrimaryReplicaFixture(t *testing.T) *RedisPrimaryReplicaFixture {
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && indexOf(s, substr) >= 0
-}
-
-func indexOf(s, substr string) int {
-	n := len(substr)
-	if n == 0 {
-		return 0
-	}
-	for i := 0; i <= len(s)-n; i++ {
-		if s[i:i+n] == substr {
-			return i
-		}
-	}
-	return -1
-}
-
 // HAConfig helpers — test-only *config.Config with HA-tuned defaults (never wired into compose).
-// Keep prod code clean: these are test constructors only.
-
-// HA-mongo defaults mirror config.go sharded branch: larger selection timeout, smaller pools.
-// See config.go:72-93.
 func haMongoDefaults() (serverTimeout time.Duration, maxPool, minPool uint64) {
 	return 15 * time.Second, 20, 5
 }

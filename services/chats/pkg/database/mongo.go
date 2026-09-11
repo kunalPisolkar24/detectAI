@@ -14,7 +14,6 @@ import (
 )
 
 // MongoConnectConfig mirrors the subset of internal/config.Config needed for Mongo.
-// Using a struct avoids importing internal/config (cycle) and keeps this package reusable.
 type MongoConnectConfig struct {
 	URI            string
 	MaxPoolSize    uint64
@@ -47,9 +46,6 @@ func ConnectMongo(ctx context.Context, cfg MongoConnectConfig) (*mongo.Client, e
 		SetServerSelectionTimeout(cfg.ServerTimeout).
 		SetRetryWrites(false)
 
-	// DocumentDB and sharded (mongos) require retryWrites=false.
-	// Explicitly set it even if URI already contains it — safe on standalone.
-
 	if cfg.TLSEnabled {
 		tlsCfg, err := buildTLSConfig(cfg.TLSCAFile)
 		if err != nil {
@@ -71,23 +67,14 @@ func ConnectMongo(ctx context.Context, cfg MongoConnectConfig) (*mongo.Client, e
 	return client, nil
 }
 
-// ConnectMongoSimple retains the old signature for tests and callers that don't use config.
-// It defaults to standalone-safe values: retryWrites=false, no TLS, pool 100/10, timeout 5s.
-func ConnectMongoSimple(ctx context.Context, uri string) (*mongo.Client, error) {
-	return ConnectMongo(ctx, MongoConnectConfig{URI: uri})
-}
-
 func buildTLSConfig(caFile string) (*tls.Config, error) {
 	if caFile == "" {
-		// No CA file: still enable TLS but skip verify (Floci local without cert).
-		// For real AWS, always provide the combined CA bundle.
 		return &tls.Config{InsecureSkipVerify: true}, nil //nolint:gosec
 	}
 	pemData, err := os.ReadFile(caFile)
 	if err != nil {
 		return nil, err
 	}
-	// Go driver v1.14.0 only reads first cert from sslCAFile; we append all.
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(pemData) {
 		return nil, fmt.Errorf("no valid certs in %s", caFile)

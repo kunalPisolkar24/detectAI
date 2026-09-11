@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	redisRepo "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/redis"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/ports"
 	"go.uber.org/zap"
@@ -63,7 +62,6 @@ func (s *ChatService) fetchSession(ctx context.Context, chatID string) (*domain.
 	return session, nil
 }
 
-// fetchAuthorizedSession retrieves a chat and verifies ownership in one place.
 func (s *ChatService) fetchAuthorizedSession(ctx context.Context, chatID, userID string) (*domain.ChatSession, error) {
 	session, err := s.fetchSession(ctx, chatID)
 	if err != nil {
@@ -267,7 +265,7 @@ func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) e
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return err
 		}
-		if redisRepo.IsRedisConnError(err) {
+		if ports.IsTransient(err) {
 			s.logger.Warn("stream publish failed (redis unavailable), falling back to sync Mongo write", zap.Error(err), zap.String("chat_id", msg.ChatID))
 			s.metrics.IncStreamErrors("publish")
 			if bErr := s.persistence.BulkUpsertMessages(ctx, []*domain.Message{msg}); bErr != nil {

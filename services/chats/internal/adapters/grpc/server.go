@@ -51,8 +51,6 @@ func (s *Server) Run(ctx context.Context) error {
 	s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 	s.healthServer.SetServingStatus("chat.ChatService", healthpb.HealthCheckResponse_SERVING)
 
-	// Reflection is useful for debugging but should not be enabled in production.
-	// We enable only when not production to reduce attack surface.
 	if s.cfg.AppEnv != "production" {
 		reflection.Register(grpcServer)
 	}

@@ -11,7 +11,6 @@ import (
 )
 
 const (
-	// Lua script atomically de-duplicates by message ID, inserts, trims and expires.
 	saveToCacheScript = `
 local key = KEYS[1]
 local newData = ARGV[1]

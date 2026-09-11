@@ -55,20 +55,15 @@ func EnsureIndexes(ctx context.Context, db *mongo.Database) error {
 }
 
 // EnsureSharding enables sharding for the messages collection when MongoMode=sharded.
-// In standalone mode it is a no-op. Queries are mode-agnostic: all messages operations
-// already filter on chat_id (the shard key), and chats remains intentionally unsharded
-// (small metadata per chat, see decision in docs/sharding.md).
 func EnsureSharding(ctx context.Context, client *mongo.Client, dbName, mongoMode string) error {
 	if strings.ToLower(strings.TrimSpace(mongoMode)) != "sharded" {
 		return nil
 	}
-	// Bounded so boot does not hang forever against mongos/docdb elastic.
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	adminDB := client.Database("admin")
 
-	// Enable sharding on DB (idempotent; code 23 AlreadyInitialized or 13 Unauthorized on standalone mongo is ok)
 	enableRes := adminDB.RunCommand(ctx, bson.D{
 		{Key: "enableSharding", Value: dbName},
 	})
@@ -76,13 +71,11 @@ func EnsureSharding(ctx context.Context, client *mongo.Client, dbName, mongoMode
 		if !isShardingAlreadyDone(err) && !isNotShardedCapable(err) {
 			return err
 		}
-		// Standalone mongod returns CommandNotFound / illegal operation -> treat as soft skip.
 		if isNotShardedCapable(err) {
 			return nil
 		}
 	}
 
-	// Shard only messages on chat_id hashed. Leave chats unsharded.
 	shardRes := adminDB.RunCommand(ctx, bson.D{
 		{Key: "shardCollection", Value: dbName + ".messages"},
 		{Key: "key", Value: bson.D{{Key: "chat_id", Value: "hashed"}}},

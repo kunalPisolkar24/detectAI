@@ -51,7 +51,6 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 				msgIDs[stream.Stream] = append(msgIDs[stream.Stream], xMsg.ID)
 				continue
 			}
-			// Basic sanity: skip messages without ID but still ack to avoid blocking
 			if msg.ID == "" || msg.ChatID == "" {
 				p.logger.Warn("Message missing required fields, acking", zap.String("msg_id", xMsg.ID), zap.String("chat_id", msg.ChatID))
 				p.metrics.IncStreamErrors("invalid_message")
@@ -68,7 +67,6 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 		if len(msgIDs) == 0 {
 			return
 		}
-		// All messages were poison/malformed; ack them so they don't loop forever.
 		pipe := client.Pipeline()
 		for stream, ids := range msgIDs {
 			pipe.XAck(ctx, stream, group, ids...)
@@ -81,7 +79,6 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 	}
 
 	if err := p.repo.BulkUpsertMessages(ctx, messages); err != nil {
-		// Bounded retries for transient DB blips before DLQing.
 		retried := false
 		for attempt := 0; attempt < 3; attempt++ {
 			backoff := time.Duration(200*(1<<attempt)) * time.Millisecond

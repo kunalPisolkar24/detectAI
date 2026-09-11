@@ -47,7 +47,6 @@ func main() {
 		_ = mongoClient.Disconnect(ctx)
 	}()
 
-	// Redis is optional: API degrades to sync Mongo, worker retries until available.
 	redisClient, redisDegraded := connectRedisDegraded(ctx, cfg)
 
 	mongoDB := mongoClient.Database(cfg.MongoDatabase)
@@ -55,8 +54,6 @@ func main() {
 		logger.Log.Error("Failed to ensure mongo indexes", zap.Error(err))
 	}
 	if err := mongoRepo.EnsureSharding(ctx, mongoClient, cfg.MongoDatabase, cfg.MongoMode); err != nil {
-		// Sharding is best-effort at boot: standalone mongod will return
-		// CommandNotFound, which EnsureSharding already swallows. Log other errors.
 		logger.Log.Warn("EnsureSharding returned error (standalone is expected to no-op)", zap.Error(err), zap.String("mode", cfg.MongoMode))
 	} else if cfg.MongoMode == "sharded" {
 		logger.Log.Info("Sharding ensured", zap.String("db", cfg.MongoDatabase), zap.String("collection", "messages"), zap.String("shard_key", "chat_id:hashed"))
@@ -74,7 +71,6 @@ func main() {
 		streamRepo = redisRepo.NewStreamRepository(redisClient, cfg.StreamPartitionCount)
 		cacheRepo = redisRepo.NewCacheRepository(redisClient, cfg.CacheTTL)
 	}
-	// Ensure we close redis only when we own a real client
 	if redisClient != nil {
 		defer func() { _ = redisClient.Close() }()
 	}
@@ -232,7 +228,6 @@ func healthLoop(ctx context.Context, mongoClient *mongo.Client, redisClient *red
 				rErr = redisRepo.ErrRedisUnavailable
 			}
 			hCancel()
-			// SERVING iff Mongo healthy; Redis state is via gauge.
 			healthy := mErr == nil
 			server.SetHealth(healthy)
 			if redisClient == nil || rErr != nil {
