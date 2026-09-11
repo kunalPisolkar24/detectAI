@@ -1,19 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import amqp from "amqplib"
 import { env } from "@/lib/config/env"
 import { metrics } from "@/lib/infrastructure/metrics"
+import { isPreviewMode } from "@/lib/config/preview"
 
-const isPreviewMode = () => process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
-
-/**
- * Analytics queue contract (must match worker consumer).
- *
- * Queue: `analytics.usage`, type `quorum`, durable, DLX `analytics.usage_dlx`.
- * Payload v1: `{ event_type: "usage_event", eventId: uuid, userId, count: int>0, timestamp: ISO }`.
- * `eventId` is the idempotency key — callers must generate it once per logical
- * usage event and reuse it across retries. `event_type` routes worker metrics
- * (without it the worker labels the job `other`).
- */
+// Queue: analytics.usage (quorum, durable, DLX analytics.usage_dlx). Payload: {event_type, eventId, userId, count, timestamp}
 export const ANALYTICS_QUEUE = "analytics.usage"
 export const ANALYTICS_QUEUE_TYPE = "quorum" as const
 export const ANALYTICS_EVENT_TYPE = "usage_event" as const
@@ -151,18 +141,7 @@ class AnalyticsPublisher {
     this.connecting = null
   }
 
-  /**
-   * Publish a usage event. Returns the `eventId` used (generated when omitted,
-   * including in preview mode where nothing is sent).
-   *
-   * @throws {AnalyticsPublishError} when the broker is unreachable or the
-   *   queue rejects the message. Callers must NOT swallow this silently —
-   *   `trackUsage` uses it to decide whether the DB fallback is safe.
-   *
-   * Test-only overrides (`opts.url` / `opts.queue`) point a single call at a
-   * per-run broker/queue (HA suites) without mutating global env or singleton
-   * state beyond that call's channel.
-   */
+  // Returns eventId. Throws AnalyticsPublishError; caller decides DB fallback.
   async publish(userId: string, count: number, eventId?: string, opts?: { url?: string; queue?: string }): Promise<string> {
     if (!userId || typeof userId !== "string" || !userId.trim()) {
       throw new AnalyticsPublishError("publish requires a non-empty userId")

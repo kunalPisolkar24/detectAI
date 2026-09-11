@@ -6,7 +6,8 @@ import { authOptions } from "@/lib/config/auth-options"
 import { prisma } from "@/lib/infrastructure/prisma"
 import { SubscriptionStatus } from "@/lib/shared/generated/prisma/client"
 import { env } from "@/lib/config/env"
-import { userService } from "@/features/auth/services/user-service"
+import { userService } from "@/lib/application/user-service"
+import { isPreviewMode } from "@/lib/config/preview"
 
 type ActionState = {
   success?: boolean
@@ -14,7 +15,7 @@ type ActionState = {
 }
 
 export async function cancelSubscriptionAction(): Promise<ActionState> {
-  if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+  if (isPreviewMode()) {
     return { success: true }
   }
   try {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { updateProfileAction } from '../../../actions/update-profile'
 import { getServerSession } from 'next-auth'
-import { userService } from '@/features/auth/services/user-service'
+import { userService } from '@/lib/application/user-service'
 import { revalidatePath } from 'next/cache'
 
 vi.mock('next-auth', () => ({
@@ -12,6 +12,11 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
+vi.mock('@/lib/application/user-service', () => ({
+  userService: {
+    updateUser: vi.fn(),
+  },
+}))
 vi.mock('@/features/auth/services/user-service', () => ({
   userService: {
     updateUser: vi.fn(),

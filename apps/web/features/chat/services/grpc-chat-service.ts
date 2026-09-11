@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import "server-only"
 import type { AssistantAnalysisMessageInput, IChatService } from "./chat-service.interface"
 import { AnalysisResult, ChatSession, ChatHistoryItem, Message, ModelType } from "../types"

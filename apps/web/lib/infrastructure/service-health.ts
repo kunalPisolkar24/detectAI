@@ -1,34 +1,12 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as grpc from "@grpc/grpc-js"
-import * as protoLoader from "@grpc/proto-loader"
-import path from "path"
+import { loadProto, grpcKeepalive } from "./grpc-loader"
 
 type HealthResult = { ok: boolean; latencyMs?: number; error?: string }
 
-let healthPackageDef: protoLoader.PackageDefinition | null = null
-
-function getHealthPackageDef(): protoLoader.PackageDefinition {
-  if (!healthPackageDef) {
-    const protoPath = path.join(process.cwd(), "lib/shared/proto/grpc_health.proto")
-    healthPackageDef = protoLoader.loadSync(protoPath, {
-      keepCase: true,
-      longs: String,
-      enums: String,
-      defaults: true,
-      oneofs: true,
-    })
-  }
-  return healthPackageDef
-}
-
 function getHealthClient(target: string): any {
-  const def = getHealthPackageDef()
-  const descriptor = grpc.loadPackageDefinition(def) as any
+  const descriptor = loadProto("lib/shared/proto/grpc_health.proto")
   const Health = descriptor.grpc.health.v1.Health
-  return new Health(target, grpc.credentials.createInsecure(), {
-    "grpc.keepalive_time_ms": 60000,
-    "grpc.keepalive_timeout_ms": 5000,
-  })
+  return new Health(target, grpc.credentials.createInsecure(), grpcKeepalive)
 }
 
 /**

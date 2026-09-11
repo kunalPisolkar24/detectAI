@@ -1,4 +1,4 @@
-import type { AnalysisResult, ModelType, AnalysisHighlightSpan } from "@/features/chat/types"
+import type { AnalysisResult, ModelType, AnalysisHighlightSpan } from "@/lib/domain/chat"
 
 function hashString(str: string): number {
   let hash = 0

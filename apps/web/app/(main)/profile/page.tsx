@@ -2,11 +2,12 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/config/auth-options"
-import { userService } from "@/features/auth/services/user-service"
-import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
+import { userService } from "@/lib/application/user-service"
+import { rateLimitService } from "@/lib/application/rate-limit"
 import { prisma } from "@/lib/infrastructure/prisma"
 import { SubscriptionStatus } from "@/lib/shared/generated/prisma/client"
 import { ProfileView } from "@/features/profile/components/profile-view"
+import { isPreviewMode } from "@/lib/config/preview"
 
 export const metadata: Metadata = {
   title: "Profile Settings | Detect AI",
@@ -20,7 +21,7 @@ export default async function ProfilePage() {
     redirect("/login?callbackUrl=/profile")
   }
 
-  if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+  if (isPreviewMode()) {
     // Mock user data from session + local premium flag is handled client-side;
     // server renders a neutral preview snapshot (premium false). Client then upgrades via localStorage.
     const isPreviewPremium = false // client will override via useEffect

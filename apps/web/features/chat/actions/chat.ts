@@ -4,15 +4,12 @@ import { chatService } from "@/features/chat/services"
 import { ChatSession, ChatHistoryItem } from "@/features/chat/types"
 import { authOptions } from "@/lib/config/auth-options"
 import { getServerSession } from "next-auth"
-import { getPreviewUserId } from "@/lib/config/preview"
+import { getPreviewUserId, isPreviewMode } from "@/lib/config/preview"
 import type { ChatServiceScope } from "@/features/chat/services/chat-service.interface"
 
 type ActionResponse<T> =
   | { success: true; data: T }
   | { success: false; error: string; isRateLimit?: boolean }
-
-const isPreviewServer = () =>
-  process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
 
 /**
  * Resolve the preview storage scope from the session. Returns undefined
@@ -20,7 +17,7 @@ const isPreviewServer = () =>
  * authoritative). Inside preview, a missing session fails closed downstream.
  */
 async function previewScope(): Promise<ChatServiceScope | undefined> {
-  if (!isPreviewServer()) return undefined
+  if (!isPreviewMode()) return undefined
   const session = await getServerSession(authOptions)
   const userId = getPreviewUserId(session?.user)
   return userId ? { userId } : undefined

@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { registerAction } from '../../../actions/register'
-import { userService } from '@/features/auth/services/user-service'
+import { userService } from '@/lib/application/user-service'
 import { validateTurnstileToken } from '@/features/auth/services/turnstile.server'
 import bcrypt from 'bcryptjs'
 
+vi.mock('@/lib/application/user-service', () => ({
+  userService: {
+    getUserByEmail: vi.fn(),
+    createUser: vi.fn(),
+  },
+}))
 vi.mock('@/features/auth/services/user-service', () => ({
   userService: {
     getUserByEmail: vi.fn(),

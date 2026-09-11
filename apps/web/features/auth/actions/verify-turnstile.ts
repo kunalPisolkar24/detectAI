@@ -1,6 +1,7 @@
 "use server"
 
 import { validateTurnstileToken } from "@/features/auth/services/turnstile.server"
+import { isPreviewMode } from "@/lib/config/preview"
 
 type ActionState = {
   success: boolean
@@ -12,7 +13,7 @@ export async function verifyTurnstileAction(token: string): Promise<ActionState>
     return { success: false, error: "Token is missing" }
   }
 
-  if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+  if (isPreviewMode()) {
     return { success: true }
   }
 

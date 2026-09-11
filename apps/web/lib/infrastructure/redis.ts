@@ -1,7 +1,6 @@
 import Redis, { RedisOptions } from "ioredis"
 import { env } from "@/lib/config/env"
-
-const isPreviewMode = () => process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+import { isPreviewMode } from "@/lib/config/preview"
 
 const createPreviewRedis = () =>
   new Proxy(

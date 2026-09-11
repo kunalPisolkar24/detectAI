@@ -1,8 +1,8 @@
-import { IChatService } from "./chat-service.interface"
+import { IChatService } from "@/lib/domain/chat-service"
 import { chatService as defaultChatService } from "./index"
 import { inferenceService as defaultInferenceService, InferenceStreamAbortedError } from "./inference-service"
-import { AnalysisResult, Message, ModelType } from "../types"
-import { rateLimitService as defaultRateLimitService } from "@/features/rate-limit/services/rate-limit-service"
+import { AnalysisResult, Message, ModelType } from "@/lib/domain/chat"
+import { rateLimitService as defaultRateLimitService } from "@/lib/application/rate-limit"
 import { createNDJSONStream } from "@/lib/utils/stream-utils"
 
 export interface AnalysisParams {

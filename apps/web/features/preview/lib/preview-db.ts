@@ -1,5 +1,5 @@
 import Dexie, { Table } from "dexie"
-import type { ChatHistoryItem, ChatSession, Message, AnalysisResult, ModelType } from "@/features/chat/types"
+import type { ChatHistoryItem, ChatSession, Message, AnalysisResult, ModelType } from "@/lib/domain/chat"
 import { orderMessagesForDisplay } from "@/features/chat/utils/order-messages-for-display"
 import { PREVIEW_LEGACY_USER_ID } from "@/lib/config/preview"
 

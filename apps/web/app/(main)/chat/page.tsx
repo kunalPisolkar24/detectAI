@@ -2,7 +2,8 @@ import { ChatView } from "@/features/chat/components/chat-view"
 import type { Metadata } from "next"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/config/auth-options"
-import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
+import { rateLimitService } from "@/lib/application/rate-limit"
+import { isPreviewMode } from "@/lib/config/preview"
 
 export const metadata: Metadata = {
   title: "Chat | Detect AI",
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 }
 
 export default async function ChatPage() {
-  if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+  if (isPreviewMode()) {
     return (
       <main className="h-full w-full overflow-hidden">
         <ChatView initialRateLimited={false} />

@@ -9,19 +9,7 @@ export const PREVIEW_USER_PREFIX = "preview-"
 /** Owner id backfilled onto pre-scoping rows. Reads never match it: archived. */
 export const PREVIEW_LEGACY_USER_ID = "legacy"
 
-/**
- * Server-side preview check (runtime-safe).
- *
- * Canonical switch is `PREVIEW=true` (see lib/config/env.ts): one flick that
- * makes every other variable resolve to canned preview defaults. The two
- * legacy flags are derived from it at the boundaries (Dockerfile, compose,
- * makefile, package.json) and remain supported directly.
- *
- * NEXT_PUBLIC_ vars are inlined at build time by Next.js, so a regular
- * `next build` followed by `next start` with the flag set at runtime would
- * still evaluate to false. PREVIEW_MODE is NOT inlined, so it works at
- * request time even when the build was not a preview build.
- */
+// Server preview check. PREVIEW=true is canonical; legacy flags derived at boundaries.
 export function isPreviewMode(): boolean {
   return (
     process.env.PREVIEW === "true" ||

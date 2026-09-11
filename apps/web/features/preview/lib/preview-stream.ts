@@ -2,6 +2,7 @@ import { createNDJSONStream } from "@/lib/utils/stream-utils"
 import { generateMockAnalysis, mockStreamDocument } from "@/features/preview/lib/mock-inference"
 import type { AnalysisParams } from "@/features/chat/services/analysis-orchestrator"
 import { chatService } from "@/features/chat/services"
+import type { AnalysisResult } from "@/lib/domain/chat"
 
 export async function createPreviewStream(params: AnalysisParams, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
   // Retry intent is signalled by sourceMessageId. New analyses may carry

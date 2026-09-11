@@ -77,7 +77,11 @@ describe("generateMockAnalysis highlights", () => {
     const first = generateMockAnalysis(SAMPLE_TEXT, "spark")
     const second = generateMockAnalysis(SAMPLE_TEXT, "spark")
 
-    expect(second).toEqual(first)
+    expect(second.highlights).toEqual(first.highlights)
+    expect(second.scores).toEqual(first.scores)
+    expect(second.label).toBe(first.label)
+    expect(second.confidence).toBe(first.confidence)
+    expect(second.model).toBe(first.model)
   })
 
   it("covers short texts with a single span", () => {

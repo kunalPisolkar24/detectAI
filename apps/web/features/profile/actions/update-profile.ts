@@ -1,18 +1,15 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { z } from "zod"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/config/auth-options"
-import { userService } from "@/features/auth/services/user-service"
+import { userService } from "@/lib/application/user-service"
+import { isPreviewMode } from "@/lib/config/preview"
+import { UpdateProfileSchema } from "@/lib/domain/schemas/profile"
+import type { UpdateProfileInput } from "@/lib/domain/schemas/profile"
 
-const UpdateProfileSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-})
-
-export async function updateProfileAction(values: z.infer<typeof UpdateProfileSchema>) {
-  if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+export async function updateProfileAction(values: UpdateProfileInput) {
+  if (isPreviewMode()) {
     return { success: true }
   }
   const session = await getServerSession(authOptions)

@@ -1,13 +1,4 @@
-/**
- * Graceful shutdown and crash handlers for the Next.js server.
- *
- * Registered via Next.js instrumentation hook (see instrumentation.ts).
- * - SIGTERM/SIGINT: disconnect Prisma pools and quit Redis clients, then exit.
- * - unhandledRejection / uncaughtException: log and keep process alive where
- *   possible (Next.js will still crash on unhandled sync throws).
- *
- * Preview mode is a no-op (all clients are in-memory proxies).
- */
+// Graceful shutdown via instrumentation hook. Preview is no-op.
 export async function registerShutdownHandlers(): Promise<void> {
   if (typeof process === "undefined") return
   // Avoid double-registration in dev HMR.

@@ -4,10 +4,10 @@ import { useState, useTransition } from "react"
 import { useSession } from "next-auth/react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { toast } from "sonner"
 import { format } from "date-fns"
 import { Loader2, Calendar, ShieldCheck } from "lucide-react"
+import { UpdateProfileSchema, type UpdateProfileInput } from "@/lib/domain/schemas/profile"
 
 import { cn } from "@/lib/core/utils"
 import { teko, inter } from "@/lib/core/fonts"
@@ -32,17 +32,14 @@ interface GeneralTabProps {
   }
 }
 
-const formSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-})
+const formSchema = UpdateProfileSchema
 
 export const GeneralTab = ({ user }: GeneralTabProps) => {
   const [isPending, startTransition] = useTransition()
   const { update } = useSession()
   const [isEditing, setIsEditing] = useState(false)
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<UpdateProfileInput>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       firstName: user.firstName || "",
@@ -50,7 +47,7 @@ export const GeneralTab = ({ user }: GeneralTabProps) => {
     },
   })
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
+  const onSubmit = (values: UpdateProfileInput) => {
     startTransition(async () => {
       const result = await updateProfileAction(values)
       if (result.error) {

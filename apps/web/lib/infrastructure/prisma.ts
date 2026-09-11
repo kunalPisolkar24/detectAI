@@ -4,8 +4,7 @@ import { Pool } from 'pg';
 import { env } from '@/lib/config/env';
 import { metrics } from '@/lib/infrastructure/metrics';
 import { logger } from '@/lib/infrastructure/logger';
-
-const isPreviewMode = () => process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
+import { isPreviewMode } from '@/lib/config/preview';
 
 const READ_OPERATIONS = [
   'findUnique',

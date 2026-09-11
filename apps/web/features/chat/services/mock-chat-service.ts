@@ -1,5 +1,5 @@
-import type { IChatService, AssistantAnalysisMessageInput, ChatServiceScope } from "./chat-service.interface"
-import type { AnalysisResult, ChatHistoryItem, ChatSession, Message, ModelType } from "../types"
+import type { IChatService, AssistantAnalysisMessageInput, ChatServiceScope } from "@/lib/domain/chat-service"
+import type { AnalysisResult, ChatHistoryItem, ChatSession, Message, ModelType } from "@/lib/domain/chat"
 import {
   previewCreateChat,
   previewGetChat,

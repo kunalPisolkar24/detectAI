@@ -1,41 +1,19 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
-import { z } from "zod"
 import { authOptions } from "@/lib/config/auth-options"
 import { MAX_LIVE_ANALYSIS_CHARS } from "@/features/chat/constants"
 import { analysisOrchestrator } from "@/features/chat/services/analysis-orchestrator"
-import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
-import { getPreviewUserId } from "@/lib/config/preview"
+import { rateLimitService } from "@/lib/application/rate-limit"
+import { getPreviewUserId, isPreviewMode } from "@/lib/config/preview"
 import { env } from "@/lib/config/env"
+import { ChatAnalyzeRequestSchema } from "@/lib/domain/schemas/chat"
 
 export const runtime = "nodejs"
 
-const requestSchema = z.object({
-  chatId: z.string().min(1),
-  content: z.string().min(1),
-  model: z.enum(["spark", "flare"]),
-  assistantMessageId: z.string().min(1).optional(),
-  assistantCreatedAt: z.string().datetime().optional(),
-  sourceMessageId: z.string().min(1).optional(),
-  userMessageId: z.string().min(1).optional(),
-  userCreatedAt: z.string().datetime().optional(),
-}).superRefine((value, ctx) => {
-  // Retry intent is signalled by sourceMessageId; new analyses may still send
-  // client-generated user/assistant IDs for cache identity reuse.
-  if (!value.sourceMessageId) {
-    return
-  }
-  if (!value.assistantMessageId || !value.assistantCreatedAt) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Retry requests must include assistant message details",
-    })
-  }
-})
+const requestSchema = ChatAnalyzeRequestSchema
 
 export async function POST(request: Request) {
-  const isPreview = process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true"
-  if (isPreview) {
+  if (isPreviewMode()) {
     try {
       const body = await request.json()
       const parsed = requestSchema.safeParse(body)

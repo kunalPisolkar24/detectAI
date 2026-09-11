@@ -5,9 +5,10 @@ import { authOptions } from "@/lib/config/auth-options"
 import { prisma } from "@/lib/infrastructure/prisma"
 import { SubscriptionStatus } from "@/lib/shared/generated/prisma/client"
 import { cacheService } from "@/lib/services/cache-service"
+import { isPreviewMode } from "@/lib/config/preview"
 
 export async function confirmUpgradeAction(): Promise<{ isPremium: boolean }> {
-  if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+  if (isPreviewMode()) {
     return { isPremium: true }
   }
   const session = await getServerSession(authOptions)

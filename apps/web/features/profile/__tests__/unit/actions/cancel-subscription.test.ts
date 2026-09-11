@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { cancelSubscriptionAction } from '../../../actions/cancel-subscription'
 import { getServerSession } from 'next-auth'
 import { prismaMock } from '@/test/prisma-mock'
-import { userService } from '@/features/auth/services/user-service'
+import { userService } from '@/lib/application/user-service'
 import { revalidatePath } from 'next/cache'
 import { SubscriptionStatus } from '@/lib/shared/generated/prisma/client'
 
@@ -14,6 +14,11 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
+vi.mock('@/lib/application/user-service', () => ({
+  userService: {
+    invalidateUserCache: vi.fn(),
+  },
+}))
 vi.mock('@/features/auth/services/user-service', () => ({
   userService: {
     invalidateUserCache: vi.fn(),

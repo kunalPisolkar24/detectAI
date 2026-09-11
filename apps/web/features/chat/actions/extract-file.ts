@@ -1,7 +1,7 @@
 "use server"
 
 import { fileExtractionService } from "../services/file-extraction.service"
-import { DOCUMENT_PARSER_UNAVAILABLE_TOOLTIP } from "@/lib/config/preview"
+import { DOCUMENT_PARSER_UNAVAILABLE_TOOLTIP, isPreviewMode } from "@/lib/config/preview"
 
 type ExtractFileState = {
   success?: boolean
@@ -10,7 +10,7 @@ type ExtractFileState = {
 }
 
 export async function extractTextFromFile(formData: FormData): Promise<ExtractFileState> {
-  if (process.env.PREVIEW === "true" || process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+  if (isPreviewMode()) {
     return { error: "Document parsing is not available in preview mode" }
   }
   try {

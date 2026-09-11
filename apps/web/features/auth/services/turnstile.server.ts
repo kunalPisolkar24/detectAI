@@ -1,5 +1,6 @@
 import "server-only"
 import { env } from "@/lib/config/env"
+import { isPreviewMode } from "@/lib/config/preview"
 
 interface TurnstileResponse {
   success: boolean
@@ -9,8 +10,7 @@ interface TurnstileResponse {
 }
 
 export async function validateTurnstileToken(token: string): Promise<boolean> {
-  // Preview: accept any non-empty token without Cloudflare round-trip (covers test keys and offline)
-  if (process.env.PREVIEW_MODE === "true" || process.env.NEXT_PUBLIC_PREVIEW_MODE === "true") {
+  if (isPreviewMode()) {
     return !!token
   }
   const secretKey = env.TURNSTILE_SECRET_KEY

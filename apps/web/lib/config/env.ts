@@ -1,17 +1,7 @@
 import { createEnv } from "@t3-oss/env-nextjs"
 import { z } from "zod"
 
-/**
- * Canonical preview switch. `PREVIEW=true` is the only flick preview mode
- * needs: validation is skipped and every variable below resolves to a canned
- * default (passed-in values are ignored), so no real credentials are
- * required. The backends behind these values are never dialed in preview —
- * all integrations are mocked — they only satisfy validation and types.
- *
- * Boundaries (Dockerfile, compose, makefile, package.json) derive the legacy
- * `PREVIEW_MODE` / `NEXT_PUBLIC_PREVIEW_MODE` flags from this switch, so the
- * direct `process.env.*` checks across the codebase keep working untouched.
- */
+// PREVIEW=true provides canned defaults and skips validation; legacy flags derived at boundaries.
 const isPreview = process.env.PREVIEW === "true"
 
 const previewDefaults = {

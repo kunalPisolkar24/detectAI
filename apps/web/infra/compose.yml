@@ -1,18 +1,4 @@
-# Unified web stack (start-only, no dev/HMR mode).
-#
-# Preview needs a single flick: PREVIEW=true (see `make preview`). The legacy
-# PREVIEW_MODE / NEXT_PUBLIC_PREVIEW_MODE flags are derived from PREVIEW at
-# the boundaries; the app treats any of them as preview. Preview runs skip
-# backends via `up --no-deps frontend`, so no separate compose file is needed.
-#
-# Datastores (postgres-users + redis-users + rabbitmq) come from the shared
-# atoms below and always start with the web stack (same project, shared
-# default network). Either fill .env with real datastore values, or point the
-# URLs at an external instance — the local atoms still start but stay unused
-# in that case. Preview runs skip everything via `up --no-deps frontend`.
-# RabbitMQ here is the local standalone atom (single instance, quorum queue);
-# prod overrides RABBITMQ_URL from Terraform secret detectai/mq/urls
-# (amqps://...:5671, quorum queues declared by the publisher).
+# Web stack. PREVIEW=true => frontend-only (--no-deps). Datastores via shared atoms.
 include:
   - path: ../../../infra/docker/postgres-users/standalone.yml
   - path: ../../../infra/docker/redis-users/standalone.yml
