@@ -126,12 +126,60 @@ What happens when something goes wrong?
 
 | Failure | What Happens | Recovery |
 |---------|--------------|----------|
-| Stream write fails | API returns error | User retries |
+| Stream write fails (transient) | API falls back to sync MongoDB write | Automatic — no user action needed |
+| Stream write fails (non-transient) | API returns error to user | User retries |
 | Worker crashes | Messages stay in stream | Worker restarts and processes them |
 | Database write fails | Message stays in stream | Worker retries |
 | Message is corrupted | Message is acknowledged | Skipped (logged as error) |
 
 **Key point:** Messages are only removed from the stream after they're successfully saved to the database.
+
+## Degraded Mode (Redis Unavailable)
+
+When Redis is unavailable at startup or goes down during operation, the service enters **degraded mode**:
+
+### How It Works
+
+```mermaid
+graph TB
+    A[SaveMessage called] --> B[Publish to stream]
+    B -->|Success| C[Normal path: async via Worker]
+    B -->|Transient error| D[Fallback: sync MongoDB write]
+    D --> E[Message saved directly]
+    E --> F[Best-effort cache update]
+```
+
+1. The API tries to publish to the Redis Stream
+2. If the error is **transient** (connection refused, broken pipe, i/o timeout, etc.), the service falls back to writing the message directly to MongoDB
+3. The cache is updated on a best-effort basis
+4. The user still gets a successful response
+
+### What Is a Transient Error?
+
+The service classifies these as transient (retriable):
+- Connection refused / reset / closed
+- Broken pipe
+- I/o timeout / timeout
+- No such host / dial tcp errors
+- "Client is closed" errors
+- Any `ErrUnavailable` sentinel
+
+### Detection and Recovery
+
+- **API mode**: A background recovery loop attempts to reconnect to Redis every 5-30 seconds with exponential backoff. When Redis comes back, the API automatically switches back to stream-based processing.
+- **Worker mode**: The Worker blocks at startup until Redis is available. It cannot process messages without the stream.
+- The `redis_degraded` metric tracks the state (1 = degraded, 0 = normal).
+
+### Trade-offs
+
+| Aspect | Normal Mode | Degraded Mode |
+|--------|-------------|---------------|
+| Message save | Async (fast response) | Sync DB write (slightly slower) |
+| Cache | Working | Not available |
+| History reads | Cache + DB merge | DB only |
+| Service availability | Full | Full (graceful degradation) |
+
+See [Architecture](../concepts/architecture.md#degraded-mode-redis-unavailable) for the full explanation.
 
 ## Monitoring
 
@@ -142,6 +190,8 @@ The service tracks stream health:
 | `chat_redis_stream_lag` | How many messages are waiting to be processed |
 | `chat_stream_errors_total` | How many stream operations failed |
 | `chat_messages_published_total` | How many messages were added to streams |
+| `chat_sync_fallback_total` | How many messages were saved via sync fallback (degraded mode) |
+| `redis_degraded` | Whether the service is in degraded mode (1 = yes, 0 = no) |
 
 ## Configuration
 

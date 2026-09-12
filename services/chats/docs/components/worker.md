@@ -22,16 +22,20 @@ When the Worker starts:
 
 ```mermaid
 graph TB
-    A[Worker starts] --> B[Connect to Redis]
-    B --> C[Create consumer group]
-    C --> D[Start processing messages]
-    D --> E[Start recovery loop]
+    A[Worker starts] --> B{Redis available?}
+    B -->|Yes| C[Connect to Redis]
+    B -->|No| D[Block and retry]
+    D -->|Redis back| C
+    C --> E[Create consumer group]
+    E --> F[Start processing messages]
+    F --> G[Start recovery loop]
 ```
 
-1. Connects to Redis
-2. Creates a "consumer group" (a way to track which messages have been processed)
-3. Starts listening for new messages
-4. Starts a recovery loop to handle missed messages
+1. **Checks Redis availability** — If Redis is down, the Worker blocks and retries with exponential backoff (1s, 2s, 4s... up to 30s) until it becomes available. The Worker cannot function without Redis.
+2. Connects to Redis
+3. Creates a "consumer group" (a way to track which messages have been processed)
+4. Starts listening for new messages
+5. Starts a recovery loop to handle missed messages
 
 ### Processing Messages
 

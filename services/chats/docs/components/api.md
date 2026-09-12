@@ -139,7 +139,7 @@ grpcurl -plaintext -d '{
 
 ### Save a Message
 
-**What it does:** Saves a message to a chat.
+**What it does:** Saves a message to a chat. The message is published to a stream for async persistence by the Worker. If the stream is unavailable, the API falls back to writing directly to MongoDB (see [Streaming](streaming.md)).
 
 **Request:**
 
@@ -148,9 +148,27 @@ grpcurl -plaintext -d '{
   "chat_id": "550e8400-e29b-41d4-a716-446655440000",
   "user_id": "user123",
   "role": "user",
-  "content": "Hello, how are you?"
+  "content": "Hello, how are you?",
+  "metadata": {
+    "source": "web",
+    "session": "abc-123"
+  },
+  "message_id": "660e8400-e29b-41d4-a716-446655440000",
+  "created_at": 1725900000
 }' localhost:50051 chat.ChatService/SaveMessage
 ```
+
+**All request fields:**
+
+| Field         | Type               | Required | Description |
+| ------------- | ------------------ | -------- | ----------- |
+| `chat_id`     | string             | Yes      | The chat to save the message to |
+| `user_id`     | string             | Yes      | Your unique user identifier |
+| `role`        | string             | No       | Message role (defaults to `user` if omitted) |
+| `content`     | string             | Yes      | Message text (max 20,000 characters) |
+| `metadata`    | map<string,string> | No       | Arbitrary key-value pairs (e.g. `source`, `session`) for your own bookkeeping |
+| `message_id`  | string             | No       | Your own ID for the message. If a message with this ID already exists, the save is a no-op (idempotent). Generated automatically if omitted. |
+| `created_at`  | number (Unix)      | No       | Timestamp in seconds. Must not be more than 5 minutes in the future. Defaults to current time if omitted. |
 
 **Response:**
 
@@ -162,7 +180,6 @@ grpcurl -plaintext -d '{
 ```
 
 **Message roles:**
-
 
 | Role        | What It Means                 |
 | ----------- | ----------------------------- |
@@ -199,12 +216,43 @@ grpcurl -plaintext -d '{
       "user_id": "user123",
       "role": "user",
       "content": "Hello, how are you?",
+      "metadata": {
+        "source": "web"
+      },
+      "analysis": {
+        "human_score": 0.95,
+        "ai_score": 0.05,
+        "model_name": "detect-v2",
+        "verdict": "human"
+      },
       "created_at": 1725900000
     }
   ],
   "has_more": false
 }
 ```
+
+**Message fields in response:**
+
+| Field       | Type               | Description |
+| ----------- | ------------------ | ----------- |
+| `id`        | string             | Unique message ID |
+| `chat_id`   | string             | The chat this message belongs to |
+| `user_id`   | string             | Who sent the message |
+| `role`      | string             | `user`, `assistant`, `system`, or `tool` |
+| `content`   | string             | Message text |
+| `metadata`  | map<string,string> | Arbitrary key-value pairs (if provided when saving) |
+| `analysis`  | object \| null     | AI detection analysis (if available — see below) |
+| `created_at`| number (Unix)      | When the message was created |
+
+**Analysis fields (when present):**
+
+| Field         | Type   | Description |
+| ------------- | ------ | ----------- |
+| `human_score` | float  | Probability text is human-written (0.0 to 1.0) |
+| `ai_score`    | float  | Probability text is AI-generated (0.0 to 1.0) |
+| `model_name`  | string | Which detection model produced the analysis |
+| `verdict`     | string | `human`, `ai`, or `mixed` |
 
 **Pagination:**
 
@@ -277,6 +325,8 @@ grpcurl -plaintext localhost:50051 grpc.health.v1.Health/Check
 2. **Handle errors gracefully** - Check error codes in your code
 3. **Use pagination** - Don't request all messages at once
 4. **Validate input** - The API will reject invalid requests
+5. **Use `message_id` for idempotent writes** - If you provide your own `message_id` in `SaveMessage`, duplicate saves are silently ignored. This is useful for retries without creating duplicates.
+6. **Use `metadata` to tag messages** - Attach custom key-value pairs (like `source: "mobile"`) for your own bookkeeping.
 
 
 

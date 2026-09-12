@@ -65,8 +65,6 @@ Metrics are numbers that help you understand performance. They're exposed at:
 | Metric | What It Tells You |
 |--------|-------------------|
 | `grpc_request_duration_seconds` | How long API requests take |
-| `chat_cache_hits_total` | How often cache was used (fast path) |
-| `chat_cache_misses_total` | How often cache was missed (slow path) |
 
 #### Health
 
@@ -75,12 +73,22 @@ Metrics are numbers that help you understand performance. They're exposed at:
 | `chat_redis_stream_lag` | How many messages are waiting to be processed |
 | `chat_stream_errors_total` | How many stream operations failed |
 | `chat_database_errors_total` | How many database operations failed |
+| `redis_degraded` | Whether the service is in degraded mode (1 = yes, 0 = no) |
 
 #### Reliability
 
 | Metric | What It Tells You |
 |--------|-------------------|
 | `chat_dlq_messages_total` | How many messages are in the dead letter queue |
+| `chat_sync_fallback_total` | How many messages were saved via sync MongoDB fallback (degraded mode) |
+
+#### Cache
+
+| Metric | What It Tells You |
+|--------|-------------------|
+| `chat_cache_hits_total` | How often cache was used (fast path) |
+| `chat_cache_misses_total` | How often cache was missed (slow path) |
+| `chat_cache_populate_bg_total` | How many times the cache was populated in the background after a miss |
 
 ### Viewing Metrics
 
@@ -176,6 +184,14 @@ groups:
 1. Check `chat_redis_stream_lag` - Too many messages waiting?
 2. Check `BATCH_SIZE` - Processing too many at once?
 3. Check `STREAM_PARTITION_COUNT` - Too many partitions?
+
+### Degraded Mode Active
+
+1. Check `redis_degraded` metric — is it `1`?
+2. Check `chat_sync_fallback_total` — how many messages are using the sync path?
+3. Verify Redis is running and accessible
+4. Look at logs for "Redis unavailable" or "recovery attempt" messages
+5. Once Redis recovers, `redis_degraded` will return to `0` automatically
 
 ## Related Documentation
 

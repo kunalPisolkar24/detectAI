@@ -97,13 +97,16 @@ When the cache has what you need:
 
 When the cache doesn't have what you need:
 1. Get all messages from MongoDB
-2. Update the cache in the background
+2. **Populate the cache in the background** (non-blocking, so the user doesn't wait)
 3. Return to user
 
 **Cache misses are normal** - they happen when:
 - First time viewing a chat
 - Cache expired (after 24 hours)
 - Chat has fewer than 100 messages
+- Redis was temporarily unavailable
+
+**Background population:** When a cache miss occurs on page 1, the service fetches messages from MongoDB and pushes them into the cache in a background goroutine. This way, the next request for the same chat will hit the cache. The background population has a 5-second timeout and failures are logged as warnings (not errors).
 
 ## Performance Impact
 
@@ -124,6 +127,22 @@ CACHE_TTL=24h
 # Maximum messages per chat (in code)
 MaxCacheSize = 100
 ```
+
+## Degraded Mode (Redis Unavailable)
+
+When Redis is unavailable, the service enters **degraded mode**:
+
+- All cache operations return errors gracefully (no crashes)
+- `SaveMessage` skips the cache update (or attempts it as best-effort)
+- `GetHistory` reads directly from MongoDB every time (no cache merge)
+- Background cache population is skipped
+
+This means:
+- **Reads are slower** — Every history request hits MongoDB directly
+- **No recent-message boost** — Users always see the full database query path
+- **Service stays up** — The API remains available despite the cache being down
+
+See [Architecture](architecture.md#degraded-mode-redis-unavailable) for the full degraded mode explanation.
 
 ## Troubleshooting
 

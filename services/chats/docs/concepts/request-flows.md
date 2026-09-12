@@ -44,14 +44,21 @@ sequenceDiagram
     
     User->>API: Send a message
     API->>API: Check permissions & validate
-    API->>Stream: Add message to stream
-    API->>Cache: Update recent messages
-    API-->>User: Message received
-    Stream->>Worker: Pick up message
-    Worker->>DB: Save to database permanently
+    
+    alt Stream available (normal path)
+        API->>Stream: Add message to stream
+        API->>Cache: Update recent messages
+        API-->>User: Message received
+        Stream->>Worker: Pick up message
+        Worker->>DB: Save to database permanently
+    else Stream unavailable (degraded path)
+        API->>DB: Write directly to MongoDB
+        API->>Cache: Update recent messages
+        API-->>User: Message received
+    end
 ```
 
-**What happens:**
+**What happens (normal path):**
 1. User sends a message with chat ID, user ID, and content
 2. API checks that the user owns this chat
 3. API validates the message (not too long, valid role, etc.)
@@ -61,10 +68,23 @@ sequenceDiagram
 7. Later, a background worker picks up the message
 8. Worker saves the message permanently to MongoDB
 
+**What happens (degraded path — Redis unavailable):**
+1. User sends a message
+2. API checks ownership and validates
+3. Stream publish fails with a transient error
+4. API detects Redis is unavailable and falls back to a **synchronous MongoDB write**
+5. API updates the cache (best-effort, will also fail gracefully if Redis is down)
+6. API responds to the user ("message received")
+
 **Why two steps?**
 - User gets a fast response (step 6)
 - Message is saved reliably in the background (step 8)
 - If the database is slow, the user doesn't wait
+
+**Why the degraded fallback?**
+- Messages are still saved even when Redis is down
+- The trade-off is slightly higher latency (sync DB write) instead of failure
+- The `chat_sync_fallback_total` metric tracks how often this happens
 
 ## Get Chat History
 
@@ -97,10 +117,13 @@ sequenceDiagram
 3. **If it's the first page and cache has data:**
    - Get recent messages from Redis (fast)
    - Get older messages from MongoDB
-   - Combine them and remove duplicates
-4. **Otherwise:**
+   - Combine them, remove duplicates, and sort by time
+4. **If it's the first page but cache is empty:**
+   - Get messages from MongoDB
+   - Populate the cache in the background (non-blocking)
+5. **For any other page:**
    - Get messages directly from MongoDB
-5. Return the messages to the user
+6. Return the messages to the user
 
 **Why the cache helps:**
 - Most users want to see recent messages first
@@ -124,7 +147,8 @@ When something goes wrong, the service returns clear error messages:
 | Operation | How It Works | Speed |
 |-----------|--------------|-------|
 | Create Chat | Direct database write | Fast |
-| Save Message | Stream → Worker → Database | Fast response, async save |
+| Save Message (normal) | Stream -> Worker -> Database | Fast response, async save |
+| Save Message (degraded) | Sync MongoDB write (Redis down) | Slightly slower, still responds |
 | Get History | Cache first, database fallback | Fast for recent messages |
 
 ## Next Steps

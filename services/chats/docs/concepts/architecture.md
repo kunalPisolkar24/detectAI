@@ -242,7 +242,53 @@ graph TB
     Role -->|Worker| Workers[Start Background Processors]
 ```
 
+## Degraded Mode (Redis Unavailable)
+
+If Redis is unavailable when the service starts, it enters **degraded mode**:
+
+```mermaid
+graph TB
+    Start[Service Starts] --> Mongo[Connect to MongoDB]
+    Mongo --> RedisCheck{Redis available?}
+    RedisCheck -->|Yes| Normal[Normal operation]
+    RedisCheck -->|No| Degraded[Degraded mode]
+    
+    Degraded -->|API| Fallback[Sync MongoDB writes]
+    Degraded -->|Worker| Block[Block until Redis recovers]
+    
+    Fallback --> Recovery[Background recovery loop]
+    Recovery -->|Redis back| Normal
+```
+
+### API Mode in Degraded Mode
+
+- The API continues to handle requests normally
+- `SaveMessage` writes directly to MongoDB instead of publishing to the stream
+- Cache operations return errors gracefully (no caching)
+- A background loop tries to reconnect to Redis every 5-30 seconds
+- When Redis recovers, the API automatically switches back to normal stream-based processing
+- The `redis_degraded` metric is set to `1` during degraded mode
+
+### Worker Mode in Degraded Mode
+
+- The Worker **blocks at startup** until Redis becomes available
+- It retries with exponential backoff (1s, 2s, 4s... up to 30s)
+- The Worker cannot function without Redis (it needs the stream to read messages)
+
+### Why Degraded Mode Exists
+
+- Ensures the API stays available even if Redis has a temporary outage
+- Messages are still saved (just synchronously instead of asynchronously)
+- The trade-off is higher latency per message during degraded mode
+
 ## Key Components
+
+### gRPC Middleware
+
+The API uses two gRPC interceptors (middleware) that run on every request:
+
+- **Recovery Interceptor** — Catches panics in handlers and returns a clean `INTERNAL` error instead of crashing the server
+- **Logging Interceptor** — Logs every request with method, status code, and duration. Slow requests (over 500ms) are logged as warnings. Errors are logged at the appropriate level (client errors as warnings, server errors as errors).
 
 ### API Handler
 - Receives requests from users

@@ -51,6 +51,7 @@ Start here:
 | [Unit Tests](testing/unit.md) | Testing individual components | Writing unit tests |
 | [Integration Tests](testing/integration.md) | Testing with real databases | Writing integration tests |
 | [HA Tests](testing/ha.md) | High availability testing | Testing production setups |
+| [Sharded Cluster Tests](testing/sharded.md) | Testing with sharded MongoDB | Testing scaled deployments |
 
 ## Reading Order for Different Roles
 

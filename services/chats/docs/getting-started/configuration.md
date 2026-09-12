@@ -188,6 +188,37 @@ The service logs `LOG_LEVEL` and gRPC health. After `logger.Init(cfg.LogLevel)` 
 
 Metrics: `http://localhost:9091/metrics` (api) / `http://localhost:9099/metrics` (worker).
 
+## Developer Workflow
+
+The service includes a Makefile with common commands:
+
+| Command | What It Does |
+|---------|--------------|
+| `make deps` | Install protoc Go plugins (`protoc-gen-go`, `protoc-gen-go-grpc`) and tidy modules |
+| `make proto` | Regenerate protobuf Go code from `api/proto/chat_service.proto` |
+| `make build` | Build the binary to `bin/chat-service` |
+| `make run` | Run the service directly with `go run` |
+| `make test` | Run all unit tests |
+| `make test-coverage` | Run unit tests with coverage report |
+| `make test-integration` | Run integration tests (requires Docker containers, 15-minute timeout) |
+| `make test-sharded` | Run sharded cluster tests (requires 5-node test cluster) |
+| `make test-ha` | Run high-availability tests |
+| `make test-all` | Run all tests (unit + integration + HA) |
+| `make docker-build` | Build and start the Docker Compose stack |
+| `make load-test` | Run k6 load tests (options: `SCENARIO`, `VUS`, `DURATION`, `RPS`) |
+| `make load-down` | Tear down the load test stack |
+
+**Prerequisites for `make proto`:**
+- `protoc` (Protocol Buffers compiler) must be installed
+- Run `make deps` first to install the Go protobuf plugins
+
+**Load test examples:**
+```bash
+make load-test SCENARIO=smoke VUS=1 DURATION=10s
+make load-test SCENARIO=load VUS=10 DURATION=2m RPS=50
+make load-test SCENARIO=stress VUS=50 DURATION=5m
+```
+
 ## Troubleshooting
 
 **Service won't start?**
