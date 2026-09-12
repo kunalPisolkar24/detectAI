@@ -9,6 +9,10 @@ export async function registerShutdownHandlers(): Promise<void> {
   const shutdown = async (signal: string) => {
     console.log(JSON.stringify({ level: "info", msg: "Shutting down", signal }))
     try {
+      const { shutdownTracing } = await import("@/lib/infrastructure/tracing")
+      await shutdownTracing().catch(() => {})
+    } catch {}
+    try {
       const { prisma } = await import("@/lib/infrastructure/prisma")
       await prisma.$disconnect().catch(() => {})
     } catch {}
