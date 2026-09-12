@@ -16,8 +16,7 @@ describe("AnalyticsService Integration", () => {
 
     beforeEach(async () => {
         redis = RedisFactory.createClient({
-            mode: "standalone",
-            name: "test-redis",
+                    name: "test-redis",
             url: process.env.REDIS_URL,
         });
         const metrics = new MetricsService("test-analytics");

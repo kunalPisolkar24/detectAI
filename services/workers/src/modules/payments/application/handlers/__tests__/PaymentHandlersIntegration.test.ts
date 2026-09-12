@@ -18,13 +18,11 @@ describe("PaymentHandlers Integration", () => {
     beforeEach(async () => {
         const redisUrl = process.env.REDIS_URL!;
         redis = RedisFactory.createClient({
-            mode: "standalone",
-            name: "test-redis",
+                    name: "test-redis",
             url: redisUrl,
         });
         eventRedis = RedisFactory.createClient({
-            mode: "standalone",
-            name: "test-event-redis",
+                    name: "test-event-redis",
             url: redisUrl,
         });
         metrics = new MetricsService("test-payments");

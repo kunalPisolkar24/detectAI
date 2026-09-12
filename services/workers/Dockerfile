@@ -41,7 +41,7 @@ FROM oven/bun:1-slim AS runner
 
 WORKDIR /app
 
-ENV NODE_ENV=production
+ENV ENV_TYPE=prod
 
 RUN chown bun:bun /app
 

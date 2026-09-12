@@ -38,7 +38,7 @@ describe("Analytics HA (3-node cluster)", () => {
   }
 
   function buildWorker(queue: string, handler: (e: any) => Promise<void>): RabbitMQWorker {
-    return new RabbitMQWorker(infra.rabbitUrl, queue, handler, metrics, "quorum", ["usage_event"]);
+    return new RabbitMQWorker(infra.rabbitUrl, queue, handler, metrics, ["usage_event"]);
   }
 
   function buildService(redis: any): AnalyticsService {
@@ -49,7 +49,7 @@ describe("Analytics HA (3-node cluster)", () => {
 
   test("quorum E2E: usage_event increments Usage", async () => {
     const queue = uniqueQueue("analytics.usage");
-    const redis: any = RedisFactory.createClient({ mode: "standalone", name: "ha-analytics", url: infra.redisUrl });
+    const redis: any = RedisFactory.createClient({ name: "ha-analytics", url: infra.redisUrl });
     try {
       const svc = buildService(redis);
       const worker = buildWorker(queue, async (e) => {
@@ -94,7 +94,7 @@ describe("Analytics HA (3-node cluster)", () => {
 
   test("duplicate eventId counts exactly once", async () => {
     const queue = uniqueQueue("analytics.usage");
-    const redis: any = RedisFactory.createClient({ mode: "standalone", name: "ha-analytics-dedup", url: infra.redisUrl });
+    const redis: any = RedisFactory.createClient({ name: "ha-analytics-dedup", url: infra.redisUrl });
     try {
       const svc = buildService(redis);
       const worker = buildWorker(queue, async (e) => {
@@ -144,7 +144,7 @@ describe("Analytics HA (3-node cluster)", () => {
 
   test("invalid usage event goes to DLQ", async () => {
     const queue = uniqueQueue("analytics.usage");
-    const redis: any = RedisFactory.createClient({ mode: "standalone", name: "ha-analytics-dlq", url: infra.redisUrl });
+    const redis: any = RedisFactory.createClient({ name: "ha-analytics-dlq", url: infra.redisUrl });
     try {
       const svc = buildService(redis);
       const worker = buildWorker(queue, async (e) => {

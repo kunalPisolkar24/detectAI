@@ -20,7 +20,7 @@
     "load:payments": "./bin/k6 run src/tests/load/payments.k6.js",
     "load:analytics": "./bin/k6 run src/tests/load/analytics.k6.js",
     "load:cron": "./bin/k6 run src/tests/load/cron.k6.js",
-    "postinstall": "bun prisma generate && node scripts/patch-bun-native.js || true"
+    "postinstall": "DATABASE_URL=postgresql://127.0.0.1:5432/mock-db-not-configured bun prisma generate && node scripts/patch-bun-native.js || true"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^11.14.0",
@@ -37,6 +37,9 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1131.0",
+    "@aws-sdk/client-ssm": "^3.1131.0",
+    "@aws-sdk/config": "^3.1131.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.57.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.56.0",

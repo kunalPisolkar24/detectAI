@@ -34,8 +34,7 @@ export class IdempotencyStore {
         IdempotencyStore.TTL_SECONDS,
         "NX",
       );
-      // ioredis returns "OK" on success, null on NX failure; cluster may return 1
-      const isNew = result === "OK" || (result as unknown) === 1;
+      const isNew = result === "OK";
       if (!isNew) {
         // result === null => already exists -> duplicate
         if (result === null) {

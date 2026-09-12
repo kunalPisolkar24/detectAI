@@ -19,7 +19,10 @@ async function ensureInfrastructure() {
             process.env.DATABASE_URL_REPLICA = dbUrl;
             process.env.REDIS_URL = redisUrl;
             process.env.RABBITMQ_URL = amqpUrl;
-            process.env.NODE_ENV = "test";
+            process.env.ENV_TYPE = "dev";
+            process.env.EVENT_REDIS_URL = redisUrl;
+            process.env.PADDLE_API_KEY = "test-paddle-key";
+            process.env.PADDLE_ENVIRONMENT = "sandbox";
 
             console.log(`Running prisma db push... URL: ${dbUrl}`);
             execSync("bunx prisma db push", {

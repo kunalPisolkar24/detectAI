@@ -25,7 +25,7 @@ services:
     command: ["bun", "src/tests/load/proxy.ts"]
     restart: "no"
     environment:
-      - NODE_ENV=${NODE_ENV:-production}
+      - ENV_TYPE=${ENV_TYPE:-dev}
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - RABBITMQ_URL=${RABBITMQ_URL}

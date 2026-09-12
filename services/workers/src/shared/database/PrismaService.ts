@@ -51,8 +51,8 @@ function initializeClients() {
   const needsSSL =
     primaryUrl.includes("sslmode=require") ||
     primaryUrl.includes("sslmode=verify") ||
-    replicaUrl.includes("sslmode=require") ||
-    replicaUrl.includes("sslmode=verify");
+    (replicaUrl?.includes("sslmode=require") ?? false) ||
+    (replicaUrl?.includes("sslmode=verify") ?? false);
   const poolConfig: ConstructorParameters<typeof Pool>[0] = {
     max: Number.isFinite(poolMax) && poolMax > 0 ? poolMax : 5,
     idleTimeoutMillis: 30000,

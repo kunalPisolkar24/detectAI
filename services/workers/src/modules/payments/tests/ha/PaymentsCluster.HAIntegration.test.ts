@@ -40,7 +40,7 @@ describe("Payments HA (3-node cluster)", () => {
   }
 
   function buildWorker(queue: string, handler: (e: any) => Promise<void>): RabbitMQWorker {
-    return new RabbitMQWorker(infra.rabbitUrl, queue, handler, metrics, "quorum", [
+    return new RabbitMQWorker(infra.rabbitUrl, queue, handler, metrics, [
       "subscription.updated",
       "subscription.canceled",
       "subscription.created",
@@ -51,8 +51,8 @@ describe("Payments HA (3-node cluster)", () => {
 
   test("quorum E2E: subscription.updated commits DB and acks", async () => {
     const queue = uniqueQueue("payment_events");
-    const redis = RedisFactory.createClient({ mode: "standalone", name: "ha-test", url: infra.redisUrl });
-    const eventRedis = RedisFactory.createClient({ mode: "standalone", name: "ha-test-events", url: infra.eventRedisUrl! });
+    const redis = RedisFactory.createClient({ name: "ha-test", url: infra.redisUrl });
+    const eventRedis = RedisFactory.createClient({ name: "ha-test-events", url: infra.eventRedisUrl! });
     const userRepo = new PrismaUserRepository(prismaPrimary, prismaPrimary);
     const handler = new SubscriptionUpdatedHandler(userRepo, redis as any, eventRedis as any, metrics);
     const svc = new PaymentService({ "subscription.updated": handler as any }, metrics);

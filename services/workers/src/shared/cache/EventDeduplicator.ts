@@ -70,7 +70,7 @@ export class EventDeduplicator {
           await (this.redis as any).eval(script, 1, key, value, String(EventDeduplicator.TTL_SECONDS));
           return;
         } catch {
-          // Fallback to simple SET if eval fails (e.g., cluster)
+          // Fallback to simple SET if eval fails
         }
       }
       await this.redis.set(key, value, "EX", EventDeduplicator.TTL_SECONDS);

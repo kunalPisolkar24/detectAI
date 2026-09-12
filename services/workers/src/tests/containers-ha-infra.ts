@@ -85,8 +85,9 @@ export async function startHaInfra(opts: { withEventRedis: boolean }): Promise<H
   process.env.REDIS_URL = redisUrl;
   if (eventRedisUrl) process.env.EVENT_REDIS_URL = eventRedisUrl;
   process.env.RABBITMQ_URL = rabbitUrl;
-  process.env.NODE_ENV = "test";
-  // Skip infra requeue delay so DB-down tests run fast.
+  process.env.ENV_TYPE = "dev";
+  process.env.PADDLE_API_KEY = "test-paddle-key";
+  process.env.PADDLE_ENVIRONMENT = "sandbox";
   process.env.INFRA_REQUEUE_DELAY_MS = "0";
 
   console.log("[ha-infra] running prisma db push");
