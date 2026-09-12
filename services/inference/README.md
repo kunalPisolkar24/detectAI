@@ -50,7 +50,7 @@ graph LR
     Health --> Metrics[Prometheus :8333]
 ```
 
-Per-model isolation prevents slow-model starvation; see [Architecture](docs/01-architecture.md) for ports, startup DAG and class view.
+Per-model isolation prevents slow-model starvation; see [Architecture](docs/concepts/architecture.md) for ports, startup DAG and class view.
 
 ## Configuration
 
@@ -58,7 +58,7 @@ Per-model isolation prevents slow-model starvation; see [Architecture](docs/01-a
 ENV_TYPE=dev  # dev = compose .env, prod = AWS Secrets Manager + SSM
 # required
 API_KEY=dev-secret-key-16chars-at-least   # >=16 chars (prod: detectai/inference/secrets)
-# optional (defaults, see docs/08-configuration.md for full reference)
+# optional (defaults, see docs/getting-started/configuration.md for full reference)
 GRPC_PORT=50051
 METRICS_PORT=8333
 BATCH_SIZE=32
@@ -70,7 +70,7 @@ INFERENCE_PROVIDERS=CPUExecutionProvider
 # HF_TOKEN=hf_...  # optional, for private HF repos (prod: same secret)
 ```
 
-See `infra/.env.example` and `docs/08-configuration.md` for all vars and validation rules.
+See `infra/.env.example` and `docs/getting-started/configuration.md` for all vars and validation rules.
 
 ## API
 
@@ -81,7 +81,7 @@ gRPC  grpc.health.v1.Health/Check    -> SERVING / NOT_SERVING
 GET   :8333/metrics                  -> Prometheus
 ```
 
-`model_id` is `spark|flare` case-insensitive, truncated to `64`, default `spark`. See `docs/09-api.md` for full proto and status codes (`OK`, `INVALID_ARGUMENT`, `RESOURCE_EXHAUSTED`, `UNAUTHENTICATED` etc).
+`model_id` is `spark|flare` case-insensitive, truncated to `64`, default `spark`. See `docs/components/api.md` for full proto and status codes (`OK`, `INVALID_ARGUMENT`, `RESOURCE_EXHAUSTED`, `UNAUTHENTICATED` etc).
 
 ## Observability
 
@@ -100,7 +100,7 @@ Alerts configured:
 - High error rate — error rate above 5% for 5 minutes
 - Queue full — engine queue full for more than 1 minute
 
-See `docs/10-observability.md` for full metric list and PromQL.
+See `docs/operations/observability.md` for full metric list and PromQL.
 
 ## Testing
 
@@ -120,7 +120,7 @@ make test-coverage
 make test-integration
 ```
 
-See `docs/11-testing.md` and `load/README.md` for load scenarios.
+See `docs/testing/overview.md` and `load/README.md` for load scenarios.
 
 ## Docker
 
@@ -144,22 +144,23 @@ make inference-ps
 make inference-down
 ```
 
-See `docs/01-architecture.md` for compose files and `infra/` details.
+See `docs/concepts/architecture.md` for compose files and `infra/` details.
 
 ## Documentation
 
 | Guide | What |
 |---|---|
-| [Architecture](docs/01-architecture.md) | High-level, hexagonal ports, startup DAG, class view |
-| [Request Flows](docs/02-request-flows.md) | Detect and AnalyzeDocument sequences with error branches |
-| [Authentication](docs/03-auth.md) | JWT and `x-api-key` flow, bypasses, failure metrics |
-| [Chunking & Aggregation](docs/04-chunking.md) | Tokenizers, sliding window, highlight sweep |
-| [Batching Internals](docs/05-batching.md) | Queue, worker loop, semaphore, shutdown |
-| [Model Loading](docs/06-models.md) | HF download, retries, provider verification |
-| [Health](docs/07-health.md) | Watchtower, queue-full vs not-serving |
-| [Configuration](docs/08-configuration.md) | Full env reference and validation |
-| [API](docs/09-api.md) | Full proto, endpoints, status codes |
-| [Observability](docs/10-observability.md) | Metrics, dashboards, alerts |
-| [Testing](docs/11-testing.md) | Unit, integration, load matrix |
+| [Quick Start](docs/getting-started/quickstart.md) | Get the service running in minutes |
+| [Architecture](docs/concepts/architecture.md) | How the service is built and why |
+| [Request Flows](docs/concepts/request-flows.md) | How requests move through the system |
+| [Chunking](docs/concepts/chunking.md) | How text is split into chunks |
+| [Batching](docs/concepts/batching.md) | How requests are batched for efficiency |
+| [API Reference](docs/components/api.md) | How to call the service |
+| [Authentication](docs/components/auth.md) | How authentication works |
+| [Models](docs/components/models.md) | How ML models are loaded and used |
+| [Health](docs/components/health.md) | Health checks and monitoring |
+| [Configuration](docs/getting-started/configuration.md) | All settings and how to configure them |
+| [Observability](docs/operations/observability.md) | Metrics, logs, and alerts |
+| [Testing](docs/testing/overview.md) | How to test the service |
 
 Full index: [docs/README.md](docs/README.md).
