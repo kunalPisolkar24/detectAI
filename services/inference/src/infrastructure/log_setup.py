@@ -5,13 +5,23 @@ import sys
 import structlog
 
 
-def _resolve_log_level() -> int:
-    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
-    return getattr(logging, level_name, logging.INFO)
+_ALLOWED_LEVELS = {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}
 
 
-def configure_logger() -> None:
-    log_level = _resolve_log_level()
+def _resolve_log_level(level: str | None = None) -> int:
+    """Resolve log level from explicit ``level`` or ``LOG_LEVEL`` env (validated)."""
+    raw = level if level is not None else os.getenv("LOG_LEVEL", "INFO")
+    normalized = str(raw).strip().upper()
+    if normalized == "WARN":
+        normalized = "WARNING"
+    if normalized not in _ALLOWED_LEVELS:
+        structlog.get_logger().warning("invalid_log_level_fallback", level=raw, fallback="INFO")
+        normalized = "INFO"
+    return getattr(logging, normalized, logging.INFO)
+
+
+def configure_logger(level: str | None = None) -> None:
+    log_level = _resolve_log_level(level)
 
     timestamper = structlog.processors.TimeStamper(fmt="iso")
     structlog_processors: list = [

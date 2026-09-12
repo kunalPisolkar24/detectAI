@@ -2,7 +2,8 @@ FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    ENV_TYPE=prod
 
 WORKDIR /app
 
@@ -43,7 +44,7 @@ RUN useradd -m -r appuser && chown -R appuser:appuser /app
 EXPOSE 50051 8333
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD ["/bin/grpc_health_probe", "-addr=:50051"]
+    CMD /bin/grpc_health_probe -addr=:${GRPC_PORT:-50051}
 
 USER appuser
 

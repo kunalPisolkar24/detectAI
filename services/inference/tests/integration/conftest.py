@@ -7,7 +7,6 @@ import pytest
 import jwt
 
 from src.infrastructure.config import Settings
-import src.infrastructure.config as config_module
 from src.application.services.document_analysis import DocumentAnalysisService
 from src.application.services.chunking import build_chunk_planner
 from src.application.services.validation import InputValidator
@@ -44,14 +43,14 @@ def event_loop():
 @pytest.fixture
 def test_settings():
     settings = Settings(
-        API_KEY="integration-test-secret",
+        API_KEY="integration-test-secret-key-16chars",
         GRPC_PORT=get_free_port(),
         METRICS_PORT=get_free_port(),
         BATCH_SIZE=4,
         BATCH_TIMEOUT=0.1,
         BATCH_QUEUE_MAX_SIZE=16,
         MAX_INFLIGHT_DOC_CHUNKS=4,
-        MAX_TEXT_LENGTH=1000,
+        MAX_TEXT_CHARS=1000,
         CHUNK_TOKEN_LIMIT=10,
         CHUNK_TOKEN_STRIDE=5,
         MAX_GLOBAL_TOKENS=5000,
@@ -68,14 +67,7 @@ def auth_token(test_settings):
     )
 
 @pytest.fixture
-async def integration_app(test_settings, monkeypatch):
-    # Apply settings to modules
-    import src.adapters.inbound.grpc.grpc_server as grpc_server_module
-    import src.adapters.inbound.grpc.interceptors as interceptors_module
-    
-    monkeypatch.setattr(config_module, "settings", test_settings)
-    monkeypatch.setattr(grpc_server_module, "settings", test_settings)
-    monkeypatch.setattr(interceptors_module, "settings", test_settings)
+async def integration_app(test_settings):
 
     from src.adapters.outbound.inference.batcher import BatchingProxy
     import concurrent.futures
@@ -106,7 +98,7 @@ async def integration_app(test_settings, monkeypatch):
         telemetry=PrometheusTelemetryReporter(),
     )
 
-    server = GRPCServer(analysis_service)
+    server = GRPCServer(analysis_service, config=test_settings)
     server_task = asyncio.create_task(server.start())
     
     # Wait for server to be ready

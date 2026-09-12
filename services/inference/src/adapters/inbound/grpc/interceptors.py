@@ -7,7 +7,6 @@ import jwt
 from grpc import aio
 import structlog
 
-from src.infrastructure.config import settings as _global_settings
 from src.infrastructure.metrics import GRPC_LATENCY_SECONDS, GRPC_REQUESTS_TOTAL, record_auth_failure
 
 logger = structlog.get_logger()
@@ -32,16 +31,15 @@ def _truncate(value: str, limit: int) -> str:
 
 
 class AuthInterceptor(aio.ServerInterceptor):
-    def __init__(self, settings=None, telemetry=None) -> None:
+    def __init__(self, settings, telemetry=None) -> None:
+        if settings is None:
+            raise ValueError("AuthInterceptor requires explicit settings (DI) — global settings removed")
         self._settings = settings
         self.telemetry = telemetry
 
     @property
     def settings(self):
-        if self._settings is not None:
-            return self._settings
-        # Use module-level alias that tests patch via monkeypatch
-        return globals().get("settings", _global_settings)
+        return self._settings
 
     async def intercept_service(self, continuation, handler_call_details):
         if handler_call_details.method in _HEALTH_METHODS:
@@ -253,5 +251,4 @@ class MonitoringInterceptor(aio.ServerInterceptor):
         return str(uuid.uuid4())
 
 
-# Backwards compatibility for tests that patch module-level settings
-settings = _global_settings
+

@@ -5,16 +5,26 @@ import structlog
 logger = structlog.get_logger()
 
 
-def setup_tracing(service_name: str | None = None, service_version: str | None = None):
+def setup_tracing(
+    service_name: str | None = None,
+    service_version: str | None = None,
+    endpoint: str | None = None,
+):
     """Setup OpenTelemetry tracing for gRPC server.
 
-    Export is OTLP/HTTP to OTEL_EXPORTER_OTLP_ENDPOINT (e.g. http://otel-collector:4318).
+    Export is OTLP/HTTP to ``OTEL_EXPORTER_OTLP_ENDPOINT`` (e.g. http://otel-collector:4318).
     Fail-open if no endpoint or deps missing, matching document-parser and workers.
+
+    Args:
+        service_name: OTel ``service.name`` — defaults to ``OTEL_SERVICE_NAME`` env or ``inference``.
+        service_version: OTel ``service.version`` — defaults to ``OTEL_SERVICE_VERSION`` / ``SERVICE_VERSION``.
+        endpoint: OTLP HTTP base URL — defaults to ``OTEL_EXPORTER_OTLP_ENDPOINT`` env.
     """
-    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-    if not endpoint:
+    resolved_endpoint = endpoint if endpoint is not None else os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if not resolved_endpoint or not str(resolved_endpoint).strip():
         logger.info("tracing_disabled_no_endpoint")
         return None
+    endpoint = str(resolved_endpoint).strip()
 
     try:
         from opentelemetry import trace

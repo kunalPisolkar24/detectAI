@@ -55,8 +55,9 @@ Per-model isolation prevents slow-model starvation; see [Architecture](docs/01-a
 ## Configuration
 
 ```ini
+ENV_TYPE=dev  # dev = compose .env, prod = AWS Secrets Manager + SSM
 # required
-API_KEY=dev-secret-key-16chars-at-least   # >=16 chars, also AI_SERVICE_API_KEY
+API_KEY=dev-secret-key-16chars-at-least   # >=16 chars (prod: detectai/inference/secrets)
 # optional (defaults, see docs/08-configuration.md for full reference)
 GRPC_PORT=50051
 METRICS_PORT=8333
@@ -66,6 +67,7 @@ MAX_TEXT_CHARS=50000
 CHUNK_TOKEN_LIMIT=256
 CHUNK_TOKEN_STRIDE=192
 INFERENCE_PROVIDERS=CPUExecutionProvider
+# HF_TOKEN=hf_...  # optional, for private HF repos (prod: same secret)
 ```
 
 See `infra/.env.example` and `docs/08-configuration.md` for all vars and validation rules.

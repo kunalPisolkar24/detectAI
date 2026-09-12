@@ -57,7 +57,7 @@ def test_settings_include_pinned_model_revisions():
         ("BATCH_TIMEOUT", 0),
         ("BATCH_QUEUE_MAX_SIZE", 0),
         ("MAX_INFLIGHT_DOC_CHUNKS", 0),
-        ("MAX_TEXT_LENGTH", 0),
+        ("MAX_TEXT_CHARS", 0),
         ("MAX_GLOBAL_TOKENS", 0),
         ("CHUNK_TOKEN_LIMIT", 0),
         ("CHUNK_TOKEN_STRIDE", 0),

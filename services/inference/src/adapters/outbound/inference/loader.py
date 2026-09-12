@@ -35,26 +35,28 @@ class HuggingFaceLoader(IModelLoader):
     def __init__(
         self,
         cache_dir: str,
-        providers: list[str] | None = None,
+        providers: list[str] | str | None = None,
         spark_model_revision: str = "9a48004391c71272d6fb1d164ed7c56e1fbfe360",
         flare_model_revision: str = "e1911c0be59f4e10f0d120f639d1358e46bc2086",
+        hf_token: str | None = None,
         telemetry=None,
     ) -> None:
         self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True)
         self.spark_model_revision = spark_model_revision
         self.flare_model_revision = flare_model_revision
+        self.hf_token = hf_token
         self.telemetry = telemetry
         if providers is None:
-            providers = parse_inference_providers(
-                os.getenv("INFERENCE_PROVIDERS", "CUDAExecutionProvider,CPUExecutionProvider")
-            )
+            # Back-compat for tests / direct construction: default CPU provider.
+            # Production path must inject Settings.INFERENCE_PROVIDERS explicitly.
+            self.providers = ["CPUExecutionProvider"]
         elif isinstance(providers, str):
-            providers = parse_inference_providers(providers)
+            self.providers = parse_inference_providers(providers)
         elif isinstance(providers, list):
             self.providers = providers
-            return
-        self.providers = providers
+        else:
+            raise TypeError("providers must be list[str] | str | None")
 
     def load(self, model_key: str):
         if model_key not in ("spark", "flare"):
@@ -102,6 +104,7 @@ class HuggingFaceLoader(IModelLoader):
         return session, tokenizer
 
     def _get_file(self, repo_id: str, filename: str, revision: str, local_only: bool) -> str:
+        token_kwargs = {"token": self.hf_token} if self.hf_token else {}
         if local_only:
             try:
                 return hf_hub_download(
@@ -110,12 +113,15 @@ class HuggingFaceLoader(IModelLoader):
                     revision=revision,
                     local_dir=self.cache_dir,
                     local_files_only=True,
+                    **token_kwargs,
                 )
             except (LocalEntryNotFoundError, FileNotFoundError) as e:
                 raise FileNotFoundError(f"Local file {filename} not found in {self.cache_dir}: {e}") from e
         for attempt in range(3):
             try:
-                return hf_hub_download(repo_id=repo_id, filename=filename, local_dir=self.cache_dir, revision=revision)
+                return hf_hub_download(
+                    repo_id=repo_id, filename=filename, local_dir=self.cache_dir, revision=revision, **token_kwargs
+                )
             except Exception as e:
                 if not _is_transient_error(e) or attempt == 2:
                     raise
@@ -125,15 +131,18 @@ class HuggingFaceLoader(IModelLoader):
         raise RuntimeError("unreachable")
 
     def _get_directory(self, repo_id: str, revision: str, local_only: bool) -> str:
+        token_kwargs = {"token": self.hf_token} if self.hf_token else {}
         expected_dir = os.path.join(self.cache_dir, repo_id.split("/")[-1])
         if local_only:
             try:
-                return snapshot_download(repo_id=repo_id, revision=revision, local_dir=expected_dir, local_files_only=True)
+                return snapshot_download(
+                    repo_id=repo_id, revision=revision, local_dir=expected_dir, local_files_only=True, **token_kwargs
+                )
             except (LocalEntryNotFoundError, FileNotFoundError) as e:
                 raise FileNotFoundError(f"Local directory {expected_dir} not found: {e}") from e
         for attempt in range(3):
             try:
-                return snapshot_download(repo_id=repo_id, local_dir=expected_dir, revision=revision)
+                return snapshot_download(repo_id=repo_id, local_dir=expected_dir, revision=revision, **token_kwargs)
             except Exception as e:
                 if not _is_transient_error(e) or attempt == 2:
                     raise

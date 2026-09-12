@@ -25,7 +25,10 @@ def _is_transient_error(exc: Exception) -> bool:
     return False
 
 
-def get_file(cache_dir: str, repo_id: str, filename: str, revision: str, local_only: bool) -> str:
+def get_file(
+    cache_dir: str, repo_id: str, filename: str, revision: str, local_only: bool, token: str | None = None
+) -> str:
+    token_kw = {"token": token} if token else {}
     if local_only:
         try:
             return hf_hub_download(
@@ -34,6 +37,7 @@ def get_file(cache_dir: str, repo_id: str, filename: str, revision: str, local_o
                 revision=revision,
                 local_dir=cache_dir,
                 local_files_only=True,
+                **token_kw,
             )
         except (LocalEntryNotFoundError, FileNotFoundError) as e:
             raise FileNotFoundError(f"Local file {filename} not found in {cache_dir}: {e}") from e
@@ -41,7 +45,7 @@ def get_file(cache_dir: str, repo_id: str, filename: str, revision: str, local_o
     for attempt in range(3):
         try:
             return hf_hub_download(
-                repo_id=repo_id, filename=filename, local_dir=cache_dir, revision=revision
+                repo_id=repo_id, filename=filename, local_dir=cache_dir, revision=revision, **token_kw
             )
         except Exception as e:
             if not _is_transient_error(e) or attempt == 2:
@@ -58,19 +62,22 @@ def get_file(cache_dir: str, repo_id: str, filename: str, revision: str, local_o
             time.sleep(backoff)
 
 
-def get_directory(cache_dir: str, repo_id: str, revision: str, local_only: bool) -> str:
+def get_directory(
+    cache_dir: str, repo_id: str, revision: str, local_only: bool, token: str | None = None
+) -> str:
+    token_kw = {"token": token} if token else {}
     expected_dir = os.path.join(cache_dir, repo_id.split("/")[-1])
     if local_only:
         try:
             return snapshot_download(
-                repo_id=repo_id, revision=revision, local_dir=expected_dir, local_files_only=True
+                repo_id=repo_id, revision=revision, local_dir=expected_dir, local_files_only=True, **token_kw
             )
         except (LocalEntryNotFoundError, FileNotFoundError) as e:
             raise FileNotFoundError(f"Local directory {expected_dir} not found: {e}") from e
 
     for attempt in range(3):
         try:
-            return snapshot_download(repo_id=repo_id, local_dir=expected_dir, revision=revision)
+            return snapshot_download(repo_id=repo_id, local_dir=expected_dir, revision=revision, **token_kw)
         except Exception as e:
             if not _is_transient_error(e) or attempt == 2:
                 raise

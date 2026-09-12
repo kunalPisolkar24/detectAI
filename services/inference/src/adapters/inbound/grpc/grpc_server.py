@@ -7,16 +7,16 @@ from src.adapters.inbound.grpc.health import add_health_check
 from src.adapters.inbound.grpc.interceptors import AuthInterceptor, MonitoringInterceptor
 from src.adapters.inbound.grpc.servicers import AIService
 from src.generated import ai_service_pb2_grpc
-from src.infrastructure.config import settings as _global_settings
 import structlog
 
 logger = structlog.get_logger()
-settings = _global_settings
 
 
 class GRPCServer:
-    def __init__(self, analysis_service, config=None, telemetry=None):
-        cfg = config if config is not None else settings
+    def __init__(self, analysis_service, config, telemetry=None):
+        if config is None:
+            raise ValueError("GRPCServer requires explicit config (DI) — global settings removed")
+        cfg = config
         self.port = cfg.GRPC_PORT
         self.analysis_service = analysis_service
         self.server = aio.server(

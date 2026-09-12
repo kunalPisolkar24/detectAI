@@ -14,10 +14,11 @@ from src.application.services.validation import InputValidator
 async def build_analysis_service(settings, telemetry, executors):
     spark_ex, flare_ex = executors
     loader = HuggingFaceLoader(
-        settings.MODEL_CACHE_DIR,
-        settings.INFERENCE_PROVIDERS,
-        settings.SPARK_MODEL_REVISION,
-        settings.FLARE_MODEL_REVISION,
+        cache_dir=settings.MODEL_CACHE_DIR,
+        providers=settings.INFERENCE_PROVIDERS,
+        spark_model_revision=settings.SPARK_MODEL_REVISION,
+        flare_model_revision=settings.FLARE_MODEL_REVISION,
+        hf_token=settings.HF_TOKEN,
         telemetry=telemetry,
     )
     loop = asyncio.get_running_loop()

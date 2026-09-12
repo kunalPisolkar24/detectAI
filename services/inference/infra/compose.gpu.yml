@@ -4,7 +4,7 @@ services:
       context: ..
       dockerfile: Dockerfile
     environment:
-      - INFERENCE_PROVIDERS=CUDAExecutionProvider
+      - INFERENCE_PROVIDERS=${INFERENCE_PROVIDERS:-CUDAExecutionProvider,CPUExecutionProvider}
     deploy:
       resources:
         limits:

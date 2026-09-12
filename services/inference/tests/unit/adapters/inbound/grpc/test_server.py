@@ -26,7 +26,7 @@ async def test_server_start_waits_for_shutdown(test_settings):
         server_instance.stop = AsyncMock()
         mock_server_factory.return_value = server_instance
 
-        server = GRPCServer(analysis_service)
+        server = GRPCServer(analysis_service, config=test_settings)
 
         async def trigger_stop():
             await asyncio.sleep(0.05)

@@ -1,17 +1,11 @@
-import os
 import time
 from unittest.mock import AsyncMock, MagicMock
 
 import jwt
 import pytest
 
-os.environ.setdefault("API_KEY", "test-secret-key-16chars")
-
-import src.infrastructure.config as config_module  # noqa: E402
-import src.adapters.inbound.grpc.grpc_server as grpc_server_module  # noqa: E402
-import src.adapters.inbound.grpc.interceptors as interceptors_module  # noqa: E402
-from src.infrastructure.config import Settings  # noqa: E402
-from src.domain.models import DocumentScore  # noqa: E402
+from src.infrastructure.config import Settings
+from src.domain.models import DocumentScore
 
 
 class AbortError(Exception):
@@ -38,7 +32,7 @@ class FakeContext:
 
 
 @pytest.fixture
-def test_settings(monkeypatch, unused_tcp_port):
+def test_settings(unused_tcp_port):
     settings = Settings(
         API_KEY="test-secret-key-16chars",
         GRPC_PORT=unused_tcp_port,
@@ -46,15 +40,11 @@ def test_settings(monkeypatch, unused_tcp_port):
         BATCH_TIMEOUT=0.05,
         BATCH_QUEUE_MAX_SIZE=8,
         MAX_INFLIGHT_DOC_CHUNKS=2,
-        MAX_TEXT_LENGTH=100,
+        MAX_TEXT_CHARS=100,
         CHUNK_TOKEN_LIMIT=4,
         CHUNK_TOKEN_STRIDE=2,
         MAX_GLOBAL_TOKENS=100,
     )
-
-    monkeypatch.setattr(config_module, "settings", settings)
-    monkeypatch.setattr(interceptors_module, "settings", settings)
-    monkeypatch.setattr(grpc_server_module, "settings", settings)
     return settings
 
 

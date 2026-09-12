@@ -1,5 +1,4 @@
 import asyncio
-import os
 import sys
 
 import structlog
@@ -16,13 +15,17 @@ logger = structlog.get_logger()
 
 
 async def main() -> None:
-    configure_logger()
     settings = get_settings()
+    configure_logger(level=settings.LOG_LEVEL)
     telemetry = PrometheusTelemetryReporter()
     executors = create_model_executors(settings.INFERENCE_MAX_WORKERS)
     tracing_provider = None
     try:
-        tracing_provider = setup_tracing(service_name=os.getenv("OTEL_SERVICE_NAME", "inference"))
+        tracing_provider = setup_tracing(
+            service_name=settings.OTEL_SERVICE_NAME,
+            service_version=settings.OTEL_SERVICE_VERSION,
+            endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
+        )
         start_http_server(settings.METRICS_PORT)
         logger.info("metrics_server_started", port=settings.METRICS_PORT)
         logger.info("loading_models")
