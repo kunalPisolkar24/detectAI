@@ -134,12 +134,15 @@ make parser-down-v
 
 | Guide | What |
 |---|---|
-| [Architecture](docs/01-architecture.md) | High-level, sequence, readiness, class view |
-| [Validation](docs/02-validation.md) | Size, MIME sniff, limits |
-| [Internals](docs/03-internals.md) | Strategies, factory, pool, temp files |
-| [Configuration](docs/08-configuration.md) | Full env reference |
-| [API](docs/09-api.md) | Endpoints, status codes |
-| [Observability](docs/10-observability.md) | Metrics, alerts, dashboards |
-| [Testing](docs/11-testing.md) | Unit, integration, load |
+| [Quick Start](docs/getting-started/quickstart.md) | Get running in minutes |
+| [Configuration](docs/getting-started/configuration.md) | Full env reference |
+| [Architecture](docs/concepts/architecture.md) | How the service is built and why |
+| [Extraction Strategies](docs/concepts/extraction-strategies.md) | How PDF, DOCX, TXT are parsed |
+| [Text Cleaning](docs/concepts/text-cleaning.md) | How raw text is cleaned |
+| [API Reference](docs/components/api.md) | Endpoints, curl examples |
+| [Validation](docs/components/validation.md) | MIME sniff, size limits, error codes |
+| [Health Checks](docs/components/health.md) | Health and readiness probes |
+| [Observability](docs/operations/observability.md) | Metrics, alerts, dashboards |
+| [Testing](docs/testing/overview.md) | Unit, integration, load |
 
 Full index: [docs/README.md](docs/README.md).
