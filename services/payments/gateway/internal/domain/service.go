@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"gateway/internal/domain/ports"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/domain/ports"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -14,7 +14,7 @@ import (
 
 const unknownEventType = "unknown"
 
-var tracer = otel.Tracer("gateway/payment-service")
+var tracer = otel.Tracer("github.com/kunalPisolkar24/detectAI/services/payments/gateway/payment-service")
 
 type PaymentService struct {
 	publisher     ports.Publisher

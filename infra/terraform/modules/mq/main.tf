@@ -25,7 +25,7 @@ resource "aws_secretsmanager_secret_version" "master" {
 
 resource "aws_mq_broker" "this" {
   broker_name                = var.broker_name
-  engine_type                = "RabbitMQ"
+  engine_type                = "RABBITMQ"
   engine_version             = var.engine_version
   host_instance_type         = var.host_instance_type
   deployment_mode            = var.deployment_mode
@@ -56,15 +56,12 @@ resource "aws_mq_broker" "this" {
 }
 
 locals {
-  # instances[0].endpoints[0] is amqps://host:5671 (3.13) on both Floci (dynamic port)
-  # and AWS. Inject the single admin creds so apps never assemble URLs.
   raw_endpoint = try(aws_mq_broker.this.instances[0].endpoints[0], "")
-  # Strip scheme to get host:port; fallback to broker id DNS when endpoint not yet known at plan.
-  hostport = local.raw_endpoint != "" ? replace(local.raw_endpoint, "amqps://", "") : "${aws_mq_broker.this.id}.mq.${var.aws_region}.amazonaws.com:5671"
-
-  amqp_url = "amqps://${var.username}:${urlencode(random_password.mq.result)}@${local.hostport}/"
-
-  console_url = try(aws_mq_broker.this.instances[0].console_url, "")
+  is_amqps     = local.raw_endpoint != "" && can(regex("^amqps://", local.raw_endpoint))
+  hostport     = local.raw_endpoint != "" ? replace(replace(local.raw_endpoint, "amqps://", ""), "amqp://", "") : "${aws_mq_broker.this.id}.mq.${var.aws_region}.amazonaws.com:5671"
+  scheme       = local.raw_endpoint == "" ? "amqps" : (local.is_amqps ? "amqps" : "amqp")
+  amqp_url     = "${local.scheme}://${var.username}:${urlencode(random_password.mq.result)}@${local.hostport}/"
+  console_url  = try(aws_mq_broker.this.instances[0].console_url, "")
 }
 
 resource "aws_secretsmanager_secret" "urls" {

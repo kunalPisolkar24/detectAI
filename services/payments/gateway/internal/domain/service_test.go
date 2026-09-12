@@ -3,7 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
-	"gateway/test/mocks"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/test/mocks"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

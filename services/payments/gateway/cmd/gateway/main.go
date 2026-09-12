@@ -2,22 +2,18 @@ package main
 
 import (
 	"context"
-	"gateway/internal/domain"
-	"gateway/internal/infrastructure/config"
-	"gateway/internal/infrastructure/paddle"
-	"gateway/internal/infrastructure/rabbitmq"
-	"gateway/internal/logger"
-	"gateway/internal/monitoring"
-	"gateway/internal/tracing"
-	"gateway/internal/transport/http"
 	nethttp "net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/adapters/inbound/http"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/adapters/outbound/paddle"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/adapters/outbound/rabbitmq"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/application"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/config"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/platform/observability"
 )
 
 const QueueName = "payment_events"
@@ -28,26 +24,29 @@ var (
 )
 
 func main() {
-	log := logger.New()
-	cfg, err := config.Load()
+	cfg, err := config.Load(context.Background())
 	if err != nil {
-		log.Error("Failed to load config", "error", err)
+		obsLog := observability.NewLogger("error")
+		obsLog.Error("Failed to load config", "error", err, "env_type", os.Getenv("ENV_TYPE"), "redacted_url", config.RedactedRabbitURL(os.Getenv("RABBITMQ_URL")))
 		os.Exit(1)
 	}
 
-	monitor := monitoring.New("payment-gateway")
+	log := observability.NewLogger(cfg.LogLevel)
+	monitor := observability.NewMonitor("payment-gateway")
 	monitor.SetBuildInfo(buildVersion, buildCommit)
 
-	shutdownTracing, err := tracing.Init("payment-gateway")
+	shutdownTracing, err := observability.InitTracing(cfg)
 	if err != nil {
 		log.Error("Failed to initialize tracing", "error", err)
 		os.Exit(1)
 	}
 
-	rabbitMQ := rabbitmq.NewRabbitMQProducer(cfg.RabbitMQURL, QueueName, cfg.RabbitMQQueueType, log, monitor)
-	paddleValidator := paddle.NewPaddleValidator()
+	log.Info("Gateway config loaded", "port", cfg.Port, "queue_type", cfg.RabbitMQQueueType, "rabbit_url", config.RedactedRabbitURL(cfg.RabbitMQURL), "env_type", cfg.EnvType)
 
-	paymentService := domain.NewPaymentService(rabbitMQ, paddleValidator, monitor, cfg.WebhookSecret)
+	rabbitMQ := rabbitmq.NewRabbitMQProducer(cfg.RabbitMQURL, QueueName, cfg.RabbitMQQueueType, log, monitor)
+	paddleValidator := paddle.NewValidator()
+
+	paymentService := application.NewPaymentService(rabbitMQ, paddleValidator, monitor, cfg.WebhookSecret)
 	handler := http.NewHandler(http.HandlerConfig{
 		Service:     paymentService,
 		Health:      rabbitMQ,
@@ -56,13 +55,7 @@ func main() {
 		Logger:      log,
 	})
 
-	r := gin.New()
-	r.Use(gin.Recovery())
-	r.Use(otelgin.Middleware("payment-gateway"))
-	r.Use(monitor.Middleware())
-	r.GET("/metrics", gin.WrapH(monitor.Handler()))
-
-	handler.RegisterRoutes(r)
+	r := http.SetupRouter(monitor, handler)
 
 	srv := &nethttp.Server{
 		Addr:    ":" + cfg.Port,
@@ -84,7 +77,6 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Error("Server forced to shutdown", "error", err)
 	}

@@ -2,7 +2,7 @@ package mocks
 
 import (
 	"context"
-	"gateway/internal/domain/ports"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/domain/ports"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/mock"
 )

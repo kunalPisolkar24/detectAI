@@ -3,8 +3,8 @@ package rabbitmq
 import (
 	"context"
 	"fmt"
-	"gateway/internal/domain/ports"
-	"gateway/internal/logger"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/domain/ports"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/logger"
 	"strings"
 	"time"
 

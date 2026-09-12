@@ -3,9 +3,9 @@ package rabbitmq
 import (
 	"context"
 	"errors"
-	"gateway/internal/domain/ports"
-	"gateway/internal/logger"
-	"gateway/test/mocks"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/domain/ports"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/logger"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/test/mocks"
 	"sync/atomic"
 	"testing"
 	"time"

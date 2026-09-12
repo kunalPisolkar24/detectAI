@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"gateway/internal/domain"
-	"gateway/internal/infrastructure/paddle"
-	"gateway/internal/infrastructure/rabbitmq"
-	"gateway/internal/logger"
-	"gateway/internal/monitoring"
-	transporthttp "gateway/internal/transport/http"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/domain"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/infrastructure/paddle"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/infrastructure/rabbitmq"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/logger"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/monitoring"
+	transporthttp "github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/transport/http"
 
 	"github.com/gin-gonic/gin"
 	amqp "github.com/rabbitmq/amqp091-go"

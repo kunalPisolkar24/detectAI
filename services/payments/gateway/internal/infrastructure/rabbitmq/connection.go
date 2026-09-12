@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"gateway/internal/domain/ports"
-	"gateway/internal/logger"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/domain/ports"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/logger"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )

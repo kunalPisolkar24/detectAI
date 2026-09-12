@@ -2,8 +2,8 @@ package rabbitmq
 
 import (
 	"errors"
-	"gateway/internal/logger"
-	"gateway/test/mocks"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/logger"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/test/mocks"
 	"sync/atomic"
 	"testing"
 	"time"

@@ -7,10 +7,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// ErrNotConnected signals RabbitMQ is down and the request is retryable (503).
 var ErrNotConnected = errors.New("not connected to RabbitMQ")
-
-// Infrastructure Ports (Outbound)
 
 type AMQPDialer interface {
 	Dial(url string) (AMQPConnection, error)
@@ -57,8 +54,6 @@ type MetricsRecorder interface {
 	RecordRabbitMQPublishDuration(duration float64)
 	RecordRabbitMQReconnection()
 }
-
-// Service Ports (Inbound)
 
 type PaymentService interface {
 	ProcessWebhook(ctx context.Context, signature string, body []byte) error

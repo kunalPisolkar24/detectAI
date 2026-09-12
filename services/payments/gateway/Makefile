@@ -1,7 +1,10 @@
-.PHONY: build run test test-coverage test-integration deps load-test load-down load-test-spike load-test-stress load-test-soak load-test-internal gateway-build gateway-up gateway-down gateway-down-v gateway-logs gateway-ps
+.PHONY: build run test test-coverage test-integration deps load-test load-down load-test-spike load-test-stress load-test-soak load-test-internal gateway-build gateway-up gateway-down gateway-down-v gateway-logs gateway-ps help
+
+help:
+	@echo "Targets: build run test test-coverage test-integration load-test gateway-up/down"
 
 build:
-	go build -o gateway ./cmd/gateway/main.go
+	go build -ldflags "-X main.buildVersion=$${VERSION:-dev} -X main.buildCommit=$${COMMIT:-unknown}" -o gateway ./cmd/gateway/main.go
 
 run:
 	go run cmd/gateway/main.go
@@ -44,8 +47,6 @@ load-test-internal:
 
 deps:
 	go mod tidy
-	go get github.com/testcontainers/testcontainers-go
-	go get github.com/testcontainers/testcontainers-go/modules/rabbitmq
 
 # Gateway with RabbitMQ via shared infra atoms (infra/docker/rabbitmq/*)
 # Usage: make gateway-up [WITH_RABBITMQ=0|1] [WITH_UI=0|1] [RABBITMQ_URL=...]

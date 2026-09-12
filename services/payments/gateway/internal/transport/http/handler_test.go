@@ -3,9 +3,9 @@ package http
 import (
 	"bytes"
 	"errors"
-	"gateway/internal/logger"
-	"gateway/internal/monitoring"
-	"gateway/test/mocks"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/logger"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/monitoring"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/test/mocks"
 	"net/http"
 	"net/http/httptest"
 	"testing"

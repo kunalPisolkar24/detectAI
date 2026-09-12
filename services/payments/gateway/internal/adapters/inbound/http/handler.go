@@ -3,13 +3,19 @@ package http
 import (
 	"context"
 	"errors"
-	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/domain/ports"
-	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/logger"
 	"io"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/domain"
+	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/ports"
+)
+
+const (
+	maxBodySize      = 1 << 20
+	requestTimeout   = 5 * time.Second
+	retryAfterHeader = "5"
 )
 
 type HandlerConfig struct {
@@ -17,7 +23,7 @@ type HandlerConfig struct {
 	Health      ports.HealthChecker
 	Metrics     ports.MetricsRecorder
 	InternalKey string
-	Logger      logger.Logger
+	Logger      ports.Logger
 }
 
 type Handler struct {
@@ -25,7 +31,7 @@ type Handler struct {
 	health      ports.HealthChecker
 	metrics     ports.MetricsRecorder
 	internalKey string
-	logger      logger.Logger
+	logger      ports.Logger
 }
 
 func NewHandler(cfg HandlerConfig) *Handler {
@@ -42,7 +48,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	r.GET("/healthz", h.livez)
 	r.GET("/readyz", h.readyz)
 	r.POST("/webhook/paddle", h.handleWebhook)
-	r.POST("/internal/events", h.handleInternalEvent)
+	r.POST("/internal/events", RequireInternalKey(h.internalKey, h.metrics), h.handleInternalEvent)
 }
 
 func (h *Handler) livez(c *gin.Context) {
@@ -59,12 +65,12 @@ func (h *Handler) readyz(c *gin.Context) {
 }
 
 func isRetryablePublishError(err error) bool {
-	return errors.Is(err, ports.ErrNotConnected) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
+	return errors.Is(err, domain.ErrNotConnected) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
-func (h *Handler) handleWebhook(c *gin.Context) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
-	bodyBytes, err := io.ReadAll(c.Request.Body)
+func (h *Handler) readBody(c *gin.Context) ([]byte, bool) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBodySize)
+	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		reason := "unreadable"
 		var maxBytesErr *http.MaxBytesError
@@ -72,67 +78,58 @@ func (h *Handler) handleWebhook(c *gin.Context) {
 			reason = "too_large"
 		}
 		h.metrics.RecordWebhookBodyError(reason)
-
 		h.logger.Error("Failed to read request body", "error", err, "reason", reason)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Request body too large or unreadable"})
+		return nil, false
+	}
+	return body, true
+}
+
+func (h *Handler) handleWebhook(c *gin.Context) {
+	body, ok := h.readBody(c)
+	if !ok {
 		return
 	}
-
 	signature := c.GetHeader("Paddle-Signature")
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), requestTimeout)
 	defer cancel()
 
-	if err := h.service.ProcessWebhook(ctx, signature, bodyBytes); err != nil {
+	if err := h.service.ProcessWebhook(ctx, signature, body); err != nil {
 		h.logger.Error("Failed to process webhook", "error", err)
-		if err.Error() == "invalid signature" {
+		if errors.Is(err, domain.ErrInvalidSignature) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid signature"})
 			return
 		}
 		if isRetryablePublishError(err) {
-			c.Header("Retry-After", "5")
+			c.Header("Retry-After", retryAfterHeader)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Service Unavailable", "retryable": true})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
 		return
 	}
-
 	h.logger.Info("Event queued successfully")
 	c.JSON(http.StatusOK, gin.H{"status": "queued"})
 }
 
 func (h *Handler) handleInternalEvent(c *gin.Context) {
-	key := c.GetHeader("X-Internal-Key")
-	if key == "" || key != h.internalKey {
-		h.metrics.RecordInternalEventUnauthorized()
-		h.logger.Warn("Unauthorized internal event attempt", "ip", c.ClientIP())
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	body, ok := h.readBody(c)
+	if !ok {
 		return
 	}
-
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
-	bodyBytes, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		h.logger.Error("Failed to read internal event body", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Request body too large or unreadable"})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), requestTimeout)
 	defer cancel()
 
-	if err := h.service.ProcessInternalEvent(ctx, bodyBytes); err != nil {
+	if err := h.service.ProcessInternalEvent(ctx, body); err != nil {
 		h.logger.Error("Failed to process internal event", "error", err)
 		if isRetryablePublishError(err) {
-			c.Header("Retry-After", "5")
+			c.Header("Retry-After", retryAfterHeader)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Service Unavailable", "retryable": true})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
 		return
 	}
-
 	h.logger.Info("Internal event queued successfully")
 	c.JSON(http.StatusOK, gin.H{"status": "queued"})
 }
