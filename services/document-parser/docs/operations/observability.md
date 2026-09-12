@@ -8,7 +8,7 @@ Observability means being able to understand what's happening inside a system by
 
 - **Logs** - Written records of what happened
 - **Metrics** - Numbers that measure performance
-- **Traces** - Distributed tracing across services
+- **Traces** - Distributed tracing across services (via OpenTelemetry)
 
 ## Logs
 
@@ -22,18 +22,21 @@ Logs are written to standard output in JSON format. They're useful for debugging
 | Extraction | MIME type, duration, success/error, truncated |
 | Validation | Rejection reasons (too large, unsupported type) |
 | Pool | Queue depth, active threads |
+| Config | Loaded configuration at startup |
 
 ### Example Log Entry
 
 ```json
 {
-  "level": "info",
-  "msg": "request completed",
+  "timestamp": "2024-09-10T12:00:00Z",
+  "level": "INFO",
+  "message": "Request processed",
+  "module": "middleware",
   "method": "POST",
   "path": "/api/v1/extract",
   "status_code": 200,
-  "duration_ms": 234,
-  "trace_id": "abc123"
+  "duration_ms": 234.56,
+  "trace_id": "abc123def456"
 }
 ```
 
@@ -92,16 +95,23 @@ Metrics are exposed at:
 
 ### Error Classification
 
-Failures are classified into these error types:
+Failures are classified into these error types via `_ERROR_TYPE_MAP`:
 
-| Error Type | Meaning |
-|------------|---------|
-| `file_too_large` | Upload exceeds 10 MiB |
-| `document_too_large` | PDF pages > 1000 or DOCX uncompressed > 100 MB |
-| `unsupported_file_type` | MIME not in allowed list |
-| `timeout` | Extraction exceeded timeout |
-| `corrupt_document` | File is unreadable or damaged |
-| `unexpected` | Unexpected error |
+| Error Type | Exception | Meaning |
+|------------|-----------|---------|
+| `file_too_large` | `FileTooLargeError` | Upload exceeds 10 MiB |
+| `document_too_large` | `DocumentTooLargeError` | PDF pages > 1000 or DOCX uncompressed > 100 MB |
+| `unsupported_file_type` | `UnsupportedFileTypeError` | MIME not in allowed list |
+| `timeout` | `ExtractionTimeoutError` | Extraction exceeded timeout |
+| `corrupt_document` | `ExtractionError` | File is unreadable or damaged |
+| `unexpected` | (any other) | Unexpected error |
+
+Rejections are classified via `_REJECTED_REASON_MAP`:
+
+| Reason | Exceptions |
+|--------|-----------|
+| `too_large` | `FileTooLargeError`, `DocumentTooLargeError` |
+| `unsupported_type` | `UnsupportedFileTypeError` |
 
 ### Viewing Metrics
 

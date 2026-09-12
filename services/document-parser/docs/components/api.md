@@ -8,7 +8,7 @@ This document explains how to use the Document Parser service API. The API uses 
 
 To use the API, you need:
 
-- A running Document Parser service (see [Configuration](../getting-started/configuration.md))
+- A running Document Parser service (see [Quick Start](../getting-started/quickstart.md))
 - A tool like `curl` for making HTTP requests
 
 ### Base URL
@@ -43,7 +43,7 @@ curl -F file=@sample.pdf http://localhost:8000/api/v1/extract
 }
 ```
 
-**Response fields:**
+**All response fields:**
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -150,7 +150,7 @@ When something goes wrong, the API returns these error codes:
 | `200` | Success | - |
 | `413` | File too large | Upload a file smaller than 10 MiB |
 | `415` | Unsupported format | Use PDF, DOCX, or TXT |
-| `422` | Document too large | PDF: reduce pages below 1000. DOCX: reduce size below 100 MB uncompressed |
+| `422` | Document too large or corrupt | PDF: reduce pages below 1000. DOCX: reduce size below 100 MB uncompressed |
 | `503` | Service unavailable | Wait and retry (pool saturated or unhealthy) |
 | `504` | Extraction timeout | Try a smaller file or increase `EXTRACTION_TIMEOUT_SECONDS` |
 
@@ -171,6 +171,9 @@ fi
 # 3. Get the text length
 LENGTH=$(echo $RESPONSE | jq -r .text_length)
 echo "Extracted $LENGTH characters"
+
+# 4. Get just the text
+echo $RESPONSE | jq -r .text
 ```
 
 ## Tips

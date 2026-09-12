@@ -20,7 +20,7 @@ This is important for:
 
 The service has two types of health checks:
 
-### 1. Health Check (`/api/v1/health`)
+### 1. Health Check (`GET /api/v1/health`)
 
 Checks if the service is running and the thread pool is operational:
 
@@ -32,10 +32,10 @@ graph TB
 ```
 
 **What it checks:**
-- Thread pool is initialized
-- Thread pool is not shutdown
+- Thread pool is initialized (not `None`)
+- Thread pool is not shutdown (`_shutdown == False`)
 
-### 2. Readiness Check (`/api/v1/ready`)
+### 2. Readiness Check (`GET /api/v1/ready`)
 
 Checks if the service can handle new requests:
 
@@ -50,8 +50,9 @@ graph TB
 
 **What it checks:**
 - Thread pool is healthy (exists and not shutdown)
-- Active threads (`busy`) are below the maximum
+- Active threads (`busy`) are below the maximum (`WORKER_THREADS`)
 - Queued tasks are below `READINESS_MAX_QUEUE_DEPTH` (default 50)
+- Pool stats are available (not `None` -- race guard during startup)
 
 ## Health Endpoints
 
@@ -77,14 +78,14 @@ healthcheck:
   interval: 30s
   timeout: 10s
   retries: 3
-  start_period: 20s
+  start_period: 10s
 ```
 
 **What this means:**
 - Check every 30 seconds
 - Timeout after 10 seconds
 - Fail after 3 consecutive failures
-- Wait 20 seconds before first check (startup time)
+- Wait 10 seconds before first check (startup time)
 
 ## Monitoring Health
 
@@ -115,23 +116,27 @@ docker ps --format "table {{.Names}}\t{{.Status}}"
 
 ## Troubleshooting
 
-**Service returns `503 unavailable`?**
+### "Service returns 503 unavailable?"
+
 - Check if the service process is running
 - Look at logs for startup errors
 - Verify the thread pool initialized correctly
 
-**Service returns `503 not_ready`?**
+### "Service returns 503 not_ready?"
+
 - The thread pool is saturated (too many concurrent extractions)
 - Wait for current extractions to complete
 - Increase `WORKER_THREADS` if this happens frequently
 - Check `extraction_pool_queue_depth` metric
 
-**Health check timeout?**
+### "Health check timeout?"
+
 - The service may be overloaded
 - Check `extraction_pool_active_threads` metric
 - Look at service logs for errors
 
-**Docker health check failing?**
+### "Docker health check failing?"
+
 - Check container logs (`docker compose logs document-parser`)
 - Verify the health check command works inside the container
 - Ensure port 8000 is correctly mapped

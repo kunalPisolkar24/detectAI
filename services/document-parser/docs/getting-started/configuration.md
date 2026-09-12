@@ -10,8 +10,8 @@ This document explains how to configure the Document Parser service for `ENV_TYP
 
 ## How Configuration Works
 
-- `ENV_TYPE=dev` -- loads `.env` in CWD if present, else `$ENV_FILE` (best-effort via `python-dotenv`), applies dev defaults, validates.
-- `ENV_TYPE=prod` -- loads Secrets Manager + SSM via boto3, applies non-secret env overrides, then validates with strict prod checks.
+* `ENV_TYPE=dev` -- loads `.env` in CWD if present, else `$ENV_FILE` (best-effort via `python-dotenv`), applies dev defaults, validates.
+* `ENV_TYPE=prod` -- loads Secrets Manager + SSM via boto3, applies non-secret env overrides, then validates with strict prod checks.
 
 Precedence: `process env` > AWS (Secrets + SSM) > prod-non-secret-overrides > schema defaults. Empty strings never override (compose passthrough `${VAR:-}`).
 
@@ -35,7 +35,7 @@ WORKERS=4                     # gunicorn worker processes (shell-only, not via S
 ### Extraction Settings
 
 ```bash
-WORKER_THREADS=4              # ThreadPoolExecutor size (default: cpu_count || 4)
+WORKER_THREADS=4              # ThreadPoolExecutor size (default: cpu_count || 4, range 1..128)
 MAX_UPLOAD_SIZE_BYTES=10485760        # 10 MiB, 413 if exceeded
 MAX_TEXT_LENGTH=1000000               # 1M chars, truncate output
 MAX_PDF_PAGES=1000                    # 422 if exceeded
@@ -47,7 +47,7 @@ READINESS_MAX_QUEUE_DEPTH=50          # queued >= 50 -> 503
 ### PDF Extraction Tuning
 
 ```bash
-HEADER_FOOTER_MARGIN_PT=40.0         # PDF header/footer strip margin (0..500)
+HEADER_FOOTER_MARGIN_PT=40.0         # PDF header/footer strip margin (0..500 points)
 HEADER_REPETITION_RATIO=0.8          # drop repeated lines on >= ratio pages (0..1)
 ```
 
@@ -113,9 +113,16 @@ LOG_LEVEL=INFO
 OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector:4318
 ```
 
+### Floci local prod test
+
+```bash
+ENV_TYPE=prod AWS_REGION=ap-south-1 AWS_ENDPOINT_URL=http://host.docker.internal:4566 \
+  docker compose --env-file infra/.env.example -f infra/compose.yml config
+```
+
 ## Configuration Validation
 
-`Settings` validates on startup:
+`Settings(BaseSettings)` validates on startup:
 
 | Error | Cause | Fix |
 |-------|-------|-----|
@@ -144,7 +151,14 @@ Failed validation -> service exits at startup.
 ## AWS
 
 - **Secrets Manager:** `DOCUMENT_PARSER_SECRETS_NAME` or `detectai/document-parser/secrets`. JSON object keys upper-normalized and merged if missing in `cfg`; tolerant missing in prod (warning).
+  ```bash
+  aws secretsmanager create-secret --name detectai/document-parser/secrets --secret-string '{"SOME_KEY":"value"}'
+  ```
 - **SSM Parameter Store:** `SSM_PREFIX` or `/detectai/document-parser/`. `GetParametersByPath(recursive, withDecryption)` paginated, key = `Name[len(prefix):].upper().replace("-","_")`, skipped if env/cfg already set. Disable with `SSM_ENABLED=0|false`.
+  ```bash
+  aws ssm put-parameter --name /detectai/document-parser/max-pdf-pages --value 2000
+  ```
+- **Floci endpoint:** dummy `test/test` creds auto-injected when `AWS_ENDPOINT_URL` contains `localhost:4566` / `host.docker.internal:4566` without `AWS_ACCESS_KEY_ID`.
 
 ## Developer Workflow
 
@@ -155,12 +169,24 @@ The service includes a Makefile with common commands:
 | `make test` | Run all unit tests |
 | `make test-coverage` | Run unit tests with coverage report |
 | `make test-integration` | Run integration tests (requires Docker) |
-| `make load-test` | Run k6 load tests |
+| `make lint` | Run ruff linter |
+| `make deps` | Install dependencies via Poetry |
+| `make load-test` | Run k6 load tests (options: `MODE`, `VUS`, `DURATION`, `RPS`) |
 | `make load-down` | Tear down the load test stack |
 | `make parser-build` | Build the Docker image |
 | `make parser-up` | Start the service with Docker Compose |
 | `make parser-logs` | View live logs |
+| `make parser-ps` | View running containers |
 | `make parser-down` | Stop and clean up |
+| `make parser-down-v` | Stop and remove volumes |
+| `make parser-config` | Validate compose config |
+
+**Load test examples:**
+```bash
+make load-test VUS=20 DURATION=1m RAMP_TIME=30s
+make load-test MODE=rps RPS=100 VUS=50 DURATION=2m
+make load-test MODE=vus VUS=100
+```
 
 ## Troubleshooting
 

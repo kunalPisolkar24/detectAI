@@ -62,20 +62,42 @@ Response:
 curl -F file=@sample.docx http://localhost:8000/api/v1/extract
 ```
 
+Response:
+```json
+{
+  "text": "Content from your Word document...",
+  "truncated": false,
+  "filename": "sample.docx",
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text_length": 5678
+}
+```
+
 #### Extract Text from a TXT
 
 ```bash
 curl -F file=@sample.txt http://localhost:8000/api/v1/extract
 ```
 
-### What Just Happened?
+Response:
+```json
+{
+  "text": "Content from your text file...",
+  "truncated": false,
+  "filename": "sample.txt",
+  "content_type": "text/plain",
+  "text_length": 42
+}
+```
+
+## What Just Happened?
 
 1. You sent a file to the `/api/v1/extract` endpoint
-2. The service **sniffed the MIME type** (detected it's a PDF/DOCX/TXT)
-3. It checked the file **size** (must be under 10 MiB) and **format** (must be supported)
+2. The service **sniffed the MIME type** using `python-magic` (reads first 4096 bytes)
+3. It checked the file **size** (must be under 10 MiB) and **format** (must be PDF, DOCX, or TXT)
 4. It picked the right **extraction strategy** for the file type
 5. The strategy extracted raw text from the document
-6. The text was **cleaned** (normalized whitespace, removed control characters)
+6. The text was **cleaned** (normalized whitespace, removed control characters, fixed hyphenated breaks)
 7. The cleaned text was returned to you
 
 ## Checking Readiness
@@ -91,7 +113,7 @@ Response when ready:
 {"status": "ready"}
 ```
 
-Response when busy:
+Response when the thread pool is saturated:
 ```json
 {"status": "not_ready"}
 ```

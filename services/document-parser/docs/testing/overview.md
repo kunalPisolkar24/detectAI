@@ -85,20 +85,34 @@ make load-test
 ```
 document-parser/
 ├── tests/
-│   ├── test_extractor.py      # Tests for PDF, DOCX, TXT extraction
-│   ├── test_validator.py      # Tests for MIME sniff, size check
-│   ├── test_cleaner.py        # Tests for TextCleaner
-│   └── test_app.py            # Tests for FastAPI endpoints
+│   ├── conftest.py                    # Shared fixtures (client, sample files, pool mock)
+│   ├── unit/
+│   │   ├── api/
+│   │   │   ├── test_deps.py           # validate_upload: size guard, MIME sniff
+│   │   │   ├── test_exception_handlers.py  # Error handler: safe detail, metrics
+│   │   │   └── v1/endpoints/
+│   │   │       ├── test_extract.py    # POST /extract: success, errors, timeouts
+│   │   │       ├── test_extract_edge.py  # Edge cases: missing file, empty filename
+│   │   │       ├── test_health.py     # /health, /ready: pool states
+│   │   │       └── test_health_extra.py  # /metrics, race guard
+│   │   ├── core/
+│   │   │   ├── test_config.py         # Settings validation, env normalization
+│   │   │   ├── test_exceptions.py     # Exception hierarchy, status codes
+│   │   │   ├── test_logging.py        # JSON formatter, middleware logging
+│   │   │   └── test_metrics.py        # All Prometheus metrics, classification
+│   │   └── domain/
+│   │       ├── test_cleaner.py        # TextCleaner: all 10 cleaning steps
+│   │       ├── test_entities.py       # ExtractionResult dataclass
+│   │       └── test_extractions.py    # ExtractionService, strategies, factory
+│   └── integration/
+│       └── test_extract_integration.py  # End-to-end extraction with real files
 ├── load/
-│   ├── script.js              # k6 load test script
-│   ├── fixtures/              # Sample files for testing
-│   │   ├── sample.pdf
-│   │   ├── sample.docx
-│   │   └── sample.txt
-│   └── README.md              # Load test documentation
+│   ├── script.js                      # k6 load test script
+│   ├── fixtures/                      # Sample files (PDF, DOCX, TXT)
+│   └── README.md                      # Load test documentation
 └── docs/
     └── testing/
-        └── overview.md        # This file
+        └── overview.md                # This file
 ```
 
 ## Writing Tests
@@ -120,36 +134,37 @@ def test_pdf_extractor_rejects_too_many_pages():
 
 ```python
 @pytest.mark.integration
-async def test_extract_pdf_returns_text():
+def test_extract_pdf_returns_text(client):
     """Test that uploading a PDF returns extracted text."""
     # Arrange
-    async with httpx.AsyncClient(app=app) as client:
-        with open("tests/fixtures/sample.pdf", "rb") as f:
-            # Act
-            response = await client.post(
-                "/api/v1/extract",
-                files={"file": ("sample.pdf", f, "application/pdf")}
-            )
+    with open("tests/fixtures/sample.pdf", "rb") as f:
+        # Act
+        response = client.post(
+            "/api/v1/extract",
+            files={"file": ("sample.pdf", f, "application/pdf")}
+        )
 
-        # Assert
-        assert response.status_code == 200
-        data = response.json()
-        assert "text" in data
-        assert len(data["text"]) > 0
-        assert data["truncated"] is False
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert "text" in data
+    assert len(data["text"]) > 0
+    assert data["truncated"] is False
 ```
 
 ### Validation Test Example
 
 ```python
-def test_reject_oversized_file():
-    """Test that files over 10 MiB are rejected."""
-    # Arrange
-    large_content = b"x" * (10 * 1024 * 1024 + 1)
+def test_reject_oversized_file(mocker):
+    """Test that files over 10 MiB are rejected at upload."""
+    mock_magic = mocker.patch("app.api.deps.magic.from_buffer")
+    upload = _upload(b"x" * 10, "big.pdf", size=11 * 1024 * 1024)
 
-    # Act
     with pytest.raises(FileTooLargeError):
-        validate_upload(large_content)
+        asyncio.run(validate_upload(upload))
+
+    # Magic should not even be called -- size check is first
+    mock_magic.assert_not_called()
 ```
 
 ## Test Coverage
@@ -179,23 +194,26 @@ open htmlcov/index.html
 Load testing checks how the service performs under heavy traffic.
 
 ```bash
-# Run with default settings
+# Run with default settings (5 VUs, 10s)
 make load-test
 
-# Run with custom settings
-make load-test VUS=20 DURATION=1m
+# Run with custom VUs and duration
+make load-test VUS=20 DURATION=1m RAMP_TIME=30s
 
-# Run in RPS mode
-make load-test MODE=rps RPS=100 VUS=50
+# Run in RPS mode (target requests per second)
+make load-test MODE=rps RPS=100 VUS=50 DURATION=2m
+
+# Stop load test stack
+make load-down
 ```
 
 ### Load Test Modes
 
 | Mode | What It Does | When to Use |
 |------|--------------|-------------|
-| `vus` (default) | Simulates N virtual users | Realistic traffic simulation |
-| `rps` | Targets N requests per second | Throughput testing |
-| `health` | Simple health check loop | Smoke testing |
+| `vus` (default) | Simulates N virtual users with ramp-up/down | Realistic traffic simulation |
+| `rps` | Targets N requests per second with open-model arrival | Throughput testing |
+| `health` | Simple health check loop (5 VUs, 30s) | Smoke testing |
 
 ### Load Test Scenarios
 
@@ -203,9 +221,17 @@ make load-test MODE=rps RPS=100 VUS=50
 |----------|---------------|----------|---------|
 | Smoke | 5 | 30 seconds | Quick sanity check |
 | Load | 20 | 2 minutes | Realistic traffic |
-| Stress | 50 | 5 minutes | Find breaking point |
+| Stress | 50-100 | 5 minutes | Find breaking point |
 
-Each virtual user picks a random file (PDF, DOCX, or TXT) from `load/fixtures/`, uploads it, and verifies a `200` response.
+Each virtual user picks a random file (PDF, DOCX, or TXT) from `load/fixtures/`, uploads it as `multipart/form-data`, and verifies a `200` response with valid `text` field.
+
+### Thresholds
+
+| Threshold | Value | Meaning |
+|-----------|-------|---------|
+| `http_req_duration p(95)` | < 1500ms | 95% of requests under 1.5 seconds |
+| `http_req_duration p(99)` | < 3000ms | 99% of requests under 3 seconds |
+| `errors rate` | == 0 | Zero errors allowed |
 
 ## Common Testing Issues
 
@@ -239,9 +265,9 @@ kill <PID>
 **Problem:** Tests sometimes pass, sometimes fail.
 
 **Solution:**
-- Check for race conditions
-- Ensure tests clean up after themselves
-- Use proper test isolation
+- Check for race conditions in pool metrics
+- Ensure tests clean up after themselves (conftest clears all metrics)
+- Use proper test isolation (settings cache cleared per test)
 
 ## Best Practices
 
