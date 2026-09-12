@@ -51,7 +51,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 	s.healthServer.SetServingStatus("chat.ChatService", healthpb.HealthCheckResponse_SERVING)
 
-	if s.cfg.AppEnv != "production" {
+	if !s.cfg.IsProd() {
 		reflection.Register(grpcServer)
 	}
 

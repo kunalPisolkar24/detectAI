@@ -15,13 +15,13 @@ import (
 
 // MongoConnectConfig mirrors the subset of internal/config.Config needed for Mongo.
 type MongoConnectConfig struct {
-	URI            string
-	MaxPoolSize    uint64
-	MinPoolSize    uint64
-	ServerTimeout  time.Duration
-	TLSEnabled     bool
-	TLSCAFile      string
-	Mode           string // standalone | sharded (only used for logging/hints)
+	URI           string
+	MaxPoolSize   uint64
+	MinPoolSize   uint64
+	ServerTimeout time.Duration
+	TLSEnabled    bool
+	TLSCAFile     string
+	Mode          string // standalone | sharded (only used for logging/hints)
 }
 
 func ConnectMongo(ctx context.Context, cfg MongoConnectConfig) (*mongo.Client, error) {

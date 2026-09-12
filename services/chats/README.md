@@ -75,22 +75,29 @@ grpcurl -plaintext -d '{"chat_id": "your-chat-id", "page": 1, "page_size": 20}' 
 
 ## Configuration
 
-The service is configured using environment variables. The most important ones:
+The service uses `ENV_TYPE=dev|prod` (like `gateway` and `workers`). `dev` reads `.env` / compose env with sane defaults; `prod` pulls from AWS Secrets Manager (`detectai/docdb/urls` + `detectai/redis/chat/urls`) and SSM `/detectai/chat/` with strict validation (`internal/config/{config,provider,aws}.go`).
 
 ```bash
-# Required
+# dev (compose defaults, no AWS)
+ENV_TYPE=dev
 SERVICE_ROLE=api          # or 'worker'
-MONGO_URI=mongodb://mongo-chat:27017
-CHAT_REDIS_ADDR=redis-chat:6379
+# MONGO_URI/Chats Redis default via dev defaults: mongodb://mongo-chat:27017 / redis-chat:6379
 
-# Optional
+# prod (AWS)
+ENV_TYPE=prod
+SERVICE_ROLE=api
+AWS_REGION=ap-south-1     # secrets/SSM fetched automatically, no MONGO_URI in env
+
+# optional tuning (both)
 MONGO_DATABASE=chat_db
 STREAM_PARTITION_COUNT=16
 BATCH_SIZE=50
 CACHE_TTL=24h
+LOG_LEVEL=info            # debug,info,warn,error
+OTEL_EXPORTER_OTLP_ENDPOINT= # http(s):// — empty disables
 ```
 
-See [Configuration](docs/getting-started/configuration.md) for all options.
+See [Configuration](docs/getting-started/configuration.md) for the full table, Floci local prod, and validation errors.
 
 ## API Reference
 

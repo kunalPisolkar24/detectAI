@@ -171,10 +171,10 @@ func TestHA_Database_HAConnectConfig(t *testing.T) {
 	require.NoError(t, mongorepo.EnsureIndexes(ctx, db))
 	repo := mongorepo.NewMongoRepository(db)
 	msg := &domain.Message{
-		ID:     uuid.New().String(),
-		ChatID: uuid.New().String(),
-		UserID: "user-1",
-		Content: "ha connect",
+		ID:        uuid.New().String(),
+		ChatID:    uuid.New().String(),
+		UserID:    "user-1",
+		Content:   "ha connect",
 		CreatedAt: time.Now().UTC(),
 	}
 	require.NoError(t, repo.BulkUpsertMessages(ctx, []*domain.Message{msg}))

@@ -15,7 +15,7 @@ func EnsureIndexes(ctx context.Context, db *mongo.Database) error {
 	defer cancel()
 
 	_, err := db.Collection("chats").Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "updated_at", Value: -1}},
+		Keys:    bson.D{{Key: "user_id", Value: 1}, {Key: "updated_at", Value: -1}},
 		Options: options.Index().SetName("idx_user_chats_timeline"),
 	})
 	if err != nil {

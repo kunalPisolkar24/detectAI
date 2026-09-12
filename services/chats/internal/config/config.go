@@ -2,172 +2,265 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
-
-	"github.com/joho/godotenv"
-	"github.com/kelseyhightower/envconfig"
 )
 
+// Config holds all runtime configuration for the chats service.
+// It is the single source of truth — no other package should read env directly.
 type Config struct {
-	AppEnv               string        `envconfig:"APP_ENV" default:"production"`
-	ServiceRole          string        `envconfig:"SERVICE_ROLE" required:"true"`
-	GRPCPort             string        `envconfig:"GRPC_PORT" default:":50051"`
-	MetricsPort          string        `envconfig:"METRICS_PORT" default:":9091"`
-	MongoURI             string        `envconfig:"MONGO_URI" required:"true"`
-	MongoDatabase        string        `envconfig:"MONGO_DATABASE" default:"chat_db"`
-	MongoMode            string        `envconfig:"MONGO_MODE" default:"standalone"`
-	MongoTLSEnabled      bool          `envconfig:"MONGO_TLS_ENABLED" default:"false"`
-	MongoTLSCAFile       string        `envconfig:"MONGO_TLS_CA_FILE" default:""`
-	MongoMaxPoolSize     uint64        `envconfig:"MONGO_MAX_POOL_SIZE" default:"0"`
-	MongoMinPoolSize     uint64        `envconfig:"MONGO_MIN_POOL_SIZE" default:"0"`
-	MongoServerTimeout   time.Duration `envconfig:"MONGO_SERVER_SELECTION_TIMEOUT" default:"0s"`
-	RedisAddr            string        `envconfig:"CHAT_REDIS_ADDR"`
-	RedisURL             string        `envconfig:"REDIS_URL"`
-	RedisPassword        string        `envconfig:"REDIS_PASSWORD"`
-	RedisTLSEnabled      bool          `envconfig:"REDIS_TLS_ENABLED" default:"false"`
-	RedisTLSCAFile       string        `envconfig:"REDIS_TLS_CA_FILE" default:""`
-	RedisPoolSize        int           `envconfig:"REDIS_POOL_SIZE" default:"100"`
-	BatchSize            int           `envconfig:"BATCH_SIZE" default:"50"`
-	StreamPartitionCount int           `envconfig:"STREAM_PARTITION_COUNT" default:"16"`
-	CacheTTL             time.Duration `envconfig:"CACHE_TTL" default:"24h"`
+	EnvType              string
+	ServiceRole          string
+	GRPCPort             string
+	MetricsPort          string
+	MongoURI             string
+	MongoDatabase        string
+	MongoMode            string
+	MongoTLSEnabled      bool
+	MongoTLSCAFile       string
+	MongoMaxPoolSize     uint64
+	MongoMinPoolSize     uint64
+	MongoServerTimeout   time.Duration
+	RedisAddr            string
+	RedisPassword        string
+	RedisTLSEnabled      bool
+	RedisTLSCAFile       string
+	RedisPoolSize        int
+	BatchSize            int
+	StreamPartitionCount int
+	CacheTTL             time.Duration
+	LogLevel             string
+	OtelEndpoint         string
+	OtelServiceName      string
+	AWSRegion            string
 }
 
-func Load() (*Config, error) {
-	if envFile := os.Getenv("ENV_FILE"); envFile != "" {
-		_ = godotenv.Load(envFile)
+// IsProd reports whether the service runs in production (AWS-backed) mode.
+func (c *Config) IsProd() bool { return c.EnvType == "prod" }
+
+// IsDev reports whether the service runs in development (local compose) mode.
+func (c *Config) IsDev() bool { return c.EnvType == "dev" }
+
+// Validate checks all invariants, normalizes defaults and derived fields.
+// It mutates the receiver to fill mode-dependent defaults, mirroring the
+// gateway/document-parser Validate pattern.
+func (c *Config) Validate() error {
+	if c.EnvType != "dev" && c.EnvType != "prod" {
+		return fmt.Errorf("ENV_TYPE must be dev or prod, got %q", c.EnvType)
 	}
 
-	var cfg Config
-	err := envconfig.Process("", &cfg)
-	if err != nil {
-		return nil, err
+	c.ServiceRole = strings.ToLower(strings.TrimSpace(c.ServiceRole))
+	if c.ServiceRole != "api" && c.ServiceRole != "worker" {
+		return fmt.Errorf("SERVICE_ROLE must be 'api' or 'worker', got %q", c.ServiceRole)
 	}
 
-	if strings.TrimSpace(cfg.RedisAddr) == "" {
-		cfg.RedisAddr = strings.TrimSpace(cfg.RedisURL)
+	if strings.TrimSpace(c.MongoURI) == "" {
+		return fmt.Errorf("MONGO_URI is required")
 	}
-	cfg.RedisAddr = strings.TrimSpace(cfg.RedisAddr)
-	if strings.HasPrefix(strings.ToLower(cfg.RedisAddr), "rediss://") {
-		cfg.RedisAddr = cfg.RedisAddr[len("rediss://"):]
-		cfg.RedisTLSEnabled = true
-	} else if strings.HasPrefix(strings.ToLower(cfg.RedisAddr), "redis://") {
-		cfg.RedisAddr = cfg.RedisAddr[len("redis://"):]
+	lowerURI := strings.ToLower(strings.TrimSpace(c.MongoURI))
+	if !strings.HasPrefix(lowerURI, "mongodb://") && !strings.HasPrefix(lowerURI, "mongodb+srv://") {
+		return fmt.Errorf("MONGO_URI must start with mongodb:// or mongodb+srv://, got %q", redactMongoURI(c.MongoURI))
 	}
-	if at := strings.LastIndex(cfg.RedisAddr, "@"); at >= 0 {
-		creds := cfg.RedisAddr[:at]
-		cfg.RedisAddr = cfg.RedisAddr[at+1:]
-		if cfg.RedisPassword == "" {
+
+	if strings.TrimSpace(c.MongoDatabase) == "" {
+		c.MongoDatabase = "chat_db"
+	}
+
+	c.MongoMode = strings.ToLower(strings.TrimSpace(c.MongoMode))
+	if c.MongoMode == "" {
+		c.MongoMode = "standalone"
+	}
+	if c.MongoMode != "standalone" && c.MongoMode != "sharded" {
+		return fmt.Errorf("MONGO_MODE must be 'standalone' or 'sharded', got %q", c.MongoMode)
+	}
+	if c.MongoTLSEnabled && c.MongoTLSCAFile != "" {
+		if _, err := os.Stat(c.MongoTLSCAFile); err != nil {
+			return fmt.Errorf("MONGO_TLS_CA_FILE not readable %q: %w", c.MongoTLSCAFile, err)
+		}
+	}
+	if c.RedisTLSEnabled && c.RedisTLSCAFile != "" {
+		if _, err := os.Stat(c.RedisTLSCAFile); err != nil {
+			return fmt.Errorf("REDIS_TLS_CA_FILE not readable %q: %w", c.RedisTLSCAFile, err)
+		}
+	}
+
+	if err := c.normalizeRedis(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(c.RedisAddr) == "" {
+		return fmt.Errorf("CHAT_REDIS_ADDR or REDIS_URL is required (host:port)")
+	}
+	if !strings.Contains(c.RedisAddr, ":") {
+		return fmt.Errorf("CHAT_REDIS_ADDR must be host:port, got %q", c.RedisAddr)
+	}
+
+	if c.MongoMaxPoolSize == 0 {
+		if c.MongoMode == "sharded" {
+			c.MongoMaxPoolSize = 20
+		} else {
+			c.MongoMaxPoolSize = 100
+		}
+	}
+	if c.MongoMaxPoolSize == 0 || c.MongoMaxPoolSize > 500 {
+		return fmt.Errorf("MONGO_MAX_POOL_SIZE must be 1..500, got %d", c.MongoMaxPoolSize)
+	}
+	if c.MongoMinPoolSize == 0 {
+		if c.MongoMode == "sharded" {
+			c.MongoMinPoolSize = 5
+		} else {
+			c.MongoMinPoolSize = 10
+		}
+	}
+	if c.MongoMinPoolSize > c.MongoMaxPoolSize {
+		return fmt.Errorf("MONGO_MIN_POOL_SIZE (%d) must be <= MONGO_MAX_POOL_SIZE (%d)", c.MongoMinPoolSize, c.MongoMaxPoolSize)
+	}
+	if c.MongoServerTimeout == 0 {
+		if c.MongoMode == "sharded" {
+			c.MongoServerTimeout = 15 * time.Second
+		} else {
+			c.MongoServerTimeout = 5 * time.Second
+		}
+	}
+
+	if c.RedisPoolSize <= 0 {
+		c.RedisPoolSize = 100
+	}
+	if c.RedisPoolSize > 500 {
+		return fmt.Errorf("REDIS_POOL_SIZE must be <= 500, got %d", c.RedisPoolSize)
+	}
+
+	if c.BatchSize <= 0 {
+		c.BatchSize = 50
+	}
+	if c.BatchSize > 500 {
+		return fmt.Errorf("BATCH_SIZE must be <= 500, got %d", c.BatchSize)
+	}
+
+	if c.StreamPartitionCount <= 0 {
+		c.StreamPartitionCount = 16
+	}
+	if c.StreamPartitionCount > 128 {
+		return fmt.Errorf("STREAM_PARTITION_COUNT must be <= 128, got %d", c.StreamPartitionCount)
+	}
+
+	if c.CacheTTL <= 0 {
+		c.CacheTTL = 24 * time.Hour
+	}
+
+	if c.GRPCPort == "" {
+		c.GRPCPort = ":50051"
+	}
+	if c.MetricsPort == "" {
+		c.MetricsPort = ":9091"
+	}
+	if !isValidPort(c.GRPCPort) {
+		return fmt.Errorf("GRPC_PORT has invalid format %q", c.GRPCPort)
+	}
+	if !isValidPort(c.MetricsPort) {
+		return fmt.Errorf("METRICS_PORT has invalid format %q", c.MetricsPort)
+	}
+
+	if strings.TrimSpace(c.LogLevel) == "" {
+		c.LogLevel = "info"
+	}
+	ll := strings.ToLower(strings.TrimSpace(c.LogLevel))
+	allowed := map[string]bool{
+		"debug": true, "info": true, "warn": true, "warning": true,
+		"error": true, "dpanic": true, "panic": true, "fatal": true,
+	}
+	if !allowed[ll] {
+		return fmt.Errorf("LOG_LEVEL must be one of debug,info,warn,warning,error, got %q", c.LogLevel)
+	}
+	if ll == "warning" {
+		ll = "warn"
+	}
+	c.LogLevel = ll
+
+	if c.OtelEndpoint != "" {
+		if !strings.HasPrefix(c.OtelEndpoint, "http://") && !strings.HasPrefix(c.OtelEndpoint, "https://") {
+			return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT must be http(s) URL, got %q", c.OtelEndpoint)
+		}
+		if _, err := url.Parse(c.OtelEndpoint); err != nil {
+			return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT invalid URL %q: %w", c.OtelEndpoint, err)
+		}
+	}
+	if strings.TrimSpace(c.OtelServiceName) == "" {
+		c.OtelServiceName = "chat-service"
+	} else {
+		c.OtelServiceName = strings.TrimSpace(c.OtelServiceName)
+	}
+
+	if strings.TrimSpace(c.AWSRegion) == "" {
+		c.AWSRegion = "ap-south-1"
+	}
+
+	return nil
+}
+
+func (c *Config) normalizeRedis() error {
+	raw := strings.TrimSpace(c.RedisAddr)
+	if raw == "" {
+		return nil
+	}
+	lower := strings.ToLower(raw)
+	tlsFromScheme := false
+	if strings.HasPrefix(lower, "rediss://") {
+		raw = raw[len("rediss://"):]
+		tlsFromScheme = true
+	} else if strings.HasPrefix(lower, "redis://") {
+		raw = raw[len("redis://"):]
+	}
+	if at := strings.LastIndex(raw, "@"); at >= 0 {
+		creds := raw[:at]
+		raw = raw[at+1:]
+		if c.RedisPassword == "" {
 			if i := strings.LastIndex(creds, ":"); i >= 0 {
-				cfg.RedisPassword = creds[i+1:]
+				c.RedisPassword = creds[i+1:]
 			} else {
-				cfg.RedisPassword = creds
+				c.RedisPassword = creds
 			}
 		}
 	}
-	if strings.TrimSpace(cfg.RedisAddr) == "" {
-		return nil, fmt.Errorf("CHAT_REDIS_ADDR or REDIS_URL is required (host:port)")
+	c.RedisAddr = strings.TrimSpace(raw)
+	if tlsFromScheme {
+		c.RedisTLSEnabled = true
 	}
-	if !strings.Contains(cfg.RedisAddr, ":") {
-		return nil, fmt.Errorf("CHAT_REDIS_ADDR must be host:port, got %q", cfg.RedisAddr)
-	}
-
-	cfg.ServiceRole = strings.ToLower(strings.TrimSpace(cfg.ServiceRole))
-	if cfg.ServiceRole != "api" && cfg.ServiceRole != "worker" {
-		return nil, fmt.Errorf("SERVICE_ROLE must be 'api' or 'worker', got %q", cfg.ServiceRole)
-	}
-
-	cfg.MongoMode = strings.ToLower(strings.TrimSpace(cfg.MongoMode))
-	if cfg.MongoMode == "" {
-		cfg.MongoMode = "standalone"
-	}
-	if cfg.MongoMode != "standalone" && cfg.MongoMode != "sharded" {
-		return nil, fmt.Errorf("MONGO_MODE must be 'standalone' or 'sharded', got %q", cfg.MongoMode)
-	}
-	if cfg.MongoTLSEnabled && cfg.MongoTLSCAFile != "" {
-		if _, err := os.Stat(cfg.MongoTLSCAFile); err != nil {
-			return nil, fmt.Errorf("MONGO_TLS_CA_FILE not readable %q: %w", cfg.MongoTLSCAFile, err)
-		}
-	}
-	if cfg.MongoMaxPoolSize == 0 {
-		if cfg.MongoMode == "sharded" {
-			cfg.MongoMaxPoolSize = 20
-		} else {
-			cfg.MongoMaxPoolSize = 100
-		}
-	}
-	if cfg.MongoMinPoolSize == 0 {
-		if cfg.MongoMode == "sharded" {
-			cfg.MongoMinPoolSize = 5
-		} else {
-			cfg.MongoMinPoolSize = 10
-		}
-	}
-	if cfg.MongoServerTimeout == 0 {
-		if cfg.MongoMode == "sharded" {
-			cfg.MongoServerTimeout = 15 * time.Second
-		} else {
-			cfg.MongoServerTimeout = 5 * time.Second
-		}
-	}
-	if cfg.MongoMaxPoolSize == 0 || cfg.MongoMaxPoolSize > 500 {
-		return nil, fmt.Errorf("MONGO_MAX_POOL_SIZE must be 1..500, got %d", cfg.MongoMaxPoolSize)
-	}
-	if cfg.MongoMinPoolSize > cfg.MongoMaxPoolSize {
-		return nil, fmt.Errorf("MONGO_MIN_POOL_SIZE (%d) must be <= MONGO_MAX_POOL_SIZE (%d)", cfg.MongoMinPoolSize, cfg.MongoMaxPoolSize)
-	}
-
-	if cfg.RedisTLSEnabled && cfg.RedisTLSCAFile != "" {
-		if _, err := os.Stat(cfg.RedisTLSCAFile); err != nil {
-			return nil, fmt.Errorf("REDIS_TLS_CA_FILE not readable %q: %w", cfg.RedisTLSCAFile, err)
-		}
-	}
-
-	if cfg.RedisPoolSize <= 0 {
-		cfg.RedisPoolSize = 100
-	}
-	if cfg.RedisPoolSize > 500 {
-		return nil, fmt.Errorf("REDIS_POOL_SIZE must be <= 500, got %d", cfg.RedisPoolSize)
-	}
-
-	if cfg.BatchSize <= 0 {
-		cfg.BatchSize = 50
-	}
-	if cfg.BatchSize > 500 {
-		return nil, fmt.Errorf("BATCH_SIZE must be <= 500, got %d", cfg.BatchSize)
-	}
-
-	if cfg.StreamPartitionCount <= 0 {
-		cfg.StreamPartitionCount = 16
-	}
-	if cfg.StreamPartitionCount > 128 {
-		return nil, fmt.Errorf("STREAM_PARTITION_COUNT must be <= 128, got %d", cfg.StreamPartitionCount)
-	}
-
-	if cfg.CacheTTL <= 0 {
-		cfg.CacheTTL = 24 * time.Hour
-	}
-
-	if cfg.GRPCPort != "" && !isValidPort(cfg.GRPCPort) {
-		return nil, fmt.Errorf("GRPC_PORT has invalid format %q", cfg.GRPCPort)
-	}
-	if cfg.MetricsPort != "" && !isValidPort(cfg.MetricsPort) {
-		return nil, fmt.Errorf("METRICS_PORT has invalid format %q", cfg.MetricsPort)
-	}
-
-	return &cfg, nil
+	return nil
 }
 
 func isValidPort(p string) bool {
+	p = strings.TrimSpace(p)
 	if p == "" {
 		return false
 	}
-	if strings.HasPrefix(p, ":") && len(p) > 1 {
-		return true
+	if strings.HasPrefix(p, ":") {
+		portStr := strings.TrimPrefix(p, ":")
+		if portStr == "" {
+			return false
+		}
+		port, err := strconv.Atoi(portStr)
+		return err == nil && port >= 1 && port <= 65535
 	}
 	if strings.Contains(p, ":") {
-		return true
+		parts := strings.Split(p, ":")
+		portStr := parts[len(parts)-1]
+		port, err := strconv.Atoi(portStr)
+		return err == nil && port >= 1 && port <= 65535
 	}
-	return false
+	port, err := strconv.Atoi(p)
+	return err == nil && port >= 1 && port <= 65535
+}
+
+func redactMongoURI(raw string) string {
+	if !strings.Contains(raw, "@") {
+		return raw
+	}
+	if u, err := url.Parse(raw); err == nil && u.User != nil {
+		u.User = url.UserPassword(u.User.Username(), "***")
+		return u.String()
+	}
+	return raw
 }

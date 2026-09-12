@@ -25,14 +25,27 @@ import (
 )
 
 func main() {
-	cfg, err := config.Load()
+	cfg, err := config.Load(context.Background())
 	if err != nil {
 		panic(err)
 	}
 
-	logger.Init(cfg.AppEnv)
+	logger.Init(cfg.LogLevel)
 	metrics.Init()
 	metrics.StartMetricsServer(cfg.MetricsPort)
+	logger.Log.Info("Config loaded",
+		zap.String("env_type", cfg.EnvType),
+		zap.String("service_role", cfg.ServiceRole),
+		zap.String("mongo_database", cfg.MongoDatabase),
+		zap.String("mongo_mode", cfg.MongoMode),
+		zap.String("redis_addr", cfg.RedisAddr),
+		zap.Int("redis_password_len", len(cfg.RedisPassword)),
+		zap.Bool("redis_tls", cfg.RedisTLSEnabled),
+		zap.String("log_level", cfg.LogLevel),
+		zap.String("otel_service", cfg.OtelServiceName),
+		zap.Int("batch_size", cfg.BatchSize),
+		zap.Int("stream_partitions", cfg.StreamPartitionCount),
+	)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
