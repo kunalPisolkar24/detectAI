@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "preview:build": "PREVIEW=true PREVIEW_MODE=true NEXT_PUBLIC_PREVIEW_MODE=true NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA TURNSTILE_SECRET_KEY=1x00000000000000000000AA NEXTAUTH_SECRET=preview-secret-for-local-dev-only-32chars NEXTAUTH_URL=http://localhost:3000 NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=mock-paddle-client-token-not-configured next build",
-    "preview:start": "PREVIEW=true PREVIEW_MODE=true NEXT_PUBLIC_PREVIEW_MODE=true NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA TURNSTILE_SECRET_KEY=1x00000000000000000000AA NEXTAUTH_SECRET=preview-secret-for-local-dev-only-32chars NEXTAUTH_URL=http://localhost:3000 next start",
+    "preview:build": "ENV_TYPE=preview NEXT_PUBLIC_ENV_TYPE=preview NEXT_PUBLIC_PREVIEW_MODE=true NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA TURNSTILE_SECRET_KEY=1x00000000000000000000AA NEXTAUTH_SECRET=preview-secret-for-local-dev-only-32chars NEXTAUTH_URL=http://localhost:3000 NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=mock-paddle-client-token-not-configured next build",
+    "preview:start": "ENV_TYPE=preview NEXT_PUBLIC_ENV_TYPE=preview NEXT_PUBLIC_PREVIEW_MODE=true NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA TURNSTILE_SECRET_KEY=1x00000000000000000000AA NEXTAUTH_SECRET=preview-secret-for-local-dev-only-32chars NEXTAUTH_URL=http://localhost:3000 next start",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -20,6 +20,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1131.0",
+    "@aws-sdk/client-ssm": "^3.1131.0",
     "@grpc/grpc-js": "^1.14.3",
     "@grpc/proto-loader": "^0.8.0",
     "@hookform/resolvers": "^5.2.2",
@@ -68,9 +70,9 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
-    "@testcontainers/rabbitmq": "^11.14.0",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4",
+    "@testcontainers/rabbitmq": "^11.14.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

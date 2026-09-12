@@ -1,4 +1,6 @@
-# Web stack. PREVIEW=true => frontend-only (--no-deps). Datastores via shared atoms.
+# Web stack. ENV_TYPE=dev|prod|preview. dev/preview use compose env; prod hydrates from AWS
+# Secrets Manager (detectai/pg/urls, detectai/redis/users/urls, detectai/mq/urls, detectai/web/secrets)
+# + SSM /detectai/web/. Datastores via shared atoms.
 include:
   - path: ../../../infra/docker/postgres-users/standalone.yml
   - path: ../../../infra/docker/redis-users/standalone.yml
@@ -25,52 +27,62 @@ services:
       context: ..
       dockerfile: Dockerfile
       args:
-        PREVIEW: ${PREVIEW:-false}
+        ENV_TYPE: ${ENV_TYPE:-dev}
+        NEXT_PUBLIC_ENV_TYPE: ${NEXT_PUBLIC_ENV_TYPE:-${ENV_TYPE:-dev}}
+        NEXT_PUBLIC_PREVIEW_MODE: ${NEXT_PUBLIC_PREVIEW_MODE:-false}
         NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
         NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: ${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
     restart: always
     environment:
-      # Preview switch (single flick; see header)
-      - PREVIEW=${PREVIEW:-false}
-      - PREVIEW_MODE=${PREVIEW_MODE:-false}
+      - ENV_TYPE=${ENV_TYPE:-dev}
+      - NEXT_PUBLIC_ENV_TYPE=${NEXT_PUBLIC_ENV_TYPE:-${ENV_TYPE:-dev}}
       - NEXT_PUBLIC_PREVIEW_MODE=${NEXT_PUBLIC_PREVIEW_MODE:-false}
-      # Environment
       - NODE_ENV=${NODE_ENV}
       - LOG_LEVEL=${LOG_LEVEL}
+      - DB_POOL_MAX=${DB_POOL_MAX:-}
       # OAuth
-      - GITHUB_ID=${GITHUB_ID}
-      - GITHUB_SECRET=${GITHUB_SECRET}
-      - GOOGLE_ID=${GOOGLE_ID}
-      - GOOGLE_SECRET=${GOOGLE_SECRET}
+      - GITHUB_ID=${GITHUB_ID:-}
+      - GITHUB_SECRET=${GITHUB_SECRET:-}
+      - GOOGLE_ID=${GOOGLE_ID:-}
+      - GOOGLE_SECRET=${GOOGLE_SECRET:-}
       # Next Auth
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-}
       # Postgres DB (standalone instance; replica URL points at it too)
-      - DATABASE_URL=${DATABASE_URL}
-      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - DATABASE_URL=${DATABASE_URL:-}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA:-}
       # Redis user cache (standalone docker or ElastiCache users)
-      - REDIS_URL=${REDIS_URL}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_URL=${REDIS_URL:-}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       # Cloudflare Turnstile
-      - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
-      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}
-      # Paddle
-      - NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN}
-      - PADDLE_WEBHOOK_SECRET=${PADDLE_WEBHOOK_SECRET}
-      - PADDLE_API_KEY=${PADDLE_API_KEY}
+      - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
+      # Paddle (client token only; server keys owned by gateway/workers)
+      - NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=${NEXT_PUBLIC_PADDLE_CLIENT_TOKEN:-}
       # Payment Gateway
-      - PAYMENT_GATEWAY_URL=${PAYMENT_GATEWAY_URL}
-      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - PAYMENT_GATEWAY_URL=${PAYMENT_GATEWAY_URL:-}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-}
       - PROMETHEUS_WEB_SCRAPE_TOKEN=${PROMETHEUS_WEB_SCRAPE_TOKEN:-}
       # Inference Service
-      - AI_SERVICE_URL=${AI_SERVICE_URL}
-      - AI_SERVICE_API_KEY=${AI_SERVICE_API_KEY}
+      - AI_SERVICE_URL=${AI_SERVICE_URL:-}
+      - AI_SERVICE_API_KEY=${AI_SERVICE_API_KEY:-}
       # Chat Service
-      - CHAT_SERVICE_URL=${CHAT_SERVICE_URL}
+      - CHAT_SERVICE_URL=${CHAT_SERVICE_URL:-}
       # File Processing Service
-      - FILE_EXTRACTOR_API_URL=${FILE_EXTRACTOR_API_URL}
+      - FILE_EXTRACTOR_API_URL=${FILE_EXTRACTOR_API_URL:-}
       # RabbitMQ
-      - RABBITMQ_URL=${RABBITMQ_URL}
+      - RABBITMQ_URL=${RABBITMQ_URL:-}
+      # Prod AWS (only when ENV_TYPE=prod; ignored in dev/preview)
+      - AWS_REGION=${AWS_REGION:-}
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-}
+      - SSM_PREFIX=${SSM_PREFIX:-}
+      - SSM_ENABLED=${SSM_ENABLED:-}
+      - PG_URLS_SECRET_NAME=${PG_URLS_SECRET_NAME:-}
+      - REDIS_URLS_SECRET_NAME=${REDIS_URLS_SECRET_NAME:-}
+      - MQ_URLS_SECRET_NAME=${MQ_URLS_SECRET_NAME:-}
+      - WEB_SECRETS_NAME=${WEB_SECRETS_NAME:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-}
     ports:
       - "${PORT_FRONTEND:-3000}:3000"
     extra_hosts:

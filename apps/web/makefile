@@ -1,7 +1,8 @@
 # Start-only targets (no dev/HMR mode).
 # Serving reads apps/web/.env (copy .env.example once). Preview runs
-# on PREVIEW=true alone (canned defaults live in lib/config/env.ts). Load
-# values are fixed inline below (LOAD_ENV) — reproducible, no env file.
+# on ENV_TYPE=preview alone (canned defaults live in lib/config/schema.ts).
+# Prod hydrates from AWS Secrets Manager + SSM at runtime (see .env.example).
+# Load values are fixed inline below (LOAD_ENV) — reproducible, no env file.
 .PHONY: start preview preview-down down logs clean restart load-up load-down load-test
 
 # Datastores (postgres + user redis) are included in infra/compose.yml and
@@ -19,7 +20,7 @@ start:
 	$(COMPOSE) up -d --build
 
 preview:
-	PREVIEW=true $(PREVIEW_COMPOSE) up -d --build --no-deps frontend
+	ENV_TYPE=preview $(PREVIEW_COMPOSE) up -d --build --no-deps frontend
 
 preview-down:
 	$(PREVIEW_COMPOSE) down --remove-orphans

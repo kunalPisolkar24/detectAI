@@ -24,9 +24,13 @@ services:
       context: ..
       dockerfile: Dockerfile
       args:
+        - ENV_TYPE=dev
+        - NEXT_PUBLIC_ENV_TYPE=dev
         - NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
         - NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=load-test-token
     environment:
+      - ENV_TYPE=dev
+      - NEXT_PUBLIC_ENV_TYPE=dev
       - NODE_ENV=production
       - DATABASE_URL=postgresql://postgres:postgres@postgres-users:5432/detectai_load
       - REDIS_URL=redis://:load-redis-password@redis-users:6379
@@ -46,7 +50,6 @@ services:
       - GOOGLE_ID=mock-google-client-id-not-configured
       - GOOGLE_SECRET=mock-google-client-secret-not-configured
       - AI_SERVICE_API_KEY=mock-ai-service-api-key-not-configured
-      # Local standalone broker (same atom family as compose.yml); prod uses amqps from detectai/mq/urls.
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
     depends_on:
       postgres-users:
