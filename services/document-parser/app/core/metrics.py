@@ -1,3 +1,5 @@
+"""Thin re-export — canonical metrics live in infrastructure."""
+
 from app.infrastructure.executor.extraction_pool import (
     get_pool_stats,
     is_extraction_pool_healthy as is_process_pool_healthy,
@@ -16,6 +18,7 @@ from app.infrastructure.observability.metrics import (
     EXTRACTION_QUEUE_WAIT_SECONDS,
     EXTRACTED_TEXT_BYTES_TOTAL,
     EXTRACTED_TEXT_LENGTH_BYTES,
+    EXTRACTION_TIMEOUTS_TOTAL,
     HTTP_REQUEST_DURATION_SECONDS,
     HTTP_REQUEST_ERRORS_TOTAL,
     HTTP_REQUESTS_TOTAL,
@@ -23,7 +26,6 @@ from app.infrastructure.observability.metrics import (
     PARSED_DOCUMENTS_TOTAL,
     PARSED_FILE_SIZE_BYTES,
     REJECTED_UPLOADS_TOTAL,
-    EXTRACTION_TIMEOUTS_TOTAL,
     classify_extraction_error,
     record_extraction,
     record_extraction_duration,

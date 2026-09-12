@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from prometheus_client.metrics import MetricWrapperBase
 
 import app.core.metrics as metrics_module
+from app.core.config import clear_settings_cache
 from app.main import app as fastapi_app
 
 
@@ -29,12 +30,15 @@ def clean_prometheus_registry():
     metrics_module._pool_busy_tasks = 0  # legacy compat
     pool_mod._pool_busy_tasks = 0
     pool_mod._busy = 0
+    # Ensure settings cache is cleared so env overrides in tests don't leak
+    clear_settings_cache()
     yield
     for metric in _metric_families():
         _clear_metric(metric)
     metrics_module._pool_busy_tasks = 0
     pool_mod._pool_busy_tasks = 0
     pool_mod._busy = 0
+    clear_settings_cache()
 
 
 @pytest.fixture(scope="session")

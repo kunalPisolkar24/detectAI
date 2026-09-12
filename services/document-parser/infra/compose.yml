@@ -6,18 +6,34 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     stop_grace_period: 30s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - PYTHONUNBUFFERED=1
-      - PORT=${PORT_DOC_PARSER:-8000}
-      - WORKERS=${DOC_PARSER_WORKERS:-4}
-      - API_TITLE=${DOC_PARSER_API_TITLE:-Document Parser Service}
-      - API_VERSION=${DOC_PARSER_API_VERSION:-1.0.0}
-      - MAX_UPLOAD_SIZE_BYTES=${DOC_PARSER_MAX_UPLOAD_SIZE:-10485760}
-      - MAX_TEXT_LENGTH=${DOC_PARSER_MAX_TEXT_LENGTH:-1000000}
+      - ENV_TYPE=${ENV_TYPE:-dev}
+      - PORT=${PORT:-8000}
+      - WORKERS=${WORKERS:-}
+      - WORKER_THREADS=${WORKER_THREADS:-}
+      - MAX_UPLOAD_SIZE_BYTES=${MAX_UPLOAD_SIZE_BYTES:-}
+      - MAX_TEXT_LENGTH=${MAX_TEXT_LENGTH:-}
+      - MAX_PDF_PAGES=${MAX_PDF_PAGES:-}
+      - MAX_DOCX_UNCOMPRESSED_BYTES=${MAX_DOCX_UNCOMPRESSED_BYTES:-}
+      - EXTRACTION_TIMEOUT_SECONDS=${EXTRACTION_TIMEOUT_SECONDS:-}
+      - READINESS_MAX_QUEUE_DEPTH=${READINESS_MAX_QUEUE_DEPTH:-}
+      - HEADER_FOOTER_MARGIN_PT=${HEADER_FOOTER_MARGIN_PT:-}
+      - HEADER_REPETITION_RATIO=${HEADER_REPETITION_RATIO:-}
+      - ALLOWED_MIME_TYPES=${ALLOWED_MIME_TYPES:-}
+      - LOG_LEVEL=${LOG_LEVEL:-}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-document-parser}
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-}
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-}
+      - SSM_PREFIX=${SSM_PREFIX:-}
+      - SSM_ENABLED=${SSM_ENABLED:-}
+      - DOCUMENT_PARSER_SECRETS_NAME=${DOCUMENT_PARSER_SECRETS_NAME:-}
     ports:
-      - "${PORT_DOC_PARSER:-8000}:8000"
+      - "${PORT:-8000}:8000"
     networks:
       - detectai_net
     healthcheck:
@@ -29,4 +45,4 @@ services:
 
 networks:
   detectai_net:
-    name: ${detect_ai_network:-detect-ai-network}
+    name: ${DETECT_AI_NETWORK:-detect-ai-network}

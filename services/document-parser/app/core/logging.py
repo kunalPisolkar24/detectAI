@@ -1,21 +1,18 @@
+"""Thin re-export — canonical implementation lives in infrastructure.
+
+Kept for backward compat; new code should import from
+``app.infrastructure.observability.logging`` directly.
+"""
+
 import time
 
-from opentelemetry import trace
+from opentelemetry import trace  # re-export for callers
 
-from app.infrastructure.observability.logging import JsonFormatter, logger
-
-
-def current_trace_id() -> str:
-    ctx = trace.get_current_span().get_span_context()
-    if ctx and ctx.is_valid:
-        return format(ctx.trace_id, "032x")
-    return "-"
+from app.infrastructure.observability.logging import JsonFormatter, current_trace_id, logger
 
 
-__all__ = ["JsonFormatter", "current_trace_id", "logger", "log_request_middleware", "trace"]
-
-
-async def log_request_middleware(request, call_next):
+async def log_request_middleware(request, call_next):  # pragma: no cover - legacy compat
+    """Deprecated alias for ``app.api.middleware.request_middleware``."""
     start = time.time()
     response = await call_next(request)
     meta = {
@@ -27,3 +24,6 @@ async def log_request_middleware(request, call_next):
     }
     logger.info("Request processed", extra={"request_meta": meta})
     return response
+
+
+__all__ = ["JsonFormatter", "current_trace_id", "logger", "trace", "log_request_middleware"]
