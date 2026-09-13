@@ -177,7 +177,7 @@ FILE_EXTRACTOR_API_URL=http://document-parser:8000
 ### Health Check
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:8000/api/v1/health
 ```
 
 The readiness probe (`/api/readyz`) checks this endpoint.

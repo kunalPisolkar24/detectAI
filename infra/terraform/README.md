@@ -88,11 +88,31 @@ terraform destroy -var-file=envs/floci-local.tfvars
 ## Makefile (from repo root)
 
 ```bash
-make tf-fmt          # terraform fmt -check
-make tf-validate     # init + validate + test
-make tf-plan-local   # plan with floci-local
-make tf-test         # terraform test
+make tf-fmt            # terraform fmt -check
+make tf-validate       # init + validate + test
+make tf-plan-local     # plan with envs/floci-local.tfvars
+make tf-apply-local    # apply with envs/floci-local.tfvars
+make tf-destroy-local  # destroy with envs/floci-local.tfvars
+make tf-test           # terraform test (unit, mocked)
 ```
+
+## Floci App Secrets & Prod Stack (from repo root)
+
+Terraform manages `detectai/{pg,docdb,redis/*/mq}/urls`, but not the app-only
+secrets (`detectai/web|workers|gateway|inference/secrets`). Seed those
+separately, then start the prod stack attached to the emulator network:
+
+```bash
+make floci-seed        # create app-only secrets on the emulator (idempotent)
+make floci-verify      # check emulator APIs + secrets exist
+make prod-up-floci     # start prod stack on FLOCI_NETWORK (default documents_default)
+make prod-config-floci # render merged prod + Floci compose config
+```
+
+Notes:
+
+- Run only one stack at a time — `local-up` refuses while prod is running and vice versa.
+- Missing `.env` files are created from `.env.example` automatically on first run.
 
 ## Prod Hardening Checklist (when moving to real AWS)
 
@@ -108,3 +128,6 @@ make tf-test         # terraform test
 - `endpoint ""` → set `emulator_endpoint = "http://localhost:4566"` for local, or `null` for prod.
 - `NoSuchBucket` for S3 backend → `aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-tfstate-local`.
 - State shows `Objects have changed outside Terraform` → emulator was reset; `terraform apply` will recreate.
+- `UpdateBroker ... 404` on apply → the emulator can't update brokers in place; the broker itself is fine, ignore the error.
+- `plan` keeps showing small diffs after apply (e.g. `transit_encryption_enabled`, `backup_retention_period`) → the emulator doesn't persist those fields; harmless, don't chase `plan` to zero on the emulator.
+- Apps get `AUTH failed` from emulator Redis → the emulator runs its Valkey backing stores without a password even though the secrets carry one; point apps at the passwordless endpoints for local testing (see `infra/docker/prod/.env.example`).

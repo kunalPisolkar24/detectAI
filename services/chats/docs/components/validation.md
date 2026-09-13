@@ -63,15 +63,17 @@ Each field has specific rules to ensure data quality:
 | Rule | Why |
 |------|-----|
 | Maximum 20,000 characters | Prevents memory issues |
-| Cannot be empty | Empty messages aren't useful |
+| Cannot be empty for `user` messages | Empty user messages aren't useful |
+| May be empty for `assistant` messages | Assistant messages carry their meaning in the `analysis` payload or state metadata (for example, a `"running"` placeholder saved before inference finishes); the UI never renders assistant text content |
 | Extra spaces removed | Keeps data clean |
 
 **Valid examples:**
 - `"Hello"` ✓
 - `"This is a longer message..."` ✓
+- `""` with `role: "assistant"` ✓ (analysis placeholder or result)
 
 **Invalid examples:**
-- `""` ✗ (empty)
+- `""` with `role: "user"` ✗ (empty)
 - Content with 20,001+ characters ✗ (too long)
 
 ### Message Role
