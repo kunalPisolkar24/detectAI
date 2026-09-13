@@ -5,6 +5,7 @@ PROD_ENV := infra/docker/prod/.env
 PROD_ENV_EXAMPLE := infra/docker/prod/.env.example
 PROD_COMPOSE_FILE := infra/docker/prod/compose.yml
 PROD_FLOCI_COMPOSE_FILE := infra/docker/prod/compose.floci.yml
+PROD_GPU_COMPOSE_FILE := infra/docker/prod/compose.gpu.yml
 LOCAL_ENV := infra/docker/local/.env
 LOCAL_ENV_EXAMPLE := infra/docker/local/.env.example
 LOCAL_COMPOSE_FILE := infra/docker/local/compose.yml
@@ -19,6 +20,19 @@ DOCKER_BIN := $(if $(DOCKER_BIN),$(DOCKER_BIN),docker)
 PROD_COMPOSE := $(DOCKER_BIN) compose --env-file $(PROD_ENV) -f $(PROD_COMPOSE_FILE)
 PROD_COMPOSE_FLOCI := $(DOCKER_BIN) compose --env-file $(PROD_ENV) -f $(PROD_COMPOSE_FILE) -f $(PROD_FLOCI_COMPOSE_FILE)
 LOCAL_COMPOSE := $(DOCKER_BIN) compose --env-file $(LOCAL_ENV) -f $(LOCAL_COMPOSE_FILE)
+
+# GPU auto-detect for ai-service: GPU=1 forces the overlay, GPU=0 skips it,
+# otherwise a GPU is used only if the host has one AND docker can access it
+# (nvidia-smi + nvidia container runtime); absent either = CPU fallback.
+GPU ?=
+_HAS_NVIDIA_GPU := $(strip $(shell command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L 2>/dev/null | grep -qi gpu && echo 1))
+_HAS_NVIDIA_RUNTIME := $(strip $(shell $(DOCKER_BIN) info 2>/dev/null | grep -qi nvidia && echo 1))
+HAS_GPU := $(if $(_HAS_NVIDIA_GPU),$(if $(_HAS_NVIDIA_RUNTIME),1))
+USE_GPU := $(if $(filter 1,$(GPU)),1,$(if $(filter 0,$(GPU)),,$(HAS_GPU)))
+GPU_MODE := $(if $(filter 1,$(USE_GPU)),gpu,cpu)
+
+PROD_COMPOSE := $(PROD_COMPOSE) $(if $(filter 1,$(USE_GPU)),-f $(PROD_GPU_COMPOSE_FILE))
+PROD_COMPOSE_FLOCI := $(PROD_COMPOSE_FLOCI) $(if $(filter 1,$(USE_GPU)),-f $(PROD_GPU_COMPOSE_FILE))
 
 STACK ?=
 SERVICE ?=
@@ -78,7 +92,8 @@ help:
 	@printf "  make floci-seed        Seed app-only secrets Floci doesn't TF-manage\n"
 	@printf "  make floci-verify      Check emulator APIs + secrets exist\n"
 	@printf "  make prod-up-floci     Start prod stack attached to FLOCI_NETWORK\n"
-	@printf "  make prod-config-floci Render prod+Floci merged compose config\n\n"
+	@printf "  make prod-config-floci Render prod+Floci merged compose config\n"
+	@printf "  ai-service GPU: auto (host GPU + docker nvidia runtime = gpu, else cpu); override with GPU=1 / GPU=0\n\n"
 	@printf "Setup\n"
 	@printf "  cp infra/docker/local/.env.example infra/docker/local/.env\n"
 	@printf "  cp infra/docker/prod/.env.example infra/docker/prod/.env\n"
@@ -137,6 +152,7 @@ rebuild: validate-stack
 	@$(MAKE) --no-print-directory $(STACK)-rebuild SERVICE="$(SERVICE)"
 
 prod-up: ensure-prod-env guard-prod network
+	@echo "ai-service mode: $(GPU_MODE) (GPU=1 force GPU, GPU=0 force CPU)"
 	$(PROD_COMPOSE) up -d
 
 prod-down:
@@ -166,6 +182,7 @@ prod-migrate: ensure-prod-env guard-prod network
 # Floci variants: same project, plus the emulator backing network.
 # down/logs/ps/clean work with the base targets (project name is identical).
 prod-up-floci: ensure-prod-env guard-prod network
+	@echo "ai-service mode: $(GPU_MODE) (GPU=1 force GPU, GPU=0 force CPU)"
 	$(PROD_COMPOSE_FLOCI) up -d
 
 prod-config-floci: ensure-prod-env
@@ -229,11 +246,26 @@ tf-destroy-local:
 # redis/*/mq}/urls; these it does NOT). One random value per shared key is
 # generated once and stored in every secret that needs it, so web/gateway/
 # inference stay in sync. Idempotent: creates or overwrites in place.
-# Override endpoint: make floci-seed FLOCI_ENDPOINT=http://host:4566
+# Real-world values (OAuth, Paddle, NextAuth) are mirrored from
+# infra/docker/local/.env when present, so Floci emulates the same identity
+# and billing config as the local stack; otherwise test/mock fallbacks are
+# used. Override endpoint: make floci-seed FLOCI_ENDPOINT=http://host:4566
 floci-seed:
-	@EP="$(FLOCI_ENDPOINT)"; R="$(AWS_REGION)"; \
+	@EP="$(FLOCI_ENDPOINT)"; R="$(AWS_REGION)"; LOCAL_ENV_FILE="infra/docker/local/.env"; \
 	randhex() { openssl rand -hex "$$1" 2>/dev/null || od -An -tx1 -N "$$1" /dev/urandom | tr -d ' \n'; }; \
-	INTERNAL_KEY="$$(randhex 24)"; AI_KEY="$$(randhex 24)"; HOOK_SECRET="$$(randhex 24)"; AUTH_SECRET="$$(randhex 32)"; \
+	local_val() { if [ -f "$$LOCAL_ENV_FILE" ]; then awk -F= -v k="$$1" '$$1==k{sub($$1"=","");print}' "$$LOCAL_ENV_FILE" | tail -n 1; fi; }; \
+	with_local() { v="$$(local_val "$$1")"; if [ -n "$$v" ]; then printf '%s' "$$v"; else printf '%s' "$$2"; fi; }; \
+	INTERNAL_KEY="$$(randhex 24)"; AI_KEY="$$(randhex 24)"; \
+	GOOGLE_ID="$$(with_local GOOGLE_ID floci-test-google-client-id)"; \
+	GOOGLE_SECRET="$$(with_local GOOGLE_SECRET floci-test-google-client-secret)"; \
+	GITHUB_ID="$$(with_local GITHUB_ID floci-test-github-client-id)"; \
+	GITHUB_SECRET="$$(with_local GITHUB_SECRET floci-test-github-client-secret)"; \
+	AUTH_SECRET="$$(with_local NEXTAUTH_SECRET "$$(randhex 32)")"; \
+	HOOK_SECRET="$$(with_local PADDLE_WEBHOOK_SECRET "$$(randhex 24)")"; \
+	PADDLE_KEY="$$(with_local PADDLE_API_KEY mock-paddle-api-key-not-configured)"; \
+	CLIENT_TOKEN="$$(with_local NEXT_PUBLIC_PADDLE_CLIENT_TOKEN mock-paddle-client-token-not-configured)"; \
+	TS_SITE="$$(with_local NEXT_PUBLIC_TURNSTILE_SITE_KEY 1x00000000000000000000AA)"; \
+	TS_SECRET="$$(with_local TURNSTILE_SECRET_KEY 1x00000000000000000000AA)"; \
 	put_secret() { \
 		name="$$1"; payload="$$2"; \
 		if aws --endpoint-url "$$EP" --region "$$R" secretsmanager describe-secret --secret-id "$$name" >/dev/null 2>&1; then \
@@ -243,11 +275,11 @@ floci-seed:
 		fi; \
 		echo "seeded $$name"; \
 	}; \
-	put_secret "detectai/web/secrets" "{\"NEXTAUTH_SECRET\":\"$$AUTH_SECRET\",\"INTERNAL_API_KEY\":\"$$INTERNAL_KEY\",\"AI_SERVICE_API_KEY\":\"$$AI_KEY\",\"NEXT_PUBLIC_TURNSTILE_SITE_KEY\":\"1x00000000000000000000AA\",\"TURNSTILE_SECRET_KEY\":\"1x00000000000000000000AA\",\"NEXT_PUBLIC_PADDLE_CLIENT_TOKEN\":\"mock-paddle-client-token-not-configured\"}"; \
+	put_secret "detectai/web/secrets" "{\"NEXTAUTH_SECRET\":\"$$AUTH_SECRET\",\"INTERNAL_API_KEY\":\"$$INTERNAL_KEY\",\"AI_SERVICE_API_KEY\":\"$$AI_KEY\",\"NEXT_PUBLIC_TURNSTILE_SITE_KEY\":\"$$TS_SITE\",\"TURNSTILE_SECRET_KEY\":\"$$TS_SECRET\",\"NEXT_PUBLIC_PADDLE_CLIENT_TOKEN\":\"$$CLIENT_TOKEN\",\"GOOGLE_ID\":\"$$GOOGLE_ID\",\"GOOGLE_SECRET\":\"$$GOOGLE_SECRET\",\"GITHUB_ID\":\"$$GITHUB_ID\",\"GITHUB_SECRET\":\"$$GITHUB_SECRET\",\"PROMETHEUS_WEB_SCRAPE_TOKEN\":\"mock-prometheus-scrape-token-32ch\"}"; \
 	put_secret "detectai/gateway/secrets" "{\"PADDLE_WEBHOOK_SECRET\":\"$$HOOK_SECRET\",\"INTERNAL_API_KEY\":\"$$INTERNAL_KEY\"}"; \
-	put_secret "detectai/workers/secrets" "{\"PADDLE_API_KEY\":\"mock-paddle-api-key-not-configured\",\"PADDLE_ENVIRONMENT\":\"sandbox\"}"; \
+	put_secret "detectai/workers/secrets" "{\"PADDLE_API_KEY\":\"$$PADDLE_KEY\",\"PADDLE_ENVIRONMENT\":\"sandbox\"}"; \
 	put_secret "detectai/inference/secrets" "{\"API_KEY\":\"$$AI_KEY\"}"; \
-	echo "Done. INTERNAL_API_KEY/AI_SERVICE_API_KEY are in sync across web/gateway/inference."
+	echo "Done. OAuth/Paddle/NextAuth mirrored from local .env; INTERNAL/AI keys in sync."
 
 # Verify the emulator has the TF-managed infra + seeded secrets.
 floci-verify:

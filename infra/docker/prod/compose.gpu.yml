@@ -1,0 +1,21 @@
+# GPU overlay for the prod stack: reserves one NVIDIA GPU for ai-service.
+# Applied AUTOMATICALLY by `make prod-up[-floci]` when the host has a GPU AND
+# docker can access it (see Makefile GPU detection). Force on/off manually:
+#   make prod-up-floci GPU=1   # force GPU overlay (fails without nvidia runtime)
+#   make prod-up-floci GPU=0   # force CPU even if a GPU exists
+# The GPU image also runs without this overlay — the app falls back to
+# CPUExecutionProvider (same pattern as services/inference/infra/compose.gpu.yml).
+services:
+  ai-service:
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+          cpus: "8.0"
+        reservations:
+          memory: 4G
+          cpus: "2.0"
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

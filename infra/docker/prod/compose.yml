@@ -250,7 +250,8 @@ services:
       retries: 3
       start_period: 20s
 
-  # -- inference (GPU image; needs nvidia runtime, see compose.gpu note) ------
+  # -- inference (GPU image; runs on CPU too unless compose.gpu.yml is ----
+  # applied — see Makefile GPU auto-detect: nvidia-smi present = GPU overlay)
   ai-service:
     container_name: detect_ai_inference
     build:
@@ -258,18 +259,6 @@ services:
       dockerfile: Dockerfile
     restart: always
     stop_grace_period: 30s
-    deploy:
-      resources:
-        limits:
-          memory: 16G
-          cpus: "8.0"
-        reservations:
-          memory: 4G
-          cpus: "2.0"
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     healthcheck:
       test: ["CMD-SHELL", "/bin/grpc_health_probe -addr=:$${GRPC_PORT:-50051}"]
       interval: 30s
@@ -385,7 +374,7 @@ services:
       SSM_PREFIX: ${CHAT_SSM_PREFIX:-/detectai/chat/}
       SSM_ENABLED: ${SSM_ENABLED:-true}
       DOCDB_URLS_SECRET_NAME: ${DOCDB_URLS_SECRET_NAME:-detectai/docdb/urls}
-      REDIS_URLS_SECRET_NAME: ${REDIS_URLS_SECRET_NAME:-detectai/redis/chat/urls}
+      REDIS_URLS_SECRET_NAME: ${CHAT_REDIS_URLS_SECRET_NAME:-detectai/redis/chat/urls}
     ports:
       - "${CHAT_GRPC_HOST_PORT:-50052}:50051"
       - "${CHAT_METRICS_HOST_PORT:-9095}:9091"
@@ -426,7 +415,7 @@ services:
       SSM_PREFIX: ${CHAT_SSM_PREFIX:-/detectai/chat/}
       SSM_ENABLED: ${SSM_ENABLED:-true}
       DOCDB_URLS_SECRET_NAME: ${DOCDB_URLS_SECRET_NAME:-detectai/docdb/urls}
-      REDIS_URLS_SECRET_NAME: ${REDIS_URLS_SECRET_NAME:-detectai/redis/chat/urls}
+      REDIS_URLS_SECRET_NAME: ${CHAT_REDIS_URLS_SECRET_NAME:-detectai/redis/chat/urls}
     ports:
       - "${CHAT_WORKER_METRICS_PORT_HOST:-9099}:9099"
     extra_hosts:
