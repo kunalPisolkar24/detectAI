@@ -21,7 +21,7 @@ services:
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-test_internal_key_16chars}
       PORT: "8080"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/readyz"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:8080/readyz"]
       interval: 5s
       timeout: 5s
       retries: 12

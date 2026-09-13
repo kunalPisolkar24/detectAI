@@ -13,5 +13,5 @@ WORKDIR /app
 COPY --from=builder /app/gateway .
 USER appuser
 EXPOSE 8080
-HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=15s CMD wget --no-verbose --tries=1 --spider http://localhost:8080/readyz || exit 1
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=15s CMD wget --no-verbose --tries=1 -O /dev/null http://localhost:8080/readyz || exit 1
 CMD ["./gateway"]

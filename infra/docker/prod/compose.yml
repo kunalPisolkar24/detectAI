@@ -125,7 +125,9 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/readyz"]
+      # NOTE: plain GET, not `wget --spider` (spider sends HEAD, which gin
+      # rejects with 404 on the GET-only /readyz route -> false unhealthy).
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:8080/readyz"]
       interval: 10s
       timeout: 5s
       retries: 3
