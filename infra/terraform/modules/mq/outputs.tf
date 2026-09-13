@@ -1,13 +1,15 @@
 output "broker_id" {
-  value = aws_mq_broker.this.id
+  description = "MQ broker ID."
+  value       = aws_mq_broker.this.id
 }
 
 output "broker_arn" {
-  value = aws_mq_broker.this.arn
+  description = "MQ broker ARN."
+  value       = aws_mq_broker.this.arn
 }
 
 output "amqp_endpoint" {
-  description = "Raw amqps://host:5671 endpoint from DescribeBroker (dynamic port on Floci)."
+  description = "Raw amqps://host:5671 endpoint from DescribeBroker (dynamic port on emulator)."
   value       = try(aws_mq_broker.this.instances[0].endpoints[0], "")
 }
 
@@ -23,17 +25,21 @@ output "amqp_url" {
 }
 
 output "master_secret_arn" {
-  value = aws_secretsmanager_secret.master.arn
+  description = "ARN of master secret."
+  value       = aws_secretsmanager_secret.master.arn
 }
 
 output "urls_secret_arn" {
-  value = aws_secretsmanager_secret.urls.arn
+  description = "ARN of URL secret."
+  value       = aws_secretsmanager_secret.urls.arn
 }
 
 output "engine_version" {
-  value = var.engine_version
+  description = "Engine version."
+  value       = var.engine_version
 }
 
 output "deployment_mode" {
-  value = var.deployment_mode
+  description = "Deployment mode."
+  value       = var.deployment_mode
 }

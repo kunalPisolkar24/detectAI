@@ -24,3 +24,5 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
+infra/terraform/backend.prod.hcl
+infra/terraform/.env.pg.floci

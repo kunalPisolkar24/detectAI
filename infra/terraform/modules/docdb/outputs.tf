@@ -1,26 +1,31 @@
 output "cluster_id" {
-  value = aws_docdb_cluster.this.cluster_identifier
+  description = "DocumentDB cluster identifier."
+  value       = aws_docdb_cluster.this.cluster_identifier
 }
 
 output "cluster_arn" {
-  value = aws_docdb_cluster.this.arn
+  description = "DocumentDB cluster ARN."
+  value       = aws_docdb_cluster.this.arn
 }
 
 output "endpoint" {
-  description = "DocumentDB cluster endpoint (host part of MONGO_URI). For Floci, read Port too - it is dynamic."
+  description = "DocumentDB cluster endpoint (host part of MONGO_URI). For emulator, read Port too — it is dynamic."
   value       = aws_docdb_cluster.this.endpoint
 }
 
 output "port" {
-  value = aws_docdb_cluster.this.port
+  description = "DocumentDB cluster port."
+  value       = aws_docdb_cluster.this.port
 }
 
 output "master_secret_arn" {
-  value = aws_secretsmanager_secret.master.arn
+  description = "ARN of master secret."
+  value       = aws_secretsmanager_secret.master.arn
 }
 
 output "urls_secret_arn" {
-  value = aws_secretsmanager_secret.urls.arn
+  description = "ARN of URL secret."
+  value       = aws_secretsmanager_secret.urls.arn
 }
 
 output "mongo_uri" {
@@ -30,15 +35,16 @@ output "mongo_uri" {
 }
 
 output "mongo_database" {
-  value = var.database_name
+  description = "MONGO_DATABASE name."
+  value       = var.database_name
 }
 
 output "mongo_mode" {
-  description = "MONGO_MODE the app should use: standalone or sharded"
+  description = "MONGO_MODE the app should use: standalone or sharded."
   value       = local.mongo_mode
 }
 
 output "mode" {
-  description = "Requested docdb_mode (standalone vs elastic)"
+  description = "Requested docdb_mode (standalone vs elastic)."
   value       = var.mode
 }

@@ -1,5 +1,5 @@
 # Amazon MQ for RabbitMQ broker + secrets (mirrors postgres/docdb/elasticache contract).
-# Floci note: CreateBroker Users must be exactly one entry; User API (CreateUser etc.)
+# Emulator note: CreateBroker Users must be exactly one entry; User API (CreateUser etc.)
 # is ActiveMQ-only and rejected for RabbitMQ. AMQP (5672) + management (15672)
 # are mapped to dynamic host ports; always read endpoints from DescribeBroker.
 
@@ -13,6 +13,7 @@ resource "aws_secretsmanager_secret" "master" {
   name                    = "detectai/mq/master"
   recovery_window_in_days = var.secret_recovery_window
   description             = "Amazon MQ RabbitMQ admin credentials (break-glass only, wired to broker Users[0])"
+  tags                    = var.tags
 }
 
 resource "aws_secretsmanager_secret_version" "master" {
@@ -36,6 +37,12 @@ resource "aws_mq_broker" "this" {
 
   subnet_ids      = var.subnet_ids
   security_groups = var.security_groups
+  tags            = var.tags
+
+  lifecycle {
+    # Emulator's UpdateBroker does not handle tags/config changes well; avoid spurious updates.
+    ignore_changes = [tags, configuration]
+  }
 
   maintenance_window_start_time {
     day_of_week = var.maintenance_day
@@ -52,7 +59,7 @@ resource "aws_mq_broker" "this" {
     password = random_password.mq.result
   }
 
-  # Floci stores but does not enforce: encryption_options, configuration, tags.
+  # Emulator stores but does not enforce: encryption_options, configuration.
 }
 
 locals {
@@ -68,6 +75,7 @@ resource "aws_secretsmanager_secret" "urls" {
   name                    = "detectai/mq/urls"
   recovery_window_in_days = var.secret_recovery_window
   description             = "Composed Amazon MQ URLs (RABBITMQ_URL amqps + UI + QUEUE_TYPE)"
+  tags                    = var.tags
   depends_on              = [aws_mq_broker.this]
 }
 

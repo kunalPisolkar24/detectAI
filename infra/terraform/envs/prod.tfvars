@@ -1,7 +1,8 @@
-# Production (real AWS). No floci_endpoint: provider talks to real AWS.
+# Production (real AWS). No emulator_endpoint/floci_endpoint: provider talks to real AWS.
 # MQ is CLUSTER_MULTI_AZ (3 nodes across AZs behind NLB, auto ha-mode=all).
 # Scaling is vertical (mq_host_instance_type) — no broker autoscaling.
-floci_endpoint         = ""
+emulator_endpoint      = null
+floci_endpoint         = null
 aws_region             = "ap-south-1"
 cluster_identifier     = "detectai-pg-prod"
 engine                 = "aurora-postgresql"

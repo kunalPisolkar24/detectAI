@@ -1,0 +1,18 @@
+# Real AWS prod backend — copy to backend.prod.hcl and fill bucket.
+# Usage:
+#   cp backend.prod.hcl.example backend.prod.hcl
+#   # Edit bucket name (must exist, versioned, encrypted)
+#   # aws s3 mb s3://YOUR-BUCKET --region ap-south-1
+#   # aws s3api put-bucket-versioning --bucket YOUR-BUCKET --versioning-configuration Status=Enabled
+#   terraform init -reconfigure -backend-config=backend.prod.hcl -var-file=envs/prod.tfvars
+#
+# For prod also set:
+#   secret_recovery_window = 30
+#   db_sslmode             = "require"
+#   and ensure emulator_endpoint / floci_endpoint is null/empty.
+
+bucket       = "REPLACE-me-detectai-tfstate"
+key          = "prod/terraform.tfstate"
+region       = "ap-south-1"
+encrypt      = true
+use_lockfile = true

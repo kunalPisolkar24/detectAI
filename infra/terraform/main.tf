@@ -7,6 +7,7 @@ module "postgres" {
   master_username        = var.master_username
   db_sslmode             = var.db_sslmode
   secret_recovery_window = var.secret_recovery_window
+  # Single instance for emulator/dev; prod would use instance_count=2 via override.
 }
 
 module "docdb" {
@@ -31,7 +32,7 @@ module "redis_chat" {
   at_rest_encryption_enabled = var.redis_chat_at_rest_encryption_enabled
   snapshot_retention_limit   = var.redis_chat_snapshot_retention_limit
   secret_recovery_window     = var.secret_recovery_window
-  # chat needs HA: 1 primary +1 replica
+  # chat needs HA: 1 primary + 1 replica, failover + Multi-AZ
   num_cache_clusters         = 2
   automatic_failover_enabled = true
   multi_az_enabled           = true

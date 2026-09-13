@@ -1,37 +1,46 @@
 output "cluster_id" {
-  value = aws_rds_cluster.this.cluster_identifier
+  description = "RDS cluster identifier."
+  value       = aws_rds_cluster.this.cluster_identifier
 }
 
 output "cluster_arn" {
-  value = aws_rds_cluster.this.arn
+  description = "RDS cluster ARN."
+  value       = aws_rds_cluster.this.arn
 }
 
 output "writer_host" {
-  value = aws_rds_cluster.this.endpoint
+  description = "Writer endpoint host."
+  value       = aws_rds_cluster.this.endpoint
 }
 
 output "reader_host" {
-  value = aws_rds_cluster.this.reader_endpoint
+  description = "Reader endpoint host."
+  value       = aws_rds_cluster.this.reader_endpoint
 }
 
 output "port" {
-  value = aws_rds_cluster.this.port
+  description = "RDS cluster port."
+  value       = aws_rds_cluster.this.port
 }
 
 output "master_secret_arn" {
-  value = aws_secretsmanager_secret.master.arn
+  description = "ARN of master credentials secret."
+  value       = aws_secretsmanager_secret.master.arn
 }
 
 output "urls_secret_arn" {
-  value = aws_secretsmanager_secret.urls.arn
+  description = "ARN of composed URL secret (DATABASE_URL)."
+  value       = aws_secretsmanager_secret.urls.arn
 }
 
 output "database_url" {
-  value     = local.database_url
-  sensitive = true
+  description = "Composed DATABASE_URL (writer) with encoded password."
+  value       = local.database_url
+  sensitive   = true
 }
 
 output "database_url_replica" {
-  value     = local.database_url_replica
-  sensitive = true
+  description = "Composed DATABASE_URL_REPLICA (reader) with encoded password."
+  value       = local.database_url_replica
+  sensitive   = true
 }

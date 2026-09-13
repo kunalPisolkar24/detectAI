@@ -1,4 +1,6 @@
-# Floci-local (personal machine). Endpoint is the ONLY divergence from VPS/real AWS.
+# Floci/LocalStack-local (personal machine). Endpoint is the ONLY divergence from VPS/real AWS.
+# emulator_endpoint is preferred; floci_endpoint kept as deprecated alias (both work via fallback).
+emulator_endpoint      = "http://localhost:4566"
 floci_endpoint         = "http://localhost:4566"
 aws_region             = "ap-south-1"
 cluster_identifier     = "detectai-pg-local"
@@ -38,7 +40,7 @@ redis_users_transit_encryption_enabled = false
 redis_users_at_rest_encryption_enabled = false
 redis_users_snapshot_retention_limit   = 0
 
-# Amazon MQ RabbitMQ (payments + analytics quorum queues) — Floci SINGLE_INSTANCE only.
+# Amazon MQ RabbitMQ (payments + analytics quorum queues) — emulator SINGLE_INSTANCE only.
 mq_broker_name        = "detectai-mq-local"
 mq_engine_version     = "3.13"
 mq_host_instance_type = "mq.m5.large"

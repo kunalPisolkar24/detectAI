@@ -21,7 +21,8 @@ PROD_NETWORK := $(if $(PROD_NETWORK),$(PROD_NETWORK),detect_ai_network)
 .PHONY: help network validate-stack \
 	up down logs clean build rebuild shell-web \
 	prod-up prod-down prod-logs prod-clean prod-build prod-rebuild prod-config prod-ps prod-migrate \
-	local-up local-down local-logs local-clean local-build local-rebuild local-config local-ps
+	local-up local-down local-logs local-clean local-build local-rebuild local-config local-ps \
+	tf-fmt tf-validate tf-test tf-plan-local
 
 help:
 	@printf "\nDetect AI Docker commands\n\n"
@@ -57,6 +58,11 @@ help:
 	@printf "  make build STACK=local SERVICE=frontend\n"
 	@printf "  make prod-logs SERVICE=worker-analytics\n"
 	@printf "  make local-logs SERVICE=frontend\n\n"
+	@printf "Terraform (infra/terraform, Floci/LocalStack on localhost:4566)\n"
+	@printf "  make tf-fmt            Check terraform formatting\n"
+	@printf "  make tf-validate       init + validate + test (mocked)\n"
+	@printf "  make tf-test           terraform test (unit, mocked)\n"
+	@printf "  make tf-plan-local     plan with envs/floci-local.tfvars\n\n"
 
 network:
 	@$(DOCKER_BIN) network inspect $(PROD_NETWORK) >/dev/null 2>&1 || $(DOCKER_BIN) network create $(PROD_NETWORK)
@@ -138,3 +144,22 @@ local-ps:
 
 shell-web:
 	$(PROD_COMPOSE) exec frontend /bin/sh
+
+# Terraform — floci/localstack on localhost:4566, no AWS
+TF_DIR := infra/terraform
+TF_VARS_LOCAL := envs/floci-local.tfvars
+
+tf-fmt:
+	terraform -chdir=$(TF_DIR) fmt -check -recursive -diff
+
+tf-validate:
+	terraform -chdir=$(TF_DIR) init -backend=false
+	terraform -chdir=$(TF_DIR) validate
+	terraform -chdir=$(TF_DIR) test
+
+tf-test:
+	terraform -chdir=$(TF_DIR) test
+
+tf-plan-local:
+	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backend.local-s3.hcl
+	terraform -chdir=$(TF_DIR) plan -var-file=$(TF_VARS_LOCAL)
