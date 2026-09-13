@@ -37,3 +37,13 @@ class GrpcClientFactory {
 }
 
 export const getChatGrpcClient = () => GrpcClientFactory.getClient()
+
+// Identity for chat-service RPCs. The server requires the x-user-id header
+// on RPCs whose proto has no user_id field (GetChat, GetChatHistory,
+// RenameChat, DeleteChat) and prefers it everywhere else — pass it on every
+// call so new RPCs are authenticated by default.
+export const buildUserMetadata = (userId: string) => {
+  const md = new grpc.Metadata()
+  md.set("x-user-id", userId)
+  return md
+}

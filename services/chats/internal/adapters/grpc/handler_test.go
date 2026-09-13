@@ -356,6 +356,71 @@ func TestSaveMessage_MissingChatID(t *testing.T) {
 	assert.Equal(t, codes.InvalidArgument, st.Code())
 }
 
+func TestSaveMessage_EmptyContentWithAnalysis(t *testing.T) {
+	svc := new(mocks.MockChatService)
+	h := NewHandler(svc)
+	ctx := context.Background()
+
+	svc.On("ProcessMessage", ctx, mock.MatchedBy(func(m *domain.Message) bool {
+		return m.ChatID == "chat-1" && m.Content == "" && m.Analysis != nil
+	})).Run(func(args mock.Arguments) {
+		msg := args.Get(1).(*domain.Message)
+		msg.ID = "msg-uuid"
+		msg.CreatedAt = time.Now()
+	}).Return(nil)
+
+	resp, err := h.SaveMessage(ctx, &pb.SaveMessageRequest{
+		ChatId:   "chat-1",
+		UserId:   "user-1",
+		Role:     "assistant",
+		Content:  "",
+		Analysis: &pb.Analysis{HumanScore: 0.2, AiScore: 0.8, ModelName: "spark", Verdict: "AI"},
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, "msg-uuid", resp.MessageId)
+	svc.AssertExpectations(t)
+}
+
+func TestSaveMessage_EmptyContentNoAnalysis(t *testing.T) {
+	svc := new(mocks.MockChatService)
+	h := NewHandler(svc)
+	ctx := context.Background()
+
+	_, err := h.SaveMessage(ctx, &pb.SaveMessageRequest{ChatId: "chat-1", UserId: "user-1", Role: "user", Content: "  "})
+
+	assert.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.InvalidArgument, st.Code())
+	assert.Contains(t, st.Message(), "content is required")
+	svc.AssertNotCalled(t, "ProcessMessage", mock.Anything, mock.Anything)
+}
+
+func TestSaveMessage_EmptyContentAssistantRunningPlaceholder(t *testing.T) {
+	svc := new(mocks.MockChatService)
+	h := NewHandler(svc)
+	ctx := context.Background()
+
+	svc.On("ProcessMessage", ctx, mock.MatchedBy(func(m *domain.Message) bool {
+		return m.ChatID == "chat-1" && m.Content == "" && m.Role == "assistant" && m.Analysis == nil
+	})).Run(func(args mock.Arguments) {
+		msg := args.Get(1).(*domain.Message)
+		msg.ID = "msg-uuid"
+		msg.CreatedAt = time.Now()
+	}).Return(nil)
+
+	resp, err := h.SaveMessage(ctx, &pb.SaveMessageRequest{
+		ChatId:  "chat-1",
+		UserId:  "user-1",
+		Role:    "assistant",
+		Content: "",
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, "msg-uuid", resp.MessageId)
+	svc.AssertExpectations(t)
+}
+
 // --- GetChatHistory ---
 
 func TestGetChatHistory_Success(t *testing.T) {

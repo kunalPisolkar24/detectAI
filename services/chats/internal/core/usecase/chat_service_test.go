@@ -275,6 +275,48 @@ func TestProcessMessage_InvalidInput(t *testing.T) {
 	assert.ErrorIs(t, svc.ProcessMessage(ctx, &domain.Message{ChatID: "c", UserID: "u", Content: ""}), domain.ErrInvalidInput)
 }
 
+func TestProcessMessage_EmptyContentWithAnalysis(t *testing.T) {
+	dbRepo, cacheRepo, streamRepo, metricsCollector, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+	streamRepo.On("Publish", mock.Anything, mock.Anything).Return(nil)
+	metricsCollector.On("IncPublishedMessages", 1.0).Return()
+	cacheRepo.On("SaveToCache", mock.Anything, mock.Anything).Return(nil)
+
+	err := svc.ProcessMessage(ctx, &domain.Message{
+		ChatID:   "chat-1",
+		UserID:   "user-1",
+		Role:     "assistant",
+		Content:  "",
+		Analysis: &domain.AnalysisResult{HumanScore: 0.2, AIScore: 0.8, ModelName: "spark", Verdict: "AI"},
+	})
+
+	assert.NoError(t, err)
+}
+
+func TestProcessMessage_EmptyContentAssistantNoAnalysis(t *testing.T) {
+	dbRepo, cacheRepo, streamRepo, metricsCollector, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+	streamRepo.On("Publish", mock.Anything, mock.Anything).Return(nil)
+	metricsCollector.On("IncPublishedMessages", 1.0).Return()
+	cacheRepo.On("SaveToCache", mock.Anything, mock.Anything).Return(nil)
+
+	// "running" placeholder saved before inference produces a result.
+	err := svc.ProcessMessage(ctx, &domain.Message{
+		ChatID:  "chat-1",
+		UserID:  "user-1",
+		Role:    "assistant",
+		Content: "",
+	})
+
+	assert.NoError(t, err)
+}
+
 func TestProcessMessage_Unauthorized(t *testing.T) {
 	dbRepo, _, _, _, svc := newTestService()
 	ctx := context.Background()

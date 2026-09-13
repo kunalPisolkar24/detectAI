@@ -228,7 +228,10 @@ func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) e
 	msg.Content = strings.TrimSpace(msg.Content)
 	msg.Role = strings.TrimSpace(msg.Role)
 
-	if msg.ChatID == "" || msg.UserID == "" || msg.Content == "" {
+	// Assistant messages (analysis placeholders, results) may omit text
+	// content — meaning lives in Analysis/metadata. User messages require it.
+	if msg.ChatID == "" || msg.UserID == "" ||
+		(msg.Content == "" && msg.Analysis == nil && !strings.EqualFold(msg.Role, "assistant")) {
 		return domain.ErrInvalidInput
 	}
 	if len(msg.Content) > domain.MaxContentLen {

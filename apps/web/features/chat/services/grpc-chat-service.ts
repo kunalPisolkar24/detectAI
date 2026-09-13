@@ -1,7 +1,7 @@
 import "server-only"
 import type { AssistantAnalysisMessageInput, IChatService } from "./chat-service.interface"
 import { AnalysisResult, ChatSession, ChatHistoryItem, Message, ModelType } from "../types"
-import { getChatGrpcClient } from "@/lib/shared/grpc/chat-client"
+import { getChatGrpcClient, buildUserMetadata } from "@/lib/shared/grpc/chat-client"
 import { inferenceService } from "./inference-service"
 import { mapGrpcMessageToDomain, mapDomainAnalysisToGrpc } from "../utils/mappers"
 import { buildAnalysisMessageMetadata } from "../utils/analysis-message-metadata"
@@ -39,7 +39,7 @@ export class GrpcChatService implements IChatService {
     const title = initialMessage.slice(0, 40) || "New Chat"
 
     return new Promise((resolve, reject) => {
-      this.client.CreateChat({ user_id: userId, title }, (err: any, response: any) => {
+      this.client.CreateChat({ user_id: userId, title }, buildUserMetadata(userId), (err: any, response: any) => {
         if (err) return reject(err)
 
         resolve({
@@ -53,8 +53,10 @@ export class GrpcChatService implements IChatService {
   }
 
   async getChat(chatId: string): Promise<ChatSession> {
+    const userId = await this.getUserId()
+
     const metaPromise = new Promise<GrpcChatResponse>((resolve, reject) => {
-      this.client.GetChat({ chat_id: chatId }, (err: any, response: any) => {
+      this.client.GetChat({ chat_id: chatId }, buildUserMetadata(userId), (err: any, response: any) => {
         if (err) return reject(err)
         resolve(response)
       })
@@ -65,7 +67,7 @@ export class GrpcChatService implements IChatService {
         chat_id: chatId,
         page: 1,
         page_size: 50
-      }, (err: any, response: any) => {
+      }, buildUserMetadata(userId), (err: any, response: any) => {
         if (err) return reject(err)
         const messages = (response.messages || []).map(mapGrpcMessageToDomain)
         resolve(messages)
@@ -89,7 +91,7 @@ export class GrpcChatService implements IChatService {
       this.client.GetUserChats({
         user_id: userId,
         limit: 50
-      }, (err: any, response: any) => {
+      }, buildUserMetadata(userId), (err: any, response: any) => {
         if (err) return reject(err)
 
         const chats: ChatHistoryItem[] = (response.chats || []).map((c: GrpcChatSummary) => ({
@@ -154,8 +156,10 @@ export class GrpcChatService implements IChatService {
   }
 
   async deleteChat(chatId: string): Promise<void> {
+    const userId = await this.getUserId()
+
     return new Promise((resolve, reject) => {
-      this.client.DeleteChat({ chat_id: chatId }, (err: any) => {
+      this.client.DeleteChat({ chat_id: chatId }, buildUserMetadata(userId), (err: any) => {
         if (err) return reject(err)
         resolve()
       })
@@ -163,8 +167,10 @@ export class GrpcChatService implements IChatService {
   }
 
   async renameChat(chatId: string, newTitle: string): Promise<ChatHistoryItem> {
+    const userId = await this.getUserId()
+
     return new Promise((resolve, reject) => {
-      this.client.RenameChat({ chat_id: chatId, new_title: newTitle }, (err: any) => {
+      this.client.RenameChat({ chat_id: chatId, new_title: newTitle }, buildUserMetadata(userId), (err: any) => {
         if (err) return reject(err)
         resolve({
           id: chatId,
@@ -200,7 +206,7 @@ export class GrpcChatService implements IChatService {
         metadata: options?.metadata ?? {},
         message_id: options?.messageId ?? "",
         created_at: options?.createdAt ? Math.floor(options.createdAt.getTime() / 1000) : 0,
-      }, (err: any, response: any) => {
+      }, buildUserMetadata(userId), (err: any, response: any) => {
         if (err) return reject(err)
 
         resolve(mapGrpcMessageToDomain({

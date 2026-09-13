@@ -726,7 +726,7 @@ export const useChatMutations = () => {
         router.push("/chat")
       }
     },
-    onError: () => toast.error("Failed to delete chat"),
+    onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to delete chat"),
   })
 
   const renameChat = useMutation({
@@ -747,7 +747,7 @@ export const useChatMutations = () => {
       )
       if (updatedChat) queryClient.invalidateQueries({ queryKey: ["chat", (updatedChat as ChatHistoryItem).id] })
     },
-    onError: () => toast.error("Failed to rename chat"),
+    onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to rename chat"),
   })
 
   return { deleteChat, renameChat }

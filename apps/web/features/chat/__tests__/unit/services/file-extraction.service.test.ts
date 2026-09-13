@@ -24,7 +24,7 @@ describe('FileExtractionService', () => {
       expect(result).toBe('extracted text content')
     })
 
-    it('posts to the correct /extract endpoint with the provided FormData', async () => {
+    it('posts to the correct /api/v1/extract endpoint with the provided FormData', async () => {
       const formData = new FormData()
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
@@ -33,7 +33,7 @@ describe('FileExtractionService', () => {
 
       await service.extract(formData)
 
-      expect(fetch).toHaveBeenCalledWith(`${BASE_URL}/extract`, {
+      expect(fetch).toHaveBeenCalledWith(`${BASE_URL}/api/v1/extract`, {
         method: 'POST',
         body: formData,
       })

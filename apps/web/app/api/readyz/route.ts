@@ -87,7 +87,7 @@ async function checkDocumentParser(): Promise<CheckResult> {
   const start = performance.now()
   try {
     const { env } = await import("@/lib/config/env")
-    const url = `${env.FILE_EXTRACTOR_API_URL.replace(/\/$/, "")}/health`
+    const url = `${env.FILE_EXTRACTOR_API_URL.replace(/\/$/, "")}/api/v1/health`
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 2000)
     try {

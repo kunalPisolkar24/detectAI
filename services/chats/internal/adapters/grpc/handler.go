@@ -147,7 +147,12 @@ func (h *Handler) SaveMessage(ctx context.Context, req *pb.SaveMessageRequest) (
 	if strings.TrimSpace(req.ChatId) == "" {
 		return nil, status.Error(codes.InvalidArgument, "chat_id is required")
 	}
-	if strings.TrimSpace(req.Content) == "" {
+	// Assistant messages legitimately carry no text content — their substance
+	// is the Analysis payload or state metadata (running/completed/failed),
+	// and the UI never renders assistant content (see GrpcChatService).
+	// User messages must always have content.
+	if strings.TrimSpace(req.Content) == "" && req.Analysis == nil &&
+		!strings.EqualFold(strings.TrimSpace(req.Role), "assistant") {
 		return nil, status.Error(codes.InvalidArgument, "content is required")
 	}
 
