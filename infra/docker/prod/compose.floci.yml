@@ -1,0 +1,58 @@
+# Floci overlay for the prod stack: attaches every app service to the
+# Floci/LocalStack backing network so Terraform-emitted container IPs
+# (RDS 172.24.0.x, DocDB, MQ) are routable from app containers.
+#
+# Usage (from repo root):
+#   make prod-up-floci        # = prod compose + this overlay
+#   make prod-config-floci    # render merged config
+#
+# The network name depends on how Floci itself was deployed on the host
+# (here: documents_default). Override without editing:
+#   make prod-up-floci FLOCI_NETWORK=my-floci_default
+# Real AWS needs no overlay (endpoints are public DNS): use plain prod-up.
+networks:
+  floci:
+    name: ${FLOCI_NETWORK:-documents_default}
+    external: true
+
+services:
+  db-migrate:
+    networks:
+      - default
+      - floci
+  frontend:
+    networks:
+      - default
+      - floci
+  payment-gateway:
+    networks:
+      - default
+      - floci
+  worker-analytics:
+    networks:
+      - default
+      - floci
+  worker-cron:
+    networks:
+      - default
+      - floci
+  worker-payments:
+    networks:
+      - default
+      - floci
+  ai-service:
+    networks:
+      - default
+      - floci
+  document-parser:
+    networks:
+      - default
+      - floci
+  chat-service:
+    networks:
+      - default
+      - floci
+  chat-worker:
+    networks:
+      - default
+      - floci
