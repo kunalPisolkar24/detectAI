@@ -25,7 +25,7 @@ The service has two types of health checks:
 
 ```mermaid
 graph TB
-    K8s[Kubernetes] --> Healthz[/api/healthz]
+    K8s[Kubernetes] --> Healthz["/api/healthz"]
     Healthz --> Process{Process alive?}
     Process -->|Yes| OK[200 OK]
     Process -->|No| Restart[Pod Restarted]
@@ -49,7 +49,7 @@ graph TB
 
 ```mermaid
 graph TB
-    K8s[Kubernetes] --> Reada[/api/readyz]
+    K8s[Kubernetes] --> Reada["/api/readyz"]
     Reada --> PG[PostgreSQL<br/>SELECT 1]
     Reada --> Redis[Redis<br/>PING]
     Reada --> Inference[Inference Service<br/>gRPC Health]

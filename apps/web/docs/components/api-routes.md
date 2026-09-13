@@ -13,12 +13,12 @@ The Web service exposes API routes under `/api/`. These routes handle:
 
 ```mermaid
 graph LR
-    Client[Browser] --> Healthz[/api/healthz]
-    Client --> Reada[/api/readyz]
-    Client --> Metrics[/api/metrics]
-    Client --> Analyze[/api/chat/analyze/stream]
-    Client --> Auth[/api/auth/*]
-    Client --> Services[/api/services/*]
+    Client[Browser] --> Healthz["/api/healthz"]
+    Client --> Reada["/api/readyz"]
+    Client --> Metrics["/api/metrics"]
+    Client --> Analyze["/api/chat/analyze/stream"]
+    Client --> Auth["/api/auth/*"]
+    Client --> Services["/api/services/*"]
 ```
 
 ## Health Endpoints

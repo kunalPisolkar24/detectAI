@@ -206,7 +206,7 @@ The Web service periodically checks backend health:
 
 ```mermaid
 graph TB
-    ReadyZ[/api/readyz] --> InferenceCheck[gRPC Health: Inference]
+    ReadyZ["/api/readyz"] --> InferenceCheck[gRPC Health: Inference]
     ReadyZ --> ChatCheck[gRPC Health: Chats]
     ReadyZ --> DocCheck[HTTP Health: Document Parser]
     ReadyZ --> PayCheck[HTTP Health: Payment Gateway]
