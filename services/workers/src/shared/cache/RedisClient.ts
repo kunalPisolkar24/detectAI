@@ -16,7 +16,7 @@ export class RedisFactory {
       password: config.password || undefined,
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
-      enableOfflineQueue: false,
+      enableOfflineQueue: true,
       retryStrategy(times) {
         return Math.min(times * 50, 2000);
       },

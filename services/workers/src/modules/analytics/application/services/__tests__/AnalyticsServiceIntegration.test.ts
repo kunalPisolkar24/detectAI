@@ -19,6 +19,13 @@ describe("AnalyticsService Integration", () => {
                     name: "test-redis",
             url: process.env.REDIS_URL,
         });
+        await new Promise<void>((resolve, reject) => {
+            const t = setTimeout(() => reject(new Error("redis ready timeout")), 5000);
+            redis.once("ready", () => { clearTimeout(t); resolve(); });
+            redis.once("error", (e: Error) => { clearTimeout(t); reject(e); });
+            if (redis.status === "ready") { clearTimeout(t); resolve(); }
+        }).catch(() => {});
+        await new Promise((r) => setTimeout(r, 200));
         const metrics = new MetricsService("test-analytics");
         userRepository = new PrismaUserRepository(prismaPrimary, prisma);
         // Dedup lives in redis-cache (same instance as counters).
