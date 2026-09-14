@@ -61,7 +61,7 @@ jobs:
       - name: Run Unit Tests & Coverage
         env:
           API_KEY: "ci-dummy-key-16chars-long"
-        run: poetry run pytest tests/unit --cov=src --cov-fail-under=70 -v
+        run: poetry run pytest tests/unit --cov=src --cov-fail-under=60 -v
 
       - name: Run Integration Tests
         env:

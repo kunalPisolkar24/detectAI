@@ -8,6 +8,7 @@ const eslintConfig = defineConfig([
   {
     files: [
       "lib/infrastructure/grpc-client.ts",
+      "lib/infrastructure/grpc-loader.ts",
       "lib/shared/grpc/chat-client.ts",
       "lib/infrastructure/service-health.ts",
       "lib/infrastructure/analytics-publisher.ts",
