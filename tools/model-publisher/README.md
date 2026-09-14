@@ -1,105 +1,184 @@
-# model-publisher — HuggingFace model publisher for DetectAI
+# Model Publisher
 
-Publishes local `assets/<model>` folders (e.g. `assets/detect-ai-spark`, `assets/detect-ai-flare`) to HuggingFace Hub as versioned model repos, with strict validation and dry-run support.
+Publishes DetectAI model artifacts to [HuggingFace Hub](https://huggingface.co) as versioned model repos. One-shot CLI tool — run it, it publishes, it exits.
 
-## Clean architecture
+```mermaid
+graph LR
+    A[Local Assets] -->|Upload| B[HuggingFace Hub]
+    C[CLI] -->|Validate & Publish| B
+```
+
+## Quick Start
+
+```bash
+# 1. Install
+poetry -C tools/model-publisher install
+
+# 2. Configure
+cd tools/model-publisher && cp .env.example .env
+# Edit .env — set HF_TOKEN and HF_USERNAME
+
+# 3. Validate (dry-run, no network)
+make -C tools/model-publisher dry-run model=detect-ai-spark v=v1.0.0
+
+# 4. Publish
+make -C tools/model-publisher upload-spark v=v1.0.0
+```
+
+## Available Models
+
+| Model | Make Command | Description |
+|-------|--------------|-------------|
+| `detect-ai-spark` | `make upload-spark v=<version>` | DetectAI Spark detection model |
+| `detect-ai-flare` | `make upload-flare v=<version>` | DetectAI Flare detection model |
+| Any model | `make upload model=<name> v=<version>` | Generic publish |
+
+## CLI Usage
+
+```bash
+# Full form
+python main.py --model detect-ai-spark --version v1.0.0
+
+# With options
+python main.py \
+  --model detect-ai-spark \
+  --version v1.0.1 \
+  --description "Bug fix release" \
+  --assets-dir /tmp/assets \
+  --dry-run \
+  --verbose
+```
+
+| Argument | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `--model` | Yes | — | Model name (e.g., `detect-ai-spark`) |
+| `--version` | Yes | — | Version tag (e.g., `v1.0.0`) |
+| `--description` | No | `Production release <version>` | Release description |
+| `--assets-dir` | No | `assets` | Override assets base directory |
+| `--dry-run` | No | `false` | Validate only, no upload |
+| `--verbose` | No | `false` | Verbose logging |
+
+## Configuration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `HF_TOKEN` | Yes | — | HuggingFace write token (min 8 chars, no placeholders) |
+| `HF_USERNAME` | Yes | — | HuggingFace username (repo namespace) |
+| `PROJECT_ROOT_DIR` | No | `.` | Root directory containing `assets/` |
+| `ASSETS_DIR_NAME` | No | `assets` | Assets folder name under root |
+| `ENV_FILE` | No | `.env` | Alternative dotenv file path |
+
+```bash
+# Example .env
+HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxx
+HF_USERNAME=myuser
+PROJECT_ROOT_DIR=.
+ASSETS_DIR_NAME=assets
+```
+
+## Architecture
+
+Clean architecture with strict dependency rules — domain never imports infrastructure.
+
+```mermaid
+graph TB
+    subgraph "CLI"
+        Main[main.py]
+        Parser[CLI Parser]
+    end
+
+    subgraph "Application"
+        UseCase[PublishModelUseCase]
+    end
+
+    subgraph "Domain"
+        Schemas[ModelMetadata / ArtifactBundle]
+    end
+
+    subgraph "Ports"
+        Registry[IModelRegistry]
+        Store[IArtifactStore]
+    end
+
+    subgraph "Infrastructure"
+        HF[HuggingFaceRegistry]
+        FS[LocalArtifactStore]
+        Config[Settings]
+        Wire[Composition Root]
+    end
+
+    Main --> Parser --> UseCase
+    UseCase --> Registry
+    UseCase --> Store
+    HF --> Registry
+    FS --> Store
+    Wire --> HF
+    Wire --> FS
+    Wire --> Config
+    Wire --> UseCase
+```
 
 ```
 src/
-  core/             exceptions, constants, logging (no domain/infrastructure imports)
-  domain/           constants + schemas (pure Pydantic, no FS I/O)
-  interfaces/       ports: IModelRegistry, IArtifactStore (ABCs)
-  application/      DTOs + use-cases (orchestrates ports, no I/O)
-  infrastructure/
-    config/         Settings + provider (lru_cache, clear for tests)
-    filesystem/     LocalArtifactStore — the ONLY place that touches Path.exists()
-    huggingface/    HuggingFaceRegistry — injected HfApi, redacted errors
-    composition/    container — sole wiring place (build_publisher)
-  cli/              argparse parser (testable)
-main.py             thin bootstrap: parse args -> get_settings -> build_publisher -> execute
+  core/             exceptions, constants, logging
+  domain/           schemas + validation (pure Pydantic, no I/O)
+  interfaces/       ports: IModelRegistry, IArtifactStore
+  application/      DTOs + use-case (orchestrates ports)
+  infrastructure/   adapters: HuggingFace, filesystem, config, wiring
+  cli/              argparse parser
+main.py             bootstrap: parse → settings → wire → execute
 ```
 
-Dependency rule: `domain <- application <- infrastructure`, `main -> composition -> all`. Domain never imports infra.
+## Publishing Flow
 
-## Setup
+```mermaid
+sequenceDiagram
+    participant CLI as CLI
+    participant UC as Use Case
+    participant FS as Filesystem
+    participant HF as HuggingFace Hub
 
-```bash
-cp .env.example .env   # set HF_TOKEN, HF_USERNAME
-poetry -C tools/model-publisher install --no-interaction
-# or
-make -C tools/model-publisher install
+    CLI->>UC: Execute(PublishCommand)
+    UC->>FS: Resolve asset directory
+    FS-->>UC: ArtifactBundle
+
+    alt Dry Run
+        UC-->>CLI: Validated (no network)
+    else Real Publish
+        UC->>HF: Upload folder
+        HF-->>UC: URL
+        UC->>HF: Create version tag
+        HF-->>UC: Tagged
+        UC-->>CLI: Published
+    end
 ```
 
-### Environment
-
-| Var | Required | Default | Notes |
-|-----|----------|---------|-------|
-| `HF_TOKEN` | yes | — | write token, min 8 chars, not `test`/`placeholder` |
-| `HF_USERNAME` | yes | — | Hub namespace |
-| `PROJECT_ROOT_DIR` | no | `.` | root containing `assets/` |
-| `ASSETS_DIR_NAME` | no | `assets` | folder name under root |
-| `ENV_FILE` | no | `.env` | alternative dotenv path |
-
-Empty strings are ignored (so compose empty vars don't break validation).
-
-## Usage
-
-```bash
-# validate only — never touches network (recommended before real publish)
-poetry -C tools/model-publisher run python main.py --model detect-ai-spark --version v1.0.0 --dry-run
-make -C tools/model-publisher dry-run model=detect-ai-spark v=v1.0.0
-
-# publish
-poetry -C tools/model-publisher run python main.py --model detect-ai-spark --version v1.0.0
-make -C tools/model-publisher upload-spark v=v1.0.0
-make -C tools/model-publisher upload-flare v=v1.0.0
-make -C tools/model-publisher upload model=detect-ai-spark v=v1.0.1 -- --description "hotfix" --assets-dir ./assets
-
-# verbose + custom assets dir
-poetry -C tools/model-publisher run python main.py --model detect-ai-spark --version v1.0.0 --assets-dir /tmp/assets --verbose
-```
-
-Version must match `^v\d+\.\d+\.\d+(?:[-+].+)?$` (e.g. `v1.0.0`, `v2.1.3-alpha`). Description defaults to `Production release <version>`.
-
-Exit codes: `0` success, `2` usage/config error, `1` runtime (upload/tag/artifact missing).
-
-## Dry-run
-
-`--dry-run` validates model/version/description and that `PROJECT_ROOT_DIR/ASSETS_DIR_NAME/<model>` exists and is a directory, then returns without calling HuggingFace. Use it in CI and before any real `v*` publish.
+**Exit codes:** `0` = success, `1` = runtime error, `2` = usage/config error
 
 ## Development
 
 ```bash
-make -C tools/model-publisher lint        # ruff check
-make -C tools/model-publisher test        # unit (no network)
-make -C tools/model-publisher test-all    # unit + integration (mocked HF, tmp_path)
-make -C tools/model-publisher test-cov    # unit + coverage gate 80%
-poetry -C tools/model-publisher run ruff format .   # format
+make -C tools/model-publisher lint       # ruff check
+make -C tools/model-publisher test       # unit tests (no network)
+make -C tools/model-publisher test-all   # unit + integration
+make -C tools/model-publisher test-cov   # unit + coverage (70% gate)
+make -C tools/model-publisher clean      # remove caches
 ```
-
-Tests use `FakeRegistry`/`FakeStore` — no network, no token needed. Integration tests mount `tmp_path` and `mocker.patch(HfApi)`.
-
-## Publishing flow
-
-1. `LocalArtifactStore.resolve(model, version)` validates `model_key`/`version` (pure regex) and checks `<root>/<assets>/<model>` exists.
-2. `HuggingFaceRegistry.upload_artifacts(bundle)` calls `HfApi.upload_folder(repo_id={username}/{model}, repo_type=model)`.
-3. `HuggingFaceRegistry.set_version_tag(bundle)` calls `HfApi.create_tag(tag=version, tag_message=description)`. If tag already exists, raises `TagFailedException` (409).
-
-Upload errors are wrapped as `UploadFailedException`/`TagFailedException` with redacted auth material and `repo_id` context; `upload_folder` failure never attempts tagging.
 
 ## CI
 
-`tools-model-publisher.yaml` runs on `staging`/`main` (path-filtered) — `ruff + pytest --cov --cov-fail-under=80`. Feature branches target `dev` (no CI) — paste local `make lint/test` output in PR.
+GitHub Actions workflow (`.github/workflows/tools-model-publisher.yaml`) runs on `staging`/`main` (path-filtered): ruff lint + pytest with 70% coverage gate. Feature branches targeting `dev` paste local `make lint/test` output in PR.
 
-## Legacy
+## Documentation
 
-`src/application/publisher.py:ModelPublisher` is kept as a deprecated shim delegating to `PublishModelUseCase`; prefer `container.build_publisher`.
+Detailed docs in [`docs/`](docs/):
 
-## Verify
-
-```bash
-# after publish, check Hub
-# https://huggingface.co/<username>/<model>/tree/<version>
-# tag via
-# huggingface-cli repo tag list <username>/<model>  # or via UI
-```
+| Doc | Description |
+|-----|-------------|
+| [Quick Start](docs/getting-started/quickstart.md) | Zero-to-running guide |
+| [Configuration](docs/getting-started/configuration.md) | All settings and env vars |
+| [Architecture](docs/concepts/architecture.md) | Clean architecture deep-dive |
+| [Publishing Flow](docs/concepts/publishing-flow.md) | Step-by-step lifecycle |
+| [CLI Reference](docs/components/cli.md) | All arguments and examples |
+| [Validation](docs/components/validation.md) | Input rules and error messages |
+| [Testing](docs/testing/overview.md) | How to run and write tests |
