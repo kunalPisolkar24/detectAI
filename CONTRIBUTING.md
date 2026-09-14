@@ -42,22 +42,21 @@ AI agents (OpenCode, Cursor, Copilot, etc.) are welcome to **create** issues and
 
 ### What AI may do
 
-- Open issues using the YAML issue forms. Must complete `Deduplication Check` and `Keywords Searched`.
-- Open draft pull requests from `feat/*` against `dev` only. Must use the pull request template.
+- Open issues with a clear title and a brief description. Blank issues are enabled on purpose to keep filing frictionless.
+- Open draft pull requests from `feat/*` against `dev` only, using the short PR template (linked issue, what/why, testing).
 - Rebase on latest `dev` before marking ready for review.
 
 ### What AI must not do
 
 - Never open `dev -> staging` or `staging -> main` pull requests.
 - **Never merge** any pull request. All merges are human-only.
-- Never bypass the pull request template or open blank issues.
 - Never commit secrets, env files, or credentials.
 
 ### Required hygiene for AI
 
 1. **Search before create.** Check open and closed issues and pull requests for the same keywords. If a duplicate exists, comment there instead.
-2. **Idempotency.** Set `Idempotency Key` in issues (`agent:<name>-<YYYYMMDD>-<short-hash>` or task ID) so reruns do not create duplicates.
-3. **Disclosure.** Fill `Agent Disclosure` in issues and `AI Disclosure` in pull requests: agent name, model, task or prompt ID, human approver.
+2. **Idempotency.** When automating, set an idempotency key in the issue body (`agent:<name>-<YYYYMMDD>-<short-hash>` or task ID) so reruns do not create duplicates.
+3. **Disclosure.** When AI generated the content, note the agent name, model, and task or prompt ID in the issue or PR body.
 4. **Labels.** Add `agent-generated` and `needs-human-review` where possible, or note it in the body if labels cannot be set.
 5. **One task, one PR.** Do not bundle unrelated changes. Do not open more than one PR for the same issue without closing the prior one.
 6. **Draft first.** Open as draft, wait for human conversion to ready.
@@ -83,7 +82,7 @@ Since `dev` does not run CI, the author must provide evidence in the PR under `T
 ## Pull Request Process
 
 1. Fork or create a feature branch from `dev`.
-2. Create a pull request against `dev` using the template. Fill `Promotion Path`, `Related Issue`, `Description`, `Changes`, `Testing`, and `AI Disclosure` if applicable.
+2. Create a pull request against `dev` using the short template: linked issue, what/why, and testing evidence.
 3. Ensure the title is a clean sentence with no prefix.
 4. Request review. All PRs require a human maintainer approval via `CODEOWNERS`.
 5. A human merges. AI must not merge.

@@ -19,7 +19,7 @@ jobs:
             const title = pr.title || "";
             const body = pr.body || "";
             const labels = pr.labels.map(l => l.name);
-            const isAgent = labels.includes("agent-generated") || /AI Disclosure/i.test(body) || /agent:/i.test(body);
+            const isAgent = labels.includes("agent-generated") || /agent:/i.test(body);
 
             const errors = [];
 
@@ -44,9 +44,11 @@ jobs:
               errors.push(`Title must not start with brackets like \`[Bug]\` or \`[Feature]\`. Found: "${title}".`);
             }
 
-            // Rule 5: Body must contain promotion path checklist (PR template)
-            if (!/Promotion Path/i.test(body)) {
-              errors.push("PR body is missing the `Promotion Path` checklist from the template. Please use the repository pull request template.");
+            // Rule 5: Body must not be blank (strip HTML comments from the template first).
+            // Promotion path is enforced structurally via base/head refs above, not via body text.
+            const bodyText = body.replace(/<!--[\s\S]*?-->/g, "").trim();
+            if (!bodyText) {
+              errors.push("PR body is empty. Fill in the short template: linked issue, what/why, and testing evidence.");
             }
 
             if (errors.length > 0) {
