@@ -16,7 +16,7 @@ graph TB
     subgraph "Data Stores"
         PG[(PostgreSQL<br/>Prisma ORM)]
         Redis[(Redis<br/>ioredis)]
-        RabbitMQ[RabbitMQ<br/>amqplib)]
+        RabbitMQ[(RabbitMQ<br/>amqplib)]
     end
 
     subgraph "Observability"
@@ -73,6 +73,175 @@ DB_POOL_MAX=5                                   # Connection pool size (1-50)
 | `Account` | OAuth provider links |
 | `Usage` | API usage tracking for rate limiting |
 | `Subscription` | Paddle subscription data |
+| `VerificationToken` | Email verification tokens |
+| `ProcessedWebhook` | Idempotent webhook event tracking |
+
+### Database Schema
+
+#### Full ER Diagram
+
+```mermaid
+erDiagram
+    User ||--o| Subscription : "has one"
+    User ||--o| Usage : "has one"
+    User ||--o{ Account : "has many"
+    User ||--o{ Session : "has many"
+
+    User {
+        string id PK
+        string email UK
+        string name
+        string firstName
+        string lastName
+        string password
+        string paddleCustomerId UK
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Subscription {
+        string id PK
+        string userId UK FK
+        string paddleSubscriptionId UK
+        string paddlePlanId
+        enum status
+        datetime endsAt
+        boolean cancellationScheduled
+        datetime eventTimestamp
+    }
+
+    Usage {
+        string id PK
+        string userId UK FK
+        int apiCallCountDaily
+        int apiCallCountTotal
+        datetime lastApiCallReset
+    }
+
+    Account {
+        string id PK
+        string userId FK
+        string provider
+        string providerAccountId
+        string type
+        text refresh_token
+        text access_token
+        int expires_at
+    }
+
+    Session {
+        string id PK
+        string sessionToken UK
+        string userId FK
+        datetime expires
+    }
+
+    VerificationToken {
+        string identifier
+        string token UK
+        datetime expires
+    }
+
+    ProcessedWebhook {
+        string eventId PK
+        string eventType
+        datetime receivedAt
+    }
+```
+
+#### User & Authentication
+
+How users log in. Accounts link to OAuth providers (Google, GitHub). Sessions track active logins. Verification tokens handle email verification flows.
+
+```mermaid
+erDiagram
+    User ||--o{ Account : "OAuth providers"
+    User ||--o{ Session : "active sessions"
+    User ||--o{ VerificationToken : "email verification"
+
+    User {
+        string id PK
+        string email UK
+        string name
+        string password
+    }
+
+    Account {
+        string id PK
+        string userId FK
+        string provider
+        string providerAccountId
+        text access_token
+    }
+
+    Session {
+        string id PK
+        string sessionToken UK
+        string userId FK
+        datetime expires
+    }
+
+    VerificationToken {
+        string identifier
+        string token UK
+        datetime expires
+    }
+```
+
+#### Subscription & Billing
+
+Links a user to their Paddle subscription. The `Usage` model tracks daily and total API calls for rate limiting (free tier: 100 calls/day).
+
+```mermaid
+erDiagram
+    User ||--o| Subscription : "Paddle billing"
+    User ||--o| Usage : "rate limiting"
+
+    User {
+        string id PK
+        string email UK
+        string paddleCustomerId UK
+    }
+
+    Subscription {
+        string id PK
+        string userId UK FK
+        string paddleSubscriptionId UK
+        string paddlePlanId
+        enum status
+        datetime endsAt
+    }
+
+    Usage {
+        string id PK
+        string userId UK FK
+        int apiCallCountDaily
+        int apiCallCountTotal
+        datetime lastApiCallReset
+    }
+```
+
+#### Webhook Event Tracking
+
+`ProcessedWebhook` stores event IDs from Paddle to prevent duplicate processing. It stands alone (no foreign key to User).
+
+```mermaid
+erDiagram
+    ProcessedWebhook {
+        string eventId PK
+        string eventType
+        datetime receivedAt
+    }
+```
+
+### Relationships
+
+| Parent | Child | Type | FK Column | On Delete |
+|--------|-------|------|-----------|-----------|
+| User | Subscription | 1:1 | `userId` | Cascade |
+| User | Usage | 1:1 | `userId` | Cascade |
+| User | Account | 1:N | `userId` | Cascade |
+| User | Session | 1:N | `userId` | Cascade |
 
 ### Health Check
 
