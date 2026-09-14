@@ -316,7 +316,7 @@ floci-seed:
 	PADDLE_KEY="$$(with_local PADDLE_API_KEY mock-paddle-api-key-not-configured)"; \
 	CLIENT_TOKEN="$$(with_local NEXT_PUBLIC_PADDLE_CLIENT_TOKEN mock-paddle-client-token-not-configured)"; \
 	TS_SITE="$$(with_local NEXT_PUBLIC_TURNSTILE_SITE_KEY 1x00000000000000000000AA)"; \
-	TS_SECRET="$$(with_local TURNSTILE_SECRET_KEY 1x00000000000000000000AA)"; \
+	TS_SECRET="$$(with_local TURNSTILE_SECRET_KEY 1x0000000000000000000000000000000AA)"; \
 	put_secret() { \
 		name="$$1"; payload="$$2"; \
 		if aws --endpoint-url "$$EP" --region "$$R" secretsmanager describe-secret --secret-id "$$name" >/dev/null 2>&1; then \

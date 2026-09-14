@@ -58,7 +58,7 @@ function applyDevDefaults(cfg: Record<string, string>): void {
   if (!cfg.GOOGLE_SECRET) cfg.GOOGLE_SECRET = "mock-google-client-secret-not-configured"
   if (!cfg.GITHUB_ID) cfg.GITHUB_ID = "mock-github-client-id-not-configured"
   if (!cfg.GITHUB_SECRET) cfg.GITHUB_SECRET = "mock-github-client-secret-not-configured"
-  if (!cfg.TURNSTILE_SECRET_KEY) cfg.TURNSTILE_SECRET_KEY = "1x00000000000000000000AA"
+  if (!cfg.TURNSTILE_SECRET_KEY) cfg.TURNSTILE_SECRET_KEY = "1x0000000000000000000000000000000AA"
   if (!cfg.NEXT_PUBLIC_TURNSTILE_SITE_KEY) cfg.NEXT_PUBLIC_TURNSTILE_SITE_KEY = "1x00000000000000000000AA"
   if (!cfg.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN) cfg.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN = "mock-paddle-client-token-not-configured"
   if (!cfg.FILE_EXTRACTOR_API_URL) cfg.FILE_EXTRACTOR_API_URL = "http://document-parser:8000"
@@ -234,8 +234,14 @@ async function buildConfig(): Promise<FullConfig> {
     }
   }
 
+  // Hydrate process.env so edge runtime (proxy.ts getToken) and downstream
+  // libraries see AWS/SSM values. Empty-string compose vars (e.g.
+  // NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-}) must NOT block hydration — env wins
+  // only when non-empty, matching applySecretJson/loadFromAWS precedence.
   for (const [k, v] of Object.entries(validated)) {
-    if (v !== undefined && process.env[k] === undefined) process.env[k] = String(v)
+    if (v !== undefined && (process.env[k] === undefined || process.env[k] === "")) {
+      process.env[k] = String(v)
+    }
   }
   process.env.ENV_TYPE = envType
   process.env.NEXT_PUBLIC_ENV_TYPE = validated.NEXT_PUBLIC_ENV_TYPE

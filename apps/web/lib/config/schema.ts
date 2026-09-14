@@ -93,7 +93,7 @@ export const previewDefaults = {
   GOOGLE_SECRET: "mock-google-client-secret-not-configured",
   GITHUB_ID: "mock-github-client-id-not-configured",
   GITHUB_SECRET: "mock-github-client-secret-not-configured",
-  TURNSTILE_SECRET_KEY: "1x00000000000000000000AA",
+  TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
   NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: "mock-paddle-client-token-not-configured",
   NEXT_PUBLIC_ENV_TYPE: "preview" as const,
