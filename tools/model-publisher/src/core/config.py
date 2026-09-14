@@ -1,15 +1,15 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+"""Backward-compat shim — prefer importing from infrastructure.config."""
 
-class Settings(BaseSettings):
-    hf_token: str
-    hf_username: str
-    assets_dir_name: str = "assets"
-    project_root_dir: str = "."
+from __future__ import annotations
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore"
-    )
+from src.infrastructure.config.provider import clear_settings_cache, get_settings
+from src.infrastructure.config.settings import Settings
 
-settings = Settings()
+# Legacy global — triggers load on import; new code should call get_settings().
+try:
+    settings = get_settings()
+except Exception:
+    # allow import without env in tests/lint; caller will call get_settings() explicitly
+    settings = None  # type: ignore[assignment]
+
+__all__ = ["Settings", "get_settings", "clear_settings_cache", "settings"]

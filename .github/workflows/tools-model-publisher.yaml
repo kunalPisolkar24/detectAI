@@ -1,0 +1,56 @@
+name: Tools - Model Publisher
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - staging
+    paths:
+      - "tools/model-publisher/**"
+      - ".github/workflows/tools-model-publisher.yaml"
+  pull_request:
+    branches:
+      - main
+      - staging
+    paths:
+      - "tools/model-publisher/**"
+      - ".github/workflows/tools-model-publisher.yaml"
+
+jobs:
+  quality-assurance:
+    name: Run Tests & Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/model-publisher
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install Dependencies
+        run: poetry install --no-interaction
+
+      - name: Lint with Ruff
+        run: poetry run ruff check . --select F,E --ignore E501
+
+      - name: Run Unit Tests & Coverage
+        env:
+          HF_TOKEN: "ci-dummy-token-16chars"
+          HF_USERNAME: "ci-user"
+        run: poetry run pytest -m "not integration" --cov=src --cov-report=term-missing --cov-fail-under=70 -v
+
+      - name: Run Integration Tests
+        env:
+          HF_TOKEN: "ci-dummy-token-16chars"
+          HF_USERNAME: "ci-user"
+        run: poetry run pytest -m integration -v
