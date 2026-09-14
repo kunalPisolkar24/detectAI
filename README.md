@@ -1,157 +1,148 @@
-# Detect AI - Advanced AI-Generated Text Detection
+# Detect AI
 
 [![CI](https://github.com/kunalPisolkar24/detectAI/actions/workflows/ci.yml/badge.svg)](https://github.com/kunalPisolkar24/detectAI/actions/workflows/ci.yml)
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://lbesson.mit-license.org/)
 [![Code Coverage](https://img.shields.io/badge/coverage-75%2B-brightgreen)](https://github.com/kunalPisolkar24/detectAI)
 
-An advanced, full-stack platform designed to accurately distinguish between human-written and AI-generated text. It leverages a dual-model approach, combining a state-of-the-art transformer model with a deep neural network, all delivered through a secure, high-performance, and scalable web application with a built-in subscription management system.
+A full-stack platform that detects AI-generated text using a dual-model system (a fine-tuned BERT transformer and a 3-layer DNN). Built as a Turborepo monorepo with microservices architecture, deployed on Vercel, Lightning AI, and AWS.
 
-## ✨ Core Features
+## Features
 
-*   **Advanced AI Text Detection**: Utilizes a powerful dual-model system to analyze text and determine the probability of it being AI-generated. It offers two tiers of detection accuracy: a highly precise premium model and a robust standard model.
-*   **Subscription-Based Access**: A complete subscription system powered by Paddle.js allows users to subscribe to monthly or yearly plans for premium features. The system includes seamless payment processing and automated handling of subscription events via webhooks.
-*   **Secure & Modern User Experience**:
-    *   **Multi-Provider Authentication**: A comprehensive authentication system using Next-Auth supports email/password, Google, and GitHub logins.
-    *   **Intuitive & Animated UI**: A clean, responsive interface built with Shadcn UI and enhanced with fluid animations from Framer Motion.
-    *   **Helpful Error Feedback**: Provides clear, parameter-based error messages for an improved user experience.
-*   **Human Verification**: Employs Cloudflare Turnstile to prevent automated bots and ensure fair usage.
+- **AI Text Detection** — Dual-model system (premium BERT + standard DNN) for analyzing text
+- **Subscription Management** — Paddle.js-powered monthly/yearly plans with webhook handling
+- **Multi-Provider Auth** — Email/password, Google, and GitHub login via NextAuth
+- **Human Verification** — Cloudflare Turnstile bot prevention
+- **Chat Conversations** — Persistent chat history with streaming support
 
-## 🚀 Technical Architecture
+## Architecture
 
-### Monorepo & Build System
-*   **Turborepo**: Manages the monorepo for high-performance build caching, leading to significantly faster development and deployment cycles.
+```mermaid
+graph TB
+    Client[Web App<br/>Next.js 15] --> GW[Payment Gateway<br/>Go]
+    Client --> Parser[Document Parser<br/>Python/FastAPI]
+    Client --> Inference[Inference<br/>Python/gRPC]
+    Client --> Chats[Chats Service<br/>Go/gRPC]
+    GW --> RMQ[RabbitMQ]
+    RMQ --> Workers[Workers<br/>TypeScript/Bun]
+    Workers --> PG[(PostgreSQL)]
+    Chats --> Mongo[(MongoDB)]
+    Chats --> Redis[(Redis)]
+    Inference --> HF[HuggingFace Hub]
+```
 
-### Full-Stack Framework
-*   **Next.js 15**: The entire user-facing application and backend-for-frontend are built with the latest version of Next.js.
-*   **Vercel Deployment**: The application is deployed on Vercel with separate staging and production environments for robust release cycles.
+### Services
 
-### AI Model Service
-*   **Python, Flask & Lightning AI**: A RESTful API developed with Flask serves the AI models. It includes health check endpoints for monitoring.
-*   **Secure Communication**: A secure proxy within the Next.js backend ensures the Lightning AI secret key is never exposed on the client-side.
-*   **Containerized Deployment**: The AI service is packaged in a Docker container for consistent and portable execution.
-*   **Scalable Hosting**: Deployed on Lightning AI, the service is configured with powerful resources (16GB RAM, 4 vCPUs) and autoscaling capabilities to handle high demand.
+| Service | Language | Role | Docs |
+|---------|----------|------|------|
+| **Web** | TypeScript (Next.js 15) | Frontend, BFF, auth, UI | [docs](apps/web/docs/README.md) |
+| **Inference** | Python (gRPC) | Dual ONNX model inference | [docs](services/inference/docs/README.md) |
+| **Chats** | Go (gRPC) | Chat storage, streaming, background worker | [docs](services/chats/docs/README.md) |
+| **Document Parser** | Python (FastAPI) | Text extraction from PDF/DOCX/TXT | [docs](services/document-parser/docs/README.md) |
+| **Payment Gateway** | Go | Paddle webhook validation, RabbitMQ forwarding | [docs](services/payments/gateway/docs/README.md) |
+| **Workers** | TypeScript (Bun) | Payments, analytics, cron processing | [docs](services/workers/docs/README.md) |
+| **Terraform** | HCL | AWS infrastructure (RDS, DocumentDB, ElastiCache, MQ) | [docs](infra/docs/README.md) |
 
-### AI Model & Training
-*   **Training Dataset**: The models are trained and fine-tuned on the gold-rated DIAGT Proper Train Dataset.
-*   **Premium Model (Transformer)**:
-    *   **Model**: A fine-tuned BERT_BASE_UNCASED model.
-    *   **Performance**: Achieves a test accuracy of 99.77%, with perfect AUC-PR and ROC AUC scores of 1.0.
-*   **Standard Model (DNN)**:
-    *   **Architecture**: A 3-layer sequential model with TF-IDF Vectorizer for text preprocessing.
-    *   **Performance**: Reaches a high test accuracy of 97.25% and an AUC-ROC of 0.9940.
+## Tech Stack
 
-### Backend & Database
-*   **Prisma & Neon DB**: Prisma is used as the ORM for type-safe database interactions with a Neon DB PostgreSQL instance that autoscales based on traffic.
-*   **Authentication**: A multi-provider authentication system (Credentials, Google, GitHub) is implemented with Next-Auth, using JWT sessions stored in cookies.
-*   **Input Validation**: Zod ensures robust schema validation for all API inputs, enhancing data integrity and security.
-*   **Payment Webhooks**: Secure backend endpoints handle webhooks from Paddle for managing subscription events.
+| Layer | Technology |
+|-------|------------|
+| Framework | Next.js 15 (App Router), Turborepo |
+| UI | React, Shadcn UI, Tailwind CSS, Framer Motion |
+| Auth | NextAuth.js (JWT), bcrypt |
+| Database | PostgreSQL (Prisma), MongoDB, Redis (x3), RabbitMQ |
+| Payments | Paddle.js |
+| Inference | ONNX Runtime, HuggingFace Transformers, scikit-learn |
+| Observability | OpenTelemetry, Prometheus, structlog / pino |
+| Infrastructure | Docker Compose, Terraform, AWS (RDS, DocumentDB, ElastiCache, MQ) |
+| CI/CD | GitHub Actions, Vercel |
 
-### API Documentation
-*   **OpenAPI & Swagger UI**: A comprehensive OpenAPI specification is defined for all backend endpoints, with interactive documentation provided by Swagger UI.
-
-## ⚙️ Performance & Monitoring
-
-*   **Build Caching**: Turborepo optimizes build times, significantly speeding up the development and CI pipelines.
-*   **Database Monitoring**: Neon DB's integrated tools are used to monitor database performance and traffic patterns.
-*   **Frontend Performance**: Achieves Lighthouse scores of over 90% across all metrics for both mobile and desktop, ensuring a fast and accessible user experience.
-
-## 🛡️ Security Measures
-
-*   **Password Hashing**: Bcrypt is used to securely hash and salt user passwords.
-*   **Bot & Spam Prevention**: Cloudflare Turnstile provides effective human verification.
-*   **API Rate Limiting**: Upstash Redis implements a rate limiter, restricting users to 50 requests per 60 seconds to prevent abuse.
-*   **DDoS Protection**: Vercel's built-in DDoS protection secures the frontend and API endpoints.
-*   **Input Sanitization**: Strict schema-based input validation with Zod prevents injection attacks and ensures data integrity.
-
-## 🧪 Testing & Quality Assurance
-
-*   **Unit Testing**: Frontend components and backend APIs are unit-tested using Vitest and React Testing Library, achieving over 75% code coverage.
-*   **End-to-End (E2E) Testing**: A comprehensive suite of E2E tests using Cypress validates complete user flows and application functionality.
-
-## 🛠️ DevOps & Development Workflow
-
-*   **Continuous Integration (CI)**: A CI pipeline with GitHub Actions automatically builds and tests the application on every push and pull request.
-*   **Containerized Local Development**: Docker Compose is used to manage the multi-service local environment for a consistent end-to-end development experience.
-*   **Continuous Deployment (CD)**: Vercel's CD capabilities enable automated, zero-downtime deployments to staging and production environments.
-
-## 🚀 Getting Started
-
-To get a local copy up and running, follow these simple steps.
+## Getting Started
 
 ### Prerequisites
 
-*   pnpm
-*   Docker
+- [pnpm](https://pnpm.io/)
+- [Docker](https://docs.docker.com/get-docker/)
 
-### Installation
+### Setup
 
-1.  **Clone the repo**
-    ```sh
-    git clone https://github.com/kunalPisolkar24/detectAI.git
-    ```
-2.  **Navigate to the project directory**
-    ```sh
-    cd detectAI
-    ```
-3.  **Install NPM packages**
-    ```sh
-    pnpm install
-    ```
-4.  **Set up Docker environment variables**
+```bash
+# Clone
+git clone https://github.com/kunalPisolkar24/detectAI.git
+cd detectAI
 
-    The root `Makefile` is the entrypoint for both Docker stacks.
+# Install dependencies
+pnpm install
 
-    For the local stack:
-    ```sh
-    cp infra/docker/local/.env.example infra/docker/local/.env
-    ```
+# Set up environment
+cp infra/docker/local/.env.example infra/docker/local/.env
+# Edit the .env file with your secrets
 
-    For the prod-like stack:
-    ```sh
-    cp infra/docker/prod/.env.example infra/docker/prod/.env
-    ```
+# See all available commands
+make help
 
-    Update the env file for the stack you plan to run.
+# Start the local stack
+make local-up
+```
 
-5.  **Discover available commands**
+The web app will be available at [http://localhost:3000](http://localhost:3000).
 
-    ```sh
-    make help
-    ```
+### Build Without Starting
 
-6.  **Run a stack**
+```bash
+make build STACK=local SERVICE=frontend
+make build STACK=prod
+```
 
-    Start the lightweight local stack:
-    ```sh
-    make local-up
-    ```
+See [Infrastructure Quick Start](infra/docs/getting-started/quickstart.md) for the full local development guide, including Terraform and Floci/LocalStack setup.
 
-    Start the prod-like stack from the repo root:
-    ```sh
-    make up
-    ```
+## Project Structure
 
-7.  **Build images without starting containers**
+```
+detectAI/
+├── apps/
+│   └── web/                    # Next.js 15 full-stack app
+├── services/
+│   ├── chats/                  # Go gRPC chat service
+│   ├── document-parser/        # Python text extraction
+│   ├── inference/              # Python gRPC model serving
+│   └── payments/gateway/       # Go webhook gateway
+├── services/workers/           # TypeScript background workers
+├── tools/
+│   ├── model-publisher/        # HuggingFace model publishing CLI
+│   └── seed-secrets/           # AWS Secrets Manager seeding CLI
+└── infra/
+    ├── docker/                 # Compose stacks + reusable atoms
+    ├── terraform/              # AWS infrastructure as code
+    └── docs/                   # Infrastructure documentation
+```
 
-    ```sh
-    make build STACK=local SERVICE=frontend
-    make build STACK=prod
-    ```
+## Documentation
 
+Each component has its own documentation in `docs/`. Start with the quickstart for the component you're working on:
 
+| Component | Quick Start | Full Docs |
+|-----------|-------------|-----------|
+| Web App | [Quickstart](apps/web/docs/getting-started/quickstart.md) | [Index](apps/web/docs/README.md) |
+| Inference | [Quickstart](services/inference/docs/getting-started/quickstart.md) | [Index](services/inference/docs/README.md) |
+| Chats | [Quickstart](services/chats/docs/getting-started/quickstart.md) | [Index](services/chats/docs/README.md) |
+| Document Parser | [Quickstart](services/document-parser/docs/getting-started/quickstart.md) | [Index](services/document-parser/docs/README.md) |
+| Payment Gateway | [Quickstart](services/payments/gateway/docs/getting-started/quickstart.md) | [Index](services/payments/gateway/docs/README.md) |
+| Workers | [Quickstart](services/workers/docs/getting-started/quickstart.md) | [Index](services/workers/docs/README.md) |
+| Infrastructure | [Quickstart](infra/docs/getting-started/quickstart.md) | [Index](infra/docs/README.md) |
+| Terraform | [README](infra/terraform/README.md) | [Docs](infra/docs/concepts/terraform.md) |
+| Model Publisher | [Quickstart](tools/model-publisher/docs/getting-started/quickstart.md) | [Index](tools/model-publisher/docs/README.md) |
+| Seed Secrets | [Quickstart](tools/seed-secrets/docs/getting-started/quickstart.md) | [Index](tools/seed-secrets/docs/README.md) |
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on branching, PR process, and AI agent conventions.
 
-If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also simply open an issue with the tag "enhancement".
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-1.  Fork the Project
-2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4.  Push to the Branch (`git push origin feature/AmazingFeature`)
-5.  Open a Pull Request
+## License
 
-## 📜 License
-
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
