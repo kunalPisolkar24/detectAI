@@ -2,9 +2,9 @@ locals {
   # Effective emulator endpoint: emulator_endpoint preferred, floci_endpoint as deprecated alias.
   # Empty string is treated as null (= real AWS). Works for Floci and LocalStack (both http://localhost:4566).
   effective_endpoint = (
-    var.emulator_endpoint != null && trimspace(var.emulator_endpoint) != ""
+    try(trimspace(var.emulator_endpoint), "") != ""
     ? trimspace(var.emulator_endpoint)
-    : var.floci_endpoint != null && trimspace(var.floci_endpoint) != ""
+    : try(trimspace(var.floci_endpoint), "") != ""
     ? trimspace(var.floci_endpoint)
     : null
   )

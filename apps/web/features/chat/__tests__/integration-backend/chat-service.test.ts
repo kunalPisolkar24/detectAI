@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth'
 
 vi.mock('@/lib/shared/grpc/chat-client', () => ({
   getChatGrpcClient: vi.fn(),
+  buildUserMetadata: vi.fn(() => ({ set: vi.fn() } as any)),
 }))
 
 vi.mock('next-auth', () => ({

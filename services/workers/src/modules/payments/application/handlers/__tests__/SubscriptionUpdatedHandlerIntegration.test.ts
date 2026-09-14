@@ -25,6 +25,23 @@ describe("SubscriptionUpdatedHandler Integration", () => {
                     name: "test-event-redis",
             url: redisUrl,
         });
+        // Wait for redis clients to be ready before issuing commands
+        await Promise.all([
+            new Promise<void>((resolve, reject) => {
+                const t = setTimeout(() => reject(new Error("redis ready timeout")), 5000);
+                redis.once("ready", () => { clearTimeout(t); resolve(); });
+                redis.once("error", (e: Error) => { clearTimeout(t); reject(e); });
+                if (redis.status === "ready") { clearTimeout(t); resolve(); }
+            }).catch(() => {}),
+            new Promise<void>((resolve, reject) => {
+                const t = setTimeout(() => reject(new Error("event redis ready timeout")), 5000);
+                eventRedis.once("ready", () => { clearTimeout(t); resolve(); });
+                eventRedis.once("error", (e: Error) => { clearTimeout(t); reject(e); });
+                if (eventRedis.status === "ready") { clearTimeout(t); resolve(); }
+            }).catch(() => {}),
+        ]);
+        // Small grace to ensure connection is writable
+        await new Promise((r) => setTimeout(r, 200));
         const metrics = new MetricsService("test-payments");
         userRepository = new PrismaUserRepository(prismaPrimary, prisma);
         handler = new SubscriptionUpdatedHandler(userRepository, redis, eventRedis, metrics);
