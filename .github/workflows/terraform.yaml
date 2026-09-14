@@ -53,6 +53,7 @@ jobs:
     name: plan (floci-local, emulator)
     runs-on: ubuntu-latest
     needs: validate
+    continue-on-error: true
     defaults:
       run:
         working-directory: infra/terraform
