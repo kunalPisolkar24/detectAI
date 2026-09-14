@@ -179,6 +179,29 @@ func loadProdNonSecretOverrides(cfg *Config) error {
 		}
 		cfg.MongoServerTimeout = d
 	}
+	// Floci parity with web/gateway: an explicit CHAT_REDIS_ADDR/REDIS_URL wins
+	// over the TF secret (emulator secrets carry unreachable localhost addrs
+	// like localhost:6381). A non-empty REDIS_PASSWORD/CHATS_REDIS_PASSWORD
+	// wins; an env-provided addr with empty password env implies the
+	// passwordless emulator. Real AWS keeps secret addr+password by leaving
+	// these unset/empty in .env (compose passes CHAT_REDIS_ADDR empty).
+	if v := strings.TrimSpace(os.Getenv("CHAT_REDIS_ADDR")); v != "" {
+		cfg.RedisAddr = v
+		if strings.TrimSpace(os.Getenv("REDIS_PASSWORD")) == "" && strings.TrimSpace(os.Getenv("CHATS_REDIS_PASSWORD")) == "" {
+			cfg.RedisPassword = ""
+		}
+	} else if v := strings.TrimSpace(os.Getenv("REDIS_URL")); v != "" {
+		cfg.RedisAddr = v
+		if strings.TrimSpace(os.Getenv("REDIS_PASSWORD")) == "" && strings.TrimSpace(os.Getenv("CHATS_REDIS_PASSWORD")) == "" {
+			cfg.RedisPassword = ""
+		}
+	}
+	if v := os.Getenv("REDIS_PASSWORD"); v != "" {
+		cfg.RedisPassword = strings.TrimSpace(v)
+	}
+	if v := os.Getenv("CHATS_REDIS_PASSWORD"); v != "" {
+		cfg.RedisPassword = strings.TrimSpace(v)
+	}
 	if v := os.Getenv("REDIS_TLS_CA_FILE"); v != "" {
 		cfg.RedisTLSCAFile = strings.TrimSpace(v)
 	}
