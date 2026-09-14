@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field, field_validator
 from pathlib import Path
+
+from pydantic import BaseModel, field_validator
 
 class ModelMetadata(BaseModel):
     model_key: str
