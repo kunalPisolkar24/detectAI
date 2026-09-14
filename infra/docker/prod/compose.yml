@@ -1,12 +1,15 @@
 # Full-stack PROD compose: app services only, datastores from Terraform.
 #
-# Usage (from repo root), Floci-first:
-#   1. Boot the emulator: Floci/LocalStack on http://localhost:4566
-#   2. terraform -chdir=infra/terraform apply -var-file=envs/floci-local.tfvars
-#   3. make floci-seed          # app-only secrets Floci doesn't TF-manage
-#   4. cp infra/docker/prod/.env.example infra/docker/prod/.env  # then fill
-#      DATABASE_URL* (/workers + db-migrate) from `terraform output -raw`
-#   5. make prod-up
+# Usage (from repo root), Floci-first (new .env-driven flow):
+#   1. cp infra/docker/prod/.env.example infra/docker/prod/.env  # fill 7 real keys: GITHUB_*, GOOGLE_*, PADDLE_*
+#   2. Boot emulator: Floci/LocalStack on http://localhost:4566
+#   3. make prod-floci-bootstrap   # = terraform apply + seed from .env + verify + DATABASE_URL hint
+#      # or manually: make tf-apply-local && make seed-floci && make floci-verify
+#   4. Fill DATABASE_URL* in infra/docker/prod/.env from `terraform output -raw database_url`
+#      (rewrite localhost -> host.docker.internal for containers)
+#   5. make prod-up-floci          # prod stack on FLOCI_NETWORK; real AWS: make prod-up
+#
+# Legacy: `make floci-seed` (bash, mirrors local .env) still works as alias to `make seed-floci`.
 #
 # How wiring works (ENV_TYPE=prod + AWS SDK at runtime):
 #   web/chats/gateway  fetch URLs from Floci Secrets Manager

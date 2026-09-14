@@ -99,20 +99,35 @@ make tf-test           # terraform test (unit, mocked)
 ## Floci App Secrets & Prod Stack (from repo root)
 
 Terraform manages `detectai/{pg,docdb,redis/*/mq}/urls`, but not the app-only
-secrets (`detectai/web|workers|gateway|inference/secrets`). Seed those
-separately, then start the prod stack attached to the emulator network:
+secrets (`detectai/web|workers|gateway|inference/secrets`). Seed those from
+`infra/docker/prod/.env` (single source of truth, allowlist-only) via the
+Python seeder — works for Floci and real AWS (guarded):
 
 ```bash
-make floci-seed        # create app-only secrets on the emulator (idempotent)
-make floci-verify      # check emulator APIs + secrets exist
-make prod-up-floci     # start prod stack on FLOCI_NETWORK (default documents_default)
-make prod-config-floci # render merged prod + Floci compose config
+# New flow (Floci, .env-driven)
+cp infra/docker/prod/.env.example infra/docker/prod/.env   # fill your 7 real keys: GITHUB_*, GOOGLE_*, PADDLE_*
+make prod-floci-bootstrap   # = make tf-apply-local + make seed-floci + DATABASE_URL hint + verify
+# or manually:
+make tf-apply-local
+make seed-floci             # reads infra/docker/prod/.env -> Floci at FLOCI_ENDPOINT
+make seed-floci-dry         # preview without writing
+make floci-verify           # check emulator APIs + all 4 app secrets exist
+make prod-up-floci          # start prod stack on FLOCI_NETWORK (default documents_default)
+make prod-config-floci      # render merged prod + Floci compose config
+
+# Real AWS (same file, explicit guard)
+make seed-aws               # reads same .env -> real AWS (--confirm-prod required)
+make seed-dry               # preview against current AWS_ENDPOINT_URL
+
+# Legacy (still works)
+make floci-seed             # bash, mirrors infra/docker/local/.env -> alias to seed-floci
 ```
 
 Notes:
 
 - Run only one stack at a time — `local-up` refuses while prod is running and vice versa.
 - Missing `.env` files are created from `.env.example` automatically on first run.
+- `tools/seed-secrets/` is clean-architecture Python (boto3 only): `parse_env_file` handles `export`, quoted values, `KEY= " spaced"`, `#` comments; `Seeder` syncs `INTERNAL_API_KEY`/`AI_SERVICE_API_KEY` once across secrets; `Boto3SecretsManager` is Floci-aware (`test/test` creds) and refuses TF-managed secrets / real-AWS without `--confirm-prod`.
 
 ## Prod Hardening Checklist (when moving to real AWS)
 
