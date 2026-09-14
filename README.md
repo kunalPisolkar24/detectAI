@@ -1,9 +1,5 @@
 # Detect AI
 
-[![CI](https://github.com/kunalPisolkar24/detectAI/actions/workflows/ci.yml/badge.svg)](https://github.com/kunalPisolkar24/detectAI/actions/workflows/ci.yml)
-[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://lbesson.mit-license.org/)
-[![Code Coverage](https://img.shields.io/badge/coverage-75%2B-brightgreen)](https://github.com/kunalPisolkar24/detectAI)
-
 A full-stack platform that detects AI-generated text using a dual-model system (a fine-tuned BERT transformer and a 3-layer DNN). Built as a Turborepo monorepo with microservices architecture, deployed on Vercel, Lightning AI, and AWS.
 
 ## Features
