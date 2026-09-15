@@ -31,7 +31,8 @@ describe('GrpcChatService Integration', () => {
   })
 
   it('creates a new chat via gRPC', async () => {
-    mockClient.CreateChat.mockImplementation((_data: any, cb: any) => {
+    mockClient.CreateChat.mockImplementation((...args: any[]) => {
+      const cb = args[args.length - 1]
       cb(null, { chat_id: 'chat-123' })
     })
 
@@ -40,12 +41,14 @@ describe('GrpcChatService Integration', () => {
     expect(chat.id).toBe('chat-123')
     expect(mockClient.CreateChat).toHaveBeenCalledWith(
       expect.objectContaining({ user_id: 'user-1', title: 'Hello world' }),
+      expect.anything(),
       expect.any(Function)
     )
   })
 
   it('saves a user message via gRPC', async () => {
-    mockClient.SaveMessage.mockImplementation((_data: any, cb: any) => {
+    mockClient.SaveMessage.mockImplementation((...args: any[]) => {
+      const cb = args[args.length - 1]
       cb(null, { message_id: 'msg-1', timestamp: Date.now() })
     })
 
@@ -58,12 +61,14 @@ describe('GrpcChatService Integration', () => {
         role: 'user',
         content: 'test content'
       }),
+      expect.anything(),
       expect.any(Function)
     )
   })
 
   it('handles gRPC errors gracefully', async () => {
-    mockClient.CreateChat.mockImplementation((_data: any, cb: any) => {
+    mockClient.CreateChat.mockImplementation((...args: any[]) => {
+      const cb = args[args.length - 1]
       cb(new Error('gRPC Error'))
     })
 
