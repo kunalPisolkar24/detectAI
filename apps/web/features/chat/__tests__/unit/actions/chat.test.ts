@@ -1,23 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { 
-  createChatAction, 
-  getChatAction, 
-  getChatHistoryAction, 
-  sendMessageAction, 
-  deleteChatAction, 
-  renameChatAction 
+import {
+  createChatAction,
+  getChatAction,
+  getChatHistoryAction,
+  deleteChatAction,
+  renameChatAction
 } from '../../../actions/chat'
 import { chatService } from '@/features/chat/services'
-import { getServerSession } from 'next-auth'
-import { rateLimitService } from '@/features/rate-limit/services/rate-limit-service'
-import { MAX_LIVE_ANALYSIS_CHARS } from '@/features/chat/constants'
 
 vi.mock('@/features/chat/services', () => ({
   chatService: {
     createChat: vi.fn(),
     getChat: vi.fn(),
     getHistory: vi.fn(),
-    sendMessage: vi.fn(),
     deleteChat: vi.fn(),
     renameChat: vi.fn(),
   },
@@ -29,13 +24,6 @@ vi.mock('next-auth', () => ({
 
 vi.mock('@/lib/config/auth-options', () => ({
   authOptions: {},
-}))
-
-vi.mock('@/features/rate-limit/services/rate-limit-service', () => ({
-  rateLimitService: {
-    checkLimit: vi.fn(),
-    trackUsage: vi.fn(),
-  },
 }))
 
 describe('Chat Actions', () => {
@@ -55,49 +43,6 @@ describe('Chat Actions', () => {
       vi.mocked(chatService.createChat).mockRejectedValue(new Error('Fail'))
       const result = await createChatAction('hello')
       expect(result).toEqual({ success: false, error: 'Fail' })
-    })
-  })
-
-  describe('sendMessageAction', () => {
-    const mockUser = { id: 'user-1', isPremium: false }
-    const mockMessage = { id: 'msg-1' }
-
-    it('returns error if unauthorized', async () => {
-      vi.mocked(getServerSession).mockResolvedValue(null)
-      const result = await sendMessageAction('chat-1', 'content', 'model' as any)
-      expect(result).toEqual({ success: false, error: 'Unauthorized' })
-    })
-
-    it('returns error if rate limit exceeded', async () => {
-      vi.mocked(getServerSession).mockResolvedValue({ user: mockUser } as any)
-      vi.mocked(rateLimitService.checkLimit).mockResolvedValue({ allowed: false } as any)
-      const result = await sendMessageAction('chat-1', 'content', 'model' as any)
-      expect(result).toEqual({ success: false, error: 'Rate limit exceeded', isRateLimit: true })
-    })
-
-    it('successfully sends a message', async () => {
-      vi.mocked(getServerSession).mockResolvedValue({ user: mockUser } as any)
-      vi.mocked(rateLimitService.checkLimit).mockResolvedValue({ allowed: true } as any)
-      vi.mocked(chatService.sendMessage).mockResolvedValue(mockMessage as any)
-
-      const result = await sendMessageAction('chat-1', 'content', 'model' as any)
-
-      expect(chatService.sendMessage).toHaveBeenCalledWith('chat-1', 'content', 'model')
-      expect(rateLimitService.trackUsage).toHaveBeenCalledWith(mockUser.id)
-      expect(result).toEqual({ success: true, data: mockMessage })
-    })
-
-    it('handles rate limit error from service', async () => {
-      vi.mocked(getServerSession).mockResolvedValue({ user: mockUser } as any)
-      vi.mocked(rateLimitService.checkLimit).mockResolvedValue({ allowed: true } as any)
-      vi.mocked(chatService.sendMessage).mockRejectedValue(new Error('Rate limit 429'))
-
-      const result = await sendMessageAction('chat-1', 'content', 'model' as any)
-      expect(result).toEqual({
-        success: false,
-        error: 'Rate limit 429',
-        isRateLimit: true
-      })
     })
   })
 

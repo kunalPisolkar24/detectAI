@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  serverExternalPackages: ["@grpc/grpc-js", "@grpc/proto-loader"],
+  serverExternalPackages: ["@grpc/grpc-js", "@grpc/proto-loader", "@opentelemetry/sdk-node", "@opentelemetry/exporter-trace-otlp-http", "@opentelemetry/auto-instrumentations-node"],
   experimental: {
     optimizePackageImports: ["lucide-react", "framer-motion"],
     serverActions: {

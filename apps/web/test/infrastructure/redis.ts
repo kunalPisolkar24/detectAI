@@ -15,6 +15,7 @@ export const mockRedis = {
   del: vi.fn().mockResolvedValue(0),
   on: vi.fn(),
   pipeline: vi.fn(() => mockPipeline),
+  eval: vi.fn().mockResolvedValue(1),
   sadd: vi.fn().mockResolvedValue(1),
   smembers: vi.fn().mockResolvedValue([]),
   srem: vi.fn().mockResolvedValue(1),
@@ -27,7 +28,6 @@ export const setupRedisMocks = () => {
   vi.mock('ioredis', () => {
     class MockRedis {
       constructor() { return mockRedis }
-      static Cluster = class { constructor() { return mockRedis } }
       pipeline() { return mockPipeline }
       get(key: string) { return mockRedis.get(key) }
       set(key: string, val: string) { return mockRedis.set(key, val) }
@@ -39,17 +39,12 @@ export const setupRedisMocks = () => {
     return {
       default: MockRedis,
       Redis: MockRedis,
-      Cluster: MockRedis.Cluster,
     }
   })
 
-  // Mock internal redis instances
   vi.mock('@/lib/infrastructure/redis', () => ({
+    redis: mockRedis,
     redisReader: mockRedis,
     redisWriter: mockRedis,
-  }))
-
-  vi.mock('@/lib/infrastructure/redis-limit', () => ({
-    usageRedis: mockRedis,
   }))
 }

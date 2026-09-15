@@ -4,9 +4,14 @@ import { UpgradeView } from '../../components/upgrade-view'
 import { useSession } from 'next-auth/react'
 import { initializePaddle } from '@paddle/paddle-js'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 vi.mock('@paddle/paddle-js', () => ({
   initializePaddle: vi.fn(),
+}))
+
+vi.mock('../../actions/confirm-upgrade', () => ({
+  confirmUpgradeAction: vi.fn().mockResolvedValue({ isPremium: false }),
 }))
 
 vi.mock('next-auth/react', async (importOriginal) => {
@@ -24,6 +29,7 @@ describe('UpgradeView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
     vi.mocked(useRouter).mockReturnValue({
       push: mockPush,
       back: mockBack,
@@ -116,9 +122,68 @@ describe('UpgradeView', () => {
     expect(mockPush).toHaveBeenCalledWith('/login?callbackUrl=/upgrade')
   })
 
-  it.skip('shows error when paddle not yet initialized', async () => {
-    // This branch (line 78-80) is difficult to reach because paddle initializes
-    // asynchronously and the UI shows the upgrade button only after initialization.
-    // Skipping per policy on difficult async tests.
+  it('shows error when paddle is not initialized', async () => {
+    // Initialization finishes but yields no instance, so the upgrade button
+    // is enabled while `paddle` is still undefined.
+    vi.mocked(initializePaddle).mockResolvedValue(undefined as any)
+
+    render(<UpgradeView />)
+    await waitFor(() => expect(initializePaddle).toHaveBeenCalled())
+
+    const upgradeButton = await screen.findByRole('button', { name: /Upgrade Now/i })
+    await waitFor(() => expect(upgradeButton).toBeEnabled())
+    fireEvent.click(upgradeButton)
+
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+      'Payment system is still loading. Please try again.',
+    )
+    expect(mockPush).not.toHaveBeenCalledWith('/login?callbackUrl=/upgrade')
+  })
+
+  it('resumes pendingUpgrade on mount and activates premium', async () => {
+    const { confirmUpgradeAction } = await import('../../actions/confirm-upgrade')
+    vi.mocked(confirmUpgradeAction).mockResolvedValueOnce({ isPremium: false }).mockResolvedValueOnce({ isPremium: true })
+    // first mount: webhook not yet, second call true simulates webhook at ~10s
+    // For test we mock single mount that directly returns true (webhook already arrived)
+    vi.mocked(confirmUpgradeAction).mockReset()
+    vi.mocked(confirmUpgradeAction).mockResolvedValue({ isPremium: true })
+    localStorage.setItem('pendingUpgrade', JSON.stringify({ ts: Date.now() }))
+
+    render(<UpgradeView />)
+    await waitFor(() => expect(initializePaddle).toHaveBeenCalled())
+    await waitFor(() => expect(confirmUpgradeAction).toHaveBeenCalled())
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith({ isPremium: true }))
+    expect(mockPush).toHaveBeenCalledWith('/chat?upgrade_success=true')
+    expect(localStorage.getItem('pendingUpgrade')).toBeNull()
+  })
+
+  it('does not poll when pendingUpgrade expired beyond 2hr', async () => {
+    const { confirmUpgradeAction } = await import('../../actions/confirm-upgrade')
+    vi.mocked(confirmUpgradeAction).mockClear()
+    localStorage.setItem('pendingUpgrade', JSON.stringify({ ts: Date.now() - 7200000 - 1000 }))
+
+    render(<UpgradeView />)
+    await waitFor(() => expect(initializePaddle).toHaveBeenCalled())
+    // wait a tick for mount effect
+    await new Promise(r => setTimeout(r, 50))
+    expect(confirmUpgradeAction).not.toHaveBeenCalled()
+    expect(localStorage.getItem('pendingUpgrade')).toBeNull()
+  })
+
+  it('clears pendingUpgrade when already premium', async () => {
+    const { confirmUpgradeAction } = await import('../../actions/confirm-upgrade')
+    vi.mocked(confirmUpgradeAction).mockClear()
+    localStorage.setItem('pendingUpgrade', JSON.stringify({ ts: Date.now() }))
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: 'u1', email: 'test@example.com', isPremium: true } },
+      status: 'authenticated',
+      update: mockUpdate,
+    } as any)
+
+    render(<UpgradeView />)
+    await waitFor(() => expect(initializePaddle).toHaveBeenCalled())
+    await new Promise(r => setTimeout(r, 50))
+    expect(confirmUpgradeAction).not.toHaveBeenCalled()
+    expect(localStorage.getItem('pendingUpgrade')).toBeNull()
   })
 })

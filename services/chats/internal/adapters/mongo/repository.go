@@ -2,6 +2,7 @@ package mongo
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
@@ -33,12 +34,21 @@ func (r *MongoRepository) GetChat(ctx context.Context, chatID string) (*domain.C
 	var chat domain.ChatSession
 	err := r.chatColl.FindOne(ctx, bson.M{"_id": chatID}).Decode(&chat)
 	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, domain.ErrNotFound
+		}
 		return nil, err
 	}
 	return &chat, nil
 }
 
 func (r *MongoRepository) GetUserChats(ctx context.Context, userID string, limit int) ([]*domain.ChatSession, error) {
+	if limit <= 0 {
+		limit = domain.DefaultUserChatsLimit
+	}
+	if limit > domain.MaxUserChatsLimit {
+		limit = domain.MaxUserChatsLimit
+	}
 	opts := options.Find().
 		SetSort(bson.D{{Key: "updated_at", Value: -1}}).
 		SetLimit(int64(limit))
@@ -53,6 +63,9 @@ func (r *MongoRepository) GetUserChats(ctx context.Context, userID string, limit
 	if err := cursor.All(ctx, &chats); err != nil {
 		return nil, err
 	}
+	if chats == nil {
+		return []*domain.ChatSession{}, nil
+	}
 	return chats, nil
 }
 
@@ -60,14 +73,23 @@ func (r *MongoRepository) UpdateChatTitle(ctx context.Context, chatID, title str
 	filter := bson.M{"_id": chatID}
 	update := bson.M{"$set": bson.M{"title": title, "updated_at": time.Now().UTC()}}
 
-	_, err := r.chatColl.UpdateOne(ctx, filter, update)
-	return err
+	res, err := r.chatColl.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
 }
 
 func (r *MongoRepository) DeleteChat(ctx context.Context, chatID string) error {
-	_, err := r.chatColl.DeleteOne(ctx, bson.M{"_id": chatID})
+	res, err := r.chatColl.DeleteOne(ctx, bson.M{"_id": chatID})
 	if err != nil {
 		return err
+	}
+	if res.DeletedCount == 0 {
+		return domain.ErrNotFound
 	}
 
 	_, err = r.messageColl.DeleteMany(ctx, bson.M{"chat_id": chatID})
@@ -82,6 +104,13 @@ func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*do
 	now := time.Now().UTC()
 
 	for _, msg := range messages {
+		if msg == nil || msg.ID == "" || msg.ChatID == "" {
+			continue
+		}
+		if msg.CreatedAt.IsZero() {
+			msg.CreatedAt = now
+		}
+
 		updateExistingResult, err := r.messageColl.UpdateOne(
 			ctx,
 			bson.M{
@@ -102,11 +131,15 @@ func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*do
 			continue
 		}
 
+		bucketTime := msg.CreatedAt
+		if bucketTime.After(now) {
+			bucketTime = now
+		}
 		filter := bson.M{
 			"chat_id": msg.ChatID,
-			"count":   bson.M{"$lt": 50},
+			"count":   bson.M{"$lt": domain.BucketCapacity},
 			"end_date": bson.M{
-				"$gt": now.Add(-24 * time.Hour),
+				"$gt": now.Add(-domain.BucketWindow),
 			},
 		}
 
@@ -117,7 +150,7 @@ func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*do
 			"$min":  bson.M{"start_date": msg.CreatedAt},
 			"$setOnInsert": bson.M{
 				"chat_id":      msg.ChatID,
-				"bucket_index": now.UnixNano(),
+				"bucket_index": bucketTime.UnixNano(),
 			},
 		}
 
@@ -130,7 +163,20 @@ func (r *MongoRepository) BulkUpsertMessages(ctx context.Context, messages []*do
 }
 
 func (r *MongoRepository) GetHistory(ctx context.Context, chatID string, offset, limit int) ([]*domain.Message, error) {
-	bucketLimit := (limit / 50) + 2
+	if limit <= 0 {
+		limit = domain.DefaultPageSize
+	}
+	if limit > domain.MaxPageSize {
+		limit = domain.MaxPageSize
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	needed := offset + limit
+	bucketLimit := (needed / domain.BucketCapacity) + 2
+	if bucketLimit > domain.MaxBucketsFetch {
+		bucketLimit = domain.MaxBucketsFetch
+	}
 
 	findOpts := options.Find().
 		SetSort(bson.D{{Key: "bucket_index", Value: -1}}).
@@ -147,13 +193,15 @@ func (r *MongoRepository) GetHistory(ctx context.Context, chatID string, offset,
 		return nil, err
 	}
 
-	var allMessages []*domain.Message
+	allMessages := make([]*domain.Message, 0, len(buckets)*domain.BucketCapacity)
 	for _, bucket := range buckets {
-		for i := len(bucket.Messages) - 1; i >= 0; i-- {
-			msg := bucket.Messages[i]
-			allMessages = append(allMessages, &msg)
+		for i := range bucket.Messages {
+			msgCopy := bucket.Messages[i]
+			allMessages = append(allMessages, &msgCopy)
 		}
 	}
+
+	domain.SortMessagesDesc(allMessages)
 
 	if offset >= len(allMessages) {
 		return []*domain.Message{}, nil

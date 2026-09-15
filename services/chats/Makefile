@@ -1,5 +1,4 @@
-.PHONY: all proto deps run build test docker-build
-K6 ?= $(shell which k6 2>/dev/null || echo "/home/zeus/content/detectAI/services/workers/bin/k6")
+.PHONY: all proto deps run build test test-integration test-ha test-all docker-build load-test load-down
 
 all: deps proto build
 
@@ -25,17 +24,28 @@ test:
 test-coverage:
 	go test -v ./... -cover 
 
+test-integration:
+	go test -v -tags integration -timeout=900s -run Test -count=1 ./...
+
+test-sharded:
+	go test -v -tags integration -timeout=900s -run TestSharded -count=1 ./...
+
+test-ha:
+	go test -v -tags ha -run TestHA -count=1 ./...
+
+test-all:
+	go test -v -tags integration,ha -count=1 ./...
+
 docker-build:
 	docker compose up --build
 
-load-test-smoke:
-	SMOKE_VUS=$(SMOKE_VUS) SMOKE_DURATION=$(SMOKE_DURATION) $(K6) run tests/load/scenarios/smoke.js
-
+# Self-contained load test: compose brings up chat-mongo + chat-redis + service + worker + k6
+# on isolated chat_loadnet, no dependency on main stack or local k6 binary.
+# Usage: make load-test [SCENARIO=smoke|load|stress|soak] [VUS=2] [DURATION=30s] [RPS=10]
+#   tiny smoke: make load-test SCENARIO=smoke VUS=1 DURATION=10s
+#   with RPS cap: make load-test SCENARIO=load VUS=10 DURATION=2m RPS=50
 load-test:
-	LOAD_VUS=$(LOAD_VUS) LOAD_DURATION=$(LOAD_DURATION) $(K6) run tests/load/scenarios/load.js
+	docker compose -f infra/compose.load.yml up --build --abort-on-container-exit --exit-code-from k6
 
-load-test-stress:
-	STRESS_VUS=$(STRESS_VUS) STRESS_DURATION=$(STRESS_DURATION) $(K6) run tests/load/scenarios/stress.js
-
-load-test-soak:
-	SOAK_VUS=$(SOAK_VUS) SOAK_DURATION=$(SOAK_DURATION) $(K6) run tests/load/scenarios/soak.js
+load-down:
+	docker compose -f infra/compose.load.yml down -v --remove-orphans

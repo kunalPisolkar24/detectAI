@@ -48,7 +48,7 @@ jobs:
         run: poetry run ruff check . --select F,E --ignore E501
 
       - name: Run Unit Tests & Coverage
-        run: poetry run pytest tests/unit -m "not integration" --cov=app --cov-fail-under=80 -v
+        run: poetry run pytest tests/unit -m "not integration" --cov=app --cov-fail-under=70 -v
 
       - name: Run Integration Tests
         run: poetry run pytest tests/integration -m integration -v

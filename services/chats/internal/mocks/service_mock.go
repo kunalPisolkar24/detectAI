@@ -27,8 +27,8 @@ func (m *MockChatService) GetSession(ctx context.Context, chatID, userID string)
 	return args.Get(0).(*domain.ChatSession), args.Error(1)
 }
 
-func (m *MockChatService) GetUserSessions(ctx context.Context, userID string) ([]*domain.ChatSession, error) {
-	args := m.Called(ctx, userID)
+func (m *MockChatService) GetUserSessions(ctx context.Context, userID string, limit int) ([]*domain.ChatSession, error) {
+	args := m.Called(ctx, userID, limit)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

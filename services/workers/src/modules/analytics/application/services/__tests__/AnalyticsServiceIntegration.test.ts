@@ -6,80 +6,65 @@ import { RedisFactory } from "@shared/cache/RedisClient";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
 import { AnalyticsService } from "../AnalyticsService";
+import { UsageEventDeduplicator } from "../../../infrastructure/UsageEventDeduplicator";
 
 describe("AnalyticsService Integration", () => {
     let service: AnalyticsService;
     let redis: any;
     let userRepository: PrismaUserRepository;
+    let usageDeduplicator: UsageEventDeduplicator;
 
     beforeEach(async () => {
         redis = RedisFactory.createClient({
-            mode: "standalone",
-            name: "test-redis",
+                    name: "test-redis",
             url: process.env.REDIS_URL,
         });
+        await new Promise<void>((resolve, reject) => {
+            const t = setTimeout(() => reject(new Error("redis ready timeout")), 5000);
+            redis.once("ready", () => { clearTimeout(t); resolve(); });
+            redis.once("error", (e: Error) => { clearTimeout(t); reject(e); });
+            if (redis.status === "ready") { clearTimeout(t); resolve(); }
+        }).catch(() => {});
+        await new Promise((r) => setTimeout(r, 200));
         const metrics = new MetricsService("test-analytics");
         userRepository = new PrismaUserRepository(prismaPrimary, prisma);
-        // Using same redis for both usage and main client in tests
-        service = new AnalyticsService(userRepository, redis, redis, metrics);
+        // Dedup lives in redis-cache (same instance as counters).
+        usageDeduplicator = new UsageEventDeduplicator(redis);
+        service = new AnalyticsService(userRepository, metrics, usageDeduplicator);
     });
 
-    test("should process usage batch correctly", async () => {
-        // 1. Seed user in DB
+    test("should handle usage event: increment db without touching user cache", async () => {
         const user = await prismaPrimary.user.create({
             data: {
-                email: "analytics-test@example.com",
-                name: "Analytics User",
+                email: "analytics-handle-event@example.com",
+                name: "Analytics Event User",
             },
         });
 
-        // 2. Seed usage in Redis
         const userId = user.id;
-        await redis.sadd("usage:dirty_users", userId);
-        await redis.set(`usage:{${userId}}:pending`, "10");
-        await redis.set(CacheKeys.user(userId), "cached-data");
+        // Split layout: usage must NOT evict basic/sub entries.
+        await redis.set(CacheKeys.userBasic(userId), "cached-data", "EX", 3600);
+        await redis.set(CacheKeys.userSub(userId), "cached-sub", "EX", 600);
 
-        // 3. Process batch
-        const processed = await service.processBatch();
-        expect(processed).toBe(1);
+        await service.handleUsageEvent(userId, 10, crypto.randomUUID());
 
-        // 4. Verify DB update
-        const usage = await prismaPrimary.usage.findUnique({
-            where: { userId },
-        });
+        const usage = await prismaPrimary.usage.findUnique({ where: { userId } });
         expect(usage?.apiCallCountTotal).toBe(10);
 
-        // 5. Verify Redis state
-        const pending = await redis.get(`usage:{${userId}}:pending`);
-        expect(Number(pending)).toBe(0);
-        
-        const dirty = await redis.sismember("usage:dirty_users", userId);
-        expect(dirty).toBe(0);
-
-        // 6. Verify cache invalidation
-        const cached = await redis.get(CacheKeys.user(userId));
-        expect(cached).toBeNull();
+        expect(await redis.get(CacheKeys.userBasic(userId))).toBe("cached-data");
+        expect(await redis.get(CacheKeys.userSub(userId))).toBe("cached-sub");
     });
 
-    test("should requeue users on DB failure", async () => {
-        const userId = "non-existent-user-id";
-        await redis.sadd("usage:dirty_users", userId);
-        await redis.set(`usage:{${userId}}:pending`, "5");
+    test("should count duplicate event ids exactly once", async () => {
+        const user = await prismaPrimary.user.create({
+            data: { email: "analytics-duplicate-event@example.com" },
+        });
 
-        // processBatch will fail to update DB because user doesn't exist (Prisma error)
-        // or actually, it might just throw if the user is missing and we use update.
-        // PrismaUserRepository.incrementUsage uses executeRaw which might not throw if user missing unless there's a constraint.
-        // Let's check incrementUsage in UserRepository.ts.
-        // It uses INSERT ... ON CONFLICT ("userId") DO UPDATE ...
-        // So if user doesn't exist, it will try to insert. If there's a foreign key on userId to User.id, it will fail.
-        
-        const processed = await service.processBatch();
-        expect(processed).toBe(1); // It fetches 1 update
+        const eventId = crypto.randomUUID();
+        await service.handleUsageEvent(user.id, 5, eventId);
+        await service.handleUsageEvent(user.id, 5, eventId);
 
-        // Wait, AnalyticsService catches error and returns false for flushToDatabase
-        // Then it calls requeueFailedUsers.
-        
-        const dirty = await redis.sismember("usage:dirty_users", userId);
-        expect(dirty).toBe(1); // Should be requeued
+        const usage = await prismaPrimary.usage.findUnique({ where: { userId: user.id } });
+        expect(usage?.apiCallCountTotal).toBe(5);
     });
 });

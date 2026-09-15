@@ -20,6 +20,11 @@ vi.mock("../../../services/inference-service", () => ({
   }
 }))
 
+vi.mock("@/lib/application/rate-limit", () => ({
+  rateLimitService: {
+    trackUsage: vi.fn(),
+  }
+}))
 vi.mock("@/features/rate-limit/services/rate-limit-service", () => ({
   rateLimitService: {
     trackUsage: vi.fn(),
@@ -28,7 +33,7 @@ vi.mock("@/features/rate-limit/services/rate-limit-service", () => ({
 
 import { chatService as mockChatService } from "../../../services/index"
 import { inferenceService as mockInferenceService } from "../../../services/inference-service"
-import { rateLimitService as mockRateLimitService } from "@/features/rate-limit/services/rate-limit-service"
+import { rateLimitService as mockRateLimitService } from "@/lib/application/rate-limit"
 
 describe("AnalysisOrchestrator", () => {
   let orchestrator: AnalysisOrchestrator

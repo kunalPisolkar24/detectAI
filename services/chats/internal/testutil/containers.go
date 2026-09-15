@@ -56,7 +56,7 @@ func NewMongoFixture(t *testing.T, dbName string) *MongoFixture {
 
 type RedisFixture struct {
 	Container *tcredis.RedisContainer
-	Client    goredis.UniversalClient
+	Client    *goredis.Client
 }
 
 func NewRedisFixture(t *testing.T) *RedisFixture {

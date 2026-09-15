@@ -1,16 +1,16 @@
+import { z } from "zod";
 import { baseEnvSchema, createConfig } from "@shared/config";
 
-const analyticsEnvSchema = baseEnvSchema.pick({
-  DATABASE_URL: true,
-  DATABASE_URL_REPLICA: true,
-  REDIS_USAGE_URL: true,
-  REDIS_USAGE_MODE: true,
-  REDIS_URL: true,
-  REDIS_MODE: true,
-  REDIS_SENTINELS: true,
-  REDIS_MASTER_NAME: true,
-  NODE_ENV: true,
-  PORT: true,
+export const analyticsEnvSchema = baseEnvSchema.superRefine((data, ctx) => {
+  if (!data.RABBITMQ_URL && data.ENV_TYPE === "prod") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "RABBITMQ_URL is required in prod",
+      path: ["RABBITMQ_URL"],
+    });
+  }
 });
 
-export const config = createConfig(analyticsEnvSchema, "Analytics");
+export type AnalyticsConfig = z.infer<typeof analyticsEnvSchema>;
+
+export const loadAnalyticsConfig = (): Promise<AnalyticsConfig> => createConfig(analyticsEnvSchema, "Analytics");

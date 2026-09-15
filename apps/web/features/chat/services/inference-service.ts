@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import "server-only"
 
 import { getGrpcClient, getGrpcMetadata } from "@/lib/infrastructure/grpc-client"

@@ -10,3 +10,19 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.class
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars.json
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+infra/terraform/backend.prod.hcl
+infra/terraform/.env.pg.floci

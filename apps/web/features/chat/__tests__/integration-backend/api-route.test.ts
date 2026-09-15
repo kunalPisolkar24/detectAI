@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { POST } from '../../../../app/api/chat/analyze/stream/route'
 import { getServerSession } from 'next-auth'
 import { analysisOrchestrator } from '@/features/chat/services/analysis-orchestrator'
-import { rateLimitService } from '@/features/rate-limit/services/rate-limit-service'
+import { rateLimitService } from '@/lib/application/rate-limit'
 
 vi.mock('next-auth', () => ({
   getServerSession: vi.fn(),
@@ -14,6 +14,11 @@ vi.mock('@/features/chat/services/analysis-orchestrator', () => ({
   },
 }))
 
+vi.mock('@/lib/application/rate-limit', () => ({
+  rateLimitService: {
+    checkLimit: vi.fn(),
+  },
+}))
 vi.mock('@/features/rate-limit/services/rate-limit-service', () => ({
   rateLimitService: {
     checkLimit: vi.fn(),

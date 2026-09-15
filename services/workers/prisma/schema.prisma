@@ -45,9 +45,13 @@ model Subscription {
   status                   SubscriptionStatus?
   endsAt                   DateTime?
   cancellationScheduled    Boolean @default(false)
+  eventTimestamp           DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([status, endsAt])
+  @@index([eventTimestamp])
 }
 
 model Usage {
@@ -80,6 +84,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 model Session {
@@ -88,6 +93,8 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model VerificationToken {
@@ -96,5 +103,13 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model ProcessedWebhook {
+  eventId    String   @id
+  eventType  String
+  receivedAt DateTime @default(now())
+
+  @@index([receivedAt])
 }
 

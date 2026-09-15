@@ -6,9 +6,12 @@ import bcrypt from "bcryptjs"
 import { PrismaAdapter } from "@next-auth/prisma-adapter"
 import { prisma } from "@/lib/infrastructure/prisma"
 import { SubscriptionStatus } from "@/lib/shared/generated/prisma/client"
-import { LoginSchema } from "@/schemas/auth"
+import { LoginSchema } from "@/lib/domain/schemas/auth"
 import { env } from "@/lib/config/env"
-import { userService } from "@/features/auth/services/user-service"
+import { userService } from "@/lib/application/user-service"
+import { isPreviewMode } from "@/lib/config/preview"
+const previewDummyId = "preview-dummy"
+const previewDummySecret = "preview-dummy-secret"
 
 interface ExtendedProfile extends Profile {
   firstName?: string
@@ -16,11 +19,11 @@ interface ExtendedProfile extends Profile {
 }
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  adapter: isPreviewMode() ? (undefined as unknown as ReturnType<typeof PrismaAdapter>) : PrismaAdapter(prisma),
   providers: [
     GithubProvider({
-      clientId: env.GITHUB_ID,
-      clientSecret: env.GITHUB_SECRET,
+      clientId: (env.GITHUB_ID as string) || previewDummyId,
+      clientSecret: (env.GITHUB_SECRET as string) || previewDummySecret,
       allowDangerousEmailAccountLinking: false,
       profile(profile) {
         return {
@@ -34,8 +37,8 @@ export const authOptions: NextAuthOptions = {
       },
     }),
     GoogleProvider({
-      clientId: env.GOOGLE_ID,
-      clientSecret: env.GOOGLE_SECRET,
+      clientId: (env.GOOGLE_ID as string) || previewDummyId,
+      clientSecret: (env.GOOGLE_SECRET as string) || previewDummySecret,
       allowDangerousEmailAccountLinking: false,
       profile(profile) {
         return {
@@ -63,6 +66,22 @@ export const authOptions: NextAuthOptions = {
           return null
         }
         const { email, password } = loginValidated.data
+        if (isPreviewMode()) {
+          // Any syntactically valid credentials succeed in preview mode
+          const localPart = email.split("@")[0] ?? "Preview"
+          const firstName = localPart.split(/[._-]/)[0] ?? "Preview"
+          const lastName = localPart.split(/[._-]/).slice(1).join(" ") || "User"
+          // isPremium is not authoritative here; JWT update() can flip it client-side
+          return {
+            id: `preview-${email}`,
+            name: `${firstName} ${lastName}`.trim(),
+            email,
+            firstName,
+            lastName,
+            image: undefined,
+            isPremium: false,
+          }
+        }
         const user = await prisma.user.findUnique({ 
           where: { email },
           include: { subscription: true }
@@ -89,35 +108,47 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: "jwt",
+    maxAge: 60 * 60,
   },
-  secret: env.NEXTAUTH_SECRET,
+  secret: (env.NEXTAUTH_SECRET as string) || previewDummySecret,
   callbacks: {
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id
         token.isPremium = user.isPremium ?? false
-      }
-
-      if (token.id) {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const dbUser = await userService.getUserById(token.id) as any
-
-          if (dbUser) {
-            token.name = dbUser.name ?? token.name
-            token.email = dbUser.email ?? token.email
-            token.picture = dbUser.image ?? token.picture
-            token.isPremium = dbUser.subscription?.status === SubscriptionStatus.ACTIVE
-          }
-        } catch (error) {
-          console.error("JWT Callback error:", error)
-        }
+        token.name = user.name ?? null
+        token.email = user.email ?? null
+        token.picture = user.image ?? null
       }
 
       if (trigger === "update" && session) {
         if (typeof session.name === "string") token.name = session.name
         if (typeof session.picture === "string") token.picture = session.picture
         if (typeof session.isPremium === "boolean") token.isPremium = session.isPremium
+        return token
+      }
+
+      // Fallback revalidate for non-premium: single DB query, 60s throttle, no new API route
+      // Covers refresh/close after pay when pendingUpgrade flag expired or JWT stale 1h
+      // Skip in preview mode — no DB access
+      if (!isPreviewMode() && trigger !== "update" && token.isPremium === false && token.id) {
+        const nowSec = Date.now() / 1000
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const lastCheck = (token as any)._lastPremiumCheck as number | undefined
+        const iat = (token.iat as number) ?? 0
+        const shouldCheck = lastCheck ? nowSec - lastCheck > 60 : nowSec - iat > 60
+        if (shouldCheck) {
+          try {
+            const dbUser = await prisma.user.findUnique({
+              where: { id: token.id as string },
+              include: { subscription: true },
+            })
+            const isPremium = dbUser?.subscription?.status === SubscriptionStatus.ACTIVE
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ;(token as any)._lastPremiumCheck = nowSec
+            token.isPremium = isPremium
+          } catch {}
+        }
       }
 
       return token
@@ -135,6 +166,7 @@ export const authOptions: NextAuthOptions = {
   },
   events: {
     async linkAccount(message) {
+      if (isPreviewMode()) return
       if (!message.user.id) return
 
       const user = await prisma.user.findUnique({ where: { id: message.user.id } })

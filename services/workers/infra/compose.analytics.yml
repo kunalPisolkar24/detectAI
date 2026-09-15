@@ -1,0 +1,51 @@
+# Analytics worker service definition (datastores merged via -f, see Makefile).
+# Usage events flow: web INCRs redis-users, publishes analytics.usage;
+# worker-analytics dedupes (redis-users) and UPSERTs postgres Usage.
+#
+# No depends_on gates on purpose: the worker boots degraded (liveness ok,
+# readiness reflects dep state), the broker consumer reconnects on its own,
+# Redis fails open, and handler DB failures requeue instead of DLQing.
+# Always boot via `make worker-up WORKER=analytics` (from services/workers),
+# which merges this file with the needed infra atoms.
+name: detect-ai-workers-analytics
+
+services:
+  worker-analytics:
+    container_name: worker_analytics
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: always
+    command: ["bun", "run", "start:analytics"]
+    stop_grace_period: 35s
+    environment:
+      - ENV_TYPE=${ENV_TYPE:-dev}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - RABBITMQ_PREFETCH=${RABBITMQ_PREFETCH:-1}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-worker-analytics}
+      - OTEL_TRACES_SAMPLER=${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      - OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-0.1}
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - MQ_SECRETS_NAME=${MQ_SECRETS_NAME:-}
+      - WORKERS_SECRETS_NAME=${WORKERS_SECRETS_NAME:-}
+      - SSM_PREFIX=${SSM_PREFIX:-}
+      - SSM_ENABLED=${SSM_ENABLED:-}
+      - PORT=7001
+    ports:
+      - "${WORKER_ANALYTICS_PORT:-7001}:7001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "bun", "-e", "const r = await fetch('http://localhost:7001/ready'); if (!r.ok) process.exit(1);"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

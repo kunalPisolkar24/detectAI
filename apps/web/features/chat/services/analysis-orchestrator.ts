@@ -1,8 +1,8 @@
-import { IChatService } from "./chat-service.interface"
+import { IChatService } from "@/lib/domain/chat-service"
 import { chatService as defaultChatService } from "./index"
 import { inferenceService as defaultInferenceService, InferenceStreamAbortedError } from "./inference-service"
-import { AnalysisResult, Message, ModelType } from "../types"
-import { rateLimitService as defaultRateLimitService } from "@/features/rate-limit/services/rate-limit-service"
+import { AnalysisResult, Message, ModelType } from "@/lib/domain/chat"
+import { rateLimitService as defaultRateLimitService } from "@/lib/application/rate-limit"
 import { createNDJSONStream } from "@/lib/utils/stream-utils"
 
 export interface AnalysisParams {
@@ -13,6 +13,16 @@ export interface AnalysisParams {
   assistantMessageId?: string
   assistantCreatedAt?: string
   sourceMessageId?: string
+  userMessageId?: string
+  userCreatedAt?: string
+  /**
+   * Idempotency key for usage accounting. When omitted a fresh UUID is
+   * generated in `trackUsage`. Pass a caller-owned key when the same logical
+   * analysis may be submitted more than once (e.g. HTTP retry) so the worker
+   * dedupes it. Each genuinely new analysis should use a new key (and is
+   * counted separately — inference ran again).
+   */
+  eventId?: string
 }
 
 export class AnalysisOrchestrator {
@@ -23,7 +33,9 @@ export class AnalysisOrchestrator {
   ) {}
 
   async execute(params: AnalysisParams, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
-    const isRetry = Boolean(params.assistantMessageId)
+    // Retry intent is signalled by sourceMessageId. New analyses may carry
+    // client-generated user/assistant IDs for optimistic-cache identity.
+    const isRetry = Boolean(params.assistantMessageId && params.sourceMessageId)
     
     let persistedAssistantMessage: Message
     let persistedSourceMessageId: string
@@ -38,9 +50,19 @@ export class AnalysisOrchestrator {
         sourceMessageId: persistedSourceMessageId,
       })
     } else {
-      const userMessage = await this.chatService.saveUserMessage(params.chatId, params.userId, params.content)
+      // Reuse client-generated IDs when provided so the optimistic cache and
+      // persisted rows share identity (prevents reorder/flicker). Otherwise
+      // fall back to server-generated IDs (existing behavior).
+      const userMessage = params.userMessageId
+        ? await this.chatService.saveUserMessage(params.chatId, params.userId, params.content, {
+            messageId: params.userMessageId,
+            createdAt: params.userCreatedAt ? new Date(params.userCreatedAt) : new Date(),
+          })
+        : await this.chatService.saveUserMessage(params.chatId, params.userId, params.content)
       persistedSourceMessageId = userMessage.id
       persistedAssistantMessage = await this.chatService.saveAssistantAnalysisMessage(params.chatId, params.userId, {
+        ...(params.assistantMessageId ? { messageId: params.assistantMessageId } : {}),
+        ...(params.assistantCreatedAt ? { createdAt: new Date(params.assistantCreatedAt) } : {}),
         state: "running",
         model: params.model,
         sourceMessageId: persistedSourceMessageId,
@@ -94,7 +116,11 @@ export class AnalysisOrchestrator {
         finalized = true
 
         try {
-          await this.rateLimitService.trackUsage(params.userId)
+          if (params.eventId) {
+            await this.rateLimitService.trackUsage(params.userId, { eventId: params.eventId })
+          } else {
+            await this.rateLimitService.trackUsage(params.userId)
+          }
         } catch {
         }
 

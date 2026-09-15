@@ -44,22 +44,38 @@ class HealthMonitor:
             self._task = None
 
     async def _watchtower(self) -> None:
-        try:
-            while True:
+        while True:
+            try:
                 await self._publish_state()
                 await asyncio.sleep(_POLL_INTERVAL_SECONDS)
-        except asyncio.CancelledError:
-            raise
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error("health_watchtower_error", error=str(e), exc_info=True)
+                await asyncio.sleep(_POLL_INTERVAL_SECONDS)
 
     async def _publish_state(self) -> None:
         snapshots = self._collect_snapshots()
         state, reason = self._resolve_state(snapshots)
-        for service_name in _SERVICE_NAMES:
-            await self.health_servicer.set(service_name, state)
+        # Atomic publish for both service names
+        try:
+            await asyncio.gather(
+                *(self.health_servicer.set(name, state) for name in _SERVICE_NAMES)
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error("health_publish_failed", error=str(e), exc_info=True)
 
-        set_service_health(state, reason)
+        try:
+            set_service_health(state, reason)
+        except Exception as e:
+            logger.warning("health_metric_failed", error=str(e))
         for model_name, snapshot in snapshots.items():
-            set_engine_health(model_name, snapshot)
+            try:
+                set_engine_health(model_name, snapshot)
+            except Exception as e:
+                logger.warning("engine_health_metric_failed", model=model_name, error=str(e))
 
         if state != self._last_state or reason != self._last_reason:
             if state == health_pb2.HealthCheckResponse.NOT_SERVING:
@@ -80,8 +96,19 @@ class HealthMonitor:
         if self._is_shutting_down:
             return health_pb2.HealthCheckResponse.NOT_SERVING, "shutdown_in_progress"
 
-        effective_snapshots = snapshots or self._collect_snapshots()
+        if snapshots is None:
+            effective_snapshots = self._collect_snapshots()
+        else:
+            effective_snapshots = snapshots
+
+        # Empty reporters likely misconfiguration — treat as NOT_SERVING
+        if not effective_snapshots:
+            return health_pb2.HealthCheckResponse.NOT_SERVING, "service_initializing"
+
         for snapshot in effective_snapshots.values():
+            # QUEUE_FULL is transient load, should not flip health to NOT_SERVING (shed via RESOURCE_EXHAUSTED)
+            if snapshot.status == BatcherHealthStatus.QUEUE_FULL:
+                continue
             if snapshot.status != BatcherHealthStatus.SERVING:
                 return health_pb2.HealthCheckResponse.NOT_SERVING, snapshot.failure_reason
 

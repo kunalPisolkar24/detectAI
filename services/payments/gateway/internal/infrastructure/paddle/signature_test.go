@@ -67,10 +67,24 @@ func TestPaddleValidator_Validate(t *testing.T) {
 			wantValid: false,
 		},
 		{
-			name:      "Empty Inputs",
-			header:    "",
-			body:      nil,
+			name:      "Future Timestamp",
+			header:    generateTestSignature(fmt.Sprintf("%d", time.Now().Unix()+600), body, secret),
+			body:      []byte(body),
+			secret:    secret,
+			wantValid: false,
+		},
+		{
+			name:      "Empty Secret",
+			header:    generateTestSignature(now, body, secret),
+			body:      []byte(body),
 			secret:    "",
+			wantValid: false,
+		},
+		{
+			name:      "Empty Header",
+			header:    "",
+			body:      []byte(body),
+			secret:    secret,
 			wantValid: false,
 		},
 	}

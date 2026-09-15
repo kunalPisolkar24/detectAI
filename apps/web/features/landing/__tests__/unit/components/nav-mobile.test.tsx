@@ -14,7 +14,7 @@ describe('NavMobile', () => {
     fireEvent.click(trigger)
     
     // Menu content should be visible
-    expect(screen.getByText(/DOCS/i)).toBeInTheDocument()
+    expect(screen.getByText(/PRICING/i)).toBeInTheDocument()
     
     // Close button
     const closeButton = screen.getAllByRole('button').find(b => b.querySelector('svg.lucide-x'))
@@ -29,7 +29,7 @@ describe('NavMobile', () => {
     const trigger = buttons.find(b => b.querySelector('svg.lucide-panel-right'))
     if (trigger) fireEvent.click(trigger)
     
-    const docsLink = screen.getByText(/DOCS/i)
-    fireEvent.click(docsLink)
+    const pricingLink = screen.getByText(/PRICING/i)
+    fireEvent.click(pricingLink)
   })
 })

@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	pb "github.com/kunalPisolkar24/detectAI/services/chats/api/proto"
@@ -23,19 +24,35 @@ func NewHandler(service ports.ChatService) *Handler {
 }
 
 func (h *Handler) CreateChat(ctx context.Context, req *pb.CreateChatRequest) (*pb.CreateChatResponse, error) {
-	session, err := h.service.CreateSession(ctx, req.UserId, req.Title)
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request body is required")
+	}
+	userID, err := h.resolveUserID(ctx, req.UserId)
 	if err != nil {
-		return nil, h.mapError(err)
+		return nil, err
+	}
+	session, svcErr := h.service.CreateSession(ctx, userID, req.Title)
+	if svcErr != nil {
+		return nil, h.mapError(svcErr)
 	}
 
 	return &pb.CreateChatResponse{ChatId: session.ID}, nil
 }
 
 func (h *Handler) GetChat(ctx context.Context, req *pb.GetChatRequest) (*pb.GetChatResponse, error) {
-	userID := h.extractUserID(ctx)
-	session, err := h.service.GetSession(ctx, req.ChatId, userID)
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request body is required")
+	}
+	userID, err := h.requireAuth(ctx)
 	if err != nil {
-		return nil, h.mapError(err)
+		return nil, err
+	}
+	if strings.TrimSpace(req.ChatId) == "" {
+		return nil, status.Error(codes.InvalidArgument, "chat_id is required")
+	}
+	session, svcErr := h.service.GetSession(ctx, req.ChatId, userID)
+	if svcErr != nil {
+		return nil, h.mapError(svcErr)
 	}
 
 	return &pb.GetChatResponse{
@@ -48,13 +65,30 @@ func (h *Handler) GetChat(ctx context.Context, req *pb.GetChatRequest) (*pb.GetC
 }
 
 func (h *Handler) GetUserChats(ctx context.Context, req *pb.GetUserChatsRequest) (*pb.GetUserChatsResponse, error) {
-	chats, err := h.service.GetUserSessions(ctx, req.UserId)
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request body is required")
+	}
+	userID, err := h.resolveUserID(ctx, req.UserId)
 	if err != nil {
-		return nil, h.mapError(err)
+		return nil, err
+	}
+	limit := int(req.Limit)
+	if limit <= 0 {
+		limit = domain.DefaultUserChatsLimit
+	}
+	if limit > domain.MaxUserChatsLimit {
+		limit = domain.MaxUserChatsLimit
+	}
+	chats, svcErr := h.service.GetUserSessions(ctx, userID, limit)
+	if svcErr != nil {
+		return nil, h.mapError(svcErr)
 	}
 
 	summaries := make([]*pb.ChatSummary, len(chats))
 	for i, c := range chats {
+		if c == nil {
+			continue
+		}
 		summaries[i] = &pb.ChatSummary{
 			Id:        c.ID,
 			Title:     c.Title,
@@ -66,48 +100,86 @@ func (h *Handler) GetUserChats(ctx context.Context, req *pb.GetUserChatsRequest)
 }
 
 func (h *Handler) RenameChat(ctx context.Context, req *pb.RenameChatRequest) (*pb.RenameChatResponse, error) {
-	userID := h.extractUserID(ctx)
-	err := h.service.RenameSession(ctx, req.ChatId, userID, req.NewTitle)
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request body is required")
+	}
+	userID, err := h.requireAuth(ctx)
 	if err != nil {
-		return nil, h.mapError(err)
+		return nil, err
+	}
+	if strings.TrimSpace(req.ChatId) == "" {
+		return nil, status.Error(codes.InvalidArgument, "chat_id is required")
+	}
+	if strings.TrimSpace(req.NewTitle) == "" {
+		return nil, status.Error(codes.InvalidArgument, "new_title is required")
+	}
+	if svcErr := h.service.RenameSession(ctx, req.ChatId, userID, req.NewTitle); svcErr != nil {
+		return nil, h.mapError(svcErr)
 	}
 	return &pb.RenameChatResponse{Success: true}, nil
 }
 
 func (h *Handler) DeleteChat(ctx context.Context, req *pb.DeleteChatRequest) (*pb.DeleteChatResponse, error) {
-	userID := h.extractUserID(ctx)
-	err := h.service.DeleteSession(ctx, req.ChatId, userID)
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request body is required")
+	}
+	userID, err := h.requireAuth(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.ChatId) == "" {
+		return nil, status.Error(codes.InvalidArgument, "chat_id is required")
+	}
+	if err := h.service.DeleteSession(ctx, req.ChatId, userID); err != nil {
 		return nil, h.mapError(err)
 	}
 	return &pb.DeleteChatResponse{Success: true}, nil
 }
 
 func (h *Handler) SaveMessage(ctx context.Context, req *pb.SaveMessageRequest) (*pb.SaveMessageResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request body is required")
+	}
+	userID, err := h.resolveUserID(ctx, req.UserId)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.ChatId) == "" {
+		return nil, status.Error(codes.InvalidArgument, "chat_id is required")
+	}
+	// Assistant messages legitimately carry no text content — their substance
+	// is the Analysis payload or state metadata (running/completed/failed),
+	// and the UI never renders assistant content (see GrpcChatService).
+	// User messages must always have content.
+	if strings.TrimSpace(req.Content) == "" && req.Analysis == nil &&
+		!strings.EqualFold(strings.TrimSpace(req.Role), "assistant") {
+		return nil, status.Error(codes.InvalidArgument, "content is required")
+	}
+
 	msg := &domain.Message{
-		ChatID:   req.ChatId,
-		UserID:   req.UserId,
-		Role:     req.Role,
+		ChatID:   strings.TrimSpace(req.ChatId),
+		UserID:   userID,
+		Role:     strings.TrimSpace(req.Role),
 		Content:  req.Content,
 		Metadata: req.Metadata,
-		ID:       req.MessageId,
+		ID:       strings.TrimSpace(req.MessageId),
 	}
 
 	if req.CreatedAt > 0 {
-		msg.CreatedAt = time.Unix(req.CreatedAt, 0).UTC()
+		msg.CreatedAt = parseTimestamp(req.CreatedAt)
 	}
 
 	if req.Analysis != nil {
 		msg.Analysis = &domain.AnalysisResult{
 			HumanScore: req.Analysis.HumanScore,
 			AIScore:    req.Analysis.AiScore,
-			ModelName:  req.Analysis.ModelName,
-			Verdict:    req.Analysis.Verdict,
+			ModelName:  strings.TrimSpace(req.Analysis.ModelName),
+			Verdict:    strings.TrimSpace(req.Analysis.Verdict),
 		}
 	}
 
-	if err := h.service.ProcessMessage(ctx, msg); err != nil {
-		return nil, h.mapError(err)
+	if svcErr := h.service.ProcessMessage(ctx, msg); svcErr != nil {
+		return nil, h.mapError(svcErr)
 	}
 
 	return &pb.SaveMessageResponse{
@@ -117,14 +189,26 @@ func (h *Handler) SaveMessage(ctx context.Context, req *pb.SaveMessageRequest) (
 }
 
 func (h *Handler) GetChatHistory(ctx context.Context, req *pb.GetChatHistoryRequest) (*pb.GetChatHistoryResponse, error) {
-	userID := h.extractUserID(ctx)
-	messages, hasMore, err := h.service.GetHistory(ctx, req.ChatId, userID, req.Page, req.PageSize)
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request body is required")
+	}
+	userID, err := h.requireAuth(ctx)
 	if err != nil {
-		return nil, h.mapError(err)
+		return nil, err
+	}
+	if strings.TrimSpace(req.ChatId) == "" {
+		return nil, status.Error(codes.InvalidArgument, "chat_id is required")
+	}
+	messages, hasMore, svcErr := h.service.GetHistory(ctx, req.ChatId, userID, req.Page, req.PageSize)
+	if svcErr != nil {
+		return nil, h.mapError(svcErr)
 	}
 
 	pbMessages := make([]*pb.Message, len(messages))
 	for i, m := range messages {
+		if m == nil {
+			continue
+		}
 		var analysis *pb.Analysis
 		if m.Analysis != nil {
 			analysis = &pb.Analysis{
@@ -154,6 +238,12 @@ func (h *Handler) GetChatHistory(ctx context.Context, req *pb.GetChatHistoryRequ
 }
 
 func (h *Handler) mapError(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return status.Error(codes.DeadlineExceeded, "request deadline exceeded")
+	}
+	if errors.Is(err, context.Canceled) {
+		return status.Error(codes.Canceled, "request canceled")
+	}
 	if errors.Is(err, domain.ErrNotFound) {
 		return status.Error(codes.NotFound, err.Error())
 	}
@@ -162,6 +252,9 @@ func (h *Handler) mapError(err error) error {
 	}
 	if errors.Is(err, domain.ErrInvalidInput) {
 		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	if ports.IsTransient(err) {
+		return status.Error(codes.Unavailable, "database temporarily unavailable")
 	}
 	return status.Error(codes.Internal, "internal server error")
 }
@@ -173,7 +266,39 @@ func (h *Handler) extractUserID(ctx context.Context) string {
 	}
 	ids := md.Get("x-user-id")
 	if len(ids) > 0 {
-		return ids[0]
+		return strings.TrimSpace(ids[0])
 	}
 	return ""
+}
+
+func (h *Handler) requireAuth(ctx context.Context) (string, error) {
+	userID := h.extractUserID(ctx)
+	if strings.TrimSpace(userID) == "" {
+		return "", status.Error(codes.Unauthenticated, "missing authentication: x-user-id header required")
+	}
+	return userID, nil
+}
+
+func (h *Handler) resolveUserID(ctx context.Context, bodyUserID string) (string, error) {
+	headerID := h.extractUserID(ctx)
+	bodyID := strings.TrimSpace(bodyUserID)
+	headerID = strings.TrimSpace(headerID)
+
+	if headerID != "" {
+		if bodyID != "" && bodyID != headerID {
+			return "", status.Error(codes.PermissionDenied, "user_id mismatch between header and body")
+		}
+		return headerID, nil
+	}
+	if bodyID != "" {
+		return bodyID, nil
+	}
+	return "", status.Error(codes.Unauthenticated, "missing authentication: x-user-id header or user_id field required")
+}
+
+func parseTimestamp(ts int64) time.Time {
+	if ts > 1e11 {
+		return time.UnixMilli(ts).UTC()
+	}
+	return time.Unix(ts, 0).UTC()
 }

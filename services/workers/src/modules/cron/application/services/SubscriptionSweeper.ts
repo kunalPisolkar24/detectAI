@@ -1,89 +1,109 @@
-import { type IUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
+import { UserCacheInvalidator } from "@shared/cache/invalidation";
 import { type RedisClient } from "@shared/cache/RedisClient";
-import { LockService } from "@shared/cache/lock";
 import { Logger } from "@shared/logging/Logger";
 import { SubscriptionStatus } from "../../../../../generated/prisma/client";
-import { CacheKeys } from "@shared/cache/keys";
 import { MetricsService } from "@shared/monitoring/MetricsService";
+import { trace, SpanStatusCode } from "@opentelemetry/api";
 
 export class SubscriptionSweeper {
-    private readonly BATCH_SIZE = 100;
-    private readonly LOCK_KEY = "cron:subscription_sweeper";
-    private readonly LOCK_TTL_MS = 120_000;
+    private readonly BATCH_SIZE: number;
+
+    private readonly cacheInvalidator: UserCacheInvalidator;
 
     constructor(
         private readonly userRepository: IUserRepository,
-        private readonly redis: RedisClient,
-        private readonly lockService: LockService,
-        private readonly metrics: MetricsService
-    ) {}
+        redis: RedisClient,
+        private readonly metrics: MetricsService,
+        batchSize = 100
+    ) {
+        this.BATCH_SIZE = batchSize;
+        this.cacheInvalidator = new UserCacheInvalidator(redis, metrics);
+    }
 
     public async processExpiredSubscriptions(): Promise<number> {
-        const release = await this.lockService.acquire(this.LOCK_KEY, this.LOCK_TTL_MS);
-
-        if (!release) {
-            Logger.warn("Subscription sweeper lock already held by another instance, skipping.");
-            return 0;
-        }
-
+        const tracer = trace.getTracer("worker-cron");
+        const sweepSpan = tracer.startSpan("sweep_expired");
         const timer = this.metrics.jobDuration.startTimer({ job_type: "sweep_expired" });
 
         this.metrics.activeJobs.inc({ job_type: "sweep_expired" });
         try {
-            const now = new Date();
-            const expiredUsers = await this.userRepository.findExpiredSubscriptions(now, this.BATCH_SIZE);
+            const sweepTime = new Date();
+            sweepSpan.setAttribute("batch.size", this.BATCH_SIZE);
+            sweepSpan.setAttribute("sweepTime", sweepTime.toISOString());
 
-            if (expiredUsers.length === 0) {
+            // Expiry is a terminal downgrade; it intentionally bypasses the
+            // payments stateMachine (PAUSED->CANCELED is invalid via webhooks
+            // but is the whole point of the sweep, see #196/#178).
+            // cancellationScheduled:false is intentional: once endsAt has passed,
+            // a scheduled cancellation is moot — the row is fully canceled.
+            const sweptUsers = await this.userRepository.expireDueSubscriptions(this.BATCH_SIZE, {
+                status: SubscriptionStatus.CANCELED,
+                cancellationScheduled: false,
+                paddleSubscriptionId: null,
+                paddlePlanId: null,
+                eventTimestamp: sweepTime,
+            }, sweepTime, async (selected) => {
+                // Pre-commit DEL (payments-style double-del): shrinks the window
+                // where a replica-lag read repopulates stale entries after commit.
+                // ~100ms replica lag remains possible; see #187.
+                await this.cacheInvalidator.invalidateUsers(selected);
+            });
+
+            // P0 SLO: expiry lag + backlog gauges (issue #207)
+            // lag = max(sweepTime - endsAt) piggybacked on selected endsAt to avoid extra RTT.
+            // backlog heuristic for b1: when batch full, pending > batch; refined to exact COUNT(*) in b2 when limit hit.
+            if (sweptUsers.length === 0) {
+                this.metrics.expiryLagSeconds.set(0);
+                this.metrics.expiredBacklog.set(0);
+                sweepSpan.setAttribute("result.count", 0);
                 timer({ status: "empty" });
                 return 0;
             }
+            try {
+                const lags = sweptUsers
+                    .map(u => {
+                        const endsAt = (u as any).endsAt;
+                        if (!endsAt) return 0;
+                        const ts = endsAt instanceof Date ? endsAt.getTime() : new Date(endsAt).getTime();
+                        return (sweepTime.getTime() - ts) / 1000;
+                    })
+                    .filter(v => v > 0);
+                const maxLag = lags.length ? Math.max(...lags) : 0;
+                this.metrics.expiryLagSeconds.set(Math.max(0, maxLag));
+                // Heuristic backlog: swept count +1 when batch full indicates remaining work (exact count in b2)
+                const backlog = sweptUsers.length >= this.BATCH_SIZE ? sweptUsers.length + 1 : sweptUsers.length;
+                this.metrics.expiredBacklog.set(backlog);
+            } catch {
+                // gauges are best-effort; sweep success takes precedence
+            }
 
-            Logger.info(`Found ${expiredUsers.length} expired subscriptions to sweep.`);
+            Logger.info(`Found ${sweptUsers.length} expired subscriptions to sweep.`);
 
-            await this.bulkDowngradeUsers(expiredUsers);
+            for (const user of sweptUsers) {
+                if (user.paddleSubscriptionId) {
+                    Logger.info("Sweep clearing paddle identifiers for downgraded subscription", {
+                        userId: user.id,
+                        paddleSubscriptionId: user.paddleSubscriptionId,
+                    });
+                }
+            }
 
-            this.metrics.jobTotal.inc({ job_type: "user_downgrade" }, expiredUsers.length);
+            await this.cacheInvalidator.invalidateUsers(sweptUsers);
+
+            this.metrics.jobTotal.inc({ job_type: "user_downgrade" }, sweptUsers.length);
+            sweepSpan.setAttribute("result.count", sweptUsers.length);
             timer({ status: "success" });
-            return expiredUsers.length;
+            sweepSpan.setStatus({ code: SpanStatusCode.OK });
+            return sweptUsers.length;
         } catch (error) {
             timer({ status: "error" });
-            this.metrics.jobErrors.inc({ job_type: "sweep_expired", error_type: "db_error" });
+            try { sweepSpan.recordException(error as Error); sweepSpan.setStatus({ code: SpanStatusCode.ERROR }); } catch {}
             throw error;
         } finally {
             this.metrics.activeJobs.dec({ job_type: "sweep_expired" });
-            await release();
+            try { sweepSpan.end(); } catch {}
         }
     }
 
-    private async bulkDowngradeUsers(users: { id: string; email: string }[]): Promise<void> {
-        const userIds = users.map(u => u.id);
-
-        await this.userRepository.bulkUpdateStatus(userIds, {
-            status: SubscriptionStatus.CANCELED,
-            cancellationScheduled: false,
-            paddleSubscriptionId: null,
-            paddlePlanId: null,
-        });
-
-        await this.bulkInvalidateCache(users);
-
-        Logger.info(`Successfully swept batch of ${users.length} users`);
-    }
-
-    private async bulkInvalidateCache(users: { id: string; email: string }[]): Promise<void> {
-        const keys: string[] = users.flatMap(user => [
-            CacheKeys.user(user.id),
-            CacheKeys.userByEmail(user.email),
-        ]);
-
-        if (keys.length === 0) return;
-
-        try {
-            await this.redis.del(...keys);
-            this.metrics.cacheOperations.inc({ operation: "invalidate", cache_type: "main" }, keys.length);
-        } catch (error) {
-            Logger.error("Failed to bulk invalidate cache", error);
-            this.metrics.jobErrors.inc({ job_type: "bulk_invalidate", error_type: "redis_error" });
-        }
-    }
 }

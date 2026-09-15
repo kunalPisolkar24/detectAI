@@ -21,9 +21,16 @@ type Monitor struct {
 	eventPublished   *prometheus.CounterVec
 	invalidSignature prometheus.Counter
 
+	webhooksReceived     *prometheus.CounterVec
+	webhooksUnknownType  prometheus.Counter
+	internalUnauthorized prometheus.Counter
+	webhookBodyErrors    *prometheus.CounterVec
+	signatureValidation  prometheus.Histogram
+	buildInfo            *prometheus.GaugeVec
+
 	// Infrastructure Metrics
-	rabbitmqStatus      prometheus.Gauge
-	rabbitmqPublishDur  prometheus.Histogram
+	rabbitmqStatus     prometheus.Gauge
+	rabbitmqPublishDur prometheus.Histogram
 	rabbitmqReconnects prometheus.Counter
 }
 
@@ -69,6 +76,52 @@ func New(serviceName string) *Monitor {
 		},
 	)
 
+	webhooksReceived := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "payment_webhooks_received_total",
+			Help: "Total number of payment webhooks received, counted before signature validation",
+		},
+		[]string{"event_type"},
+	)
+
+	webhooksUnknownType := prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "payment_webhooks_unknown_event_type_total",
+			Help: "Total number of payment webhooks with a missing event_type or alert_name field",
+		},
+	)
+
+	internalUnauthorized := prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "payment_internal_events_unauthorized_total",
+			Help: "Total number of internal event requests rejected due to a missing or wrong X-Internal-Key",
+		},
+	)
+
+	webhookBodyErrors := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "payment_webhook_body_errors_total",
+			Help: "Total number of webhook request bodies that could not be read, by reason",
+		},
+		[]string{"reason"},
+	)
+
+	signatureValidation := prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "payment_signature_validation_duration_seconds",
+			Help:    "Duration of webhook HMAC signature validation in seconds",
+			Buckets: []float64{0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.05, 0.1},
+		},
+	)
+
+	buildInfo := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "gateway_build_info",
+			Help: "Build information for the payment gateway, always set to 1",
+		},
+		[]string{"version", "commit"},
+	)
+
 	rabbitmqStatus := prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "rabbitmq_connection_status",
@@ -97,6 +150,12 @@ func New(serviceName string) *Monitor {
 		duration,
 		eventPublished,
 		invalidSignature,
+		webhooksReceived,
+		webhooksUnknownType,
+		internalUnauthorized,
+		webhookBodyErrors,
+		signatureValidation,
+		buildInfo,
 		rabbitmqStatus,
 		rabbitmqPublishDur,
 		rabbitmqReconnects,
@@ -105,15 +164,21 @@ func New(serviceName string) *Monitor {
 	)
 
 	return &Monitor{
-		handler:            promhttp.HandlerFor(registry, promhttp.HandlerOpts{}),
-		requests:           requests,
-		errors:             errors,
-		duration:           duration,
-		eventPublished:     eventPublished,
-		invalidSignature:   invalidSignature,
-		rabbitmqStatus:     rabbitmqStatus,
-		rabbitmqPublishDur: rabbitmqPublishDur,
-		rabbitmqReconnects: rabbitmqReconnects,
+		handler:              promhttp.HandlerFor(registry, promhttp.HandlerOpts{}),
+		requests:             requests,
+		errors:               errors,
+		duration:             duration,
+		eventPublished:       eventPublished,
+		invalidSignature:     invalidSignature,
+		webhooksReceived:     webhooksReceived,
+		webhooksUnknownType:  webhooksUnknownType,
+		internalUnauthorized: internalUnauthorized,
+		webhookBodyErrors:    webhookBodyErrors,
+		signatureValidation:  signatureValidation,
+		buildInfo:            buildInfo,
+		rabbitmqStatus:       rabbitmqStatus,
+		rabbitmqPublishDur:   rabbitmqPublishDur,
+		rabbitmqReconnects:   rabbitmqReconnects,
 	}
 }
 
@@ -154,6 +219,30 @@ func (m *Monitor) RecordPublish(eventType, status string) {
 
 func (m *Monitor) RecordInvalidSignature() {
 	m.invalidSignature.Inc()
+}
+
+func (m *Monitor) RecordWebhookReceived(eventType string) {
+	m.webhooksReceived.WithLabelValues(eventType).Inc()
+}
+
+func (m *Monitor) RecordWebhookUnknownEventType() {
+	m.webhooksUnknownType.Inc()
+}
+
+func (m *Monitor) RecordInternalEventUnauthorized() {
+	m.internalUnauthorized.Inc()
+}
+
+func (m *Monitor) RecordWebhookBodyError(reason string) {
+	m.webhookBodyErrors.WithLabelValues(reason).Inc()
+}
+
+func (m *Monitor) RecordSignatureValidationDuration(seconds float64) {
+	m.signatureValidation.Observe(seconds)
+}
+
+func (m *Monitor) SetBuildInfo(version, commit string) {
+	m.buildInfo.WithLabelValues(version, commit).Set(1)
 }
 
 func (m *Monitor) SetRabbitMQStatus(connected bool) {

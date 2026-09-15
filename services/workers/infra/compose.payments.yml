@@ -1,0 +1,56 @@
+# Payments worker service definition (datastores merged via -f, see Makefile).
+# Needs postgres-users + redis-users + redis-events (Paddle-only:
+# paddle:evt:* 7d + payment:event:ts:* 30d, AOF + noeviction) + rabbitmq.
+#
+# No depends_on gates on purpose: the worker boots degraded (liveness ok,
+# readiness reflects dep state), the broker consumer reconnects on its own,
+# Redis fails open (DB ledger is authoritative), and handler DB failures
+# requeue instead of DLQing.
+# Always boot via `make worker-up WORKER=payments` (from services/workers),
+# which merges this file with the needed infra atoms.
+name: detect-ai-workers-payments
+
+services:
+  worker-payments:
+    container_name: worker_payments
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: always
+    command: ["bun", "run", "start:payments"]
+    stop_grace_period: 35s
+    environment:
+      - ENV_TYPE=${ENV_TYPE:-dev}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - RABBITMQ_PREFETCH=${RABBITMQ_PREFETCH:-1}
+      - PADDLE_API_KEY=${PADDLE_API_KEY}
+      - PADDLE_ENVIRONMENT=${PADDLE_ENVIRONMENT:-sandbox}
+      - EVENT_REDIS_URL=${EVENT_REDIS_URL}
+      - EVENT_REDIS_PASSWORD=${EVENT_REDIS_PASSWORD}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-worker-payments}
+      - OTEL_TRACES_SAMPLER=${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      - OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-0.1}
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - MQ_SECRETS_NAME=${MQ_SECRETS_NAME:-}
+      - WORKERS_SECRETS_NAME=${WORKERS_SECRETS_NAME:-}
+      - SSM_PREFIX=${SSM_PREFIX:-}
+      - SSM_ENABLED=${SSM_ENABLED:-}
+      - PORT=7003
+    ports:
+      - "${WORKER_PAYMENTS_PORT:-7003}:7003"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "bun", "-e", "const r = await fetch('http://localhost:7003/ready'); if (!r.ok) process.exit(1);"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

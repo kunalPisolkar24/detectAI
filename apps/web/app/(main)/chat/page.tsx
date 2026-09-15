@@ -2,7 +2,8 @@ import { ChatView } from "@/features/chat/components/chat-view"
 import type { Metadata } from "next"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/config/auth-options"
-import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
+import { rateLimitService } from "@/lib/application/rate-limit"
+import { isPreviewMode } from "@/lib/config/preview"
 
 export const metadata: Metadata = {
   title: "Chat | Detect AI",
@@ -10,6 +11,14 @@ export const metadata: Metadata = {
 }
 
 export default async function ChatPage() {
+  if (isPreviewMode()) {
+    return (
+      <main className="h-full w-full overflow-hidden">
+        <ChatView initialRateLimited={false} />
+      </main>
+    )
+  }
+  // session.user.isPremium is refreshed via jwt fallback revalidate (auth-options.ts:96, 60s throttle) and pendingUpgrade resume (upgrade-view.tsx)
   const session = await getServerSession(authOptions)
   let isRateLimited = false
 

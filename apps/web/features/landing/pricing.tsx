@@ -15,9 +15,10 @@ interface PricingProps {
   onPlanSelect?: (planId: string, billingCycle: "monthly" | "yearly") => void
   isProcessing?: boolean
   isUpgradePage?: boolean
+  isGatewayDown?: boolean
 }
 
-export const Pricing = ({ onPlanSelect, isProcessing = false, isUpgradePage = false }: PricingProps) => {
+export const Pricing = ({ onPlanSelect, isProcessing = false, isUpgradePage = false, isGatewayDown = false }: PricingProps) => {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly")
 
   const handleCardAction = (planId: string) => {
@@ -27,7 +28,7 @@ export const Pricing = ({ onPlanSelect, isProcessing = false, isUpgradePage = fa
   }
 
   return (
-    <section className="w-full relative overflow-hidden flex flex-col items-center justify-center bg-transparent text-foreground transition-colors duration-300 py-16 md:py-24">
+    <section id="pricing" className="w-full relative overflow-hidden flex flex-col items-center justify-center bg-transparent text-foreground transition-colors duration-300 py-16 md:py-24 scroll-mt-20">
       <div className="w-full container px-6 sm:px-8 lg:mx-auto flex flex-col items-center justify-center space-y-8 z-10">
         <div className="text-center flex flex-col items-center justify-center">
           <m.div
@@ -123,6 +124,7 @@ export const Pricing = ({ onPlanSelect, isProcessing = false, isUpgradePage = fa
                 onAction={isUpgradePage ? handleCardAction : undefined}
                 isLoading={isProcessingThisCard}
                 disabled={isDisabled}
+                gatewayDisabled={isGatewayDown && isUpgradePage}
               />
             )
           })}

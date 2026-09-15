@@ -1,5 +1,7 @@
 Dockerfile
 .dockerignore
+# Compose files and preview env live here but must not bloat the image context
+infra
 node_modules
 npm-debug.log
 README.md

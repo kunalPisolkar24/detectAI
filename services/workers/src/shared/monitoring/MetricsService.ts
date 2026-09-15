@@ -14,7 +14,27 @@ export class MetricsService {
     public readonly activeJobs: Gauge;
     public readonly messageSizeBytes: Histogram;
     public readonly deadLetteredTotal: Counter;
+    public readonly unhandledEventsTotal: Counter;
     public readonly dbPoolStatus: Gauge;
+    public readonly expiryLagSeconds: Gauge;
+    public readonly expiredBacklog: Gauge;
+    public readonly sweepBatchSize: Histogram;
+    public readonly staleEventsFilteredTotal: Counter;
+    public readonly workerDuplicateEventsTotal: Counter;
+    public readonly workerIdempotencyRedisErrorsTotal: Counter;
+    public readonly workerRetryTotal: Counter;
+    public readonly infraRequeuedTotal: Counter;
+    public readonly paddleCancelTotal: Counter;
+    public readonly paddleRequestDuration: Histogram;
+    public readonly cacheInvalidateDurationSeconds: Histogram;
+    public readonly cacheInvalidateRetriesTotal: Counter;
+    public readonly dbTransactionDurationSeconds: Histogram;
+    public readonly dbLockSkippedTotal: Counter;
+    public readonly shutdownAbortsTotal: Counter;
+    public readonly loopIterationsTotal: Counter;
+    public readonly jitterSeconds: Histogram;
+    public readonly subscriptionStatus: Gauge;
+    public readonly cronConfig: Gauge;
 
     constructor(private readonly serviceName: string) {
         this.registry = new Registry();
@@ -90,6 +110,13 @@ export class MetricsService {
             registers: [this.registry]
         });
 
+        this.unhandledEventsTotal = new Counter({
+            name: "worker_unhandled_events_total",
+            help: "Events received with no registered handler",
+            labelNames: ["event_type"],
+            registers: [this.registry]
+        });
+
         this.messageSizeBytes = new Histogram({
             name: "worker_message_size_bytes",
             help: "Size of incoming messages in bytes",
@@ -111,6 +138,138 @@ export class MetricsService {
             labelNames: ["pool_name", "state"],
             registers: [this.registry]
         });
+
+        this.expiryLagSeconds = new Gauge({
+            name: "worker_cron_expiry_lag_seconds",
+            help: "Max lag in seconds between sweepTime and oldest expired endsAt (SLO)",
+            registers: [this.registry]
+        });
+
+        this.expiredBacklog = new Gauge({
+            name: "worker_cron_expired_backlog",
+            help: "Number of expired subscriptions pending sweep (backlog)",
+            registers: [this.registry]
+        });
+
+        this.sweepBatchSize = new Histogram({
+            name: "worker_cron_sweep_batch_size",
+            help: "Batch size during cron sweep (selected vs updated)",
+            labelNames: ["stage"],
+            buckets: [10, 50, 100, 250, 500],
+            registers: [this.registry]
+        });
+
+        this.staleEventsFilteredTotal = new Counter({
+            name: "worker_cron_stale_events_filtered_total",
+            help: "Total phantom/stale events filtered during sweep",
+            labelNames: ["reason"],
+            registers: [this.registry]
+        });
+
+        this.workerDuplicateEventsTotal = new Counter({
+            name: "worker_duplicate_events_total",
+            help: "Total duplicate Paddle events filtered by event_id dedup",
+            labelNames: ["event_type"],
+            registers: [this.registry]
+        });
+
+        this.workerIdempotencyRedisErrorsTotal = new Counter({
+            name: "worker_idempotency_redis_errors_total",
+            help: "Total idempotency Redis errors (fallback to DB)",
+            registers: [this.registry]
+        });
+
+        this.workerRetryTotal = new Counter({
+            name: "worker_retry_total",
+            help: "Total retry attempts before DLQ",
+            labelNames: ["job_type"],
+            registers: [this.registry]
+        });
+
+        this.infraRequeuedTotal = new Counter({
+            name: "worker_infra_requeued_total",
+            help: "Total messages nacked with requeue because infra (not the event) was at fault — no retry burn, no DLQ",
+            labelNames: ["job_type", "dep"],
+            registers: [this.registry]
+        });
+
+        this.paddleCancelTotal = new Counter({
+            name: "paddle_cancel_total",
+            help: "Total Paddle cancel requests by status",
+            labelNames: ["status"],
+            registers: [this.registry]
+        });
+
+        this.paddleRequestDuration = new Histogram({
+            name: "paddle_request_duration_seconds",
+            help: "Duration of Paddle API requests",
+            labelNames: ["status"],
+            buckets: [0.1, 0.5, 1, 2, 5, 10],
+            registers: [this.registry]
+        });
+
+        this.cacheInvalidateDurationSeconds = new Histogram({
+            name: "worker_cron_cache_invalidate_duration_seconds",
+            help: "Duration of cache invalidation (per attempt) for cron sweep",
+            labelNames: ["attempt"],
+            buckets: [0.01, 0.05, 0.1, 0.5, 1],
+            registers: [this.registry]
+        });
+
+        this.cacheInvalidateRetriesTotal = new Counter({
+            name: "worker_cron_cache_invalidate_retries_total",
+            help: "Total cache invalidation retries for cron sweep",
+            registers: [this.registry]
+        });
+
+        this.dbTransactionDurationSeconds = new Histogram({
+            name: "worker_cron_db_transaction_duration_seconds",
+            help: "Duration of cron DB transaction (expireDueSubscriptions)",
+            labelNames: ["result"],
+            buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+            registers: [this.registry]
+        });
+
+        this.dbLockSkippedTotal = new Counter({
+            name: "worker_cron_db_lock_skipped_total",
+            help: "Total SKIP LOCKED rows skipped during sweep (lock contention)",
+            registers: [this.registry]
+        });
+
+        this.shutdownAbortsTotal = new Counter({
+            name: "worker_cron_shutdown_aborts_total",
+            help: "Total shutdown aborts (sleep_aborted, job_grace_timeout)",
+            labelNames: ["reason"],
+            registers: [this.registry]
+        });
+
+        this.loopIterationsTotal = new Counter({
+            name: "worker_cron_loop_iterations_total",
+            help: "Total cron loop iterations by result (success, empty, error)",
+            labelNames: ["result"],
+            registers: [this.registry]
+        });
+
+        this.jitterSeconds = new Histogram({
+            name: "worker_cron_jitter_seconds",
+            help: "Sleep duration with jitter for cron loop (seconds, tight-bucketed around 900s interval)",
+            buckets: [1, 10, 60, 300, 700, 800, 850, 900, 950, 1000, 1100],
+            registers: [this.registry]
+        });
+
+        this.subscriptionStatus = new Gauge({
+            name: "worker_cron_subscription_status",
+            help: "Subscription status distribution (group by status before sweep)",
+            labelNames: ["status"],
+            registers: [this.registry]
+        });
+
+        this.cronConfig = new Gauge({
+            name: "worker_cron_config",
+            help: "Cron config values (check_interval_ms, batch_size) for drift detection",
+            labelNames: ["param"],
+            registers: [this.registry]
+        });
     }
 
 
@@ -122,17 +281,37 @@ export class MetricsService {
         return this.registry.contentType;
     }
 
-    public registerPool(name: string, pool: any): void {
-        this.registry.registerMetric(new Gauge({
-            name: `db_pool_${name}_connections`,
-            help: `Connections in ${name} pool`,
-            labelNames: ["state"],
-            registers: [this.registry],
-            collect: () => {
-                this.dbPoolStatus.set({ pool_name: name, state: "total" }, pool.totalCount);
-                this.dbPoolStatus.set({ pool_name: name, state: "idle" }, pool.idleCount);
-                this.dbPoolStatus.set({ pool_name: name, state: "waiting" }, pool.waitingCount);
+    private readonly registeredPools = new Set<string>();
+
+    public registerPool(name: string, pool: Pick<import("pg").Pool, "totalCount" | "idleCount" | "waitingCount">): void {
+        if (this.registeredPools.has(name)) return;
+        // Avoid duplicate metric registration crash
+        try {
+            const existing = this.registry.getSingleMetric(`db_pool_${name}_connections`);
+            if (existing) {
+                this.registeredPools.add(name);
+                return;
             }
-        }));
+        } catch {}
+        this.registeredPools.add(name);
+        try {
+            this.registry.registerMetric(new Gauge({
+                name: `db_pool_${name}_connections`,
+                help: `Connections in ${name} pool`,
+                labelNames: ["state"],
+                registers: [this.registry],
+                collect: () => {
+                    this.dbPoolStatus.set({ pool_name: name, state: "total" }, pool.totalCount);
+                    this.dbPoolStatus.set({ pool_name: name, state: "idle" }, pool.idleCount);
+                    this.dbPoolStatus.set({ pool_name: name, state: "waiting" }, pool.waitingCount);
+                }
+            }));
+        } catch (e: any) {
+            if (String(e?.message ?? "").includes("has already been registered")) {
+                // Idempotent — already registered in another instance (HMR/test)
+            } else {
+                throw e;
+            }
+        }
     }
 }

@@ -1,32 +1,46 @@
 import http from 'k6/http';
-import { check, sleep } from 'k6';
+import { check } from 'k6';
+import { config, thresholds } from './lib/config.js';
 
 export const options = {
     scenarios: {
         constant_request_rate: {
             executor: 'constant-arrival-rate',
-            rate: __ENV.RPS || 10,
+            rate: config.paymentsRps,
             timeUnit: '1s',
-            duration: __ENV.DURATION || '30s',
-            preAllocatedVUs: 10,
-            maxVUs: 100,
+            duration: config.paymentsDuration,
+            preAllocatedVUs: config.paymentsVUs,
+            maxVUs: Math.max(config.paymentsVUs * 10, 100),
         },
+    },
+    thresholds: {
+        http_req_failed: ['rate<0.01'],
+        checks: [`rate>=${thresholds.successRate}`],
     },
 };
 
 export default function () {
-    const eventTypes = [
-        'subscription.created',
-        'subscription.updated',
-        'subscription.canceled',
-        'subscription.activated'
-    ];
-    const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
+    // Stable user per VU slot + created-first: repeats hit the same
+    // subscription row through valid transitions (created -> updated* ->
+    // canceled -> created ...) instead of poison-transition DLQs.
+    const userId = `user_k6_${__VU}`;
+    let eventType;
+    if (__ITER === 0) {
+        eventType = 'subscription.created';
+    } else {
+        const eventTypes = [
+            'subscription.updated',
+            'subscription.updated',
+            'subscription.activated',
+            'subscription.canceled'
+        ];
+        eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
+    }
 
-    const url = 'http://localhost:9999/payments';
+    const url = `${config.proxyUrl}/payments`;
     const payload = JSON.stringify({
         event_type: eventType,
-        userId: `user_k6_${Math.floor(Math.random() * 10000)}`,
+        userId,
     });
 
     const params = {
@@ -39,7 +53,4 @@ export default function () {
     check(res, {
         'status is 200': (r) => r.status === 200,
     });
-    
-    // Adjust sleep to maintain RPS if needed, but stages handles it in k6
-    // If using constant RPS, k6 arrival-rate executors are better.
 }

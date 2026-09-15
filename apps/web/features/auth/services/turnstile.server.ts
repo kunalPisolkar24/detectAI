@@ -1,5 +1,6 @@
 import "server-only"
 import { env } from "@/lib/config/env"
+import { isPreviewMode } from "@/lib/config/preview"
 
 interface TurnstileResponse {
   success: boolean
@@ -9,6 +10,9 @@ interface TurnstileResponse {
 }
 
 export async function validateTurnstileToken(token: string): Promise<boolean> {
+  if (isPreviewMode()) {
+    return !!token
+  }
   const secretKey = env.TURNSTILE_SECRET_KEY
 
   const formData = new FormData()
@@ -25,6 +29,11 @@ export async function validateTurnstileToken(token: string): Promise<boolean> {
     )
 
     const outcome: TurnstileResponse = await result.json()
+    if (!outcome.success) {
+      console.error("Cloudflare Turnstile verification rejected token:", {
+        errorCodes: outcome["error-codes"] ?? [],
+      })
+    }
     return outcome.success
   } catch (error) {
     console.error("Cloudflare Turnstile verification failed:", error)

@@ -23,7 +23,7 @@ type Message struct {
 type MessageBucket struct {
 	ID          string    `bson:"_id"`
 	ChatID      string    `bson:"chat_id"`
-	BucketIndex int       `bson:"bucket_index"`
+	BucketIndex int64     `bson:"bucket_index"`
 	Count       int       `bson:"count"`
 	Messages    []Message `bson:"messages"`
 	StartDate   time.Time `bson:"start_date"`

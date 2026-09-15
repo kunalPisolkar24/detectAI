@@ -2,24 +2,16 @@ import { prisma } from "@/lib/infrastructure/prisma"
 import { Prisma, User } from "@/lib/shared/generated/prisma/client"
 
 export const userRepository = {
-  async findById(id: string) {
-    return prisma.user.findUnique({
-      where: { id },
-      include: {
-        subscription: true,
-        usage: true
-      }
-    })
+  async findBasicById(id: string) {
+    return prisma.user.findUnique({ where: { id } })
   },
 
-  async findByEmail(email: string) {
-    return prisma.user.findUnique({
-      where: { email },
-      include: {
-        subscription: true,
-        usage: true
-      }
-    })
+  async findBasicByEmail(email: string) {
+    return prisma.user.findUnique({ where: { email } })
+  },
+
+  async findSubscriptionByUserId(userId: string) {
+    return prisma.subscription.findUnique({ where: { userId } })
   },
 
   async create(data: Prisma.UserCreateInput): Promise<User> {

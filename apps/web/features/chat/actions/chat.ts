@@ -1,19 +1,31 @@
 "use server"
 
 import { chatService } from "@/features/chat/services"
-import { MAX_LIVE_ANALYSIS_CHARS } from "@/features/chat/constants"
-import { ModelType, ChatSession, Message, ChatHistoryItem } from "@/features/chat/types"
+import { ChatSession, ChatHistoryItem } from "@/features/chat/types"
 import { authOptions } from "@/lib/config/auth-options"
 import { getServerSession } from "next-auth"
-import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
+import { getPreviewUserId, isPreviewMode } from "@/lib/config/preview"
+import type { ChatServiceScope } from "@/features/chat/services/chat-service.interface"
 
 type ActionResponse<T> =
   | { success: true; data: T }
   | { success: false; error: string; isRateLimit?: boolean }
 
+/**
+ * Resolve the preview storage scope from the session. Returns undefined
+ * outside preview mode (the gRPC service ignores it; the session there is
+ * authoritative). Inside preview, a missing session fails closed downstream.
+ */
+async function previewScope(): Promise<ChatServiceScope | undefined> {
+  if (!isPreviewMode()) return undefined
+  const session = await getServerSession(authOptions)
+  const userId = getPreviewUserId(session?.user)
+  return userId ? { userId } : undefined
+}
+
 export async function createChatAction(initialMessage: string): Promise<ActionResponse<ChatSession>> {
   try {
-    const chat = await chatService.createChat(initialMessage)
+    const chat = await chatService.createChat(initialMessage, await previewScope())
     return { success: true, data: chat }
   } catch (error) {
     return {
@@ -25,7 +37,7 @@ export async function createChatAction(initialMessage: string): Promise<ActionRe
 
 export async function getChatAction(chatId: string): Promise<ActionResponse<ChatSession>> {
   try {
-    const chat = await chatService.getChat(chatId)
+    const chat = await chatService.getChat(chatId, await previewScope())
     return { success: true, data: chat }
   } catch (error) {
     return {
@@ -37,7 +49,7 @@ export async function getChatAction(chatId: string): Promise<ActionResponse<Chat
 
 export async function getChatHistoryAction(): Promise<ActionResponse<ChatHistoryItem[]>> {
   try {
-    const history = await chatService.getHistory()
+    const history = await chatService.getHistory(await previewScope())
     return { success: true, data: history }
   } catch (error) {
     return {
@@ -47,48 +59,9 @@ export async function getChatHistoryAction(): Promise<ActionResponse<ChatHistory
   }
 }
 
-export async function sendMessageAction(chatId: string, content: string, model: ModelType): Promise<ActionResponse<Message>> {
-  try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return { success: false, error: "Unauthorized" }
-    }
-
-    const { allowed } = await rateLimitService.checkLimit(session.user.id, session.user.isPremium ?? false)
-
-    if (!allowed) {
-      return { success: false, error: "Rate limit exceeded", isRateLimit: true }
-    }
-
-    if (content.length > MAX_LIVE_ANALYSIS_CHARS) {
-      return {
-        success: false,
-        error: `Text exceeds maximum length of ${MAX_LIVE_ANALYSIS_CHARS} characters`
-      }
-    }
-
-    const message = await chatService.sendMessage(chatId, content, model)
-
-    await rateLimitService.trackUsage(session.user.id)
-
-    return { success: true, data: message }
-  } catch (error) {
-    const isRateLimit = error instanceof Error && (
-      error.message.includes("Rate limit") ||
-      error.message.includes("429")
-    )
-
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to send message",
-      isRateLimit
-    }
-  }
-}
-
 export async function deleteChatAction(chatId: string): Promise<ActionResponse<void>> {
   try {
-    await chatService.deleteChat(chatId)
+    await chatService.deleteChat(chatId, await previewScope())
     return { success: true, data: undefined }
   } catch (error) {
     return {
@@ -100,7 +73,7 @@ export async function deleteChatAction(chatId: string): Promise<ActionResponse<v
 
 export async function renameChatAction(chatId: string, newTitle: string): Promise<ActionResponse<ChatHistoryItem>> {
   try {
-    const result = await chatService.renameChat(chatId, newTitle)
+    const result = await chatService.renameChat(chatId, newTitle, await previewScope())
     return { success: true, data: result }
   } catch (error) {
     return {

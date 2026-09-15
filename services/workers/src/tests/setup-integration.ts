@@ -19,7 +19,10 @@ async function ensureInfrastructure() {
             process.env.DATABASE_URL_REPLICA = dbUrl;
             process.env.REDIS_URL = redisUrl;
             process.env.RABBITMQ_URL = amqpUrl;
-            process.env.NODE_ENV = "test";
+            process.env.ENV_TYPE = "dev";
+            process.env.EVENT_REDIS_URL = redisUrl;
+            process.env.PADDLE_API_KEY = "test-paddle-key";
+            process.env.PADDLE_ENVIRONMENT = "sandbox";
 
             console.log(`Running prisma db push... URL: ${dbUrl}`);
             execSync("bunx prisma db push", {
@@ -50,7 +53,9 @@ beforeEach(async () => {
     const pool = new Pool({ connectionString: dbUrl });
     const client = await pool.connect();
     try {
-        const tables = ["User", "Subscription", "Usage", "Account", "Session", "VerificationToken"];
+        // NOTE: bun test runs files in parallel; TRUNCATE without isolation can race.
+        // For now, run integration tests with --concurrent=1 or use per-worker DB names.
+        const tables = ["User", "Subscription", "Usage", "Account", "Session", "VerificationToken", "ProcessedWebhook"];
         for (const table of tables) {
             await client.query(`TRUNCATE TABLE "${table}" CASCADE;`);
         }
@@ -62,22 +67,14 @@ beforeEach(async () => {
 
     const redisUrl = process.env.REDIS_URL;
     if (redisUrl) {
-        console.log("Flushing Redis...");
+        console.log("Flushing Redis DB 1 (flushdb, not flushall to avoid wiping dev cache)...");
         const Redis = (await import("ioredis")).default;
         const redisClient = new Redis(redisUrl);
-        await redisClient.flushall();
+        // Use flushdb to only clear DB index 1 (test), not entire instance
+        await redisClient.flushdb();
         await redisClient.quit();
-        console.log("Redis flushed");
+        console.log("Redis DB flushed");
     }
 }, 30000);
 
-// We don't stop containers between files in bun test if we want them to persist
-// But bun test doesn't have a global afterAll easily.
-// Testcontainers will clean up via Ryuk anyway.
-/*
-afterAll(async () => {
-    if (postgres) await postgres.stop();
-    if (redis) await redis.stop();
-    if (rabbitmq) await rabbitmq.stop();
-});
-*/
+

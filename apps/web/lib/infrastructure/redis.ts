@@ -1,25 +1,39 @@
 import Redis, { RedisOptions } from "ioredis"
 import { env } from "@/lib/config/env"
+import { isPreviewMode } from "@/lib/config/preview"
+
+const createPreviewRedis = () =>
+  new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (prop === "then") return undefined
+        // Return no-op async functions for any Redis method in preview
+        return async () => null
+      },
+    },
+  ) as unknown as Redis
 
 const globalForRedis = global as unknown as {
-  redisWriter: Redis
-  redisReader: Redis
+  redis: Redis
 }
-
-const getRedisMode = () => env.REDIS_MODE ?? "sentinel"
 
 const getStandaloneConfig = (): { url: string; options: RedisOptions } => {
   if (!env.REDIS_URL) {
-    throw new Error("REDIS_URL is required when REDIS_MODE=standalone")
+    throw new Error("REDIS_URL is required")
   }
 
   return {
     url: env.REDIS_URL,
     options: {
       password: env.REDIS_PASSWORD,
-      retryStrategy: (times) => Math.min(times * 50, 2000),
-      enableReadyCheck: false,
-      maxRetriesPerRequest: null,
+      // Fail fast so cache/lock callers degrade to postgres-only mode quickly
+      // instead of hanging on retries (lock-service/readyz already have their own 2s timeouts,
+      // but maxRetriesPerRequest:null would queue forever offline).
+      retryStrategy: (times) => (times > 3 ? null : Math.min(times * 50, 500)),
+      enableReadyCheck: true,
+      maxRetriesPerRequest: 2,
+      enableOfflineQueue: false,
       family: 4,
       keepAlive: 10000,
       lazyConnect: true,
@@ -27,65 +41,32 @@ const getStandaloneConfig = (): { url: string; options: RedisOptions } => {
   }
 }
 
-const getSentinelConfig = (): RedisOptions => {
-  const sentinelStr = env.REDIS_SENTINELS || "localhost:26379"
-  const sentinels = sentinelStr.split(",").map((s) => {
-    const [host, port] = s.split(":")
-    return { host, port: parseInt(port, 10) }
-  })
-
-  return {
-    sentinels,
-    name: env.REDIS_MASTER_NAME,
-    password: env.REDIS_PASSWORD,
-    sentinelPassword: env.REDIS_PASSWORD,
-    retryStrategy: (times) => Math.min(times * 50, 2000),
-    enableReadyCheck: false,
-    maxRetriesPerRequest: null,
-    family: 4,
-    keepAlive: 10000,
-    lazyConnect: true,
+const createRedisClient = (): Redis => {
+  if (isPreviewMode()) {
+    return createPreviewRedis()
   }
-}
+  const { url, options } = getStandaloneConfig()
+  const client = new Redis(url, options)
 
-const createRedisClients = () => {
-  const mode = getRedisMode()
-  const standaloneConfig = mode === "standalone" ? getStandaloneConfig() : null
-  const writer =
-    mode === "standalone"
-      ? new Redis(standaloneConfig!.url, standaloneConfig!.options)
-      : new Redis({
-          ...getSentinelConfig(),
-          role: "master",
-        })
-
-  const reader =
-    mode === "standalone"
-      ? new Redis(standaloneConfig!.url, standaloneConfig!.options)
-      : new Redis({
-          ...getSentinelConfig(),
-          role: "slave",
-        })
-
-  writer.on("error", (err) => {
-    console.error("Redis Writer Error:", err.message)
+  client.on("error", (err) => {
+    console.error("Redis Error:", err.message)
+  })
+  client.on("close", () => {
+    console.error("Redis closed")
   })
 
-  reader.on("error", (err) => {
-    console.error("Redis Reader Error:", err.message)
-  })
-
-  return { writer, reader }
+  return client
 }
 
-const clients = globalForRedis.redisWriter && globalForRedis.redisReader
-  ? { writer: globalForRedis.redisWriter, reader: globalForRedis.redisReader }
-  : createRedisClients()
+const client = isPreviewMode()
+  ? createRedisClient()
+  : globalForRedis.redis ?? createRedisClient()
 
-export const redisWriter = clients.writer
-export const redisReader = clients.reader
+export const redis = client
+// Back-compat aliases for incremental migration — all point to the same standalone client
+export const redisWriter = redis
+export const redisReader = redis
 
-if (env.NODE_ENV !== "production") {
-  globalForRedis.redisWriter = redisWriter
-  globalForRedis.redisReader = redisReader
+if (!isPreviewMode() && env.NODE_ENV !== "production") {
+  globalForRedis.redis = redis
 }

@@ -2,10 +2,12 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/config/auth-options"
-import { userService } from "@/features/auth/services/user-service"
-import { rateLimitService } from "@/features/rate-limit/services/rate-limit-service"
+import { userService } from "@/lib/application/user-service"
+import { rateLimitService } from "@/lib/application/rate-limit"
+import { prisma } from "@/lib/infrastructure/prisma"
 import { SubscriptionStatus } from "@/lib/shared/generated/prisma/client"
 import { ProfileView } from "@/features/profile/components/profile-view"
+import { isPreviewMode } from "@/lib/config/preview"
 
 export const metadata: Metadata = {
   title: "Profile Settings | Detect AI",
@@ -19,9 +21,47 @@ export default async function ProfilePage() {
     redirect("/login?callbackUrl=/profile")
   }
 
-  const [user, realTimeUsage] = await Promise.all([
-    userService.getUserById(session.user.id),
-    rateLimitService.getRealTimeUsage(session.user.id)
+  if (isPreviewMode()) {
+    // Mock user data from session + local premium flag is handled client-side;
+    // server renders a neutral preview snapshot (premium false). Client then upgrades via localStorage.
+    const isPreviewPremium = false // client will override via useEffect
+    const now = new Date()
+    const endsAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+    const email = session.user.email ?? "preview@example.com"
+    const name = session.user.name ?? email.split("@")[0]
+    const parts = name.split(" ")
+    const userData = {
+      id: session.user.id,
+      firstName: parts[0] ?? "Preview",
+      lastName: parts.slice(1).join(" ") || "User",
+      email,
+      image: session.user.image ?? null,
+      createdAt: now,
+      isPremium: isPreviewPremium,
+      subscriptionEndsAt: isPreviewPremium ? endsAt : null,
+      paddleSubscriptionStatus: isPreviewPremium ? "ACTIVE" : null,
+      paddleCancellationScheduled: false,
+      // Start at 0 and grow with each analysis (client upgrades via localStorage preview:usage:*
+      apiCallCountDaily: 0,
+      apiCallCountTotal: 0,
+    }
+    return (
+      <div className="flex-1 h-full overflow-y-auto">
+        <div className="w-full max-w-[90%] xl:max-w-[1600px] mx-auto py-8 px-4 md:px-8">
+          <ProfileView user={userData} />
+          <div className="h-20 md:h-0" />
+        </div>
+      </div>
+    )
+  }
+
+  // Split reads: basic (cached 1h) + subscription (cached 10m) + usage
+  // daily (Redis counter) + usage total (DB-authoritative). Usage increments
+  // never invalidate user cache.
+  const [user, realTimeUsage, usageRow] = await Promise.all([
+    userService.getUserWithSubscription(session.user.id),
+    rateLimitService.getRealTimeUsage(session.user.id),
+    prisma.usage.findUnique({ where: { userId: session.user.id } }),
   ])
 
   if (!user) {
@@ -37,7 +77,7 @@ export default async function ProfilePage() {
     paddleSubscriptionStatus: user.subscription?.status as string | null,
     paddleCancellationScheduled: user.subscription?.cancellationScheduled ?? false,
     apiCallCountDaily: realTimeUsage.dailyCount,
-    apiCallCountTotal: (user.usage?.apiCallCountTotal ?? 0) + realTimeUsage.pendingCount
+    apiCallCountTotal: usageRow?.apiCallCountTotal ?? 0
   }
 
   return (

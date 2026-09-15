@@ -98,7 +98,7 @@ export const ChatHeader = () => {
       <AlertDialog open={showRenameDialog} onOpenChange={setShowRenameDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Rename Chat</AlertDialogTitle>
+            <AlertDialogTitle className={cn("tracking-wide", teko.className)}>Rename Chat</AlertDialogTitle>
             <AlertDialogDescription>
               Enter a new name for this conversation.
             </AlertDialogDescription>
@@ -133,7 +133,7 @@ export const ChatHeader = () => {
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Chat?</AlertDialogTitle>
+            <AlertDialogTitle className={cn("tracking-wide", teko.className)}>Delete Chat?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete <span className="font-medium text-foreground">&quot;{chat.title}&quot;</span>. This action cannot be undone.
             </AlertDialogDescription>

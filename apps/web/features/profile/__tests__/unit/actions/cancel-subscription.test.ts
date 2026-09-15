@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { cancelSubscriptionAction } from '../../../actions/cancel-subscription'
 import { getServerSession } from 'next-auth'
 import { prismaMock } from '@/test/prisma-mock'
-import { userService } from '@/features/auth/services/user-service'
+import { userService } from '@/lib/application/user-service'
 import { revalidatePath } from 'next/cache'
 import { SubscriptionStatus } from '@/lib/shared/generated/prisma/client'
 
@@ -14,6 +14,11 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
+vi.mock('@/lib/application/user-service', () => ({
+  userService: {
+    invalidateUserCache: vi.fn(),
+  },
+}))
 vi.mock('@/features/auth/services/user-service', () => ({
   userService: {
     invalidateUserCache: vi.fn(),
@@ -107,10 +112,27 @@ describe('cancelSubscriptionAction', () => {
 
     const result = await cancelSubscriptionAction()
 
-    expect(prismaMock.subscription.update).toHaveBeenCalledWith({
-      where: { userId: mockUserId },
-      data: { cancellationScheduled: false }
-    })
+    // Gateway-first: DB is untouched when gateway fails (no partial state to revert)
+    expect(prismaMock.subscription.update).not.toHaveBeenCalled()
+    expect(result).toEqual({ error: 'Failed to communicate with payment provider. Please try again.' })
+  })
+
+  it('does not update database if gateway fetch throws', async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: mockUserId } } as any)
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: mockUserId,
+      email: mockEmail,
+      subscription: {
+        paddleSubscriptionId: 'sub-1',
+        status: SubscriptionStatus.ACTIVE,
+      }
+    } as any)
+
+    vi.mocked(fetch).mockRejectedValue(new Error('ECONNREFUSED'))
+
+    const result = await cancelSubscriptionAction()
+
+    expect(prismaMock.subscription.update).not.toHaveBeenCalled()
     expect(result).toEqual({ error: 'Failed to communicate with payment provider. Please try again.' })
   })
 

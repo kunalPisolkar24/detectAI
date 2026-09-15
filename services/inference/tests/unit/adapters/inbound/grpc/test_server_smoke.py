@@ -48,7 +48,7 @@ class SmokeAnalysisService:
 @pytest.mark.asyncio
 async def test_grpc_server_smoke_flow(test_settings, auth_token):
     analysis_service = SmokeAnalysisService()
-    server = GRPCServer(analysis_service)
+    server = GRPCServer(analysis_service, config=test_settings)
     server_task = asyncio.create_task(server.start())
     channel = grpc.aio.insecure_channel(f"127.0.0.1:{test_settings.GRPC_PORT}")
 

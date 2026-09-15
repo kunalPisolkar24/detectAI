@@ -2,10 +2,12 @@ package ports
 
 import (
 	"context"
+	"errors"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// Infrastructure Ports (Outbound)
+var ErrNotConnected = errors.New("not connected to RabbitMQ")
 
 type AMQPDialer interface {
 	Dial(url string) (AMQPConnection, error)
@@ -43,12 +45,15 @@ type HealthChecker interface {
 type MetricsRecorder interface {
 	RecordPublish(eventType, status string)
 	RecordInvalidSignature()
+	RecordWebhookReceived(eventType string)
+	RecordWebhookUnknownEventType()
+	RecordInternalEventUnauthorized()
+	RecordWebhookBodyError(reason string)
+	RecordSignatureValidationDuration(seconds float64)
 	SetRabbitMQStatus(connected bool)
 	RecordRabbitMQPublishDuration(duration float64)
 	RecordRabbitMQReconnection()
 }
-
-// Service Ports (Inbound)
 
 type PaymentService interface {
 	ProcessWebhook(ctx context.Context, signature string, body []byte) error

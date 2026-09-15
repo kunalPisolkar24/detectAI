@@ -19,7 +19,7 @@ class MockRequest:
 
 @pytest.mark.asyncio
 async def test_auth_interceptor_bypasses_health_rpc(test_settings):
-    interceptor = AuthInterceptor()
+    interceptor = AuthInterceptor(settings=test_settings)
     handler = grpc.unary_unary_rpc_method_handler(lambda request, context: None)
 
     async def continuation(details):
@@ -34,7 +34,7 @@ async def test_auth_interceptor_bypasses_health_rpc(test_settings):
 
 @pytest.mark.asyncio
 async def test_auth_interceptor_rejects_missing_token_for_streaming_rpc(test_settings, grpc_context):
-    interceptor = AuthInterceptor()
+    interceptor = AuthInterceptor(settings=test_settings)
 
     async def behavior(request, context):
         if False:
@@ -60,7 +60,7 @@ async def test_auth_interceptor_rejects_missing_token_for_streaming_rpc(test_set
 
 @pytest.mark.asyncio
 async def test_auth_interceptor_rejects_expired_token(test_settings, expired_auth_token, grpc_context):
-    interceptor = AuthInterceptor()
+    interceptor = AuthInterceptor(settings=test_settings)
 
     async def continuation(details):
         return grpc.unary_unary_rpc_method_handler(lambda request, context: None)
@@ -81,7 +81,7 @@ async def test_auth_interceptor_rejects_expired_token(test_settings, expired_aut
 
 @pytest.mark.asyncio
 async def test_auth_interceptor_records_auth_failure_metric(test_settings, grpc_context, mocker):
-    interceptor = AuthInterceptor()
+    interceptor = AuthInterceptor(settings=test_settings)
     mock_auth_failure = mocker.patch("src.adapters.inbound.grpc.interceptors.record_auth_failure")
 
     async def continuation(details):

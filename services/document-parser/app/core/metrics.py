@@ -1,75 +1,73 @@
-import os
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    REGISTRY,
-    CollectorRegistry,
-    Counter,
-    Histogram,
-    generate_latest,
-    multiprocess,
+"""Thin re-export — canonical metrics live in infrastructure."""
+
+from app.infrastructure.executor.extraction_pool import (
+    get_pool_stats,
+    is_extraction_pool_healthy as is_process_pool_healthy,
+    mark_extraction_finished,
+    mark_extraction_started,
+    refresh_pool_gauges as refresh_process_pool_gauges,
+    register_extraction_pool as register_process_pool,
+)
+from app.infrastructure.observability.metrics import (
+    EXTRACTION_COMPRESSION_RATIO,
+    EXTRACTION_DURATION_SECONDS,
+    EXTRACTION_FAILURES_TOTAL,
+    EXTRACTION_POOL_ACTIVE_THREADS,
+    EXTRACTION_POOL_MAX_WORKERS,
+    EXTRACTION_POOL_QUEUE_DEPTH,
+    EXTRACTION_QUEUE_WAIT_SECONDS,
+    EXTRACTED_TEXT_BYTES_TOTAL,
+    EXTRACTED_TEXT_LENGTH_BYTES,
+    EXTRACTION_TIMEOUTS_TOTAL,
+    HTTP_REQUEST_DURATION_SECONDS,
+    HTTP_REQUEST_ERRORS_TOTAL,
+    HTTP_REQUESTS_TOTAL,
+    IN_FLIGHT_REQUESTS,
+    PARSED_DOCUMENTS_TOTAL,
+    PARSED_FILE_SIZE_BYTES,
+    REJECTED_UPLOADS_TOTAL,
+    classify_extraction_error,
+    record_extraction,
+    record_extraction_duration,
+    record_extraction_failure,
+    record_extraction_queue_wait,
+    record_extraction_timeout,
+    record_rejected_upload,
+    record_request,
+    render_metrics,
 )
 
-HTTP_REQUESTS_TOTAL = Counter(
-    "http_requests_total",
-    "Total number of HTTP requests",
-    ["method", "route", "status_code"],
-)
-
-HTTP_REQUEST_ERRORS_TOTAL = Counter(
-    "http_request_errors_total",
-    "Total number of HTTP requests resulting in errors",
-    ["method", "route", "status_code"],
-)
-
-HTTP_REQUEST_DURATION_SECONDS = Histogram(
-    "http_request_duration_seconds",
-    "Duration of HTTP requests in seconds",
-    ["method", "route", "status_code"],
-    buckets=(0.01, 0.05, 0.1, 0.3, 0.5, 1.0, 2.5, 5.0, 10.0),
-)
-
-PARSED_FILE_SIZE_BYTES = Histogram(
-    "parsed_file_size_bytes",
-    "Distribution of uploaded file sizes in bytes",
-    ["mime_type"],
-    buckets=(1024, 10240, 102400, 524288, 1048576, 5242880, 10485760),
-)
-
-PARSED_DOCUMENTS_TOTAL = Counter(
-    "parsed_documents_total",
-    "Total number of documents processed",
-    ["mime_type", "status"],
-)
-
-EXTRACTED_TEXT_BYTES_TOTAL = Counter(
-    "extracted_text_bytes_total",
-    "Total volume of text extracted in bytes",
-    ["mime_type"],
-)
-
-
-def record_request(method: str, route: str, status_code: int, duration: float) -> None:
-    status_code_label = str(status_code)
-    HTTP_REQUESTS_TOTAL.labels(method=method, route=route, status_code=status_code_label).inc()
-    HTTP_REQUEST_DURATION_SECONDS.labels(method=method, route=route, status_code=status_code_label).observe(duration)
-    if status_code >= 400:
-        HTTP_REQUEST_ERRORS_TOTAL.labels(method=method, route=route, status_code=status_code_label).inc()
-
-
-def record_extraction(mime_type: str, file_size_bytes: int, text_bytes: int) -> None:
-    PARSED_FILE_SIZE_BYTES.labels(mime_type=mime_type).observe(file_size_bytes)
-    PARSED_DOCUMENTS_TOTAL.labels(mime_type=mime_type, status="success").inc()
-    EXTRACTED_TEXT_BYTES_TOTAL.labels(mime_type=mime_type).inc(text_bytes)
-
-
-def record_extraction_failure(mime_type: str, file_size_bytes: int) -> None:
-    PARSED_FILE_SIZE_BYTES.labels(mime_type=mime_type).observe(file_size_bytes)
-    PARSED_DOCUMENTS_TOTAL.labels(mime_type=mime_type, status="error").inc()
-
-
-def render_metrics() -> tuple[bytes, str]:
-    registry = REGISTRY
-    if os.getenv("PROMETHEUS_MULTIPROC_DIR"):
-        registry = CollectorRegistry()
-        multiprocess.MultiProcessCollector(registry)
-    return generate_latest(registry), CONTENT_TYPE_LATEST
+__all__ = [
+    "HTTP_REQUESTS_TOTAL",
+    "HTTP_REQUEST_ERRORS_TOTAL",
+    "HTTP_REQUEST_DURATION_SECONDS",
+    "PARSED_FILE_SIZE_BYTES",
+    "PARSED_DOCUMENTS_TOTAL",
+    "EXTRACTED_TEXT_BYTES_TOTAL",
+    "EXTRACTION_FAILURES_TOTAL",
+    "EXTRACTION_TIMEOUTS_TOTAL",
+    "REJECTED_UPLOADS_TOTAL",
+    "IN_FLIGHT_REQUESTS",
+    "EXTRACTION_QUEUE_WAIT_SECONDS",
+    "EXTRACTION_POOL_ACTIVE_THREADS",
+    "EXTRACTION_POOL_QUEUE_DEPTH",
+    "EXTRACTION_POOL_MAX_WORKERS",
+    "EXTRACTION_DURATION_SECONDS",
+    "EXTRACTED_TEXT_LENGTH_BYTES",
+    "EXTRACTION_COMPRESSION_RATIO",
+    "classify_extraction_error",
+    "record_extraction",
+    "record_extraction_duration",
+    "record_extraction_failure",
+    "record_extraction_queue_wait",
+    "record_extraction_timeout",
+    "record_rejected_upload",
+    "record_request",
+    "render_metrics",
+    "get_pool_stats",
+    "is_process_pool_healthy",
+    "mark_extraction_started",
+    "mark_extraction_finished",
+    "refresh_process_pool_gauges",
+    "register_process_pool",
+]

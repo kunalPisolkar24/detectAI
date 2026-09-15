@@ -23,7 +23,7 @@ type ChatPersistenceRepository interface {
 	GetUserChats(ctx context.Context, userID string, limit int) ([]*domain.ChatSession, error)
 	UpdateChatTitle(ctx context.Context, chatID, title string) error
 	DeleteChat(ctx context.Context, chatID string) error
-	
+
 	BulkUpsertMessages(ctx context.Context, messages []*domain.Message) error
 	GetHistory(ctx context.Context, chatID string, offset, limit int) ([]*domain.Message, error)
 }

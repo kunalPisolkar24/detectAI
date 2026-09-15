@@ -2,78 +2,26 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import AsyncGenerator, Callable, List, Optional, Tuple
+from typing import AsyncGenerator, Callable, Optional
 
-from src.application.ports.outbound.inference import IAsyncInferenceEngine, IEngineHealthReporter
+import structlog
+
+from src.application.ports.inbound.document_analysis import DocumentAnalysisUseCase
+from src.application.ports.outbound.health import IEngineHealthReporter
+from src.application.ports.outbound.inference import IAsyncInferenceEngine
+from src.application.ports.outbound.telemetry import ITelemetryReporter
 from src.application.services.aggregation import ResultAggregator
 from src.application.services.chunking import ChunkPlanner
-from src.domain.models import DocumentChunk, DocumentProgress, DocumentScore, DocumentStarted
+from src.application.services.dispatcher import ConcurrencyDispatcher
+from src.application.services.text_pipeline import TextPreparationPipeline
 from src.application.services.validation import InputValidator
-from src.application.ports.outbound.telemetry import ITelemetryReporter
+from src.domain.exceptions import InvalidInputError, ServiceOverloadedError
+from src.domain.models import BatcherHealthStatus, DocumentProgress, DocumentScore, DocumentStarted
+
+logger = structlog.get_logger()
 
 
-class TextPreparationPipeline:
-    def __init__(self, validator: InputValidator, planners: dict[str, ChunkPlanner]):
-        self.validator = validator
-        self.planners = planners
-
-    def prepare(self, text: str, model_key: str) -> Tuple[str, List[DocumentChunk]]:
-        validated_text = self.validator.validate(text)
-        if model_key not in self.planners:
-            raise ValueError(f"Unknown model key: {model_key}")
-        chunks = self.planners[model_key].plan(validated_text)
-        if not chunks:
-            raise ValueError("No chunks were generated for the provided text")
-        return validated_text, chunks
-
-
-class ConcurrencyDispatcher:
-    def __init__(self, max_inflight: int):
-        self.max_inflight = max(1, max_inflight)
-
-    async def execute_progressively(
-        self, 
-        engine: IAsyncInferenceEngine, 
-        chunks: List[DocumentChunk], 
-        request_is_active: Optional[Callable[[], bool]] = None,
-        operation: str = "analyze",
-        model_key: str = "unknown",
-        telemetry: ITelemetryReporter = None,
-    ) -> AsyncGenerator[Tuple[int, float], None]:
-        semaphore = asyncio.Semaphore(self.max_inflight)
-
-        async def _worker(chunk_index: int, chunk: DocumentChunk) -> Tuple[int, float]:
-            async with semaphore:
-                if request_is_active and not request_is_active():
-                    raise asyncio.CancelledError("Client disconnected")
-                result = await self._predict_chunk(engine, chunk.text, operation, model_key, telemetry)
-                return chunk_index, result
-
-        tasks = [
-            asyncio.create_task(_worker(i, chunk))
-            for i, chunk in enumerate(chunks)
-        ]
-
-        try:
-            for future in asyncio.as_completed(tasks):
-                yield await future
-        except BaseException:
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
-            raise
-
-    async def _predict_chunk(self, engine: IAsyncInferenceEngine, text: str, operation: str, model_key: str, telemetry: ITelemetryReporter) -> float:
-        telemetry.track_document_chunk_started(operation, model_key)
-        try:
-            return float(await engine.predict(text))
-        finally:
-            telemetry.track_document_chunk_finished(operation, model_key)
-
-
-class DocumentAnalysisService:
+class DocumentAnalysisService(DocumentAnalysisUseCase):
     def __init__(
         self,
         engines: dict[str, IAsyncInferenceEngine],
@@ -83,10 +31,22 @@ class DocumentAnalysisService:
         max_inflight_chunks: int,
         telemetry: ITelemetryReporter,
         health_reporters: dict[str, IEngineHealthReporter] | None = None,
-    ):
-        for model_key, engine in engines.items():
-            if not inspect.iscoroutinefunction(getattr(engine, "predict", None)):
-                raise TypeError(f"Engine '{model_key}' must expose an async predict method")
+    ) -> None:
+        if not engines:
+            raise ValueError("engines must be non-empty")
+        if not planners:
+            raise ValueError("planners must be non-empty")
+        if validator is None or aggregator is None or telemetry is None:
+            raise ValueError("validator, aggregator, telemetry are required")
+        if set(engines.keys()) != set(planners.keys()):
+            raise ValueError(
+                f"engines keys {set(engines.keys())} must match planners keys {set(planners.keys())}"
+            )
+        for k, e in engines.items():
+            if not inspect.iscoroutinefunction(getattr(e, "predict", None)):
+                raise TypeError(f"Engine '{k}' must expose an async predict method")
+        if not isinstance(max_inflight_chunks, int) or max_inflight_chunks < 1:
+            raise ValueError("max_inflight_chunks must be an int >=1")
         self.engines = engines
         self.health_reporters = health_reporters or {}
         self.prep_pipeline = TextPreparationPipeline(validator, planners)
@@ -101,23 +61,25 @@ class DocumentAnalysisService:
         request_is_active: Optional[Callable[[], bool]] = None,
     ) -> DocumentScore:
         operation = "analyze"
-        validated_text, chunks = self.prep_pipeline.prepare(text, model_key)
-        engine = self._get_engine(model_key)
-        self.telemetry.observe_document_plan(operation, model_key, len(validated_text), len(chunks))
-        
-        probabilities = [0.0] * len(chunks)
-        async for chunk_index, prob in self.dispatcher.execute_progressively(
-            engine,
-            chunks,
-            request_is_active,
-            operation=operation,
-            model_key=model_key,
-            telemetry=self.telemetry,
-        ):
-            probabilities[chunk_index] = prob
-            self.telemetry.record_document_chunk_processed(operation, model_key)
-            
-        return self.aggregator.aggregate(chunks, probabilities, len(validated_text))
+        try:
+            validated, chunks = self._prepare(text, model_key, operation)
+            engine = self._get_engine(model_key)
+            probs = await self._collect_probs(engine, chunks, request_is_active, operation, model_key)
+            result = self.aggregator.aggregate(chunks, probs, len(validated))
+            self._record_request(operation, model_key, "success")
+            return result
+        except InvalidInputError:
+            self._record_request(operation, model_key, "invalid_argument")
+            raise
+        except ServiceOverloadedError:
+            self._record_request(operation, model_key, "overloaded")
+            raise
+        except asyncio.CancelledError:
+            self._record_request(operation, model_key, "cancelled")
+            raise
+        except Exception:
+            self._record_request(operation, model_key, "internal")
+            raise
 
     async def stream(
         self,
@@ -126,42 +88,97 @@ class DocumentAnalysisService:
         request_is_active: Optional[Callable[[], bool]] = None,
     ) -> AsyncGenerator[DocumentStarted | DocumentProgress | DocumentScore, None]:
         operation = "stream"
-        validated_text, chunks = self.prep_pipeline.prepare(text, model_key)
-        engine = self._get_engine(model_key)
-        self.telemetry.observe_document_plan(operation, model_key, len(validated_text), len(chunks))
-        probabilities: list[float] = [0.0] * len(chunks)
-        processed_chunks = 0
-
-        yield DocumentStarted(total_chars=len(validated_text), total_chunks=len(chunks))
-
-        async for chunk_index, prob in self.dispatcher.execute_progressively(
-            engine,
-            chunks,
-            request_is_active,
-            operation=operation,
-            model_key=model_key,
-            telemetry=self.telemetry,
-        ):
-            probabilities[chunk_index] = prob
-            self.telemetry.record_document_chunk_processed(operation, model_key)
-            processed_chunks += 1
-            yield DocumentProgress(processed_chunks=processed_chunks, total_chunks=len(chunks))
-
-        yield self.aggregator.aggregate(chunks, probabilities, len(validated_text))
-
-    def summarize(self, text: str, model_key: str) -> tuple[int, int]:
-        validated_text, chunks = self.prep_pipeline.prepare(text, model_key)
-        return len(validated_text), len(chunks)
+        try:
+            validated, chunks = self._prepare(text, model_key, operation)
+            engine = self._get_engine(model_key)
+            probs: list[float] = [0.0] * len(chunks)
+            processed = 0
+            yield DocumentStarted(total_chars=len(validated), total_chunks=len(chunks))
+            async for idx, prob in self.dispatcher.execute_progressively(
+                engine, chunks, request_is_active, operation=operation, model_key=model_key, telemetry=self.telemetry
+            ):
+                probs[idx] = prob
+                self._safe_telemetry(lambda: self.telemetry.record_document_chunk_processed(operation, model_key))
+                processed += 1
+                yield DocumentProgress(processed_chunks=processed, total_chunks=len(chunks))
+            final = self.aggregator.aggregate(chunks, probs, len(validated))
+            yield final
+            self._record_request(operation, model_key, "success")
+        except InvalidInputError:
+            self._record_request(operation, model_key, "invalid_argument")
+            raise
+        except ServiceOverloadedError:
+            self._record_request(operation, model_key, "overloaded")
+            raise
+        except asyncio.CancelledError:
+            self._record_request(operation, model_key, "cancelled")
+            raise
+        except Exception:
+            self._record_request(operation, model_key, "internal")
+            raise
 
     async def shutdown(self) -> None:
-        for engine in self.engines.values():
-            if hasattr(engine, "shutdown"):
-                if asyncio.iscoroutinefunction(engine.shutdown):
-                    await engine.shutdown()
+        for name, engine in self.engines.items():
+            if not hasattr(engine, "shutdown"):
+                continue
+            try:
+                fn = engine.shutdown
+                if inspect.iscoroutinefunction(fn):
+                    await fn()
                 else:
-                    engine.shutdown()
+                    res = fn()
+                    if inspect.isawaitable(res):
+                        await res
+            except Exception as e:
+                logger.error("engine_shutdown_failed", engine=name, error=str(e), exc_info=True)
+
+    def _prepare(self, text: str, model_key: str, operation: str):
+        validated, chunks = self.prep_pipeline.prepare(text, model_key)
+        self._safe_telemetry(
+            lambda: self.telemetry.observe_document_plan(operation, model_key, len(validated), len(chunks))
+        )
+        return validated, chunks
+
+    async def _collect_probs(self, engine, chunks, request_is_active, operation, model_key):
+        probs = [0.0] * len(chunks)
+        async for idx, prob in self.dispatcher.execute_progressively(
+            engine, chunks, request_is_active, operation=operation, model_key=model_key, telemetry=self.telemetry
+        ):
+            probs[idx] = prob
+            self._safe_telemetry(lambda: self.telemetry.record_document_chunk_processed(operation, model_key))
+        return probs
 
     def _get_engine(self, model_key: str) -> IAsyncInferenceEngine:
         if model_key not in self.engines:
-            raise ValueError(f"Unknown model key: {model_key}")
+            raise InvalidInputError(f"Unknown model key: {model_key}")
+        reporter = self.health_reporters.get(model_key)
+        if reporter is not None:
+            try:
+                snap = reporter.health_snapshot()
+                if snap.status != BatcherHealthStatus.SERVING:
+                    logger.warning("engine_not_serving", model=model_key, status=snap.status.value)
+                    if snap.status in (
+                        BatcherHealthStatus.QUEUE_FULL,
+                        BatcherHealthStatus.WORKER_UNAVAILABLE,
+                        BatcherHealthStatus.CIRCUIT_OPEN,
+                    ):
+                        self._safe_telemetry(lambda: self.telemetry.record_queue_rejected(model_key, "health_shed"))
+                        raise ServiceOverloadedError(f"{model_key} is {snap.status.value}")
+            except ServiceOverloadedError:
+                raise
+            except Exception as e:
+                logger.warning("health_check_failed", model=model_key, error=str(e))
         return self.engines[model_key]
+
+    def _record_request(self, operation: str, model_key: str, status: str) -> None:
+        self._safe_telemetry(lambda: self.telemetry.record_document_request(operation, model_key, status))
+
+    @staticmethod
+    def _safe_telemetry(fn) -> None:
+        try:
+            fn()
+        except Exception as e:
+            logger.warning("telemetry_failed", error=str(e))
+
+
+__all__ = ["DocumentAnalysisService", "ConcurrencyDispatcher", "TextPreparationPipeline"]
