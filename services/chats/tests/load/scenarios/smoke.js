@@ -7,6 +7,7 @@ import { closeClient } from '../lib/grpc.js';
 export const options = {
     vus: config.smokeVUs,
     duration: config.smokeDuration,
+    ...(config.rps > 0 ? { rps: config.rps } : {}),
     thresholds: {
         'chat_rpc_success_rate': ['rate>=1.0'],
     },

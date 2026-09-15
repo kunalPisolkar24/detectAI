@@ -1,0 +1,29 @@
+# Standalone redis-chat template (chats hot cache + streams, no HA).
+#
+# Importable atom: reference it from a stack via compose `include:`
+# (paths resolve relative to the including file), e.g.:
+#   include:
+#     - path: ../../../infra/docker/redis-chat/standalone.yml
+# or merge it with `-f`. Everything varying is a variable (see
+# infra/docker/redis-chat/.env.example); importing projects isolate
+# volumes and networks by project name. No `networks:` / `container_name`
+# here so multiple projects can run side by side. Isolated from generic
+# `redis-users` (6379) via host port 6381 and volume `redis_chat_data`.
+x-redis-chat: &redis-chat
+  image: redis:7-alpine
+  restart: unless-stopped
+  command: redis-server --appendonly yes --requirepass ${REDIS_CHAT_PASSWORD:-test_redis_password}
+  healthcheck:
+    test: ["CMD", "redis-cli", "-a", "${REDIS_CHAT_PASSWORD:-test_redis_password}", "ping"]
+    interval: 5s
+    timeout: 3s
+    retries: 10
+
+services:
+  redis-chat:
+    <<: *redis-chat
+    volumes:
+      - redis_chat_data:/data
+
+volumes:
+  redis_chat_data:

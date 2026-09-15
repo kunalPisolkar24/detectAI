@@ -1,0 +1,3 @@
+services:
+  document-parser:
+    restart: always

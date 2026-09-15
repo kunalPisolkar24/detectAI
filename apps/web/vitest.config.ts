@@ -8,7 +8,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./test/setup.ts'],
     globals: true,
-    exclude: ['node_modules/**', 'e2e/**', '.next/**'],
+    // HA suites need a real 3-node broker (test:integration:ha); never run them in unit jobs.
+    exclude: ['node_modules/**', 'e2e/**', '.next/**', '**/*.ha.test.ts'],
     coverage: {
       provider: 'v8',
       include: ['features/**/*.{ts,tsx}'],

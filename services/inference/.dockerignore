@@ -52,3 +52,11 @@ src/generated/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Docker / Compose
+Dockerfile*
+.dockerignore
+compose*.yml
+docker-compose*.yml
+**/compose*.yml
+infra/

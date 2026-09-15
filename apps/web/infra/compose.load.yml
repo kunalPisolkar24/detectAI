@@ -1,0 +1,73 @@
+# Self-contained load-test rig (throwaway postgres/redis, mock-server, k6).
+# Isolated from the main stack by design: `make load-test`.
+# Datastores come from the shared atoms; their values are fixed inline in
+# the makefile (LOAD_ENV) — reproducible, no env file. Keep the hardcoded
+# frontend URLs below in sync with LOAD_ENV (db name, redis password).
+include:
+  - path: ../../../infra/docker/postgres-users/standalone.yml
+  - path: ../../../infra/docker/redis-users/standalone.yml
+  - path: ../../../infra/docker/rabbitmq/standalone.yml
+
+services:
+  mock-server:
+    build:
+      context: ..
+      dockerfile: test/load/mock-server/Dockerfile
+    environment:
+      - PROTO_DIR=/app/lib/shared/proto
+    ports:
+      - "8001:8000"
+      - "50052:50051"
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        - ENV_TYPE=dev
+        - NEXT_PUBLIC_ENV_TYPE=dev
+        - NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+        - NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=load-test-token
+    environment:
+      - ENV_TYPE=dev
+      - NEXT_PUBLIC_ENV_TYPE=dev
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:postgres@postgres-users:5432/detectai_load
+      - REDIS_URL=redis://:load-redis-password@redis-users:6379
+      - REDIS_PASSWORD=load-redis-password
+      - NEXTAUTH_SECRET=load-test-secret
+      - NEXTAUTH_URL=http://frontend:3000
+      - AI_SERVICE_URL=mock-server:50051
+      - CHAT_SERVICE_URL=mock-server:50051
+      - FILE_EXTRACTOR_API_URL=http://mock-server:8000
+      - PAYMENT_GATEWAY_URL=http://mock-server:8000
+      - INTERNAL_API_KEY=load-test-key
+      - NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+      - NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=load-test-token
+      - TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+      - GITHUB_ID=mock-github-client-id-not-configured
+      - GITHUB_SECRET=mock-github-client-secret-not-configured
+      - GOOGLE_ID=mock-google-client-id-not-configured
+      - GOOGLE_SECRET=mock-google-client-secret-not-configured
+      - AI_SERVICE_API_KEY=mock-ai-service-api-key-not-configured
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      postgres-users:
+        condition: service_healthy
+      redis-users:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+
+  k6:
+    image: grafana/k6
+    volumes:
+      - ../test/load/scripts:/scripts
+    environment:
+      - BASE_URL=http://frontend:3000
+    depends_on:
+      frontend:
+        condition: service_started
+    command: run /scripts/landing.k6.js

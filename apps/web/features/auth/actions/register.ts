@@ -3,8 +3,9 @@
 import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { SignupSchema } from "@/schemas/auth"
-import { userService } from "@/features/auth/services/user-service"
+import { userService } from "@/lib/application/user-service"
 import { validateTurnstileToken } from "@/features/auth/services/turnstile.server"
+import { isPreviewMode } from "@/lib/config/preview"
 
 type RegisterActionState = {
   success?: boolean
@@ -20,6 +21,13 @@ export async function registerAction(
 
     if (!validatedFields.success) {
       return { error: "Invalid input fields" }
+    }
+
+    if (isPreviewMode()) {
+      if (!turnstileToken) {
+        return { error: "Please complete the captcha verification" }
+      }
+      return { success: true }
     }
 
     if (!turnstileToken) {

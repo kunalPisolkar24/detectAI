@@ -49,7 +49,19 @@ describe('MessageList', () => {
     
     render(<MessageList />)
     
-    expect(screen.getByText(/Was this written by Human or AI?/i)).toBeInTheDocument()
+    expect(screen.getByText(/Human or AI\?/i)).toBeInTheDocument()
+    expect(screen.getByText(/Know in seconds\./i)).toBeInTheDocument()
+  })
+
+  it('renders model and capability hints in the empty state', () => {
+    vi.mocked(useChatSession).mockReturnValue({ data: { messages: [] } } as any)
+
+    render(<MessageList />)
+
+    expect(screen.getByText('SPARK')).toBeInTheDocument()
+    expect(screen.getByText('FLARE')).toBeInTheDocument()
+    expect(screen.getByText(/Chunk-level highlights/i)).toBeInTheDocument()
+    expect(screen.getByText(/AI vs human scores/i)).toBeInTheDocument()
   })
 
   it('renders a list of messages', () => {

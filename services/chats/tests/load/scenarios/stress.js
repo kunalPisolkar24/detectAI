@@ -12,6 +12,7 @@ export const options = {
         { duration: config.stressDuration, target: config.stressVUs },
         { duration: '1m', target: 0 },
     ],
+    ...(config.rps > 0 ? { rps: config.rps } : {}),
 };
 
 export function teardown() {

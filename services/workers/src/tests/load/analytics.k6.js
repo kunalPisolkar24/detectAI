@@ -1,21 +1,26 @@
 import http from 'k6/http';
-import { check, sleep } from 'k6';
+import { check } from 'k6';
+import { config, thresholds } from './lib/config.js';
 
 export const options = {
     scenarios: {
         constant_request_rate: {
             executor: 'constant-arrival-rate',
-            rate: __ENV.RPS || 20,
+            rate: config.analyticsRps,
             timeUnit: '1s',
-            duration: __ENV.DURATION || '30s',
-            preAllocatedVUs: 10,
-            maxVUs: 100,
+            duration: config.analyticsDuration,
+            preAllocatedVUs: config.analyticsVUs,
+            maxVUs: Math.max(config.analyticsVUs * 10, 100),
         },
+    },
+    thresholds: {
+        http_req_failed: ['rate<0.01'],
+        checks: [`rate>=${thresholds.successRate}`],
     },
 };
 
 export default function () {
-    const url = 'http://localhost:9999/analytics';
+    const url = `${config.proxyUrl}/analytics`;
     const payload = JSON.stringify({
         userId: `user_k6_${__VU}_${__ITER}`,
         count: Math.floor(Math.random() * 10) + 1,

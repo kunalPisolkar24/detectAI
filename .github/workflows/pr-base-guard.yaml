@@ -1,0 +1,65 @@
+name: PR Base Guard
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches: [dev, staging, main]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate promotion path and title hygiene
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const base = pr.base.ref;
+            const head = pr.head.ref;
+            const title = pr.title || "";
+            const body = pr.body || "";
+            const labels = pr.labels.map(l => l.name);
+            const isAgent = labels.includes("agent-generated") || /agent:/i.test(body);
+
+            const errors = [];
+
+            // Rule 2: AI agents must only target dev
+            if (isAgent && base !== "dev") {
+              errors.push(`AI-generated PRs must target \`dev\` only. This PR targets \`${base}\`.`);
+            }
+
+            // Rule 3: dev -> staging and staging -> main are promotion PRs (informational)
+            // No hard fail, but warn if feature branch tries to target staging/main directly
+            if ((base === "staging" || base === "main") && head !== "dev" && head !== "staging") {
+              errors.push(`\`${base}\` should only receive promotions from \`${base === "staging" ? "dev" : "staging"}\`. Feature branches should target \`dev\`.`);
+            }
+
+            // Rule 4: Title hygiene - no feat/fix/chore prefixes or brackets
+            const prefixRe = /^(feat|fix|chore|docs|refactor|test|build|ci)(\(.+\))?:\s/i;
+            const bracketRe = /^\s*\[.*\]\s*/;
+            if (prefixRe.test(title)) {
+              errors.push(`Title must not use conventional prefixes like \`feat:\`, \`fix:\`, \`chore:\`. Found prefix in: "${title}". Use a clean sentence instead.`);
+            }
+            if (bracketRe.test(title)) {
+              errors.push(`Title must not start with brackets like \`[Bug]\` or \`[Feature]\`. Found: "${title}".`);
+            }
+
+            // Rule 5: Body must not be blank (strip HTML comments from the template first).
+            // Promotion path is enforced structurally via base/head refs above, not via body text.
+            const bodyText = body.replace(/<!--[\s\S]*?-->/g, "").trim();
+            if (!bodyText) {
+              errors.push("PR body is empty. Fill in the short template: linked issue, what/why, and testing evidence.");
+            }
+
+            if (errors.length > 0) {
+              const comment = `### PR Base Guard failed\n\n${errors.map(e => `- ${e}`).join("\n")}\n\nSee \`CONTRIBUTING.md#branching-strategy-and-ai-agent-guidelines\` for the expected flow: \`feat/* -> dev (junction, no CI) -> staging (CI) -> main (CI)\` and clean title rules.`;
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: comment
+              });
+              core.setFailed(errors.join("\n"));
+            } else {
+              console.log("PR base guard passed");
+            }

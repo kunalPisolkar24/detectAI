@@ -1,7 +1,11 @@
 import { useCallback, useMemo, useState } from "react"
 import { env } from "@/lib/config/env"
 
-const PLACEHOLDER_SITE_KEYS = new Set(["dummy"])
+const PLACEHOLDER_SITE_KEYS = new Set([
+  "mock-turnstile-site-key-not-configured",
+  // Legacy fallback — older .env.example used plain "dummy".
+  "dummy",
+])
 
 const ERROR_MESSAGES: Record<string, string> = {
   expired: "Verification expired. Retry to continue.",
@@ -15,7 +19,9 @@ export const useTurnstile = () => {
   const [key, setKey] = useState(0)
   const [errorCode, setErrorCode] = useState<string | null>(null)
 
-  const siteKey = env.NEXT_PUBLIC_TURNSTILE_SITE_KEY.trim()
+  // NEXT_PUBLIC vars bake in at build time and may be empty when secrets
+  // hydrate at runtime — never assume non-empty (empty = unconfigured).
+  const siteKey = (env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "").trim()
   const isConfigured = siteKey.length > 0 && !PLACEHOLDER_SITE_KEYS.has(siteKey)
 
   const reset = useCallback(() => {

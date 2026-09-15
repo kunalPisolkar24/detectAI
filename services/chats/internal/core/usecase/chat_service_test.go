@@ -10,6 +10,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -96,11 +97,39 @@ func TestGetSession_DBError(t *testing.T) {
 	dbRepo, _, _, _, svc := newTestService()
 	ctx := context.Background()
 
-	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(nil, errors.New("not found"))
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(nil, domain.ErrNotFound)
 
 	_, err := svc.GetSession(ctx, "chat-1", "user-1")
 
 	assert.ErrorIs(t, err, domain.ErrNotFound)
+}
+
+func TestGetSession_DBInternalError(t *testing.T) {
+	dbRepo, _, _, metricsCollector, svc := newTestService()
+	ctx := context.Background()
+
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(nil, errors.New("connection refused"))
+	metricsCollector.On("IncDatabaseErrors", "get_chat").Return()
+
+	_, err := svc.GetSession(ctx, "chat-1", "user-1")
+
+	assert.Error(t, err)
+	assert.NotErrorIs(t, err, domain.ErrNotFound)
+	assert.NotErrorIs(t, err, domain.ErrUnauthorized)
+}
+
+func TestGetSession_InvalidInput(t *testing.T) {
+	_, _, _, _, svc := newTestService()
+	ctx := context.Background()
+
+	_, err := svc.GetSession(ctx, "", "user-1")
+	assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+	_, err = svc.GetSession(ctx, "chat-1", "")
+	assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+	_, err = svc.GetSession(ctx, "   ", "user-1")
+	assert.ErrorIs(t, err, domain.ErrInvalidInput)
 }
 
 // --- GetUserSessions ---
@@ -112,18 +141,41 @@ func TestGetUserSessions_Success(t *testing.T) {
 	chats := []*domain.ChatSession{{ID: "chat-1"}, {ID: "chat-2"}}
 	dbRepo.On("GetUserChats", mock.Anything, "user-1", 50).Return(chats, nil)
 
-	result, err := svc.GetUserSessions(ctx, "user-1")
+	result, err := svc.GetUserSessions(ctx, "user-1", 50)
 
 	assert.NoError(t, err)
 	assert.Len(t, result, 2)
 	dbRepo.AssertExpectations(t)
 }
 
+func TestGetUserSessions_LimitClamping(t *testing.T) {
+	dbRepo, _, _, _, svc := newTestService()
+	ctx := context.Background()
+
+	chats := []*domain.ChatSession{{ID: "chat-1"}}
+	// limit 0 should default to 50
+	dbRepo.On("GetUserChats", mock.Anything, "user-1", 50).Return(chats, nil).Once()
+	result, err := svc.GetUserSessions(ctx, "user-1", 0)
+	assert.NoError(t, err)
+	assert.Len(t, result, 1)
+
+	// limit >100 should clamp to 100
+	chats2 := []*domain.ChatSession{{ID: "chat-2"}}
+	dbRepo.On("GetUserChats", mock.Anything, "user-1", 100).Return(chats2, nil).Once()
+	result, err = svc.GetUserSessions(ctx, "user-1", 200)
+	assert.NoError(t, err)
+	assert.Len(t, result, 1)
+
+	// whitespace userID
+	_, err = svc.GetUserSessions(ctx, "   ", 50)
+	assert.ErrorIs(t, err, domain.ErrInvalidInput)
+}
+
 func TestGetUserSessions_InvalidInput(t *testing.T) {
 	_, _, _, _, svc := newTestService()
 	ctx := context.Background()
 
-	_, err := svc.GetUserSessions(ctx, "")
+	_, err := svc.GetUserSessions(ctx, "", 50)
 
 	assert.ErrorIs(t, err, domain.ErrInvalidInput)
 }
@@ -200,12 +252,13 @@ func TestDeleteSession_CacheError_IsGraceful(t *testing.T) {
 // --- ProcessMessage ---
 
 func TestProcessMessage_Success(t *testing.T) {
-	dbRepo, cacheRepo, streamRepo, _, svc := newTestService()
+	dbRepo, cacheRepo, streamRepo, metricsCollector, svc := newTestService()
 	ctx := context.Background()
 
 	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
 	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
 	streamRepo.On("Publish", mock.Anything, mock.Anything).Return(nil)
+	metricsCollector.On("IncPublishedMessages", 1.0).Return()
 	cacheRepo.On("SaveToCache", mock.Anything, mock.Anything).Return(nil)
 
 	err := svc.ProcessMessage(ctx, &domain.Message{ChatID: "chat-1", UserID: "user-1", Content: "hello"})
@@ -220,6 +273,48 @@ func TestProcessMessage_InvalidInput(t *testing.T) {
 	assert.ErrorIs(t, svc.ProcessMessage(ctx, &domain.Message{ChatID: "", UserID: "u", Content: "c"}), domain.ErrInvalidInput)
 	assert.ErrorIs(t, svc.ProcessMessage(ctx, &domain.Message{ChatID: "c", UserID: "", Content: "c"}), domain.ErrInvalidInput)
 	assert.ErrorIs(t, svc.ProcessMessage(ctx, &domain.Message{ChatID: "c", UserID: "u", Content: ""}), domain.ErrInvalidInput)
+}
+
+func TestProcessMessage_EmptyContentWithAnalysis(t *testing.T) {
+	dbRepo, cacheRepo, streamRepo, metricsCollector, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+	streamRepo.On("Publish", mock.Anything, mock.Anything).Return(nil)
+	metricsCollector.On("IncPublishedMessages", 1.0).Return()
+	cacheRepo.On("SaveToCache", mock.Anything, mock.Anything).Return(nil)
+
+	err := svc.ProcessMessage(ctx, &domain.Message{
+		ChatID:   "chat-1",
+		UserID:   "user-1",
+		Role:     "assistant",
+		Content:  "",
+		Analysis: &domain.AnalysisResult{HumanScore: 0.2, AIScore: 0.8, ModelName: "spark", Verdict: "AI"},
+	})
+
+	assert.NoError(t, err)
+}
+
+func TestProcessMessage_EmptyContentAssistantNoAnalysis(t *testing.T) {
+	dbRepo, cacheRepo, streamRepo, metricsCollector, svc := newTestService()
+	ctx := context.Background()
+
+	mockChat := &domain.ChatSession{ID: "chat-1", UserID: "user-1"}
+	dbRepo.On("GetChat", mock.Anything, "chat-1").Return(mockChat, nil)
+	streamRepo.On("Publish", mock.Anything, mock.Anything).Return(nil)
+	metricsCollector.On("IncPublishedMessages", 1.0).Return()
+	cacheRepo.On("SaveToCache", mock.Anything, mock.Anything).Return(nil)
+
+	// "running" placeholder saved before inference produces a result.
+	err := svc.ProcessMessage(ctx, &domain.Message{
+		ChatID:  "chat-1",
+		UserID:  "user-1",
+		Role:    "assistant",
+		Content: "",
+	})
+
+	assert.NoError(t, err)
 }
 
 func TestProcessMessage_Unauthorized(t *testing.T) {
@@ -281,7 +376,14 @@ func TestGetHistory_CacheMiss_ReadRepair(t *testing.T) {
 	assert.False(t, hasMore)
 	assert.Len(t, result, 2)
 
-	time.Sleep(100 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		for _, call := range cacheRepo.Calls {
+			if call.Method == "PopulateCache" {
+				return true
+			}
+		}
+		return false
+	}, time.Second, 10*time.Millisecond, "PopulateCache should be called asynchronously")
 	cacheRepo.AssertExpectations(t)
 }
 

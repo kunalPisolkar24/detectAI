@@ -1,29 +1,55 @@
-import { expect, test, describe, beforeEach } from "bun:test";
+import { expect, test, describe, beforeEach, afterEach } from "bun:test";
 import { CacheKeys } from "@shared/cache/keys";
 import "../../../../../tests/setup-integration";
 import { prismaPrimary, prisma } from "@shared/database/PrismaService";
 import { RedisFactory } from "@shared/cache/RedisClient";
-import { LockService } from "@shared/cache/lock";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import { PrismaUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { SubscriptionUpdatedHandler } from "../SubscriptionUpdatedHandler";
 import { SubscriptionStatus } from "../../../../../../generated/prisma/client";
 
 describe("SubscriptionUpdatedHandler Integration", () => {
     let handler: SubscriptionUpdatedHandler;
     let redis: any;
+    let eventRedis: any;
     let userRepository: PrismaUserRepository;
 
     beforeEach(async () => {
+        const redisUrl = process.env.REDIS_URL!;
         redis = RedisFactory.createClient({
-            mode: "standalone",
-            name: "test-redis",
-            url: process.env.REDIS_URL,
+                    name: "test-redis",
+            url: redisUrl,
         });
-        const lockService = new LockService(redis);
+        eventRedis = RedisFactory.createClient({
+                    name: "test-event-redis",
+            url: redisUrl,
+        });
+        // Wait for redis clients to be ready before issuing commands
+        await Promise.all([
+            new Promise<void>((resolve, reject) => {
+                const t = setTimeout(() => reject(new Error("redis ready timeout")), 5000);
+                redis.once("ready", () => { clearTimeout(t); resolve(); });
+                redis.once("error", (e: Error) => { clearTimeout(t); reject(e); });
+                if (redis.status === "ready") { clearTimeout(t); resolve(); }
+            }).catch(() => {}),
+            new Promise<void>((resolve, reject) => {
+                const t = setTimeout(() => reject(new Error("event redis ready timeout")), 5000);
+                eventRedis.once("ready", () => { clearTimeout(t); resolve(); });
+                eventRedis.once("error", (e: Error) => { clearTimeout(t); reject(e); });
+                if (eventRedis.status === "ready") { clearTimeout(t); resolve(); }
+            }).catch(() => {}),
+        ]);
+        // Small grace to ensure connection is writable
+        await new Promise((r) => setTimeout(r, 200));
         const metrics = new MetricsService("test-payments");
         userRepository = new PrismaUserRepository(prismaPrimary, prisma);
-        handler = new SubscriptionUpdatedHandler(userRepository, redis, lockService, metrics);
+        handler = new SubscriptionUpdatedHandler(userRepository, redis, eventRedis, metrics);
+    });
+
+    afterEach(async () => {
+        await redis.quit().catch(() => {});
+        await eventRedis.quit().catch(() => {});
     });
 
     test("should handle subscription update and invalidate cache", async () => {
@@ -35,8 +61,9 @@ describe("SubscriptionUpdatedHandler Integration", () => {
             },
         });
 
-        // 2. Set some initial cache
-        await redis.set(CacheKeys.user(user.id), "initial-cache");
+        // 2. Set some initial cache (split layout: basic + sub)
+        await redis.set(CacheKeys.userBasic(user.id), "initial-cache");
+        await redis.set(CacheKeys.userSub(user.id), "initial-sub");
 
         // 3. Prepare Paddle event
         const eventData = {
@@ -50,7 +77,8 @@ describe("SubscriptionUpdatedHandler Integration", () => {
             ],
             current_billing_period: {
                 ends_at: new Date(Date.now() + 86400000).toISOString()
-            }
+            },
+            occurred_at: new Date().toISOString(),
         };
 
         // 4. Handle event
@@ -64,8 +92,8 @@ describe("SubscriptionUpdatedHandler Integration", () => {
         expect(updatedUser?.subscription?.status).toBe(SubscriptionStatus.ACTIVE);
         expect(updatedUser?.subscription?.paddleSubscriptionId).toBe("sub_123");
 
-        // 6. Verify cache invalidation
-        const cachedUser = await redis.get(CacheKeys.user(user.id));
-        expect(cachedUser).toBeNull();
+        // 6. Verify cache invalidation (basic + sub + legacy)
+        expect(await redis.get(CacheKeys.userBasic(user.id))).toBeNull();
+        expect(await redis.get(CacheKeys.userSub(user.id))).toBeNull();
     });
 });

@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { signIn } from "next-auth/react"
 import { m } from "framer-motion"
-import { Eye, EyeOff, User, Mail, Lock, AlertCircle } from "lucide-react"
+import { Eye, EyeOff, User, Mail, Lock, AlertCircle, FlaskConical } from "lucide-react"
 import type { z } from "zod"
 
 import { cn } from "@/lib/core/utils"
@@ -18,12 +18,14 @@ import { CardWrapper } from "./card-wrapper"
 import { teko } from "@/lib/core/fonts"
 import { useTurnstile } from "@/features/auth/hooks/use-turnstile"
 import { registerAction } from "@/features/auth/actions/register"
+import { isPreviewModeClient } from "@/lib/config/preview"
 
 export const SignupForm = () => {
   const [isPending, startTransition] = useTransition()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const isPreview = isPreviewModeClient()
 
   const {
     token,
@@ -91,6 +93,16 @@ export const SignupForm = () => {
     >
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          {isPreview && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-blue-500/20 bg-blue-500/10 px-3.5 py-3 text-sm leading-relaxed text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200">
+              <FlaskConical size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <p>
+                <span className="font-semibold">Preview mode</span>
+                <span aria-hidden="true"> — </span>
+                any credentials will create a mock account.
+              </p>
+            </div>
+          )}
           {formError && (
             <m.div
               initial={{ opacity: 0, y: -10 }}

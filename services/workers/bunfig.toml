@@ -8,7 +8,8 @@ coveragePathIgnorePatterns = [
 coverageSkipTestFiles = true
 
 [resolve]
-# Path aliases for module resolution
-# These map @shared/* and @workers/* to the local src directories
-@shared = "./src/shared"
-@workers = "./src/workers"
+# Path aliases for module resolution.
+# Keys must be quoted: `@` is not valid in a bare TOML key, and an
+# unparsable bunfig fails EVERY bun invocation in /app (including the
+# `bun -e` container healthchecks, which then never leave `starting`).
+"@shared" = "./src/shared"

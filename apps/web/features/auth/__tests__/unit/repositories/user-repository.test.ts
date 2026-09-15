@@ -9,6 +9,9 @@ vi.mock('@/lib/infrastructure/prisma', () => ({
       create: vi.fn(),
       update: vi.fn(),
     },
+    subscription: {
+      findUnique: vi.fn(),
+    },
   },
 }))
 
@@ -17,47 +20,27 @@ describe('userRepository', () => {
     vi.clearAllMocks()
   })
 
-  describe('findById', () => {
-    it('finds a user by id', async () => {
+  describe('findBasicById', () => {
+    it('finds profile row without joins', async () => {
       const mockUser = { id: '1', email: 'test@example.com' }
       vi.mocked(prisma.user.findUnique).mockResolvedValue(mockUser as any)
 
-      const result = await userRepository.findById('1')
+      const result = await userRepository.findBasicById('1')
 
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: '1' },
-        include: {
-          subscription: true,
-          usage: true
-        }
-      })
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: '1' } })
       expect(result).toEqual(mockUser)
-    })
-
-    it('returns null if user not found', async () => {
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(null)
-
-      const result = await userRepository.findById('non-existent')
-
-      expect(result).toBeNull()
     })
   })
 
-  describe('findByEmail', () => {
-    it('finds a user by email', async () => {
-      const mockUser = { id: '1', email: 'test@example.com' }
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(mockUser as any)
+  describe('findSubscriptionByUserId', () => {
+    it('finds subscription row for split cache', async () => {
+      const mockSub = { status: 'ACTIVE' }
+      vi.mocked(prisma.subscription.findUnique).mockResolvedValue(mockSub as any)
 
-      const result = await userRepository.findByEmail('test@example.com')
+      const result = await userRepository.findSubscriptionByUserId('1')
 
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({
-        where: { email: 'test@example.com' },
-        include: {
-          subscription: true,
-          usage: true
-        }
-      })
-      expect(result).toEqual(mockUser)
+      expect(prisma.subscription.findUnique).toHaveBeenCalledWith({ where: { userId: '1' } })
+      expect(result).toEqual(mockSub)
     })
   })
 

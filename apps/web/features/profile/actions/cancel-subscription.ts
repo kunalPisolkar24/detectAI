@@ -6,7 +6,8 @@ import { authOptions } from "@/lib/config/auth-options"
 import { prisma } from "@/lib/infrastructure/prisma"
 import { SubscriptionStatus } from "@/lib/shared/generated/prisma/client"
 import { env } from "@/lib/config/env"
-import { userService } from "@/features/auth/services/user-service"
+import { userService } from "@/lib/application/user-service"
+import { isPreviewMode } from "@/lib/config/preview"
 
 type ActionState = {
   success?: boolean
@@ -14,6 +15,9 @@ type ActionState = {
 }
 
 export async function cancelSubscriptionAction(): Promise<ActionState> {
+  if (isPreviewMode()) {
+    return { success: true }
+  }
   try {
     const session = await getServerSession(authOptions)
 
@@ -48,37 +52,50 @@ export async function cancelSubscriptionAction(): Promise<ActionState> {
       return { error: "Subscription is already inactive." }
     }
 
+    // Contact gateway first — only mark scheduled if provider confirms, so we
+    // never leave cancellationScheduled:true while gateway was never told
+    // (the partial-payment bug when fetch throws and skips the rollback).
+    let gatewayOk = false
+    try {
+      const response = await fetch(`${env.PAYMENT_GATEWAY_URL}/internal/events`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Key": env.INTERNAL_API_KEY || "",
+        },
+        body: JSON.stringify({
+          event_id: `evt_internal_${crypto.randomUUID()}`,
+          event_type: "user.cancel_subscription",
+          occurred_at: new Date().toISOString(),
+          notification_id: `internal_${userId}_${Date.now()}`,
+          data: {
+            userId: userId,
+            paddleSubscriptionId: user.subscription.paddleSubscriptionId,
+            custom_data: { userId },
+          }
+        }),
+      })
+
+      if (!response.ok) {
+        console.error(`Gateway Error: ${response.statusText}`)
+        return { error: "Failed to communicate with payment provider. Please try again." }
+      }
+      gatewayOk = true
+    } catch (error) {
+      console.error("Gateway fetch failed:", error)
+      return { error: "Failed to communicate with payment provider. Please try again." }
+    }
+
+    if (!gatewayOk) {
+      return { error: "Failed to communicate with payment provider. Please try again." }
+    }
+
     await prisma.subscription.update({
       where: { userId },
       data: { cancellationScheduled: true }
     })
 
     await userService.invalidateUserCache(userId, user.email)
-
-    const response = await fetch(`${env.PAYMENT_GATEWAY_URL}/internal/events`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Internal-Key": env.INTERNAL_API_KEY || "",
-      },
-      body: JSON.stringify({
-        event_type: "user.cancel_subscription",
-        data: {
-          userId: userId,
-          paddleSubscriptionId: user.subscription.paddleSubscriptionId
-        }
-      }),
-    })
-
-    if (!response.ok) {
-      await prisma.subscription.update({
-        where: { userId },
-        data: { cancellationScheduled: false }
-      })
-      await userService.invalidateUserCache(userId, user.email)
-      console.error(`Gateway Error: ${response.statusText}`)
-      return { error: "Failed to communicate with payment provider. Please try again." }
-    }
 
     revalidatePath("/profile")
     return { success: true }

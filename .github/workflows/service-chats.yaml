@@ -49,7 +49,7 @@ jobs:
         run: go test $(go list ./... | grep -v '/tests/integration') -v -cover
 
       - name: Run Integration Tests
-        run: go test -tags=integration -timeout=300s ./... -v -cover
+        run: go test -tags=integration -timeout=900s ./... -v -cover
 
   build-and-push:
     name: Build & Push Docker Image

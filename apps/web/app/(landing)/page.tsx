@@ -1,6 +1,7 @@
 import dynamic from "next/dynamic"
 import { Skeleton } from "@/components/ui/skeleton"
 import { HeroSection } from "@/features/landing/hero"
+import { LandingHashScroll } from "@/features/landing/components/landing-hash-scroll"
 
 const Testimonials = dynamic(
   () => import("@/features/landing/testimonials").then((mod) => mod.Testimonials),
@@ -34,6 +35,7 @@ const Faqs = dynamic(
 export default function Page() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-between">
+      <LandingHashScroll />
       <HeroSection />
       <Testimonials />
       <Pricing/>

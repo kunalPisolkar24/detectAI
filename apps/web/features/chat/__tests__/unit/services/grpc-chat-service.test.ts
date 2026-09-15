@@ -4,7 +4,18 @@ import { getChatGrpcClient } from '@/lib/shared/grpc/chat-client'
 import { inferenceService } from '../../../services/inference-service'
 import { getServerSession } from 'next-auth'
 
-vi.mock('@/lib/shared/grpc/chat-client')
+vi.mock('@/lib/shared/grpc/chat-client', async () => {
+  const grpc = await import('@grpc/grpc-js')
+  return {
+    getChatGrpcClient: vi.fn(),
+    // Mirrors the real helper without importing env (side-effect free).
+    buildUserMetadata: (userId: string) => {
+      const md = new grpc.Metadata()
+      md.set('x-user-id', userId)
+      return md
+    },
+  }
+})
 vi.mock('../../../services/inference-service')
 vi.mock('next-auth')
 vi.mock('@/lib/config/auth-options', () => ({ authOptions: {} }))
@@ -44,7 +55,7 @@ describe('GrpcChatService', () => {
   // ─── createChat ───────────────────────────────────────────────────────────────
   describe('createChat', () => {
     it('returns a ChatSession with the gRPC chat_id', async () => {
-      mockClient.CreateChat.mockImplementation((data: any, cb: any) => {
+      mockClient.CreateChat.mockImplementation((data: any, _meta: any, cb: any) => {
         cb(null, { chat_id: MOCK_CHAT_ID })
       })
 
@@ -55,12 +66,13 @@ describe('GrpcChatService', () => {
       expect(session.messages).toEqual([])
       expect(mockClient.CreateChat).toHaveBeenCalledWith(
         { user_id: MOCK_USER_ID, title: 'Hello world' },
+        expect.anything(),
         expect.any(Function),
       )
     })
 
     it('truncates the initial message to 40 chars for the title', async () => {
-      mockClient.CreateChat.mockImplementation((data: any, cb: any) => {
+      mockClient.CreateChat.mockImplementation((data: any, _meta: any, cb: any) => {
         cb(null, { chat_id: MOCK_CHAT_ID })
       })
       const longMessage = 'A'.repeat(100)
@@ -71,7 +83,7 @@ describe('GrpcChatService', () => {
     })
 
     it('falls back to "New Chat" title when initial message is empty', async () => {
-      mockClient.CreateChat.mockImplementation((data: any, cb: any) => {
+      mockClient.CreateChat.mockImplementation((data: any, _meta: any, cb: any) => {
         cb(null, { chat_id: MOCK_CHAT_ID })
       })
 
@@ -81,7 +93,7 @@ describe('GrpcChatService', () => {
     })
 
     it('rejects when the gRPC call fails', async () => {
-      mockClient.CreateChat.mockImplementation((data: any, cb: any) => {
+      mockClient.CreateChat.mockImplementation((data: any, _meta: any, cb: any) => {
         cb(new Error('gRPC unavailable'))
       })
 
@@ -98,10 +110,10 @@ describe('GrpcChatService', () => {
   // ─── getChat ──────────────────────────────────────────────────────────────────
   describe('getChat', () => {
     it('fetches metadata and history in parallel and returns ordered messages', async () => {
-      mockClient.GetChat.mockImplementation((data: any, cb: any) => {
+      mockClient.GetChat.mockImplementation((data: any, _meta: any, cb: any) => {
         cb(null, { id: MOCK_CHAT_ID, user_id: MOCK_USER_ID, title: 'My Chat', created_at: '1700000000', updated_at: '1700000001' })
       })
-      mockClient.GetChatHistory.mockImplementation((data: any, cb: any) => {
+      mockClient.GetChatHistory.mockImplementation((data: any, _meta: any, cb: any) => {
         cb(null, {
           messages: [
             { id: 'msg-user', chat_id: MOCK_CHAT_ID, user_id: MOCK_USER_ID, role: 'user', content: 'Hello', created_at: '1700000000', metadata: {} },
@@ -116,18 +128,24 @@ describe('GrpcChatService', () => {
       expect(chat.title).toBe('My Chat')
       expect(chat.messages).toHaveLength(2)
       // Both GetChat and GetChatHistory must be called concurrently
-      expect(mockClient.GetChat).toHaveBeenCalledWith({ chat_id: MOCK_CHAT_ID }, expect.any(Function))
+      expect(mockClient.GetChat).toHaveBeenCalledWith({ chat_id: MOCK_CHAT_ID }, expect.anything(), expect.any(Function))
       expect(mockClient.GetChatHistory).toHaveBeenCalledWith(
         { chat_id: MOCK_CHAT_ID, page: 1, page_size: 50 },
+        expect.anything(),
         expect.any(Function),
       )
+      // Identity header must ride along — the server requires x-user-id metadata
+      const getChatMeta = mockClient.GetChat.mock.calls[0][1]
+      expect(getChatMeta.get('x-user-id')).toEqual([MOCK_USER_ID])
+      const historyMeta = mockClient.GetChatHistory.mock.calls[0][1]
+      expect(historyMeta.get('x-user-id')).toEqual([MOCK_USER_ID])
     })
 
     it('rejects when GetChat fails', async () => {
-      mockClient.GetChat.mockImplementation((data: any, cb: any) => {
+      mockClient.GetChat.mockImplementation((data: any, _meta: any, cb: any) => {
         cb(new Error('Not found'))
       })
-      mockClient.GetChatHistory.mockImplementation((data: any, cb: any) => {
+      mockClient.GetChatHistory.mockImplementation((data: any, _meta: any, cb: any) => {
         cb(null, { messages: [] })
       })
 
@@ -138,7 +156,7 @@ describe('GrpcChatService', () => {
   // ─── getHistory ───────────────────────────────────────────────────────────────
   describe('getHistory', () => {
     it('returns a list of ChatHistoryItems mapped from gRPC chats', async () => {
-      mockClient.GetUserChats.mockImplementation((data: any, cb: any) => {
+      mockClient.GetUserChats.mockImplementation((data: any, _meta: any, cb: any) => {
         cb(null, {
           chats: [
             { id: 'chat-1', title: 'First Chat', updated_at: '1700000001' },
@@ -155,12 +173,13 @@ describe('GrpcChatService', () => {
       expect(history[0].updatedAt).toBeInstanceOf(Date)
       expect(mockClient.GetUserChats).toHaveBeenCalledWith(
         { user_id: MOCK_USER_ID, limit: 50 },
+        expect.anything(),
         expect.any(Function),
       )
     })
 
     it('returns an empty array when the user has no chats', async () => {
-      mockClient.GetUserChats.mockImplementation((data: any, cb: any) => {
+      mockClient.GetUserChats.mockImplementation((data: any, _meta: any, cb: any) => {
         cb(null, { chats: [] })
       })
 
@@ -175,8 +194,8 @@ describe('GrpcChatService', () => {
     it('saves user message and persists the assistant analysis result', async () => {
       vi.mocked(inferenceService.detect).mockResolvedValue(MOCK_INFERENCE_RESULT)
       mockClient.SaveMessage
-        .mockImplementationOnce((data: any, cb: any) => cb(null, { message_id: 'msg-user', timestamp: 1700000000 }))
-        .mockImplementationOnce((data: any, cb: any) => cb(null, { message_id: 'msg-asst', timestamp: 1700000001 }))
+        .mockImplementationOnce((data: any, _meta: any, cb: any) => cb(null, { message_id: 'msg-user', timestamp: 1700000000 }))
+        .mockImplementationOnce((data: any, _meta: any, cb: any) => cb(null, { message_id: 'msg-asst', timestamp: 1700000001 }))
 
       const result = await service.sendMessage(MOCK_CHAT_ID, 'Analyze me', 'spark')
 
@@ -190,8 +209,8 @@ describe('GrpcChatService', () => {
       vi.mocked(inferenceService.detect).mockResolvedValue(MOCK_INFERENCE_RESULT)
       let capturedAssistantPayload: any
       mockClient.SaveMessage
-        .mockImplementationOnce((data: any, cb: any) => cb(null, { message_id: 'msg-user', timestamp: 1700000000 }))
-        .mockImplementationOnce((data: any, cb: any) => {
+        .mockImplementationOnce((data: any, _meta: any, cb: any) => cb(null, { message_id: 'msg-user', timestamp: 1700000000 }))
+        .mockImplementationOnce((data: any, _meta: any, cb: any) => {
           capturedAssistantPayload = data
           cb(null, { message_id: 'msg-asst', timestamp: 1700000001 })
         })
@@ -209,7 +228,7 @@ describe('GrpcChatService', () => {
       // behaviour (we have the user input on record). What must NOT happen is saving
       // a broken/empty assistant analysis message.
       vi.mocked(inferenceService.detect).mockRejectedValue(new Error('AI Analysis Service Unavailable'))
-      mockClient.SaveMessage.mockImplementation((data: any, cb: any) =>
+      mockClient.SaveMessage.mockImplementation((data: any, _meta: any, cb: any) =>
         cb(null, { message_id: 'msg-user', timestamp: 1700000000 }),
       )
 
@@ -220,6 +239,7 @@ describe('GrpcChatService', () => {
       expect(mockClient.SaveMessage).toHaveBeenCalledTimes(1)
       expect(mockClient.SaveMessage).toHaveBeenCalledWith(
         expect.objectContaining({ role: 'user', content: 'Hello' }),
+        expect.anything(),
         expect.any(Function),
       )
     })
@@ -228,15 +248,17 @@ describe('GrpcChatService', () => {
   // ─── deleteChat ───────────────────────────────────────────────────────────────
   describe('deleteChat', () => {
     it('calls DeleteChat with the correct chat_id', async () => {
-      mockClient.DeleteChat.mockImplementation((data: any, cb: any) => cb(null))
+      mockClient.DeleteChat.mockImplementation((data: any, _meta: any, cb: any) => cb(null))
 
       await service.deleteChat(MOCK_CHAT_ID)
 
-      expect(mockClient.DeleteChat).toHaveBeenCalledWith({ chat_id: MOCK_CHAT_ID }, expect.any(Function))
+      expect(mockClient.DeleteChat).toHaveBeenCalledWith({ chat_id: MOCK_CHAT_ID }, expect.anything(), expect.any(Function))
+      const meta = mockClient.DeleteChat.mock.calls[0][1]
+      expect(meta.get('x-user-id')).toEqual([MOCK_USER_ID])
     })
 
     it('rejects when DeleteChat fails', async () => {
-      mockClient.DeleteChat.mockImplementation((data: any, cb: any) => cb(new Error('Permission denied')))
+      mockClient.DeleteChat.mockImplementation((data: any, _meta: any, cb: any) => cb(new Error('Permission denied')))
 
       await expect(service.deleteChat(MOCK_CHAT_ID)).rejects.toThrow('Permission denied')
     })
@@ -245,7 +267,7 @@ describe('GrpcChatService', () => {
   // ─── renameChat ───────────────────────────────────────────────────────────────
   describe('renameChat', () => {
     it('returns an updated ChatHistoryItem with the new title', async () => {
-      mockClient.RenameChat.mockImplementation((data: any, cb: any) => cb(null))
+      mockClient.RenameChat.mockImplementation((data: any, _meta: any, cb: any) => cb(null))
 
       const result = await service.renameChat(MOCK_CHAT_ID, 'New Title')
 
@@ -254,12 +276,15 @@ describe('GrpcChatService', () => {
       expect(result.updatedAt).toBeInstanceOf(Date)
       expect(mockClient.RenameChat).toHaveBeenCalledWith(
         { chat_id: MOCK_CHAT_ID, new_title: 'New Title' },
+        expect.anything(),
         expect.any(Function),
       )
+      const meta = mockClient.RenameChat.mock.calls[0][1]
+      expect(meta.get('x-user-id')).toEqual([MOCK_USER_ID])
     })
 
     it('rejects when RenameChat fails', async () => {
-      mockClient.RenameChat.mockImplementation((data: any, cb: any) => cb(new Error('Chat not found')))
+      mockClient.RenameChat.mockImplementation((data: any, _meta: any, cb: any) => cb(new Error('Chat not found')))
 
       await expect(service.renameChat(MOCK_CHAT_ID, 'New Title')).rejects.toThrow('Chat not found')
     })

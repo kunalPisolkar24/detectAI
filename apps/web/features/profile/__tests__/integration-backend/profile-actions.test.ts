@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { updateProfileAction } from '../../actions/update-profile'
 import { cancelSubscriptionAction } from '../../actions/cancel-subscription'
 import { prisma } from '@/lib/infrastructure/prisma'
-import { redisWriter } from '@/lib/infrastructure/redis'
+import { redis } from '@/lib/infrastructure/redis'
 import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { http, HttpResponse } from 'msw'
@@ -51,7 +51,7 @@ describe('Profile Actions Integration', () => {
         where: { id: mockUserId },
         data: expect.objectContaining({ firstName: 'Jane' })
       }))
-      expect(redisWriter.del).toHaveBeenCalled()
+      expect(redis.del).toHaveBeenCalled()
       expect(revalidatePath).toHaveBeenCalledWith('/profile')
     })
   })
@@ -79,10 +79,10 @@ describe('Profile Actions Integration', () => {
       expect(prisma.subscription.update).toHaveBeenCalledWith(expect.objectContaining({
         data: { cancellationScheduled: true }
       }))
-      expect(redisWriter.del).toHaveBeenCalled()
+      expect(redis.del).toHaveBeenCalled()
     })
 
-    it('reverts DB change if gateway notification fails', async () => {
+    it('does not update DB if gateway notification fails (gateway-first)', async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
         id: mockUserId,
         email: 'test@example.com',
@@ -101,10 +101,7 @@ describe('Profile Actions Integration', () => {
       const result = await cancelSubscriptionAction()
 
       expect(result.error).toBeDefined()
-      // Should have been called twice: once to set true, once to revert to false
-      expect(prisma.subscription.update).toHaveBeenCalledWith(expect.objectContaining({
-        data: { cancellationScheduled: false }
-      }))
+      expect(prisma.subscription.update).not.toHaveBeenCalled()
     })
   })
 })

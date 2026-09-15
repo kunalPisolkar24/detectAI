@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { env } from '@/lib/config/env';
 import { metrics } from '@/lib/infrastructure/metrics';
 import { logger } from '@/lib/infrastructure/logger';
+import { isPreviewMode } from '@/lib/config/preview';
 
 const READ_OPERATIONS = [
   'findUnique',
@@ -20,9 +21,40 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient;
 };
 
+const createPreviewPrisma = (): PrismaClient => {
+  const handler: ProxyHandler<object> = {
+    get(_target, prop) {
+      if (prop === "then") return undefined
+      return () => {
+        throw new Error(`Prisma.${String(prop)} is not available in preview mode`)
+      }
+    },
+  }
+  return new Proxy({}, handler) as unknown as PrismaClient
+}
+
 const createExtendedClient = () => {
-  const poolPrimary = new Pool({ connectionString: env.DATABASE_URL });
-  const poolReplica = new Pool({ connectionString: env.DATABASE_URL_REPLICA ?? env.DATABASE_URL });
+  if (isPreviewMode()) {
+    return createPreviewPrisma()
+  }
+  const primaryUrl = env.DATABASE_URL
+  const replicaUrl = env.DATABASE_URL_REPLICA ?? primaryUrl
+  const poolMax = env.DB_POOL_MAX
+  const needsSSL =
+    primaryUrl.includes("sslmode=require") ||
+    primaryUrl.includes("sslmode=verify") ||
+    replicaUrl.includes("sslmode=require") ||
+    replicaUrl.includes("sslmode=verify")
+  const poolConfig: ConstructorParameters<typeof Pool>[0] = {
+    max: poolMax,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+    options: "-c statement_timeout=30000",
+    ...(needsSSL ? { ssl: { rejectUnauthorized: false } } : {}),
+  }
+  const poolPrimary = new Pool({ connectionString: primaryUrl, ...poolConfig })
+  // Reuse primary pool when replica resolves to the same URL (standalone / local Floci)
+  const poolReplica = replicaUrl === primaryUrl ? poolPrimary : new Pool({ connectionString: replicaUrl, ...poolConfig })
 
   const adapterPrimary = new PrismaPg(poolPrimary);
   const adapterReplica = new PrismaPg(poolReplica);
@@ -72,8 +104,8 @@ const createExtendedClient = () => {
   }) as unknown as PrismaClient;
 };
 
-export const prisma = globalForPrisma.prisma || createExtendedClient();
+export const prisma = isPreviewMode() ? createPreviewPrisma() : globalForPrisma.prisma || createExtendedClient();
 
-if (env.NODE_ENV !== 'production') {
+if (!isPreviewMode() && env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }

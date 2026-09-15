@@ -15,6 +15,7 @@ export const setupCommonMocks = () => {
   vi.mock('@/lib/services/lock-service', () => ({
     lockService: {
       execute: vi.fn((_keys, task) => task()),
+      executeMulti: vi.fn((_keys, task) => task()),
     },
   }))
 

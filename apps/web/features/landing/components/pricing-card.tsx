@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation"
 import { m } from "framer-motion"
 import { CircleCheck, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/core/utils"
 import { teko } from "@/lib/core/fonts"
+import { PAYMENT_GATEWAY_UNAVAILABLE_TOOLTIP } from "@/lib/config/preview"
 
 interface PricingCardProps {
   plan: {
@@ -25,6 +27,7 @@ interface PricingCardProps {
   onAction?: (planId: string) => void
   isLoading?: boolean
   disabled?: boolean
+  gatewayDisabled?: boolean
 }
 
 const PricingCard = memo(({ 
@@ -33,11 +36,13 @@ const PricingCard = memo(({
   index, 
   onAction,
   isLoading = false,
-  disabled = false
+  disabled = false,
+  gatewayDisabled = false,
 }: PricingCardProps) => {
   const isPopular = plan.popular
   const { data: session } = useSession()
   const router = useRouter()
+  const isPaymentDisabled = gatewayDisabled && isPopular
 
   const handleSubscribe = () => {
     if (onAction) {
@@ -119,20 +124,27 @@ const PricingCard = memo(({
       </div>
 
       <div className="p-6 pt-0">
-        <Button
-          onClick={handleSubscribe}
-          disabled={disabled || isLoading}
-          className={cn(
-            "w-full font-medium text-2xl tracing-wide transition-all", teko.className,
-            isPopular
-              ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 shadow-lg shadow-blue-500/20"
-              : "bg-transparent border border-black/20 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-          )}
-          variant={isPopular ? "default" : "outline"}
-        >
-          {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-          {plan.cta}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="block">
+              <Button
+                onClick={handleSubscribe}
+                disabled={disabled || isLoading || isPaymentDisabled}
+                className={cn(
+                  "w-full font-medium text-2xl tracing-wide transition-all", teko.className,
+                  isPopular
+                    ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 shadow-lg shadow-blue-500/20"
+                    : "bg-transparent border border-black/20 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                )}
+                variant={isPopular ? "default" : "outline"}
+              >
+                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+                {plan.cta}
+              </Button>
+            </span>
+          </TooltipTrigger>
+          {isPaymentDisabled && <TooltipContent>{PAYMENT_GATEWAY_UNAVAILABLE_TOOLTIP}</TooltipContent>}
+        </Tooltip>
       </div>
 
       {isPopular && (

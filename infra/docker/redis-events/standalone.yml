@@ -1,0 +1,37 @@
+# Standalone events-redis template (Paddle-only dedup store, no HA).
+#
+# Holds ONLY payment webhook dedup state:
+# - paddle:evt:{eventId}      -> "1" EX 7d  (IdempotencyStore fast path)
+# - payment:event:ts:{userId} -> ISO EX 30d (ordering hint)
+# DB ledgers (ProcessedWebhook, lockAndUpdateSubscription) stay authoritative;
+# Redis loss here means double-credit risk, so this instance is AOF-persisted
+# with noeviction. NEVER run cache-only (--save "" --appendonly no).
+#
+# Importable atom: reference it from a stack via compose `include:`
+# (paths resolve relative to the including file), e.g.:
+#   include:
+#     - path: ../../../infra/docker/redis-events/standalone.yml
+# or merge it with `-f`. Everything varying is a variable (see
+# infra/docker/redis-events/.env.example). Importing projects isolate volumes
+# and networks by project name. No `networks:` / `container_name` here
+# so multiple projects can run side by side.
+x-redis-events: &redis-events
+  image: redis:7-alpine
+  restart: unless-stopped
+  command: redis-server --appendonly yes --save "900 1 300 10" --maxmemory-policy noeviction --requirepass ${EVENT_REDIS_PASSWORD}
+  healthcheck:
+    test: ["CMD", "redis-cli", "-a", "${EVENT_REDIS_PASSWORD}", "ping"]
+    interval: 5s
+    timeout: 3s
+    retries: 10
+
+services:
+  redis-events:
+    <<: *redis-events
+    ports:
+      - "${EVENT_REDIS_PORT:-6381}:6379"
+    volumes:
+      - redis_events_data:/data
+
+volumes:
+  redis_events_data:

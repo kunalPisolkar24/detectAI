@@ -10,6 +10,7 @@ export const options = {
         { duration: config.loadDuration, target: config.loadVUs }, // Steady state
         { duration: '30s', target: 0 }, // Ramp down
     ],
+    ...(config.rps > 0 ? { rps: config.rps } : {}),
     thresholds: {
         'chat_rpc_success_rate': [`rate>=${thresholds.successRate}`],
         'chat_save_message_duration': [`p(95)<${thresholds.saveMessageP95}`, `p(99)<${thresholds.saveMessageP99}`],

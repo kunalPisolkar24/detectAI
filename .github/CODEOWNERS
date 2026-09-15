@@ -1,0 +1,4 @@
+# CODEOWNERS - all merges require human maintainer approval
+# AI agents must not merge. dev -> staging and staging -> main are human-only promotions.
+
+* @kunalPisolkar24

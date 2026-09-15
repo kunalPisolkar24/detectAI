@@ -3,16 +3,20 @@ import { metrics } from "@/lib/infrastructure/metrics"
 import { logger } from "@/lib/infrastructure/logger"
 import { type ICacheStorage, RedisCacheAdapter } from "@/lib/infrastructure/redis-cache-adapter"
 
+import { CacheKeys, CacheTTL } from "@/lib/services/cache-keys"
+
 export const TTL = {
-  USER: 3600,
+  USER_BASIC: CacheTTL.USER_BASIC,
+  USER_SUB: CacheTTL.USER_SUB,
 }
 
 export class CacheService {
   constructor(private storage: ICacheStorage) {}
 
   public keys = {
-    user: (id: string) => `user:id:${id}`,
-    userByEmail: (email: string) => `user:email:${email}`,
+    userBasic: (id: string) => CacheKeys.userBasic(id),
+    userBasicByEmail: (email: string) => CacheKeys.userBasicByEmail(email),
+    userSub: (id: string) => CacheKeys.userSub(id),
   }
 
   async get<T>(key: string): Promise<T | null> {

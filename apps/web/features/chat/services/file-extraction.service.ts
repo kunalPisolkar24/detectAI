@@ -8,7 +8,7 @@ export class FileExtractionService {
   }
 
   async extract(formData: FormData): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/extract`, {
+    const response = await fetch(`${this.baseUrl}/api/v1/extract`, {
       method: "POST",
       body: formData,
     })

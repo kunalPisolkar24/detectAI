@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/logger"
 	"github.com/prometheus/client_golang/prometheus"
@@ -14,7 +15,12 @@ var (
 		Name: "chat_messages_ingested_total",
 		Help: "Total number of messages successfully ingested into MongoDB",
 	})
-	
+
+	MessagesPublished = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "chat_messages_published_total",
+		Help: "Total number of messages successfully published to Redis stream",
+	})
+
 	StreamLag = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "chat_redis_stream_lag",
 		Help: "Current lag of the Redis stream consumer group",
@@ -50,6 +56,18 @@ var (
 		Name: "chat_database_errors_total",
 		Help: "Total number of database operation errors",
 	}, []string{"operation"})
+
+	SyncFallback = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "chat_sync_fallback_total",
+		Help: "Total number of sync Mongo fallback writes when Redis stream was unavailable",
+	}, []string{"reason"})
+
+	RedisDegraded = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "chat_redis_degraded",
+		Help: "1 when Redis is degraded/unavailable, 0 when healthy",
+	})
+
+	initOnce sync.Once
 )
 
 type PrometheusMetrics struct{}
@@ -70,6 +88,10 @@ func (p *PrometheusMetrics) AddIngestedMessages(count float64) {
 	MessagesIngested.Add(count)
 }
 
+func (p *PrometheusMetrics) IncPublishedMessages(count float64) {
+	MessagesPublished.Add(count)
+}
+
 func (p *PrometheusMetrics) SetStreamLag(partition string, lag float64) {
 	StreamLag.WithLabelValues(partition).Set(lag)
 }
@@ -86,24 +108,44 @@ func (p *PrometheusMetrics) IncDatabaseErrors(operation string) {
 	DatabaseErrors.WithLabelValues(operation).Inc()
 }
 
+func (p *PrometheusMetrics) IncSyncFallback(reason string) {
+	SyncFallback.WithLabelValues(reason).Inc()
+}
+
+func (p *PrometheusMetrics) SetRedisDegraded(v float64) {
+	RedisDegraded.Set(v)
+}
+
 func Init() {
-	prometheus.MustRegister(
-		MessagesIngested,
-		StreamLag,
-		CacheHits,
-		CacheMisses,
-		RequestLatency,
-		DLQMessages,
-		StreamErrors,
-		DatabaseErrors,
-	)
+	initOnce.Do(func() {
+		prometheus.MustRegister(
+			MessagesIngested,
+			MessagesPublished,
+			StreamLag,
+			CacheHits,
+			CacheMisses,
+			RequestLatency,
+			DLQMessages,
+			StreamErrors,
+			DatabaseErrors,
+			SyncFallback,
+			RedisDegraded,
+		)
+	})
 }
 
 func StartMetricsServer(port string) {
-	http.Handle("/metrics", promhttp.Handler())
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
 	go func() {
-		if err := http.ListenAndServe(port, nil); err != nil {
-			logger.Log.Error("Metrics server failed", zap.Error(err))
+		if err := http.ListenAndServe(port, mux); err != nil && err != http.ErrServerClosed {
+			if logger.Log != nil {
+				logger.Log.Error("Metrics server failed", zap.Error(err))
+			}
 		}
 	}()
 }

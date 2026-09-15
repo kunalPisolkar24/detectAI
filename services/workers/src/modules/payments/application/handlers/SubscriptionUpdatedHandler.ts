@@ -1,75 +1,100 @@
+import { UserCacheInvalidator } from "@shared/cache/invalidation";
 import { SubscriptionStatus } from "../../../../../generated/prisma/client";
-import { type IUserRepository } from "@modules/user/infrastructure/persistence/PrismaUserRepository";
+import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { type RedisClient } from "@shared/cache/RedisClient";
-import { CacheKeys } from "@shared/cache/keys";
-import { LockService } from "@shared/cache/lock";
+import { EventDeduplicator } from "@shared/cache/EventDeduplicator";
 import { MetricsService } from "@shared/monitoring/MetricsService";
-import { type PaddleEventData, type PaymentUpdatePayload } from "../../domain/types";
+import { Logger } from "@shared/logging/Logger";
+import { type PaddleEventData } from "../../domain/types";
+import { type SubscriptionUpdateData } from "@modules/user/domain/types";
 import type { IPaymentEventHandler } from "./IPaymentEventHandler";
+import { UserNotFoundError, MissingFieldError } from "../../domain/errors";
 
 export class SubscriptionUpdatedHandler implements IPaymentEventHandler {
-    constructor(
-        private readonly userRepository: IUserRepository,
-        private readonly redis: RedisClient,
-        private readonly lockService: LockService,
-        private readonly metrics: MetricsService
-    ) {}
+  private readonly cacheInvalidator: UserCacheInvalidator;
 
-    async handle(userId: string | null, data: PaddleEventData): Promise<void> {
-        if (!userId) return;
+  private readonly deduplicator: EventDeduplicator;
 
-        const status = this.parseStatus(data.status);
-        const subId = data.id;
-        const customerId = data.customer_id;
-        const planId = data.items?.[0]?.price?.id;
-        const endsAt = this.parseEndsAt(data);
+  constructor(
+    private readonly userRepository: IUserRepository,
+    private readonly redis: RedisClient,
+    eventRedis: RedisClient,
+    private readonly metrics: MetricsService
+  ) {
+    this.cacheInvalidator = new UserCacheInvalidator(redis, metrics);
+    this.deduplicator = new EventDeduplicator(eventRedis);
+  }
 
-        if (!subId || !status || !customerId || !planId) return;
+  async handle(userId: string | null, data: PaddleEventData): Promise<void> {
+    if (!userId) throw new MissingFieldError("userId");
 
-        const updateData: PaymentUpdatePayload = {
-            paddleCustomerId: customerId,
-            paddleSubscriptionId: subId,
-            paddlePlanId: planId,
-            status,
-            endsAt,
-        };
+    const status = this.parseStatus(data.status);
+    const subId = data.id;
+    const customerId = data.customer_id;
+    const planId = data.items?.[0]?.price?.id;
+    const endsAt = this.parseEndsAt(data);
 
-        if (data?.scheduled_change) {
-            updateData.cancellationScheduled = data.scheduled_change.action === "cancel";
-        }
-
-        const updatedUser = await this.userRepository.updateById(userId, updateData, { email: true });
-        await this.invalidateUserCache(userId, updatedUser.email);
+    if (!subId) throw new MissingFieldError("id");
+    if (!status) throw new MissingFieldError("status");
+    if (!customerId) throw new MissingFieldError("customer_id");
+    if (!planId) {
+      Logger.warn("Missing planId, updating without overwriting paddlePlanId", { userId, subId });
+      try {
+        this.metrics.jobErrors.inc({ job_type: "subscription.updated", error_type: "missing_planId" });
+      } catch {}
     }
 
-    private async invalidateUserCache(userId: string, email: string): Promise<void> {
-        const keys = [CacheKeys.user(userId), CacheKeys.userByEmail(email)];
+    const eventTimestamp = this.parseEventTimestamp(data.occurred_at);
 
-        try {
-            const locks = await Promise.all(keys.map(key => this.lockService.acquire(key)));
-            try {
-                await this.redis.del(...keys);
-                this.metrics.cacheOperations.inc({ operation: "invalidate", cache_type: "main" }, keys.length);
-            } finally {
-                await Promise.all(locks.map(release => release ? release() : Promise.resolve()));
-            }
-        } catch (error) {
-            await this.redis.del(...keys).catch(() => {});
-            this.metrics.jobErrors.inc({ job_type: "cache_invalidate", error_type: "lock_failure" });
-        }
-    }
+    if (await this.deduplicator.isStale(userId, eventTimestamp)) return;
 
-    private parseStatus(status?: string): SubscriptionStatus | null {
-        if (!status) return null;
-        const s = status.toUpperCase();
-        if (Object.values(SubscriptionStatus).includes(s as SubscriptionStatus)) {
-            return s as SubscriptionStatus;
-        }
-        return null;
-    }
+    const user = await this.userRepository.findUniqueById(userId);
+    if (!user) throw new UserNotFoundError(userId);
 
-    private parseEndsAt(data: PaddleEventData): Date | null {
-        const raw = data?.current_billing_period?.ends_at || data?.scheduled_change?.effective_at;
-        return raw ? new Date(raw) : null;
+    const updateData: SubscriptionUpdateData = {
+      paddleCustomerId: customerId,
+      paddleSubscriptionId: subId,
+      paddlePlanId: planId ?? undefined,
+      status,
+      endsAt,
+      cancellationScheduled: data.scheduled_change?.action === "cancel",
+    };
+
+    // Pre-invalidate before DB write to shrink the stale-read window.
+    // If the write fails, the next read pays a cache-miss penalty — acceptable for consistency.
+    await this.cacheInvalidator.invalidateUser(userId, user.email);
+
+    const result = await this.userRepository.lockAndUpdateSubscription(userId, eventTimestamp, status, updateData, customerId);
+
+    if (!result.stale) {
+      await this.cacheInvalidator.invalidateUser(userId, result.email);
+      await this.deduplicator.markProcessed(userId, eventTimestamp);
     }
+  }
+
+
+  private parseStatus(status?: string): SubscriptionStatus | null {
+    if (!status) return null;
+    const s = status.toUpperCase();
+    if (Object.values(SubscriptionStatus).includes(s as SubscriptionStatus)) {
+      return s as SubscriptionStatus;
+    }
+    return null;
+  }
+
+  private parseEndsAt(data: PaddleEventData): Date | null {
+    const raw = data?.current_billing_period?.ends_at || data?.scheduled_change?.effective_at;
+    if (!raw) return null;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  private parseEventTimestamp(occurredAt?: string): Date {
+    if (!occurredAt) return new Date();
+    const d = new Date(occurredAt);
+    if (isNaN(d.getTime())) {
+      throw new MissingFieldError("occurred_at");
+    }
+    return d;
+  }
 }

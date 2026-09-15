@@ -3,7 +3,9 @@ import { createChatAction, deleteChatAction, renameChatAction } from "@/features
 import { useChatUIStore } from "../stores/ui-store"
 import { Message, ChatSession, ChatHistoryItem, ModelType, StreamingAnalysisProgress } from "../types"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { toast } from "sonner"
+import { getPreviewUserId, isPreviewModeClient } from "@/lib/config/preview"
 
 interface SerializedMessage extends Omit<Message, "createdAt"> {
   createdAt: string
@@ -76,6 +78,7 @@ const deserializeMessage = (message: SerializedMessage): Message => ({
 
 export const useSendMessage = () => {
   const queryClient = useQueryClient()
+  const { data: session } = useSession()
   const currentChatId = useChatUIStore((state) => state.currentChatId)
   const selectedModel = useChatUIStore((state) => state.selectedModel)
   const setCurrentChatId = useChatUIStore((state) => state.setCurrentChatId)
@@ -93,26 +96,46 @@ export const useSendMessage = () => {
         throw new Error("An analysis is already running")
       }
 
+      const isPreview = isPreviewModeClient()
+      // Preview storage is namespaced per login (session id `preview-<email>`),
+      // so each set of credentials gets its own chats, premium, and usage.
+      const previewUserId = isPreview ? getPreviewUserId(session?.user) : null
+      if (isPreview && !previewUserId) {
+        throw new Error("Not authenticated")
+      }
+
       let activeChatId = currentChatId
       const effectiveModel = input.kind === "retry" ? input.model : selectedModel
 
       if (input.kind === "new" && !activeChatId) {
-        const createResult = await createChatAction(input.content)
+        if (isPreview) {
+          const { previewCreateChat } = await import("@/features/preview/lib/preview-db")
+          const newChat = await previewCreateChat(previewUserId!, input.content)
+          activeChatId = newChat.id
+          setCurrentChatId(activeChatId)
+          queryClient.setQueryData<ChatSession>(["chat", activeChatId], {
+            ...newChat,
+            messages: [],
+          })
+          await queryClient.invalidateQueries({ queryKey: ["chat-history"] })
+        } else {
+          const createResult = await createChatAction(input.content)
 
-        if (!createResult.success) {
-          throw new Error(createResult.error)
+          if (!createResult.success) {
+            throw new Error(createResult.error)
+          }
+
+          const newChat = createResult.data
+          activeChatId = newChat.id
+          setCurrentChatId(activeChatId)
+
+          queryClient.setQueryData<ChatSession>(["chat", activeChatId], {
+            ...newChat,
+            messages: [],
+          })
+
+          await queryClient.invalidateQueries({ queryKey: ["chat-history"] })
         }
-
-        const newChat = createResult.data
-        activeChatId = newChat.id
-        setCurrentChatId(activeChatId)
-
-        queryClient.setQueryData<ChatSession>(["chat", activeChatId], {
-          ...newChat,
-          messages: [],
-        })
-
-        await queryClient.invalidateQueries({ queryKey: ["chat-history"] })
       }
 
       if (!activeChatId) {
@@ -123,22 +146,41 @@ export const useSendMessage = () => {
       const streamingAssistantId = input.kind === "retry" ? input.assistantMessageId : crypto.randomUUID()
       const controller = new AbortController()
       let activeAssistantMessageId = streamingAssistantId
+      // Distinct timestamps keep oldest-first sort stable so the assistant
+      // never renders before its source user message.
+      const optimisticUserCreatedAt = new Date()
+      const optimisticAssistantCreatedAt = new Date(optimisticUserCreatedAt.getTime() + 1)
+      // The assistant is always linked to its source so ordering helpers can
+      // group it after the user message during streaming and after completion.
+      const optimisticSourceMessageId =
+        input.kind === "new" ? optimisticUserId! : input.sourceMessageId
+
+      // Cancel any in-flight session fetch so it cannot overwrite the
+      // optimistic progress card below.
+      await queryClient.cancelQueries({ queryKey: ["chat", activeChatId] })
 
       if (input.kind === "new") {
         const optimisticUserMessage: Message = {
           id: optimisticUserId!,
           role: "user",
           content: input.content,
-          createdAt: new Date(),
+          createdAt: optimisticUserCreatedAt,
         }
 
         const streamingAssistantMessage: Message = {
           id: streamingAssistantId,
           role: "assistant",
           content: "",
-          createdAt: new Date(),
+          createdAt: optimisticAssistantCreatedAt,
           isStreaming: true,
-          streamingProgress: createStreamingProgress(effectiveModel, input.content),
+          analysisStatus: {
+            state: "running",
+            model: effectiveModel,
+            sourceMessageId: optimisticSourceMessageId,
+          },
+          streamingProgress: createStreamingProgress(effectiveModel, input.content, {
+            sourceMessageId: optimisticSourceMessageId,
+          }),
         }
 
         queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
@@ -172,8 +214,14 @@ export const useSendMessage = () => {
                           state: "running",
                           error: undefined,
                         }
-                      : message.analysisStatus,
-                    streamingProgress: createStreamingProgress(effectiveModel, input.content),
+                      : {
+                          state: "running",
+                          model: effectiveModel,
+                          sourceMessageId: input.sourceMessageId,
+                        },
+                    streamingProgress: createStreamingProgress(effectiveModel, input.content, {
+                      sourceMessageId: input.sourceMessageId,
+                    }),
                   }
                 : message,
             ),
@@ -190,6 +238,130 @@ export const useSendMessage = () => {
       let shouldRollbackUserMessage = input.kind === "new"
       let shouldRetainAssistantMessage = input.kind === "retry"
       try {
+        if (isPreview) {
+          if (input.kind === "new" && optimisticUserId) {
+            const { previewPersistUserMessage, previewPersistAssistantRunning } = await import("@/features/preview/lib/preview-db")
+            await previewPersistUserMessage(previewUserId!, activeChatId, optimisticUserId, input.content, optimisticUserCreatedAt)
+            await previewPersistAssistantRunning(previewUserId!, activeChatId, streamingAssistantId, optimisticAssistantCreatedAt, effectiveModel, optimisticUserId)
+          } else if (input.kind === "retry") {
+            const { previewSaveAssistantMessage } = await import("@/features/preview/lib/preview-db")
+            await previewSaveAssistantMessage(previewUserId!, activeChatId, {
+              messageId: streamingAssistantId,
+              state: "running",
+              model: effectiveModel,
+              sourceMessageId: input.sourceMessageId,
+            })
+          }
+          shouldRollbackUserMessage = false
+          shouldRetainAssistantMessage = true
+
+          const { mockStreamDocument } = await import("@/features/preview/lib/mock-inference")
+          const { previewPersistAssistantFinal } = await import("@/features/preview/lib/preview-db")
+          let mockFinalAnalysis: import("@/features/chat/types").AnalysisResult | null = null
+
+          await mockStreamDocument(input.content, effectiveModel, {
+            signal: controller.signal,
+            onEvent: (event) => {
+              if (controller.signal.aborted) return
+              if (event.type === "started") {
+                queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
+                  if (!old) return undefined
+                  return {
+                    ...old,
+                    messages: old.messages.map((message) =>
+                      message.id === activeAssistantMessageId
+                        ? {
+                            ...message,
+                            isStreaming: true,
+                            streamingProgress: {
+                              model: effectiveModel,
+                              processedChunks: 0,
+                              totalChunks: event.totalChunks,
+                              status: "running",
+                              retryContent: input.content,
+                              sourceMessageId:
+                                message.streamingProgress?.sourceMessageId ??
+                                message.analysisStatus?.sourceMessageId ??
+                                optimisticSourceMessageId,
+                            },
+                          }
+                        : message,
+                    ),
+                  }
+                })
+              } else if (event.type === "progress") {
+                queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
+                  if (!old) return undefined
+                  return {
+                    ...old,
+                    messages: old.messages.map((message) =>
+                      message.id === activeAssistantMessageId
+                        ? {
+                            ...message,
+                            isStreaming: true,
+                            streamingProgress: {
+                              model: effectiveModel,
+                              processedChunks: event.processedChunks,
+                              totalChunks: event.totalChunks,
+                              status: "running",
+                              retryContent: input.content,
+                              sourceMessageId:
+                                message.streamingProgress?.sourceMessageId ??
+                                message.analysisStatus?.sourceMessageId ??
+                                optimisticSourceMessageId,
+                            },
+                          }
+                        : message,
+                    ),
+                  }
+                })
+              } else if (event.type === "final") {
+                mockFinalAnalysis = event.result
+              }
+            },
+          })
+
+          if (controller.signal.aborted) {
+            throw new DOMException("Aborted", "AbortError")
+          }
+
+          if (!mockFinalAnalysis) {
+            throw new Error("Analysis did not produce a final result")
+          }
+
+          const sourceId = input.kind === "retry" ? input.sourceMessageId : optimisticUserId!
+          const finalPersisted = await previewPersistAssistantFinal(previewUserId!, activeChatId, streamingAssistantId, mockFinalAnalysis, sourceId)
+          const finalMessage: Message = {
+            ...finalPersisted,
+            isStreaming: false,
+            streamingProgress: undefined,
+          }
+
+          queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
+            if (!old) return undefined
+            return {
+              ...old,
+              messages: old.messages.map((message) =>
+                message.id === activeAssistantMessageId ? finalMessage : message,
+              ),
+            }
+          })
+
+          // Preview analytics: increment daily/total to replicate real trackUsage
+          try {
+            const { incrementPreviewUsage } = await import("@/features/preview/lib/preview-usage")
+            incrementPreviewUsage(previewUserId)
+          } catch {}
+
+          // Also update chat history title if first message
+          await queryClient.invalidateQueries({ queryKey: ["chat-history"] })
+
+          return {
+            chatId: activeChatId,
+            message: finalMessage,
+          }
+        }
+
         const response = await fetch("/api/chat/analyze/stream", {
           method: "POST",
           headers: {
@@ -200,8 +372,15 @@ export const useSendMessage = () => {
             chatId: activeChatId,
             content: input.content,
             model: effectiveModel,
-            assistantMessageId: input.kind === "retry" ? input.assistantMessageId : undefined,
-            assistantCreatedAt: input.kind === "retry" ? input.assistantCreatedAt.toISOString() : undefined,
+            // New analyses share the optimistic IDs so server rows and the
+            // cache keep the same identity (no duplicate user message, the
+            // `accepted` source ID always resolves, order stays stable).
+            userMessageId: input.kind === "new" ? optimisticUserId : undefined,
+            userCreatedAt: input.kind === "new" ? optimisticUserCreatedAt.toISOString() : undefined,
+            assistantMessageId: input.kind === "retry" ? input.assistantMessageId : streamingAssistantId,
+            assistantCreatedAt: input.kind === "retry"
+              ? input.assistantCreatedAt.toISOString()
+              : optimisticAssistantCreatedAt.toISOString(),
             sourceMessageId: input.kind === "retry" ? input.sourceMessageId : undefined,
           }),
         })
@@ -262,11 +441,18 @@ export const useSendMessage = () => {
                       ? {
                           ...acceptedMessage,
                           isStreaming: true,
+                          analysisStatus: acceptedMessage.analysisStatus ?? {
+                            state: "running",
+                            model: effectiveModel,
+                            sourceMessageId: optimisticSourceMessageId,
+                          },
                           streamingProgress: message.streamingProgress ?? createStreamingProgress(
                             effectiveModel,
                             input.content,
                             {
-                              sourceMessageId: acceptedMessage.analysisStatus?.sourceMessageId,
+                              sourceMessageId:
+                                acceptedMessage.analysisStatus?.sourceMessageId ??
+                                optimisticSourceMessageId,
                             },
                           ),
                         }
@@ -296,7 +482,10 @@ export const useSendMessage = () => {
                             totalChunks: event.totalChunks,
                             status: "running",
                             retryContent: input.content,
-                            sourceMessageId: message.analysisStatus?.sourceMessageId,
+                            sourceMessageId:
+                              message.streamingProgress?.sourceMessageId ??
+                              message.analysisStatus?.sourceMessageId ??
+                              optimisticSourceMessageId,
                           },
                         }
                       : message,
@@ -325,7 +514,10 @@ export const useSendMessage = () => {
                             totalChunks: event.totalChunks,
                             status: "running",
                             retryContent: input.content,
-                            sourceMessageId: message.analysisStatus?.sourceMessageId,
+                            sourceMessageId:
+                              message.streamingProgress?.sourceMessageId ??
+                              message.analysisStatus?.sourceMessageId ??
+                              optimisticSourceMessageId,
                           },
                         }
                       : message,
@@ -380,6 +572,24 @@ export const useSendMessage = () => {
                 shouldRetainAssistantMessage,
               )
 
+        // Persist failure to IndexedDB in preview mode
+        if (isPreview) {
+          try {
+            if (failure.rollbackUserMessage && optimisticUserId) {
+              const { previewDeleteMessage } = await import("@/features/preview/lib/preview-db")
+              await previewDeleteMessage(previewUserId!, optimisticUserId)
+              await previewDeleteMessage(previewUserId!, activeAssistantMessageId)
+            } else if (!failure.retainAssistantMessage) {
+              const { previewDeleteMessage } = await import("@/features/preview/lib/preview-db")
+              await previewDeleteMessage(previewUserId!, activeAssistantMessageId)
+            } else {
+              const { previewPersistAssistantFailed } = await import("@/features/preview/lib/preview-db")
+              const sourceId = input.kind === "retry" ? input.sourceMessageId : (optimisticUserId ?? "")
+              await previewPersistAssistantFailed(previewUserId!, activeChatId, activeAssistantMessageId, effectiveModel, sourceId, failure.message, failure.kind === "cancelled" ? "cancelled" : "failed")
+            }
+          } catch {}
+        }
+
         queryClient.setQueryData<ChatSession>(["chat", activeChatId], (old) => {
           if (!old) {
             return undefined
@@ -389,7 +599,7 @@ export const useSendMessage = () => {
             return {
               ...old,
               messages: old.messages.filter((message) => {
-                if (message.id === streamingAssistantId) {
+                if (message.id === streamingAssistantId || message.id === activeAssistantMessageId) {
                   return false
                 }
 
@@ -413,7 +623,10 @@ export const useSendMessage = () => {
                 return [message]
               }
 
-              const previousProgress = message.streamingProgress ?? createStreamingProgress(effectiveModel, input.content)
+              const previousProgress = message.streamingProgress ?? createStreamingProgress(effectiveModel, input.content, {
+                sourceMessageId:
+                  message.analysisStatus?.sourceMessageId ?? optimisticSourceMessageId,
+              })
 
               return [{
                 ...message,
@@ -483,10 +696,22 @@ export const useSendMessage = () => {
 export const useChatMutations = () => {
   const queryClient = useQueryClient()
   const router = useRouter()
+  const { data: session } = useSession()
   const { currentChatId, setCurrentChatId } = useChatUIStore()
+
+  const requirePreviewUserId = (): string => {
+    const userId = getPreviewUserId(session?.user)
+    if (!userId) throw new Error("Not authenticated")
+    return userId
+  }
 
   const deleteChat = useMutation({
     mutationFn: async (chatId: string) => {
+      if (isPreviewModeClient()) {
+        const { previewDeleteChat } = await import("@/features/preview/lib/preview-db")
+        await previewDeleteChat(requirePreviewUserId(), chatId)
+        return
+      }
       const result = await deleteChatAction(chatId)
       if (!result.success) throw new Error(result.error)
       return result.data
@@ -501,22 +726,28 @@ export const useChatMutations = () => {
         router.push("/chat")
       }
     },
-    onError: () => toast.error("Failed to delete chat"),
+    onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to delete chat"),
   })
 
   const renameChat = useMutation({
     mutationFn: async ({ id, title }: { id: string, title: string }) => {
+      if (isPreviewModeClient()) {
+        const { previewRenameChat } = await import("@/features/preview/lib/preview-db")
+        const updated = await previewRenameChat(requirePreviewUserId(), id, title)
+        return updated
+      }
       const result = await renameChatAction(id, title)
       if (!result.success) throw new Error(result.error)
       return result.data
     },
     onSuccess: (updatedChat) => {
+      if (!updatedChat) return
       queryClient.setQueryData<ChatHistoryItem[]>(["chat-history"], (old) =>
-        old?.map(c => c.id === updatedChat.id ? updatedChat : c) || [],
+        old?.map(c => c.id === (updatedChat as ChatHistoryItem).id ? (updatedChat as ChatHistoryItem) : c) || [],
       )
-      queryClient.invalidateQueries({ queryKey: ["chat", updatedChat.id] })
+      if (updatedChat) queryClient.invalidateQueries({ queryKey: ["chat", (updatedChat as ChatHistoryItem).id] })
     },
-    onError: () => toast.error("Failed to rename chat"),
+    onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to rename chat"),
   })
 
   return { deleteChat, renameChat }

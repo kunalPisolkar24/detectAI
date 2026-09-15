@@ -1,4 +1,4 @@
-import { Github, Twitter, Linkedin, Mail, FileText, Package, DollarSign, HelpCircle } from "lucide-react"
+import { Github, Twitter, Linkedin, Mail, DollarSign, HelpCircle } from "lucide-react"
 
 export const HERO_TEXT = {
   badge: "Introducing Detect AI",
@@ -110,13 +110,19 @@ export const FAQS_LIST = [
   },
 ]
 
+export const CONTACT_EMAIL = "info@detectai.com"
+
+export const contactMailto = (subject?: string): string =>
+  subject
+    ? `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}`
+    : `mailto:${CONTACT_EMAIL}`
+
 export const FOOTER_LINKS = [
   {
     title: "Product",
     links: [
-      { name: "Pricing", href: "/pricing" },
-      { name: "FAQs", href: "/faqs" },
-      { name: "API", href: "/api" },
+      { name: "Pricing", href: "/#pricing" },
+      { name: "FAQs", href: "/#faqs" },
     ],
   },
   {
@@ -124,6 +130,7 @@ export const FOOTER_LINKS = [
     links: [
       { name: "About", href: "/about" },
       { name: "Contact", href: "/contact" },
+      { name: "Support", href: "/support" },
     ],
   },
   {
@@ -143,8 +150,7 @@ export const SOCIAL_LINKS = [
 ]
 
 export const NAV_LINKS = [
-  { href: "/docs", label: "DOCS", icon: FileText },
-  { href: "/features", label: "FEATURES", icon: Package },
-  { href: "/pricing", label: "PRICING", icon: DollarSign },
-  { href: "/faqs", label: "FAQs", icon: HelpCircle }
+  { href: "/#pricing", label: "PRICING", icon: DollarSign },
+  { href: "/#faqs", label: "FAQs", icon: HelpCircle },
+  { href: "/contact", label: "CONTACT", icon: Mail },
 ]

@@ -1,0 +1,30 @@
+name: gateway
+
+services:
+  payment-gateway:
+    container_name: payment_gateway
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - ENV_TYPE=${ENV_TYPE:-dev}
+      - RABBITMQ_URL=${RABBITMQ_URL:-}
+      - RABBITMQ_QUEUE_TYPE=${RABBITMQ_QUEUE_TYPE:-}
+      - PADDLE_WEBHOOK_SECRET=${PADDLE_WEBHOOK_SECRET:-}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-}
+      - PORT=${PORT:-8080}
+      - GIN_MODE=${GIN_MODE:-release}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-payment-gateway}
+      - AWS_REGION=${AWS_REGION:-}
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-}
+      - SSM_PREFIX=${SSM_PREFIX:-}
+    ports:
+      - "${PORT_GATEWAY:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:8080/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

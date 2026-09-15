@@ -1,72 +1,58 @@
-import Redlock, { ExecutionError } from "redlock"
-import { redisWriter } from "@/lib/infrastructure/redis"
+import { redis } from "@/lib/infrastructure/redis"
+import { logger } from "@/lib/infrastructure/logger"
 
-const isLocalEnvironment = process.env.RDCL_IS_LOCAL === "true" || process.env.DOCKER_LOCAL === "true"
+const RETRY_COUNT = 10
+const RETRY_DELAY_MS = 200
+const RETRY_JITTER_MS = 200
 
-let redlock: Redlock | null = null
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-if (!isLocalEnvironment) {
-  redlock = new Redlock(
-    [redisWriter],
-    {
-      driftFactor: 0.01,
-      retryCount: 10,
-      retryDelay: 200,
-      retryJitter: 200,
-      automaticExtensionThreshold: 500,
-    }
-  )
+export const lockService = {
+  async execute<T>(resource: string, task: () => Promise<T>, ttlMs = 5000): Promise<T> {
+    const lockKey = `lock:${resource}`
+    const lockValue = crypto.randomUUID()
 
-  redlock.on("error", (error) => {
-    if (error instanceof ExecutionError) {
-      return
-    }
-    console.error("Redlock Error:", error)
-  })
-}
-
-export class LockService {
-  private static instance: LockService
-
-  private constructor() { }
-
-  public static getInstance(): LockService {
-    if (!LockService.instance) {
-      LockService.instance = new LockService()
-    }
-    return LockService.instance
-  }
-
-  public async execute<T>(
-    resources: string | string[],
-    task: () => Promise<T>,
-    ttl: number = 5000
-  ): Promise<T> {
-    if (isLocalEnvironment) {
-      return task()
-    }
-
-    const keys = Array.isArray(resources) ? resources.map(k => `lock:${k}`) : [`lock:${resources}`]
-
-    let lock
-    try {
-      lock = await redlock!.acquire(keys, ttl)
-    } catch {
-      throw new Error(`Failed to acquire lock for resources: ${keys.join(", ")}`)
-    }
-
-    try {
-      return await task()
-    } finally {
+    for (let attempt = 0; attempt <= RETRY_COUNT; attempt++) {
+      let acquired: string | null = null
       try {
-        await lock.release()
+        acquired = await redis.set(lockKey, lockValue, "PX", ttlMs, "NX")
       } catch (error) {
-        if (process.env.NODE_ENV === "development") {
-          console.warn(`Failed to release lock for ${keys.join(", ")}`, error)
+        // Redis unavailable — degrade to postgres-only mode: run without lock.
+        logger.warn({ msg: "Lock store unavailable, running without lock", resource, error })
+        return await task()
+      }
+
+      if (acquired) {
+        try {
+          return await task()
+        } finally {
+          try {
+            await redis.eval(
+              `if redis.call("GET", KEYS[1]) == ARGV[1] then redis.call("DEL", KEYS[1]) end`,
+              1,
+              lockKey,
+              lockValue
+            )
+          } catch (error) {
+            logger.warn({ msg: "Failed to release lock", resource, error })
+          }
         }
       }
-    }
-  }
-}
 
-export const lockService = LockService.getInstance()
+      if (attempt < RETRY_COUNT) {
+        const jitter = Math.floor(Math.random() * RETRY_JITTER_MS)
+        await sleep(RETRY_DELAY_MS + jitter)
+      }
+    }
+
+    // Contended without Redis error — also degrade rather than throw, so a
+    // transient lock race does not fail the request when Redis is usable but busy.
+    logger.warn({ msg: "Could not acquire lock, running without lock", resource })
+    return await task()
+  },
+
+  async executeMulti<T>(keys: string[], task: () => Promise<T>, ttlMs = 5000): Promise<T> {
+    const compositeKey = JSON.stringify([...keys].sort())
+    return this.execute(compositeKey, task, ttlMs)
+  },
+}

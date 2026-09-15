@@ -1,4 +1,5 @@
 import { ReactNode } from "react"
+import { PreviewModeDialog } from "@/features/preview/components/preview-mode-dialog"
 
 interface AuthLayoutProps {
   children: ReactNode
@@ -15,6 +16,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
       <div className="w-full max-w-md space-y-8 z-10">
         {children}
       </div>
+      <PreviewModeDialog variant="auth" />
     </div>
   )
 }

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: "Contributing Guide"
+    url: https://github.com/kunalPisolkar24/detectAI/blob/dev/CONTRIBUTING.md
+    about: "Branch flow (feat -> dev -> staging -> main) and title rules. Read before contributing."
+  - name: "Existing Issues and Pull Requests"
+    url: https://github.com/kunalPisolkar24/detectAI/issues
+    about: "Search open and closed issues before opening a new one to avoid duplicates."

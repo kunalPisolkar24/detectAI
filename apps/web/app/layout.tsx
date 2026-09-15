@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
-import { ThemeProvider } from "@/providers";
-import { LazyMotionProvider } from "@/components/providers/lazy-motion-provider";
-import { QueryProvider } from "@/components/providers/query-provider";
-import { SessionProvider } from "@/components/providers/session-provider";
+import { ThemeProvider, LazyMotionProvider, QueryProvider, SessionProvider } from "@/providers";
 import { Toaster } from "@/components/ui/sonner";
 import { inter } from "@/lib/core/fonts";
 import "./globals.css";

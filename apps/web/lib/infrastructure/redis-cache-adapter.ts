@@ -1,4 +1,4 @@
-import { redisReader, redisWriter } from "@/lib/infrastructure/redis"
+import { redis } from "@/lib/infrastructure/redis"
 
 export interface ICacheStorage {
   get(key: string): Promise<string | null>
@@ -8,16 +8,16 @@ export interface ICacheStorage {
 
 export class RedisCacheAdapter implements ICacheStorage {
   async get(key: string): Promise<string | null> {
-    return redisReader.get(key)
+    return redis.get(key)
   }
 
   async setex(key: string, ttl: number, value: string): Promise<void> {
-    await redisWriter.setex(key, ttl, value)
+    await redis.setex(key, ttl, value)
   }
 
   async del(...keys: string[]): Promise<void> {
     if (keys.length > 0) {
-      await redisWriter.del(...keys)
+      await redis.del(...keys)
     }
   }
 }
