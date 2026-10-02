@@ -1,25 +1,19 @@
-# Standalone chats stack (single mongo + single redis, no HA).
-# Datastores are importable atoms (same pattern as gateway/workers/inference).
-# Host ports live once in the atoms (6381/27018); this file must not redefine
-# them — compose `include:` forbids overriding imported services.
-# Usage (from repo root or services/chats):
-#   docker compose -f services/chats/infra/compose.yml up -d --build
-# ENV_TYPE=dev uses env/compose defaults; ENV_TYPE=prod pulls from AWS
-# Secrets Manager (detectai/docdb/urls + detectai/redis/chat/urls) + SSM /detectai/chat/.
-name: chats
-include:
-  - path: ../../../infra/docker/mongo-chat/standalone.yml
-  - path: ../../../infra/docker/redis-chat/standalone.yml
+# Chats service-only stack for prod/Floci (no bundled infra).
+# Datastores come from Terraform (Floci/LocalStack or real AWS) via
+# Secrets Manager + SSM; point MONGO_URI/CHAT_REDIS_ADDR at Floci outputs.
+# Usage:
+#   docker compose -f services/chats/infra/compose.prod.yml up -d --build
+# Top-level prod uses the same shape (see infra/docker/prod/compose.yml).
+name: chats-prod
 
 services:
-
   chat-service:
     build:
       context: ..
       dockerfile: Dockerfile
-    restart: unless-stopped
+    restart: always
     environment:
-      ENV_TYPE: ${ENV_TYPE:-dev}
+      ENV_TYPE: ${ENV_TYPE:-prod}
       SERVICE_ROLE: api
       GRPC_PORT: ${GRPC_PORT:-}
       METRICS_PORT: ${METRICS_PORT:-}
@@ -33,7 +27,7 @@ services:
       MONGO_SERVER_SELECTION_TIMEOUT: ${MONGO_SERVER_SELECTION_TIMEOUT:-}
       CHAT_REDIS_ADDR: ${CHAT_REDIS_ADDR:-}
       REDIS_URL: ${REDIS_URL:-}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-${REDIS_CHAT_PASSWORD:-test_redis_password}}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_TLS_ENABLED: ${REDIS_TLS_ENABLED:-}
       REDIS_TLS_CA_FILE: ${REDIS_TLS_CA_FILE:-}
       REDIS_POOL_SIZE: ${REDIS_POOL_SIZE:-}
@@ -54,11 +48,6 @@ services:
       - "${CHAT_METRICS_HOST_PORT:-9095}:9091"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      mongo-chat:
-        condition: service_healthy
-      redis-chat:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/metrics"]
       interval: 30s
@@ -70,9 +59,9 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    restart: unless-stopped
+    restart: always
     environment:
-      ENV_TYPE: ${ENV_TYPE:-dev}
+      ENV_TYPE: ${ENV_TYPE:-prod}
       SERVICE_ROLE: worker
       GRPC_PORT: ${GRPC_PORT:-}
       METRICS_PORT: ${WORKER_METRICS_PORT:-:9099}
@@ -86,7 +75,7 @@ services:
       MONGO_SERVER_SELECTION_TIMEOUT: ${MONGO_SERVER_SELECTION_TIMEOUT:-}
       CHAT_REDIS_ADDR: ${CHAT_REDIS_ADDR:-}
       REDIS_URL: ${REDIS_URL:-}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-${REDIS_CHAT_PASSWORD:-test_redis_password}}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_TLS_ENABLED: ${REDIS_TLS_ENABLED:-}
       REDIS_TLS_CA_FILE: ${REDIS_TLS_CA_FILE:-}
       REDIS_POOL_SIZE: ${REDIS_POOL_SIZE:-}
@@ -106,11 +95,6 @@ services:
       - "${CHAT_WORKER_METRICS_PORT_HOST:-9099}:9099"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      mongo-chat:
-        condition: service_healthy
-      redis-chat:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9099/metrics"]
       interval: 30s
