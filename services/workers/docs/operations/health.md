@@ -183,7 +183,7 @@ healthcheck:
 | worker-cron | 7002 | 7002 | Health + Metrics |
 | postgres-users | 5432 | 5432 | PostgreSQL |
 | redis-users | 6379 | 6379 | Redis (users) |
-| redis-events | 6381 | 6379 | Redis (events, payments only) |
+| redis-events | 6382 | 6379 | Redis (events, payments only) |
 | rabbitmq | 5672 | 5672 | RabbitMQ |
 | rabbitmq | 15672 | 15672 | RabbitMQ Management UI |
 

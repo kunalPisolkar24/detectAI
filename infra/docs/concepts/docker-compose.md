@@ -108,7 +108,7 @@ Atoms use variable-based port assignments to avoid conflicts:
 | postgres-users | 5432 | `POSTGRES_PORT` |
 | redis-users | 6379 | `REDIS_PORT` |
 | redis-chat | 6381 | `REDIS_CHAT_PORT` |
-| redis-events | 6381 | `EVENT_REDIS_PORT` |
+| redis-events | 6382 | `EVENT_REDIS_PORT` |
 | mongo-chat | 27018 | `MONGO_CHAT_PORT` |
 | rabbitmq | 5672 | `RABBITMQ_PORT` |
 
