@@ -1,14 +1,11 @@
 name: gateway-load
 
+# RabbitMQ UI port lives in standalone.yml; do not include management.yml
+# alongside it (compose forbids redefining imported services).
 include:
   - path: ../../../../infra/docker/rabbitmq/standalone.yml
-  - path: ../../../../infra/docker/rabbitmq/management.yml
 
 services:
-  rabbitmq:
-    networks:
-      - gateway_loadnet
-
   payment-gateway:
     build:
       context: ..
@@ -29,8 +26,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-    networks:
-      - gateway_loadnet
 
   k6:
     image: grafana/k6:latest
@@ -48,8 +43,3 @@ services:
     depends_on:
       payment-gateway:
         condition: service_healthy
-    networks:
-      - gateway_loadnet
-
-networks:
-  gateway_loadnet:
