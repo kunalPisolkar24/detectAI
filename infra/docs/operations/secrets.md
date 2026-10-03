@@ -282,8 +282,8 @@ docker exec <container> env | grep DATABASE_URL
 
 ### "Secret not found"
 
-- **Terraform secrets**: Run `make tf-apply-local`
-- **App secrets**: Run `make seed-floci`
+- **Terraform secrets**: Run `make tf-apply ENV=floci`
+- **App secrets**: Run `make seed ENV=floci`
 
 ### "Access denied"
 

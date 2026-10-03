@@ -109,7 +109,6 @@ Environments are controlled by `.tfvars` files:
 ```mermaid
 graph TB
     subgraph "Environment Files"
-        Local[envs/floci-local.tfvars]
         Floci[envs/floci.tfvars]
         Prod[envs/prod.tfvars]
     end
@@ -121,21 +120,20 @@ graph TB
         HA[High availability]
     end
     
-    Local --> Endpoint
-    Local --> TLS
-    Local --> Sizing
-    Local --> HA
+    Floci --> Endpoint
+    Floci --> TLS
+    Floci --> Sizing
+    Floci --> HA
 ```
 
 | File | Endpoint | TLS | Instance Size | HA |
 |------|----------|-----|---------------|-----|
-| `floci-local.tfvars` | `http://localhost:4566` | Off | `cache.t3.micro` | Single node |
-| `floci.tfvars` | `https://4566-...cloudspaces.litng.ai` | Off | `cache.t3.micro` | Single node |
+| `floci.tfvars` | `http://localhost:4566` | Off | `cache.t3.micro` | Single node |
 | `prod.tfvars` | `null` (real AWS) | On | `cache.r6g.large` | Multi-AZ |
 
 ### Key Variable Differences
 
-| Variable | Local | Production |
+| Variable | Floci | Production |
 |----------|-------|------------|
 | `emulator_endpoint` | `http://localhost:4566` | `null` |
 | `db_sslmode` | `disable` | `require` |
@@ -149,12 +147,12 @@ graph TB
 
 ```bash
 # From repo root
-make tf-fmt            # Check formatting
-make tf-validate       # Init + validate + test
-make tf-plan-local     # Plan with floci-local
-make tf-apply-local    # Apply with floci-local
-make tf-destroy-local  # Destroy with floci-local
-make tf-test           # Run unit tests
+make tf-fmt              # Check formatting
+make tf-validate         # Init + validate + test
+make tf-plan ENV=floci   # Plan with floci (prod: ENV=prod)
+make tf-apply ENV=floci  # Apply with floci (prod needs CONFIRM_PROD=1)
+make tf-destroy ENV=floci
+make tf-test             # Run unit tests
 ```
 
 ### Direct Terraform Commands
@@ -166,13 +164,13 @@ cd infra/terraform
 terraform init
 
 # Plan
-terraform plan -var-file=envs/floci-local.tfvars
+terraform plan -var-file=envs/floci.tfvars
 
 # Apply
-terraform apply -var-file=envs/floci-local.tfvars
+terraform apply -var-file=envs/floci.tfvars
 
 # Destroy
-terraform destroy -var-file=envs/floci-local.tfvars
+terraform destroy -var-file=envs/floci.tfvars
 
 # Run tests
 terraform test
@@ -262,7 +260,7 @@ Uses `mock_provider` to test without AWS resources. Tests cover:
 ### Integration Tests (Emulator)
 
 ```bash
-terraform apply -var-file=envs/floci-local.tfvars
+terraform apply -var-file=envs/floci.tfvars
 
 # Verify via emulator API
 aws --endpoint-url http://localhost:4566 rds describe-db-clusters
@@ -274,7 +272,7 @@ aws --endpoint-url http://localhost:4566 mq list-brokers
 psql "$(terraform output -raw database_url)" -c "select 1"
 redis-cli -h $(terraform output -raw redis_chat_primary_address) ping
 
-terraform destroy -var-file=envs/floci-local.tfvars
+terraform destroy -var-file=envs/floci.tfvars
 ```
 
 ## Prod Hardening Checklist
