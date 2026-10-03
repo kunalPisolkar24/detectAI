@@ -101,20 +101,9 @@ docker compose -f local/compose.yml -f ../redis-chat/standalone.yml up -d
 
 ### Overriding Atom Configuration
 
-When importing, you can override variables:
-
-```yaml
-# local/compose.yml
-include:
-  - path: ../redis-chat/standalone.yml
-
-services:
-  redis-chat:
-    ports:
-      - "6381:6379"  # Override default port
-```
-
-Or via environment variables in `.env`:
+Override via environment variables in `.env` (host ports live once in the
+atoms — compose `include:` forbids redefining an imported service, so never
+add a `services:` block for an atom you included):
 
 ```bash
 # local/.env
@@ -222,7 +211,7 @@ Health: mongosh --eval db.adminCommand('ping')
 ```yaml
 # rabbitmq/standalone.yml
 Services: rabbitmq
-Port: ${RABBITMQ_PORT:-5672}
+Port: ${RABBITMQ_PORT:-5672} + ${RABBITMQ_UI_PORT:-15672}
 Volume: rabbitmq_data
 Image: rabbitmq:3-management-alpine
 Health: rabbitmq-diagnostics -q ping
@@ -232,8 +221,9 @@ Health: rabbitmq-diagnostics -q ping
 - `RABBITMQ_USER` - Username (default: `guest`)
 - `RABBITMQ_PASS` - Password (default: `guest`)
 - `RABBITMQ_PORT` - Host port (default: 5672)
+- `RABBITMQ_UI_PORT` - Management UI host port (default: 15672)
 
-### RabbitMQ Management (Overlay)
+### RabbitMQ Management (Overlay, legacy `-f` only)
 
 ```yaml
 # rabbitmq/management.yml
@@ -241,7 +231,10 @@ Services: rabbitmq (adds port)
 Port: ${RABBITMQ_UI_PORT:-15672}
 ```
 
-This is an overlay that adds the management UI port to an existing RabbitMQ instance.
+This overlay only works with `-f` merging (`docker compose -f standalone.yml
+-f management.yml`). Do NOT `include:` it alongside `standalone.yml` — compose
+rejects redefining imported services, and standalone already publishes the UI
+port.
 
 ## Creating a New Atom
 

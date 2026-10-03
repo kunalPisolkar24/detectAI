@@ -143,6 +143,6 @@ Notes:
 - `endpoint ""` → set `emulator_endpoint = "http://localhost:4566"` for local, or `null` for prod.
 - `NoSuchBucket` for S3 backend → `aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-tfstate-local`.
 - State shows `Objects have changed outside Terraform` → emulator was reset; `terraform apply` will recreate.
-- `UpdateBroker ... 404` on apply → the emulator can't update brokers in place; the broker itself is fine, ignore the error.
-- `plan` keeps showing small diffs after apply (e.g. `transit_encryption_enabled`, `backup_retention_period`) → the emulator doesn't persist those fields; harmless, don't chase `plan` to zero on the emulator.
+- `UpdateBroker ... 404` on apply → fixed via `ignore_changes` on the MQ module (Floci rejects the PUT); if it reappears, `plan` will name the new un-persisted field to add there.
+- `plan` should report no changes after apply (emulator-misreported fields like `transit_encryption_enabled`/`backup_retention_period` are in the modules' `ignore_changes`); any new perpetual diff means a new field to ignore, not a real drift.
 - Apps get `AUTH failed` from emulator Redis → the emulator runs its Valkey backing stores without a password even though the secrets carry one; point apps at the passwordless endpoints for local testing (see `infra/docker/prod/.env.example`).

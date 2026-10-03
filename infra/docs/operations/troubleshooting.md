@@ -63,6 +63,11 @@ kill <PID>
 PORT_FRONTEND=3001
 ```
 
+> Transient variant: right after `down`, Docker frees host ports
+> asynchronously, so the next `up` can fail with `address already in use`
+> while nothing is actually bound. `make prod-up-floci` retries once
+> automatically after 10s; otherwise just re-run the `up` command.
+
 ### "Not enough memory"
 
 Docker needs at least 8 GB RAM:
