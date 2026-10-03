@@ -12,6 +12,10 @@ LOCAL_COMPOSE_FILE := infra/docker/local/compose.yml
 
 FLOCI_ENDPOINT ?= http://localhost:4566
 FLOCI_NETWORK ?= documents_default
+FLOCI_IMAGE ?= floci/floci:latest
+FLOCI_CONTAINER ?= floci
+FLOCI_VOLUME ?= floci-data
+FLOCI_PORT ?= 4566
 AWS_REGION ?= ap-south-1
 
 # Generic prod env: floci (emulator) or prod (real AWS).
@@ -58,7 +62,7 @@ DETECT_AI_NETWORK := $(if $(DETECT_AI_NETWORK),$(DETECT_AI_NETWORK),detect-ai-ne
 	prod-up prod-down prod-logs prod-clean prod-build prod-rebuild prod-config prod-ps prod-migrate \
 	prod-up-floci prod-config-floci \
 	local-up local-down local-logs local-clean local-build local-rebuild local-config local-ps \
-	tf-fmt tf-validate tf-test tf-plan tf-apply tf-destroy tf-plan-local tf-apply-local tf-destroy-local floci-seed floci-verify \
+	tf-fmt tf-validate tf-test tf-plan tf-apply tf-destroy tf-plan-local tf-apply-local tf-destroy-local floci-seed floci-verify floci-up floci-down floci-clean \
 	seed-install seed seed-floci seed-floci-dry seed-aws seed-dry prod-floci-bootstrap
 
 help:
@@ -69,9 +73,9 @@ help:
 	@printf "  make logs [SERVICE=x]  Stream prod logs\n"
 	@printf "  make clean             Stop prod and remove volumes\n"
 	@printf "  make prod-up [ENV=x] [WITH_INFRA=0|1] [WITH_SEED=0|1]  Start prod (+ infra/seed when asked)\n"
-	@printf "  make prod-down         Stop the prod stack\n"
+	@printf "  make prod-down [ENV=x] [WITH_INFRA=0|1]  Stop prod (+ tf-destroy when asked)\n"
 	@printf "  make prod-logs         Stream prod logs\n"
-	@printf "  make prod-clean        Stop prod and remove volumes\n"
+	@printf "  make prod-clean [ENV=x] [WITH_INFRA=0|1]  Stop prod and remove volumes (+ infra when asked)\n"
 	@printf "  make prod-build        Build prod images\n"
 	@printf "  make prod-rebuild      Rebuild prod images without cache\n"
 	@printf "  make prod-config       Render prod compose config\n"
@@ -115,9 +119,13 @@ help:
 	@printf "  make prod-floci-bootstrap Bootstrap: tf-apply ENV=floci + seed-floci + verify + DATABASE_URL hint\n"
 	@printf "  make prod-up-floci     Alias: prod-up ENV=floci (attached to FLOCI_NETWORK)\n"
 	@printf "  make prod-config-floci Alias: prod-config ENV=floci\n"
+	@printf "  make floci-up          Start emulator daemon (named volume, standalone, not part of prod)\n"
+	@printf "  make floci-down        Stop emulator daemon (keeps volume)\n"
+	@printf "  make floci-clean       Stop daemon and remove its volume (fresh emulator)\n"
 	@printf "  make seed              Seed for ENV (floci -> seed-floci, prod -> seed-aws)\n"
 	@printf "  ai-service GPU: auto (host GPU + docker nvidia runtime = gpu, else cpu); override with GPU=1 / GPU=0\n\n"
 	@printf "Single command: make prod-up ENV=floci WITH_INFRA=1 WITH_SEED=1  (skip steps by leaving flags 0)\n"
+	@printf "Full cleanup: make prod-down ENV=floci WITH_INFRA=1  (apps + tf-destroy; daemon/volume via floci-down/clean)\n"
 	@printf "Prod AWS: make prod-up ENV=prod WITH_INFRA=1 WITH_SEED=1 CONFIRM_PROD=1\n"
 	@printf "Seed (new, .env-driven via poetry, works for Floci and real AWS)\n"
 	@printf "  make seed-install      Install seeder deps (poetry -C $(SEED_DIR) install)\n"
@@ -216,6 +224,12 @@ rebuild: validate-stack
 	@$(MAKE) --no-print-directory $(STACK)-rebuild SERVICE="$(SERVICE)"
 
 prod-up: validate-env ensure-prod-env guard-prod network check-database-url
+	@if [ "$(ENV)" = "floci" ]; then \
+		if ! curl -fsS "$(FLOCI_ENDPOINT)/_localstack/health" >/dev/null 2>&1; then \
+			echo "Refusing: emulator not running at $(FLOCI_ENDPOINT) — run 'make floci-up' first (standalone, not part of prod)."; \
+			exit 1; \
+		fi; \
+	fi
 	@if [ "$(WITH_INFRA)" = "1" ]; then \
 		if [ "$(ENV)" = "prod" ] && [ "$(CONFIRM_PROD)" != "1" ]; then echo "Refusing: ENV=prod WITH_INFRA=1 needs CONFIRM_PROD=1"; exit 1; fi; \
 		$(MAKE) --no-print-directory tf-apply ENV="$(ENV)" CONFIRM_PROD="$(CONFIRM_PROD)"; \
@@ -235,14 +249,22 @@ prod-up: validate-env ensure-prod-env guard-prod network check-database-url
 		$(PROD_COMPOSE) up -d; \
 	fi
 
-prod-down:
+prod-down: validate-env
 	$(PROD_COMPOSE) down --remove-orphans
+	@if [ "$(WITH_INFRA)" = "1" ]; then \
+		if [ "$(ENV)" = "prod" ] && [ "$(CONFIRM_PROD)" != "1" ]; then echo "Refusing: ENV=prod WITH_INFRA=1 needs CONFIRM_PROD=1"; exit 1; fi; \
+		$(MAKE) --no-print-directory tf-destroy ENV="$(ENV)" CONFIRM_PROD="$(CONFIRM_PROD)"; \
+	fi
 
 prod-logs:
 	$(PROD_COMPOSE) logs -f $(SERVICE_ARGS)
 
-prod-clean:
+prod-clean: validate-env
 	$(PROD_COMPOSE) down -v --remove-orphans
+	@if [ "$(WITH_INFRA)" = "1" ]; then \
+		if [ "$(ENV)" = "prod" ] && [ "$(CONFIRM_PROD)" != "1" ]; then echo "Refusing: ENV=prod WITH_INFRA=1 needs CONFIRM_PROD=1"; exit 1; fi; \
+		$(MAKE) --no-print-directory tf-destroy ENV="$(ENV)" CONFIRM_PROD="$(CONFIRM_PROD)"; \
+	fi
 
 prod-build: ensure-prod-env
 	$(PROD_COMPOSE) build $(SERVICE_ARGS)
@@ -413,6 +435,50 @@ floci-seed:
 	put_secret "detectai/workers/secrets" "{\"PADDLE_API_KEY\":\"$$PADDLE_KEY\",\"PADDLE_ENVIRONMENT\":\"sandbox\"}"; \
 	put_secret "detectai/inference/secrets" "{\"API_KEY\":\"$$AI_KEY\"}"; \
 	echo "Done. OAuth/Paddle/NextAuth mirrored from local .env; INTERNAL/AI keys in sync."
+
+# Standalone Floci emulator daemon (plain docker CLI, named volume for persistence).
+# Never called by prod-up/prod-down: prod only health-checks $(FLOCI_ENDPOINT).
+#   make floci-up    -> start daemon (no-op if already healthy), volume $(FLOCI_VOLUME) persists
+#   make floci-down  -> stop/remove daemon container only, keep volume
+#   make floci-clean -> down + remove volume (fresh emulator)
+floci-up:
+	@if [ -z "$(FLOCI_VOLUME)" ]; then echo "Refusing: FLOCI_VOLUME must not be empty."; exit 1; fi
+	@if curl -fsS "$(FLOCI_ENDPOINT)/_localstack/health" >/dev/null 2>&1; then \
+		echo "Floci already running at $(FLOCI_ENDPOINT) (health ok)."; \
+	elif [ -n "$$($(DOCKER_BIN) ps -q -f "name=^/$(FLOCI_CONTAINER)$$" 2>/dev/null)" ]; then \
+		echo "Floci container $(FLOCI_CONTAINER) is running, waiting for health at $(FLOCI_ENDPOINT)..."; \
+	elif $(DOCKER_BIN) inspect $(FLOCI_CONTAINER) >/dev/null 2>&1; then \
+		echo "Starting stopped Floci container $(FLOCI_CONTAINER) (volume $(FLOCI_VOLUME) reattached)..."; \
+		$(DOCKER_BIN) start $(FLOCI_CONTAINER); \
+	else \
+		echo "Starting Floci $(FLOCI_IMAGE) on :$(FLOCI_PORT) (volume $(FLOCI_VOLUME))..."; \
+		$(DOCKER_BIN) volume create $(FLOCI_VOLUME) >/dev/null; \
+		$(DOCKER_BIN) network inspect $(FLOCI_NETWORK) >/dev/null 2>&1 || $(DOCKER_BIN) network create $(FLOCI_NETWORK); \
+		$(DOCKER_BIN) run -d --name $(FLOCI_CONTAINER) -p $(FLOCI_PORT):4566 \
+			-v /var/run/docker.sock:/var/run/docker.sock \
+			-v $(FLOCI_VOLUME):/app/data \
+			-e FLOCI_STORAGE_PERSISTENT_PATH=/app/data \
+			--network $(FLOCI_NETWORK) $(FLOCI_IMAGE); \
+	fi
+	@for i in $$(seq 1 30); do \
+		if curl -fsS "$(FLOCI_ENDPOINT)/_localstack/health" >/dev/null 2>&1; then \
+			echo "Floci healthy at $(FLOCI_ENDPOINT)."; break; \
+		fi; \
+		if [ "$$i" = "30" ]; then echo "Floci did not become healthy — see: $(DOCKER_BIN) logs $(FLOCI_CONTAINER)"; exit 1; fi; \
+		sleep 2; \
+	done
+
+floci-down:
+	@if $(DOCKER_BIN) inspect $(FLOCI_CONTAINER) >/dev/null 2>&1; then \
+		$(DOCKER_BIN) stop $(FLOCI_CONTAINER) >/dev/null 2>&1 || true; \
+		$(DOCKER_BIN) rm $(FLOCI_CONTAINER) >/dev/null 2>&1 || true; \
+		echo "Floci daemon stopped (volume $(FLOCI_VOLUME) kept)."; \
+	else \
+		echo "Floci daemon not present (nothing to stop; volume $(FLOCI_VOLUME) kept)."; \
+	fi
+
+floci-clean: floci-down
+	@$(DOCKER_BIN) volume rm $(FLOCI_VOLUME) 2>/dev/null && echo "Floci volume $(FLOCI_VOLUME) removed." || echo "Floci volume $(FLOCI_VOLUME) already absent."
 
 # Verify the emulator has the TF-managed infra + seeded secrets.
 floci-verify:

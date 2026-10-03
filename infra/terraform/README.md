@@ -102,6 +102,9 @@ secrets (`detectai/web|workers|gateway|inference/secrets`). Seed those from
 Python seeder — works for Floci and real AWS (guarded):
 
 ```bash
+# Emulator daemon (standalone, not part of prod; named volume persists state)
+make floci-up              # start daemon (no-op if already healthy)
+make floci-down            # stop daemon, keep volume
 # New flow (Floci, .env-driven)
 cp infra/docker/prod/.env.example infra/docker/prod/.env   # fill your 7 real keys: GITHUB_*, GOOGLE_*, PADDLE_*
 make prod-floci-bootstrap   # = make tf-apply ENV=floci + make seed-floci + DATABASE_URL hint + verify
@@ -115,6 +118,7 @@ make seed-floci-dry         # preview without writing
 make floci-verify           # check emulator APIs + all 4 app secrets exist
 make prod-up-floci          # start prod stack on FLOCI_NETWORK (default documents_default)
 make prod-config-floci      # render merged prod + Floci compose config
+make prod-down ENV=floci WITH_INFRA=1  # full cleanup: apps + tf-destroy (daemon/volume via floci-down/clean)
 
 # Real AWS (same file, explicit guard)
 make seed-aws               # reads same .env -> real AWS (--confirm-prod required)
