@@ -104,8 +104,8 @@ help:
 	@printf "  make tf-validate       init + validate + test (mocked)\n"
 	@printf "  make tf-test           terraform test (unit, mocked)\n"
 	@printf "  make tf-plan [ENV=x]   plan with envs/<ENV>.tfvars\n"
-	@printf "  make tf-apply [ENV=x]  apply with envs/<ENV>.tfvars (prod needs CONFIRM_PROD=1)\n"
-	@printf "  make tf-destroy [ENV=x] destroy (prod needs CONFIRM_PROD=1)\n"
+	@printf "  make tf-apply [ENV=x]  apply with envs/<ENV>.tfvars (prod needs CONFIRM_PROD=1; answer yes when prompted)\n"
+	@printf "  make tf-destroy [ENV=x] destroy (prod needs CONFIRM_PROD=1; answer yes when prompted)\n"
 	@printf "  make tf-plan-local     alias: tf-plan ENV=floci\n"
 	@printf "  make tf-apply-local    alias: tf-apply ENV=floci\n"
 	@printf "  make tf-destroy-local  alias: tf-destroy ENV=floci\n\n"
@@ -320,29 +320,32 @@ shell-web:
 TF_DIR := infra/terraform
 TF_VARS := envs/$(ENV).tfvars
 TF_BACKEND := $(if $(filter prod,$(ENV)),backend.prod.hcl,backend.local-s3.hcl)
+# Emulator AWS creds: dummy test/test for floci targets only (shell env wins
+# when already set); empty for prod so real IAM roles/creds are untouched.
+TF_ENV_EXPORT := $(if $(filter floci,$(ENV)),AWS_ACCESS_KEY_ID=$${AWS_ACCESS_KEY_ID:-test} AWS_SECRET_ACCESS_KEY=$${AWS_SECRET_ACCESS_KEY:-test})
 
 tf-fmt:
 	terraform -chdir=$(TF_DIR) fmt -check -recursive -diff
 
 tf-validate:
-	terraform -chdir=$(TF_DIR) init -backend=false
-	terraform -chdir=$(TF_DIR) validate
-	terraform -chdir=$(TF_DIR) test
+	$(TF_ENV_EXPORT) terraform -chdir=$(TF_DIR) init -backend=false
+	$(TF_ENV_EXPORT) terraform -chdir=$(TF_DIR) validate
+	$(TF_ENV_EXPORT) terraform -chdir=$(TF_DIR) test
 
 tf-test:
 	terraform -chdir=$(TF_DIR) test
 
 tf-plan: validate-env check-tf-backend
-	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=$(TF_BACKEND)
-	terraform -chdir=$(TF_DIR) plan -var-file=$(TF_VARS)
+	$(TF_ENV_EXPORT) terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=$(TF_BACKEND)
+	$(TF_ENV_EXPORT) terraform -chdir=$(TF_DIR) plan -var-file=$(TF_VARS)
 
 tf-apply: validate-env guard-confirm-prod check-tf-backend
-	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=$(TF_BACKEND)
-	terraform -chdir=$(TF_DIR) apply -var-file=$(TF_VARS)
+	$(TF_ENV_EXPORT) terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=$(TF_BACKEND)
+	$(TF_ENV_EXPORT) terraform -chdir=$(TF_DIR) apply -var-file=$(TF_VARS)
 
 tf-destroy: validate-env guard-confirm-prod check-tf-backend
-	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=$(TF_BACKEND)
-	terraform -chdir=$(TF_DIR) destroy -var-file=$(TF_VARS)
+	$(TF_ENV_EXPORT) terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=$(TF_BACKEND)
+	$(TF_ENV_EXPORT) terraform -chdir=$(TF_DIR) destroy -var-file=$(TF_VARS)
 
 tf-plan-local:
 	@$(MAKE) --no-print-directory tf-plan ENV=floci
@@ -482,7 +485,7 @@ floci-clean: floci-down
 
 # Verify the emulator has the TF-managed infra + seeded secrets.
 floci-verify:
-	@EP="$(FLOCI_ENDPOINT)"; R="$(AWS_REGION)"; \
+	@export AWS_ACCESS_KEY_ID="$${AWS_ACCESS_KEY_ID:-test}"; export AWS_SECRET_ACCESS_KEY="$${AWS_SECRET_ACCESS_KEY:-test}"; EP="$(FLOCI_ENDPOINT)"; R="$(AWS_REGION)"; \
 	echo "== emulator health: $$EP"; \
 	curl -fsS "$$EP/_localstack/health" | head -c 400; echo; \
 	echo "== rds clusters:"; \
