@@ -15,7 +15,7 @@ graph LR
     
     subgraph "Pipeline"
         Validate[fmt / validate / test]
-        Plan[plan floci-local]
+        Plan[plan floci]
     end
     
     Push --> Validate
@@ -53,7 +53,7 @@ graph TB
         Checkout2[Checkout]
         Setup2[Setup Terraform 1.9.8]
         Init2[terraform init]
-        Plan[terraform plan floci-local]
+        Plan[terraform plan floci]
     end
     
     Checkout1 --> Setup1
@@ -104,8 +104,8 @@ steps:
   - name: Init
     run: terraform init
 
-  - name: Plan (floci-local)
-    run: terraform plan -var-file=envs/floci-local.tfvars -input=false -detailed-exitcode
+  - name: Plan (floci)
+    run: terraform plan -var-file=envs/floci.tfvars -input=false -detailed-exitcode
 ```
 
 **What it does:**
@@ -170,7 +170,7 @@ terraform test
 ```bash
 # Start Floci/LocalStack first
 # Then plan
-make tf-plan-local
+make tf-plan ENV=floci
 ```
 
 ### Run Service Tests
@@ -192,7 +192,7 @@ npm test
 1. **Format your code**: `make tf-fmt`
 2. **Validate**: `make tf-validate`
 3. **Test locally**: `make tf-test`
-4. **Plan against emulator**: `make tf-plan-local`
+4. **Plan against emulator**: `make tf-plan ENV=floci`
 
 ### Pull Request Checklist
 

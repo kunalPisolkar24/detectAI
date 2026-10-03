@@ -5,7 +5,7 @@ Manages core stateful services as code: **RDS Aurora Postgres**, **DocumentDB**,
 ## Architecture & Clean Design
 
 - **One module per bounded context** (`modules/postgres`, `modules/docdb`, `modules/elasticache`, `modules/mq`) — single responsibility, validated inputs, descriptive outputs.
-- **Env separation via tfvars** (`envs/floci-local.tfvars`, `envs/floci.tfvars`, `envs/prod.tfvars`) — only endpoint, sizing, TLS diverge; same modules, same secret contract.
+- **Env separation via tfvars** (`envs/floci.tfvars`, `envs/prod.tfvars`) — only endpoint, sizing, TLS diverge; same modules, same secret contract.
 - **Secret contract is the API**: `detectai/pg/urls` → `DATABASE_URL`, `detectai/docdb/urls` → `MONGO_URI`, `detectai/redis/{chat,events,users}/urls`, `detectai/mq/urls` → `RABBITMQ_URL`. See `outputs.tf` for full list.
 - **Provider is environment-aware**: `emulator_endpoint` (preferred) or legacy `floci_endpoint` — `null/empty = real AWS` (real creds, no skips), `http://localhost:4566 = Floci/LocalStack` (test creds, `skip_*`, `s3_use_path_style`, endpoint overrides). Works with both Floci and LocalStack on `localhost:4566`.
 - **High testability**: `terraform fmt/validate`, `tests/*.tftest.hcl` with `mock_provider`, and `localhost:4566` integration plan/apply without touching real AWS.
@@ -25,8 +25,8 @@ cd infra/terraform
 terraform init
 terraform fmt -check
 terraform validate
-terraform plan -var-file=envs/floci-local.tfvars
-terraform apply -var-file=envs/floci-local.tfvars
+terraform plan -var-file=envs/floci.tfvars
+terraform apply -var-file=envs/floci.tfvars
 
 # verify via emulator API
 aws --endpoint-url http://localhost:4566 rds describe-db-clusters --query 'DBClusters[].DBClusterIdentifier'
@@ -39,7 +39,7 @@ aws --endpoint-url http://localhost:4566 secretsmanager list-secrets --query 'Se
 # mongosh "$(terraform output -raw docdb_mongo_uri)" --eval "db.runCommand({ping:1})"
 # redis-cli -h $(terraform output -raw redis_chat_primary_address) -p $(terraform output -raw redis_chat_port) ping
 
-terraform destroy -var-file=envs/floci-local.tfvars
+terraform destroy -var-file=envs/floci.tfvars
 ```
 
 ## State Backends
@@ -48,8 +48,8 @@ terraform destroy -var-file=envs/floci-local.tfvars
 - **Emulator S3 (smoke-test prod flow locally)** — ephemeral, proves the switch works:
   ```bash
   aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-tfstate-local --region ap-south-1 || true
-  terraform init -reconfigure -backend-config=backend.local-s3.hcl -var-file=envs/floci-local.tfvars
-  terraform plan -var-file=envs/floci-local.tfvars
+  terraform init -reconfigure -backend-config=backend.local-s3.hcl -var-file=envs/floci.tfvars
+  terraform plan -var-file=envs/floci.tfvars
   ```
   See `backend.local-s3.hcl` (endpoint `http://localhost:4566`, `use_path_style=true`, skips).
 - **Real AWS prod (later)**: copy `backend.prod.hcl.example` → `backend.prod.hcl`, set bucket, then:
@@ -62,8 +62,7 @@ terraform destroy -var-file=envs/floci-local.tfvars
 
 | File | Endpoint | Notable |
 |------|----------|---------|
-| `envs/floci-local.tfvars` | `http://localhost:4566` | `sslmode=disable`, `recovery_window=0`, `cache.t3.micro`, `SINGLE_INSTANCE` |
-| `envs/floci.tfvars` | `https://4566-...cloudspaces.litng.ai` | same as local, remote host |
+| `envs/floci.tfvars` | `http://localhost:4566` | `sslmode=disable`, `recovery_window=0`, `cache.t3.micro`, `SINGLE_INSTANCE` |
 | `envs/prod.tfvars` | `null` (real AWS) | `sslmode=require`, `recovery_window=30`, `cache.r6g.large / cache.t4g.small`, `CLUSTER_MULTI_AZ`, TLS true, snapshot 7/1 |
 
 `emulator_endpoint` is preferred; `floci_endpoint` remains as deprecated alias — locals coalesce them and treat `""` as `null` (real AWS). All identifiers, engine versions, `db_sslmode`, `secret_recovery_window`, etc. have `validation` blocks (see `variables.tf` and `modules/*/variables.tf`).
@@ -82,17 +81,16 @@ terraform destroy -var-file=envs/floci-local.tfvars
   ```bash
   terraform test
   ```
-- **Integration (emulator)**: `terraform plan/apply -var-file=envs/floci-local.tfvars` against `localhost:4566` then `aws --endpoint-url http://localhost:4566 …` + data-plane checks, then `destroy`.
-- **CI**: `.github/workflows/terraform.yaml` runs `fmt → init → validate → test → plan (floci-local)` on changes to `infra/terraform/**`. No `apply` in CI, no real AWS.
+- **Integration (emulator)**: `terraform plan/apply -var-file=envs/floci.tfvars` against `localhost:4566` then `aws --endpoint-url http://localhost:4566 …` + data-plane checks, then `destroy`.
+- **CI**: `.github/workflows/terraform.yaml` runs `fmt → init → validate → test → plan (floci)` on changes to `infra/terraform/**`. No `apply` in CI, no real AWS.
 
 ## Makefile (from repo root)
 
 ```bash
 make tf-fmt            # terraform fmt -check
 make tf-validate       # init + validate + test
-make tf-plan-local     # plan with envs/floci-local.tfvars
-make tf-apply-local    # apply with envs/floci-local.tfvars
-make tf-destroy-local  # destroy with envs/floci-local.tfvars
+make tf-plan ENV=floci # plan with envs/floci.tfvars (prod needs CONFIRM_PROD=1 for apply/destroy)
+make tf-apply ENV=prod CONFIRM_PROD=1  # real AWS apply
 make tf-test           # terraform test (unit, mocked)
 ```
 
@@ -106,10 +104,13 @@ Python seeder — works for Floci and real AWS (guarded):
 ```bash
 # New flow (Floci, .env-driven)
 cp infra/docker/prod/.env.example infra/docker/prod/.env   # fill your 7 real keys: GITHUB_*, GOOGLE_*, PADDLE_*
-make prod-floci-bootstrap   # = make tf-apply-local + make seed-floci + DATABASE_URL hint + verify
+make prod-floci-bootstrap   # = make tf-apply ENV=floci + make seed-floci + DATABASE_URL hint + verify
 # or manually:
-make tf-apply-local
-make seed-floci             # reads infra/docker/prod/.env -> Floci at FLOCI_ENDPOINT
+make tf-apply ENV=floci
+make seed ENV=floci       # reads infra/docker/prod/.env -> Floci at FLOCI_ENDPOINT
+make prod-up ENV=floci WITH_INFRA=1 WITH_SEED=1  # single command (skip by leaving flags 0)
+# real AWS:
+make prod-up ENV=prod WITH_INFRA=1 WITH_SEED=1 CONFIRM_PROD=1
 make seed-floci-dry         # preview without writing
 make floci-verify           # check emulator APIs + all 4 app secrets exist
 make prod-up-floci          # start prod stack on FLOCI_NETWORK (default documents_default)

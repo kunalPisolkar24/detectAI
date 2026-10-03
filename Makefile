@@ -14,6 +14,14 @@ FLOCI_ENDPOINT ?= http://localhost:4566
 FLOCI_NETWORK ?= documents_default
 AWS_REGION ?= ap-south-1
 
+# Generic prod env: floci (emulator) or prod (real AWS).
+#   ENV=floci -> envs/floci.tfvars + backend.local-s3.hcl + compose.floci.yml
+#   ENV=prod  -> envs/prod.tfvars + backend.prod.hcl + plain compose.yml
+ENV ?= floci
+WITH_INFRA ?= 0
+WITH_SEED ?= 0
+CONFIRM_PROD ?= 0
+
 SEED_FILE ?= $(PROD_ENV)
 SEED_DIR := tools/seed-secrets
 SEED_RUN := poetry -C $(SEED_DIR) run python main.py
@@ -44,22 +52,23 @@ SERVICE_ARGS := $(strip $(SERVICE))
 DETECT_AI_NETWORK := $(strip $(shell awk -F= '/^DETECT_AI_NETWORK=/{print $$2; exit}' $(PROD_ENV) 2>/dev/null))
 DETECT_AI_NETWORK := $(if $(DETECT_AI_NETWORK),$(DETECT_AI_NETWORK),detect-ai-network)
 
-.PHONY: help network validate-stack ensure-local-env ensure-prod-env guard-local guard-prod \
+.PHONY: help network validate-stack validate-env ensure-local-env ensure-prod-env guard-local guard-prod \
+	guard-confirm-prod check-tf-backend check-database-url \
 	up down logs clean build rebuild shell-web \
 	prod-up prod-down prod-logs prod-clean prod-build prod-rebuild prod-config prod-ps prod-migrate \
 	prod-up-floci prod-config-floci \
 	local-up local-down local-logs local-clean local-build local-rebuild local-config local-ps \
-	tf-fmt tf-validate tf-test tf-plan-local tf-apply-local tf-destroy-local floci-seed floci-verify \
-	seed-install seed-floci seed-floci-dry seed-aws seed-dry prod-floci-bootstrap
+	tf-fmt tf-validate tf-test tf-plan tf-apply tf-destroy tf-plan-local tf-apply-local tf-destroy-local floci-seed floci-verify \
+	seed-install seed seed-floci seed-floci-dry seed-aws seed-dry prod-floci-bootstrap
 
 help:
 	@printf "\nDetect AI Docker commands\n\n"
-	@printf "Production\n"
+	@printf "Production (ENV=floci|prod, default floci)\n"
 	@printf "  make up                Start the prod stack\n"
 	@printf "  make down              Stop the prod stack\n"
 	@printf "  make logs [SERVICE=x]  Stream prod logs\n"
 	@printf "  make clean             Stop prod and remove volumes\n"
-	@printf "  make prod-up           Start the prod stack\n"
+	@printf "  make prod-up [ENV=x] [WITH_INFRA=0|1] [WITH_SEED=0|1]  Start prod (+ infra/seed when asked)\n"
 	@printf "  make prod-down         Stop the prod stack\n"
 	@printf "  make prod-logs         Stream prod logs\n"
 	@printf "  make prod-clean        Stop prod and remove volumes\n"
@@ -86,13 +95,16 @@ help:
 	@printf "  make build STACK=local SERVICE=frontend\n"
 	@printf "  make prod-logs SERVICE=worker-analytics\n"
 	@printf "  make local-logs SERVICE=frontend\n\n"
-	@printf "Terraform (infra/terraform, Floci/LocalStack on localhost:4566)\n"
+	@printf "Terraform (infra/terraform, ENV=floci|prod)\n"
 	@printf "  make tf-fmt            Check terraform formatting\n"
 	@printf "  make tf-validate       init + validate + test (mocked)\n"
 	@printf "  make tf-test           terraform test (unit, mocked)\n"
-	@printf "  make tf-plan-local     plan with envs/floci-local.tfvars\n"
-	@printf "  make tf-apply-local    apply with envs/floci-local.tfvars\n"
-	@printf "  make tf-destroy-local  destroy with envs/floci-local.tfvars\n\n"
+	@printf "  make tf-plan [ENV=x]   plan with envs/<ENV>.tfvars\n"
+	@printf "  make tf-apply [ENV=x]  apply with envs/<ENV>.tfvars (prod needs CONFIRM_PROD=1)\n"
+	@printf "  make tf-destroy [ENV=x] destroy (prod needs CONFIRM_PROD=1)\n"
+	@printf "  make tf-plan-local     alias: tf-plan ENV=floci\n"
+	@printf "  make tf-apply-local    alias: tf-apply ENV=floci\n"
+	@printf "  make tf-destroy-local  alias: tf-destroy ENV=floci\n\n"
 	@printf "Floci (FLOCI_ENDPOINT=$(FLOCI_ENDPOINT))\n"
 	@printf "  make floci-seed        Seed app-only secrets Floci doesn't TF-manage (legacy, alias to seed-floci)\n"
 	@printf "  make seed-floci        Seed app secrets from SEED_FILE=$(SEED_FILE) into Floci\n"
@@ -100,10 +112,13 @@ help:
 	@printf "  make seed-aws          Seed app secrets into real AWS (requires --confirm-prod guard)\n"
 	@printf "  make seed-dry          Preview seed against current AWS_ENDPOINT_URL (dry-run)\n"
 	@printf "  make floci-verify      Check emulator APIs + secrets exist\n"
-	@printf "  make prod-floci-bootstrap Bootstrap: tf-apply-local + seed-floci + verify + DATABASE_URL hint\n"
-	@printf "  make prod-up-floci     Start prod stack attached to FLOCI_NETWORK\n"
-	@printf "  make prod-config-floci Render prod+Floci merged compose config\n"
+	@printf "  make prod-floci-bootstrap Bootstrap: tf-apply ENV=floci + seed-floci + verify + DATABASE_URL hint\n"
+	@printf "  make prod-up-floci     Alias: prod-up ENV=floci (attached to FLOCI_NETWORK)\n"
+	@printf "  make prod-config-floci Alias: prod-config ENV=floci\n"
+	@printf "  make seed              Seed for ENV (floci -> seed-floci, prod -> seed-aws)\n"
 	@printf "  ai-service GPU: auto (host GPU + docker nvidia runtime = gpu, else cpu); override with GPU=1 / GPU=0\n\n"
+	@printf "Single command: make prod-up ENV=floci WITH_INFRA=1 WITH_SEED=1  (skip steps by leaving flags 0)\n"
+	@printf "Prod AWS: make prod-up ENV=prod WITH_INFRA=1 WITH_SEED=1 CONFIRM_PROD=1\n"
 	@printf "Seed (new, .env-driven via poetry, works for Floci and real AWS)\n"
 	@printf "  make seed-install      Install seeder deps (poetry -C $(SEED_DIR) install)\n"
 	@printf "  make seed-floci SEED_FILE=$(SEED_FILE) FLOCI_ENDPOINT=$(FLOCI_ENDPOINT) AWS_REGION=$(AWS_REGION)\n"
@@ -153,6 +168,39 @@ validate-stack:
 		exit 1; \
 	fi
 
+validate-env:
+	@if [ "$(ENV)" != "floci" ] && [ "$(ENV)" != "prod" ]; then \
+		echo "Invalid ENV '$(ENV)'. Use ENV=floci or ENV=prod."; \
+		exit 1; \
+	fi
+	@if [ "$(WITH_INFRA)" != "0" ] && [ "$(WITH_INFRA)" != "1" ]; then \
+		echo "Invalid WITH_INFRA '$(WITH_INFRA)'. Use 0 or 1."; exit 1; \
+	fi
+	@if [ "$(WITH_SEED)" != "0" ] && [ "$(WITH_SEED)" != "1" ]; then \
+		echo "Invalid WITH_SEED '$(WITH_SEED)'. Use 0 or 1."; exit 1; \
+	fi
+
+guard-confirm-prod:
+	@if [ "$(ENV)" = "prod" ] && [ "$(CONFIRM_PROD)" != "1" ]; then \
+		echo "Refusing: ENV=prod needs CONFIRM_PROD=1 (destructive/real-AWS action)."; \
+		exit 1; \
+	fi
+
+check-tf-backend:
+	@if [ "$(ENV)" = "prod" ] && [ ! -f "$(TF_DIR)/backend.prod.hcl" ]; then \
+		echo "Missing $(TF_DIR)/backend.prod.hcl. Copy from backend.prod.hcl.example and fill bucket."; \
+		exit 1; \
+	fi
+	@if [ "$(ENV)" = "floci" ] && [ ! -f "$(TF_DIR)/backend.local-s3.hcl" ]; then \
+		echo "Missing $(TF_DIR)/backend.local-s3.hcl."; exit 1; \
+	fi
+
+check-database-url:
+	@if grep -q "REPLACE_ME\|REFER_TF_OUTPUT" "$(PROD_ENV)" 2>/dev/null; then \
+		echo "Refusing: DATABASE_URL still has placeholders in $(PROD_ENV). Fill from terraform output (see make prod-floci-bootstrap hint)."; \
+		exit 1; \
+	fi
+
 up: prod-up
 
 down: prod-down
@@ -167,9 +215,25 @@ build: validate-stack
 rebuild: validate-stack
 	@$(MAKE) --no-print-directory $(STACK)-rebuild SERVICE="$(SERVICE)"
 
-prod-up: ensure-prod-env guard-prod network
-	@echo "ai-service mode: $(GPU_MODE) (GPU=1 force GPU, GPU=0 force CPU)"
-	$(PROD_COMPOSE) up -d
+prod-up: validate-env ensure-prod-env guard-prod network check-database-url
+	@if [ "$(WITH_INFRA)" = "1" ]; then \
+		if [ "$(ENV)" = "prod" ] && [ "$(CONFIRM_PROD)" != "1" ]; then echo "Refusing: ENV=prod WITH_INFRA=1 needs CONFIRM_PROD=1"; exit 1; fi; \
+		$(MAKE) --no-print-directory tf-apply ENV="$(ENV)" CONFIRM_PROD="$(CONFIRM_PROD)"; \
+	fi
+	@if [ "$(WITH_SEED)" = "1" ]; then \
+		if [ "$(ENV)" = "prod" ] && [ "$(CONFIRM_PROD)" != "1" ]; then echo "Refusing: ENV=prod WITH_SEED=1 needs CONFIRM_PROD=1"; exit 1; fi; \
+		$(MAKE) --no-print-directory seed ENV="$(ENV)"; \
+	fi
+	@echo "ai-service mode: $(GPU_MODE) (GPU=1 force GPU, GPU=0 force CPU) ENV=$(ENV)"
+	@if [ "$(ENV)" = "floci" ]; then \
+		OUT="$$($(PROD_COMPOSE_FLOCI) up -d 2>&1)"; ST=$$?; echo "$$OUT"; \
+		if [ $$ST -ne 0 ] && echo "$$OUT" | grep -q "address already in use"; then \
+			echo "transient host-port bind race after down; waiting 10s and retrying once..."; \
+			sleep 10; $(PROD_COMPOSE_FLOCI) up -d; \
+		elif [ $$ST -ne 0 ]; then exit $$ST; fi; \
+	else \
+		$(PROD_COMPOSE) up -d; \
+	fi
 
 prod-down:
 	$(PROD_COMPOSE) down --remove-orphans
@@ -186,30 +250,22 @@ prod-build: ensure-prod-env
 prod-rebuild: ensure-prod-env
 	$(PROD_COMPOSE) build --no-cache $(SERVICE_ARGS)
 
-prod-config: ensure-prod-env
-	$(PROD_COMPOSE) config
+prod-config: validate-env ensure-prod-env
+	@if [ "$(ENV)" = "floci" ]; then $(PROD_COMPOSE_FLOCI) config; else $(PROD_COMPOSE) config; fi
 
 prod-ps:
 	$(PROD_COMPOSE) ps
 
-prod-migrate: ensure-prod-env guard-prod network
+prod-migrate: ensure-prod-env guard-prod network check-database-url
 	$(PROD_COMPOSE) run --rm db-migrate
 
-# Floci variants: same project, plus the emulator backing network.
+# Floci aliases: same project, plus the emulator backing network.
 # down/logs/ps/clean work with the base targets (project name is identical).
-# The single retry below covers Docker's async host-port release right after
-# `down`: the first `up` can hit "address already in use" with nothing actually
-# bound (verified empty); anything else still fails fast.
-prod-up-floci: ensure-prod-env guard-prod network
-	@echo "ai-service mode: $(GPU_MODE) (GPU=1 force GPU, GPU=0 force CPU)"
-	@OUT="$$($(PROD_COMPOSE_FLOCI) up -d 2>&1)"; ST=$$?; echo "$$OUT"; \
-	if [ $$ST -ne 0 ] && echo "$$OUT" | grep -q "address already in use"; then \
-		echo "transient host-port bind race after down; waiting 10s and retrying once..."; \
-		sleep 10; $(PROD_COMPOSE_FLOCI) up -d; \
-	elif [ $$ST -ne 0 ]; then exit $$ST; fi
+prod-up-floci:
+	@$(MAKE) --no-print-directory prod-up ENV=floci
 
-prod-config-floci: ensure-prod-env
-	$(PROD_COMPOSE_FLOCI) config
+prod-config-floci:
+	@$(MAKE) --no-print-directory prod-config ENV=floci
 
 local-up: ensure-local-env guard-local
 	$(LOCAL_COMPOSE) up -d
@@ -238,9 +294,10 @@ local-ps:
 shell-web:
 	$(PROD_COMPOSE) exec frontend /bin/sh
 
-# Terraform — floci/localstack on localhost:4566, no AWS
+# Terraform — generic by ENV (floci = emulator, prod = real AWS)
 TF_DIR := infra/terraform
-TF_VARS_LOCAL := envs/floci-local.tfvars
+TF_VARS := envs/$(ENV).tfvars
+TF_BACKEND := $(if $(filter prod,$(ENV)),backend.prod.hcl,backend.local-s3.hcl)
 
 tf-fmt:
 	terraform -chdir=$(TF_DIR) fmt -check -recursive -diff
@@ -253,33 +310,51 @@ tf-validate:
 tf-test:
 	terraform -chdir=$(TF_DIR) test
 
+tf-plan: validate-env check-tf-backend
+	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=$(TF_BACKEND)
+	terraform -chdir=$(TF_DIR) plan -var-file=$(TF_VARS)
+
+tf-apply: validate-env guard-confirm-prod check-tf-backend
+	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=$(TF_BACKEND)
+	terraform -chdir=$(TF_DIR) apply -var-file=$(TF_VARS)
+
+tf-destroy: validate-env guard-confirm-prod check-tf-backend
+	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=$(TF_BACKEND)
+	terraform -chdir=$(TF_DIR) destroy -var-file=$(TF_VARS)
+
 tf-plan-local:
-	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backend.local-s3.hcl
-	terraform -chdir=$(TF_DIR) plan -var-file=$(TF_VARS_LOCAL)
+	@$(MAKE) --no-print-directory tf-plan ENV=floci
 
 tf-apply-local:
-	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backend.local-s3.hcl
-	terraform -chdir=$(TF_DIR) apply -var-file=$(TF_VARS_LOCAL)
+	@$(MAKE) --no-print-directory tf-apply ENV=floci
 
 tf-destroy-local:
-	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backend.local-s3.hcl
-	terraform -chdir=$(TF_DIR) destroy -var-file=$(TF_VARS_LOCAL)
+	@$(MAKE) --no-print-directory tf-destroy ENV=floci
 
 # ---------------------------------------------------------------------------
 # Seed app-only secrets (Floci + real AWS) — .env-driven via Python
 # ---------------------------------------------------------------------------
 # New (recommended): reads SEED_FILE (default infra/docker/prod/.env, gitignored)
 # allowlist-only, shared-key sync, dry-run, guarded real-AWS write.
+#   make seed ENV=floci|prod -> Floci at FLOCI_ENDPOINT or real AWS (needs CONFIRM_PROD=1)
 #   make seed-floci          -> Floci/LocalStack at FLOCI_ENDPOINT
 #   make seed-floci-dry      -> preview
 #   make seed-aws            -> real AWS (needs --confirm-prod)
-#   make prod-floci-bootstrap-> tf-apply-local + seed-floci + DATABASE_URL hint
+#   make prod-floci-bootstrap-> tf-apply ENV=floci + seed-floci + DATABASE_URL hint
 #
 # Legacy floci-seed (bash, mirrors infra/docker/local/.env) kept as alias.
 # ---------------------------------------------------------------------------
 
 seed-install:
 	@poetry -C $(SEED_DIR) install --no-interaction
+
+seed: validate-env ensure-prod-env
+	@if [ "$(ENV)" = "prod" ]; then \
+		if [ "$(CONFIRM_PROD)" != "1" ]; then echo "Refusing: seed ENV=prod needs CONFIRM_PROD=1"; exit 1; fi; \
+		$(MAKE) --no-print-directory seed-aws; \
+	else \
+		$(MAKE) --no-print-directory seed-floci; \
+	fi
 
 seed-floci: ensure-prod-env
 	@$(SEED_RUN) --env-file "$(SEED_FILE)" --endpoint-url "$(FLOCI_ENDPOINT)" --region "$(AWS_REGION)" $(ARGS)
