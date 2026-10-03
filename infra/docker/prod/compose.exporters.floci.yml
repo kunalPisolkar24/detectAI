@@ -72,7 +72,7 @@ services:
 
   rabbitmq-exporter:
     container_name: detect_ai_rabbitmq_exporter
-    image: kbudde/rabbitmq-exporter:1.4.0
+    image: kbudde/rabbitmq-exporter:1.0.0
     restart: always
     environment:
       - RABBIT_URL=${RABBITMQ_URL:-}
