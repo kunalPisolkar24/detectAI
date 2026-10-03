@@ -35,9 +35,17 @@ resource "newrelic_workflow" "email_all" {
     type = "FILTER"
 
     predicate {
-      attribute = "policyName"
-      operator  = "CONTAINS"
-      values    = ["detectai-"]
+      attribute = "labels.policyIds"
+      operator  = "EXACTLY_MATCHES"
+      values = [
+        newrelic_alert_policy.web.id,
+        newrelic_alert_policy.payment_gateway.id,
+        newrelic_alert_policy.workers.id,
+        newrelic_alert_policy.inference.id,
+        newrelic_alert_policy.document_parser.id,
+        newrelic_alert_policy.chats.id,
+        newrelic_alert_policy.pipeline.id,
+      ]
     }
   }
 
