@@ -41,7 +41,10 @@ resource "aws_mq_broker" "this" {
 
   lifecycle {
     # Emulator's UpdateBroker does not handle tags/config changes well; avoid spurious updates.
-    ignore_changes = [tags, configuration]
+    # Floci also drops storage_type/logs/maintenance-window on read, which would
+    # otherwise force a perpetual UpdateBroker that Floci rejects (UnknownOperation).
+    # Real AWS still applies these at creation; reads match there so ignores are no-ops.
+    ignore_changes = [tags, configuration, storage_type, logs, maintenance_window_start_time]
   }
 
   maintenance_window_start_time {

@@ -197,9 +197,16 @@ prod-migrate: ensure-prod-env guard-prod network
 
 # Floci variants: same project, plus the emulator backing network.
 # down/logs/ps/clean work with the base targets (project name is identical).
+# The single retry below covers Docker's async host-port release right after
+# `down`: the first `up` can hit "address already in use" with nothing actually
+# bound (verified empty); anything else still fails fast.
 prod-up-floci: ensure-prod-env guard-prod network
 	@echo "ai-service mode: $(GPU_MODE) (GPU=1 force GPU, GPU=0 force CPU)"
-	$(PROD_COMPOSE_FLOCI) up -d
+	@OUT="$$($(PROD_COMPOSE_FLOCI) up -d 2>&1)"; ST=$$?; echo "$$OUT"; \
+	if [ $$ST -ne 0 ] && echo "$$OUT" | grep -q "address already in use"; then \
+		echo "transient host-port bind race after down; waiting 10s and retrying once..."; \
+		sleep 10; $(PROD_COMPOSE_FLOCI) up -d; \
+	elif [ $$ST -ne 0 ]; then exit $$ST; fi
 
 prod-config-floci: ensure-prod-env
 	$(PROD_COMPOSE_FLOCI) config
