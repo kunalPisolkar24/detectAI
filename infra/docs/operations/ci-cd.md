@@ -168,7 +168,8 @@ terraform test
 ### Plan Against Emulator
 
 ```bash
-# Start Floci/LocalStack first
+# Start the emulator daemon first (standalone, not part of prod)
+make floci-up
 # Then plan
 make tf-plan ENV=floci
 ```
@@ -210,7 +211,7 @@ npm test
 | `fmt check failed` | Code not formatted | Run `terraform fmt -recursive` |
 | `validation failed` | Invalid configuration | Check `variables.tf` constraints |
 | `test failed` | Unit test error | Fix the failing test |
-| `plan failed` | Emulator not running | Start Floci/LocalStack |
+| `plan failed` | Emulator not running | `make floci-up` |
 
 ## Pipeline Architecture
 

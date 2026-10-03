@@ -2,7 +2,7 @@
 #
 # Usage (from repo root), Floci-first (new .env-driven flow):
 #   1. cp infra/docker/prod/.env.example infra/docker/prod/.env  # fill 7 real keys: GITHUB_*, GOOGLE_*, PADDLE_*
-#   2. Boot emulator: Floci/LocalStack on http://localhost:4566
+#   2. Boot emulator: make floci-up (standalone daemon on http://localhost:4566)
 #   3. make prod-floci-bootstrap   # = terraform apply + seed from .env + verify + DATABASE_URL hint
 #      # or manually: make tf-apply ENV=floci && make seed ENV=floci && make floci-verify
 #   4. Fill DATABASE_URL* in infra/docker/prod/.env from `terraform output -raw database_url`

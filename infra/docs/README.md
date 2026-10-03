@@ -121,16 +121,22 @@ make local-up          # Start local stack
 make local-down        # Stop local stack
 make local-logs        # View logs
 
-# Production
-make prod-up           # Start prod stack
-make prod-down         # Stop prod stack
+# Production (ENV=floci|prod, default floci)
+make prod-up ENV=floci WITH_INFRA=1 WITH_SEED=1  # Start prod (+ infra/seed)
+make prod-down ENV=floci WITH_INFRA=1            # Stop prod (+ tf-destroy)
+make prod-logs         # View logs
+
+# Emulator daemon (standalone, not part of prod)
+make floci-up          # Start daemon (named volume persists state)
+make floci-down        # Stop daemon, keep volume
+make floci-clean       # Stop daemon and remove volume
 
 # Terraform
-make tf-apply-local    # Apply Terraform locally
-make tf-plan-local     # Plan Terraform locally
+make tf-plan ENV=floci    # Plan with envs/floci.tfvars (prod needs CONFIRM_PROD=1 for apply/destroy)
+make tf-apply ENV=floci   # Apply (floci injects test/test creds automatically)
 
 # Secrets
-make seed-floci        # Seed secrets to emulator
+make seed ENV=floci    # Seed secrets to emulator (floci -> seed-floci, prod -> seed-aws)
 make floci-verify      # Verify emulator state
 ```
 
