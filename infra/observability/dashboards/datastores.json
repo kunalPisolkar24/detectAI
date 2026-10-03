@@ -1,0 +1,139 @@
+{
+  "name": "detectai-datastores (${environment})",
+  "description": "Postgres, DocDB/Mongo, 3x Redis, MQ RabbitMQ + collector pipeline. Floci = exporter sidecars, prod = CloudWatch (link pending).",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Datastores + pipeline",
+      "description": "Client-side spans plus exporter metrics on Floci, CloudWatch on prod",
+      "widgets": [
+        {
+          "title": "",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "## Datastores + pipeline (`${environment}`)\n**Floci:** collector scrapes `postgres-exporter`, `3x redis-exporter` (users 6379 / chat 6380 / events 6381), `mongodb-exporter`, `rabbitmq-exporter`. **Prod:** New Relic AWS CloudWatch integration (link account, enable RDS/DocDB/ElastiCache/MQ) — panels with `provider = CloudWatch` populate after linking. Client-span panels work in both."
+          }
+        },
+        {
+          "title": "PG query p95 (client spans)",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = '${environment}' AND (`db.system` = 'postgresql' OR name LIKE '%postgres%')" }
+            ]
+          }
+        },
+        {
+          "title": "Redis cmd p95 (client spans)",
+          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = '${environment}' AND name LIKE '%redis%'" }
+            ]
+          }
+        },
+        {
+          "title": "Mongo op p95 (client spans)",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = '${environment}' AND (`db.system` = 'mongodb' OR name LIKE '%mongo%')" }
+            ]
+          }
+        },
+        {
+          "title": "MQ publish errors",
+          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS `mq errors` WHERE deployment.environment = '${environment}' AND (message LIKE '%rabbitmq%' OR message LIKE '%mq%publish%fail%' OR message LIKE '%amqp%')" }
+            ],
+            "thresholds": { "alert": { "value": 1 } }
+          }
+        },
+        {
+          "title": "DB latency by caller service",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT average(duration.ms) AS `avg ms` WHERE deployment.environment = '${environment}' AND (`db.system` IN ('postgresql', 'mongodb') OR name LIKE '%postgres%' OR name LIKE '%mongo%') FACET service.name TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Exporter: PG connections + cache hit (Floci)",
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(pg_stat_database_numbackends) AS backends, average(pg_locks_count) AS locks WHERE deployment.environment = 'floci' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(redis_hit_ratio) AS `hit ratio`, max(redis_evicted_keys_total) AS evicted WHERE deployment.environment = 'floci' FACET redis_group TIMESERIES AUTO LIMIT 6" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Exporter: Redis per group (Floci)",
+          "layout": { "column": 1, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(redis_commands_duration_seconds) AS `cmd s`, average(redis_connected_clients) AS clients, max(redis_memory_used_bytes / 1000000) AS `mem MB` WHERE deployment.environment = 'floci' FACET redis_group, redis_addr LIMIT 12" }
+            ]
+          }
+        },
+        {
+          "title": "Exporter: MQ queues (Floci)",
+          "layout": { "column": 7, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT max(rabbitmq_queue_messages) AS depth, max(rabbitmq_queue_consumers) AS consumers WHERE deployment.environment = 'floci' FACET rabbitmq_queue LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Collector pipeline (OTLP EU)",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(otelcol_receiver_accepted_spans) AS accepted, sum(otelcol_receiver_refused_spans) AS refused, sum(otelcol_exporter_sent_spans) AS sent, sum(otelcol_exporter_send_failed_spans) AS failed WHERE service.name = 'otel-collector' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Collector queue + memory",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(otelcol_process_memory_rss_bytes / 1000000) AS `rss MB`, max(otelcol_exporter_queue_size) AS `queue size` WHERE service.name = 'otel-collector' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "CloudWatch (prod only, after AWS link)",
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "### Prod CloudWatch panels go here after `newrelic_cloud_aws_link_account`\nPending follow-up: link AWS account, enable RDS / DocDB / ElastiCache / MQ integrations, then add `FROM Metric WHERE provider = 'RdsDbCluster'`, `DocDbCluster`, `ElastiCacheReplicationGroup`, `MqBroker` widgets. Floci exporter panels above are the test double until then."
+          }
+        }
+      ]
+    }
+  ]
+}

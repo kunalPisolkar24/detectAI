@@ -1,0 +1,129 @@
+{
+  "name": "detectai-document-parser (${environment})",
+  "description": "FastAPI text extraction: uploads, pages, durations, saturation. service.name = document-parser. :8000.",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Document parser",
+      "description": "Upload RED, extraction duration, queue saturation",
+      "widgets": [
+        {
+          "title": "",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "## Document parser (`document-parser`, `${environment}`, port 8000)\nLimits: `MAX_UPLOAD_SIZE_BYTES`, `MAX_TEXT_LENGTH`, `MAX_PDF_PAGES`, `EXTRACTION_TIMEOUT_SECONDS`, `READINESS_MAX_QUEUE_DEPTH`, `WORKERS`/`WORKER_THREADS`. Health `GET /api/v1/health`. 413 = too large, 422 = unprocessable, timeouts = extraction over budget."
+          }
+        },
+        {
+          "title": "Uploads/min",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `uploads/min` WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND span.kind = 'SERVER'" }
+            ]
+          }
+        },
+        {
+          "title": "Error share",
+          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND span.kind = 'SERVER'" }
+            ],
+            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } }
+          }
+        },
+        {
+          "title": "Extraction p95",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND span.kind = 'SERVER'" }
+            ]
+          }
+        },
+        {
+          "title": "Timeouts",
+          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS timeouts WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND (message LIKE '%timeout%' OR message LIKE '%timed out%')" }
+            ],
+            "thresholds": { "alert": { "value": 5 } }
+          }
+        },
+        {
+          "title": "Duration by MIME type",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND span.kind = 'SERVER' FACET `mime.type`, `http.route` TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "413 vs 422 vs timeouts",
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' FACET `http.status_code` TIMESERIES AUTO LIMIT 10" }
+            ]
+          }
+        },
+        {
+          "title": "Upload size / pages vs limits",
+          "layout": { "column": 1, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n FACET message WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND (message LIKE '%upload%' OR message LIKE '%page%' OR message LIKE '%truncat%' OR message LIKE '%too large%') LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Saturation (workers, queue, readiness)",
+          "layout": { "column": 7, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(parser_queue_depth) AS `queue depth`, average(parser_workers_busy) AS `busy workers` WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS `readiness not-ready` WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND message LIKE '%readiness%' OR message LIKE '%not ready%' OR message LIKE '%queue depth%' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Slowest extractions",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND span.kind = 'SERVER' FACET `http.route`, `mime.type` LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Recent parser errors",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND (level = 'error' OR severity = 'ERROR') FACET `http.route` LIMIT 20" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -5,6 +5,7 @@ PROD_ENV := infra/docker/prod/.env
 PROD_ENV_EXAMPLE := infra/docker/prod/.env.example
 PROD_COMPOSE_FILE := infra/docker/prod/compose.yml
 PROD_FLOCI_COMPOSE_FILE := infra/docker/prod/compose.floci.yml
+PROD_EXPORTERS_FLOCI_COMPOSE_FILE := infra/docker/prod/compose.exporters.floci.yml
 PROD_GPU_COMPOSE_FILE := infra/docker/prod/compose.gpu.yml
 LOCAL_ENV := infra/docker/local/.env
 LOCAL_ENV_EXAMPLE := infra/docker/local/.env.example
@@ -34,7 +35,7 @@ DOCKER_BIN := $(strip $(shell command -v docker 2>/dev/null))
 DOCKER_BIN := $(if $(DOCKER_BIN),$(DOCKER_BIN),docker)
 
 PROD_COMPOSE := $(DOCKER_BIN) compose --env-file $(PROD_ENV) -f $(PROD_COMPOSE_FILE)
-PROD_COMPOSE_FLOCI := $(DOCKER_BIN) compose --env-file $(PROD_ENV) -f $(PROD_COMPOSE_FILE) -f $(PROD_FLOCI_COMPOSE_FILE)
+PROD_COMPOSE_FLOCI := $(DOCKER_BIN) compose --env-file $(PROD_ENV) -f $(PROD_COMPOSE_FILE) -f $(PROD_FLOCI_COMPOSE_FILE) -f $(PROD_EXPORTERS_FLOCI_COMPOSE_FILE)
 LOCAL_COMPOSE := $(DOCKER_BIN) compose --env-file $(LOCAL_ENV) -f $(LOCAL_COMPOSE_FILE)
 
 # GPU auto-detect for ai-service: GPU=1 forces the overlay, GPU=0 skips it,
@@ -63,6 +64,7 @@ DETECT_AI_NETWORK := $(if $(DETECT_AI_NETWORK),$(DETECT_AI_NETWORK),detect-ai-ne
 	prod-up-floci prod-config-floci \
 	local-up local-down local-logs local-clean local-build local-rebuild local-config local-ps \
 	tf-fmt tf-validate tf-test tf-plan tf-apply tf-destroy tf-plan-local tf-apply-local tf-destroy-local floci-seed floci-verify floci-up floci-down floci-clean \
+	obs-fmt obs-validate obs-test obs-plan obs-apply obs-destroy \
 	seed-install seed seed-floci seed-floci-dry seed-aws seed-dry prod-floci-bootstrap
 
 help:
@@ -355,6 +357,39 @@ tf-apply-local:
 
 tf-destroy-local:
 	@$(MAKE) --no-print-directory tf-destroy ENV=floci
+
+# ---------------------------------------------------------------------------
+# Observability (New Relic dashboards + alerts, EU) — separate Terraform root
+# ---------------------------------------------------------------------------
+# Secrets via env only: TF_VAR_newrelic_api_key or NEW_RELIC_API_KEY (NRAK-...).
+#   make obs-plan ENV=floci|prod  -> plan with infra/observability/envs/<ENV>.tfvars
+#   make obs-apply ENV=prod CONFIRM_PROD=1 -> publish dashboards + alerts
+OBS_DIR := infra/observability
+OBS_VARS := envs/$(ENV).tfvars
+OBS_BACKEND := $(if $(filter prod,$(ENV)),backend.prod.hcl,backend.local-s3.hcl)
+
+obs-fmt:
+	terraform -chdir=$(OBS_DIR) fmt -check -recursive -diff
+
+obs-validate:
+	terraform -chdir=$(OBS_DIR) init -backend=false
+	terraform -chdir=$(OBS_DIR) validate
+	terraform -chdir=$(OBS_DIR) test
+
+obs-test:
+	terraform -chdir=$(OBS_DIR) test
+
+obs-plan: validate-env
+	terraform -chdir=$(OBS_DIR) init -reconfigure -backend-config=$(OBS_BACKEND)
+	terraform -chdir=$(OBS_DIR) plan -var-file=$(OBS_VARS)
+
+obs-apply: validate-env guard-confirm-prod
+	terraform -chdir=$(OBS_DIR) init -reconfigure -backend-config=$(OBS_BACKEND)
+	terraform -chdir=$(OBS_DIR) apply -var-file=$(OBS_VARS)
+
+obs-destroy: validate-env guard-confirm-prod
+	terraform -chdir=$(OBS_DIR) init -reconfigure -backend-config=$(OBS_BACKEND)
+	terraform -chdir=$(OBS_DIR) destroy -var-file=$(OBS_VARS)
 
 # ---------------------------------------------------------------------------
 # Seed app-only secrets (Floci + real AWS) — .env-driven via Python
