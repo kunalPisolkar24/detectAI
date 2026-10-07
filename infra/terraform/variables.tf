@@ -202,6 +202,17 @@ variable "redis_chat_engine_version" {
   }
 }
 
+variable "redis_chat_port" {
+  description = "Redis port for the chat group. Floci binds the requested port on the host, so groups sharing an emulator need distinct ports (real AWS keeps 6379)."
+  type        = number
+  default     = 6379
+
+  validation {
+    condition     = var.redis_chat_port >= 1024 && var.redis_chat_port <= 65535
+    error_message = "redis_chat_port must be 1024-65535."
+  }
+}
+
 variable "redis_chat_node_type" {
   description = "ElastiCache node type. cache.t3.micro for Floci/dev, cache.r6g.large for prod."
   type        = string
@@ -292,6 +303,17 @@ variable "redis_events_snapshot_retention_limit" {
   }
 }
 
+variable "redis_events_port" {
+  description = "Redis port for the events group. Floci binds the requested port on the host, so groups sharing an emulator need distinct ports (real AWS keeps 6379)."
+  type        = number
+  default     = 6379
+
+  validation {
+    condition     = var.redis_events_port >= 1024 && var.redis_events_port <= 65535
+    error_message = "redis_events_port must be 1024-65535."
+  }
+}
+
 variable "redis_users_identifier" {
   description = "ElastiCache replication group identifier for users cache+rate-limit (single-node)."
   type        = string
@@ -345,6 +367,17 @@ variable "redis_users_snapshot_retention_limit" {
   validation {
     condition     = var.redis_users_snapshot_retention_limit >= 0 && var.redis_users_snapshot_retention_limit <= 35
     error_message = "redis_users_snapshot_retention_limit must be 0-35."
+  }
+}
+
+variable "redis_users_port" {
+  description = "Redis port for the users group. Floci binds the requested port on the host, so groups sharing an emulator need distinct ports (real AWS keeps 6379)."
+  type        = number
+  default     = 6379
+
+  validation {
+    condition     = var.redis_users_port >= 1024 && var.redis_users_port <= 65535
+    error_message = "redis_users_port must be 1024-65535."
   }
 }
 

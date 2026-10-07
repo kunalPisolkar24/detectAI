@@ -1,0 +1,119 @@
+{
+  "name": "detectai-worker-cron (${environment})",
+  "description": "Cron sweeper: ticks, batches, subscription retries. service.name = worker-cron.",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Worker cron",
+      "description": "Schedule adherence, batch efficiency, sweep outcomes",
+      "widgets": [
+        {
+          "title": "",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "## Worker cron (`worker-cron`, `${environment}`, sampler always_on)\nSweep every `CRON_CHECK_INTERVAL_MS` (default 900000), batch `CRON_BATCH_SIZE` (default 100). Missed tick = no successful tick for 2x interval. Tick duration must stay below interval."
+          }
+        },
+        {
+          "title": "Ticks/hour",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT rate(count(*), 1 hour) AS `ticks/h` WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND message LIKE '%tick%' OR message LIKE '%sweep%' OR message LIKE '%cron%'" }
+            ]
+          }
+        },
+        {
+          "title": "Last successful tick ago",
+          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT latest(timestamp) AS `last tick` WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}'" }
+            ]
+          }
+        },
+        {
+          "title": "Tick error share",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT percentage(count(*), WHERE level = 'error') AS `error %` WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}'" }
+            ],
+            "thresholds": { "alert": { "value": 5 } }
+          }
+        },
+        {
+          "title": "Processed per tick",
+          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT average(numeric(`processed`)) AS `avg processed` WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}'" }
+            ]
+          }
+        },
+        {
+          "title": "Tick cadence vs expected",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS ticks WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Tick duration",
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Sweep outcomes",
+          "layout": { "column": 1, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n FACET message WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND (message LIKE '%sweep%' OR message LIKE '%subscription%' OR message LIKE '%expired%' OR message LIKE '%paused%') LIMIT 25" }
+            ]
+          }
+        },
+        {
+          "title": "Cron errors",
+          "layout": { "column": 7, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND level = 'error' FACET message LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "DB + Redis dependency during ticks",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT average(duration.ms) AS `avg ms` WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND span.kind = 'CLIENT' FACET name TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 # Standalone chats stack (single mongo + single redis, no HA).
 # Datastores are importable atoms (same pattern as gateway/workers/inference).
+# Host ports live once in the atoms (6381/27018); this file must not redefine
+# them — compose `include:` forbids overriding imported services.
 # Usage (from repo root or services/chats):
 #   docker compose -f services/chats/infra/compose.yml up -d --build
 # ENV_TYPE=dev uses env/compose defaults; ENV_TYPE=prod pulls from AWS
@@ -10,12 +12,6 @@ include:
   - path: ../../../infra/docker/redis-chat/standalone.yml
 
 services:
-  mongo-chat:
-    ports:
-      - "${MONGO_CHAT_PORT:-27018}:27017"
-  redis-chat:
-    ports:
-      - "${REDIS_CHAT_PORT:-6381}:6379"
 
   chat-service:
     build:

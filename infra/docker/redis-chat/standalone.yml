@@ -22,6 +22,8 @@ x-redis-chat: &redis-chat
 services:
   redis-chat:
     <<: *redis-chat
+    ports:
+      - "${REDIS_CHAT_PORT:-6381}:6379"
     volumes:
       - redis_chat_data:/data
 

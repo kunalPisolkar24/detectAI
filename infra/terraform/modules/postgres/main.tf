@@ -42,6 +42,13 @@ resource "aws_rds_cluster" "this" {
   skip_final_snapshot             = true
   enabled_cloudwatch_logs_exports = []
   tags                            = var.tags
+
+  lifecycle {
+    # Floci does not persist backup_retention_period/tags on read, which would
+    # otherwise force a perpetual ModifyDBCluster. Real AWS returns them, so
+    # the ignores are no-ops there (still applied at creation).
+    ignore_changes = [backup_retention_period, tags_all]
+  }
 }
 
 resource "aws_rds_cluster_instance" "this" {

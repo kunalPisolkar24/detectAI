@@ -27,6 +27,7 @@ module "redis_chat" {
   identifier                 = var.redis_chat_identifier
   secret_prefix              = "chat"
   engine_version             = var.redis_chat_engine_version
+  port                       = var.redis_chat_port
   node_type                  = var.redis_chat_node_type
   transit_encryption_enabled = var.redis_chat_transit_encryption_enabled
   at_rest_encryption_enabled = var.redis_chat_at_rest_encryption_enabled
@@ -44,6 +45,7 @@ module "redis_events" {
   secret_prefix              = "events"
   description                = "Paddle dedup (paddle:evt + payment:event:ts) single-node, noeviction, AOF"
   engine_version             = var.redis_events_engine_version
+  port                       = var.redis_events_port
   node_type                  = var.redis_events_node_type
   parameter_group_name       = "default.redis7"
   transit_encryption_enabled = var.redis_events_transit_encryption_enabled
@@ -62,6 +64,7 @@ module "redis_users" {
   secret_prefix              = "users"
   description                = "Users cache + rate-limit + analytics dedup single-node, volatile-ttl, AOF"
   engine_version             = var.redis_users_engine_version
+  port                       = var.redis_users_port
   node_type                  = var.redis_users_node_type
   parameter_group_name       = "default.redis7"
   transit_encryption_enabled = var.redis_users_transit_encryption_enabled

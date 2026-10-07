@@ -63,6 +63,11 @@ kill <PID>
 PORT_FRONTEND=3001
 ```
 
+> Transient variant: right after `down`, Docker frees host ports
+> asynchronously, so the next `up` can fail with `address already in use`
+> while nothing is actually bound. `make prod-up-floci` retries once
+> automatically after 10s; otherwise just re-run the `up` command.
+
 ### "Not enough memory"
 
 Docker needs at least 8 GB RAM:
@@ -174,7 +179,7 @@ emulator_endpoint = "http://localhost:4566"
 The emulator was reset. Apply again:
 
 ```bash
-make tf-apply-local
+make tf-apply ENV=floci
 ```
 
 ### "plan keeps showing small diffs"
@@ -195,13 +200,21 @@ aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-tfstate-local --reg
 
 ```bash
 # For Terraform secrets
-make tf-apply-local
+make tf-apply ENV=floci
 
 # For app secrets
-make seed-floci
+make seed ENV=floci
 
 # Verify all secrets exist
 make floci-verify
+```
+
+### "No valid credential sources found"
+
+The emulator targets inject dummy `test/test` creds automatically (`make tf-*`, `make floci-verify`). If you call `terraform` or `aws` directly, export them first:
+
+```bash
+export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test
 ```
 
 ### "Cannot overwrite Terraform secret"
@@ -285,18 +298,23 @@ docker exec -it <inference-container> ls -la /cache
 ### Emulator not responding
 
 ```bash
-# Check if Floci is running
+# Start the emulator daemon (standalone, named volume persists state)
+make floci-up
+
+# Check health directly
 curl http://localhost:4566/_localstack/health
 
 # Check Docker containers
 docker ps | grep floci
 ```
 
+`prod-up` never starts the emulator — it fails fast with `run 'make floci-up' first` when `:4566` is down.
+
 ### Resources not created
 
 ```bash
 # Apply Terraform
-make tf-apply-local
+make tf-apply ENV=floci
 
 # Verify resources
 make floci-verify

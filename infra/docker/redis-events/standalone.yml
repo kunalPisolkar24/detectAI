@@ -29,7 +29,7 @@ services:
   redis-events:
     <<: *redis-events
     ports:
-      - "${EVENT_REDIS_PORT:-6381}:6379"
+      - "${EVENT_REDIS_PORT:-6382}:6379"
     volumes:
       - redis_events_data:/data
 

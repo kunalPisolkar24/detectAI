@@ -1,0 +1,144 @@
+{
+  "name": "detectai-payment-gateway (${environment})",
+  "description": "Go/Gin Paddle webhook gateway: validation, dedup, MQ publish. service.name = payment-gateway.",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Payment gateway",
+      "description": "Webhook RED, HMAC validation, dedup, MQ publish",
+      "widgets": [
+        {
+          "title": "",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "## Payment gateway (`service.name = payment-gateway`, `${environment}`)\nGin `POST /webhook` (Paddle) + `GET /readyz`. Watches: HMAC/signature failures (attack or secret drift), events-Redis dedup hits (`paddle:evt`), MQ quorum publish errors. Secrets: `detectai/gateway/secrets`, `detectai/mq/urls`."
+          }
+        },
+        {
+          "title": "Webhook RPS",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND span.kind = 'SERVER'" }
+            ]
+          }
+        },
+        {
+          "title": "5xx share",
+          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE `http.status_code` >= '500') AS `5xx %` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND span.kind = 'SERVER'" }
+            ],
+            "thresholds": { "alert": { "value": 1 }, "warning": { "value": 0.5 } }
+          }
+        },
+        {
+          "title": "Webhook p95",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND span.kind = 'SERVER'" }
+            ]
+          }
+        },
+        {
+          "title": "HMAC fail rate",
+          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT rate(count(*), 1 minute) AS `hmac fails/min` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND message LIKE '%HMAC%' OR message LIKE '%signature%invalid%' OR message LIKE '%webhook%secret%'" }
+            ],
+            "thresholds": { "alert": { "value": 5 } }
+          }
+        },
+        {
+          "title": "Latency by route (/webhook vs /readyz)",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND span.kind = 'SERVER' FACET `http.route` TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Status split",
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND span.kind = 'SERVER' FACET `http.status_code` TIMESERIES AUTO LIMIT 10" }
+            ]
+          }
+        },
+        {
+          "title": "Webhook validation breakdown",
+          "layout": { "column": 1, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS events FACET message WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND (message LIKE '%webhook%' OR message LIKE '%paddle%' OR message LIKE '%dedup%') LIMIT 25" }
+            ]
+          }
+        },
+        {
+          "title": "MQ publish health",
+          "layout": { "column": 7, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `client spans/min` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND span.kind = 'CLIENT' FACET name TIMESERIES AUTO LIMIT 10" },
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND message LIKE '%mq%publish%fail%' OR message LIKE '%rabbitmq%' FACET message TIMESERIES AUTO LIMIT 5" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Dedup hits (events Redis)",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS `dedup events` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND message LIKE '%dedup%' OR message LIKE '%duplicate%' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Span SELECT average(duration.ms) AS `redis avg ms` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND name LIKE '%redis%' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Go runtime",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(go_goroutines) AS goroutines, average(go_gc_pause_ms) AS `gc pause ms` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Recent gateway errors",
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND (level = 'error' OR severity = 'ERROR') FACET `http.route` LIMIT 20" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

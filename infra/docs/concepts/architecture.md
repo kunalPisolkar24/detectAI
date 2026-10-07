@@ -190,7 +190,6 @@ graph TB
     end
     
     subgraph "Environments"
-        Local[envs/floci-local.tfvars]
         Floci[envs/floci.tfvars]
         Prod[envs/prod.tfvars]
     end
@@ -200,7 +199,6 @@ graph TB
     Main --> Redis
     Main --> MQ
     
-    Local --> Main
     Floci --> Main
     Prod --> Main
 ```

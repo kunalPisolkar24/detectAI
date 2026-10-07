@@ -2,9 +2,9 @@
 #
 # Usage (from repo root), Floci-first (new .env-driven flow):
 #   1. cp infra/docker/prod/.env.example infra/docker/prod/.env  # fill 7 real keys: GITHUB_*, GOOGLE_*, PADDLE_*
-#   2. Boot emulator: Floci/LocalStack on http://localhost:4566
+#   2. Boot emulator: make floci-up (standalone daemon on http://localhost:4566)
 #   3. make prod-floci-bootstrap   # = terraform apply + seed from .env + verify + DATABASE_URL hint
-#      # or manually: make tf-apply-local && make seed-floci && make floci-verify
+#      # or manually: make tf-apply ENV=floci && make seed ENV=floci && make floci-verify
 #   4. Fill DATABASE_URL* in infra/docker/prod/.env from `terraform output -raw database_url`
 #      (rewrite localhost -> host.docker.internal for containers)
 #   5. make prod-up-floci          # prod stack on FLOCI_NETWORK; real AWS: make prod-up
@@ -84,8 +84,10 @@ services:
       - REDIS_URLS_SECRET_NAME=${REDIS_URLS_SECRET_NAME:-detectai/redis/users/urls}
       - MQ_URLS_SECRET_NAME=${MQ_URLS_SECRET_NAME:-detectai/mq/urls}
       - WEB_SECRETS_NAME=${WEB_SECRETS_NAME:-detectai/web/secrets}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-web}
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-0.1.0}
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=${ENV_TYPE:-prod}
     ports:
       - "${PORT_FRONTEND:-3000}:3000"
     extra_hosts:
@@ -114,8 +116,10 @@ services:
       - INTERNAL_API_KEY=${INTERNAL_API_KEY:-}
       - PORT=8080
       - GIN_MODE=${GIN_MODE:-release}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-payment-gateway}
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-0.1.0}
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=${ENV_TYPE:-prod}
       - AWS_REGION=${AWS_REGION:-ap-south-1}
       - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-}
       - SSM_PREFIX=${GATEWAY_SSM_PREFIX:-/detectai/gateway/}
@@ -152,8 +156,10 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - RABBITMQ_URL=${RABBITMQ_URL:-}
       - RABBITMQ_PREFETCH=${RABBITMQ_PREFETCH:-1}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-worker-analytics}
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-0.1.0}
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=${ENV_TYPE:-prod}
       - OTEL_TRACES_SAMPLER=${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
       - OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-0.1}
       - AWS_REGION=${AWS_REGION:-ap-south-1}
@@ -190,8 +196,10 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - CRON_CHECK_INTERVAL_MS=${CRON_CHECK_INTERVAL_MS:-900000}
       - CRON_BATCH_SIZE=${CRON_BATCH_SIZE:-100}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-worker-cron}
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-0.1.0}
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=${ENV_TYPE:-prod}
       - OTEL_TRACES_SAMPLER=${OTEL_TRACES_SAMPLER:-parentbased_always_on}
       - AWS_REGION=${AWS_REGION:-ap-south-1}
       - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-}
@@ -231,8 +239,10 @@ services:
       - PADDLE_ENVIRONMENT=${PADDLE_ENVIRONMENT:-sandbox}
       - EVENT_REDIS_URL=${EVENT_REDIS_URL:-}
       - EVENT_REDIS_PASSWORD=${EVENT_REDIS_PASSWORD:-}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-worker-payments}
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-0.1.0}
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=${ENV_TYPE:-prod}
       - OTEL_TRACES_SAMPLER=${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
       - OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-0.1}
       - AWS_REGION=${AWS_REGION:-ap-south-1}
@@ -296,9 +306,10 @@ services:
       - INFERENCE_MAX_WORKERS=${INFERENCE_MAX_WORKERS:-}
       - INFERENCE_PROVIDERS=${INFERENCE_PROVIDERS:-CUDAExecutionProvider,CPUExecutionProvider}
       - GRPC_MAX_WORKERS=${GRPC_MAX_WORKERS:-}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-inference}
-      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-}
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-0.1.0}
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=${ENV_TYPE:-prod}
       - HF_TOKEN=${HF_TOKEN:-}
       - AWS_REGION=${AWS_REGION:-ap-south-1}
       - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-}
@@ -331,9 +342,10 @@ services:
       - HEADER_REPETITION_RATIO=${HEADER_REPETITION_RATIO:-}
       - ALLOWED_MIME_TYPES=${ALLOWED_MIME_TYPES:-}
       - LOG_LEVEL=${LOG_LEVEL:-}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-document-parser}
-      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-}
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-0.1.0}
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=${ENV_TYPE:-prod}
       - AWS_REGION=${AWS_REGION:-ap-south-1}
       - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-}
       - SSM_PREFIX=${DOC_PARSER_SSM_PREFIX:-/detectai/document-parser/}
@@ -370,8 +382,10 @@ services:
       REDIS_TLS_ENABLED: ${REDIS_TLS_ENABLED:-false}
       REDIS_TLS_CA_FILE: ${REDIS_TLS_CA_FILE:-}
       LOG_LEVEL: ${LOG_LEVEL:-}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-chat-service}
+      OTEL_SERVICE_VERSION: ${OTEL_SERVICE_VERSION:-0.1.0}
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=${ENV_TYPE:-prod}
       AWS_REGION: ${AWS_REGION:-ap-south-1}
       AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
       SSM_PREFIX: ${CHAT_SSM_PREFIX:-/detectai/chat/}
@@ -411,8 +425,10 @@ services:
       REDIS_TLS_ENABLED: ${REDIS_TLS_ENABLED:-false}
       REDIS_TLS_CA_FILE: ${REDIS_TLS_CA_FILE:-}
       LOG_LEVEL: ${LOG_LEVEL:-}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-chat-worker}
+      OTEL_SERVICE_VERSION: ${OTEL_SERVICE_VERSION:-0.1.0}
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=${ENV_TYPE:-prod}
       AWS_REGION: ${AWS_REGION:-ap-south-1}
       AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
       SSM_PREFIX: ${CHAT_SSM_PREFIX:-/detectai/chat/}
@@ -427,5 +443,35 @@ services:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9099/metrics"]
       interval: 30s
       timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # -- observability: OTEL collector (prod stack only, Floci + real AWS) ----
+  # Apps send OTLP to http://otel-collector:4318 (default above); the collector
+  # batches and exports to New Relic EU. Empty NEW_RELIC_LICENSE_KEY = the
+  # exporter retries and drops; apps keep running (SDKs are fail-open).
+  # Floci datastore exporters live in compose.exporters.floci.yml (applied only
+  # when ENV=floci) so real AWS never starts them.
+  otel-collector:
+    container_name: detect_ai_otel_collector
+    image: otel/opentelemetry-collector-contrib:0.121.0
+    restart: always
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY:-}
+      - NEW_RELIC_OTLP_ENDPOINT=${NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:4318}
+      - DEPLOYMENT_ENV=${ENV_TYPE:-prod}
+    ports:
+      - "${OTEL_GRPC_PORT:-4317}:4317"
+      - "${OTEL_HTTP_PORT:-4318}:4318"
+      - "${OTEL_HEALTH_PORT:-13133}:13133"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13133/"]
+      interval: 30s
+      timeout: 5s
       retries: 3
       start_period: 20s

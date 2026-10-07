@@ -1,0 +1,166 @@
+{
+  "name": "detectai-web (${environment})",
+  "description": "Next.js frontend + BFF: routes, dependencies, auth, checkout. service.name = web.",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Web service",
+      "description": "RED per route plus downstream dependency health",
+      "widgets": [
+        {
+          "title": "",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "## Web (`service.name = web`, env `${environment}`)\nNext.js SSR + API routes. **Dependency map:** `AI_SERVICE_URL`, `CHAT_SERVICE_URL`, `FILE_EXTRACTOR_API_URL`, PG pool (`DB_POOL_MAX`), users-Redis. Auth: NextAuth GitHub/Google + Turnstile. Slow routes and 5xx here page first."
+          }
+        },
+        {
+          "title": "Request rate",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'web' AND deployment.environment = '${environment}' AND span.kind = 'SERVER'" }
+            ]
+          }
+        },
+        {
+          "title": "Error share",
+          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'web' AND deployment.environment = '${environment}' AND span.kind = 'SERVER'" }
+            ],
+            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } }
+          }
+        },
+        {
+          "title": "p95 latency",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'web' AND deployment.environment = '${environment}' AND span.kind = 'SERVER'" }
+            ]
+          }
+        },
+        {
+          "title": "Apdex proxy (satisfied < 500ms)",
+          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE duration.ms < 500) AS `satisfied %` WHERE service.name = 'web' AND deployment.environment = '${environment}' AND span.kind = 'SERVER'" }
+            ],
+            "thresholds": { "alert": { "value": 95, "direction": "below" } }
+          }
+        },
+        {
+          "title": "Latency p50/p95/p99 by route",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'web' AND deployment.environment = '${environment}' AND span.kind = 'SERVER' FACET `http.route` TIMESERIES AUTO LIMIT 12" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Throughput vs errors by route",
+          "layout": { "column": 1, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS rpm, percentage(count(*), WHERE error = true) AS `error %`, percentile(duration.ms, 50, 95, 99) WHERE service.name = 'web' AND deployment.environment = '${environment}' AND span.kind = 'SERVER' FACET `http.route` LIMIT 30" }
+            ]
+          }
+        },
+        {
+          "title": "Status code split",
+          "layout": { "column": 7, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS spans WHERE service.name = 'web' AND deployment.environment = '${environment}' AND span.kind = 'SERVER' FACET `http.status_code` TIMESERIES AUTO LIMIT 12" }
+            ]
+          }
+        },
+        {
+          "title": "Downstream dependency latency",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT average(duration.ms) AS `avg ms` WHERE service.name = 'web' AND deployment.environment = '${environment}' AND span.kind = 'CLIENT' FACET name TIMESERIES AUTO LIMIT 12" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Downstream errors by dependency",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS calls, percentage(count(*), WHERE error = true) AS `error %`, average(duration.ms) AS `avg ms` WHERE service.name = 'web' AND deployment.environment = '${environment}' AND span.kind = 'CLIENT' FACET name LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Auth failures (401/403 + NextAuth)",
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS denials WHERE service.name = 'web' AND deployment.environment = '${environment}' AND `http.status_code` IN ('401', '403') FACET `http.route` TIMESERIES AUTO LIMIT 10" },
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS `auth errors` WHERE service.name = 'web' AND deployment.environment = '${environment}' AND message LIKE '%auth%fail%' OR message LIKE '%NextAuth%' FACET `http.route` TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "DB pool + cache behavior",
+          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(db_pool_wait_ms) AS `pool wait ms`, max(db_pool_used) AS `pool used` WHERE service.name = 'web' AND deployment.environment = '${environment}' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Span SELECT average(duration.ms) AS `db avg ms` WHERE service.name = 'web' AND deployment.environment = '${environment}' AND (name LIKE '%postgres%' OR `db.system` = 'postgresql') TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Node runtime (event loop, heap)",
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(process_runtime_nodejs_eventloop_lag_ms) AS `loop lag ms`, average(process_heap_used_bytes / 1000000) AS `heap MB` WHERE service.name = 'web' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Recent web error logs",
+          "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample WHERE service.name = 'web' AND deployment.environment = '${environment}' AND (level = 'error' OR severity = 'ERROR') FACET `http.route` LIMIT 20" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

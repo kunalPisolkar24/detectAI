@@ -1,0 +1,133 @@
+{
+  "name": "detectai-worker-payments (${environment})",
+  "description": "Payments consumer: queue payment_events, Paddle API, dedup, reconcile. service.name = worker-payments.",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Worker payments",
+      "description": "Paddle API health, dedup, end-to-end reconcile lag",
+      "widgets": [
+        {
+          "title": "",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "## Worker payments (`worker-payments`, `${environment}`)\nQueue `payment_events` (`subscription.created|updated|canceled`, `user.cancel`). Paddle client timeout 10s, env `sandbox|production`. End-to-end = gateway webhook -> worker -> DB. Dedup via `EVENT_REDIS_URL`."
+          }
+        },
+        {
+          "title": "Payment events/min",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `msgs/min` WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}'" }
+            ]
+          }
+        },
+        {
+          "title": "Processing error share",
+          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}'" }
+            ],
+            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } }
+          }
+        },
+        {
+          "title": "Paddle API error share",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' AND (name LIKE '%paddle%' OR `http.host` LIKE '%paddle%')" }
+            ],
+            "thresholds": { "alert": { "value": 5 }, "warning": { "value": 2 } }
+          }
+        },
+        {
+          "title": "Duplicate suppressions",
+          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS dups WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' AND (message LIKE '%duplicate%' OR message LIKE '%dedup%')" }
+            ]
+          }
+        },
+        {
+          "title": "Events by type",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' FACET `event.type` TIMESERIES AUTO LIMIT 10" },
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' FACET name TIMESERIES AUTO LIMIT 10" }
+            ]
+          }
+        },
+        {
+          "title": "Paddle API latency + 429/5xx",
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' AND (name LIKE '%paddle%' OR `http.host` LIKE '%paddle%') TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' AND `http.status_code` IN ('429', '500', '502', '503') TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Handler breakdown (state machine)",
+          "layout": { "column": 1, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS rpm, percentage(count(*), WHERE error = true) AS `error %`, average(duration.ms) AS `avg ms` WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' FACET name LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Invalid transitions / poison",
+          "layout": { "column": 7, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' AND (message LIKE '%transition%' OR message LIKE '%Invalid%' OR message LIKE '%poison%' OR level = 'error') FACET message LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Reconcile lag proxy (gateway -> worker)",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `gateway/min` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `worker/min` WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Node runtime",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(process_runtime_nodejs_eventloop_lag_ms) AS `loop lag ms`, average(process_heap_used_bytes / 1000000) AS `heap MB` WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        }
+      ]
+    }
+  ]
+}

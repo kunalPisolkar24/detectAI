@@ -56,3 +56,31 @@ services:
     networks:
       - default
       - floci
+  otel-collector:
+    networks:
+      - default
+      - floci
+  postgres-exporter:
+    networks:
+      - default
+      - floci
+  redis-exporter-users:
+    networks:
+      - default
+      - floci
+  redis-exporter-chat:
+    networks:
+      - default
+      - floci
+  redis-exporter-events:
+    networks:
+      - default
+      - floci
+  mongo-exporter:
+    networks:
+      - default
+      - floci
+  rabbitmq-exporter:
+    networks:
+      - default
+      - floci

@@ -11,9 +11,10 @@ from src.interfaces.env_loader import IEnvLoader
 
 class LocalEnvLoader(IEnvLoader):
     def __init__(self, repo_root: Path | None = None) -> None:
-        # repo_root = parent of tools/seed-secrets -> repo root
+        # repo_root = dir containing tools/ -> repo root (this file lives at
+        # tools/seed-secrets/src/infrastructure/filesystem/, six levels down).
         if repo_root is None:
-            repo_root = Path(__file__).parent.parent.parent.parent
+            repo_root = Path(__file__).parent.parent.parent.parent.parent.parent
         self._repo_root = Path(repo_root).resolve()
 
     def resolve_path(self, raw_path: str | Path) -> Path:

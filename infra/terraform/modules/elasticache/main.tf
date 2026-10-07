@@ -49,7 +49,9 @@ resource "aws_elasticache_replication_group" "this" {
 
   lifecycle {
     # Emulator allocates host-mapped ports (6379-6399) per group; logical port 6379 would otherwise force perpetual replacement.
-    ignore_changes = [port]
+    # Floci also mis-reports transit_encryption_enabled on read (no TLS enforced);
+    # ignoring avoids a perpetual ModifyReplicationGroup. Real AWS matches config.
+    ignore_changes = [port, transit_encryption_enabled]
 
     precondition {
       condition     = var.num_cache_clusters > 1 || var.automatic_failover_enabled == false

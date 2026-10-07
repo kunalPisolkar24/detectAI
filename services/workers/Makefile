@@ -30,7 +30,7 @@ WITH_RABBITMQ ?= 1
 # Local Infrastructure Defaults (pointing to ports mapped by the worker stacks)
 DATABASE_URL ?= postgresql://user:password@localhost:5432/detect_ai
 REDIS_URL ?= redis://:user_cache_password@localhost:6379
-EVENT_REDIS_URL ?= redis://:events_password@localhost:6381
+EVENT_REDIS_URL ?= redis://:events_password@localhost:6382
 RABBITMQ_URL ?= amqp://guest:guest@localhost:5672
 
 .PHONY: help proxy proxy-stop load-test load-down load-payments load-analytics load-cron \
@@ -157,7 +157,7 @@ worker-%:
 	$(call guard-shared-url,WITH_POSTGRES,postgres-users,DATABASE_URL,postgresql://user:password@host.docker.internal:5432/detect_ai)
 	$(call guard-shared-url,WITH_POSTGRES,postgres-users,DATABASE_URL_REPLICA,postgresql://user:password@host.docker.internal:5432/detect_ai)
 	$(call guard-shared-url,WITH_REDIS,redis-users,REDIS_URL,redis://:user_cache_password@host.docker.internal:6379)
-	$(call guard-shared-url,WITH_EVENTS,redis-events,EVENT_REDIS_URL,redis://:events_password@host.docker.internal:6381)
+	$(call guard-shared-url,WITH_EVENTS,redis-events,EVENT_REDIS_URL,redis://:events_password@host.docker.internal:6382)
 	$(call guard-shared-url,WITH_RABBITMQ,rabbitmq,RABBITMQ_URL,amqp://guest:guest@host.docker.internal:5672/)
 
 worker-up: worker-%

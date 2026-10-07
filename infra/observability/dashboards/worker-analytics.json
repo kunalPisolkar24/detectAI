@@ -1,0 +1,132 @@
+{
+  "name": "detectai-worker-analytics (${environment})",
+  "description": "Analytics consumer: queue analytics.usage, dedup, DB writes. service.name = worker-analytics.",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Worker analytics",
+      "description": "Consumer lag, processing duration, retries, DB writes",
+      "widgets": [
+        {
+          "title": "",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "## Worker analytics (`worker-analytics`, `${environment}`)\nQueue `analytics.usage`, dedup prefix `analytics:usage:event:`, sampler `traceidratio 0.1` (counts are sampled — use rates). Watches: stopped consumer (no ack 10m), DLQ/poison growth, DB write errors."
+          }
+        },
+        {
+          "title": "Consume rate",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `msgs/min` WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}'" }
+            ]
+          }
+        },
+        {
+          "title": "Processing error share",
+          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}'" }
+            ],
+            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } }
+          }
+        },
+        {
+          "title": "Processing p95",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}'" }
+            ]
+          }
+        },
+        {
+          "title": "Poison / DLQ events",
+          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS `poison` WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' AND (message LIKE '%Invalid analytics%' OR message LIKE '%poison%' OR message LIKE '%DLQ%' OR message LIKE '%dead-letter%')" }
+            ],
+            "thresholds": { "alert": { "value": 1 } }
+          }
+        },
+        {
+          "title": "Consume vs ack vs nack",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' AND (message LIKE '%ack%' OR message LIKE '%nack%' OR message LIKE '%consum%') FACET message TIMESERIES AUTO LIMIT 8" },
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' FACET name TIMESERIES AUTO LIMIT 8" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Processing duration distribution",
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Dedup + DB write breakdown",
+          "layout": { "column": 1, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS rpm, average(duration.ms) AS `avg ms`, percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' FACET name LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Unhandled rejections / exceptions",
+          "layout": { "column": 7, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' AND (message LIKE '%Unhandled rejection%' OR message LIKE '%uncaughtException%' OR level = 'error') FACET message LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Node runtime",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(process_runtime_nodejs_eventloop_lag_ms) AS `loop lag ms`, average(process_heap_used_bytes / 1000000) AS `heap MB` WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Prefetch / readiness probes (:7001/ready)",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' AND (`http.route` = '/ready' OR name LIKE '%ready%') TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        }
+      ]
+    }
+  ]
+}

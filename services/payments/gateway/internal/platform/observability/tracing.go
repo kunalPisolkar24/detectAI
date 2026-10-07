@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"strings"
 
 	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/config"
 	"go.opentelemetry.io/otel"
@@ -13,7 +14,7 @@ import (
 )
 
 func InitTracing(cfg *config.Config) (func(context.Context) error, error) {
-	if cfg.OtelEndpoint == "" {
+	if strings.TrimSpace(cfg.OtelEndpoint) == "" {
 		return func(context.Context) error { return nil }, nil
 	}
 	serviceName := cfg.OtelServiceName
@@ -21,7 +22,10 @@ func InitTracing(cfg *config.Config) (func(context.Context) error, error) {
 		serviceName = "payment-gateway"
 	}
 	ctx := context.Background()
-	exporter, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpoint(cfg.OtelEndpoint))
+	// OtelEndpoint is a full base URL (http://otel-collector:4318); WithEndpoint
+	// takes host:port only, so use WithEndpointURL with the traces path.
+	url := strings.TrimSuffix(strings.TrimSpace(cfg.OtelEndpoint), "/") + "/v1/traces"
+	exporter, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(url))
 	if err != nil {
 		return nil, err
 	}
