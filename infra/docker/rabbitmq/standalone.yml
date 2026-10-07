@@ -9,10 +9,10 @@
 # or the aggregate infra/docker/data/.env.example); importing projects
 # isolate volumes and networks by project name. No
 # `networks:` / `container_name` here so multiple projects can run side by
-# side. Standalone uses `management-alpine` image but only publishes 5672;
-# for the management UI add the overlay:
-#   include:
-#     - path: ../../../infra/docker/rabbitmq/management.yml
+# side. Standalone uses `management-alpine` image and publishes both 5672
+# and the management UI 15672 (override via RABBITMQ_PORT / RABBITMQ_UI_PORT).
+# The separate management.yml overlay is only for legacy `-f` merging; do NOT
+# `include:` both files together (compose forbids redefining imported services).
 x-rabbitmq: &rabbitmq
   image: rabbitmq:3-management-alpine
   restart: unless-stopped
@@ -31,6 +31,7 @@ services:
     <<: *rabbitmq
     ports:
       - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_UI_PORT:-15672}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 

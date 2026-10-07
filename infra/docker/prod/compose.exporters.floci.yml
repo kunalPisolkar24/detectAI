@@ -1,0 +1,84 @@
+# Floci-only datastore exporters for the prod stack (test doubles for New Relic
+# CloudWatch panels). Applied ONLY when ENV=floci:
+#   make prod-up-floci  (= compose.yml + compose.floci.yml + this file)
+# Real AWS (ENV=prod) never starts these — prod infra metrics come from the
+# New Relic AWS CloudWatch integration instead (see infra/observability README).
+#
+# Wiring: exporters read Floci-backed endpoints from infra/docker/prod/.env
+# (same values the apps use). Where a URL is empty (e.g. MONGO_URI fetched
+# from Secrets Manager at runtime), that exporter fails gracefully and its
+# panels stay empty — client-span panels still work.
+name: detectai-prod
+
+services:
+  postgres-exporter:
+    container_name: detect_ai_pg_exporter
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    restart: always
+    environment:
+      - DATA_SOURCE_NAME=${DATABASE_URL:-postgresql://dbadmin:floci@host.docker.internal:5432/detect_ai?sslmode=disable}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  redis-exporter-users:
+    container_name: detect_ai_redis_exporter_users
+    image: oliver006/redis_exporter:v1.66.0
+    restart: always
+    environment:
+      - REDIS_ADDR=${REDIS_URL:-redis://floci-valkey-detectai-redis-users-local:6379}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  redis-exporter-chat:
+    container_name: detect_ai_redis_exporter_chat
+    image: oliver006/redis_exporter:v1.66.0
+    restart: always
+    environment:
+      - REDIS_ADDR=redis://${CHAT_REDIS_ADDR:-floci-valkey-detectai-redis-chat-local:6379}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  redis-exporter-events:
+    container_name: detect_ai_redis_exporter_events
+    image: oliver006/redis_exporter:v1.66.0
+    restart: always
+    environment:
+      - REDIS_ADDR=${EVENT_REDIS_URL:-redis://floci-valkey-detectai-redis-events-local:6379}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  mongo-exporter:
+    container_name: detect_ai_mongo_exporter
+    image: percona/mongodb_exporter:0.40.0
+    restart: always
+    command: ["--mongodb.uri=${MONGO_URI:-mongodb://host.docker.internal:27017/chat_db}", "--collect-all"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  rabbitmq-exporter:
+    container_name: detect_ai_rabbitmq_exporter
+    image: kbudde/rabbitmq-exporter:1.0.0
+    restart: always
+    environment:
+      - RABBIT_URL=${RABBITMQ_URL:-}
+      - RABBIT_CAPABILITIES=bert,no_sort
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      otel-collector:
+        condition: service_started

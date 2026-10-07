@@ -9,13 +9,13 @@
 # (project names differ: detectai-local vs detectai-prod).
 #
 # Infra comes from the importable atoms (single definition each, no
-# duplication). Host-port map (defaults, all overridable via .env):
+# duplication; host ports are defined in the atoms via env, not overridden
+# here — `include:` forbids redefining imported services). Host-port map
+# (defaults, all overridable via .env):
 #   3000 web | 8080 gateway | 8000 doc-parser | 50051+8333 inference
 #   50052+9095 chat-api | 9099 chat-worker | 7001/7002/7003 workers
 #   5432 pg | 6379 redis-users | 6381 redis-chat | 6382 redis-events
 #   27018 mongo | 5672 mq + 15672 mq UI
-# NOTE: redis-events is remapped to 6382 here (upstream atom defaults to
-# 6381, which collides with redis-chat).
 name: detectai-local
 
 include:
@@ -25,22 +25,8 @@ include:
   - path: ../redis-events/standalone.yml
   - path: ../mongo-chat/standalone.yml
   - path: ../rabbitmq/standalone.yml
-  - path: ../rabbitmq/management.yml
 
 services:
-  # -- infra host-port bindings (atoms publish pg/redis-users/mq themselves) --
-  mongo-chat:
-    ports:
-      - "${MONGO_CHAT_PORT:-27018}:27017"
-
-  redis-chat:
-    ports:
-      - "${REDIS_CHAT_PORT:-6381}:6379"
-
-  redis-events:
-    ports:
-      - "${EVENT_REDIS_PORT:-6382}:6379"
-
   # -- web ------------------------------------------------------------------
   db-migrate:
     build:

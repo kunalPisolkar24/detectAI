@@ -3,6 +3,7 @@ package tracing
 import (
 	"context"
 	"os"
+	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -13,7 +14,8 @@ import (
 )
 
 func Init(serviceName string) (func(context.Context) error, error) {
-	if endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); endpoint == "" {
+	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	if endpoint == "" {
 		return func(context.Context) error { return nil }, nil
 	}
 
@@ -23,7 +25,11 @@ func Init(serviceName string) (func(context.Context) error, error) {
 
 	ctx := context.Background()
 
-	exporter, err := otlptracehttp.New(ctx)
+	// otlptracehttp.WithEndpoint takes host:port, but our compose contract
+	// provides a full base URL (http://otel-collector:4318). WithEndpointURL
+	// accepts it as-is and appends nothing, so add the traces path here.
+	url := strings.TrimSuffix(endpoint, "/") + "/v1/traces"
+	exporter, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(url))
 	if err != nil {
 		return nil, err
 	}

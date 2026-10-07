@@ -96,8 +96,12 @@ include:
   - path: ../redis-events/standalone.yml
   - path: ../mongo-chat/standalone.yml
   - path: ../rabbitmq/standalone.yml
-  - path: ../rabbitmq/management.yml
 ```
+
+> `include:` merges atom definitions — never redeclare an included service
+> (ports, networks) in the importing file, compose rejects it with
+> `conflicts with imported resource`. All host ports live in the atoms and are
+> overridden via env (see table below).
 
 ### Port Assignments
 
@@ -108,9 +112,10 @@ Atoms use variable-based port assignments to avoid conflicts:
 | postgres-users | 5432 | `POSTGRES_PORT` |
 | redis-users | 6379 | `REDIS_PORT` |
 | redis-chat | 6381 | `REDIS_CHAT_PORT` |
-| redis-events | 6381 | `EVENT_REDIS_PORT` |
+| redis-events | 6382 | `EVENT_REDIS_PORT` |
 | mongo-chat | 27018 | `MONGO_CHAT_PORT` |
 | rabbitmq | 5672 | `RABBITMQ_PORT` |
+| rabbitmq UI | 15672 | `RABBITMQ_UI_PORT` |
 
 ## Local Stack
 

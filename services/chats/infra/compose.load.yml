@@ -1,6 +1,8 @@
 # Load-test rig for chats service (k6 only, isolated infra).
-# Reuses mongo-chat/redis-chat atoms but with no host ports for datastores, so it can run
-# side-by-side with the main stack (`compose.yml` publishes 27018/6381).
+# Reuses mongo-chat/redis-chat atoms on the default project network
+# (isolation via project name `chats-load`). Host ports come from the atoms;
+# to run side-by-side with the main stack, override them:
+#   MONGO_CHAT_PORT=27019 REDIS_CHAT_PORT=6390 make load-test
 # Usage: make load-test SCENARIO=smoke VUS=1 DURATION=10s RPS=10
 name: chats-load
 include:
@@ -8,16 +10,6 @@ include:
   - path: ../../../infra/docker/redis-chat/standalone.yml
 
 services:
-  # mongo-chat/redis-chat atoms have no host ports by default (template has no ports);
-  # `compose.yml` publishes 27018/6381, load keeps internal-only for isolation
-  mongo-chat:
-    networks:
-      - chat_loadnet
-
-  redis-chat:
-    networks:
-      - chat_loadnet
-
   chat-service:
     build:
       context: ..
@@ -48,8 +40,6 @@ services:
         condition: service_healthy
       redis-chat:
         condition: service_healthy
-    networks:
-      - chat_loadnet
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/metrics"]
       interval: 30s
@@ -87,8 +77,6 @@ services:
         condition: service_healthy
       redis-chat:
         condition: service_healthy
-    networks:
-      - chat_loadnet
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9099/metrics"]
       interval: 30s
@@ -120,14 +108,4 @@ services:
     depends_on:
       chat-service:
         condition: service_healthy
-    networks:
-      - chat_loadnet
 
-networks:
-  chat_loadnet:
-
-volumes:
-  mongo_chat_data:
-    name: chat_load_mongo_data
-  redis_chat_data:
-    name: chat_load_redis_data

@@ -1,0 +1,131 @@
+{
+  "name": "detectai-chats (${environment})",
+  "description": "Go chat service api + worker roles: gRPC, Mongo chat_db, Redis streams. service.name = chat-service | chat-worker. Metrics :9091/:9099.",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Chats",
+      "description": "gRPC RED per role, DocDB ops, Redis streams lag",
+      "widgets": [
+        {
+          "title": "",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "## Chats (`chat-service` api + `chat-worker`, `${environment}`)\nKnown gap: Go services log `otel_service` but traces may be absent until SDK init lands — metrics (`:9091/:9099/metrics` via collector prometheus) and logs work today. Roles split by `service.name` facet. Datastores: `chat_db` Mongo (mode `standalone` on Floci), chat Redis streams. Degraded mode = `NoopStream` Mongo fallback."
+          }
+        },
+        {
+          "title": "API gRPC rate",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_grpc_requests_total), 1 minute) AS `req/min` WHERE service.name = 'chat-service' AND deployment.environment = '${environment}'" }
+            ]
+          }
+        },
+        {
+          "title": "API error share",
+          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT (sum(chat_grpc_errors_total) / (sum(chat_grpc_requests_total) + 1)) * 100 AS `error %` WHERE service.name = 'chat-service' AND deployment.environment = '${environment}'" }
+            ],
+            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } }
+          }
+        },
+        {
+          "title": "Worker consume rate",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_worker_consumed_total), 1 minute) AS `consumed/min` WHERE service.name = 'chat-worker' AND deployment.environment = '${environment}'" }
+            ]
+          }
+        },
+        {
+          "title": "Redis degraded flag",
+          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT max(chat_redis_degraded) AS degraded WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker')" }
+            ],
+            "thresholds": { "alert": { "value": 1 } }
+          }
+        },
+        {
+          "title": "gRPC latency by method",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name IN ('chat-service', 'chat-worker') AND deployment.environment = '${environment}' FACET service.name, name TIMESERIES AUTO LIMIT 12" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(chat_grpc_duration_ms) AS `avg ms` WHERE service.name = 'chat-service' AND deployment.environment = '${environment}' FACET grpc_method TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Produce -> consume lag proxy",
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_stream_produced_total), 1 minute) AS `produced/min`, rate(sum(chat_worker_consumed_total), 1 minute) AS `consumed/min` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT max(chat_stream_pending) AS pending WHERE deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Mongo op health (chat_db)",
+          "layout": { "column": 1, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS rpm, average(duration.ms) AS `avg ms`, percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker') AND (`db.system` = 'mongodb' OR name LIKE '%mongo%') FACET name LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Redis stream + cache ops",
+          "layout": { "column": 7, "row": 4, "height": 4, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS rpm, average(duration.ms) AS `avg ms` WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker') AND (name LIKE '%redis%' OR name LIKE '%stream%' OR name LIKE '%cache%') FACET name LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "TLS + connection errors",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker') AND (message LIKE '%TLS%' OR message LIKE '%tls%' OR message LIKE '%AUTH%' OR message LIKE '%connect%fail%' OR message LIKE '%degraded%') FACET service.name LIMIT 15" }
+            ]
+          }
+        },
+        {
+          "title": "Go runtime per role",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(go_goroutines) AS goroutines WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker') FACET service.name TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        }
+      ]
+    }
+  ]
+}

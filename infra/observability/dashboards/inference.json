@@ -1,0 +1,142 @@
+{
+  "name": "detectai-inference (${environment})",
+  "description": "Python gRPC AI service: methods, batching, models, GPU. service.name = inference. gRPC :50051, metrics :8333.",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Inference",
+      "description": "gRPC RED, batch queue, model revisions, device",
+      "widgets": [
+        {
+          "title": "",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "## Inference (`service.name = inference`, `${environment}`)\nPython gRPC (`GRPC_PORT 50051`, Prometheus `:8333`). Knobs: `BATCH_SIZE`, `BATCH_TIMEOUT`, `BATCH_QUEUE_MAX_SIZE`, `MAX_INFLIGHT_DOC_CHUNKS`, `SPARK_MODEL_REVISION`, `FLARE_MODEL_REVISION`, `INFERENCE_PROVIDERS` (CUDA vs CPU). Cold start has 10m grace — warmup failures hide there."
+          }
+        },
+        {
+          "title": "gRPC QPS",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `qps*60` WHERE service.name = 'inference' AND deployment.environment = '${environment}'" }
+            ]
+          }
+        },
+        {
+          "title": "gRPC error share",
+          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'inference' AND deployment.environment = '${environment}'" }
+            ],
+            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } }
+          }
+        },
+        {
+          "title": "Inference p95",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'inference' AND deployment.environment = '${environment}'" }
+            ]
+          }
+        },
+        {
+          "title": "Queue drops",
+          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS drops WHERE service.name = 'inference' AND deployment.environment = '${environment}' AND (message LIKE '%queue%full%' OR message LIKE '%dropped%' OR message LIKE '%RESOURCE_EXHAUSTED%')" }
+            ],
+            "thresholds": { "alert": { "value": 1 } }
+          }
+        },
+        {
+          "title": "Latency by gRPC method",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'inference' AND deployment.environment = '${environment}' FACET name TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Errors by gRPC code",
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'inference' AND deployment.environment = '${environment}' AND error = true FACET `rpc.grpc.status_code` TIMESERIES AUTO LIMIT 10" },
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'inference' AND deployment.environment = '${environment}' AND (message LIKE '%DEADLINE_EXCEEDED%' OR message LIKE '%RESOURCE_EXHAUSTED%' OR message LIKE '%OOM%') TIMESERIES AUTO" }
+            ]
+          }
+        },
+        {
+          "title": "Batch efficiency",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(inference_batch_size) AS `batch size`, average(inference_queue_depth) AS `queue depth`, average(inference_inflight_chunks) AS inflight WHERE service.name = 'inference' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Latency by model revision + provider",
+          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS rpm, average(duration.ms) AS `avg ms`, percentile(duration.ms, 95) AS `p95 ms`, percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'inference' AND deployment.environment = '${environment}' FACET `model.revision`, `inference.provider` LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Device + host (GPU util, mem, CPU fallback)",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(gpu_utilization) AS `gpu %`, average(gpu_memory_used_bytes / 1000000) AS `gpu MB`, average(system_cpu_percent) AS `cpu %` WHERE service.name IN ('inference', 'otel-collector') AND deployment.environment = '${environment}' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS `cpu fallback` WHERE service.name = 'inference' AND deployment.environment = '${environment}' AND message LIKE '%CPUExecutionProvider%' OR message LIKE '%fallback%' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Chunk/token behaviour",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n FACET message WHERE service.name = 'inference' AND deployment.environment = '${environment}' AND (message LIKE '%chunk%' OR message LIKE '%token%' OR message LIKE '%truncat%') LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Recent inference errors",
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample WHERE service.name = 'inference' AND deployment.environment = '${environment}' AND (level = 'error' OR severity = 'ERROR') FACET name LIMIT 20" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

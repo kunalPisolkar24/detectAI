@@ -22,4 +22,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.exception_handler(DocumentParserError)(document_parser_exception_handler)
     app.add_middleware(BaseHTTPMiddleware, dispatch=request_middleware)
     app.include_router(v1_router, prefix="/api/v1")
+    # Instrument before serving: FastAPIInstrumentor adds middleware, which
+    # Starlette forbids after startup (lifespan runs too late and crashes boot
+    # whenever OTEL_EXPORTER_OTLP_ENDPOINT is set). No-op without an endpoint.
+    try:
+        from app.infrastructure.observability.tracing import setup_tracing
+
+        setup_tracing(
+            app,
+            service_name=_settings.OTEL_SERVICE_NAME,
+            service_version=_settings.OTEL_SERVICE_VERSION,
+        )
+    except Exception:
+        pass
     return app

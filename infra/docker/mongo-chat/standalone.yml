@@ -23,6 +23,8 @@ x-mongo-chat: &mongo-chat
 services:
   mongo-chat:
     <<: *mongo-chat
+    ports:
+      - "${MONGO_CHAT_PORT:-27018}:27017"
     volumes:
       - mongo_chat_data:/data/db
 
