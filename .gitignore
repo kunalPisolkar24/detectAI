@@ -11,6 +11,10 @@ __pycache__/
 *$py.class
 *.class
 
+# JS
+.pnpm-store/
+node_modules/
+
 # Terraform
 **/.terraform/
 *.tfstate
