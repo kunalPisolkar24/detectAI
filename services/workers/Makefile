@@ -3,6 +3,10 @@ RPS ?= 5
 DURATION ?= 10s
 SEED_COUNT ?= 1000
 VUS ?=
+RABBITMQ_PREFETCH ?= 1
+# Export so `RABBITMQ_PREFETCH=N make worker-up/load-test ...` reaches compose
+# interpolation (compose reads shell env, and make vars are not exported by default).
+export RABBITMQ_PREFETCH
 
 # Worker selector for the docker targets below.
 # Usage: make worker-up WORKER=payments
@@ -58,8 +62,8 @@ help:
 	@echo ""
 	@echo "Load Testing (containerized rigs in infra/compose.load-*.yml):"
 	@echo "  make load-test WORKER=analytics|payments|cron - Run k6 in containers (params below)"
-	@echo "    VUS=10 DURATION=2m RPS=50 SEED_COUNT=1000 (cron seed size)"
-	@echo "    e.g. make load-test WORKER=payments VUS=10 DURATION=2m RPS=50"
+	@echo "    VUS=10 DURATION=2m RPS=50 SEED_COUNT=1000 (cron seed size) RABBITMQ_PREFETCH=1 (payments/analytics)"
+	@echo "    e.g. make load-test WORKER=payments VUS=10 DURATION=2m RPS=50 RABBITMQ_PREFETCH=10"
 	@echo "  make load-down WORKER=... - Tear down the load rig (removes volumes)"
 	@echo "  make proxy           - Start the load testing proxy on host (for local runs)"
 	@echo "  make proxy-stop      - Kill any existing proxy process on port 9999"
@@ -196,7 +200,7 @@ proxy-stop:
 	@ss -tlnp | grep :9999 | grep -oP 'pid=\K[0-9]+' | xargs -I {} kill -9 {} 2>/dev/null || true
 
 # Containerized load testing: worker + proxy + k6 + isolated datastores.
-# Usage: make load-test WORKER=payments VUS=10 DURATION=2m RPS=50
+# Usage: make load-test WORKER=payments VUS=10 DURATION=2m RPS=50 RABBITMQ_PREFETCH=10
 #        make load-test WORKER=cron SEED_COUNT=1000
 # k6 exit code propagates (--exit-code-from k6), so threshold breaches fail.
 # Load host ports default away from dev stacks so rigs run side by side.
@@ -207,10 +211,12 @@ LOAD_RABBITMQ_PORT ?= 5690
 LOAD_WORKER_PORT ?= 7199
 LOAD_COMPOSE = docker compose --env-file $(ENV_FILE) -f infra/compose.load-$(WORKER).yml
 # Host bindings for the rig (dev defaults are usually taken by dev stacks).
+# RABBITMQ_PREFETCH is forwarded explicitly so `make load-test ... RABBITMQ_PREFETCH=N`
+# reaches the worker container even though it is absent from infra/.env.example.
 LOAD_RUN_ENV = POSTGRES_PORT=$(LOAD_POSTGRES_PORT) REDIS_PORT=$(LOAD_REDIS_PORT) \
 	EVENT_REDIS_PORT=$(LOAD_EVENTS_PORT) RABBITMQ_PORT=$(LOAD_RABBITMQ_PORT) \
 	WORKER_ANALYTICS_PORT=$(LOAD_WORKER_PORT) WORKER_CRON_PORT=$(LOAD_WORKER_PORT) \
-	WORKER_PAYMENTS_PORT=$(LOAD_WORKER_PORT)
+	WORKER_PAYMENTS_PORT=$(LOAD_WORKER_PORT) RABBITMQ_PREFETCH=$(RABBITMQ_PREFETCH)
 
 load-test: worker-%
 	$(LOAD_COMPOSE) build
