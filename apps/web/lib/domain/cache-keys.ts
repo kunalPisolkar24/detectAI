@@ -9,12 +9,18 @@ export function emailHash(email: string): string {
   return createHash("sha256").update(normalizeEmail(email)).digest("hex").slice(0, 16)
 }
 
+export function hashRateLimitIdentifier(value: string): string {
+  return createHash("sha256").update(value.trim().toLowerCase()).digest("hex").slice(0, 16)
+}
+
 export const CacheKeys = {
   userBasic: (id: string) => `user:basic:${id}`,
   userBasicByEmail: (email: string) => `user:basic:email:${emailHash(email)}`,
   userSub: (id: string) => `user:sub:${id}`,
   dailyUsage: (userId: string, utcDay: string) => `rate_limit:${userId}:daily:${utcDay}`,
   analyticsDedup: (eventId: string) => `analytics:usage:event:${eventId}`,
+  abuseFixedWindow: (scope: string, identifierHash: string, windowId: number) =>
+    `abuse:${scope}:${identifierHash}:${windowId}`,
 } as const
 
 export const CacheTTL = {

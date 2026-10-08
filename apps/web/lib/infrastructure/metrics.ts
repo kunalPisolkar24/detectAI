@@ -76,4 +76,18 @@ export const metrics = {
     labelNames: ["reason"],
     registers: [registry],
   })),
+
+  abuseRateLimitHits: getOrCreateMetric('abuse_rate_limit_hits_total', () => new Counter({
+    name: "abuse_rate_limit_hits_total",
+    help: "Total abuse rate limit rejections by scope",
+    labelNames: ["scope"],
+    registers: [registry],
+  })),
+
+  abuseRedisErrors: getOrCreateMetric('abuse_redis_errors_total', () => new Counter({
+    name: "abuse_redis_errors_total",
+    help: "Total abuse-limiter Redis errors by operation",
+    labelNames: ["operation"],
+    registers: [registry],
+  })),
 }
