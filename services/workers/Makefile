@@ -3,9 +3,11 @@ RPS ?= 5
 DURATION ?= 10s
 SEED_COUNT ?= 1000
 VUS ?=
-RABBITMQ_PREFETCH ?= 1
-# Export so `RABBITMQ_PREFETCH=N make worker-up/load-test ...` reaches compose
+# Leave empty by default so each worker's compose fallback applies (payments 10,
+# analytics 1). Export so an explicit `RABBITMQ_PREFETCH=N make ...` reaches compose
 # interpolation (compose reads shell env, and make vars are not exported by default).
+# Note: `${VAR:-default}` in compose treats empty as unset, so exporting empty is safe.
+RABBITMQ_PREFETCH ?=
 export RABBITMQ_PREFETCH
 
 # Worker selector for the docker targets below.
@@ -62,7 +64,7 @@ help:
 	@echo ""
 	@echo "Load Testing (containerized rigs in infra/compose.load-*.yml):"
 	@echo "  make load-test WORKER=analytics|payments|cron - Run k6 in containers (params below)"
-	@echo "    VUS=10 DURATION=2m RPS=50 SEED_COUNT=1000 (cron seed size) RABBITMQ_PREFETCH=1 (payments/analytics)"
+	@echo "    VUS=10 DURATION=2m RPS=50 SEED_COUNT=1000 (cron seed size) RABBITMQ_PREFETCH=(default: payments 10, analytics 1)"
 	@echo "    e.g. make load-test WORKER=payments VUS=10 DURATION=2m RPS=50 RABBITMQ_PREFETCH=10"
 	@echo "  make load-down WORKER=... - Tear down the load rig (removes volumes)"
 	@echo "  make proxy           - Start the load testing proxy on host (for local runs)"
