@@ -43,6 +43,7 @@ services:
       - WORKERS_SECRETS_NAME=${WORKERS_SECRETS_NAME:-}
       - SSM_PREFIX=${SSM_PREFIX:-}
       - SSM_ENABLED=${SSM_ENABLED:-}
+      - POOL_MAX=${POOL_MAX:-5}
       - PORT=7003
     ports:
       - "${WORKER_PAYMENTS_PORT:-7003}:7003"
