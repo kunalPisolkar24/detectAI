@@ -30,3 +30,14 @@ class FlareEngine(ISyncBatchInferenceEngine, BaseEngine):
             raise
         except Exception as e:
             raise InferenceError(f"Flare batch inference failed: {e}") from e
+
+    def warmup(self) -> None:
+        inputs = self.tokenizer(
+            ["warmup text for session initialization"],
+            return_tensors="np",
+            padding=True,
+            truncation=True,
+            max_length=min(self.max_length, 32),
+        )
+        ort_inputs = {k: v.astype(np.int64) for k, v in inputs.items() if k in self.input_names}
+        self.session.run(None, ort_inputs)

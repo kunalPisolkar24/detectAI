@@ -127,3 +127,30 @@ def test_loader_passes_pinned_revisions(mock_loader_env):
     assert mock_dl.call_args_list[0].kwargs["revision"] == "spark-rev"
     assert mock_dl.call_args_list[1].kwargs["revision"] == "spark-rev"
     assert mock_snap.call_args.kwargs["revision"] == "flare-rev"
+
+
+def test_loader_forwards_session_options(mock_loader_env):
+    import onnxruntime as ort
+
+    mock_session, _, _, _ = mock_loader_env
+    options = ort.SessionOptions()
+    options.intra_op_num_threads = 2
+    loader = HuggingFaceLoader("./cache", session_options=options)
+
+    loader.load("spark")
+
+    assert mock_session.call_args.kwargs["sess_options"] is options
+
+
+def test_loader_builds_default_session_options(mock_loader_env):
+    import onnxruntime as ort
+
+    mock_session, _, _, _ = mock_loader_env
+    loader = HuggingFaceLoader("./cache")
+
+    loader.load("spark")
+
+    passed = mock_session.call_args.kwargs["sess_options"]
+    assert isinstance(passed, ort.SessionOptions)
+    assert passed.intra_op_num_threads == 1
+    assert passed.graph_optimization_level == ort.GraphOptimizationLevel.ORT_ENABLE_ALL

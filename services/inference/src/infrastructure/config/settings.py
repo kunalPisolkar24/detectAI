@@ -100,6 +100,13 @@ class Settings(BaseSettings):
         default_factory=lambda: ["CPUExecutionProvider"]
     )
 
+    # -- onnx runtime -----------------------------------------------------
+    ORT_INTRA_OP_THREADS: int = Field(default=1, ge=0, le=64)
+    ORT_INTER_OP_THREADS: int = Field(default=1, ge=0, le=64)
+    ORT_GRAPH_OPT_LEVEL: Literal["disabled", "basic", "extended", "all"] = Field(default="all")
+    ORT_EXECUTION_MODE: Literal["sequential", "parallel"] = Field(default="sequential")
+    ORT_WARMUP_ENABLED: bool = Field(default=True)
+
     # -- observability ----------------------------------------------------
     LOG_LEVEL: str = Field(default="INFO")
     OTEL_EXPORTER_OTLP_ENDPOINT: str | None = Field(default=None)

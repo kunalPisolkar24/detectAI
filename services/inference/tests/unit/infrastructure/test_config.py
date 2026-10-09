@@ -47,6 +47,23 @@ def test_settings_include_pinned_model_revisions():
     assert settings.FLARE_MODEL_REVISION == "e1911c0be59f4e10f0d120f639d1358e46bc2086"
 
 
+def test_settings_default_ort_tuning():
+    settings = Settings(API_KEY="test-secret-key-16chars")
+
+    assert settings.ORT_INTRA_OP_THREADS == 1
+    assert settings.ORT_INTER_OP_THREADS == 1
+    assert settings.ORT_GRAPH_OPT_LEVEL == "all"
+    assert settings.ORT_EXECUTION_MODE == "sequential"
+    assert settings.ORT_WARMUP_ENABLED is True
+
+
+def test_settings_reject_invalid_ort_options():
+    with pytest.raises(ValidationError):
+        Settings(API_KEY="test-secret-key-16chars", ORT_GRAPH_OPT_LEVEL="turbo")
+    with pytest.raises(ValidationError):
+        Settings(API_KEY="test-secret-key-16chars", ORT_EXECUTION_MODE="sideways")
+
+
 @pytest.mark.parametrize(
     ("field_name", "value"),
     [
