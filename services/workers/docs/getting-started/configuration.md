@@ -73,6 +73,12 @@ verify with
 `make load-test WORKER=payments VUS=40 DURATION=60s RPS=120 RABBITMQ_PREFETCH=10`.
 Analytics keeps the base default `1` until separately tested.
 
+Single-box follow-up (3-minute runs, one worker): with `POOL_MAX=10` (env-only,
+default stays `5`) the same worker drains ~150rps clean with zero DLQ/retries;
+past ~150–160rps it backlogs no matter the prefetch (pool contention past 10
+slots just inflates latency). Scale replicas beyond that; see PR #303 for the
+full matrix.
+
 ## Analytics Worker Configuration
 
 Uses only the base schema. No additional variables needed.
