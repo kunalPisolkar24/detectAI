@@ -28,7 +28,7 @@ class BaseEngine:
             probs = self.sigmoid(raw)
             return np.clip(probs, 0.0, 1.0).tolist()
         if raw.ndim == 2 and raw.shape[1] == 1:
-            probs = self.sigmoid(raw.flatten())
+            probs = self.sigmoid(raw.ravel())
             return np.clip(probs, 0.0, 1.0).tolist()
         if raw.ndim == 2 and raw.shape[1] == 2:
             probs = self.softmax(raw)

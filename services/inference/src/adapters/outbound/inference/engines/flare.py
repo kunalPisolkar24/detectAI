@@ -23,7 +23,7 @@ class FlareEngine(ISyncBatchInferenceEngine, BaseEngine):
             inputs = self.tokenizer(
                 texts, return_tensors="np", padding=True, truncation=True, max_length=self.max_length
             )
-            ort_inputs = {k: v.astype(np.int64) for k, v in inputs.items() if k in self.input_names}
+            ort_inputs = {k: v.astype(np.int64, copy=False) for k, v in inputs.items() if k in self.input_names}
             raw = self.session.run(None, ort_inputs)[0]
             return self.decode_logits(raw)
         except InferenceError:
@@ -39,5 +39,5 @@ class FlareEngine(ISyncBatchInferenceEngine, BaseEngine):
             truncation=True,
             max_length=min(self.max_length, 32),
         )
-        ort_inputs = {k: v.astype(np.int64) for k, v in inputs.items() if k in self.input_names}
+        ort_inputs = {k: v.astype(np.int64, copy=False) for k, v in inputs.items() if k in self.input_names}
         self.session.run(None, ort_inputs)
