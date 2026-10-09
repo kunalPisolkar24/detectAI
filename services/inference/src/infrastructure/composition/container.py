@@ -51,8 +51,8 @@ async def build_analysis_service(settings, telemetry, executors):
 
     spark_batched = BatchingProxy(
         spark_raw,
-        settings.BATCH_SIZE,
-        settings.BATCH_TIMEOUT,
+        settings.batch_size_for("spark"),
+        settings.batch_timeout_for("spark"),
         "spark",
         settings.BATCH_QUEUE_MAX_SIZE,
         executor=spark_ex,
@@ -61,8 +61,8 @@ async def build_analysis_service(settings, telemetry, executors):
     )
     flare_batched = BatchingProxy(
         flare_raw,
-        settings.BATCH_SIZE,
-        settings.BATCH_TIMEOUT,
+        settings.batch_size_for("flare"),
+        settings.batch_timeout_for("flare"),
         "flare",
         settings.BATCH_QUEUE_MAX_SIZE,
         executor=flare_ex,

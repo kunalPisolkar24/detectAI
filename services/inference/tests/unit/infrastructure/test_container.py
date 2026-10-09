@@ -6,8 +6,8 @@ import pytest
 from src.infrastructure.composition import container
 
 
-def _settings(warmup_enabled=True):
-    return SimpleNamespace(
+def _settings(warmup_enabled=True, **overrides):
+    settings = SimpleNamespace(
         MODEL_CACHE_DIR="./models",
         INFERENCE_PROVIDERS=["CPUExecutionProvider"],
         SPARK_MODEL_REVISION="9a48004391c71272d6fb1d164ed7c56e1fbfe360",
@@ -20,6 +20,10 @@ def _settings(warmup_enabled=True):
         ORT_WARMUP_ENABLED=warmup_enabled,
         BATCH_SIZE=2,
         BATCH_TIMEOUT=0.05,
+        SPARK_BATCH_SIZE=None,
+        SPARK_BATCH_TIMEOUT=None,
+        FLARE_BATCH_SIZE=None,
+        FLARE_BATCH_TIMEOUT=None,
         BATCH_QUEUE_MAX_SIZE=8,
         MAX_CONCURRENT_BATCHES=1,
         CHUNK_TOKEN_LIMIT=4,
@@ -28,6 +32,17 @@ def _settings(warmup_enabled=True):
         MAX_INFLIGHT_DOC_CHUNKS=2,
         MAX_TEXT_CHARS=100,
     )
+    for key, value in overrides.items():
+        setattr(settings, key, value)
+    settings.batch_size_for = lambda model_key: (
+        {"spark": settings.SPARK_BATCH_SIZE, "flare": settings.FLARE_BATCH_SIZE}.get(model_key)
+        or settings.BATCH_SIZE
+    )
+    settings.batch_timeout_for = lambda model_key: (
+        {"spark": settings.SPARK_BATCH_TIMEOUT, "flare": settings.FLARE_BATCH_TIMEOUT}.get(model_key)
+        or settings.BATCH_TIMEOUT
+    )
+    return settings
 
 
 def _patch_composition():
@@ -93,3 +108,28 @@ def test_warmup_engine_failure_does_not_raise():
     engine.warmup.side_effect = RuntimeError("ort boom")
 
     container._warmup_engine(engine, "spark")
+
+
+@pytest.mark.asyncio
+async def test_build_passes_per_model_batch_config():
+    import concurrent.futures
+
+    patches = _patch_composition()
+    with patches[0] as mock_loader_cls, patches[1], patches[2], \
+         patches[3] as mock_batcher_cls, patches[4], patches[5]:
+        mock_loader_cls.return_value.load.side_effect = lambda key: (f"{key}-session", f"{key}-tokenizer")
+        batcher = MagicMock()
+        batcher.start = AsyncMock()
+        mock_batcher_cls.return_value = batcher
+
+        settings = _settings(FLARE_BATCH_SIZE=6, FLARE_BATCH_TIMEOUT=0.2)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as spark_ex, \
+             concurrent.futures.ThreadPoolExecutor(max_workers=1) as flare_ex:
+            await container.build_analysis_service(settings, MagicMock(), (spark_ex, flare_ex))
+
+        assert mock_batcher_cls.call_count == 2
+        spark_call, flare_call = mock_batcher_cls.call_args_list
+        assert spark_call.args[1:3] == (2, 0.05)
+        assert spark_call.args[3] == "spark"
+        assert flare_call.args[1:3] == (6, 0.2)
+        assert flare_call.args[3] == "flare"
