@@ -1,5 +1,11 @@
-import unicodedata
+import re
+
 from src.domain.exceptions import InvalidInputError
+
+# Unicode Cc (control) is exactly U+0000-U+001F and U+007F-U+009F. A compiled
+# regex keeps this scan in C instead of a per-char unicodedata.category()
+# Python loop over up to MAX_TEXT_CHARS input.
+_CONTROLS_RE = re.compile("[\x00-\x1f\x7f-\x9f]")
 
 
 class InputValidator:
@@ -16,7 +22,7 @@ class InputValidator:
 
         # Replace control characters (Cc) with space to preserve word boundaries; keep other categories
         # Previously deleted all C* which concatenated words like "hello\\nworld" -> "helloworld"
-        sanitized = "".join(" " if unicodedata.category(ch) == "Cc" else ch for ch in text)
+        sanitized = _CONTROLS_RE.sub(" ", text)
         sanitized = sanitized.strip()
 
         if not sanitized:
