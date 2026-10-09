@@ -17,6 +17,13 @@ _SHUTDOWN_SENTINEL = object()
 _PROCESSING_TIMEOUT = 30.0
 
 
+def _queue_gauge_child(model_name: str):
+    try:
+        return BATCH_QUEUE_SIZE.labels(model=model_name)
+    except Exception:
+        return None
+
+
 @dataclass(slots=True)
 class PendingPrediction:
     text: str
@@ -58,6 +65,7 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
         self._start_lock = asyncio.Lock()
         self._state_lock = asyncio.Lock()
         self.telemetry = telemetry
+        self._queue_gauge = _queue_gauge_child(model_name)
 
     def _record_queue_rejected(self, reason: str) -> None:
         if self.telemetry is not None:
@@ -82,6 +90,45 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
             observe_queue_wait(self.model_name, seconds)
         except Exception:
             pass
+
+    def _queue_inc(self) -> None:
+        if self._queue_gauge is not None:
+            try:
+                self._queue_gauge.inc()
+            except Exception:
+                pass
+
+    def _queue_dec(self) -> None:
+        if self._queue_gauge is not None:
+            try:
+                self._queue_gauge.dec()
+            except Exception:
+                pass
+
+    def _note_dequeued(self, item: PendingPrediction) -> None:
+        self._queue_dec()
+        if getattr(item, "enqueue_time", 0):
+            self._observe_queue_wait(time.monotonic() - item.enqueue_time)
+
+    def _drain_into(self, batch: list[PendingPrediction]) -> bool:
+        """Move waiting items into batch without arming timers.
+
+        Returns True when collection must stop (sentinel seen).
+        """
+        while len(batch) < self.batch_size:
+            try:
+                nxt = self.queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return False
+            if nxt is _SHUTDOWN_SENTINEL:
+                try:
+                    self.queue.put_nowait(_SHUTDOWN_SENTINEL)
+                except asyncio.QueueFull:
+                    pass
+                return True
+            self._note_dequeued(nxt)
+            batch.append(nxt)
+        return False
 
     async def start(self) -> None:
         async with self._start_lock:
@@ -112,7 +159,7 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
             future: asyncio.Future = loop.create_future()
             try:
                 self.queue.put_nowait(PendingPrediction(text=text, future=future, enqueue_time=time.monotonic()))
-                BATCH_QUEUE_SIZE.labels(model=self.model_name).inc()
+                self._queue_inc()
             except asyncio.QueueFull as exc:
                 future.cancel()
                 self._record_queue_rejected("queue_full")
@@ -206,10 +253,7 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
             if item is _SHUTDOWN_SENTINEL:
                 continue
             drained += 1
-            try:
-                BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
-            except Exception:
-                pass
+            self._queue_dec()
             self._record_queue_rejected("shutting_down")
             if not item.future.done():
                 item.future.set_exception(ServiceOverloadedError(f"{self.model_name} service is shutting down"))
@@ -228,38 +272,30 @@ class BatchingProxy(IAsyncInferenceEngine, IEngineHealthReporter):
                     break
                 if item is _SHUTDOWN_SENTINEL:
                     break
-                try:
-                    BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
-                except Exception:
-                    pass
-                if getattr(item, "enqueue_time", 0):
-                    self._observe_queue_wait(time.monotonic() - item.enqueue_time)
+                self._note_dequeued(item)
 
                 batch: List[PendingPrediction] = [item]
                 start = time.monotonic()
                 while len(batch) < self.batch_size:
+                    if self._drain_into(batch):
+                        break
                     remaining = self.timeout - (time.monotonic() - start)
                     if remaining <= 0:
                         break
                     try:
                         nxt = await asyncio.wait_for(self.queue.get(), timeout=remaining)
-                        if nxt is _SHUTDOWN_SENTINEL:
-                            try:
-                                self.queue.put_nowait(_SHUTDOWN_SENTINEL)
-                            except asyncio.QueueFull:
-                                pass
-                            break
-                        try:
-                            BATCH_QUEUE_SIZE.labels(model=self.model_name).dec()
-                        except Exception:
-                            pass
-                        if getattr(nxt, "enqueue_time", 0):
-                            self._observe_queue_wait(time.monotonic() - nxt.enqueue_time)
-                        batch.append(nxt)
                     except asyncio.TimeoutError:
                         break
                     except asyncio.CancelledError:
                         break
+                    if nxt is _SHUTDOWN_SENTINEL:
+                        try:
+                            self.queue.put_nowait(_SHUTDOWN_SENTINEL)
+                        except asyncio.QueueFull:
+                            pass
+                        break
+                    self._note_dequeued(nxt)
+                    batch.append(nxt)
 
                 if batch:
                     task = asyncio.create_task(self._process_batch_with_semaphore(batch))
