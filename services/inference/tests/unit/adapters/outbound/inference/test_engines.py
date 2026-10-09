@@ -147,3 +147,26 @@ def test_flare_engine_warmup_runs_session(mock_onnx_session):
     mock_onnx_session.run.assert_called_once()
     feed = mock_onnx_session.run.call_args.args[1]
     assert set(feed) <= {"input_ids", "attention_mask", "input_1"}
+
+def test_spark_engine_feeds_float32_dense_from_float64_sparse(mock_onnx_session):
+    from scipy.sparse import csr_matrix
+
+    captured = {}
+
+    class SparseTokenizer:
+        def transform(self, texts):
+            return csr_matrix(np.array([[0.0, 1.5, 0.0], [2.5, 0.0, 0.0]], dtype=np.float64))
+
+    def fake_run(output_names, feed):
+        captured.update(feed)
+        return [np.array([[0.2, 0.8], [0.7, 0.3]], dtype=np.float32)]
+
+    mock_onnx_session.run.side_effect = fake_run
+    engine = SparkEngine((mock_onnx_session, SparseTokenizer()))
+
+    results = engine.predict_batch(["a b", "c"])
+
+    assert len(results) == 2
+    vectorized = captured["input_1"]
+    assert vectorized.dtype == np.float32
+    np.testing.assert_allclose(vectorized, [[0.0, 1.5, 0.0], [2.5, 0.0, 0.0]], rtol=0, atol=1e-6)

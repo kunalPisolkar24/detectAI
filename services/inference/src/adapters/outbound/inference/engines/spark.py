@@ -22,7 +22,9 @@ class SparkEngine(ISyncBatchInferenceEngine, BaseEngine):
             return []
         outputs = None
         try:
-            vectorized = self.tokenizer.transform(texts).toarray().astype(np.float32)
+            # Cast in the sparse domain (O(nnz)) so only one float32 dense
+            # matrix is materialized instead of float64 dense + converted copy.
+            vectorized = self.tokenizer.transform(texts).astype(np.float32, copy=False).toarray()
             outputs = self.session.run(None, {self.input_name: vectorized})
             return self.decode_logits(outputs[0])
         except InferenceError:
