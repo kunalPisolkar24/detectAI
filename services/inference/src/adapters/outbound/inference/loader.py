@@ -4,12 +4,17 @@ import time
 
 import onnxruntime as ort
 import structlog
-from transformers import BertTokenizerFast
 from huggingface_hub import hf_hub_download, snapshot_download
 from huggingface_hub.utils import LocalEntryNotFoundError
+from transformers import BertTokenizerFast
 
 from src.adapters.outbound.inference.loading.provider_verifier import verify_providers
-from src.adapters.outbound.inference.loading.safe_unpickle import RestrictedUnpickler as _BaseUnpickler
+from src.adapters.outbound.inference.loading.safe_unpickle import (
+    RestrictedUnpickler as _BaseUnpickler,
+)
+from src.adapters.outbound.inference.loading.session_options import (
+    build_session_options,
+)
 from src.application.ports.outbound.model_loader import IModelLoader
 from src.domain.exceptions import ModelLoadError
 from src.infrastructure.config import parse_inference_providers
@@ -26,7 +31,9 @@ class RestrictedUnpickler(_BaseUnpickler):
 
 
 def _is_transient_error(exc: Exception) -> bool:
-    from src.adapters.outbound.inference.loading.hf_client import _is_transient_error as _impl
+    from src.adapters.outbound.inference.loading.hf_client import (
+        _is_transient_error as _impl,
+    )
 
     return _impl(exc)
 
@@ -40,6 +47,7 @@ class HuggingFaceLoader(IModelLoader):
         flare_model_revision: str = "e1911c0be59f4e10f0d120f639d1358e46bc2086",
         hf_token: str | None = None,
         telemetry=None,
+        session_options: ort.SessionOptions | None = None,
     ) -> None:
         self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True)
@@ -47,6 +55,7 @@ class HuggingFaceLoader(IModelLoader):
         self.flare_model_revision = flare_model_revision
         self.hf_token = hf_token
         self.telemetry = telemetry
+        self.session_options = session_options
         if providers is None:
             # Back-compat for tests / direct construction: default CPU provider.
             # Production path must inject Settings.INFERENCE_PROVIDERS explicitly.
@@ -87,7 +96,7 @@ class HuggingFaceLoader(IModelLoader):
         self._log_model_source("spark", repo_id, self.spark_model_revision)
         onnx_path = self._get_file(repo_id, "detect-ai-spark.onnx", self.spark_model_revision, local_only)
         tok_path = self._get_file(repo_id, "detect-ai-spark-tokenizer.pkl", self.spark_model_revision, local_only)
-        session = ort.InferenceSession(onnx_path, providers=self.providers)
+        session = ort.InferenceSession(onnx_path, sess_options=self._session_options(), providers=self.providers)
         verify_providers(session, "spark", repo_id, self.spark_model_revision, self.providers, self.telemetry)
         with open(tok_path, "rb") as f:
             data = f.read()
@@ -99,7 +108,9 @@ class HuggingFaceLoader(IModelLoader):
         self._log_model_source("flare", repo_id, self.flare_model_revision)
         model_path = self._get_directory(repo_id, self.flare_model_revision, local_only)
         tokenizer = BertTokenizerFast.from_pretrained(model_path)
-        session = ort.InferenceSession(os.path.join(model_path, "model.onnx"), providers=self.providers)
+        session = ort.InferenceSession(
+            os.path.join(model_path, "model.onnx"), sess_options=self._session_options(), providers=self.providers
+        )
         verify_providers(session, "flare", repo_id, self.flare_model_revision, self.providers, self.telemetry)
         return session, tokenizer
 
@@ -153,3 +164,8 @@ class HuggingFaceLoader(IModelLoader):
 
     def _log_model_source(self, model_key: str, repo_id: str, revision: str) -> None:
         logger.info("model_download_started", model=model_key, repo_id=repo_id, revision=revision, requested_providers=self.providers)
+
+    def _session_options(self) -> ort.SessionOptions:
+        if self.session_options is not None:
+            return self.session_options
+        return build_session_options()

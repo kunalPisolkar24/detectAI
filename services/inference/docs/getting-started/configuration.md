@@ -77,6 +77,20 @@ Allowed values:
 - `ROCMExecutionProvider` - AMD GPU
 - `OpenVINOExecutionProvider` - Intel optimization
 
+### ONNX Runtime
+
+```bash
+ORT_INTRA_OP_THREADS=1        # threads per op, 0 = ORT default (0..64)
+ORT_INTER_OP_THREADS=1        # threads across ops, 0 = ORT default (0..64)
+ORT_GRAPH_OPT_LEVEL=all       # disabled|basic|extended|all
+ORT_EXECUTION_MODE=sequential # sequential|parallel
+ORT_WARMUP_ENABLED=true       # run one dummy inference per model at startup
+```
+
+Keep `ORT_INTRA_OP_THREADS=1` with the default batcher thread pools to avoid
+oversubscribing CPU. Raise it only when `MAX_CONCURRENT_BATCHES` is low and a
+single `session.run` dominates latency.
+
 ### Observability
 
 ```bash

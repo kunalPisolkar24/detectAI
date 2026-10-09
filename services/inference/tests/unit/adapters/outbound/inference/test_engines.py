@@ -107,3 +107,43 @@ def test_flare_engine_failure(mock_onnx_session):
     with pytest.raises(InferenceError) as exc:
         engine.predict_batch(["text"])
     assert "Flare batch inference failed" in str(exc.value)
+
+def test_spark_engine_warmup_uses_session_feature_dim(mock_onnx_session):
+    shape_mock = MagicMock()
+    shape_mock.name = "input_1"
+    shape_mock.shape = ["batch", 7]
+    mock_onnx_session.get_inputs.return_value = [shape_mock]
+    engine = SparkEngine((mock_onnx_session, MockTokenizer()))
+
+    engine.warmup()
+
+    args, _ = mock_onnx_session.run.call_args
+    assert args[0] is None
+    import numpy as np
+
+    arr = args[1]["input_1"]
+    assert isinstance(arr, np.ndarray) and arr.shape == (1, 7)
+
+def test_spark_engine_warmup_falls_back_to_tokenizer_vocab(mock_onnx_session):
+    shape_mock = MagicMock()
+    shape_mock.name = "input_1"
+    shape_mock.shape = ["batch", None]
+    mock_onnx_session.get_inputs.return_value = [shape_mock]
+    tokenizer = MockTokenizer()
+    tokenizer.vocabulary_ = {"a": 0, "b": 1, "c": 2}
+    engine = SparkEngine((mock_onnx_session, tokenizer))
+
+    engine.warmup()
+
+    args, _ = mock_onnx_session.run.call_args
+    arr = args[1]["input_1"]
+    assert arr.shape == (1, 3)
+
+def test_flare_engine_warmup_runs_session(mock_onnx_session):
+    engine = FlareEngine((mock_onnx_session, MockTokenizer()))
+
+    engine.warmup()
+
+    mock_onnx_session.run.assert_called_once()
+    feed = mock_onnx_session.run.call_args.args[1]
+    assert set(feed) <= {"input_ids", "attention_mask", "input_1"}
