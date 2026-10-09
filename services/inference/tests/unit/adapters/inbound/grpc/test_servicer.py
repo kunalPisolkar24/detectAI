@@ -128,3 +128,39 @@ async def test_analyze_document_rejects_unknown_model(grpc_context):
     assert grpc_context.aborts == [
         (grpc.StatusCode.INVALID_ARGUMENT, "Unsupported analysis model: unknown")
     ]
+
+
+@pytest.mark.asyncio
+async def test_analyze_document_coalesces_progress_for_large_documents(grpc_context):
+    total = 52
+    analysis_service = MagicMock()
+    analysis_service.engines = {"spark": object()}
+
+    async def stream(*args, **kwargs):
+        yield DocumentStarted(total_chars=1000, total_chunks=total)
+        for processed in range(1, total + 1):
+            yield DocumentProgress(processed_chunks=processed, total_chunks=total)
+        yield DocumentScore(ai_probability=0.6, total_chunks=total, total_chars=1000, highlight_spans=[])
+
+    analysis_service.stream = stream
+    servicer = AIService(analysis_service)
+
+    request = ai_service_pb2.AnalyzeDocumentRequest(text="large document", model_id="spark")
+    events = await collect_events(servicer.AnalyzeDocument(request, grpc_context))
+
+    progress = [e.progress.processed_chunks for e in events if e.HasField("progress")]
+    assert progress == list(range(2, total + 1, 2))
+    assert events[0].HasField("started")
+    assert events[-1].HasField("final")
+
+
+def test_should_send_progress_boundaries():
+    from src.adapters.inbound.grpc.servicers import _should_send_progress
+
+    assert _should_send_progress(1, 1, 0) is True
+    assert _should_send_progress(2, 2, 0) is True
+    assert _should_send_progress(1, 2, 0) is True
+    assert _should_send_progress(1, 52, 0) is False
+    assert _should_send_progress(2, 52, 0) is True
+    assert _should_send_progress(2, 52, 2) is False
+    assert _should_send_progress(52, 52, 50) is True
