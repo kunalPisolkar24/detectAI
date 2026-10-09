@@ -7,6 +7,9 @@ export const paymentEnvSchema = baseEnvSchema
     PADDLE_ENVIRONMENT: z.enum(["sandbox", "production"]).optional(),
     EVENT_REDIS_URL: z.string().url(),
     EVENT_REDIS_PASSWORD: z.string().optional(),
+    // Payments-only default: load-tested to sustain ~120rps with zero DLQ/retries
+    // (base default 1 tops out at ~60rps). Analytics keeps the base default.
+    RABBITMQ_PREFETCH: z.coerce.number().int().min(1).max(1000).default(10),
   })
   .superRefine((data, ctx) => {
     if (!data.RABBITMQ_URL && data.ENV_TYPE === "prod") {
