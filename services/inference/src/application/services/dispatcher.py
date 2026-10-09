@@ -31,39 +31,83 @@ class ConcurrencyDispatcher:
         model_key: str = "unknown",
         telemetry: Optional[ITelemetryReporter] = None,
     ) -> AsyncGenerator[Tuple[int, float], None]:
-        semaphore = asyncio.Semaphore(self.max_inflight)
-
-        async def _worker(chunk_index: int, chunk: DocumentChunk) -> Tuple[int, float]:
-            async with semaphore:
-                try:
-                    if request_is_active is not None and not request_is_active():
-                        raise asyncio.CancelledError("Client disconnected")
-                except asyncio.CancelledError:
-                    raise
-                except Exception as e:
-                    logger.warning("request_is_active_check_failed", error=str(e))
-                    raise asyncio.CancelledError("Client disconnected") from e
-                result = await self._predict_chunk(engine, chunk.text, operation, model_key, telemetry)
-                return chunk_index, result
-
         if len(chunks) > 5000:
             logger.warning("large_chunk_count", count=len(chunks))
+        if not chunks:
+            return
 
-        tasks = [asyncio.create_task(_worker(i, c)) for i, c in enumerate(chunks)]
+        pending: asyncio.Queue[int] = asyncio.Queue()
+        for index in range(len(chunks)):
+            pending.put_nowait(index)
+        results: asyncio.Queue[tuple[int, bool, object]] = asyncio.Queue()
+        workers = [
+            asyncio.create_task(
+                self._pool_worker(engine, chunks, pending, results, request_is_active, operation, model_key, telemetry)
+            )
+            for _ in range(min(self.max_inflight, len(chunks)))
+        ]
 
+        settled = 0
         try:
-            for fut in asyncio.as_completed(tasks):
-                yield await fut
+            while settled < len(chunks):
+                idx, ok, payload = await results.get()
+                settled += 1
+                if not ok:
+                    assert isinstance(payload, BaseException)
+                    raise payload
+                assert isinstance(payload, float)
+                yield idx, payload
         except BaseException:
-            for t in tasks:
-                if not t.done():
-                    t.cancel()
-            if tasks:
+            for w in workers:
+                if not w.done():
+                    w.cancel()
+            if workers:
                 try:
-                    await asyncio.shield(asyncio.gather(*tasks, return_exceptions=True))
+                    await asyncio.shield(asyncio.gather(*workers, return_exceptions=True))
                 except asyncio.CancelledError:
                     pass
             raise
+
+    async def _pool_worker(
+        self,
+        engine: IAsyncInferenceEngine,
+        chunks: list[DocumentChunk],
+        pending: asyncio.Queue[int],
+        results: asyncio.Queue[tuple[int, bool, object]],
+        request_is_active: Callable[[], bool] | None,
+        operation: str,
+        model_key: str,
+        telemetry: ITelemetryReporter | None,
+    ) -> None:
+        while True:
+            try:
+                idx = pending.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            if not self._is_active(request_is_active):
+                results.put_nowait((idx, False, asyncio.CancelledError("Client disconnected")))
+                return
+            try:
+                value = await self._predict_chunk(engine, chunks[idx].text, operation, model_key, telemetry)
+            except asyncio.CancelledError:
+                raise
+            except BaseException as err:  # noqa: BLE001 - any chunk failure must be reported per item
+                results.put_nowait((idx, False, err))
+                return
+            else:
+                results.put_nowait((idx, True, value))
+
+    @staticmethod
+    def _is_active(request_is_active: Callable[[], bool] | None) -> bool:
+        if request_is_active is None:
+            return True
+        try:
+            return bool(request_is_active())
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 - caller hook may raise anything; treat as disconnect
+            logger.warning("request_is_active_check_failed", error=str(e))
+            return False
 
     async def _predict_chunk(
         self,

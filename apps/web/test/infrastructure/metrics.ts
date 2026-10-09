@@ -4,6 +4,8 @@ export const setupMetricsMocks = () => {
   vi.mock('@/lib/infrastructure/metrics', () => ({
     metrics: {
       rateLimitHits: { inc: vi.fn() },
+      abuseRateLimitHits: { inc: vi.fn() },
+      abuseRedisErrors: { inc: vi.fn() },
       analyticsPublishFailures: { inc: vi.fn() },
       usageRedisErrors: { inc: vi.fn() },
       usageSyncFallback: { inc: vi.fn() },

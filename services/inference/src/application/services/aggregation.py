@@ -55,50 +55,56 @@ class ResultAggregator:
         chunks: list[DocumentChunk],
         probabilities: list[float],
     ) -> list[HighlightSpan]:
-        # Pair and sort by char_start for sweep
-        pairs = sorted(zip(chunks, probabilities), key=lambda x: x[0].char_start)
         boundaries = sorted({b for chunk in chunks for b in (chunk.char_start, chunk.char_end)})
+        pos_index = {pos: i for i, pos in enumerate(boundaries)}
+        delta_count = [0] * len(boundaries)
+        delta_sum = [0.0] * len(boundaries)
+        for chunk, prob in zip(chunks, probabilities):
+            delta_count[pos_index[chunk.char_start]] += 1
+            delta_count[pos_index[chunk.char_end]] -= 1
+            delta_sum[pos_index[chunk.char_start]] += prob
+            delta_sum[pos_index[chunk.char_end]] -= prob
 
         spans: list[HighlightSpan] = []
-        active: list[tuple[DocumentChunk, float]] = []
-        idx = 0
-        for start, end in zip(boundaries, boundaries[1:]):
-            # Add chunks starting before end
-            while idx < len(pairs) and pairs[idx][0].char_start < end:
-                active.append(pairs[idx])
-                idx += 1
-            # Remove chunks ending before or at start
-            active = [p for p in active if p[0].char_end > start]
-            if not active:
+        active_count = 0
+        active_sum = 0.0
+        for k in range(len(boundaries) - 1):
+            active_count += delta_count[k]
+            active_sum += delta_sum[k]
+            if active_count == 0:
                 continue
-            overlapping = [prob for chunk, prob in active if chunk.char_start < end and chunk.char_end > start]
-
-            ai_probability = sum(overlapping) / len(overlapping)
-
-            if spans and spans[-1].char_end == start and self._label_for(spans[-1].ai_probability) == self._label_for(ai_probability):
-                previous = spans[-1]
-                previous_length = previous.char_end - previous.char_start
-                current_length = end - start
-                combined_length = previous_length + current_length
-                combined_probability = (
-                    (previous.ai_probability * previous_length) + (ai_probability * current_length)
-                ) / combined_length
-                spans[-1] = HighlightSpan(
-                    char_start=previous.char_start,
-                    char_end=end,
-                    ai_probability=combined_probability,
-                )
-                continue
-
-            spans.append(
-                HighlightSpan(
-                    char_start=start,
-                    char_end=end,
-                    ai_probability=ai_probability,
-                )
-            )
-
+            self._append_span(spans, boundaries[k], boundaries[k + 1], active_sum / active_count)
         return spans
+
+    def _append_span(
+        self,
+        spans: list[HighlightSpan],
+        start: int,
+        end: int,
+        ai_probability: float,
+    ) -> None:
+        if spans and spans[-1].char_end == start and self._label_for(spans[-1].ai_probability) == self._label_for(ai_probability):
+            previous = spans[-1]
+            previous_length = previous.char_end - previous.char_start
+            current_length = end - start
+            combined_length = previous_length + current_length
+            combined_probability = (
+                (previous.ai_probability * previous_length) + (ai_probability * current_length)
+            ) / combined_length
+            spans[-1] = HighlightSpan(
+                char_start=previous.char_start,
+                char_end=end,
+                ai_probability=combined_probability,
+            )
+            return
+
+        spans.append(
+            HighlightSpan(
+                char_start=start,
+                char_end=end,
+                ai_probability=ai_probability,
+            )
+        )
 
     def _label_for(self, ai_probability: float) -> str:
         return "AI" if ai_probability >= self.label_threshold else "Human"

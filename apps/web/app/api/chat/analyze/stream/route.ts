@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/config/auth-options"
 import { MAX_LIVE_ANALYSIS_CHARS } from "@/features/chat/constants"
 import { analysisOrchestrator } from "@/features/chat/services/analysis-orchestrator"
 import { rateLimitService } from "@/lib/application/rate-limit"
+import { abuseRateLimitService, extractClientIp, getAbuseRateLimitHeaders } from "@/lib/application/abuse-rate-limit"
 import { getPreviewUserId, isPreviewMode } from "@/lib/config/preview"
 import { env } from "@/lib/config/env"
 import { ChatAnalyzeRequestSchema } from "@/lib/domain/schemas/chat"
@@ -68,6 +69,20 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (!isLoadTest) {
+      const abuse = await abuseRateLimitService.consume({
+        scope: "analyze",
+        ip: extractClientIp(request.headers),
+        userId,
+      })
+      if (!abuse.allowed) {
+        return NextResponse.json(
+          { error: "Too many requests" },
+          { status: 429, headers: getAbuseRateLimitHeaders(abuse) },
+        )
+      }
+    }
+
     const body = await request.json()
     const parsed = requestSchema.safeParse(body)
     if (!parsed.success) {

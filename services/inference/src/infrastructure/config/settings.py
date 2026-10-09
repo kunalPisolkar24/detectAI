@@ -88,6 +88,10 @@ class Settings(BaseSettings):
     # -- batching / concurrency ------------------------------------------
     BATCH_SIZE: int = Field(default=32, gt=0, le=512)
     BATCH_TIMEOUT: float = Field(default=0.05, gt=0, le=10)
+    SPARK_BATCH_SIZE: int | None = Field(default=None, gt=0, le=512)
+    SPARK_BATCH_TIMEOUT: float | None = Field(default=None, gt=0, le=10)
+    FLARE_BATCH_SIZE: int | None = Field(default=None, gt=0, le=512)
+    FLARE_BATCH_TIMEOUT: float | None = Field(default=None, gt=0, le=10)
     BATCH_QUEUE_MAX_SIZE: int = Field(default=1024, gt=0, le=10000)
     INFERENCE_MAX_WORKERS: int = Field(default=32, gt=0, le=128)
     MAX_CONCURRENT_BATCHES: int = Field(default=4, gt=0, le=32)
@@ -99,6 +103,13 @@ class Settings(BaseSettings):
     INFERENCE_PROVIDERS: InferenceProviders = Field(
         default_factory=lambda: ["CPUExecutionProvider"]
     )
+
+    # -- onnx runtime -----------------------------------------------------
+    ORT_INTRA_OP_THREADS: int = Field(default=1, ge=0, le=64)
+    ORT_INTER_OP_THREADS: int = Field(default=1, ge=0, le=64)
+    ORT_GRAPH_OPT_LEVEL: Literal["disabled", "basic", "extended", "all"] = Field(default="all")
+    ORT_EXECUTION_MODE: Literal["sequential", "parallel"] = Field(default="sequential")
+    ORT_WARMUP_ENABLED: bool = Field(default=True)
 
     # -- observability ----------------------------------------------------
     LOG_LEVEL: str = Field(default="INFO")
@@ -132,6 +143,14 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.ENV_TYPE == "dev"
+
+    def batch_size_for(self, model_key: str) -> int:
+        override = {"spark": self.SPARK_BATCH_SIZE, "flare": self.FLARE_BATCH_SIZE}.get(model_key)
+        return override if override is not None else self.BATCH_SIZE
+
+    def batch_timeout_for(self, model_key: str) -> float:
+        override = {"spark": self.SPARK_BATCH_TIMEOUT, "flare": self.FLARE_BATCH_TIMEOUT}.get(model_key)
+        return override if override is not None else self.BATCH_TIMEOUT
 
     # -- validators -------------------------------------------------------
     @field_validator("ENV_TYPE", mode="before")
@@ -225,6 +244,9 @@ class Settings(BaseSettings):
             raise ValueError("MAX_GLOBAL_TOKENS must be >= CHUNK_TOKEN_LIMIT")
         if self.BATCH_QUEUE_MAX_SIZE < self.BATCH_SIZE:
             raise ValueError("BATCH_QUEUE_MAX_SIZE must be >= BATCH_SIZE")
+        for model_key in ("spark", "flare"):
+            if self.BATCH_QUEUE_MAX_SIZE < self.batch_size_for(model_key):
+                raise ValueError(f"BATCH_QUEUE_MAX_SIZE must be >= {model_key.upper()}_BATCH_SIZE")
         if self.INFERENCE_MAX_WORKERS < self.MAX_CONCURRENT_BATCHES:
             raise ValueError("INFERENCE_MAX_WORKERS must be >= MAX_CONCURRENT_BATCHES")
         return self

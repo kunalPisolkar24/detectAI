@@ -3,6 +3,16 @@ RPS ?= 5
 DURATION ?= 10s
 SEED_COUNT ?= 1000
 VUS ?=
+# Leave empty by default so each worker's compose fallback applies (payments 10,
+# analytics 1). Export so an explicit `RABBITMQ_PREFETCH=N make ...` reaches compose
+# interpolation (compose reads shell env, and make vars are not exported by default).
+# Note: `${VAR:-default}` in compose treats empty as unset, so exporting empty is safe.
+RABBITMQ_PREFETCH ?=
+export RABBITMQ_PREFETCH
+# Pool size forwarded the same way. Empty default preserves each compose
+# fallback (payments 5); pass POOL_MAX=N per run to sweep single-box capacity.
+POOL_MAX ?=
+export POOL_MAX
 
 # Worker selector for the docker targets below.
 # Usage: make worker-up WORKER=payments
@@ -58,8 +68,8 @@ help:
 	@echo ""
 	@echo "Load Testing (containerized rigs in infra/compose.load-*.yml):"
 	@echo "  make load-test WORKER=analytics|payments|cron - Run k6 in containers (params below)"
-	@echo "    VUS=10 DURATION=2m RPS=50 SEED_COUNT=1000 (cron seed size)"
-	@echo "    e.g. make load-test WORKER=payments VUS=10 DURATION=2m RPS=50"
+	@echo "    VUS=10 DURATION=2m RPS=50 SEED_COUNT=1000 (cron seed size) RABBITMQ_PREFETCH=(default: payments 10, analytics 1) POOL_MAX=(default 5)"
+	@echo "    e.g. make load-test WORKER=payments VUS=10 DURATION=2m RPS=50 RABBITMQ_PREFETCH=10"
 	@echo "  make load-down WORKER=... - Tear down the load rig (removes volumes)"
 	@echo "  make proxy           - Start the load testing proxy on host (for local runs)"
 	@echo "  make proxy-stop      - Kill any existing proxy process on port 9999"
@@ -196,7 +206,7 @@ proxy-stop:
 	@ss -tlnp | grep :9999 | grep -oP 'pid=\K[0-9]+' | xargs -I {} kill -9 {} 2>/dev/null || true
 
 # Containerized load testing: worker + proxy + k6 + isolated datastores.
-# Usage: make load-test WORKER=payments VUS=10 DURATION=2m RPS=50
+# Usage: make load-test WORKER=payments VUS=10 DURATION=2m RPS=50 RABBITMQ_PREFETCH=10 POOL_MAX=12
 #        make load-test WORKER=cron SEED_COUNT=1000
 # k6 exit code propagates (--exit-code-from k6), so threshold breaches fail.
 # Load host ports default away from dev stacks so rigs run side by side.
@@ -207,10 +217,12 @@ LOAD_RABBITMQ_PORT ?= 5690
 LOAD_WORKER_PORT ?= 7199
 LOAD_COMPOSE = docker compose --env-file $(ENV_FILE) -f infra/compose.load-$(WORKER).yml
 # Host bindings for the rig (dev defaults are usually taken by dev stacks).
+# RABBITMQ_PREFETCH / POOL_MAX are forwarded explicitly so per-run overrides reach
+# the worker container even though they are absent from infra/.env.example.
 LOAD_RUN_ENV = POSTGRES_PORT=$(LOAD_POSTGRES_PORT) REDIS_PORT=$(LOAD_REDIS_PORT) \
 	EVENT_REDIS_PORT=$(LOAD_EVENTS_PORT) RABBITMQ_PORT=$(LOAD_RABBITMQ_PORT) \
 	WORKER_ANALYTICS_PORT=$(LOAD_WORKER_PORT) WORKER_CRON_PORT=$(LOAD_WORKER_PORT) \
-	WORKER_PAYMENTS_PORT=$(LOAD_WORKER_PORT)
+	WORKER_PAYMENTS_PORT=$(LOAD_WORKER_PORT) RABBITMQ_PREFETCH=$(RABBITMQ_PREFETCH) POOL_MAX=$(POOL_MAX)
 
 load-test: worker-%
 	$(LOAD_COMPOSE) build
