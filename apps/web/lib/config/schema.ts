@@ -58,6 +58,13 @@ export const serverSchema = z.object({
 
   DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(5),
 
+  ABUSE_RATE_LIMIT_ANALYZE_MAX: z.coerce.number().int().min(1).max(10000).default(20),
+  ABUSE_RATE_LIMIT_ANALYZE_WINDOW_MS: z.coerce.number().int().min(1000).max(3600000).default(60000),
+  ABUSE_RATE_LIMIT_AUTH_MAX: z.coerce.number().int().min(1).max(10000).default(30),
+  ABUSE_RATE_LIMIT_AUTH_WINDOW_MS: z.coerce.number().int().min(1000).max(3600000).default(60000),
+  ABUSE_RATE_LIMIT_DEFAULT_MAX: z.coerce.number().int().min(1).max(100000).default(120),
+  ABUSE_RATE_LIMIT_DEFAULT_WINDOW_MS: z.coerce.number().int().min(1000).max(3600000).default(60000),
+
   OTEL_EXPORTER_OTLP_ENDPOINT: z
     .string()
     .optional()

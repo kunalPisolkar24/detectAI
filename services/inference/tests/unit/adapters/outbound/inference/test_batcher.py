@@ -7,7 +7,12 @@ from unittest.mock import patch
 import pytest
 
 from src.domain.exceptions import ServiceOverloadedError
-from src.adapters.outbound.inference.batcher import BatchingProxy
+from src.adapters.outbound.inference.batcher import (
+    _SHUTDOWN_SENTINEL,
+    BatchingProxy,
+    PendingPrediction,
+)
+from src.infrastructure.metrics import BATCH_QUEUE_SIZE
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -181,3 +186,88 @@ async def test_batcher_shutdown_does_not_leave_unretrieved_future_exceptions():
             )
         finally:
             loop.set_exception_handler(previous_handler)
+
+
+def _pending(loop, text):
+    return PendingPrediction(text=text, future=loop.create_future(), enqueue_time=0.0)
+
+
+@pytest.mark.asyncio
+async def test_batcher_caches_queue_gauge_child():
+    engine = PredictBatchEngine()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        batcher = BatchingProxy(engine, batch_size=1, timeout=0.1, model_name="gauge-test", queue_max_size=8, executor=executor)
+
+        assert batcher._queue_gauge is BATCH_QUEUE_SIZE.labels(model="gauge-test")
+
+
+@pytest.mark.asyncio
+async def test_drain_into_collects_without_timers():
+    engine = PredictBatchEngine()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        batcher = BatchingProxy(engine, batch_size=4, timeout=0.1, model_name="drain-test", queue_max_size=8, executor=executor)
+        loop = asyncio.get_running_loop()
+        batch = []
+        for text in ("a", "b", "c"):
+            batcher.queue.put_nowait(_pending(loop, text))
+
+        assert batcher._drain_into(batch) is False
+        assert [p.text for p in batch] == ["a", "b", "c"]
+        assert batcher.queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_drain_into_stops_at_batch_size():
+    engine = PredictBatchEngine()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        batcher = BatchingProxy(engine, batch_size=2, timeout=0.1, model_name="drain-test", queue_max_size=8, executor=executor)
+        loop = asyncio.get_running_loop()
+        batch = []
+        for text in ("a", "b", "c"):
+            batcher.queue.put_nowait(_pending(loop, text))
+
+        assert batcher._drain_into(batch) is False
+        assert [p.text for p in batch] == ["a", "b"]
+        assert batcher.queue.qsize() == 1
+
+
+@pytest.mark.asyncio
+async def test_drain_into_requeues_sentinel_and_stops():
+    engine = PredictBatchEngine()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        batcher = BatchingProxy(engine, batch_size=4, timeout=0.1, model_name="drain-test", queue_max_size=8, executor=executor)
+        loop = asyncio.get_running_loop()
+        batch = []
+        batcher.queue.put_nowait(_pending(loop, "a"))
+        batcher.queue.put_nowait(_SHUTDOWN_SENTINEL)
+
+        assert batcher._drain_into(batch) is True
+        assert [p.text for p in batch] == ["a"]
+        assert await batcher.queue.get() is _SHUTDOWN_SENTINEL
+
+
+@pytest.mark.asyncio
+async def test_drain_into_empty_queue():
+    engine = PredictBatchEngine()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        batcher = BatchingProxy(engine, batch_size=4, timeout=0.1, model_name="drain-test", queue_max_size=8, executor=executor)
+        batch = []
+
+        assert batcher._drain_into(batch) is False
+        assert batch == []
+
+
+@pytest.mark.asyncio
+async def test_batcher_burst_forms_single_batch():
+    engine = PredictBatchEngine(results=[0.1] * 8)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        batcher = BatchingProxy(engine, batch_size=8, timeout=0.5, model_name="burst-test", queue_max_size=16, executor=executor)
+        await batcher.start()
+
+        results = await asyncio.gather(*[batcher.predict(f"text{i}") for i in range(8)])
+
+        assert results == [0.1] * 8
+        assert len(engine.calls) == 1
+        assert len(engine.calls[0]) == 8
+
+        await batcher.shutdown()

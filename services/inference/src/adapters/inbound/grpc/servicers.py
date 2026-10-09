@@ -12,6 +12,15 @@ from src.generated import ai_service_pb2_grpc
 logger = structlog.get_logger()
 _MAX_MODEL_ID_LEN = 64
 _MAX_TEXT_LOG_LEN = 500
+_MAX_PROGRESS_EVENTS = 20
+
+
+def _should_send_progress(processed_chunks: int, total_chunks: int, last_sent: int) -> bool:
+    if processed_chunks >= total_chunks:
+        return True
+    if processed_chunks <= last_sent:
+        return False
+    return processed_chunks - last_sent >= max(1, total_chunks // _MAX_PROGRESS_EVENTS)
 
 
 def _normalize_model_id(request) -> str:
@@ -52,6 +61,7 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
         model_key = normalize_model_id(request)
         await self._ensure_model(context, model_key)
         model_name = model_key.capitalize()
+        last_progress_sent = 0
         try:
             async for event in self.analysis_service.stream(
                 request.text, model_key, request_is_active=lambda: not context.done()
@@ -62,7 +72,9 @@ class AIService(ai_service_pb2_grpc.AIServiceServicer):
                     yield self.presenter.build_started(event.total_chars, event.total_chunks)
                     continue
                 if self.presenter.is_progress(event):
-                    yield self.presenter.build_progress(event)
+                    if _should_send_progress(event.processed_chunks, event.total_chunks, last_progress_sent):
+                        yield self.presenter.build_progress(event)
+                        last_progress_sent = event.processed_chunks
                     continue
                 if self.presenter.is_final(event):
                     yield self.presenter.build_final(self._build_response(model_name, event))

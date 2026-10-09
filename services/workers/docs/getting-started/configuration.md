@@ -63,6 +63,22 @@ Extends the base schema with Paddle and events-redis settings:
 | `EVENT_REDIS_PASSWORD` | (extracted from URL) | no | Password for events Redis |
 | `RABBITMQ_URL` | (from base) | prod: yes | Required in prod |
 
+Load-tested guidance (payments only): default `RABBITMQ_PREFETCH` is `10`, which
+sustains ~120rps with zero DLQ/retries on a single worker with the default pool,
+while `1` tops out at ~60rps with unbounded queue growth. Ordering and idempotency
+are enforced by the DB row lock and dedup stores, not by `prefetch=1`, so the
+higher default does not weaken consistency. Override per deploy via environment
+(`RABBITMQ_PREFETCH=20 make worker-up WORKER=payments`, also tested clean) and
+verify with
+`make load-test WORKER=payments VUS=40 DURATION=60s RPS=120 RABBITMQ_PREFETCH=10`.
+Analytics keeps the base default `1` until separately tested.
+
+Single-box follow-up (3-minute runs, one worker): with `POOL_MAX=10` (env-only,
+default stays `5`) the same worker drains ~150rps clean with zero DLQ/retries;
+past ~150–160rps it backlogs no matter the prefetch (pool contention past 10
+slots just inflates latency). Scale replicas beyond that; see PR #303 for the
+full matrix.
+
 ## Analytics Worker Configuration
 
 Uses only the base schema. No additional variables needed.

@@ -107,3 +107,101 @@ def test_flare_engine_failure(mock_onnx_session):
     with pytest.raises(InferenceError) as exc:
         engine.predict_batch(["text"])
     assert "Flare batch inference failed" in str(exc.value)
+
+def test_spark_engine_warmup_uses_session_feature_dim(mock_onnx_session):
+    shape_mock = MagicMock()
+    shape_mock.name = "input_1"
+    shape_mock.shape = ["batch", 7]
+    mock_onnx_session.get_inputs.return_value = [shape_mock]
+    engine = SparkEngine((mock_onnx_session, MockTokenizer()))
+
+    engine.warmup()
+
+    args, _ = mock_onnx_session.run.call_args
+    assert args[0] is None
+    import numpy as np
+
+    arr = args[1]["input_1"]
+    assert isinstance(arr, np.ndarray) and arr.shape == (1, 7)
+
+def test_spark_engine_warmup_falls_back_to_tokenizer_vocab(mock_onnx_session):
+    shape_mock = MagicMock()
+    shape_mock.name = "input_1"
+    shape_mock.shape = ["batch", None]
+    mock_onnx_session.get_inputs.return_value = [shape_mock]
+    tokenizer = MockTokenizer()
+    tokenizer.vocabulary_ = {"a": 0, "b": 1, "c": 2}
+    engine = SparkEngine((mock_onnx_session, tokenizer))
+
+    engine.warmup()
+
+    args, _ = mock_onnx_session.run.call_args
+    arr = args[1]["input_1"]
+    assert arr.shape == (1, 3)
+
+def test_flare_engine_warmup_runs_session(mock_onnx_session):
+    engine = FlareEngine((mock_onnx_session, MockTokenizer()))
+
+    engine.warmup()
+
+    mock_onnx_session.run.assert_called_once()
+    feed = mock_onnx_session.run.call_args.args[1]
+    assert set(feed) <= {"input_ids", "attention_mask", "input_1"}
+
+def test_spark_engine_feeds_float32_dense_from_float64_sparse(mock_onnx_session):
+    from scipy.sparse import csr_matrix
+
+    captured = {}
+
+    class SparseTokenizer:
+        def transform(self, texts):
+            return csr_matrix(np.array([[0.0, 1.5, 0.0], [2.5, 0.0, 0.0]], dtype=np.float64))
+
+    def fake_run(output_names, feed):
+        captured.update(feed)
+        return [np.array([[0.2, 0.8], [0.7, 0.3]], dtype=np.float32)]
+
+    mock_onnx_session.run.side_effect = fake_run
+    engine = SparkEngine((mock_onnx_session, SparseTokenizer()))
+
+    results = engine.predict_batch(["a b", "c"])
+
+    assert len(results) == 2
+    vectorized = captured["input_1"]
+    assert vectorized.dtype == np.float32
+    np.testing.assert_allclose(vectorized, [[0.0, 1.5, 0.0], [2.5, 0.0, 0.0]], rtol=0, atol=1e-6)
+
+def test_flare_engine_reuses_int64_inputs_without_copy():
+    session = MagicMock()
+    names = []
+    for name in ("input_ids", "attention_mask"):
+        node = MagicMock()
+        node.name = name
+        names.append(node)
+    session.get_inputs.return_value = names
+    captured = {}
+
+    class IdentityTokenizer:
+        def __init__(self):
+            self.last = None
+
+        def __call__(self, texts, return_tensors=None, padding=True, truncation=True, max_length=None):
+            self.last = {
+                "input_ids": np.ones((len(texts), 4), dtype=np.int64),
+                "attention_mask": np.ones((len(texts), 4), dtype=np.int64),
+            }
+            return self.last
+
+    def fake_run(output_names, feed):
+        captured.update(feed)
+        return [np.array([[0.3, 0.7]], dtype=np.float32)]
+
+    session.run.side_effect = fake_run
+    tokenizer = IdentityTokenizer()
+    engine = FlareEngine((session, tokenizer))
+
+    results = engine.predict_batch(["text"])
+
+    assert results == approx([0.5987], abs=1e-4)
+    assert captured["input_ids"] is tokenizer.last["input_ids"]
+    assert captured["attention_mask"] is tokenizer.last["attention_mask"]
