@@ -55,6 +55,15 @@ MAX_CONCURRENT_BATCHES=4        # concurrent ONNX runs (1..32)
 MAX_INFLIGHT_DOC_CHUNKS=8       # concurrent chunks per request (1..64)
 ```
 
+Per-model batch overrides (unset = fall back to `BATCH_SIZE`/`BATCH_TIMEOUT`):
+
+```bash
+SPARK_BATCH_SIZE=               # TF-IDF model is sub-millisecond; smaller batches linger less
+SPARK_BATCH_TIMEOUT=
+FLARE_BATCH_SIZE=               # BERT model is slower; larger batches amortize session.run
+FLARE_BATCH_TIMEOUT=
+```
+
 ### Text Processing
 
 ```bash
@@ -161,6 +170,7 @@ The service validates all settings at startup:
 | `CHUNK_TOKEN_STRIDE must be less than or equal to CHUNK_TOKEN_LIMIT` | Stride > limit | Reduce stride or increase limit |
 | `MAX_GLOBAL_TOKENS must be >= CHUNK_TOKEN_LIMIT` | Global < chunk | Increase global or reduce chunk |
 | `BATCH_QUEUE_MAX_SIZE must be >= BATCH_SIZE` | Queue < batch | Increase queue or reduce batch |
+| `BATCH_QUEUE_MAX_SIZE must be >= SPARK_BATCH_SIZE` | Queue < model batch override | Increase queue or reduce override |
 | `INFERENCE_MAX_WORKERS must be >= MAX_CONCURRENT_BATCHES` | Workers < batches | Increase workers or reduce batches |
 | `Unknown INFERENCE_PROVIDERS` | Invalid provider | Use allowed provider names |
 | `Model revisions must be full 40-character lowercase git SHAs` | Bad revision | Use valid commit SHA |

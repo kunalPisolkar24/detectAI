@@ -105,3 +105,51 @@ def test_settings_reject_stride_greater_than_chunk_limit():
 def test_settings_reject_non_immutable_model_revisions(field_name, value):
     with pytest.raises(ValidationError, match="40-character lowercase git SHAs"):
         Settings(API_KEY="test-secret-key-16chars", **{field_name: value})
+
+
+def test_settings_batch_resolvers_fall_back_to_shared_defaults():
+    settings = Settings(API_KEY="test-secret-key-16chars")
+
+    assert settings.batch_size_for("spark") == settings.BATCH_SIZE
+    assert settings.batch_size_for("flare") == settings.BATCH_SIZE
+    assert settings.batch_timeout_for("spark") == settings.BATCH_TIMEOUT
+    assert settings.batch_timeout_for("flare") == settings.BATCH_TIMEOUT
+
+
+def test_settings_batch_resolvers_prefer_model_overrides():
+    settings = Settings(
+        API_KEY="test-secret-key-16chars",
+        SPARK_BATCH_SIZE=8,
+        SPARK_BATCH_TIMEOUT=0.01,
+        FLARE_BATCH_SIZE=64,
+        FLARE_BATCH_TIMEOUT=0.2,
+    )
+
+    assert settings.batch_size_for("spark") == 8
+    assert settings.batch_timeout_for("spark") == 0.01
+    assert settings.batch_size_for("flare") == 64
+    assert settings.batch_timeout_for("flare") == 0.2
+
+
+def test_settings_reject_model_batch_size_above_queue():
+    with pytest.raises(ValidationError, match="BATCH_QUEUE_MAX_SIZE"):
+        Settings(
+            API_KEY="test-secret-key-16chars",
+            BATCH_QUEUE_MAX_SIZE=8,
+            FLARE_BATCH_SIZE=16,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("SPARK_BATCH_SIZE", 0),
+        ("SPARK_BATCH_SIZE", 513),
+        ("SPARK_BATCH_TIMEOUT", 0),
+        ("FLARE_BATCH_SIZE", 0),
+        ("FLARE_BATCH_TIMEOUT", 11),
+    ],
+)
+def test_settings_reject_out_of_range_model_batch_values(field_name, value):
+    with pytest.raises(ValidationError):
+        Settings(API_KEY="test-secret-key-16chars", **{field_name: value})
