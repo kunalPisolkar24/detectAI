@@ -27,14 +27,18 @@ Logs are written to standard output in JSON format. They're useful for debugging
 
 ### Example Log Entry
 
+Logs are rendered by structlog's `JSONRenderer`, so the message key is `event` (not `msg`):
+
 ```json
 {
-  "level": "info",
-  "msg": "health_state_changed",
+  "event": "health_state_changed",
   "state": "SERVING",
-  "timestamp": "2024-09-10T12:00:00Z"
+  "level": "info",
+  "timestamp": "2026-10-09T12:00:00,000Z"
 }
 ```
+
+Fields after `event` depend on the call site — for example `health_state_changed` also emits `reason` when the state is `NOT_SERVING`.
 
 ### Log Levels
 
@@ -48,9 +52,9 @@ Logs are written to standard output in JSON format. They're useful for debugging
 
 ## Metrics
 
-Metrics are numbers that help you understand performance. They're exposed at:
+Metrics are numbers that help you understand performance. The service starts a Prometheus endpoint at startup:
 
-- **Metrics**: `http://localhost:8333/metrics`
+- `http://localhost:8333/metrics` (port from `METRICS_PORT`)
 
 ### Key Metrics
 
@@ -80,6 +84,7 @@ Metrics are numbers that help you understand performance. They're exposed at:
 | `inference_document_inflight_chunks` | Currently processing chunks |
 | `inference_document_chunks_processed_total` | Successfully processed chunks |
 | `inference_document_chunks_failed_total` | Failed chunks |
+| `inference_document_requests_total` | Document requests by outcome (`operation`, `model`, `status`) |
 
 #### Health
 
@@ -96,7 +101,10 @@ Metrics are numbers that help you understand performance. They're exposed at:
 |--------|-------------------|
 | `inference_batch_queue_rejected_total` | Rejected predictions |
 | `inference_batch_errors_total` | Batch processing errors |
-| `inference_engine_provider_fallback_total` | Provider fallbacks (GPU→CPU) |
+| `inference_engine_provider_fallback_total` | Provider fallbacks (GPU→CPU, offline) |
+| `model_ai_confidence_score` | Distribution of AI probability scores |
+
+> `inference_engine_circuit_open_seconds` is also registered but always reports `0` — the circuit breaker is not wired up yet. See [Health](../components/health.md).
 
 ### Viewing Metrics
 
@@ -133,23 +141,25 @@ If `OTEL_EXPORTER_OTLP_ENDPOINT` is empty, tracing is disabled (fail-open).
 
 ## Dashboards
 
-The service exposes metrics for Grafana dashboards:
+Grafana dashboards ship with the repo (paths are relative to the repository root, not `services/inference`):
 
 | Dashboard | What It Shows |
 |-----------|---------------|
-| `04-inference-overview.json` | API performance and health |
+| `infra/observability/dashboards/inference.json` | API performance and health |
 
 ### Setting Up Dashboards
 
-1. Import the JSON files into Grafana
+1. Import the JSON files from `infra/observability/dashboards/` into Grafana
 2. Configure Prometheus as the data source
-3. Point to `ai-service:8333`
+3. Point the dashboard at `ai-service:8333`
 
 ## Alerts
 
 Alerts notify you when something needs attention.
 
-### Built-in Alerts
+### Recommended Alerts
+
+There is no alerting config shipped with this service — the table below is the recommended baseline (the YAML that follows implements the first three):
 
 | Alert | Condition | What It Means |
 |-------|-----------|---------------|
@@ -176,13 +186,25 @@ groups:
           summary: "Inference service is down"
       
       - alert: HighErrorRate
-        expr: rate(grpc_requests_total{code!="OK"}[5m]) > 0.05
+        expr: |
+          sum(rate(grpc_requests_total{code!="OK"}[5m]))
+            /
+          sum(rate(grpc_requests_total[5m])) > 0.05
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "High error rate on inference service"
-      
+          summary: "More than 5% of inference requests are failing"
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(grpc_latency_seconds_bucket[5m]))) > 2.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Inference p95 latency above 2.5s for 10 minutes"
+
       - alert: QueueFull
         expr: inference_engine_health_status{status="queue_full"} == 1
         for: 1m
@@ -191,6 +213,8 @@ groups:
         annotations:
           summary: "Inference queue is full"
 ```
+
+The `HighErrorRate` rule divides failures by total requests so the threshold really is a 5% **ratio**, matching the table above.
 
 ## Monitoring Checklist
 
@@ -236,7 +260,7 @@ groups:
 
 1. Check `inference_engine_provider_fallback_total` - GPU→CPU fallbacks?
 2. Verify GPU is available: `nvidia-smi`
-3. Check Docker GPU access: `docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi`
+3. Check Docker GPU access: `docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi`
 
 ## Related Documentation
 

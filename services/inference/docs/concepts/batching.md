@@ -33,10 +33,10 @@ graph TB
 **What happens:**
 1. Client calls `predict(text)`
 2. If the service is shutting down or the worker is dead, reject immediately
-3. Add the prediction to a queue (max 1024 items)
-4. Worker collects up to 32 items within 50ms
+3. Add the prediction to a queue (max `BATCH_QUEUE_MAX_SIZE`, default 1024 items)
+4. Worker collects up to `BATCH_SIZE` (32) items within `BATCH_TIMEOUT` (50ms) — or the model's per-model override
 5. Cancelled predictions are filtered out
-6. Batch is processed on a thread pool (max 4 concurrent batches)
+6. Batch is processed on a thread pool (max `MAX_CONCURRENT_BATCHES` = 4 concurrent batches)
 7. Each batch has a 30-second timeout
 8. Results are sent back to waiting clients
 
@@ -46,8 +46,8 @@ The worker runs continuously in the background:
 
 1. Wait for items in the queue
 2. Collect items until:
-   - Batch size reached (32 items), OR
-   - Timeout reached (50ms), OR
+   - Batch size reached (`BATCH_SIZE` or the model's override), OR
+   - Timeout reached (`BATCH_TIMEOUT`, default 50ms), OR
    - Queue is empty
 3. Process the batch
 4. Repeat
@@ -109,12 +109,13 @@ classDiagram
         -executor: ThreadPoolExecutor
         -semaphore: Semaphore
         -active_batches: Set[Task]
+        +start()
         +predict(text): float
         +health_snapshot(): BatcherHealthSnapshot
-        +start()
         +shutdown()
-        -worker_loop()
-        -process_batch()
+        -_worker_loop()
+        -_drain_into(batch)
+        -_process_batch()
     }
     class PendingPrediction {
         +text: str
@@ -139,6 +140,19 @@ classDiagram
 | `BATCH_QUEUE_MAX_SIZE` | 1024 | Max queue size (1..10000) |
 | `MAX_CONCURRENT_BATCHES` | 4 | Concurrent ONNX runs (1..32) |
 
+### Per-Model Overrides
+
+Spark (TF-IDF) is sub-millisecond per batch while Flare (BERT) is much slower, so each model can be tuned independently:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `SPARK_BATCH_SIZE` | unset → `BATCH_SIZE` | Spark items per batch |
+| `SPARK_BATCH_TIMEOUT` | unset → `BATCH_TIMEOUT` | Spark linger time |
+| `FLARE_BATCH_SIZE` | unset → `BATCH_SIZE` | Flare items per batch |
+| `FLARE_BATCH_TIMEOUT` | unset → `BATCH_TIMEOUT` | Flare linger time |
+
+A practical starting point: keep Spark batches small (they finish fast, so large batches only add wait time) and let Flare batches run larger to amortize the cost of `session.run`. `BATCH_QUEUE_MAX_SIZE` must be at least as large as every effective batch size, or startup fails validation.
+
 ## Monitoring
 
 | Metric | What It Tells You |
@@ -149,6 +163,8 @@ classDiagram
 | `model_batch_processing_seconds` | Time to process batches |
 | `inference_batch_queue_rejected_total` | Rejected predictions |
 | `inference_batch_errors_total` | Batch processing errors |
+
+> Metric names here come from two generations of naming: `model_batch_*` (the original names) and `inference_*` (added later). Both are live and scraped together — this is intentional legacy naming, not a bug. The full list is in [Observability](../operations/observability.md).
 
 ## Troubleshooting
 

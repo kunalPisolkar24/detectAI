@@ -19,11 +19,11 @@ ML models can only process a fixed amount of text at once (like reading a book o
 graph TB
     Text[Validated Text 50k] --> Tok{tokenizer callable?}
     Tok -->|yes| BERT[BertTokenChunker offset_mapping]
-    Tok -->|no| Regex[RegexTokenChunker \\S+]
+    Tok -->|no| Regex[RegexTokenChunker word offsets]
     BERT --> Win[Sliding window 256/192 max_global 10000 max_chunks 10000]
     Regex --> Win
     Win --> Chunks[List DocumentChunk index/text/token_count/char_start/char_end]
-    Chunks --> Disp2[Dispatcher semaphore 8]
+    Chunks --> Disp2[Dispatcher worker pool 8]
     Disp2 --> Probs[probabilities 0..1]
     Probs --> Agg[ResultAggregator weighted]
     Agg --> Score[DocumentScore ai_probability + HighlightSpan sweep]
@@ -78,12 +78,17 @@ If tokenization produces no chunks but the text is non-empty, a single chunk cov
 
 ## Validation
 
-The `ChunkPlanner` validates:
-- `stride <= chunk_size` (overlap can't exceed chunk size)
-- `chunk_size > 0`
-- `max_global_tokens > 0`
-- Total tokens don't exceed `max_global_tokens`
-- Total chunks don't exceed `max_chunks` (10,000)
+Validation happens in two places:
+
+**`ChunkPlanner` (planning):**
+- `stride <= chunk_size` (step can't exceed the window)
+- `chunk_size > 0`, `max_global_tokens > 0`
+- Total chunks must not exceed `max_chunks` (10,000), otherwise `InvalidInputError: Too many chunks`
+
+**Each chunker (tokenizing):**
+- `BertTokenChunker` / `RegexTokenChunker` reject text over `max_global_tokens` with `InvalidInputError: Request exceeds hard limit of 10000 tokens`
+
+Both errors surface to the client as `INVALID_ARGUMENT`.
 
 ## Aggregation
 
@@ -134,11 +139,11 @@ classDiagram
 
 The aggregator also creates highlight spans showing which parts of the text are likely AI-generated:
 
-1. Sort chunks by `char_start`
-2. Find all boundaries (start/end positions)
-3. For each boundary region, average the probabilities of overlapping chunks
-4. Merge adjacent spans with the same label (`AI` or `Human`)
-5. Use length-weighted probability for merged spans
+1. Collect every chunk's `char_start` and `char_end` as a sorted set of boundaries
+2. Walk the boundaries, tracking which chunks are active over each region
+3. For each region, average the probabilities of the overlapping chunks
+4. Merge adjacent regions with the same label (`AI` or `Human`)
+5. Use a length-weighted average of the probabilities when merging
 
 **Example:**
 ```
@@ -160,7 +165,7 @@ Spans: [
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `CHUNK_TOKEN_LIMIT` | 256 | Tokens per chunk |
-| `CHUNK_TOKEN_STRIDE` | 192 | Overlap between chunks |
+| `CHUNK_TOKEN_STRIDE` | 192 | Step between chunk starts (so overlap = limit − stride = 64) |
 | `MAX_GLOBAL_TOKENS` | 10,000 | Max tokens per request |
 | `MAX_TEXT_CHARS` | 50,000 | Max input characters |
 

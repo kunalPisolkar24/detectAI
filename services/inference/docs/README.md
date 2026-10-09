@@ -16,38 +16,38 @@ Start here:
 
 | Document | What You'll Learn | When to Read |
 |----------|-------------------|--------------|
-| [Quick Start](getting-started/quickstart.md) | Run the service locally | First time using the service |
-| [Configuration](getting-started/configuration.md) | All settings and how to configure them | Setting up the service |
+| [Quick Start](getting-started/quickstart.md) | Run the service locally and make your first call | You haven't got it running yet |
+| [Configuration](getting-started/configuration.md) | Every env var, its default, and how dev/prod loading differs | You need to change a port, key, batch size or provider |
 
 ### Concepts
 
 | Document | What You'll Learn | When to Read |
 |----------|-------------------|--------------|
-| [Architecture](concepts/architecture.md) | How the service is built and why | Understanding the system |
-| [Request Flows](concepts/request-flows.md) | How requests move through the system | Understanding the flow |
-| [Chunking](concepts/chunking.md) | How text is split into chunks for analysis | Understanding text processing |
-| [Batching](concepts/batching.md) | How requests are batched for efficiency | Understanding performance |
+| [Architecture](concepts/architecture.md) | The layering, the startup sequence, and why the code uses ports and adapters | You're new to the codebase |
+| [Request Flows](concepts/request-flows.md) | What happens end to end for `Detect` and `AnalyzeDocument` | You're debugging a request or writing a client |
+| [Chunking](concepts/chunking.md) | How text becomes chunks and how chunk scores become one score | Scores or highlight spans look wrong |
+| [Batching](concepts/batching.md) | How individual predictions are grouped, and the queue/health rules | You're tuning throughput or latency |
 
 ### Components
 
 | Document | What You'll Learn | When to Read |
 |----------|-------------------|--------------|
-| [API Reference](components/api.md) | How to call the service | Integrating with other systems |
-| [Authentication](components/auth.md) | How authentication works | Securing your requests |
-| [Models](components/models.md) | How ML models are loaded and used | Understanding detection models |
-| [Health](components/health.md) | Health checks and monitoring | Monitoring the service |
+| [API Reference](components/api.md) | RPC signatures, fields, status codes, copy-paste examples | Integrating with the service |
+| [Authentication](components/auth.md) | API key vs JWT, what's checked, how failures are reported | You're hitting `UNAUTHENTICATED` |
+| [Models](components/models.md) | Which models run, where they come from, how they're loaded | Model download/loading issues |
+| [Health](components/health.md) | Health states, probes, Docker healthchecks, shutdown | Setting up or debugging probes |
 
 ### Operations
 
 | Document | What You'll Learn | When to Read |
 |----------|-------------------|--------------|
-| [Observability](operations/observability.md) | Metrics, logs, and alerts | Monitoring and debugging |
+| [Observability](operations/observability.md) | Metric names, log format, tracing, alert rules | Writing dashboards or alerts |
 
 ### Testing
 
 | Document | What You'll Learn | When to Read |
 |----------|-------------------|--------------|
-| [Testing Overview](testing/overview.md) | How to test the service | Writing or running tests |
+| [Testing Overview](testing/overview.md) | Unit vs integration vs load, and how to run each | Writing or running tests |
 
 ## Reading Order for Different Roles
 
@@ -73,8 +73,11 @@ Start here:
 
 ## Related Files
 
-- **Main README**: [`../../README.md`](../../README.md) - Overview and quick start
-- **Makefile**: [`../../Makefile`](../../Makefile) - Build and test commands
-- **Proto Definition**: [`../../protos/ai_service.proto`](../../protos/ai_service.proto) - API definition
-- **Docker Compose**: [`../../infra/compose.yml`](../../infra/compose.yml) - Local development setup
-- **Load Tests**: [`../../load/README.md`](../../load/README.md) - Load testing guide
+- **Main README**: [`../README.md`](../README.md) - Overview and quick start
+- **Makefile**: [`../Makefile`](../Makefile) - Build and test commands
+- **Proto Definition**: [`../protos/ai_service.proto`](../protos/ai_service.proto) - API definition
+- **Docker Compose**: [`../infra/compose.yml`](../infra/compose.yml) - Local development setup
+- **Env template**: [`../infra/.env.example`](../infra/.env.example) - Canonical env vars with defaults
+- **Load Tests**: [`../load/README.md`](../load/README.md) - Load testing guide
+
+> All `make` targets in these documents run from `services/inference`, not the repo root.

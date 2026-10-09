@@ -9,7 +9,7 @@ The service uses two configuration modes:
 - **Dev mode** (`ENV_TYPE=dev`) - Loads settings from `.env` file or environment variables. No AWS calls. Validation is local only.
 - **Prod mode** (`ENV_TYPE=prod`) - Loads secrets from AWS Secrets Manager and parameters from SSM Parameter Store. Strict validation rejects dev fallback values.
 
-**Precedence**: `process env` > `AWS (cfg)` > `prod non-secret overrides` > `Settings` defaults.
+**Precedence** (highest wins): `process env` → AWS values (`Secrets Manager` / `SSM`) → `Settings` defaults. In practice: an env var set in the shell always wins; AWS only fills keys you didn't set; anything left unset falls back to the defaults in `Settings`.
 
 ## Required Configuration
 
@@ -70,7 +70,7 @@ FLARE_BATCH_TIMEOUT=
 MAX_TEXT_CHARS=50000             # max input characters (1..200000)
 MAX_GLOBAL_TOKENS=10000          # max tokens per request (1..100000)
 CHUNK_TOKEN_LIMIT=256            # tokens per chunk (1..2048)
-CHUNK_TOKEN_STRIDE=192           # overlap between chunks (1..2048)
+CHUNK_TOKEN_STRIDE=192           # step between chunk starts; 256-192 = 64-token overlap (1..2048, <= limit)
 ```
 
 ### Inference Providers
@@ -112,10 +112,12 @@ OTEL_SERVICE_VERSION=0.1.0
 ### AWS (prod only)
 
 ```bash
-AWS_REGION=ap-south-1
-AWS_ENDPOINT_URL=                # LocalStack/Floci override
+AWS_REGION=ap-south-1                # default
+AWS_ENDPOINT_URL=                    # LocalStack/Floci override (unset = real AWS)
+# The next three are read by config/aws.py at prod startup; the values shown are
+# its built-in fallbacks when the env var is unset (Settings defaults are None):
 SSM_PREFIX=/detectai/inference/
-SSM_ENABLED=true                 # false disables SSM
+SSM_ENABLED=true                     # false disables SSM lookups
 INFERENCE_SECRETS_NAME=detectai/inference/secrets
 ```
 
@@ -165,7 +167,7 @@ The service validates all settings at startup:
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `ENV_TYPE must be dev or prod` | Invalid env type | Set `ENV_TYPE=dev` or `prod` |
+| `ENV_TYPE must be dev or prod` | Invalid env type | Use exactly `dev` or `prod` — aliases like `production` are rejected here; only the legacy `ENV`/`CONFIG_SOURCE` vars are mapped |
 | `API_KEY must be at least 16 characters` | Short API key | Use a longer key |
 | `CHUNK_TOKEN_STRIDE must be less than or equal to CHUNK_TOKEN_LIMIT` | Stride > limit | Reduce stride or increase limit |
 | `MAX_GLOBAL_TOKENS must be >= CHUNK_TOKEN_LIMIT` | Global < chunk | Increase global or reduce chunk |
@@ -210,8 +212,8 @@ The service includes a Makefile with common commands:
 
 **Service won't start?**
 - Check `API_KEY` is at least 16 characters
-- Verify `ENV_TYPE` is `dev` or `prod`
-- Look for validation errors in logs (panic at startup)
+- Verify `ENV_TYPE` is `dev` or `prod` (other values are rejected)
+- Look for a validation error in the startup logs — the process exits non-zero
 
 **Connection refused?**
 - Ensure Docker is running: `docker compose -f infra/compose.yml ps`

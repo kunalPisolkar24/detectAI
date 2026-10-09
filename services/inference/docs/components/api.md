@@ -9,7 +9,12 @@ This document explains how to use the Inference service API. The API uses **gRPC
 To use the API, you need:
 
 - A running Inference service (see [Configuration](../getting-started/configuration.md))
-- A gRPC client (like `grpcurl` for testing)
+- A gRPC client such as [`grpcurl`](https://github.com/fullstorydev/grpcurl) for the examples below
+- Credentials: every RPC except the health check needs an `x-api-key` header or a `Bearer` JWT (see [Authentication](auth.md))
+
+```bash
+export API_KEY=dev-secret-key-16chars-at-least   # must match the service's API_KEY
+```
 
 ### Base URL
 
@@ -28,7 +33,7 @@ localhost:50051
 **Request:**
 
 ```bash
-grpcurl -plaintext -d '{
+grpcurl -plaintext -H "x-api-key: $API_KEY" -d '{
   "text": "The quick brown fox jumps over the lazy dog.",
   "model_id": "spark"
 }' localhost:50051 aidetection.AIService/Detect
@@ -43,7 +48,8 @@ grpcurl -plaintext -d '{
   "isAiGenerated": false,
   "confidenceScore": 85.2,
   "humanConfidence": 85.2,
-  "aiConfidence": 14.8
+  "aiConfidence": 14.8,
+  "highlightSpans": []
 }
 ```
 
@@ -64,7 +70,9 @@ grpcurl -plaintext -d '{
 | `confidenceScore` | float | Overall confidence (0-100) |
 | `humanConfidence` | float | Confidence it's human-written (0-100) |
 | `aiConfidence` | float | Confidence it's AI-generated (0-100) |
-| `highlight_spans` | list | Spans showing AI-generated sections |
+| `highlightSpans` | list | Spans of AI-generated text: `charStart`, `charEnd`, `aiConfidence` (all JSON names use lowerCamelCase, per proto3 JSON mapping) |
+
+All three confidence fields are **percentages rounded to one decimal**, not 0-1 probabilities. `confidenceScore` mirrors the winning side: `aiConfidence` when `isAiGenerated` is true, otherwise `humanConfidence`.
 
 ### AnalyzeDocument (Server-Streaming RPC)
 
@@ -73,7 +81,7 @@ grpcurl -plaintext -d '{
 **Request:**
 
 ```bash
-grpcurl -plaintext -d '{
+grpcurl -plaintext -H "x-api-key: $API_KEY" -d '{
   "text": "Your long document text here...",
   "model_id": "flare"
 }' localhost:50051 aidetection.AIService/AnalyzeDocument
@@ -100,6 +108,8 @@ grpcurl -plaintext -d '{
   }
 }
 ```
+
+Progress events are **coalesced**: the server emits one only after at least `totalChunks / 20` chunks have completed since the previous one (the last chunk always emits). Small documents may see one event per chunk; a 500-chunk document sees at most ~20. Never assume one progress event per chunk.
 
 3. **Final event:**
 ```json
@@ -179,17 +189,17 @@ grpcurl -plaintext localhost:50051 grpc.health.v1.Health/Check
 ### Complete Analysis Flow
 
 ```bash
-# 1. Check health
+# 1. Check health (no auth needed)
 grpcurl -plaintext localhost:50051 grpc.health.v1.Health/Check
 
 # 2. Detect with Spark (fast)
-grpcurl -plaintext -d '{
+grpcurl -plaintext -H "x-api-key: $API_KEY" -d '{
   "text": "This is a test message.",
   "model_id": "spark"
 }' localhost:50051 aidetection.AIService/Detect
 
 # 3. Analyze with Flare (detailed)
-grpcurl -plaintext -d '{
+grpcurl -plaintext -H "x-api-key: $API_KEY" -d '{
   "text": "Your longer document here...",
   "model_id": "flare"
 }' localhost:50051 aidetection.AIService/AnalyzeDocument
@@ -199,16 +209,18 @@ grpcurl -plaintext -d '{
 
 ```bash
 # API key (internal service)
-grpcurl -H "x-api-key: $AI_SERVICE_API_KEY" \
+grpcurl -H "x-api-key: $API_KEY" \
   -d '{"text": "Hello world"}' \
   localhost:50051 aidetection.AIService/Detect
 ```
 
+`AI_SERVICE_API_KEY` (the name used elsewhere in the monorepo) holds the same value as the service's `API_KEY` — either name works as long as it matches.
+
 ### Using JWT Authentication
 
 ```bash
-# Generate a JWT token
-TOKEN=$(python load/scripts/generate_token.py --secret $AI_SERVICE_API_KEY)
+# Generate a JWT token (HS256, signed with the service API key)
+TOKEN=$(python load/scripts/generate_token.py --secret $API_KEY)
 
 # Use the token
 grpcurl -H "authorization: Bearer $TOKEN" \
