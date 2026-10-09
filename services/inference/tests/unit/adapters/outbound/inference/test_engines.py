@@ -170,3 +170,38 @@ def test_spark_engine_feeds_float32_dense_from_float64_sparse(mock_onnx_session)
     vectorized = captured["input_1"]
     assert vectorized.dtype == np.float32
     np.testing.assert_allclose(vectorized, [[0.0, 1.5, 0.0], [2.5, 0.0, 0.0]], rtol=0, atol=1e-6)
+
+def test_flare_engine_reuses_int64_inputs_without_copy():
+    session = MagicMock()
+    names = []
+    for name in ("input_ids", "attention_mask"):
+        node = MagicMock()
+        node.name = name
+        names.append(node)
+    session.get_inputs.return_value = names
+    captured = {}
+
+    class IdentityTokenizer:
+        def __init__(self):
+            self.last = None
+
+        def __call__(self, texts, return_tensors=None, padding=True, truncation=True, max_length=None):
+            self.last = {
+                "input_ids": np.ones((len(texts), 4), dtype=np.int64),
+                "attention_mask": np.ones((len(texts), 4), dtype=np.int64),
+            }
+            return self.last
+
+    def fake_run(output_names, feed):
+        captured.update(feed)
+        return [np.array([[0.3, 0.7]], dtype=np.float32)]
+
+    session.run.side_effect = fake_run
+    tokenizer = IdentityTokenizer()
+    engine = FlareEngine((session, tokenizer))
+
+    results = engine.predict_batch(["text"])
+
+    assert results == approx([0.5987], abs=1e-4)
+    assert captured["input_ids"] is tokenizer.last["input_ids"]
+    assert captured["attention_mask"] is tokenizer.last["attention_mask"]
