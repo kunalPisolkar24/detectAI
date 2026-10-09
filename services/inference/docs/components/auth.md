@@ -8,10 +8,11 @@ Authentication is the process of verifying who you are. The Inference service ne
 
 ## Why Authentication Matters
 
-- **Security** - Prevents unauthorized use of the service
-- **Usage tracking** - Knows who is making requests
-- **Rate limiting** - Can limit usage per user
-- **Audit trail** - Tracks who requested what analysis
+- **Security** - Prevents unauthorized use of the service (it listens on an open port with no TLS of its own)
+- **Usage tracking** - Binds `auth_type` and `user_id` (the JWT `sub`) to logs and traces
+- **Audit trail** - Metrics record who failed and why via `grpc_auth_failures_total`
+
+> The service does not implement rate limiting itself — it relies on callers and network-level controls for that.
 
 ## Authentication Methods
 
@@ -22,21 +23,21 @@ The service supports two authentication methods:
 API keys are simple strings used for internal service-to-service communication.
 
 ```bash
-# Pass API key in x-api-key header
-grpcurl -H "x-api-key: $AI_SERVICE_API_KEY" \
+# Pass API key in x-api-key header (the service's own env var is API_KEY;
+# AI_SERVICE_API_KEY is a legacy alias that holds the same value)
+grpcurl -H "x-api-key: $API_KEY" \
   -d '{"text": "Hello world"}' \
   localhost:50051 aidetection.AIService/Detect
 ```
 
 **How it works:**
 1. Client sends `x-api-key` header
-2. Service compares it to the configured `API_KEY` using constant-time comparison
+2. Service compares it to the configured `API_KEY`
 3. If match, request proceeds with `auth_type=api_key`
-4. If no match, returns `UNAUTHENTICATED`
+4. If no match, the request falls through to the Bearer check and then returns `UNAUTHENTICATED`
 
 **Requirements:**
-- API key must be at least 16 characters
-- Compared using constant-time comparison (prevents timing attacks)
+- API key must be at least 16 characters (enforced at startup)
 - Never logged (security)
 
 ### Method 2: JWT Token (Load Tests, External Clients)
@@ -45,7 +46,7 @@ JWT (JSON Web Token) tokens are used for more complex authentication scenarios.
 
 ```bash
 # Generate a JWT token
-TOKEN=$(python load/scripts/generate_token.py --secret $AI_SERVICE_API_KEY)
+TOKEN=$(python load/scripts/generate_token.py --secret $API_KEY)
 
 # Pass JWT in authorization header
 grpcurl -H "authorization: Bearer $TOKEN" \
@@ -69,6 +70,8 @@ grpcurl -H "authorization: Bearer $TOKEN" \
 - Maximum `sub` length: 128 characters
 
 ## Authentication Flow
+
+`MonitoringInterceptor` wraps `AuthInterceptor`, so metrics and trace IDs are recorded even for rejected requests. The diagram below zooms in on the auth step:
 
 ```mermaid
 sequenceDiagram
@@ -120,7 +123,7 @@ The service includes a token generator for load testing:
 
 ```bash
 # Generate a token with default settings
-python load/scripts/generate_token.py --secret $AI_SERVICE_API_KEY
+python load/scripts/generate_token.py --secret $API_KEY
 
 # Output: eyJhbGciOiJIUzI1NiIs...
 ```
@@ -135,8 +138,8 @@ python load/scripts/generate_token.py --secret $AI_SERVICE_API_KEY
 
 - `Authorization` header is never logged
 - Log values are truncated to prevent injection
-- API keys use constant-time comparison
-- JWT tokens have length limits to prevent DoS
+- The API key is a high-entropy shared secret compared with a direct string equality check in `AuthInterceptor`
+- JWT tokens have length limits (8192 chars) to prevent DoS
 
 ## Troubleshooting
 
@@ -154,7 +157,7 @@ python load/scripts/generate_token.py --secret $AI_SERVICE_API_KEY
 **Cause:** JWT token has passed its expiration time.
 
 **Fix:**
-- Generate a new token: `python load/scripts/generate_token.py --secret $AI_SERVICE_API_KEY`
+- Generate a new token: `python load/scripts/generate_token.py --secret $API_KEY`
 - Tokens expire after 1 hour by default
 
 ### "Invalid or missing Bearer token" Error

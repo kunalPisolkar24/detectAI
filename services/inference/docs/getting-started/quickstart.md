@@ -5,8 +5,9 @@ This guide will help you get the Inference service running quickly.
 ## Prerequisites
 
 - Docker and Docker Compose
-- Python 3.11+ (for local development)
-- Poetry (for dependency management)
+- [`grpcurl`](https://github.com/fullstorydev/grpcurl) — used by every command below
+- Python 3.11+ and [Poetry](https://python-poetry.org/) (only for running tests or the service outside Docker)
+- `make` (ships with macOS/Linux)
 
 ## What is the Inference Service?
 
@@ -14,37 +15,58 @@ The Inference service detects whether text was written by a human or generated b
 
 ## Running Locally
 
-### Step 1: Start the Service
+### Step 1: Configure
 
 ```bash
-# Navigate to the inference service directory
 cd services/inference
 
-# Start the service with Docker
+# Create your local env file (Docker Compose reads infra/.env automatically)
+cp infra/.env.example infra/.env
+```
+
+`infra/.env.example` ships working defaults. The only value you must keep valid is `API_KEY` (16+ characters) — every RPC except the health check authenticates with it.
+
+### Step 2: Start the Service
+
+```bash
 make inference-up
 ```
+
+First startup downloads the models from HuggingFace and can take a few minutes; the container reports `healthy` once it's ready.
 
 This starts the `ai-service` container with:
 - **gRPC server** on port `50051`
 - **Metrics server** on port `8333`
 
-### Step 2: Verify It's Running
+### Step 3: Verify It's Running
 
 ```bash
 # Check if the service is healthy
 docker compose -f infra/compose.yml ps
 
-# Test the health endpoint
+# Test the health endpoint (health checks skip authentication)
 grpcurl -plaintext localhost:50051 grpc.health.v1.Health/Check
 ```
 
-### Step 3: Try It Out
+Expected:
+
+```json
+{ "status": "SERVING" }
+```
+
+### Step 4: Try It Out
+
+Export the API key so the examples below work:
+
+```bash
+export API_KEY=dev-secret-key-16chars-at-least   # from infra/.env
+```
 
 #### Analyze Short Text (Unary RPC)
 
 ```bash
 # Detect if text is AI-generated
-grpcurl -plaintext -d '{
+grpcurl -plaintext -H "x-api-key: $API_KEY" -d '{
   "text": "The quick brown fox jumps over the lazy dog.",
   "model_id": "spark"
 }' localhost:50051 aidetection.AIService/Detect
@@ -58,15 +80,18 @@ Response:
   "isAiGenerated": false,
   "confidenceScore": 85.2,
   "humanConfidence": 85.2,
-  "aiConfidence": 14.8
+  "aiConfidence": 14.8,
+  "highlightSpans": []
 }
 ```
+
+Confidence values are percentages (0-100), rounded to one decimal.
 
 #### Analyze Long Document (Server-Streaming RPC)
 
 ```bash
 # Stream analysis of a longer document
-grpcurl -plaintext -d '{
+grpcurl -plaintext -H "x-api-key: $API_KEY" -d '{
   "text": "Your long document text here...",
   "model_id": "flare"
 }' localhost:50051 aidetection.AIService/AnalyzeDocument
@@ -74,7 +99,7 @@ grpcurl -plaintext -d '{
 
 This returns a stream of events:
 1. `started` - Total characters and chunks
-2. `progress` - Processing progress (monotonically increasing)
+2. `progress` - Processing progress (monotonically increasing; coalesced to at most ~20 events per request)
 3. `final` - Complete analysis result
 
 ## What Just Happened?
@@ -85,7 +110,7 @@ This returns a stream of events:
 
 The service:
 1. Validated your input (not empty, within size limits)
-2. Split the text into chunks (256 tokens each with 192 token overlap)
+2. Split the text into chunks (256-token windows stepping 192 tokens, so 64 tokens of overlap)
 3. Ran each chunk through the selected model
 4. Aggregated results with weighted scoring
 5. Returned a confidence score (0-100) and highlight spans
@@ -99,7 +124,7 @@ To run with GPU support:
 make inference-up GPU=1
 ```
 
-This uses the CUDA-enabled Docker image for faster inference.
+This uses the CUDA-enabled Docker image for faster inference (requires the NVIDIA container toolkit).
 
 ## Next Steps
 
@@ -116,9 +141,15 @@ Make sure Docker is running and the service is started:
 docker compose -f infra/compose.yml ps
 ```
 
+If the container is `starting`, wait — the first run downloads models (the health check allows up to 10 minutes).
+
 ### "Port already in use"
 
-Another process is using the port. Either stop it or change the port in configuration.
+Another process is using the port. Either stop it or change the port in `infra/.env` (`GRPC_PORT`, `METRICS_PORT`).
+
+### "UNAUTHENTICATED"
+
+You called an RPC without credentials. Add `-H "x-api-key: $API_KEY"` (or a Bearer token) — only `grpc.health.v1.Health/Check` and `Watch` skip auth.
 
 ### "Service not responding"
 
@@ -129,18 +160,18 @@ docker compose -f infra/compose.yml logs ai-service
 
 ### "Model loading failed"
 
-The first run downloads models from HuggingFace. Ensure you have internet access. Models are cached in `./models` directory.
+The first run downloads models from HuggingFace. Ensure you have internet access. Models are cached in the `./models` directory (`MODEL_CACHE_DIR`).
 
 ## Running Tests
 
 ```bash
-# Unit tests (no Docker)
+# Unit tests (no Docker, no model download)
 make test
 
-# Integration tests (requires Docker)
+# Integration tests (no Docker, no model download — uses a built-in dummy engine)
 make test-integration
 
-# Load tests
+# Load tests (spins up a separate compose stack, needs Docker)
 make load-test SCENARIO=smoke GPU=0 VUS=1
 ```
 

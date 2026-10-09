@@ -36,20 +36,20 @@ make test-coverage
 
 ### Integration Tests
 
-**What they are:** Tests that check multiple parts working together with real models.
+**What they are:** Tests that check multiple parts working together — the real gRPC server, interceptors, batching proxy and the full analysis pipeline — wired over a loopback port.
 
 **When to use:** Before committing code.
 
-**Speed:** Medium (minutes).
+**Speed:** Medium (seconds to a minute).
 
-**Dependencies:** Model files (downloaded from HuggingFace).
+**Dependencies:** None. They use a built-in `DummyEngine` (returns `0.5` for every chunk), so no model files are downloaded and no Docker is needed.
 
 ```bash
 # Run integration tests
 make test-integration
 ```
 
-**Example:** Testing that the complete analysis pipeline works end-to-end.
+**Example:** Testing that a full `AnalyzeDocument` stream emits `started` → `progress` → `final`, or that an invalid API key gets rejected.
 
 ### Load Tests
 
@@ -92,24 +92,37 @@ make load-test SCENARIO=soak GPU=0 VUS=2 DURATION=30m
 ```
 inference/
 ├── tests/
+│   ├── conftest.py                       # Shared fixtures
 │   ├── unit/
 │   │   ├── domain/
-│   │   │   └── test_exceptions.py      # Domain model tests
+│   │   │   └── test_exceptions.py        # Domain exceptions
 │   │   ├── application/
-│   │   │   └── test_document_analysis.py # Business logic tests
-│   │   └── adapters/
-│   │       ├── inbound/grpc/
-│   │       │   ├── test_interceptors.py  # Auth tests
-│   │       │   ├── test_servicer.py      # API handler tests
-│   │       │   └── test_server.py        # Server tests
-│   │       └── outbound/inference/
-│   │           ├── test_batcher.py       # Batching tests
-│   │           ├── test_engines.py       # Model engine tests
-│   │           └── test_loader.py        # Model loading tests
+│   │   │   ├── test_document_analysis.py # Analysis use case
+│   │   │   ├── test_validation.py        # Input validation
+│   │   │   ├── test_aggregation.py       # Weighted scoring + highlights
+│   │   │   └── test_dispatcher.py        # Chunk worker pool
+│   │   ├── adapters/
+│   │   │   ├── inbound/grpc/
+│   │   │   │   ├── test_interceptors.py  # Auth + monitoring
+│   │   │   │   ├── test_servicer.py      # RPC handlers
+│   │   │   │   ├── test_server.py        # Server + health monitor
+│   │   │   │   └── test_server_smoke.py  # Startup smoke test
+│   │   │   └── outbound/inference/
+│   │   │       ├── test_batcher.py       # Batching proxy
+│   │   │       ├── test_engines.py       # Spark/Flare engines
+│   │   │       ├── test_base_engine.py   # Logit decoding
+│   │   │       ├── test_loader.py        # HF download + sessions
+│   │   │       └── test_session_options.py # ONNX session tuning
+│   │   └── infrastructure/
+│   │       ├── test_config.py            # Settings validation
+│   │       ├── test_container.py         # Composition root
+│   │       ├── test_log_setup.py         # structlog setup
+│   │       └── test_tracing.py           # OTel setup
 │   └── integration/
-│       ├── test_pipeline.py              # End-to-end tests
-│       ├── test_observability.py         # Metrics tests
-│       └── test_concurrency.py           # Concurrency tests
+│       ├── conftest.py                   # DummyEngine + test server
+│       ├── test_pipeline.py              # End-to-end RPC tests
+│       ├── test_observability.py         # Metrics + health tests
+│       └── test_concurrency.py           # Batching + cancellation
 ├── load/
 │   ├── scenarios/                        # Load test scenarios
 │   ├── lib/                              # Load test helpers
@@ -129,55 +142,53 @@ from src.application.services.validation import InputValidator
 from src.domain.exceptions import InvalidInputError
 
 def test_validate_valid_text():
-    """Test that valid text passes validation."""
     validator = InputValidator(max_text_chars=50000)
-    result = validator.validate("Hello, world!")
-    assert result == "Hello, world!"
+    assert validator.validate("Hello, world!") == "Hello, world!"
 
 def test_validate_empty_text():
-    """Test that empty text raises error."""
-    validator = InputValidator(max_text_chars=50000)
     with pytest.raises(InvalidInputError):
-        validator.validate("")
+        InputValidator(max_text_chars=50000).validate("")
 
 def test_validate_too_long():
-    """Test that text exceeding max length raises error."""
-    validator = InputValidator(max_text_chars=100)
     with pytest.raises(InvalidInputError):
-        validator.validate("a" * 101)
+        InputValidator(max_text_chars=100).validate("a" * 101)
 ```
 
 ### Integration Test Example
 
+Integration tests spin up a real gRPC server on a free port using the `integration_app` fixture (which wires in a `DummyEngine`) and call it through a real client stub:
+
 ```python
 import pytest
-from src.infrastructure.composition.container import build_analysis_service
+import grpc
+from src.generated import ai_service_pb2, ai_service_pb2_grpc
 
-@pytest.mark.integration
-async def test_analyze_short_text():
-    """Test complete analysis pipeline with short text."""
-    # Setup
-    service, _ = await build_analysis_service(settings, telemetry, executors)
-    
-    # Act
-    result = await service.analyze("Hello, world!", "spark")
-    
-    # Assert
-    assert 0.0 <= result.ai_probability <= 1.0
-    assert result.total_chunks > 0
-    assert result.total_chars > 0
+async def test_detect_rejects_missing_token(integration_app):
+    channel = grpc.aio.insecure_channel(f"localhost:{integration_app['port']}")
+    stub = ai_service_pb2_grpc.AIServiceStub(channel)
+
+    request = ai_service_pb2.PredictRequest(text="hello", model_id="spark")
+
+    with pytest.raises(grpc.aio.AioRpcError) as exc:
+        await stub.Detect(request)
+    assert exc.value.code() == grpc.StatusCode.UNAUTHENTICATED
+
+    await channel.close()
 ```
+
+No model download, no Docker, no test markers — `asyncio_mode = "auto"` in `pyproject.toml` handles async tests automatically.
 
 ## Test Coverage
 
 Coverage shows what percentage of your code is tested.
 
 ```bash
-# Generate coverage report
+# Generate coverage report (also writes htmlcov/ and coverage.xml)
 make test-coverage
 
-# View coverage in browser
-open htmlcov/index.html
+# View the HTML report (from services/inference)
+python -m http.server 8000 --directory htmlcov
+# then open http://localhost:8000
 ```
 
 ### Coverage Goals
@@ -188,6 +199,23 @@ open htmlcov/index.html
 | API handlers | > 70% |
 | Adapters | > 60% |
 | Utilities | > 50% |
+
+CI enforces a floor of **60% overall** (`pytest --cov-fail-under=60`) on the `main`/`staging` workflow; the targets above are what to aim for locally.
+
+## Continuous Integration
+
+`.github/workflows/service-inference.yaml` runs on pushes and pull requests targeting `main` or `staging` whenever anything under `services/inference/**` changes. It:
+
+1. Installs dependencies with `poetry install --extras cpu`
+2. Regenerates the protobuf stubs (same commands as `make proto`)
+3. Lints with `ruff check . --select F,E --ignore E501`
+4. Runs the unit tests with `--cov-fail-under=60`
+5. Runs the integration tests
+6. Builds and pushes the Docker image to Docker Hub (second job, `Build & Push Docker Image`)
+
+Both test steps export `API_KEY=ci-dummy-key-16chars-long`, because `Settings` requires a 16+ character key. If you run pytest outside CI, export an `API_KEY` of your own first.
+
+> `dev` runs no CI — verify locally before opening a pull request.
 
 ## Load Testing
 
@@ -231,9 +259,9 @@ make load-test SCENARIO=soak GPU=0 VUS=2 DURATION=30m
 
 ### "Docker not running"
 
-**Problem:** Integration tests fail because Docker isn't running.
+**Problem:** `make inference-up` or `make load-test` fails because Docker isn't running.
 
-**Solution:** Start Docker Desktop or run `dockerd`.
+**Solution:** Start Docker Desktop or run `dockerd`. Unit and integration tests do **not** need Docker — only the compose-based and load-test targets do.
 
 ### "Port already in use"
 
@@ -246,8 +274,8 @@ make load-test SCENARIO=soak GPU=0 VUS=2 DURATION=30m
 **Problem:** Tests take too long to run.
 
 **Solution:**
-- Run only unit tests for quick feedback
-- Use test markers to run specific tests
+- Run only unit tests for quick feedback (`make test`)
+- Run a single file: `poetry run pytest tests/unit/application/test_validation.py -v`
 - Check if tests are doing unnecessary work
 
 ### "Flaky tests"

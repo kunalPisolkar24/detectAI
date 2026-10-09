@@ -7,8 +7,9 @@ Stateless Python gRPC service that runs dual ONNX models (Spark TF-IDF + Flare B
 Stateless service exposing `AIService` (`protos/ai_service.proto`) with `Detect` (unary) and `AnalyzeDocument` (server-streaming `started` → `progress` → `final`). Handles `50k` char input, `256` token chunks with `192` stride, `10k` global token cap, via `ThreadPool` batching and weighted aggregation. Isolated `spark-pool`/`flare-pool` executors prevent slow-model starvation.
 
 ```text
-POST gRPC  Detect(text, model_id)          -> PredictResponse
-POST gRPC  AnalyzeDocument(text, model_id) -> stream AnalyzeDocumentEvent
+gRPC unary         Detect(text, model_id)          -> PredictResponse
+gRPC server-stream AnalyzeDocument(text, model_id) -> stream AnalyzeDocumentEvent
+                   (started -> progress* -> final)
 ```
 
 ## Packages
@@ -17,13 +18,14 @@ POST gRPC  AnalyzeDocument(text, model_id) -> stream AnalyzeDocumentEvent
 |---|---|
 | `grpcio`, `grpcio-tools`, `grpcio-health-checking`, `protobuf` | gRPC server, health, codegen |
 | `onnxruntime` / `onnxruntime-gpu` | ONNX inference (CPU base, GPU via `compose.gpu.yml`) |
-| `transformers`, `huggingface-hub`, `tokenizers` | Flare BERT tokenizer + HF download |
-| `scikit-learn`, `scipy`, `numpy` | Spark TF-IDF vectorizer |
+| `transformers`, `huggingface-hub` | Flare BERT tokenizer + HF download (`tokenizers` comes in transitively) |
+| `scikit-learn`, `numpy` | Spark TF-IDF vectorizer (`scipy` comes in transitively) |
 | `pydantic`, `pydantic-settings` | Typed config + validation |
 | `prometheus-client` | Metrics (`:8333`) |
 | `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp-proto-http`, `opentelemetry-instrumentation-grpc` | Tracing |
 | `structlog` | JSON structured logging |
-| `PyJWT`, `circuitbreaker` | JWT auth, resilience |
+| `PyJWT` | JWT auth |
+| `boto3`, `python-dotenv` | AWS Secrets Manager/SSM (prod), `.env` loading (dev) |
 | `pytest`, `pytest-asyncio`, `pytest-cov`, `coverage`, `ruff` | Tests/lint |
 
 See `pyproject.toml` for full list.
@@ -33,13 +35,13 @@ See `pyproject.toml` for full list.
 ```mermaid
 graph LR
     Client --> GRPC[GRPCServer :50051]
-    GRPC --> Auth[AuthInterceptor]
-    Auth --> Mon[MonitoringInterceptor]
-    Mon --> Svc[AIService Servicer]
+    GRPC --> Mon[MonitoringInterceptor]
+    Mon --> Auth[AuthInterceptor]
+    Auth --> Svc[AIService Servicer]
     Svc --> DAS[DocumentAnalysisService]
     DAS --> Prep[TextPreparationPipeline]
     Prep --> Planner[ChunkPlanner spark/flare]
-    DAS --> Disp[ConcurrencyDispatcher max_inflight 8]
+    DAS --> Disp[ConcurrencyDispatcher worker pool 8]
     Disp --> BP_S[BatchingProxy spark]
     Disp --> BP_F[BatchingProxy flare]
     BP_S --> Eng_S[SparkEngine ONNX]
@@ -63,6 +65,8 @@ GRPC_PORT=50051
 METRICS_PORT=8333
 BATCH_SIZE=32
 BATCH_TIMEOUT=0.05
+# SPARK_BATCH_SIZE=32  SPARK_BATCH_TIMEOUT=0.05  # optional per-model overrides
+# FLARE_BATCH_SIZE=32  FLARE_BATCH_TIMEOUT=0.05  # (fall back to BATCH_* when unset)
 MAX_TEXT_CHARS=50000
 CHUNK_TOKEN_LIMIT=256
 CHUNK_TOKEN_STRIDE=192
@@ -85,32 +89,26 @@ GET   :8333/metrics                  -> Prometheus
 
 ## Observability
 
-Logs are JSON to stdout. Tracing is OTel if an OTLP endpoint is set. Metrics at GET /metrics for Prometheus.
+Logs are JSON to stdout (one `event` key per line). Tracing is OTel if `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and disabled otherwise. Prometheus scrapes `GET :8333/metrics`.
 
-Metrics configured:
+Key metric families:
 
-- gRPC requests total — counts every request by method, code and model
-- gRPC auth failures — counts rejected requests by method and reason
-- Batch queue size and batch processing time — track batching health
-- Document chunks processed and failed — track per-chunk success
+- `grpc_requests_total`, `grpc_latency_seconds`, `grpc_auth_failures_total` — request traffic and auth rejections
+- `model_batch_size`, `model_batch_queue_size`, `model_batch_queue_wait_seconds`, `model_batch_processing_seconds` — batching health
+- `inference_document_chunks_processed_total`, `inference_document_chunks_failed_total` — per-chunk success
+- `inference_service_health_status`, `inference_engine_health_status` — health watchtower state
 
-Alerts configured:
-
-- Inference down — service not up for more than 2 minutes
-- High error rate — error rate above 5% for 5 minutes
-- Queue full — engine queue full for more than 1 minute
-
-See `docs/operations/observability.md` for full metric list and PromQL.
+See `docs/operations/observability.md` for the full metric list, sample log entries and PromQL alert rules.
 
 ## Testing
 
-All test commands are wrapped with `make` — check `Makefile` for details.
+All test commands are wrapped with `make` and must be run from `services/inference` — check `Makefile` for details.
 
 ```bash
-# Generate gRPC code from proto
-make proto
+cd services/inference
 
-# Run unit tests
+# Run unit tests (also runs `make proto` to regenerate gRPC stubs;
+# src/generated/ is gitignored and rebuilt every time)
 make test
 
 # Run tests with coverage report
@@ -118,13 +116,16 @@ make test-coverage
 
 # Run integration tests
 make test-integration
+
+# Regenerate stubs after editing protos/ai_service.proto
+make proto
 ```
 
 See `docs/testing/overview.md` and `load/README.md` for load scenarios.
 
 ## Docker
 
-All Docker commands are wrapped with `make` for simplicity.
+All Docker commands are wrapped with `make` for simplicity and run from `services/inference`.
 
 ```bash
 # Build the inference image

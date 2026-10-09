@@ -49,10 +49,11 @@ sequenceDiagram
 
 **What happens:**
 1. Service starts and creates a `HuggingFaceLoader`
-2. Loader downloads models from HuggingFace Hub (or uses cache)
+2. Both models download **in parallel** from HuggingFace Hub (or use the cache)
 3. Models are loaded into ONNX Runtime
-4. If GPU is requested but unavailable, falls back to CPU
-5. If network fails, tries offline cache
+4. Each engine runs one warm-up inference (skipped when `ORT_WARMUP_ENABLED=false`) so the first real request doesn't pay the cold-start cost
+5. If GPU is requested but unavailable, falls back to CPU
+6. If network fails, tries offline cache
 
 ### Model Repositories
 
@@ -70,6 +71,8 @@ Models are cached in `MODEL_CACHE_DIR` (default: `./models`). This means:
 - Subsequent runs use cached models (fast)
 - In production, mount this directory as a volume/EBS to avoid re-downloading
 
+Cache layout is not identical for both models: Spark's files land directly in `MODEL_CACHE_DIR`, while Flare's snapshot goes into `MODEL_CACHE_DIR/detect-ai-flare/`.
+
 ## How Models Work
 
 ### SparkEngine
@@ -79,6 +82,7 @@ classDiagram
     class BaseEngine {
         +softmax(x): ndarray
         +sigmoid(x): ndarray
+        +decode_logits(raw): List[float]
     }
     class SparkEngine {
         -session
@@ -96,9 +100,9 @@ classDiagram
         -cache_dir: str
         -providers: List[str]
         +load(model_key): tuple
-        -get_file()
-        -get_directory()
-        -verify_providers()
+        -_get_file()
+        -_get_directory()
+        -_session_options()
     }
     BaseEngine <|-- SparkEngine
     BaseEngine <|-- FlareEngine
@@ -117,7 +121,7 @@ classDiagram
 ### FlareEngine
 
 **How Flare works:**
-1. Tokenizer processes text: `tokenizer(..., padding, truncation, max_length=256)`
+1. Tokenizer processes text: `tokenizer(..., padding, truncation, max_length=CHUNK_TOKEN_LIMIT)` (default 256, so chunking and the model window agree)
 2. Token IDs are fed to ONNX model as int64 inputs
 3. Output is processed to get probability
 4. Probability is clipped to 0-1
@@ -190,7 +194,7 @@ If network access fails, the service tries to load models from the local cache:
 
 **Fix:**
 - Check NVIDIA drivers are installed
-- Verify Docker has GPU access: `docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi`
+- Verify Docker has GPU access: `docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi`
 - Use `INFERENCE_PROVIDERS=CPUExecutionProvider` for CPU-only
 
 ### "Model loading slow"

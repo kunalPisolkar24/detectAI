@@ -10,22 +10,22 @@ When a user sends a short text for analysis, it's processed in a single request-
 sequenceDiagram
     participant C as Client
     participant G as GRPCServer
-    participant A as AuthInterceptor
     participant M as MonitoringInterceptor
+    participant A as AuthInterceptor
     participant S as AIService
     participant D as DocumentAnalysisService
     participant B as BatchingProxy
     C->>G: Detect(text, model_id)
-    G->>A: check x-api-key or Bearer HS256
+    G->>M: bind trace_id, wrap handler for metrics
+    M->>A: check x-api-key or Bearer HS256
     alt unauthenticated
         A-->>C: UNAUTHENTICATED
     else authenticated
-        G->>M: bind trace_id/user_id
-        M->>S: Detect
+        A->>S: Detect
         S->>D: analyze(text, model_key)
         D->>D: validate(MAX_TEXT_CHARS 50000)
         D->>D: plan chunks(256/192, max_global 10000)
-        D->>B: predict per chunk (inflight <=8, 30s timeout)
+        D->>B: predict per chunk (worker pool 8, 30s timeout)
         B-->>D: float 0..1
         D->>D: aggregate weighted stride + highlight sweep
         D-->>S: DocumentScore
@@ -37,12 +37,12 @@ sequenceDiagram
 **What happens:**
 
 1. Client sends a `Detect` request with text and model ID
-2. `AuthInterceptor` checks the API key or JWT token
-3. `MonitoringInterceptor` binds trace ID and user ID
+2. `MonitoringInterceptor` runs first: it binds a trace ID and wraps the handler so every outcome — including auth failures — is counted
+3. `AuthInterceptor` checks the API key or JWT token
 4. `DocumentAnalysisService.analyze()` is called
 5. Text is validated (not empty, within 50,000 character limit)
-6. Text is split into chunks (256 tokens each, 192 token overlap)
-7. Each chunk is sent to the model (max 8 concurrent, 30s timeout per chunk)
+6. Text is split into chunks (256 tokens each, 192 token step → 64-token overlap)
+7. Chunks run through a fixed worker pool (max 8 in flight, 30s timeout per chunk)
 8. Results are aggregated into a weighted score
 9. Response is returned with label (`AI` or `Human`), confidence score, and highlight spans
 
@@ -62,10 +62,11 @@ sequenceDiagram
     S->>D: stream(text, model_key, is_active)
     D-->>S: DocumentStarted(total_chars, total_chunks)
     S-->>C: event started
-    loop per chunk as_completed (semaphore 8)
+    loop per chunk as_completed (worker pool 8)
         D->>B: predict(chunk.text)
         B-->>D: prob
         D-->>S: DocumentProgress(processed, total)
+        S-->>S: coalesce: send only every total/20 chunks
         S-->>C: event progress (monotonic)
         Note over C,D: check context.done() -> CANCELLED if disconnected
     end
@@ -82,12 +83,12 @@ sequenceDiagram
 3. First event: `started` with `total_chars` and `total_chunks`
 4. For each chunk (as it completes):
    - Chunk is predicted
-   - `progress` event is sent with `processed_chunks` and `total_chunks`
+   - `progress` events are **coalesced**: the servicer sends one only when at least `total_chunks / 20` chunks have passed since the last one (always including the final chunk), so a large document produces at most ~20 progress events instead of one per chunk
    - Progress is strictly increasing (monotonic)
 5. Final event: `PredictResponse` with complete analysis
 6. Stream ends
 
-**Why streaming?** Users see progress in real-time instead of waiting for the entire analysis to complete.
+**Why streaming?** Users see progress in real-time instead of waiting for the entire analysis to complete. The same interceptors as `Detect` apply — auth runs before the stream starts.
 
 ## Error Handling
 
@@ -96,9 +97,10 @@ When something goes wrong, the service returns clear error messages:
 | Path | Code | Meaning |
 |------|------|---------|
 | Unknown `model_id` or bad text | `INVALID_ARGUMENT` | Bad input from client |
-| Queue full / worker dead / circuit open | `RESOURCE_EXHAUSTED` | Service overloaded, try later |
+| Engine returned a non-numeric or out-of-range probability | `INVALID_ARGUMENT` | Model output failed validation |
+| Queue full / worker unavailable / shutting down | `RESOURCE_EXHAUSTED` | Service overloaded, try later |
 | Client disconnect | `CANCELLED` | Client stopped listening |
-| Engine returned `NaN` or shape mismatch | `INTERNAL` | Something broke on the server |
+| Unexpected engine or server failure | `INTERNAL` | Something broke on the server (message is always the generic `Internal Inference Error`) |
 
 **Important:** `RESOURCE_EXHAUSTED` does NOT flip the health status to `NOT_SERVING`. The service keeps accepting traffic but sheds load quickly.
 

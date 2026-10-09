@@ -15,13 +15,13 @@ The Inference service detects AI-generated text. It's built as a single program 
 ```mermaid
 graph LR
     Client --> GRPC[GRPCServer :50051]
-    GRPC --> Auth[AuthInterceptor]
-    Auth --> Mon[MonitoringInterceptor]
-    Mon --> Svc[AIService Servicer]
+    GRPC --> Mon[MonitoringInterceptor]
+    Mon --> Auth[AuthInterceptor]
+    Auth --> Svc[AIService Servicer]
     Svc --> DAS[DocumentAnalysisService]
     DAS --> Prep[TextPreparationPipeline]
     Prep --> Planner[ChunkPlanner spark/flare]
-    DAS --> Disp[ConcurrencyDispatcher max_inflight 8]
+    DAS --> Disp[ConcurrencyDispatcher worker pool 8]
     Disp --> BP_S[BatchingProxy spark]
     Disp --> BP_F[BatchingProxy flare]
     BP_S --> Eng_S[SparkEngine ONNX]
@@ -33,6 +33,7 @@ graph LR
 ```
 
 **Key points:**
+- Interceptors run in registration order: **Monitoring first, then Auth**, so every request (including rejected ones) is counted before auth decides.
 - Single gRPC port `50051`, metrics port `8333`
 - Two isolated models prevent starvation (slow model doesn't block fast model)
 - `QUEUE_FULL` sheds load with `RESOURCE_EXHAUSTED`, not `NOT_SERVING`
@@ -88,6 +89,7 @@ graph TB
 inference/
 ├── src/
 │   ├── main.py                          # Application entry point
+│   ├── generated/                       # gRPC stubs (gitignored, built by `make proto`)
 │   ├── domain/                          # Business rules
 │   │   ├── models.py                    # Core data structures
 │   │   └── exceptions.py                # Error types
@@ -100,22 +102,29 @@ inference/
 │   │       ├── text_pipeline.py         # Text processing
 │   │       ├── validation.py            # Input validation
 │   │       ├── aggregation.py           # Result aggregation
-│   │       ├── dispatcher.py            # Request dispatching
-│   │       └── chunking/               # Text chunking
+│   │       ├── dispatcher.py            # Chunk worker pool
+│   │       └── chunking/               # Text chunking (BERT + regex + sliding window)
 │   ├── adapters/                        # External connections
-│   │   ├── inbound/grpc/               # gRPC API handler
-│   │   └── outbound/inference/         # ML model adapters
+│   │   ├── inbound/grpc/               # gRPC servicer, interceptors, health
+│   │   └── outbound/inference/          # ML model adapters
+│   │       ├── batcher.py              # BatchingProxy
+│   │       ├── batching/               # Batch processing
+│   │       ├── engines/                # SparkEngine, FlareEngine, logit decoding
+│   │       ├── loader.py               # HuggingFace download + ONNX session
+│   │       └── loading/                # Session options, safe unpickle, HF client
 │   └── infrastructure/                  # Cross-cutting concerns
-│       ├── config/                     # Settings
-│       ├── composition/                # Dependency injection
+│       ├── config/                     # Settings (dev/prod) + AWS loader
+│       ├── composition/                # Dependency injection (container, executors)
 │       ├── metrics.py                  # Prometheus metrics
-│       └── tracing.py                  # OpenTelemetry tracing
+│       ├── tracing.py                  # OpenTelemetry tracing
+│       └── log_setup.py                # structlog JSON setup
 ├── protos/                             # gRPC API definition
 ├── tests/                              # Test files
 ├── load/                               # Load testing
-├── infra/                              # Docker Compose files
-├── Dockerfile                          # Production image
-├── Dockerfile.local                    # Local dev image
+├── infra/                              # Docker Compose files + .env.example
+├── docs/                               # This documentation set
+├── Dockerfile                          # GPU image (CUDA 12.4)
+├── Dockerfile.local                    # Local CPU image
 ├── Makefile                            # Build commands
 └── pyproject.toml                      # Python dependencies
 ```
@@ -124,30 +133,36 @@ inference/
 
 When the service starts, it:
 
-1. **Loads configuration** from environment variables
-2. **Sets up tracing** (OpenTelemetry, if configured)
-3. **Starts metrics server** on port `8333`
-4. **Loads ML models** from HuggingFace (or cache)
-5. **Creates batchers** for each model
-6. **Starts gRPC server** on port `50051`
-7. **Starts health monitor** (polls every 5 seconds)
+1. **Loads and validates configuration** from environment/AWS (`get_settings()`)
+2. **Configures structured logging** (JSON to stdout)
+3. **Creates thread pools** for each model (`spark-pool`, `flare-pool`)
+4. **Sets up tracing** (OpenTelemetry, only if `OTEL_EXPORTER_OTLP_ENDPOINT` is set)
+5. **Starts metrics server** on port `8333`
+6. **Loads both ML models in parallel** from HuggingFace (or local cache)
+7. **Warms up each engine** with one dummy inference (skipped when `ORT_WARMUP_ENABLED=false`)
+8. **Wraps the engines in batchers** and starts them
+9. **Starts gRPC server** on port `50051`, with the health monitor started first so probes never see `NOT_FOUND`
+10. **Health monitor polls** every 5 seconds
+
+If any step throws, the process logs `startup_failed` at CRITICAL and exits with status 1.
 
 ```mermaid
 graph TB
-    Main[main.py] --> Trace[setup_tracing OTLP]
+    Main[main.py] --> Cfg[get_settings + configure_logger]
+    Main --> Trace[setup_tracing OTLP]
     Main --> MetricsStart[start_http_server :8333]
-    Main --> ExecS[spark-pool max 4..16]
-    Main --> ExecF[flare-pool max 4..16]
-    Main --> Loader2[HuggingFaceLoader]
+    Main --> ExecS[spark-pool]
+    Main --> ExecF[flare-pool]
+    Main --> Loader2[HuggingFaceLoader - parallel]
     Loader2 --> SparkRes[(spark ONNX + pickle tokenizer)]
     Loader2 --> FlareRes[(flare ONNX + BertTokenizerFast)]
-    SparkRes --> SparkRaw[SparkEngine]
-    FlareRes --> FlareRaw[FlareEngine max_length 256]
-    SparkRaw --> BPS[BatchingProxy spark 32/0.05s]
-    FlareRaw --> BPF[BatchingProxy flare 32/0.05s]
+    SparkRes --> SparkRaw[SparkEngine + warmup]
+    FlareRes --> FlareRaw[FlareEngine max_length 256 + warmup]
+    SparkRaw --> BPS[BatchingProxy spark]
+    FlareRaw --> BPF[BatchingProxy flare]
     BPS --> DAS2[DocumentAnalysisService]
     BPF --> DAS2
-    DAS2 --> GRPC2[GRPCServer Monitoring->Auth]
+    DAS2 --> GRPC2[GRPCServer Monitoring then Auth]
 ```
 
 ## Key Components
@@ -163,10 +178,12 @@ The core business logic. It:
 ### BatchingProxy
 
 Batches individual chunk predictions into efficient batch operations. It:
-- Queues incoming predictions
-- Collects up to 32 items within 50ms
-- Runs batch predictions on a thread pool
+- Queues incoming predictions (bounded queue, `BATCH_QUEUE_MAX_SIZE`)
+- Collects up to `BATCH_SIZE` items within `BATCH_TIMEOUT` (defaults: 32 items / 50ms)
+- Runs batch predictions on the model's thread pool, with up to `MAX_CONCURRENT_BATCHES` batches in flight
 - Reports health status
+
+Per-model overrides (`SPARK_BATCH_SIZE`, `FLARE_BATCH_TIMEOUT`, ...) let you tune each model independently; unset values fall back to `BATCH_SIZE`/`BATCH_TIMEOUT`.
 
 ### TextPreparationPipeline
 
@@ -176,10 +193,11 @@ Processes input text through:
 
 ### ConcurrencyDispatcher
 
-Manages parallel chunk processing with a semaphore (max 8 concurrent chunks). It:
-- Creates tasks for each chunk
-- Yields results as they complete
-- Handles timeouts (30s per chunk)
+Runs chunks in parallel through a fixed worker pool (size `min(MAX_INFLIGHT_DOC_CHUNKS, chunk_count)`, default 8). It:
+- Creates the worker pool once and feeds it a queue of chunk indexes, so at most `MAX_INFLIGHT_DOC_CHUNKS` chunks are in flight at any time
+- Yields results as they complete, in completion order
+- Enforces a 30-second timeout per chunk and validates the engine returns a probability in `[0, 1]`
+- Cancels the remaining workers on the first failure or when the client disconnects
 
 ### ResultAggregator
 
