@@ -129,24 +129,22 @@
           }
         },
         {
-          "title": "Log volume by level (load, click legend to isolate)",
-          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.line" },
-          "rawConfiguration": {
-            "legend": { "enabled": true },
-            "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' FACET `severity.text` TIMESERIES AUTO LIMIT 10" }
-            ],
-            "yAxisLeft": { "zero": true }
-          }
-        },
-        {
           "title": "Slowest extractions (load)",
-          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
               { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND name = 'extraction' FACET cases(WHERE `mime.type` LIKE '%pdf%' AS 'pdf', WHERE `mime.type` LIKE '%officedocument%' AS 'docx', WHERE `mime.type` LIKE '%plain%' AS 'txt') LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Error log sample (load)",
+          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(`trace.id`) AS `sample trace` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND `severity.text` = 'ERROR' FACET path LIMIT 20" }
             ]
           }
         },
@@ -157,6 +155,52 @@
           "rawConfiguration": {
             "nrqlQueries": [
               { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS spans FACET service.name, service.version WHERE deployment.environment = 'loadtest' AND service.name IN ('document-parser', 'otel-collector') LIMIT 20" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Logs",
+      "description": "Error-first log stream plus volume and slow requests under load",
+      "widgets": [
+        {
+          "title": "",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "## Load run logs (`deployment.environment = loadtest`)\nTables default to errors. For ad-hoc filtering (info only, text search) use Logs UI with the same filters. Stream tables show the latest 100 lines; set the time picker over the run window."
+          }
+        },
+        {
+          "title": "Error log stream (load, latest 100)",
+          "layout": { "column": 1, "row": 2, "height": 4, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, `severity.text`, message, path, status_code, `trace.id` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND `severity.text` = 'ERROR' LIMIT 100" }
+            ]
+          }
+        },
+        {
+          "title": "Log volume by level (load, click legend to isolate)",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' FACET `severity.text` TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Slow requests over 1500ms (load)",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, message, path, duration_ms, status_code, `trace.id` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND duration_ms > 1500 LIMIT 100" }
             ]
           }
         }

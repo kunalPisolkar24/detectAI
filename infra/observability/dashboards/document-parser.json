@@ -129,8 +129,42 @@
           }
         },
         {
+          "title": "Service versions reporting",
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS spans FACET service.name, service.version WHERE deployment.environment = '${environment}' AND service.name = 'document-parser' LIMIT 20" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Logs",
+      "description": "Error-first log stream plus volume and slow requests",
+      "widgets": [
+        {
+          "title": "",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "## Logs (`document-parser`, `${environment}`)\nTables below default to errors. For ad-hoc filtering (info only, text search) use Logs UI with the same `service.name` / `deployment.environment` filters. Click a level in `Log volume` to isolate it there; stream tables show the latest 100 lines."
+          }
+        },
+        {
+          "title": "Error log stream (latest 100)",
+          "layout": { "column": 1, "row": 2, "height": 4, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, `severity.text`, message, path, status_code, `trace.id` WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' LIMIT 100" }
+            ]
+          }
+        },
+        {
           "title": "Log volume by level (click legend to isolate)",
-          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
           "visualization": { "id": "viz.line" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -142,7 +176,7 @@
         },
         {
           "title": "Recent parser errors",
-          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -151,12 +185,12 @@
           }
         },
         {
-          "title": "Service versions reporting",
-          "layout": { "column": 1, "row": 7, "height": 3, "width": 12 },
+          "title": "Slow requests over 1500ms",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS spans FACET service.name, service.version WHERE deployment.environment = '${environment}' AND service.name = 'document-parser' LIMIT 20" }
+              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, message, path, duration_ms, status_code, `trace.id` WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND duration_ms > 1500 LIMIT 100" }
             ]
           }
         }
