@@ -23,6 +23,9 @@ root has no AWS provider / emulator hacks.
 - `envs/floci.tfvars|prod.tfvars` — non-secret values only. Keys via
   `TF_VAR_newrelic_api_key` or `NEW_RELIC_API_KEY` env.
 - `tests/valid.tftest.hcl` — mocked plan asserts 11 dashboards + channel.
+- `tags.tf` — `newrelic_entity_tags` per board (`team`, `managed-by`,
+  `service`, `env`, `kind`) so boards group instead of listing flat. The
+  loadtest board always tags `env=loadtest`.
 
 ## Data flow
 

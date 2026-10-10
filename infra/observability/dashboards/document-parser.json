@@ -12,7 +12,7 @@
           "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
           "visualization": { "id": "viz.markdown" },
           "rawConfiguration": {
-            "text": "## Document parser (`document-parser`, `${environment}`, port 8000)\nLimits: `MAX_UPLOAD_SIZE_BYTES`, `MAX_TEXT_LENGTH`, `MAX_PDF_PAGES`, `EXTRACTION_TIMEOUT_SECONDS`, `READINESS_MAX_QUEUE_DEPTH`, `WORKERS`/`WORKER_THREADS`. Health `GET /api/v1/health`. 413 = too large, 422 = unprocessable, timeouts = extraction over budget. Metrics scraped from `/api/v1/metrics` via otel-collector. Logs: click a level in `Log volume by level` to isolate errors/info."
+            "text": "## Document parser (`document-parser`, `${environment}`, port 8000)\n**Service:** `Python 3.11`, `FastAPI` + `Gunicorn/Uvicorn`, `opentelemetry-sdk` OTLP/HTTP. **Signals:** traces + logs via `OTEL_EXPORTER_OTLP_ENDPOINT` (`http://otel-collector:4318`), metrics scraped from `/api/v1/metrics`. **Resource:** `service.name=document-parser`, `deployment.environment=${environment}`.\nLimits: `MAX_UPLOAD_SIZE_BYTES`, `MAX_TEXT_LENGTH`, `MAX_PDF_PAGES`, `EXTRACTION_TIMEOUT_SECONDS`, `READINESS_MAX_QUEUE_DEPTH`, `WORKERS`/`WORKER_THREADS`. Health `GET /api/v1/health`. 413 = too large, 422 = unprocessable, timeouts = extraction over budget. Metrics scraped from `/api/v1/metrics` via otel-collector. Logs: click a level in `Log volume by level` to isolate errors/info."
           }
         },
         {
@@ -147,6 +147,16 @@
           "rawConfiguration": {
             "nrqlQueries": [
               { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(trace_id) AS `sample trace` WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND level = 'ERROR' FACET path LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Service versions reporting",
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS spans FACET service.name, service.version WHERE deployment.environment = '${environment}' AND service.name = 'document-parser' LIMIT 20" }
             ]
           }
         }

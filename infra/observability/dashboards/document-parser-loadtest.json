@@ -1,5 +1,5 @@
 {
-  "name": "detectai-document-parser-loadtest",
+  "name": "detectai-document-parser (loadtest)",
   "description": "Load-test view for document-parser (deployment.environment = loadtest): k6-driven throughput/latency plus host and collector infra. service.name = document-parser.",
   "permissions": "PUBLIC_READ_WRITE",
   "pages": [
@@ -12,7 +12,7 @@
           "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
           "visualization": { "id": "viz.markdown" },
           "rawConfiguration": {
-            "text": "## Document parser load test (`deployment.environment = loadtest`)\nRun: `make load-test WITH_OBSERVABILITY=1 VUS=50 DURATION=2m` from `services/document-parser`. k6 pass/fail (p95<1500ms, p99<3000ms, 0 errors) stays in k6 output; this board shows server-side latency/saturation and host infra for the same window. Compare `Server latency` here against k6 `http_req_duration` to spot client-vs-server gaps."
+            "text": "## Document parser load test (`deployment.environment = loadtest`)\n**Service:** `Python 3.11`, `FastAPI` + `Gunicorn/Uvicorn` (`ENV_TYPE=dev` during load). **Pipeline:** parser + `otel-collector-loadtest` sidecar on `loadnet` scrape `/api/v1/metrics`, export OTLP to EU as `loadtest`.\nRun: `make load-test WITH_OBSERVABILITY=1 VUS=50 DURATION=2m` from `services/document-parser`. k6 pass/fail (p95<1500ms, p99<3000ms, 0 errors) stays in k6 output; this board shows server-side latency/saturation and host infra for the same window. Compare `Server latency` here against k6 `http_req_duration` to spot client-vs-server gaps."
           }
         },
         {
@@ -110,7 +110,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(system.cpu.load_average.1m) AS `cpu load 1m`, average(system.memory.utilization) AS `mem used ratio` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`system.cpu.load_average.1m`) AS `cpu load 1m`, average(`system.memory.utilization`) AS `mem used ratio` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true }
           }
@@ -146,6 +146,16 @@
           "rawConfiguration": {
             "nrqlQueries": [
               { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND name = 'extraction' FACET `mime.type` LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Service versions reporting (load)",
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS spans FACET service.name, service.version WHERE deployment.environment = 'loadtest' AND service.name IN ('document-parser', 'otel-collector') LIMIT 20" }
             ]
           }
         }
