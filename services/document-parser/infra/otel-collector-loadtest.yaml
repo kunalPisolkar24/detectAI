@@ -22,6 +22,7 @@ receivers:
           static_configs:
             - targets: ["localhost:8888"]
         - job_name: document-parser
+          scrape_interval: 15s
           metrics_path: /api/v1/metrics
           static_configs:
             - targets: ["document-parser:8000"]

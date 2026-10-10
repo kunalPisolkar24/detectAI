@@ -21,7 +21,7 @@
           "visualization": { "id": "viz.billboard" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `uploads/min` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'SERVER' AND http.route = '/api/v1/extract'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `uploads/min` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server' AND http.route = '/api/v1/extract'" }
             ]
           }
         },
@@ -31,7 +31,7 @@
           "visualization": { "id": "viz.billboard" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'SERVER'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server'" }
             ],
             "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } }
           }
@@ -42,7 +42,7 @@
           "visualization": { "id": "viz.billboard" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'SERVER' AND http.route = '/api/v1/extract'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server' AND http.route = '/api/v1/extract'" }
             ]
           }
         },
@@ -52,7 +52,7 @@
           "visualization": { "id": "viz.billboard" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) AS `p99 ms` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'SERVER' AND http.route = '/api/v1/extract'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) AS `p99 ms` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server' AND http.route = '/api/v1/extract'" }
             ]
           }
         },
@@ -63,7 +63,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'SERVER' AND http.route = '/api/v1/extract' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server' AND http.route = '/api/v1/extract' TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true }
           }
@@ -75,7 +75,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND name = 'extraction' FACET `mime.type` TIMESERIES AUTO LIMIT 10" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND name = 'extraction' FACET cases(WHERE `mime.type` LIKE '%pdf%' AS 'pdf', WHERE `mime.type` LIKE '%officedocument%' AS 'docx', WHERE `mime.type` LIKE '%plain%' AS 'txt') TIMESERIES AUTO LIMIT 10" }
             ],
             "yAxisLeft": { "zero": true }
           }
@@ -99,7 +99,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'SERVER' FACET `http.status_code` TIMESERIES AUTO LIMIT 10" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server' FACET `http.status_code` TIMESERIES AUTO LIMIT 10" }
             ]
           }
         },
@@ -110,7 +110,8 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`system.cpu.load_average.1m`) AS `cpu load 1m`, average(`system.memory.utilization`) AS `mem used ratio` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`system.cpu.load_average.1m`) AS `cpu load 1m` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`system.memory.usage`) AS bytes WHERE deployment.environment = 'loadtest' FACET state TIMESERIES AUTO LIMIT 8" }
             ],
             "yAxisLeft": { "zero": true }
           }
@@ -122,7 +123,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(otelcol_exporter_sent_spans) AS sent, sum(otelcol_exporter_send_failed_spans) AS failed WHERE service.name = 'otel-collector' AND deployment.environment = 'loadtest' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(otelcol_exporter_sent_spans) AS sent, sum(otelcol_exporter_send_failed_spans) AS failed WHERE service.name = 'otelcol-contrib' AND deployment.environment = 'loadtest' TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true }
           }
@@ -134,7 +135,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' FACET level TIMESERIES AUTO LIMIT 10" }
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' FACET `severity.text` TIMESERIES AUTO LIMIT 10" }
             ],
             "yAxisLeft": { "zero": true }
           }
@@ -145,7 +146,7 @@
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND name = 'extraction' FACET `mime.type` LIMIT 20" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND name = 'extraction' FACET cases(WHERE `mime.type` LIKE '%pdf%' AS 'pdf', WHERE `mime.type` LIKE '%officedocument%' AS 'docx', WHERE `mime.type` LIKE '%plain%' AS 'txt') LIMIT 20" }
             ]
           }
         },

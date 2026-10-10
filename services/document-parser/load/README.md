@@ -38,6 +38,10 @@ telemetry label changes, so k6 traffic shows up in the
 Without the flag (default `WITH_OBSERVABILITY=0`) the run is unchanged and
 fully offline. Empty license key = collector retries/drops, apps keep running.
 
+Tip: infra panels (saturation, host CPU/mem) need a run of a few minutes to
+fill — the parser scrape ticks every 15s and hostmetrics every 30s. Short
+smoke runs only populate the span/log panels.
+
 Or directly:
 
 ```bash

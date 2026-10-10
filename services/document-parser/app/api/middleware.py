@@ -27,10 +27,13 @@ async def request_middleware(request: Request, call_next):
         "trace_id": current_trace_id(),
         "span_id": current_span_id(),
     }
+    # Flat scalar extras: nested dicts are dropped by the OTLP log exporter,
+    # so request fields ride top-level (request_meta kept for stdout/tests).
+    extra = {"request_meta": meta, **meta}
     if request.url.path in _QUIET_PATHS:
-        logger.debug("Request processed", extra={"request_meta": meta})
+        logger.debug("Request processed", extra=extra)
     else:
-        logger.info("Request processed", extra={"request_meta": meta})
+        logger.info("Request processed", extra=extra)
     if not is_metrics:
         route = request.scope.get("route")
         route_path = getattr(route, "path", request.url.path)

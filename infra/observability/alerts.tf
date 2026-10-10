@@ -243,7 +243,7 @@ resource "newrelic_nrql_alert_condition" "parser_error_rate" {
   aggregation_delay            = 120
   violation_time_limit_seconds = 3600
   nrql {
-    query = "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'document-parser' AND deployment.environment = '${local.env}' AND span.kind = 'SERVER'"
+    query = "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'document-parser' AND deployment.environment = '${local.env}' AND span.kind = 'server'"
   }
   critical {
     operator              = "above"
@@ -265,7 +265,7 @@ resource "newrelic_nrql_alert_condition" "parser_p95" {
   aggregation_delay            = 120
   violation_time_limit_seconds = 3600
   nrql {
-    query = "FROM Span SELECT percentile(duration.ms, 95) AS `p95` WHERE service.name = 'document-parser' AND deployment.environment = '${local.env}' AND span.kind = 'SERVER' AND http.route = '/api/v1/extract'"
+    query = "FROM Span SELECT percentile(duration.ms, 95) AS `p95` WHERE service.name = 'document-parser' AND deployment.environment = '${local.env}' AND span.kind = 'server' AND http.route = '/api/v1/extract'"
   }
   warning {
     operator              = "above"
