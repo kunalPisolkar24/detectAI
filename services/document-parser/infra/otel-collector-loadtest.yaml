@@ -1,14 +1,12 @@
-# OTEL collector for the prod stack only (Floci emulator AND real AWS).
-# Never add to infra/docker/local/compose.yml. Apps send OTLP here
-# (OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318); the collector
-# batches and exports to New Relic EU over OTLP/HTTP.
+# OTEL collector for document-parser load tests only.
+# Applied via infra/compose.load.observability.yml when
+# `make load-test WITH_OBSERVABILITY=1` is used (ENV_TYPE stays dev;
+# telemetry is labeled deployment.environment=loadtest so k6 traffic never
+# pollutes prod dashboards). Same New Relic EU endpoint as prod.
 #
-# Required env (from infra/docker/prod/.env, never committed):
+# Required env (shell only, never committed):
 #   NEW_RELIC_LICENSE_KEY  ingest key (eu01...)
-#   NEW_RELIC_OTLP_ENDPOINT  default https://otlp.eu01.nr-data.net:4318
-#   DEPLOYMENT_ENV  prod | floci, stamped on scraped metrics
-# Empty NEW_RELIC_LICENSE_KEY = exporter fails closed with retry; apps keep
-# running (their SDKs are fail-open when this collector is unreachable).
+# Empty key = exporter retries and drops; apps keep running (fail-open SDKs).
 receivers:
   otlp:
     protocols:
@@ -23,37 +21,10 @@ receivers:
         - job_name: otel-collector
           static_configs:
             - targets: ["localhost:8888"]
-        - job_name: chat-service
-          static_configs:
-            - targets: ["chat-service:9091"]
-        - job_name: chat-worker
-          static_configs:
-            - targets: ["chat-worker:9099"]
-        - job_name: inference
-          static_configs:
-            - targets: ["ai-service:8333"]
         - job_name: document-parser
           metrics_path: /api/v1/metrics
           static_configs:
             - targets: ["document-parser:8000"]
-        - job_name: postgres-exporter
-          static_configs:
-            - targets: ["postgres-exporter:9187"]
-        - job_name: redis-users
-          static_configs:
-            - targets: ["redis-exporter-users:9121"]
-        - job_name: redis-chat
-          static_configs:
-            - targets: ["redis-exporter-chat:9121"]
-        - job_name: redis-events
-          static_configs:
-            - targets: ["redis-exporter-events:9121"]
-        - job_name: mongo-exporter
-          static_configs:
-            - targets: ["mongo-exporter:9216"]
-        - job_name: rabbitmq-exporter
-          static_configs:
-            - targets: ["rabbitmq-exporter:9419"]
 
   hostmetrics:
     collection_interval: 30s
@@ -80,16 +51,15 @@ processors:
     error_mode: ignore
     traces:
       span:
-        - 'attributes["http.route"] == "/api/healthz"'
-        - 'attributes["http.route"] == "/readyz"'
-        - 'attributes["http.route"] == "/ready"'
-        - 'attributes["http.route"] == "/health"'
+        - 'attributes["http.route"] == "/api/v1/health"'
+        - 'attributes["http.route"] == "/api/v1/ready"'
+        - 'attributes["http.route"] == "/api/v1/metrics"'
         - 'attributes["http.target"] == "/metrics"'
 
   resource/env:
     attributes:
       - key: deployment.environment
-        value: ${env:DEPLOYMENT_ENV:-prod}
+        value: loadtest
         action: upsert
 
 exporters:
@@ -107,7 +77,6 @@ exporters:
       num_consumers: 4
       queue_size: 5000
 
-  # Local fallback for debugging (disabled by default via pipeline below).
   debug:
     verbosity: basic
 

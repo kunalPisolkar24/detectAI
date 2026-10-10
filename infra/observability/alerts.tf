@@ -253,6 +253,100 @@ resource "newrelic_nrql_alert_condition" "parser_error_rate" {
   }
 }
 
+resource "newrelic_nrql_alert_condition" "parser_p95" {
+  account_id                   = var.newrelic_account_id
+  policy_id                    = newrelic_alert_policy.document_parser.id
+  name                         = "Parser p95 latency high"
+  enabled                      = true
+  type                         = "static"
+  description                  = "Document parser extract p95 over 10 minutes (warning always on, critical prod only)."
+  aggregation_window           = 60
+  aggregation_method           = "event_flow"
+  aggregation_delay            = 120
+  violation_time_limit_seconds = 3600
+  nrql {
+    query = "FROM Span SELECT percentile(duration.ms, 95) AS `p95` WHERE service.name = 'document-parser' AND deployment.environment = '${local.env}' AND span.kind = 'SERVER' AND http.route = '/api/v1/extract'"
+  }
+  warning {
+    operator              = "above"
+    threshold             = 2000
+    threshold_duration    = 600
+    threshold_occurrences = "ALL"
+  }
+  critical {
+    operator              = "above"
+    threshold             = 3000
+    threshold_duration    = 300
+    threshold_occurrences = "ALL"
+  }
+}
+
+resource "newrelic_nrql_alert_condition" "parser_extraction_errors" {
+  account_id                   = var.newrelic_account_id
+  policy_id                    = newrelic_alert_policy.document_parser.id
+  name                         = "Parser extraction failures"
+  enabled                      = local.is_prod
+  type                         = "static"
+  description                  = "Failed extraction spans (timeouts, corrupt docs) in 5 minutes."
+  aggregation_window           = 60
+  aggregation_method           = "event_flow"
+  aggregation_delay            = 120
+  violation_time_limit_seconds = 3600
+  nrql {
+    query = "FROM Span SELECT count(*) AS failures WHERE service.name = 'document-parser' AND deployment.environment = '${local.env}' AND name = 'extraction' AND error = true"
+  }
+  critical {
+    operator              = "above"
+    threshold             = 5
+    threshold_duration    = 300
+    threshold_occurrences = "ALL"
+  }
+}
+
+resource "newrelic_nrql_alert_condition" "parser_queue_saturated" {
+  account_id                   = var.newrelic_account_id
+  policy_id                    = newrelic_alert_policy.document_parser.id
+  name                         = "Parser queue saturated"
+  enabled                      = true
+  type                         = "static"
+  description                  = "Extraction pool queue depth near READINESS_MAX_QUEUE_DEPTH (default 50)."
+  aggregation_window           = 60
+  aggregation_method           = "event_flow"
+  aggregation_delay            = 120
+  violation_time_limit_seconds = 3600
+  nrql {
+    query = "FROM Metric SELECT average(extraction_pool_queue_depth) AS `queue depth` WHERE deployment.environment = '${local.env}'"
+  }
+  warning {
+    operator              = "above"
+    threshold             = 40
+    threshold_duration    = 300
+    threshold_occurrences = "ALL"
+  }
+}
+
+resource "newrelic_nrql_alert_condition" "parser_rejections_spike" {
+  account_id                   = var.newrelic_account_id
+  policy_id                    = newrelic_alert_policy.document_parser.id
+  name                         = "Parser rejections spike"
+  enabled                      = true
+  type                         = "static"
+  description                  = "Upload rejections (too large, unsupported type) per minute over 5 minutes."
+  aggregation_window           = 60
+  aggregation_method           = "event_flow"
+  aggregation_delay            = 120
+  violation_time_limit_seconds = 3600
+  nrql {
+    query = "FROM Metric SELECT rate(sum(rejected_uploads_total), 1 minute) AS `rejections/min` WHERE deployment.environment = '${local.env}'"
+  }
+  warning {
+    operator              = "above"
+    threshold             = 10
+    threshold_duration    = 300
+    threshold_occurrences = "ALL"
+  }
+}
+
 # --- chats ---
 resource "newrelic_nrql_alert_condition" "chats_redis_degraded" {
   account_id                   = var.newrelic_account_id
