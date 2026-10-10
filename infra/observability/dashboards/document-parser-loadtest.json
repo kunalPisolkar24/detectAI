@@ -1,0 +1,234 @@
+{
+  "name": "detectai-document-parser (loadtest)",
+  "description": "Load-test view for document-parser (deployment.environment = loadtest): k6-driven throughput/latency plus host and collector infra. service.name = document-parser.",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Document parser load test",
+      "description": "App RED under load plus host/collector saturation",
+      "widgets": [
+        {
+          "title": "",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "## Document parser load test (`deployment.environment = loadtest`)\n**Service:** `Python 3.11`, `FastAPI` + `Gunicorn/Uvicorn` (`ENV_TYPE=dev` during load). **Pipeline:** parser + `otel-collector-loadtest` sidecar on `loadnet` scrape `/api/v1/metrics`, export OTLP to EU as `loadtest`.\nRun: `make load-test WITH_OBSERVABILITY=1 VUS=50 DURATION=2m` from `services/document-parser`. k6 pass/fail (p95<1500ms, p99<3000ms, 0 errors) stays in k6 output; this board shows server-side latency/saturation and host infra for the same window. Compare `Server latency` here against k6 `http_req_duration` to spot client-vs-server gaps."
+          }
+        },
+        {
+          "title": "Uploads/min (load)",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `uploads/min` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server' AND http.route = '/api/v1/extract'" }
+            ]
+          }
+        },
+        {
+          "title": "Error share (load)",
+          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server'" }
+            ],
+            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } }
+          }
+        },
+        {
+          "title": "Extract p95 (load)",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server' AND http.route = '/api/v1/extract'" }
+            ]
+          }
+        },
+        {
+          "title": "Extract p99 (load)",
+          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.billboard" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) AS `p99 ms` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server' AND http.route = '/api/v1/extract'" }
+            ]
+          }
+        },
+        {
+          "title": "Server latency p50/p95/p99 (load)",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server' AND http.route = '/api/v1/extract' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Extraction duration — pdf (load)",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 4 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND name = 'extraction' AND `mime.type` = 'application/pdf' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Extraction duration — docx (load)",
+          "layout": { "column": 5, "row": 4, "height": 3, "width": 4 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND name = 'extraction' AND `mime.type` = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Extraction duration — txt (load)",
+          "layout": { "column": 9, "row": 4, "height": 3, "width": 4 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND name = 'extraction' AND `mime.type` = 'text/plain' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Saturation: queue, workers, in-flight (load)",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(extraction_pool_queue_depth) AS `queue depth`, average(extraction_pool_active_threads) AS `busy workers`, average(extraction_pool_max_workers) AS `max workers`, average(in_flight_requests) AS `in-flight` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Status codes (load)",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server' FACET `http.status_code` TIMESERIES AUTO LIMIT 10" }
+            ]
+          }
+        },
+        {
+          "title": "Host CPU load + memory (load rig)",
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`system.cpu.load_average.1m`) AS `cpu load 1m` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`system.memory.usage`) AS bytes WHERE deployment.environment = 'loadtest' FACET state TIMESERIES AUTO LIMIT 8" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Collector export health (load)",
+          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(otelcol_exporter_sent_spans) AS sent, sum(otelcol_exporter_send_failed_spans) AS failed WHERE service.name = 'otelcol-contrib' AND deployment.environment = 'loadtest' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Slowest extractions (load)",
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND name = 'extraction' FACET cases(WHERE `mime.type` LIKE '%pdf%' AS 'pdf', WHERE `mime.type` LIKE '%officedocument%' AS 'docx', WHERE `mime.type` LIKE '%plain%' AS 'txt') LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Error log sample (load)",
+          "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(`trace.id`) AS `sample trace` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND `severity.text` = 'ERROR' FACET path LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Service versions reporting (load)",
+          "layout": { "column": 1, "row": 8, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS spans FACET service.name, service.version WHERE deployment.environment = 'loadtest' AND service.name IN ('document-parser', 'otel-collector') LIMIT 20" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Logs",
+      "description": "Error-first log stream plus volume and slow requests under load",
+      "widgets": [
+        {
+          "title": "",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.markdown" },
+          "rawConfiguration": {
+            "text": "## Load run logs (`deployment.environment = loadtest`)\nTables default to errors. For ad-hoc filtering (info only, text search) use Logs UI with the same filters. Stream tables show the latest 100 lines; set the time picker over the run window."
+          }
+        },
+        {
+          "title": "Error log stream (load, latest 100)",
+          "layout": { "column": 1, "row": 2, "height": 4, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, `severity.text`, message, path, status_code, `trace.id` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND `severity.text` = 'ERROR' LIMIT 100" }
+            ]
+          }
+        },
+        {
+          "title": "Log volume by level (load, click legend to isolate)",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' FACET `severity.text` TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Slow requests over 1500ms (load)",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, message, path, duration_ms, status_code, `trace.id` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND duration_ms > 1500 LIMIT 100" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

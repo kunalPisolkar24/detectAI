@@ -8,7 +8,13 @@ import time
 
 from opentelemetry import trace  # re-export for callers
 
-from app.infrastructure.observability.logging import JsonFormatter, current_trace_id, logger
+from app.infrastructure.observability.logging import (
+    JsonFormatter,
+    current_span_id,
+    current_trace_id,
+    logger,
+    setup_log_export,
+)
 
 
 async def log_request_middleware(request, call_next):  # pragma: no cover - legacy compat
@@ -22,8 +28,8 @@ async def log_request_middleware(request, call_next):  # pragma: no cover - lega
         "duration_ms": round((time.time() - start) * 1000, 2),
         "trace_id": current_trace_id(),
     }
-    logger.info("Request processed", extra={"request_meta": meta})
+    logger.info("Request processed", extra={"request_meta": meta, **meta})
     return response
 
 
-__all__ = ["JsonFormatter", "current_trace_id", "logger", "trace", "log_request_middleware"]
+__all__ = ["JsonFormatter", "current_span_id", "current_trace_id", "logger", "setup_log_export", "trace", "log_request_middleware"]

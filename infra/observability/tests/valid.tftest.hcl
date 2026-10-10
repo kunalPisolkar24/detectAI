@@ -13,8 +13,8 @@ run "dashboards_render" {
   command = plan
 
   assert {
-    condition     = length(newrelic_one_dashboard_json.dashboards) == 10
-    error_message = "Expected 10 dashboards."
+    condition     = length(newrelic_one_dashboard_json.dashboards) == 11
+    error_message = "Expected 11 dashboards."
   }
 }
 

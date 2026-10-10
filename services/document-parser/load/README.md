@@ -23,6 +23,25 @@ make load-test MODE=vus VUS=100
 make load-down                          # down -v
 ```
 
+## Observability (opt-in)
+
+```bash
+# Push traces/metrics/logs to New Relic EU as deployment.environment=loadtest
+export NEW_RELIC_LICENSE_KEY="..."      # ingest key, never commit
+make load-test WITH_OBSERVABILITY=1 VUS=50 DURATION=2m
+```
+
+Adds `otel-collector-loadtest` on `loadnet` (scrapes `/api/v1/metrics`,
+collects host CPU/mem, exports OTLP to EU). `ENV_TYPE` stays `dev` — only the
+telemetry label changes, so k6 traffic shows up in the
+`detectai-document-parser-loadtest` dashboard and never pollutes prod boards.
+Without the flag (default `WITH_OBSERVABILITY=0`) the run is unchanged and
+fully offline. Empty license key = collector retries/drops, apps keep running.
+
+Tip: infra panels (saturation, host CPU/mem) need a run of a few minutes to
+fill — the parser scrape ticks every 15s and hostmetrics every 30s. Short
+smoke runs only populate the span/log panels.
+
 Or directly:
 
 ```bash
@@ -46,6 +65,7 @@ API_URL=http://document-parser:8000 make load-test
 | `DURATION` | `10s` | hold duration |
 | `RAMP_TIME` | `5s` | ramp up/down |
 | `RPS` | `10` | `ramping-arrival-rate` target |
+| `WITH_OBSERVABILITY` | `0` | `1` → also start `otel-collector-loadtest`, push to New Relic as `loadtest` |
 
 ## How it Works
 

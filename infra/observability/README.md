@@ -1,7 +1,7 @@
 # infra/observability — DetectAI New Relic observability (Terraform)
 
 Publishes **New Relic dashboards + email alerts** as code. EU region (`one.eu.newrelic.com`,
-OTLP `https://otlp.eu01.nr-data.net:4317`). Separate Terraform root from
+OTLP `https://otlp.eu01.nr-data.net:443`). Separate Terraform root from
 `infra/terraform` on purpose: dashboards must survive datastore `destroy`, and this
 root has no AWS provider / emulator hacks.
 
@@ -10,17 +10,22 @@ root has no AWS provider / emulator hacks.
 - `versions.tf`, `providers.tf` — `newrelic ~> 3.0`, `region = EU`. No `aws` provider.
 - `variables.tf` — `newrelic_account_id` (6428768), `newrelic_api_key` (sensitive,
   env only), `newrelic_region` (EU), `environment` (`prod|floci`), `alert_email`.
-- `main.tf` — 10 `newrelic_one_dashboard_json` resources from `dashboards/*.json`
-  via `templatefile` (`${account_id}`, `${environment}`).
+- `main.tf` — 11 `newrelic_one_dashboard_json` resources from `dashboards/*.json`
+  via `templatefile` (`${account_id}`, `${environment}`). `document-parser-loadtest`
+  is environment-agnostic (hardcoded `deployment.environment = 'loadtest'`) and
+  ships with both envs so k6 runs never pollute prod boards.
 - `dashboards/` — `overview`, `web`, `payment-gateway`, `worker-analytics`,
-  `worker-payments`, `worker-cron`, `inference`, `document-parser`, `chats`,
-  `datastores`. Every NRQL filters `deployment.environment`.
+  `worker-payments`, `worker-cron`, `inference`, `document-parser`,
+  `document-parser-loadtest`, `chats`, `datastores`. Every prod NRQL filters `deployment.environment`.
 - `alerts.tf` — one policy per area, NRQL static conditions. Criticals are
   `enabled = environment == prod` so Floci test data never sends mail.
 - `notifications.tf` — email destination + channel + workflow only.
 - `envs/floci.tfvars|prod.tfvars` — non-secret values only. Keys via
   `TF_VAR_newrelic_api_key` or `NEW_RELIC_API_KEY` env.
-- `tests/valid.tftest.hcl` — mocked plan asserts 10 dashboards + channel.
+- `tests/valid.tftest.hcl` — mocked plan asserts 11 dashboards + channel.
+- `tags.tf` — `newrelic_entity_tags` per board (`team`, `managed-by`,
+  `service`, `env`, `kind`) so boards group instead of listing flat. The
+  loadtest board always tags `env=loadtest`.
 
 ## Data flow
 

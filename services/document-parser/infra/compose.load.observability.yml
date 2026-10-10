@@ -1,0 +1,38 @@
+# Observability overlay for document-parser load tests.
+# Applied ONLY when `make load-test WITH_OBSERVABILITY=1` is used:
+#   docker compose -f compose.load.yml -f compose.load.observability.yml up
+# Base load-test behavior (no collector, no OTEL) is unchanged otherwise.
+#
+# What it adds on the existing `loadnet` network:
+# - otel-collector-loadtest: scrapes document-parser /api/v1/metrics + self,
+#   collects hostmetrics, exports traces/metrics/logs to New Relic EU with
+#   deployment.environment=loadtest.
+# - document-parser env override: OTLP endpoint + loadtest resource attributes.
+#   ENV_TYPE intentionally stays dev (app behavior unchanged).
+services:
+  document-parser:
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-loadtest:4318
+      - OTEL_SERVICE_NAME=document-parser
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-1.0.0}
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=loadtest
+    depends_on:
+      otel-collector-loadtest:
+        condition: service_started
+
+  otel-collector-loadtest:
+    image: otel/opentelemetry-collector-contrib:0.121.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector-loadtest.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY:-}
+      - NEW_RELIC_OTLP_ENDPOINT=${NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:443}
+    networks:
+      - loadnet
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13133/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

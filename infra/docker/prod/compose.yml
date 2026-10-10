@@ -461,7 +461,7 @@ services:
       - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
     environment:
       - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY:-}
-      - NEW_RELIC_OTLP_ENDPOINT=${NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:4318}
+      - NEW_RELIC_OTLP_ENDPOINT=${NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:443}
       - DEPLOYMENT_ENV=${ENV_TYPE:-prod}
     ports:
       - "${OTEL_GRPC_PORT:-4317}:4317"

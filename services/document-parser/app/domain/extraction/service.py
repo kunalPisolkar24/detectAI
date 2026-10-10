@@ -55,7 +55,9 @@ class ExtractionService:
                 strategy = ExtractorFactory.get_strategy(mime_type)
 
                 with tracer.start_as_current_span("extraction") as span:
+                    span.set_attribute("mime.type", mime_type)
                     span.set_attribute("mime_type", mime_type)
+                    span.set_attribute("file.size_bytes", file_size_bytes)
                     span.set_attribute("file_size", file_size_bytes)
 
                     extraction_started = time.perf_counter()
@@ -76,6 +78,7 @@ class ExtractionService:
 
                     cleaned_text = TextCleaner.clean(raw_result.text)
 
+                    span.set_attribute("text.length_bytes", len(cleaned_text.encode("utf-8")))
                     span.set_attribute("text_length", len(cleaned_text.encode("utf-8")))
                     span.set_attribute("truncated", raw_result.truncated)
 
