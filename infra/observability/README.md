@@ -1,7 +1,7 @@
 # infra/observability — DetectAI New Relic observability (Terraform)
 
 Publishes **New Relic dashboards + email alerts** as code. EU region (`one.eu.newrelic.com`,
-OTLP `https://otlp.eu01.nr-data.net:4317`). Separate Terraform root from
+OTLP `https://otlp.eu01.nr-data.net:443`). Separate Terraform root from
 `infra/terraform` on purpose: dashboards must survive datastore `destroy`, and this
 root has no AWS provider / emulator hacks.
 

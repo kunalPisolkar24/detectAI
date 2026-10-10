@@ -5,7 +5,7 @@
 #
 # Required env (from infra/docker/prod/.env, never committed):
 #   NEW_RELIC_LICENSE_KEY  ingest key (eu01...)
-#   NEW_RELIC_OTLP_ENDPOINT  default https://otlp.eu01.nr-data.net:4318
+#   NEW_RELIC_OTLP_ENDPOINT  default https://otlp.eu01.nr-data.net:443
 #   DEPLOYMENT_ENV  prod | floci, stamped on scraped metrics
 # Empty NEW_RELIC_LICENSE_KEY = exporter fails closed with retry; apps keep
 # running (their SDKs are fail-open when this collector is unreachable).
