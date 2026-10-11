@@ -12,7 +12,7 @@
           "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
           "visualization": { "id": "viz.markdown" },
           "rawConfiguration": {
-            "text": "## Document parser load test (`deployment.environment = loadtest`)\n**Service:** `Python 3.11`, `FastAPI` + `Gunicorn/Uvicorn` (`ENV_TYPE=dev` during load). **Pipeline:** parser + `otel-collector-loadtest` sidecar on `loadnet` scrape `/api/v1/metrics`, export OTLP to EU as `loadtest`.\nRun: `make load-test WITH_OBSERVABILITY=1 VUS=50 DURATION=2m` from `services/document-parser`. k6 pass/fail (p95<1500ms, p99<3000ms, 0 errors) stays in k6 output; this board shows server-side latency/saturation and host infra for the same window. Compare `Server latency` here against k6 `http_req_duration` to spot client-vs-server gaps."
+            "text": "## Document parser load test (`deployment.environment = loadtest`)\n**Service:** `Python 3.11`, `FastAPI` + `Gunicorn/Uvicorn` (`ENV_TYPE=dev` during load). **Pipeline:** parser + `otel-collector-loadtest` sidecar on `loadnet` scrape `/api/v1/metrics`, read per-container stats from Docker, export OTLP to EU as `loadtest`.\nRun: `make load-test WITH_OBSERVABILITY=1 VUS=50 DURATION=2m` from `services/document-parser`. k6 pass/fail (p95<1500ms, p99<3000ms, 0 errors) stays in k6 output; this board shows server-side latency/saturation and per-container CPU/mem/net for the same window. Compare `Server latency` here against k6 `http_req_duration` to spot client-vs-server gaps."
           }
         },
         {
@@ -128,21 +128,57 @@
           }
         },
         {
-          "title": "Host CPU load + memory (load rig)",
+          "title": "Container CPU % (per container)",
           "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
           "visualization": { "id": "viz.line" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`system.cpu.load_average.1m`) AS `cpu load 1m` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`system.memory.usage`) AS bytes WHERE deployment.environment = 'loadtest' FACET state TIMESERIES AUTO LIMIT 8" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = 'loadtest' FACET `container.name` TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Container memory % (per container)",
+          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = 'loadtest' FACET `container.name` TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Container network rx/tx bytes",
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = 'loadtest' FACET `container.name` TIMESERIES AUTO LIMIT 10" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = 'loadtest' FACET `container.name` TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true }
+          }
+        },
+        {
+          "title": "Container CPU throttled time",
+          "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.line" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = 'loadtest' FACET `container.name` TIMESERIES AUTO LIMIT 10" }
             ],
             "yAxisLeft": { "zero": true }
           }
         },
         {
           "title": "Collector export health (load)",
-          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 9, "height": 3, "width": 12 },
           "visualization": { "id": "viz.line" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -154,7 +190,7 @@
         },
         {
           "title": "Slowest extractions (load)",
-          "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 8, "height": 3, "width": 6 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -164,7 +200,7 @@
         },
         {
           "title": "Error log sample (load)",
-          "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 8, "height": 3, "width": 6 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -174,7 +210,7 @@
         },
         {
           "title": "Service versions reporting (load)",
-          "layout": { "column": 1, "row": 8, "height": 3, "width": 12 },
+          "layout": { "column": 1, "row": 10, "height": 3, "width": 12 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [

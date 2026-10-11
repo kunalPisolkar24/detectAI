@@ -11,6 +11,7 @@
 #   ENV_TYPE intentionally stays dev (app behavior unchanged).
 services:
   document-parser:
+    mem_limit: 2g
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-loadtest:4318
       - OTEL_SERVICE_NAME=document-parser
@@ -20,11 +21,17 @@ services:
       otel-collector-loadtest:
         condition: service_started
 
+  k6:
+    mem_limit: 1g
+
   otel-collector-loadtest:
     image: otel/opentelemetry-collector-contrib:0.121.0
+    mem_limit: 512m
+    user: "0:0"
     command: ["--config=/etc/otelcol/config.yaml"]
     volumes:
       - ./otel-collector-loadtest.yaml:/etc/otelcol/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY:-}
       - NEW_RELIC_OTLP_ENDPOINT=${NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:443}

@@ -37,6 +37,18 @@ receivers:
       load: {}
       network: {}
 
+  # Per-container CPU/mem/net/throttling from the Docker daemon. Needs
+  # /var/run/docker.sock mounted (see compose.load.observability.yml).
+  # Unlike hostmetrics (whole shared host), these attribute to container.name.
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 15s
+    metrics:
+      container.cpu.throttling_data.throttled_time:
+        enabled: true
+      container.cpu.throttling_data.throttled_periods:
+        enabled: true
+
 processors:
   memory_limiter:
     check_interval: 1s
@@ -96,7 +108,7 @@ service:
       processors: [memory_limiter, filter/drop-health, resource/env, batch]
       exporters: [otlphttp/newrelic]
     metrics:
-      receivers: [otlp, prometheus, hostmetrics]
+      receivers: [otlp, prometheus, hostmetrics, docker_stats]
       processors: [memory_limiter, resource/env, batch]
       exporters: [otlphttp/newrelic]
     logs:

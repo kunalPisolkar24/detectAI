@@ -32,15 +32,18 @@ make load-test WITH_OBSERVABILITY=1 VUS=50 DURATION=2m
 ```
 
 Adds `otel-collector-loadtest` on `loadnet` (scrapes `/api/v1/metrics`,
-collects host CPU/mem, exports OTLP to EU). `ENV_TYPE` stays `dev` — only the
+collects per-container CPU/mem/net via `docker.sock` plus host CPU/mem,
+exports OTLP to EU). `ENV_TYPE` stays `dev` — only the
 telemetry label changes, so k6 traffic shows up in the
-`detectai-document-parser-loadtest` dashboard and never pollutes prod boards.
+`detectai-document-parser (loadtest)` dashboard and never pollutes prod boards.
 Without the flag (default `WITH_OBSERVABILITY=0`) the run is unchanged and
 fully offline. Empty license key = collector retries/drops, apps keep running.
 
-Tip: infra panels (saturation, host CPU/mem) need a run of a few minutes to
-fill — the parser scrape ticks every 15s and hostmetrics every 30s. Short
-smoke runs only populate the span/log panels.
+Tip: infra panels (saturation, containers) need a run of a few minutes to
+fill — the parser scrape and container stats tick every 15s. Short
+smoke runs only populate the span/log panels. Memory % panels rely on the
+`mem_limit`s set in `compose.load.observability.yml` (parser 2g, k6 1g,
+collector 512m).
 
 Or directly:
 
