@@ -8,14 +8,6 @@
       "description": "App RED under load plus host/collector saturation",
       "widgets": [
         {
-          "title": "",
-          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
-          "visualization": { "id": "viz.markdown" },
-          "rawConfiguration": {
-            "text": "## Document parser load test (`deployment.environment = loadtest`)\n**Service:** `Python 3.11`, `FastAPI` + `Gunicorn/Uvicorn` (`ENV_TYPE=dev` during load). **Pipeline:** parser + `otel-collector-loadtest` sidecar on `loadnet` scrape `/api/v1/metrics`, read per-container stats from Docker, export OTLP to EU as `loadtest`.\nRun: `make load-test WITH_OBSERVABILITY=1 VUS=50 DURATION=2m` from `services/document-parser`. k6 pass/fail (p95<1500ms, p99<3000ms, 0 errors) stays in k6 output; this board shows server-side latency/saturation and per-container CPU/mem/net for the same window. Compare `Server latency` here against k6 `http_req_duration` to spot client-vs-server gaps."
-          }
-        },
-        {
           "title": "Uploads/min (load)",
           "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
           "visualization": { "id": "viz.gauge" },
