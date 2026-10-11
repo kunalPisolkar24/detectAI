@@ -196,13 +196,14 @@
         {
           "title": "Status codes",
           "layout": { "column": 1, "row": 9, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.bar" },
+          "visualization": { "id": "viz.stacked-bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
               { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND span.kind = 'server' FACET `http.status_code` TIMESERIES AUTO LIMIT 10" }
             ],
-            "chartStyles": { "gradient": { "enabled": true } }
+            "facet": { "showOtherSeries": false },
+            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
           }
         },
         {
