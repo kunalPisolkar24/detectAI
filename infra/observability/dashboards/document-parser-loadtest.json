@@ -130,11 +130,11 @@
         {
           "title": "Parser container CPU %",
           "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.line" },
+          "visualization": { "id": "viz.bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = 'loadtest' AND `container.name` LIKE '%document-parser%' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = 'loadtest' AND `container.name` LIKE '%document-parser%' TIMESERIES 30 seconds" }
             ],
             "yAxisLeft": { "zero": true, "min": 0, "max": 100 }
           }
@@ -142,11 +142,11 @@
         {
           "title": "Parser container memory %",
           "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.line" },
+          "visualization": { "id": "viz.bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = 'loadtest' AND `container.name` LIKE '%document-parser%' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = 'loadtest' AND `container.name` LIKE '%document-parser%' TIMESERIES 30 seconds" }
             ],
             "yAxisLeft": { "zero": true, "min": 0, "max": 100 }
           }
@@ -154,12 +154,12 @@
         {
           "title": "Parser container network rx/tx",
           "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.line" },
+          "visualization": { "id": "viz.bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = 'loadtest' AND `container.name` LIKE '%document-parser%' TIMESERIES AUTO" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = 'loadtest' AND `container.name` LIKE '%document-parser%' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = 'loadtest' AND `container.name` LIKE '%document-parser%' TIMESERIES 30 seconds" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = 'loadtest' AND `container.name` LIKE '%document-parser%' TIMESERIES 30 seconds" }
             ],
             "yAxisLeft": { "zero": true, "min": 0 }
           }
