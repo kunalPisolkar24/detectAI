@@ -42,8 +42,8 @@
           }
         },
         {
-          "title": "Timeouts (window)",
-          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "title": "Timeouts",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 4 },
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -54,8 +54,43 @@
           }
         },
         {
+          "title": "Extract p99",
+          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) AS `p99 ms` WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND span.kind = 'server' AND http.route = '/api/v1/extract'" }
+            ],
+            "limit": 3000
+          }
+        },
+        {
+          "title": "Current CPU %",
+          "layout": { "column": 5, "row": 3, "height": 3, "width": 4 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(`container.cpu.utilization`) AS `cpu %` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%document-parser%'" }
+            ],
+            "thresholds": { "alert": { "value": 85 }, "warning": { "value": 70 } },
+            "limit": 100
+          }
+        },
+        {
+          "title": "Current memory %",
+          "layout": { "column": 9, "row": 3, "height": 3, "width": 4 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(`container.memory.percent`) AS `mem %` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%document-parser%'" }
+            ],
+            "thresholds": { "alert": { "value": 85 }, "warning": { "value": 70 } },
+            "limit": 100
+          }
+        },
+        {
           "title": "Server latency p50/p95/p99",
-          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -68,7 +103,7 @@
         },
         {
           "title": "Extraction duration — pdf",
-          "layout": { "column": 1, "row": 4, "height": 3, "width": 4 },
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 4 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -81,7 +116,7 @@
         },
         {
           "title": "Extraction duration — docx",
-          "layout": { "column": 5, "row": 4, "height": 3, "width": 4 },
+          "layout": { "column": 5, "row": 5, "height": 3, "width": 4 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -94,7 +129,7 @@
         },
         {
           "title": "Extraction duration — txt",
-          "layout": { "column": 9, "row": 4, "height": 3, "width": 4 },
+          "layout": { "column": 9, "row": 5, "height": 3, "width": 4 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -106,8 +141,61 @@
           }
         },
         {
+          "title": "Parser container CPU %",
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%document-parser%' TIMESERIES 1 minute" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Parser container memory %",
+          "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%document-parser%' TIMESERIES 1 minute" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Parser container network rx/tx",
+          "layout": { "column": 1, "row": 8, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%document-parser%' TIMESERIES 1 minute" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%document-parser%' TIMESERIES 1 minute" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Parser container CPU throttled",
+          "layout": { "column": 7, "row": 8, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%document-parser%' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
           "title": "Status codes",
-          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 9, "height": 3, "width": 6 },
           "visualization": { "id": "viz.bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -119,7 +207,7 @@
         },
         {
           "title": "Slowest extractions",
-          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 9, "height": 3, "width": 6 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -129,7 +217,7 @@
         },
         {
           "title": "Saturation (queue, workers, in-flight)",
-          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -143,7 +231,7 @@
         },
         {
           "title": "Rejections and timeouts",
-          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -156,8 +244,18 @@
           }
         },
         {
+          "title": "Error log sample",
+          "layout": { "column": 1, "row": 10, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(`trace.id`) AS `sample trace` WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET path LIMIT 20" }
+            ]
+          }
+        },
+        {
           "title": "Service versions reporting",
-          "layout": { "column": 1, "row": 7, "height": 3, "width": 12 },
+          "layout": { "column": 1, "row": 11, "height": 3, "width": 12 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
