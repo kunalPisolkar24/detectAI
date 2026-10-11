@@ -136,7 +136,7 @@
             "nrqlQueries": [
               { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = 'loadtest' AND `container.name` LIKE '%document-parser%' TIMESERIES AUTO" }
             ],
-            "yAxisLeft": { "zero": true }
+            "yAxisLeft": { "zero": true, "min": 0, "max": 100 }
           }
         },
         {
@@ -148,7 +148,7 @@
             "nrqlQueries": [
               { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = 'loadtest' AND `container.name` LIKE '%document-parser%' TIMESERIES AUTO" }
             ],
-            "yAxisLeft": { "zero": true }
+            "yAxisLeft": { "zero": true, "min": 0, "max": 100 }
           }
         },
         {
@@ -161,7 +161,7 @@
               { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = 'loadtest' AND `container.name` LIKE '%document-parser%' TIMESERIES AUTO" },
               { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = 'loadtest' AND `container.name` LIKE '%document-parser%' TIMESERIES AUTO" }
             ],
-            "yAxisLeft": { "zero": true }
+            "yAxisLeft": { "zero": true, "min": 0 }
           }
         },
         {
@@ -173,7 +173,7 @@
             "nrqlQueries": [
               { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = 'loadtest' AND `container.name` LIKE '%document-parser%' TIMESERIES AUTO" }
             ],
-            "yAxisLeft": { "zero": true }
+            "yAxisLeft": { "zero": true, "min": 0 }
           }
         },
         {
