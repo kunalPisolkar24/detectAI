@@ -60,6 +60,35 @@ def test_process_file_records_failed_extraction_duration(mocker):
     assert duration_call.kwargs["duration_seconds"] >= 0
 
 
+def test_process_file_marks_span_error_on_failure(mocker):
+    from opentelemetry import trace as otel_trace
+
+    from app.core.exceptions import ExtractionError
+
+    mock_strategy = MagicMock()
+    failure = ExtractionError("PDF processing failed: bad xref")
+    mock_strategy.extract.side_effect = failure
+    mocker.patch("app.domain.extraction.service.ExtractorFactory.get_strategy", return_value=mock_strategy)
+    mocker.patch("app.domain.extraction.service.record_extraction_failure")
+    mocker.patch("app.domain.extraction.service.record_extraction_duration")
+
+    mock_span = MagicMock()
+    mock_tracer = MagicMock()
+    mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+    mocker.patch("app.domain.extraction.service.tracer", mock_tracer)
+
+    mock_file = MagicMock()
+    mock_file.filename = "broken.pdf"
+    mock_file.file.read.return_value = b"%PDF-broken"
+
+    with pytest.raises(ExtractionError):
+        ExtractionService.process_file(mock_file, "application/pdf")
+
+    mock_span.record_exception.assert_called_once_with(failure)
+    mock_span.set_status.assert_called_once()
+    assert mock_span.set_status.call_args[0][0].status_code == otel_trace.StatusCode.ERROR
+
+
 def test_process_file_preserves_truncation_flag(mocker):
     mock_strategy = MagicMock()
     mock_strategy.extract.return_value = ExtractionResult(text="Partial text", truncated=True)

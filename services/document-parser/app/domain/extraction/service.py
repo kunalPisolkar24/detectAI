@@ -64,7 +64,9 @@ class ExtractionService:
                     extraction_started = time.perf_counter()
                     try:
                         raw_result = strategy.extract(tmp_path)
-                    except Exception:
+                    except Exception as exc:
+                        span.record_exception(exc)
+                        span.set_status(trace.Status(trace.StatusCode.ERROR))
                         record_extraction_duration(
                             mime_type=mime_type,
                             status="error",

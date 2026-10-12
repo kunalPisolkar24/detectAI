@@ -61,7 +61,9 @@ class ExtractDocumentUseCase:
                 started = time.perf_counter()
                 try:
                     raw = strategy.extract(path)
-                except Exception:
+                except Exception as exc:
+                    span.record_exception(exc)
+                    span.set_status(trace.Status(trace.StatusCode.ERROR))
                     record_extraction_duration(
                         mime_type=cmd.mime_type, status="error", duration_seconds=time.perf_counter() - started
                     )
