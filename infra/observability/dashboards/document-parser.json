@@ -223,7 +223,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(extraction_pool_active_threads)/average(extraction_pool_max_workers)*100 AS `pool utilization %` WHERE deployment.environment = '${environment}' TIMESERIES 1 minute" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(parsed_documents_total), 1 minute)*average(extraction_duration_seconds)/max(extraction_pool_max_workers)*100 AS `pool utilization %` WHERE deployment.environment = '${environment}' TIMESERIES 1 minute" }
             ],
             "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }

@@ -81,7 +81,7 @@ def test_run_extraction_task_records_queue_wait_and_delegates(mocker):
     from app.domain.extraction.service import run_extraction_task
 
     mock_record_wait = mocker.patch("app.domain.extraction.service.record_extraction_queue_wait")
-    mocker.patch("app.domain.extraction.service.refresh_process_pool_gauges")
+    mock_refresh = mocker.patch("app.domain.extraction.service.refresh_process_pool_gauges")
     mock_started = mocker.patch("app.domain.extraction.service.mark_extraction_started")
     mock_finished = mocker.patch("app.domain.extraction.service.mark_extraction_finished")
     mock_process = mocker.patch(
@@ -101,6 +101,7 @@ def test_run_extraction_task_records_queue_wait_and_delegates(mocker):
     mock_process.assert_called_once_with(mock_file, "text/plain")
     mock_started.assert_called_once()
     mock_finished.assert_called_once()
+    assert mock_refresh.call_count == 2
 
 
 def test_run_extraction_task_marks_finished_on_failure(mocker):

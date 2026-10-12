@@ -32,6 +32,7 @@ def run_extraction_task(command: ExtractCommand, submitted_at: float) -> Extract
         mime_type=command.mime_type, wait_seconds=max(0.0, time.perf_counter() - submitted_at)
     )
     mark_extraction_started()
+    refresh_pool_gauges()
     try:
         return ExtractDocumentUseCase().execute(command)
     finally:

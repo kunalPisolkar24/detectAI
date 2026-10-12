@@ -29,6 +29,7 @@ def run_extraction_task(file: UploadFile, mime_type: str, submitted_at: float) -
         wait_seconds=max(0.0, time.perf_counter() - submitted_at),
     )
     mark_extraction_started()
+    refresh_process_pool_gauges()
     try:
         return ExtractionService.process_file(file, mime_type)
     finally:
