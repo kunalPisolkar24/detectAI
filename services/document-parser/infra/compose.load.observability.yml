@@ -34,6 +34,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY:-}
+      # Do NOT change :443 to :4318. Port 4318 is TCP-blocked on this egress
+      # path (connection refused, exporter retries then drops every batch);
+      # :443 was verified to reach NR EU ingest (container probe to
+      # /v1/traces returned HTTP 403 from the auth layer, not a network
+      # failure — see commit 95c27f20). NR docs list :4318, but it does not
+      # survive this firewall. Env override still wins if ever needed.
       - NEW_RELIC_OTLP_ENDPOINT=${NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:443}
     networks:
       - loadnet

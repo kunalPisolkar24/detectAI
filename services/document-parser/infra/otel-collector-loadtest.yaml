@@ -60,12 +60,16 @@ processors:
     timeout: 10s
 
   # Drop noisy health/readiness spans before export (cost control).
+  # Only STATUS_CODE_OK spans are dropped: non-OK spans (e.g. readiness
+  # 503s under pool saturation, which the stress/soak k6 scenarios sample
+  # via /api/v1/ready) are kept so the loadtest dashboard's
+  # "readiness 503s" panel keeps working.
   filter/drop-health:
     error_mode: ignore
     traces:
       span:
-        - 'attributes["http.route"] == "/api/v1/health"'
-        - 'attributes["http.route"] == "/api/v1/ready"'
+        - 'attributes["http.route"] == "/api/v1/health" and status.code == STATUS_CODE_OK'
+        - 'attributes["http.route"] == "/api/v1/ready" and status.code == STATUS_CODE_OK'
         - 'attributes["http.route"] == "/api/v1/metrics"'
         - 'attributes["http.target"] == "/metrics"'
 
@@ -77,7 +81,11 @@ processors:
 
 exporters:
   otlphttp/newrelic:
-    endpoint: ${env:NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:4318}
+    # Fallback default only; compose always sets NEW_RELIC_OTLP_ENDPOINT.
+    # Keep :443 (not :4318): port 4318 is blocked on this egress path, :443
+    # is verified to reach NR EU ingest. See the guard comment in
+    # compose.load.observability.yml and commit 95c27f20.
+    endpoint: ${env:NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:443}
     headers:
       api-key: ${env:NEW_RELIC_LICENSE_KEY}
     retry_on_failure:
