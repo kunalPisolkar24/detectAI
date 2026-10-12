@@ -250,7 +250,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(extraction_queue_wait_seconds) AS `wait s` WHERE deployment.environment = '${environment}' FACET mime_type TIMESERIES 1 minute" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(extraction_queue_wait_seconds) AS `wait s` WHERE deployment.environment = '${environment}' FACET cases(WHERE mime_type = 'text/plain' AS 'txt', WHERE mime_type = 'application/pdf' AS 'pdf', WHERE mime_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' AS 'docx') TIMESERIES 1 minute" }
             ],
             "yAxisLeft": { "zero": true, "min": 0 },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
@@ -277,7 +277,7 @@
             "legend": { "enabled": true },
             "nrqlQueries": [
               { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(rejected_uploads_total), 1 minute) AS `rejections/min` WHERE deployment.environment = '${environment}' FACET reason TIMESERIES AUTO LIMIT 10" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(extraction_timeouts_total), 1 minute) AS `timeouts/min` WHERE deployment.environment = '${environment}' FACET mime_type TIMESERIES AUTO LIMIT 10" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(extraction_timeouts_total), 1 minute) AS `timeouts/min` WHERE deployment.environment = '${environment}' FACET cases(WHERE mime_type = 'text/plain' AS 'txt', WHERE mime_type = 'application/pdf' AS 'pdf', WHERE mime_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' AS 'docx') TIMESERIES AUTO LIMIT 10" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
