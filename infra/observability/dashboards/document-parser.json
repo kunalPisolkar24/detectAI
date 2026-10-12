@@ -300,14 +300,6 @@
       "description": "Error-first log stream plus volume and slow requests",
       "widgets": [
         {
-          "title": "",
-          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
-          "visualization": { "id": "viz.markdown" },
-          "rawConfiguration": {
-            "text": "## Logs (`document-parser`, `${environment}`)\nTables below default to errors. For ad-hoc filtering (info only, text search) use Logs UI with the same `service.name` / `deployment.environment` filters. Click a level in `Log volume` to isolate it there; stream tables show the latest 100 lines."
-          }
-        },
-        {
           "title": "Error log stream (latest 100)",
           "layout": { "column": 1, "row": 2, "height": 4, "width": 12 },
           "visualization": { "id": "viz.table" },

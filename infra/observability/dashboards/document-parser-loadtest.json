@@ -300,14 +300,6 @@
       "description": "Error-first log stream plus volume and slow requests under load",
       "widgets": [
         {
-          "title": "",
-          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
-          "visualization": { "id": "viz.markdown" },
-          "rawConfiguration": {
-            "text": "## Load run logs (`deployment.environment = loadtest`)\nTables default to errors. For ad-hoc filtering (info only, text search) use Logs UI with the same filters. Stream tables show the latest 100 lines; set the time picker over the run window."
-          }
-        },
-        {
           "title": "Error log stream (latest 100) (load)",
           "layout": { "column": 1, "row": 2, "height": 4, "width": 12 },
           "visualization": { "id": "viz.table" },
