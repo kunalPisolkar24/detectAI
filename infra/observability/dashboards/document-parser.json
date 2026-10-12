@@ -271,7 +271,7 @@
         },
         {
           "title": "Rejections and timeouts",
-          "layout": { "column": 1, "row": 11, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 11, "height": 3, "width": 12 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -281,16 +281,6 @@
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
-          }
-        },
-        {
-          "title": "Error log sample",
-          "layout": { "column": 7, "row": 11, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.table" },
-          "rawConfiguration": {
-            "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(`trace.id`) AS `sample trace` WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET path LIMIT 20" }
-            ]
           }
         },
         {
@@ -341,8 +331,21 @@
           }
         },
         {
-          "title": "Recent parser errors",
+          "title": "Errors by path",
           "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.stacked-bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'document-parser' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET path TIMESERIES AUTO" }
+            ],
+            "facet": { "showOtherSeries": false },
+            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Recent parser errors",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -352,7 +355,7 @@
         },
         {
           "title": "Slow requests over 1500ms",
-          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 12 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
