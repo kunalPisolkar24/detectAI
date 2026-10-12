@@ -105,22 +105,61 @@
           }
         },
         {
-          "title": "Saturation: queue, workers, in-flight (load)",
+          "title": "Worker pool utilization % (load)",
           "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(extraction_pool_queue_depth) AS `queue depth`, average(extraction_pool_active_threads) AS `busy workers`, average(extraction_pool_max_workers) AS `max workers`, average(in_flight_requests) AS `in-flight` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO" },
-              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS `readiness 503s` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server' AND `http.status_code` = '503' AND (http.route = '/api/v1/ready' OR http.route = '/api/v1/health') TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(extraction_pool_active_threads)/average(extraction_pool_max_workers)*100 AS `pool utilization %` WHERE deployment.environment = 'loadtest' TIMESERIES 1 minute" }
             ],
-            "yAxisLeft": { "zero": true },
+            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
-          "title": "Rejections and timeouts (load)",
+          "title": "Queue depth + in-flight (load)",
           "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(extraction_pool_queue_depth) AS `queue depth`, average(in_flight_requests) AS `in-flight` WHERE deployment.environment = 'loadtest' TIMESERIES 1 minute" },
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS `readiness 503s` WHERE service.name = 'document-parser' AND deployment.environment = 'loadtest' AND span.kind = 'server' AND `http.status_code` = '503' AND (http.route = '/api/v1/ready' OR http.route = '/api/v1/health') TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Queue wait avg by mime (load)",
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(extraction_queue_wait_seconds) AS `wait s` WHERE deployment.environment = 'loadtest' FACET mime_type TIMESERIES 1 minute" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Extraction failures by type (load)",
+          "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.stacked-bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(extraction_failures_total) AS failures WHERE deployment.environment = 'loadtest' FACET error_type TIMESERIES AUTO LIMIT 10" }
+            ],
+            "facet": { "showOtherSeries": false },
+            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Rejections and timeouts (load)",
+          "layout": { "column": 1, "row": 11, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -134,7 +173,7 @@
         },
         {
           "title": "Status codes (load)",
-          "layout": { "column": 1, "row": 9, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 10, "height": 3, "width": 6 },
           "visualization": { "id": "viz.stacked-bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -183,7 +222,7 @@
         },
         {
           "title": "Parser container CPU %",
-          "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 8, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -196,7 +235,7 @@
         },
         {
           "title": "Parser container memory %",
-          "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 8, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -209,7 +248,7 @@
         },
         {
           "title": "Parser container network rx/tx",
-          "layout": { "column": 1, "row": 8, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 9, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -223,7 +262,7 @@
         },
         {
           "title": "Parser container CPU throttled",
-          "layout": { "column": 7, "row": 8, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 9, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -236,7 +275,7 @@
         },
         {
           "title": "Slowest extractions (load)",
-          "layout": { "column": 7, "row": 9, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 10, "height": 3, "width": 6 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -246,7 +285,7 @@
         },
         {
           "title": "Error log sample (load)",
-          "layout": { "column": 1, "row": 10, "height": 3, "width": 12 },
+          "layout": { "column": 7, "row": 11, "height": 3, "width": 6 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -256,7 +295,7 @@
         },
         {
           "title": "Service versions reporting (load)",
-          "layout": { "column": 1, "row": 11, "height": 3, "width": 12 },
+          "layout": { "column": 1, "row": 12, "height": 3, "width": 12 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
