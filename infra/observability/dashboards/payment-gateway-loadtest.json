@@ -8,16 +8,8 @@
       "description": "Webhook RED, HMAC validation, MQ publish, Go runtime, containers",
       "widgets": [
         {
-          "title": "",
-          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
-          "visualization": { "id": "viz.markdown" },
-          "rawConfiguration": {
-            "text": "## Payment gateway (`service.name = payment-gateway`, `loadtest`)\nGin `POST /webhook/paddle` (Paddle) + `POST /internal/events` + `GET /readyz`. Watches: HMAC/signature failures (attack or secret drift), MQ quorum publish errors, `rabbitmq_connection_status` drops (fast-fail 503s)."
-          }
-        },
-        {
           "title": "Webhooks/min (load)",
-          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 3 },
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -28,7 +20,7 @@
         },
         {
           "title": "Error share (load)",
-          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
+          "layout": { "column": 4, "row": 1, "height": 3, "width": 3 },
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -40,7 +32,7 @@
         },
         {
           "title": "Webhook p95 (load)",
-          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
+          "layout": { "column": 7, "row": 1, "height": 3, "width": 3 },
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -51,7 +43,7 @@
         },
         {
           "title": "Webhook p99 (load)",
-          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "layout": { "column": 10, "row": 1, "height": 3, "width": 3 },
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -62,7 +54,7 @@
         },
         {
           "title": "Server latency p50/p95/p99 by route (load)",
-          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -75,7 +67,7 @@
         },
         {
           "title": "Throughput by route (load)",
-          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -88,7 +80,7 @@
         },
         {
           "title": "Status codes (load)",
-          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
           "visualization": { "id": "viz.stacked-bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -101,7 +93,7 @@
         },
         {
           "title": "Signature / validation failures (load)",
-          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -115,7 +107,7 @@
         },
         {
           "title": "Events published (load)",
-          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -128,7 +120,7 @@
         },
         {
           "title": "MQ connection + publish latency (load)",
-          "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -142,7 +134,7 @@
         },
         {
           "title": "Go runtime (load)",
-          "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -155,7 +147,7 @@
         },
         {
           "title": "Gateway container CPU % (load)",
-          "layout": { "column": 1, "row": 8, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -168,7 +160,7 @@
         },
         {
           "title": "Gateway container memory % (load)",
-          "layout": { "column": 7, "row": 8, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -181,7 +173,7 @@
         },
         {
           "title": "Gateway container network rx/tx (load)",
-          "layout": { "column": 1, "row": 9, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 8, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -195,7 +187,7 @@
         },
         {
           "title": "Gateway container CPU throttled (load)",
-          "layout": { "column": 7, "row": 9, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 8, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -208,7 +200,7 @@
         },
         {
           "title": "Current CPU % (load)",
-          "layout": { "column": 1, "row": 3, "height": 3, "width": 4 },
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 4 },
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -220,7 +212,7 @@
         },
         {
           "title": "Current memory % (load)",
-          "layout": { "column": 5, "row": 3, "height": 3, "width": 4 },
+          "layout": { "column": 5, "row": 2, "height": 3, "width": 4 },
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -232,7 +224,7 @@
         },
         {
           "title": "MQ connected (load)",
-          "layout": { "column": 9, "row": 3, "height": 3, "width": 4 },
+          "layout": { "column": 9, "row": 2, "height": 3, "width": 4 },
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -244,7 +236,7 @@
         },
         {
           "title": "Slowest routes (load)",
-          "layout": { "column": 1, "row": 10, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 9, "height": 3, "width": 6 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -254,7 +246,7 @@
         },
         {
           "title": "Service versions reporting (load)",
-          "layout": { "column": 7, "row": 10, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 9, "height": 3, "width": 6 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -270,7 +262,7 @@
       "widgets": [
         {
           "title": "Error log stream (latest 100) (load)",
-          "layout": { "column": 1, "row": 2, "height": 4, "width": 12 },
+          "layout": { "column": 1, "row": 1, "height": 4, "width": 12 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -280,7 +272,7 @@
         },
         {
           "title": "Log volume by level (click legend to isolate) (load)",
-          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -293,7 +285,7 @@
         },
         {
           "title": "Errors by route (load)",
-          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
           "visualization": { "id": "viz.stacked-bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -306,7 +298,7 @@
         },
         {
           "title": "Recent gateway errors (load)",
-          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -316,7 +308,7 @@
         },
         {
           "title": "Slow requests over 500ms (load)",
-          "layout": { "column": 1, "row": 5, "height": 3, "width": 12 },
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
