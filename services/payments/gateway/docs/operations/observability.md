@@ -85,6 +85,10 @@ The gateway outputs structured JSON logs to stdout:
 }
 ```
 
+When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the same logs are also forwarded to the collector over OTLP/HTTP (`/v1/logs`) — fail-open, so if the collector is down or no endpoint is set, the service keeps running and stdout logs are unaffected. Startup failures in tracing or log export only log an error and continue without traces. On shutdown the gateway flushes traces (5s timeout) and logs (5s timeout), best-effort. Every span and log carries `service.name`, `service.version`, and `deployment.environment` (`OTEL_RESOURCE_ATTRIBUTES` wins, then `DEPLOYMENT_ENV`, then `ENV_TYPE`; version is `OTEL_SERVICE_VERSION`, then `SERVICE_VERSION`, then `dev`).
+
+When a request runs inside a traced context, stdout logs also include `trace_id` and `span_id` so you can jump from logs to traces.
+
 ### Log Levels
 
 | Level | When to Use |
@@ -123,9 +127,13 @@ The gateway supports OpenTelemetry tracing for distributed tracking.
 ### Configuration
 
 ```bash
-# Enable tracing
+# Enable tracing + log export (empty endpoint disables both, fail-open)
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_SERVICE_NAME=payment-gateway
+OTEL_SERVICE_VERSION=1.0.0
+# SERVICE_VERSION is used only when OTEL_SERVICE_VERSION is unset
+# Optional: extra resource attributes merged into every span/log
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment=loadtest
 ```
 
 ### Spans

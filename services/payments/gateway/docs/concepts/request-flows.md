@@ -120,12 +120,15 @@ graph TB
 
 | Error | Status Code | Retryable | Header | Why |
 |-------|-------------|-----------|--------|-----|
-| Invalid signature | 401 | No | - | Bad request, won't succeed on retry |
+| Invalid signature | 401 | No | - | Bad auth, won't succeed on retry |
 | Bad API key | 401 | No | - | Unauthorized, won't succeed on retry |
-| Body too large | 400 | No | - | Client error, won't succeed on retry |
+| Body too large or unreadable (> 1 MiB) | 400 | No | - | Client error, reduce payload |
 | RabbitMQ down | 503 | Yes | `Retry-After: 5` | Temporary, Paddle will retry |
 | Publish nacked | 500 | No | - | Broker rejected, may need investigation |
 | Context timeout | 503 | Yes | `Retry-After: 5` | Temporary, Paddle will retry |
+
+**What about malformed JSON or unknown types?**
+- They still return `200 queued` as `unknown` — only oversize/unreadable returns `400`.
 
 **Why these status codes?**
 - **401** - Client error (bad auth), no point retrying
@@ -165,33 +168,42 @@ sequenceDiagram
 
 ## Event Processing
 
-Both flows extract event metadata from the JSON body:
+Both flows extract event metadata with `domain.ParseEvent`, but always forward the raw body:
 
 ```mermaid
 graph TB
-    JSON[JSON Body] --> Parse[Parse Event]
+    JSON[Raw Body] --> Parse[ParseEvent]
     Parse --> EventType{event_type?}
     Parse --> EventID{event_id?}
     EventType -->|Present| Use[Use event_type]
     EventType -->|Missing| Legacy[Check alert_name]
     Legacy -->|Present| Use
     Legacy -->|Missing| Unknown[unknown]
+    Parse -->|Malformed JSON| Unknown
     Use --> Metrics[Record Metrics]
+    Unknown --> Metrics
     EventID --> Tracing[Add to Span]
+    Use --> Publish[Publish raw body]
+    Unknown --> Publish
 ```
 
 **What happens:**
-1. Gateway parses the JSON body
+1. Gateway parses the JSON body (tolerant, never fails the request)
 2. Extracts `event_type` field (primary)
 3. Falls back to `alert_name` field (legacy Paddle)
-4. If neither exists, uses `"unknown"`
+4. If neither exists or JSON is malformed, uses `"unknown"`
 5. Extracts `event_id` for tracing
-6. Records metrics and adds to OpenTelemetry span
+6. Records metrics (`payment_webhooks_received_total`, `payment_webhooks_unknown_event_type_total`) and adds to OpenTelemetry span
+7. Publishes the original raw bytes to RabbitMQ — even `unknown` events return `200 queued`
 
 **Why extract event type?**
 - Metrics need to know what type of event was processed
 - Tracing needs to correlate events
 - Debugging requires knowing what events are flowing
+
+**Why tolerant?**
+- New Paddle types and malformed payloads still reach `worker-payments` instead of being dropped
+- Only over-limit (> 1 MiB) or unreadable bodies return `400`
 
 ## Related Documentation
 

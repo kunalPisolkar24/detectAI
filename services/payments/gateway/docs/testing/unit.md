@@ -58,12 +58,12 @@ func TestProcessWebhook_ValidSignature(t *testing.T) {
 
 ### Service Tests
 
-**Location:** `internal/domain/service_test.go`
+**Location:** `internal/domain/service_test.go` + `internal/application/` (canonical service is `application.NewPaymentService`)
 
 **What they test:**
 - ProcessWebhook with valid/invalid signatures
 - ProcessInternalEvent with valid/invalid keys
-- Event type extraction
+- Tolerant event parsing (`unknown` for missing/malformed types)
 - Error handling
 
 **Example:**
@@ -90,7 +90,7 @@ func TestProcessWebhook_ValidSignature(t *testing.T) {
 
 ### Handler Tests
 
-**Location:** `internal/transport/http/handler_test.go`
+**Location:** `internal/adapters/inbound/http/` (`handler_test.go` alongside `handler.go`)
 
 **What they test:**
 - HTTP request handling
@@ -312,16 +312,16 @@ go tool cover -html=coverage.out
 
 | Component | Target | Why |
 |-----------|--------|-----|
-| Domain | 90%+ | Critical business logic |
-| Transport | 80%+ | HTTP handling |
+| Domain + Application | 90%+ | Critical business logic |
+| Inbound adapters | 80%+ | HTTP handling |
 | Config | 80%+ | Configuration validation |
 | Overall | 80%+ | Good baseline |
 
 ### Coverage Exclusions
 
 - `cmd/gateway/main.go` - Bootstrap code
-- `config/provider.go` - AWS-specific code
-- `monitoring/monitoring.go` - Prometheus registration
+- `internal/config/aws.go` - AWS-specific code
+- `internal/platform/observability/metrics.go` - Prometheus registration
 
 ## Running Tests
 
@@ -355,7 +355,7 @@ go test -race ./...
 
 ```bash
 # Run tests in Docker
-docker run --rm -v $(pwd):/app -w /app golang:1.21 go test ./...
+docker run --rm -v $(pwd):/app -w /app golang:1.25 go test ./...
 ```
 
 ## Debugging Tests

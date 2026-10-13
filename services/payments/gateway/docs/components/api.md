@@ -103,23 +103,28 @@ curl -X POST http://localhost:8080/webhook/paddle \
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `event_id` | string | Yes | Unique event identifier |
-| `event_type` | string | Yes | Event type (e.g., `subscription.updated`) |
-| `alert_name` | string | No | Legacy Paddle event type |
+| `event_id` | string | No | Unique event identifier (used for tracing) |
+| `event_type` | string | No | Event type (e.g., `subscription.updated`) |
+| `alert_name` | string | No | Legacy Paddle event type (fallback when `event_type` is missing) |
 
-**Note:** Body must be under **1 MiB**.
+**Note:** Body must be under **1 MiB**. The gateway is tolerant by design: missing fields, unknown `event_type`, or even malformed JSON are still queued as `unknown` so no payment signal is lost. Only unreadable or over-limit bodies get a `400`. See [Validation](validation.md) for details.
 
 ### Responses
 
 | Status | Body | When | Retryable |
 |--------|------|------|-----------|
-| `200` | `{"status": "queued"}` | Event published successfully | - |
-| `400` | `{"error": "Request body too large or unreadable"}` | Body > 1 MiB or invalid | No |
+| `200` | `{"status": "queued"}` | Event published successfully (including `unknown` event types) | - |
+| `400` | `{"error": "Request body too large or unreadable"}` | Body > 1 MiB or unreadable | No |
 | `401` | `{"error": "Invalid signature"}` | HMAC validation failed | No |
 | `500` | `{"error": "Internal Server Error"}` | Publish failed (nacked/timeout) | No |
 | `503` | `{"error": "Service Unavailable", "retryable": true}` | RabbitMQ down | **Yes** |
 
 **Retry-After header** on 503: `Retry-After: 5` (seconds)
+
+**Why malformed JSON still returns 200?**
+- The gateway forwards the raw body and lets `worker-payments` decide what to do
+- Rejecting on schema would lose payment signals when Paddle adds new fields
+- Unknown types are counted via `payment_webhooks_unknown_event_type_total` so you can still spot them
 
 ## Internal Events Endpoint
 
@@ -152,8 +157,8 @@ Same as Paddle webhook endpoint.
 
 | Status | Body | When | Retryable |
 |--------|------|------|-----------|
-| `200` | `{"status": "queued"}` | Event published successfully | - |
-| `400` | `{"error": "Request body too large or unreadable"}` | Body > 1 MiB or invalid | No |
+| `200` | `{"status": "queued"}` | Event published successfully (including `unknown` event types) | - |
+| `400` | `{"error": "Request body too large or unreadable"}` | Body > 1 MiB or unreadable | No |
 | `401` | `{"error": "Unauthorized"}` | Invalid or missing API key | No |
 | `500` | `{"error": "Internal Server Error"}` | Publish failed | No |
 | `503` | `{"error": "Service Unavailable", "retryable": true}` | RabbitMQ down | **Yes** |
@@ -183,7 +188,7 @@ Some errors include additional fields:
 
 | Status | Error Type | Cause | Action |
 |--------|------------|-------|--------|
-| `400` | Bad Request | Body too large or invalid JSON | Fix request body |
+| `400` | Bad Request | Body too large (> 1 MiB) or unreadable | Reduce payload size, retry |
 | `401` | Unauthorized | Invalid signature or API key | Check credentials |
 | `500` | Internal Error | Publish failed | Check gateway logs |
 | `503` | Service Unavailable | RabbitMQ down | Wait and retry |
@@ -238,8 +243,10 @@ The gateway does not implement rate limiting because:
 | Operation | Timeout | Why |
 |-----------|---------|-----|
 | HTTP request | 5 seconds | Prevents hanging |
-| RabbitMQ publish | 5 seconds | Ensures responsiveness |
-| Graceful shutdown | 10 seconds | Allows in-flight requests |
+| RabbitMQ publish confirm | 5 seconds | Ensures responsiveness |
+| Graceful shutdown (HTTP) | 10 seconds | Allows in-flight requests |
+| OTel trace flush | 5 seconds | Best-effort export, fail-open |
+| OTel log flush | 5 seconds | Best-effort export, fail-open |
 
 **Why 5 second timeout?**
 - Balances responsiveness vs. reliability
@@ -265,8 +272,8 @@ Paddle-Signature: ts=1710000000;h1=abc123...
 ```
 
 The gateway validates:
-1. Timestamp is within 5 minutes
-2. HMAC matches the body
+1. Timestamp is within 5 minutes in both directions (too old or too far in the future is rejected)
+2. HMAC over `ts:body` matches the body
 
 See [Validation](validation.md) for details.
 
