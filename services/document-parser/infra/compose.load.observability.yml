@@ -4,8 +4,10 @@
 # Base load-test behavior (no collector, no OTEL) is unchanged otherwise.
 #
 # What it adds on the existing `loadnet` network:
-# - otel-collector-loadtest: scrapes document-parser /api/v1/metrics + self,
-#   collects hostmetrics, exports traces/metrics/logs to New Relic EU with
+# - otel-collector-loadtest (shared atom at
+#   infra/docker/otel/loadtest-observability.yml, merged via `-f` in the
+#   Makefile): scrapes document-parser /api/v1/metrics + self, collects
+#   hostmetrics, exports traces/metrics/logs to New Relic EU with
 #   deployment.environment=loadtest.
 # - document-parser env override: OTLP endpoint + loadtest resource attributes.
 #   ENV_TYPE intentionally stays dev (app behavior unchanged).
@@ -25,27 +27,12 @@ services:
     mem_limit: 1g
 
   otel-collector-loadtest:
-    image: otel/opentelemetry-collector-contrib:0.121.0
-    mem_limit: 512m
-    user: "0:0"
-    command: ["--config=/etc/otelcol/config.yaml"]
-    volumes:
-      - ./otel-collector-loadtest.yaml:/etc/otelcol/config.yaml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY:-}
-      # Do NOT change :443 to :4318. Port 4318 is TCP-blocked on this egress
-      # path (connection refused, exporter retries then drops every batch);
-      # :443 was verified to reach NR EU ingest (container probe to
-      # /v1/traces returned HTTP 403 from the auth layer, not a network
-      # failure — see commit 95c27f20). NR docs list :4318, but it does not
-      # survive this firewall. Env override still wins if ever needed.
-      - NEW_RELIC_OTLP_ENDPOINT=${NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:443}
+      - OTEL_SCRAPE_JOB=document-parser
+      - OTEL_SCRAPE_TARGET=document-parser:8000
+      - OTEL_SCRAPE_METRICS_PATH=/api/v1/metrics
+    volumes:
+      - ../../../infra/docker/otel/otel-collector-loadtest.yaml:/etc/otelcol/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - loadnet
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13133/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s

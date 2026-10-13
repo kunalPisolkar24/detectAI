@@ -1,0 +1,45 @@
+# Shared observability atom for loadtests (all services).
+#
+# Importable atom: reference it from a service's observability overlay via
+# compose `include:` (paths resolve relative to the including file), e.g.:
+#   include:
+#     - path: ../../../infra/docker/otel/loadtest-observability.yml
+# (gateway uses ../../../../infra/docker/otel/loadtest-observability.yml).
+# Everything varying is a variable (see .env.example in this dir);
+# importing projects isolate volumes and networks by project name. No
+# `volumes:` / `networks:` / `container_name` here so multiple projects can
+# run side by side. Per-service overlays add the config mount, docker.sock,
+# networks, and OTEL_SCRAPE_* env.
+#
+# What it adds:
+# - otel-collector-loadtest: scrapes the app /metrics endpoint + self,
+#   collects hostmetrics, exports traces/metrics/logs to New Relic EU with
+#   deployment.environment=loadtest.
+#
+# Required env (shell only, never committed):
+#   NEW_RELIC_LICENSE_KEY  ingest key (eu01...)
+# Empty key = exporter retries and drops; apps keep running (fail-open SDKs).
+services:
+  otel-collector-loadtest:
+    image: otel/opentelemetry-collector-contrib:0.121.0
+    mem_limit: 512m
+    user: "0:0"
+    command: ["--config=/etc/otelcol/config.yaml"]
+    environment:
+      - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY:-}
+      # Do NOT change :443 to :4318. Port 4318 is TCP-blocked on this egress
+      # path (connection refused, exporter retries then drops every batch);
+      # :443 was verified to reach NR EU ingest (container probe to
+      # /v1/traces returned HTTP 403 from the auth layer, not a network
+      # failure — see commit 95c27f20). NR docs list :4318, but it does not
+      # survive this firewall. Env override still wins if ever needed.
+      - NEW_RELIC_OTLP_ENDPOINT=${NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:443}
+      - OTEL_SCRAPE_JOB=${OTEL_SCRAPE_JOB:-app}
+      - OTEL_SCRAPE_TARGET=${OTEL_SCRAPE_TARGET:-app:8080}
+      - OTEL_SCRAPE_METRICS_PATH=${OTEL_SCRAPE_METRICS_PATH:-/metrics}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13133/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

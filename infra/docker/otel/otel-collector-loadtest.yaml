@@ -1,8 +1,16 @@
-# OTEL collector for document-parser load tests only.
-# Applied via infra/compose.load.observability.yml when
-# `make load-test WITH_OBSERVABILITY=1` is used (ENV_TYPE stays dev;
-# telemetry is labeled deployment.environment=loadtest so k6 traffic never
-# pollutes prod dashboards). Same New Relic EU endpoint as prod.
+# Shared OTEL collector for loadtests (all services).
+# Imported via compose `include:` from each service's
+# `infra/compose.load.observability.yml`, e.g.:
+#   include:
+#     - path: ../../../infra/docker/otel/loadtest-observability.yml
+# (paths resolve relative to the including file; gateway uses one more `../`
+# because it lives at services/payments/gateway/infra/).
+# Everything varying is a variable; importing projects isolate volumes and
+# networks by project name. No `volumes:` / `networks:` / `container_name`
+# here so document-parser (explicit `loadnet`) and gateway (default network)
+# can both run side by side. Per-service overlays add the config mount,
+# docker.sock, networks, and OTEL_SCRAPE_* env (see .env.example).
+# Same New Relic EU endpoint as prod.
 #
 # Required env (shell only, never committed):
 #   NEW_RELIC_LICENSE_KEY  ingest key (eu01...)
@@ -21,11 +29,11 @@ receivers:
         - job_name: otel-collector
           static_configs:
             - targets: ["localhost:8888"]
-        - job_name: document-parser
+        - job_name: ${env:OTEL_SCRAPE_JOB:-app}
           scrape_interval: 15s
-          metrics_path: /api/v1/metrics
+          metrics_path: ${env:OTEL_SCRAPE_METRICS_PATH:-/metrics}
           static_configs:
-            - targets: ["document-parser:8000"]
+            - targets: ["${env:OTEL_SCRAPE_TARGET:-app:8080}"]
 
   hostmetrics:
     collection_interval: 30s
@@ -38,7 +46,7 @@ receivers:
       network: {}
 
   # Per-container CPU/mem/net/throttling from the Docker daemon. Needs
-  # /var/run/docker.sock mounted (see compose.load.observability.yml).
+  # /var/run/docker.sock mounted (see per-service overlay).
   # Unlike hostmetrics (whole shared host), these attribute to container.name.
   docker_stats:
     endpoint: unix:///var/run/docker.sock
@@ -61,9 +69,10 @@ processors:
 
   # Drop noisy health/readiness spans before export (cost control).
   # Only STATUS_CODE_OK spans are dropped: non-OK spans (e.g. readiness
-  # 503s under pool saturation, which the stress/soak k6 scenarios sample
-  # via /api/v1/ready) are kept so the loadtest dashboard's
-  # "readiness 503s" panel keeps working.
+  # 503s under pool saturation) are kept so loadtest dashboard
+  # "readiness 503s" panels keep working. Union of document-parser
+  # (/api/v1/*) and payment-gateway (/healthz, /readyz) routes; entries
+  # that do not exist for a given service are harmless.
   filter/drop-health:
     error_mode: ignore
     traces:
@@ -71,6 +80,8 @@ processors:
         - 'attributes["http.route"] == "/api/v1/health" and status.code == STATUS_CODE_OK'
         - 'attributes["http.route"] == "/api/v1/ready" and status.code == STATUS_CODE_OK'
         - 'attributes["http.route"] == "/api/v1/metrics"'
+        - 'attributes["http.route"] == "/healthz" and status.code == STATUS_CODE_OK'
+        - 'attributes["http.route"] == "/readyz" and status.code == STATUS_CODE_OK'
         - 'attributes["http.target"] == "/metrics"'
 
   resource/env:
@@ -84,7 +95,7 @@ exporters:
     # Fallback default only; compose always sets NEW_RELIC_OTLP_ENDPOINT.
     # Keep :443 (not :4318): port 4318 is blocked on this egress path, :443
     # is verified to reach NR EU ingest. See the guard comment in
-    # compose.load.observability.yml and commit 95c27f20.
+    # loadtest-observability.yml and commit 95c27f20.
     endpoint: ${env:NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:443}
     headers:
       api-key: ${env:NEW_RELIC_LICENSE_KEY}
