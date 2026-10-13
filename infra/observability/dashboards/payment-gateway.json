@@ -59,7 +59,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND span.kind = 'SERVER' FACET `http.route` TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' FACET `http.route` TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
@@ -72,7 +72,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND span.kind = 'SERVER' FACET `http.route` TIMESERIES AUTO LIMIT 10" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' FACET `http.route` TIMESERIES AUTO LIMIT 10" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
@@ -85,7 +85,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND span.kind = 'SERVER' FACET `http.status_code` TIMESERIES AUTO LIMIT 10" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' FACET `http.status_code` TIMESERIES AUTO LIMIT 10" }
             ],
             "facet": { "showOtherSeries": false },
             "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
@@ -240,7 +240,7 @@
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND span.kind = 'SERVER' FACET `http.route` LIMIT 20" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' FACET `http.route` LIMIT 20" }
             ]
           }
         },
@@ -284,13 +284,13 @@
           }
         },
         {
-          "title": "Errors by route",
+          "title": "Errors by message",
           "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
           "visualization": { "id": "viz.stacked-bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET `http.route` TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message TIMESERIES AUTO" }
             ],
             "facet": { "showOtherSeries": false },
             "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
@@ -302,7 +302,7 @@
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(`trace.id`) AS `sample trace` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET `http.route` LIMIT 20" }
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(`trace.id`) AS `sample trace` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message LIMIT 20" }
             ]
           }
         },
