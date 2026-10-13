@@ -38,8 +38,10 @@ graph TB
 | `PORT` | `8080` | HTTP listen port | Custom port |
 | `GIN_MODE` | `release` | Gin mode: `debug`, `release`, `test` | Debug mode |
 | `LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` | Verbose logging |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | *(empty)* | OpenTelemetry endpoint | Enable tracing |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | *(empty)* | OpenTelemetry endpoint (`http(s)://`, empty disables) | Enable traces + log export |
 | `OTEL_SERVICE_NAME` | `payment-gateway` | OTel service name | Tracing identification |
+| `OTEL_SERVICE_VERSION` | `dev` | OTel service version (`SERVICE_VERSION` fallback) | Dashboard version split |
+| `OTEL_RESOURCE_ATTRIBUTES` | *(empty)* | Extra resource attrs, e.g. `deployment.environment=loadtest` | Separate loadtest telemetry |
 | `AWS_REGION` | `ap-south-1` | AWS region | AWS secrets access |
 
 ## Configuration Validation
@@ -59,6 +61,7 @@ The gateway validates all configuration at startup. If validation fails, the ser
 | `PADDLE_WEBHOOK_SECRET` | Non-empty, 16+ characters | `PADDLE_WEBHOOK_SECRET must be at least 16 characters` |
 | `INTERNAL_API_KEY` | Non-empty, 16+ characters | `INTERNAL_API_KEY must be at least 16 characters` |
 | `RABBITMQ_URL` | Valid AMQP/AMQPS URL | `RABBITMQ_URL scheme must be amqp or amqps` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Empty or `http(s)://` URL | `OTEL_EXPORTER_OTLP_ENDPOINT must be http(s) URL` |
 | `RABBITMQ_QUEUE_TYPE` | `classic` or `quorum` | `RABBITMQ_QUEUE_TYPE must be classic or quorum` |
 | `PORT` | 1-65535 | `PORT must be 1-65535` |
 | `GIN_MODE` | `debug`, `release`, or `test` | `GIN_MODE must be debug, release or test` |
@@ -84,6 +87,8 @@ When `ENV_TYPE=dev`, the gateway loads configuration from environment variables 
 | `GIN_MODE` | `release` | Production-like behavior |
 | `LOG_LEVEL` | `info` | Standard logging |
 | `OTEL_SERVICE_NAME` | `payment-gateway` | Identifies service in traces |
+| `OTEL_SERVICE_VERSION` | `dev` | Reported as `service.version` |
+| `OTEL_RESOURCE_ATTRIBUTES` | *(empty)* | Merged into every span/log; `deployment.environment` here wins over `DEPLOYMENT_ENV`/`ENV_TYPE` |
 | `AWS_REGION` | `ap-south-1` | Default AWS region |
 
 ### Example `.env` File
@@ -196,6 +201,8 @@ environment:
   - GIN_MODE=${GIN_MODE:-release}
   - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
   - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-payment-gateway}
+  - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-dev}
+  - OTEL_RESOURCE_ATTRIBUTES=${OTEL_RESOURCE_ATTRIBUTES:-}
   - AWS_REGION=${AWS_REGION:-}
 ```
 

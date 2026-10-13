@@ -6,6 +6,7 @@ locals {
     overview                 = "platform"
     web                      = "web"
     payment-gateway          = "payment-gateway"
+    payment-gateway-loadtest = "payment-gateway"
     worker-analytics         = "worker-analytics"
     worker-payments          = "worker-payments"
     worker-cron              = "worker-cron"
@@ -20,6 +21,7 @@ locals {
     overview                 = "platform"
     web                      = "service-dashboard"
     payment-gateway          = "service-dashboard"
+    payment-gateway-loadtest = "loadtest"
     worker-analytics         = "service-dashboard"
     worker-payments          = "service-dashboard"
     worker-cron              = "service-dashboard"
@@ -32,7 +34,7 @@ locals {
 
   dashboard_env = {
     for k in keys(local.dashboard_scope) :
-    k => k == "document-parser-loadtest" ? "loadtest" : var.environment
+    k => k == "document-parser-loadtest" || k == "payment-gateway-loadtest" ? "loadtest" : var.environment
   }
 }
 

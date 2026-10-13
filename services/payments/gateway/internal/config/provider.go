@@ -98,9 +98,22 @@ func applyDevDefaults(cfg *Config) {
 	if cfg.OtelServiceName == "" {
 		cfg.OtelServiceName = envOr("OTEL_SERVICE_NAME", "payment-gateway")
 	}
+	if cfg.OtelServiceVersion == "" {
+		cfg.OtelServiceVersion = otelServiceVersion()
+	}
 	if cfg.AWSRegion == "" {
 		cfg.AWSRegion = envOr("AWS_REGION", "ap-south-1")
 	}
+}
+
+func otelServiceVersion() string {
+	if v := strings.TrimSpace(os.Getenv("OTEL_SERVICE_VERSION")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("SERVICE_VERSION")); v != "" {
+		return v
+	}
+	return "dev"
 }
 
 func loadProdNonSecretOverrides(cfg *Config) {
@@ -128,6 +141,13 @@ func loadProdNonSecretOverrides(cfg *Config) {
 		cfg.OtelServiceName = v
 	} else if cfg.OtelServiceName == "" {
 		cfg.OtelServiceName = "payment-gateway"
+	}
+	if v := strings.TrimSpace(os.Getenv("OTEL_SERVICE_VERSION")); v != "" {
+		cfg.OtelServiceVersion = v
+	} else if v := strings.TrimSpace(os.Getenv("SERVICE_VERSION")); v != "" {
+		cfg.OtelServiceVersion = v
+	} else if cfg.OtelServiceVersion == "" {
+		cfg.OtelServiceVersion = "dev"
 	}
 	if cfg.AWSRegion == "" {
 		cfg.AWSRegion = envOr("AWS_REGION", "ap-south-1")
@@ -192,6 +212,11 @@ func loadFromEnv(cfg *Config) {
 	}
 	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
 		cfg.OtelServiceName = v
+	}
+	if v := os.Getenv("OTEL_SERVICE_VERSION"); v != "" {
+		cfg.OtelServiceVersion = v
+	} else if v := os.Getenv("SERVICE_VERSION"); v != "" {
+		cfg.OtelServiceVersion = v
 	}
 	if v := os.Getenv("AWS_REGION"); v != "" {
 		cfg.AWSRegion = v

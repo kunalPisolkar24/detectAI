@@ -26,12 +26,29 @@ test-integration-ha:
 # dedicated network, no dependency on the main detect_ai stack.
 # Load publishes 5673/15673 (not 5672/15672) so it runs side-by-side with `gateway-up`.
 # Usage: make load-test SCENARIO=spike TARGET_VUS=100 DURATION=60s
+# Opt-in observability: make load-test WITH_OBSERVABILITY=1 SCENARIO=spike
+# (adds otel-collector-loadtest -> New Relic EU as deployment.environment=loadtest;
+# needs NEW_RELIC_LICENSE_KEY in shell; ENV_TYPE stays dev).
+COMPOSE_LOAD := docker compose -f infra/compose.load.yml
+COMPOSE_LOAD_OBS := docker compose -f infra/compose.load.yml -f ../../../infra/docker/otel/loadtest-observability.yml -f infra/compose.load.observability.yml
+WITH_OBSERVABILITY ?= 0
 load-test:
-	RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
-	docker compose -f infra/compose.load.yml up --abort-on-container-exit --exit-code-from k6
+	@if [ "$(WITH_OBSERVABILITY)" != "0" ] && [ "$(WITH_OBSERVABILITY)" != "1" ]; then \
+		echo "Invalid WITH_OBSERVABILITY '$(WITH_OBSERVABILITY)'. Use 0 or 1."; exit 1; \
+	fi
+	@if [ "$(WITH_OBSERVABILITY)" = "1" ]; then \
+		if [ -z "$${NEW_RELIC_LICENSE_KEY:-}" ]; then \
+			echo "WITH_OBSERVABILITY=1 but NEW_RELIC_LICENSE_KEY is empty — collector will retry/drop, apps keep running."; \
+		fi; \
+		RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
+		$(COMPOSE_LOAD_OBS) up --abort-on-container-exit --exit-code-from k6; \
+	else \
+		RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
+		$(COMPOSE_LOAD) up --abort-on-container-exit --exit-code-from k6; \
+	fi
 
 load-down:
-	docker compose -f infra/compose.load.yml down -v --remove-orphans
+	$(COMPOSE_LOAD_OBS) down -v --remove-orphans
 
 load-test-spike:
 	@$(MAKE) load-test SCENARIO=spike

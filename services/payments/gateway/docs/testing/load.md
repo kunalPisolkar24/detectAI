@@ -27,6 +27,22 @@ make load-test SCENARIO=spike TARGET_VUS=100 DURATION=60s
 make load-down
 ```
 
+## Observability (opt-in)
+
+```bash
+# Push traces/metrics/logs to New Relic EU as deployment.environment=loadtest
+export NEW_RELIC_LICENSE_KEY="..."      # ingest key, never commit
+make load-test SCENARIO=spike WITH_OBSERVABILITY=1 TARGET_VUS=20
+```
+
+Adds `otel-collector-loadtest` (shared atom at `infra/docker/otel/`, same one
+document-parser uses: scrapes `/metrics`, collects per-container CPU/mem/net
+via `docker.sock` plus host CPU/mem, exports OTLP to EU). `ENV_TYPE` stays
+`dev` — only the telemetry label changes, so k6 traffic shows up in the
+`detectai-payment-gateway (loadtest)` dashboard and never pollutes prod boards.
+Without the flag (default `WITH_OBSERVABILITY=0`) the run is unchanged and
+fully offline. Empty license key = collector retries/drops, apps keep running.
+
 ## Prerequisites
 
 - **Docker** running
@@ -175,6 +191,7 @@ Each VU sends a realistic payload:
 | `INTERNAL_API_KEY` | `test_internal_key` | API key |
 | `TARGET_VUS` | `20` | Virtual users |
 | `DURATION` | `30s` | Test duration |
+| `WITH_OBSERVABILITY` | `0` | `1` → also start `otel-collector-loadtest`, push to New Relic as `loadtest` |
 
 ### Custom Configuration
 

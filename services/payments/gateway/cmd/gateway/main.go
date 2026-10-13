@@ -31,14 +31,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	log := observability.NewLogger(cfg.LogLevel)
+	log, shutdownLogs, err := observability.NewObservableLogger(cfg.LogLevel, cfg)
+	if err != nil {
+		log.Error("Failed to initialize log export, continuing with stdout logs", "error", err)
+	}
+
 	monitor := observability.NewMonitor("payment-gateway")
 	monitor.SetBuildInfo(buildVersion, buildCommit)
 
 	shutdownTracing, err := observability.InitTracing(cfg)
 	if err != nil {
-		log.Error("Failed to initialize tracing", "error", err)
-		os.Exit(1)
+		log.Error("Failed to initialize tracing, continuing without traces", "error", err)
+		shutdownTracing = func(context.Context) error { return nil }
 	}
 
 	log.Info("Gateway config loaded", "port", cfg.Port, "queue_type", cfg.RabbitMQQueueType, "rabbit_url", config.RedactedRabbitURL(cfg.RabbitMQURL), "env_type", cfg.EnvType)
@@ -87,6 +91,9 @@ func main() {
 	defer shutdownCancel()
 	if err := shutdownTracing(shutdownCtx); err != nil {
 		log.Error("Failed to flush traces on shutdown", "error", err)
+	}
+	if err := shutdownLogs(shutdownCtx); err != nil {
+		log.Error("Failed to flush logs on shutdown", "error", err)
 	}
 
 	log.Info("Gateway exited")

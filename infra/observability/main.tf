@@ -6,6 +6,7 @@ locals {
     overview                 = "overview.json"
     web                      = "web.json"
     payment-gateway          = "payment-gateway.json"
+    payment-gateway-loadtest = "payment-gateway-loadtest.json"
     worker-analytics         = "worker-analytics.json"
     worker-payments          = "worker-payments.json"
     worker-cron              = "worker-cron.json"

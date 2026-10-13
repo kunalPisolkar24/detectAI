@@ -25,6 +25,20 @@ make load-test SCENARIO=internal
 make load-down                          # down -v
 ```
 
+## Observability (opt-in)
+
+```bash
+export NEW_RELIC_LICENSE_KEY="..."      # ingest key, never commit
+make load-test SCENARIO=spike WITH_OBSERVABILITY=1 TARGET_VUS=20
+```
+
+Adds `otel-collector-loadtest` on the load network (scrapes `/metrics`,
+per-container CPU/mem/net via `docker.sock`, exports OTLP to EU).
+`ENV_TYPE` stays `dev` — telemetry is labeled
+`deployment.environment=loadtest`, so k6 traffic shows up in the
+`detectai-payment-gateway (loadtest)` dashboard, never prod. Default
+`WITH_OBSERVABILITY=0` runs fully offline.
+
 Or directly:
 
 ```bash
@@ -50,6 +64,7 @@ Load publishes `5673/15673` (not `5672/15672`), so it runs side-by-side with `ma
 | `INTERNAL_API_KEY` | `test_internal_key` | internal |
 | `TARGET_VUS` | `20` (spike) | `options.stages` |
 | `DURATION` | `30s` | `options.stages` |
+| `WITH_OBSERVABILITY` | `0` | `1` → also start `otel-collector-loadtest`, push to New Relic as `loadtest` |
 | `RAMP_UP` / `RAMP_DOWN` | `10s` | stages |
 
 ## How it Works
