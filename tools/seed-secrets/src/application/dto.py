@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from src.domain.schemas import SeedConfig
 
-# For parity with model-publisher's PublishCommand, expose alias.
+# Expose alias for backwards-compatible imports.
 SeedCommand = SeedConfig
 
 

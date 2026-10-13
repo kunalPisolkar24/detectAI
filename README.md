@@ -104,7 +104,6 @@ detectAI/
 │   └── payments/gateway/       # Go webhook gateway
 ├── services/workers/           # TypeScript background workers
 ├── tools/
-│   ├── model-publisher/        # HuggingFace model publishing CLI
 │   └── seed-secrets/           # AWS Secrets Manager seeding CLI
 └── infra/
     ├── docker/                 # Compose stacks + reusable atoms
@@ -126,7 +125,6 @@ Each component has its own documentation in `docs/`. Start with the quickstart f
 | Workers | [Quickstart](services/workers/docs/getting-started/quickstart.md) | [Index](services/workers/docs/README.md) |
 | Infrastructure | [Quickstart](infra/docs/getting-started/quickstart.md) | [Index](infra/docs/README.md) |
 | Terraform | [README](infra/terraform/README.md) | [Docs](infra/docs/concepts/terraform.md) |
-| Model Publisher | [Quickstart](tools/model-publisher/docs/getting-started/quickstart.md) | [Index](tools/model-publisher/docs/README.md) |
 | Seed Secrets | [Quickstart](tools/seed-secrets/docs/getting-started/quickstart.md) | [Index](tools/seed-secrets/docs/README.md) |
 
 ## Contributing
