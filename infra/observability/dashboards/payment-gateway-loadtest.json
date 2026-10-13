@@ -13,7 +13,7 @@
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' AND span.kind = 'SERVER'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' AND `http.route` = '/webhook/paddle'" }
             ],
             "limit": 200
           }
@@ -24,7 +24,7 @@
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' AND span.kind = 'SERVER'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' AND `http.route` = '/webhook/paddle'" }
             ],
             "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } },
             "limit": 2
@@ -36,7 +36,7 @@
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' AND span.kind = 'SERVER' AND http.route = '/webhook/paddle'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' AND `http.route` = '/webhook/paddle'" }
             ],
             "limit": 500
           }
@@ -47,7 +47,7 @@
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) AS `p99 ms` WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' AND span.kind = 'SERVER' AND http.route = '/webhook/paddle'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) AS `p99 ms` WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' AND `http.route` = '/webhook/paddle'" }
             ],
             "limit": 1000
           }
@@ -59,20 +59,20 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' FACET `http.route` TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' AND `http.route` NOT IN ('/readyz', '/healthz') FACET `http.route` TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
-          "title": "Throughput by route (load)",
+          "title": "Webhook throughput (load)",
           "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' FACET `http.route` TIMESERIES AUTO LIMIT 10" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' AND `http.route` = '/webhook/paddle' TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
@@ -85,7 +85,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' FACET `http.status_code` TIMESERIES AUTO LIMIT 10" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' AND `http.route` NOT IN ('/readyz', '/healthz') FACET `http.status_code` TIMESERIES AUTO LIMIT 10" }
             ],
             "facet": { "showOtherSeries": false },
             "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
@@ -240,7 +240,7 @@
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' FACET `http.route` LIMIT 20" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = 'loadtest' AND `http.route` NOT IN ('/readyz', '/healthz') FACET `http.route` LIMIT 20" }
             ]
           }
         },
