@@ -35,6 +35,7 @@ type Config struct {
 	LogLevel             string
 	OtelEndpoint         string
 	OtelServiceName      string
+	OtelServiceVersion   string
 	AWSRegion            string
 }
 
@@ -188,9 +189,18 @@ func (c *Config) Validate() error {
 		}
 	}
 	if strings.TrimSpace(c.OtelServiceName) == "" {
-		c.OtelServiceName = "chat-service"
+		if c.ServiceRole == "worker" {
+			c.OtelServiceName = "chat-worker"
+		} else {
+			c.OtelServiceName = "chat-service"
+		}
 	} else {
 		c.OtelServiceName = strings.TrimSpace(c.OtelServiceName)
+	}
+	if strings.TrimSpace(c.OtelServiceVersion) == "" {
+		c.OtelServiceVersion = "dev"
+	} else {
+		c.OtelServiceVersion = strings.TrimSpace(c.OtelServiceVersion)
 	}
 
 	if strings.TrimSpace(c.AWSRegion) == "" {

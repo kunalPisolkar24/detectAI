@@ -14,6 +14,7 @@ locals {
     document-parser          = "document-parser.json"
     document-parser-loadtest = "document-parser-loadtest.json"
     chats                    = "chats.json"
+    chats-loadtest           = "chats-loadtest.json"
     datastores               = "datastores.json"
   }
 }

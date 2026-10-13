@@ -15,6 +15,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/ports"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/usecase"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/database"
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/logger"
 	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/metrics"
@@ -30,9 +31,14 @@ func main() {
 		panic(err)
 	}
 
-	logger.Init(cfg.LogLevel)
+	shutdownLogs := observability.InitObservableLogger(cfg.LogLevel, cfg)
 	metrics.Init()
 	metrics.StartMetricsServer(cfg.MetricsPort)
+	shutdownTracing, err := observability.InitTracing(cfg)
+	if err != nil {
+		logger.Log.Error("Failed to initialize tracing, continuing without traces", zap.Error(err))
+		shutdownTracing = func(context.Context) error { return nil }
+	}
 	logger.Log.Info("Config loaded",
 		zap.String("env_type", cfg.EnvType),
 		zap.String("service_role", cfg.ServiceRole),
@@ -43,6 +49,7 @@ func main() {
 		zap.Bool("redis_tls", cfg.RedisTLSEnabled),
 		zap.String("log_level", cfg.LogLevel),
 		zap.String("otel_service", cfg.OtelServiceName),
+		zap.String("otel_version", cfg.OtelServiceVersion),
 		zap.Int("batch_size", cfg.BatchSize),
 		zap.Int("stream_partitions", cfg.StreamPartitionCount),
 	)
@@ -126,6 +133,15 @@ func main() {
 		promMetrics.SetRedisDegraded(0)
 		consumer := worker.NewConsumer(redisClient, persistenceRepo, cfg, logger.Log, promMetrics)
 		consumer.Start(ctx)
+	}
+
+	flushCtx, flushCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer flushCancel()
+	if err := shutdownTracing(flushCtx); err != nil && logger.Log != nil {
+		logger.Log.Error("Failed to flush traces on shutdown", zap.Error(err))
+	}
+	if err := shutdownLogs(flushCtx); err != nil && logger.Log != nil {
+		logger.Log.Error("Failed to flush logs on shutdown", zap.Error(err))
 	}
 }
 

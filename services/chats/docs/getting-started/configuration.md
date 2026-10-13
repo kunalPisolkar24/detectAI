@@ -75,8 +75,10 @@ CACHE_TTL=24h
 
 ```bash
 LOG_LEVEL=info                 # debug,info,warn,warning,error (warn→warning normalized)
-OTEL_EXPORTER_OTLP_ENDPOINT=   # http(s):// — empty disables tracing
-OTEL_SERVICE_NAME=chat-service
+OTEL_EXPORTER_OTLP_ENDPOINT=   # http(s)://collector — empty disables traces + log export (fail-open)
+OTEL_SERVICE_NAME=chat-service # worker defaults to chat-worker when unset
+OTEL_SERVICE_VERSION=dev       # alias SERVICE_VERSION; stamped as service.version
+OTEL_RESOURCE_ATTRIBUTES=      # e.g. deployment.environment=loadtest (wins over DEPLOYMENT_ENV, ENV_TYPE)
 ```
 
 ### AWS Bootstrap (prod only, also used for Floci local prod)

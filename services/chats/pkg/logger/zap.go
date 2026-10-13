@@ -43,3 +43,15 @@ func Init(logLevelStr string) {
 	Log = zap.New(core, zap.AddCaller())
 	zap.ReplaceGlobals(Log)
 }
+
+// AttachCore fans subsequent log output out to core in addition to stdout.
+// Used by the OTLP log exporter; safe to call once after Init.
+func AttachCore(core zapcore.Core) {
+	if Log == nil || core == nil {
+		return
+	}
+	Log = Log.WithOptions(zap.WrapCore(func(c zapcore.Core) zapcore.Core {
+		return zapcore.NewTee(c, core)
+	}))
+	zap.ReplaceGlobals(Log)
+}

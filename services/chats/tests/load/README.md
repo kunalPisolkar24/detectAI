@@ -45,6 +45,29 @@ make load-test SCENARIO=soak VUS=5 DURATION=10m
 make load-down
 ```
 
+## Observability (opt-in)
+
+```bash
+# Push traces/metrics/logs to New Relic EU as deployment.environment=loadtest
+export NEW_RELIC_LICENSE_KEY="..."      # ingest key, never commit
+make load-test SCENARIO=load VUS=10 DURATION=2m WITH_OBSERVABILITY=1
+```
+
+Adds `otel-collector-loadtest` on the load network (scrapes `chat-service:9091`
+and `chat-worker:9099` plus `redis-exporter:9121` and `mongo-exporter:9216`,
+collects per-container CPU/mem/net via `docker.sock` plus host CPU/mem,
+exports OTLP to EU). `ENV_TYPE` stays `dev` — only the telemetry label
+changes, so k6 traffic shows up in the `detectai-chats (loadtest)` dashboard
+(6 pages: Overview, Service, Service Logs, Worker, Worker Logs, Infra) and
+never pollutes prod boards. Without the flag (default `WITH_OBSERVABILITY=0`)
+the run is unchanged and fully offline. Empty license key = collector
+retries/drops, apps keep running.
+
+Tip: infra panels need a run of a few minutes to fill — app scrapes and
+container stats tick every 15s. Short smoke runs only populate the span/log
+panels. The api reports `service.name=chat-service`, the worker
+`service.name=chat-worker`, so every panel splits by role.
+
 ## Test Types
 
 | Test | What It Does | When to Use |
@@ -197,6 +220,8 @@ You can customize test behavior with environment variables:
 | `RPS` | Requests per second (0 = unlimited) | 0 |
 | `CHAT_SERVICE_TIMEOUT` | Connection timeout | 5s |
 | `RPC_TIMEOUT_MS` | Per-request timeout | 2000ms |
+| `WITH_OBSERVABILITY` | `0` | `1` → also start `otel-collector-loadtest` + datastore exporters, push to New Relic as `loadtest` |
+| `OTEL_SERVICE_VERSION` | `dev` | `service.version` stamped on spans/logs (`SERVICE_VERSION` fallback) |
 
 ### Scenario Defaults
 

@@ -67,6 +67,62 @@ var (
 		Help: "1 when Redis is degraded/unavailable, 0 when healthy",
 	})
 
+	GRPCRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "chat_grpc_requests_total",
+		Help: "Total number of gRPC requests handled by method and status",
+	}, []string{"method", "status"})
+
+	GRPCErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "chat_grpc_errors_total",
+		Help: "Total number of failed gRPC requests by method and code",
+	}, []string{"method", "code"})
+
+	WorkerConsumed = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "chat_worker_consumed_total",
+		Help: "Total number of stream messages consumed by the worker by partition",
+	}, []string{"partition"})
+
+	StreamPending = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "chat_stream_pending",
+		Help: "Current pending (unacked) entries of the Redis stream consumer group",
+	}, []string{"stream"})
+
+	MongoOpDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "chat_mongo_op_duration_seconds",
+		Help:    "Time taken for MongoDB operations by operation",
+		Buckets: []float64{.001, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5},
+	}, []string{"operation"})
+
+	RedisOpDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "chat_redis_op_duration_seconds",
+		Help:    "Time taken for Redis operations by operation",
+		Buckets: []float64{.001, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5},
+	}, []string{"operation"})
+
+	CacheOpDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "chat_cache_op_duration_seconds",
+		Help:    "Time taken for cache operations by operation and result",
+		Buckets: []float64{.001, .005, .01, .025, .05, .1, .25, .5, 1},
+	}, []string{"operation", "result"})
+
+	WorkerBatchDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "chat_worker_batch_duration_seconds",
+		Help:    "Time taken by the worker to process one batch by stage",
+		Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
+	}, []string{"stage"})
+
+	MessageBytes = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "chat_message_bytes",
+		Help:    "Size of ingested message content in bytes",
+		Buckets: []float64{64, 256, 1024, 4096, 16384, 65536, 262144},
+	})
+
+	BatchSize = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "chat_batch_size",
+		Help:    "Number of messages per worker batch",
+		Buckets: []float64{1, 5, 10, 25, 50, 100, 250},
+	})
+
 	initOnce sync.Once
 )
 
@@ -130,6 +186,16 @@ func Init() {
 			DatabaseErrors,
 			SyncFallback,
 			RedisDegraded,
+			GRPCRequests,
+			GRPCErrors,
+			WorkerConsumed,
+			StreamPending,
+			MongoOpDuration,
+			RedisOpDuration,
+			CacheOpDuration,
+			WorkerBatchDuration,
+			MessageBytes,
+			BatchSize,
 		)
 	})
 }

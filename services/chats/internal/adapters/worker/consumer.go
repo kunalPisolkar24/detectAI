@@ -11,6 +11,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/ports"
+	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/metrics"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -150,7 +151,10 @@ func (c *Consumer) runWorker(ctx context.Context, partitionID int, consumerName 
 		}
 
 		if len(result) > 0 && len(result[0].Messages) > 0 {
+			metrics.WorkerConsumed.WithLabelValues(stream).Add(float64(len(result[0].Messages)))
+			batchStart := time.Now().UTC()
 			c.processor.ProcessBatch(ctx, result, c.client, group)
+			metrics.WorkerBatchDuration.WithLabelValues("process").Observe(time.Since(batchStart).Seconds())
 		}
 	}
 }
@@ -240,7 +244,14 @@ func (c *Consumer) updateSingleLag(ctx context.Context, stream, group string) {
 	for _, grp := range info {
 		if grp.Name == group {
 			c.metrics.SetStreamLag(stream, float64(grp.Lag))
-			return
+			break
 		}
+	}
+	if pending, pErr := c.client.XPending(ctx, stream, group).Result(); pErr != nil {
+		if pErr != redis.Nil && !strings.Contains(pErr.Error(), "no such key") && !strings.Contains(pErr.Error(), "NOGROUP") {
+			c.logger.Warn("Failed to get stream pending", zap.String("stream", stream), zap.Error(pErr))
+		}
+	} else if pending != nil {
+		metrics.StreamPending.WithLabelValues(stream).Set(float64(pending.Count))
 	}
 }

@@ -121,11 +121,31 @@ func applyDevDefaults(cfg *Config) {
 		cfg.LogLevel = "info"
 	}
 	if cfg.OtelServiceName == "" {
-		cfg.OtelServiceName = "chat-service"
+		cfg.OtelServiceName = defaultServiceName(cfg.ServiceRole)
+	}
+	if cfg.OtelServiceVersion == "" {
+		cfg.OtelServiceVersion = otelServiceVersion()
 	}
 	if cfg.AWSRegion == "" {
 		cfg.AWSRegion = "ap-south-1"
 	}
+}
+
+func defaultServiceName(role string) string {
+	if strings.ToLower(strings.TrimSpace(role)) == "worker" {
+		return "chat-worker"
+	}
+	return "chat-service"
+}
+
+func otelServiceVersion() string {
+	if v := strings.TrimSpace(os.Getenv("OTEL_SERVICE_VERSION")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("SERVICE_VERSION")); v != "" {
+		return v
+	}
+	return "dev"
 }
 
 func loadProdNonSecretOverrides(cfg *Config) error {
@@ -251,7 +271,14 @@ func loadProdNonSecretOverrides(cfg *Config) error {
 	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
 		cfg.OtelServiceName = strings.TrimSpace(v)
 	} else if cfg.OtelServiceName == "" {
-		cfg.OtelServiceName = "chat-service"
+		cfg.OtelServiceName = defaultServiceName(cfg.ServiceRole)
+	}
+	if v := os.Getenv("OTEL_SERVICE_VERSION"); v != "" {
+		cfg.OtelServiceVersion = strings.TrimSpace(v)
+	} else if v := os.Getenv("SERVICE_VERSION"); v != "" {
+		cfg.OtelServiceVersion = strings.TrimSpace(v)
+	} else if cfg.OtelServiceVersion == "" {
+		cfg.OtelServiceVersion = "dev"
 	}
 	if v := os.Getenv("AWS_REGION"); v != "" {
 		cfg.AWSRegion = strings.TrimSpace(v)
@@ -413,6 +440,11 @@ func loadFromEnv(cfg *Config) error {
 	}
 	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
 		cfg.OtelServiceName = strings.TrimSpace(v)
+	}
+	if v := os.Getenv("OTEL_SERVICE_VERSION"); v != "" {
+		cfg.OtelServiceVersion = strings.TrimSpace(v)
+	} else if v := os.Getenv("SERVICE_VERSION"); v != "" {
+		cfg.OtelServiceVersion = strings.TrimSpace(v)
 	}
 	if v := os.Getenv("AWS_REGION"); v != "" {
 		cfg.AWSRegion = strings.TrimSpace(v)

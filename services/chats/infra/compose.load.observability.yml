@@ -1,0 +1,78 @@
+# Observability overlay for chats load tests.
+# Applied ONLY when `make load-test WITH_OBSERVABILITY=1` is used:
+#   docker compose -f infra/compose.load.yml -f ../../infra/docker/otel/loadtest-observability.yml -f infra/compose.load.observability.yml up
+# Base load-test behavior (no collector, no OTEL) is unchanged otherwise.
+#
+# What it adds on the existing project network:
+# - otel-collector-loadtest (shared atom at
+#   infra/docker/otel/loadtest-observability.yml): scrapes chat-service
+#   :9091 + chat-worker :9099 + redis/mongo exporters, collects
+#   hostmetrics, exports traces/metrics/logs to New Relic EU with
+#   deployment.environment=loadtest.
+# - redis-exporter + mongo-exporter (reusable atoms at
+#   infra/docker/redis-exporter + infra/docker/mongo-exporter, merged via
+#   extra `-f` flags in the Makefile): datastore depth for the Infra
+#   dashboard page.
+# - chat-service / chat-worker env override: OTLP endpoint + per-role
+#   service.name (chat-service vs chat-worker) + loadtest resource
+#   attributes. ENV_TYPE intentionally stays dev (app behavior unchanged).
+name: chats-load
+
+services:
+  chat-service:
+    mem_limit: 1g
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-loadtest:4318
+      - OTEL_SERVICE_NAME=chat-service
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-dev}
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=loadtest
+    depends_on:
+      otel-collector-loadtest:
+        condition: service_started
+
+  chat-worker:
+    mem_limit: 1g
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-loadtest:4318
+      - OTEL_SERVICE_NAME=chat-worker
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-dev}
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=loadtest
+    depends_on:
+      otel-collector-loadtest:
+        condition: service_started
+
+  redis-exporter:
+    environment:
+      - REDIS_ADDR=redis://redis-chat:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-test_redis_password}
+    depends_on:
+      redis-chat:
+        condition: service_healthy
+      otel-collector-loadtest:
+        condition: service_started
+
+  mongo-exporter:
+    command: ["--mongodb.uri=mongodb://mongo-chat:27017/chat_db", "--collect-all"]
+    depends_on:
+      mongo-chat:
+        condition: service_healthy
+      otel-collector-loadtest:
+        condition: service_started
+
+  k6:
+    mem_limit: 1g
+
+  otel-collector-loadtest:
+    environment:
+      - OTEL_SCRAPE_JOB=chat-service
+      - OTEL_SCRAPE_TARGET=chat-service:9091
+      - OTEL_SCRAPE_METRICS_PATH=/metrics
+      - OTEL_SCRAPE_JOB_2=chat-worker
+      - OTEL_SCRAPE_TARGET_2=chat-worker:9099
+      - OTEL_SCRAPE_JOB_3=redis-exporter
+      - OTEL_SCRAPE_TARGET_3=redis-exporter:9121
+      - OTEL_SCRAPE_JOB_4=mongo-exporter
+      - OTEL_SCRAPE_TARGET_4=mongo-exporter:9216
+    volumes:
+      - ../../../infra/docker/otel/otel-collector-loadtest.yaml:/etc/otelcol/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro

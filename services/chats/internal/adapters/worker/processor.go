@@ -8,6 +8,7 @@ import (
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/ports"
+	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/metrics"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -78,6 +79,9 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 		return
 	}
 
+	metrics.BatchSize.Observe(float64(len(messages)))
+
+	upsertStart := time.Now().UTC()
 	if err := p.repo.BulkUpsertMessages(ctx, messages); err != nil {
 		retried := false
 		for attempt := 0; attempt < 3; attempt++ {
@@ -87,7 +91,9 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 				return
 			case <-time.After(backoff):
 			}
+			retryStart := time.Now().UTC()
 			if rErr := p.repo.BulkUpsertMessages(ctx, messages); rErr == nil {
+				metrics.WorkerBatchDuration.WithLabelValues("bulk_upsert").Observe(time.Since(retryStart).Seconds())
 				retried = true
 				break
 			} else {
@@ -101,6 +107,8 @@ func (p *Processor) ProcessBatch(ctx context.Context, streams []redis.XStream, c
 			return
 		}
 		p.logger.Info("Bulk upsert succeeded after retry", zap.Int("count", len(messages)))
+	} else {
+		metrics.WorkerBatchDuration.WithLabelValues("bulk_upsert").Observe(time.Since(upsertStart).Seconds())
 	}
 
 	p.metrics.AddIngestedMessages(float64(len(messages)))

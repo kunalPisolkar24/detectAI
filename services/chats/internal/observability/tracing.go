@@ -1,0 +1,38 @@
+package observability
+
+import (
+	"context"
+	"strings"
+
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+)
+
+// InitTracing wires an OTLP/HTTP span exporter to the configured collector.
+// Fail-open: with no OTEL_EXPORTER_OTLP_ENDPOINT it returns a no-op shutdown
+// and the service runs untraced. Callers log-and-continue on error.
+func InitTracing(cfg *config.Config) (func(context.Context) error, error) {
+	if strings.TrimSpace(cfg.OtelEndpoint) == "" {
+		return func(context.Context) error { return nil }, nil
+	}
+	ctx := context.Background()
+	url := strings.TrimSuffix(strings.TrimSpace(cfg.OtelEndpoint), "/") + "/v1/traces"
+	exporter, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(url))
+	if err != nil {
+		return nil, err
+	}
+	res, err := BuildResource(cfg)
+	if err != nil {
+		return nil, err
+	}
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(res),
+	)
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	return tp.Shutdown, nil
+}

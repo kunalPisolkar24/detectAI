@@ -1,0 +1,23 @@
+# Reusable redis-exporter template (Prometheus exporter for self-hosted Redis).
+#
+# Merge it into a stack with an extra `-f` flag, then override the endpoint
+# from the service overlay, e.g.:
+#   docker compose -f compose.load.yml \
+#     -f ../../../infra/docker/redis-exporter/standalone.yml \
+#     -f compose.load.observability.yml up
+#   services:
+#     redis-exporter:
+#       environment:
+#         - REDIS_ADDR=redis://redis-chat:6379
+#         - REDIS_PASSWORD=${REDIS_PASSWORD:-secret}
+# Everything varying is a variable; importing projects isolate volumes and
+# networks by project name. No `volumes:` / `networks:` / `container_name`
+# here so multiple projects can run side by side. Serves /metrics for the
+# shared OTEL collector (see infra/docker/otel/otel-collector-loadtest.yaml).
+services:
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=${REDIS_ADDR:-redis://localhost:6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
