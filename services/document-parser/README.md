@@ -37,7 +37,7 @@ graph LR
     Cleaner --> Resp[ExtractionResponse]
 ```
 
-Pool-aware readiness (`busy < max` and `queued < 50`). See [Architecture](docs/01-architecture.md) for sequence and class view.
+Pool-aware readiness (`busy < max` and `queued < 50`). See [Architecture](docs/concepts/architecture.md) for sequence and class view.
 
 ## Configuration
 
@@ -53,7 +53,7 @@ PORT=8000                             # optional
 OTEL_EXPORTER_OTLP_ENDPOINT=          # optional, disables tracing
 ```
 
-See `docs/08-configuration.md` for full reference.
+See `docs/getting-started/configuration.md` for full reference.
 
 ## API
 
@@ -64,7 +64,7 @@ GET  /api/v1/metrics         -> Prometheus
 POST /api/v1/extract         (multipart file) -> 200 ExtractionResponse | 413 415 422 504
 ```
 
-See `docs/09-api.md` for request flow and error codes.
+See `docs/components/api.md` for request flow and error codes.
 
 ## Observability
 
@@ -88,7 +88,7 @@ Alerts configured:
 - High rejection rate — more than 1 rejection per second for 15 minutes
 - Pool saturation — pool saturated and queue depth >10 for 10 minutes
 
-See `docs/10-observability.md` for PromQL.
+See `docs/operations/observability.md` for PromQL.
 
 ## Testing
 
@@ -104,11 +104,12 @@ make test-coverage
 # Run integration tests
 make test-integration
 
-# Run load tests
-make load-test
+# Run load tests (pick a scenario)
+make load-test SCENARIO=smoke
+make load-test SCENARIO=load VUS=20 DURATION=1m
 ```
 
-See `docs/11-testing.md` and `load/README.md` for scenarios.
+See `docs/testing/overview.md` and `load/README.md` for scenarios.
 
 ## Docker
 

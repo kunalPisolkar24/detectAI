@@ -107,9 +107,11 @@ document-parser/
 │   └── integration/
 │       └── test_extract_integration.py  # End-to-end extraction with real files
 ├── load/
-│   ├── script.js                      # k6 load test script
-│   ├── fixtures/                      # Sample files (PDF, DOCX, TXT)
-│   └── README.md                      # Load test documentation
+│   ├── script.js                      # Legacy entrypoint (MODE=vus|rps), now shares lib helpers
+│   ├── lib/                           # Shared k6 helpers (config, files, metrics, requests)
+│   ├── scenarios/                     # smoke, load, stress, soak, negative
+│   ├── fixtures/                      # Sample files (PDF, DOCX, TXT in several sizes)
+│   └── README.md                      # Full load test reference
 └── docs/
     └── testing/
         └── overview.md                # This file
@@ -191,47 +193,68 @@ open htmlcov/index.html
 
 ## Load Testing
 
-Load testing checks how the service performs under heavy traffic.
+Load testing checks how the service performs under heavy traffic. Pick a scenario that matches your question -- each one is a small k6 script under `load/scenarios/` sharing the same helpers in `load/lib/`.
 
 ```bash
-# Run with default settings (5 VUs, 10s)
-make load-test
+# Quick smoke: health plus one extract per file type, fails fast
+make load-test SCENARIO=smoke
 
-# Run with custom VUs and duration
-make load-test VUS=20 DURATION=1m RAMP_TIME=30s
+# Realistic ramped load (default: 5 VUs, short hold)
+make load-test SCENARIO=load VUS=20 DURATION=1m RAMP_TIME=30s
 
-# Run in RPS mode (target requests per second)
-make load-test MODE=rps RPS=100 VUS=50 DURATION=2m
+# Arrival-rate stress to find saturation (watch readiness 503s, not extract errors)
+make load-test SCENARIO=stress RPS=20 STAGES="10s:5,30s:20,10s:0" MAX_VUS=100
 
-# Stop load test stack
+# Long steady soak to catch leaks and latency drift
+make load-test SCENARIO=soak VUS=2 DURATION=10m
+
+# Rejection checks: unsupported type, empty file, corrupt PDF, missing file
+make load-test SCENARIO=negative
+
+# Old interface still works (now shares the same lib, thresholds scoped per scenario)
+make load-test SCENARIO=legacy MODE=rps VUS=50 RPS=100 DURATION=2m
+
+# Stop everything
 make load-down
 ```
 
-### Load Test Modes
+Shortcuts exist too: `make load-test-smoke`, `load-test-load`, `load-test-stress`, `load-test-soak`, `load-test-negative`.
 
-| Mode | What It Does | When to Use |
-|------|--------------|-------------|
-| `vus` (default) | Simulates N virtual users with ramp-up/down | Realistic traffic simulation |
-| `rps` | Targets N requests per second with open-model arrival | Throughput testing |
-| `health` | Simple health check loop (5 VUs, 30s) | Smoke testing |
+### What Each Scenario Does
 
-### Load Test Scenarios
+Think of scenarios as answering different questions:
 
-| Scenario | Virtual Users | Duration | Purpose |
-|----------|---------------|----------|---------|
-| Smoke | 5 | 30 seconds | Quick sanity check |
-| Load | 20 | 2 minutes | Realistic traffic |
-| Stress | 50-100 | 5 minutes | Find breaking point |
+| Scenario | Question It Answers | Default Shape | Pass Bar |
+|----------|---------------------|---------------|----------|
+| `smoke` | "Did I break the basics?" | 1 VU, 1 iteration per file type + health | All checks pass |
+| `load` | "How does normal traffic feel?" | Ramping VUs (`5s:5,10s:5,5s:0`), 1-3s think time | `p95 < 1500ms`, `p99 < 3000ms`, txt `p95 < 500ms`, success `>= 99%` |
+| `stress` | "Where does it saturate gracefully?" | Arrival-rate (`10s:5,30s:10,10s:0`), 20 preallocated / 100 max VUs | `p95 < 3000ms`, `p99 < 6000ms`, success `>= 95%`, readiness `503`s counted separately |
+| `soak` | "Does it leak or drift over time?" | 2 VUs for 5m | `p95 < 3000ms`, `p99 < 5000ms`, success `>= 99%` |
+| `negative` | "Do guards still reject bad input?" | 1 VU, 8 iterations over 4 rejection cases | Rejection checks `== 100%` |
+| `legacy` | "Old MODE interface" | `MODE=vus\|rps` with shared lib | Scoped latency, success `>= 99%` |
 
-Each virtual user picks a random file (PDF, DOCX, or TXT) from `load/fixtures/`, uploads it as `multipart/form-data`, and verifies a `200` response with valid `text` field.
+Every extract iteration round-robins deterministically over `DOCPARSER_LOAD_PROFILES` (default `txt-small,txt-medium,txt-large,pdf-small,docx-small`), so each run covers the full mix the same way. Text fixtures come in committed sizes (`sample.txt` 26B, `sample-medium.txt` 4K, `sample-large.txt` 100K, `sample-near-limit.txt` 500K opt-in via `txt-near-limit`); binaries are `sample.pdf` 787B and `sample.docx` 36K. Each request carries a `35s` timeout (covers the `30s` extraction timeout plus margin) and tags (`service`, `test_type`, `mime`, `profile`, `size`) so loadtest dashboards stay correlatable. `504`s and 30s+ timings count as timeouts; `/ready` `503`s count as backpressure, not failures.
 
-### Thresholds
+### Observability for Load Runs
 
-| Threshold | Value | Meaning |
-|-----------|-------|---------|
-| `http_req_duration p(95)` | < 1500ms | 95% of requests under 1.5 seconds |
-| `http_req_duration p(99)` | < 3000ms | 99% of requests under 3 seconds |
-| `errors rate` | == 0 | Zero errors allowed |
+By default load runs are offline -- no collector, nothing leaves your machine. To push traces, metrics, and logs to New Relic as `deployment.environment=loadtest`:
+
+```bash
+export NEW_RELIC_LICENSE_KEY="..."   # ingest key, never commit it
+make load-test SCENARIO=load WITH_OBSERVABILITY=1 VUS=20 DURATION=2m
+```
+
+This adds `otel-collector-loadtest` (scrapes `/api/v1/metrics`, collects host and per-container CPU/memory/network). `ENV_TYPE` stays `dev`, so only the telemetry label changes. Empty key means the collector retries and drops while apps keep running. See [Observability](../operations/observability.md) for the full pipeline and [load/README.md](../../load/README.md) for every `DOCPARSER_LOAD_*` knob.
+
+### When to Run Which
+
+- **Smoke** before any deploy -- fast sanity.
+- **Load** (`VUS=10-20`, `2m`) to verify latency and success on a realistic mix.
+- **Stress** to watch pool saturation -- expect graceful `/ready` `503`s rather than extract errors.
+- **Soak** (`5-30m`) with observability on to catch leaks.
+- **Negative** after touching validation or limits.
+
+One caveat: the load stack runs `WORKERS=1` by default so k6 and the service fit on one machine (override with `WORKERS=4`). Don't read those throughput numbers as production capacity without accounting for that.
 
 ## Common Testing Issues
 

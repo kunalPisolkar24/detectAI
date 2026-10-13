@@ -12,17 +12,21 @@ Observability means being able to understand what's happening inside a system by
 
 ## Logs
 
-Logs are written to standard output in JSON format. They're useful for debugging specific issues.
+Logs are written to standard output in JSON format. They're useful for debugging specific issues. When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the same logs are also forwarded to the collector over OTLP/HTTP (`/v1/logs`) -- this is fail-open, so if the collector is down or no endpoint is set, the service keeps running and you still get stdout logs.
 
 ### What Gets Logged
 
 | Component | What It Logs |
 |-----------|--------------|
-| Middleware | Request method, path, status code, duration |
+| Middleware | Request method, path, status code, duration, trace and span IDs |
 | Extraction | MIME type, duration, success/error, truncated |
 | Validation | Rejection reasons (too large, unsupported type) |
 | Pool | Queue depth, active threads |
 | Config | Loaded configuration at startup |
+
+Health, readiness, and metrics probes (`/api/v1/health`, `/api/v1/ready`, `/api/v1/metrics`) are logged at `DEBUG` so they don't drown out real traffic. Everything else is logged at `INFO`. Each log line also carries `service.name` and `deployment.environment` so you can tell dev, prod, and loadtest traffic apart.
+
+Request fields are written twice on purpose: once inside `request_meta` (nice for reading stdout and for tests) and once as flat top-level fields (the OTLP log exporter drops nested objects, so flat fields keep them searchable in your log backend).
 
 ### Example Log Entry
 
@@ -30,13 +34,18 @@ Logs are written to standard output in JSON format. They're useful for debugging
 {
   "timestamp": "2024-09-10T12:00:00Z",
   "level": "INFO",
+  "severity": "INFO",
   "message": "Request processed",
   "module": "middleware",
+  "logger": "file_service",
+  "service.name": "document-parser",
+  "deployment.environment": "dev",
   "method": "POST",
   "path": "/api/v1/extract",
   "status_code": 200,
   "duration_ms": 234.56,
-  "trace_id": "abc123def456"
+  "trace_id": "abc123def456",
+  "span_id": "0123456789abcdef"
 }
 ```
 
@@ -44,11 +53,32 @@ Logs are written to standard output in JSON format. They're useful for debugging
 
 | Level | When to Use |
 |-------|-------------|
-| `DEBUG` | Detailed information for debugging |
+| `DEBUG` | Detailed information for debugging (health and readiness probes live here) |
 | `INFO` | Normal operations |
 | `WARNING` | Something unexpected but not critical |
 | `ERROR` | Something failed |
 | `CRITICAL` | Service cannot continue |
+
+## Traces
+
+Traces show how a single request flows through the service. They are off by default -- set `OTEL_EXPORTER_OTLP_ENDPOINT` to an `http(s)://` collector URL to turn them on. The service uses `FastAPIInstrumentor` for HTTP spans plus one `extraction` span per document.
+
+### What Each Extraction Span Carries
+
+| Attribute | Example | What It Tells You |
+|-----------|---------|-------------------|
+| `mime.type` | `application/pdf` | File type (OpenTelemetry naming) |
+| `file.size_bytes` | `783921` | How big the upload was |
+| `text.length_bytes` | `41203` | How much clean text came out |
+| `truncated` | `false` | Whether output hit `MAX_TEXT_LENGTH` |
+
+Older names (`mime_type`, `file_size`, `text_length`) are still set alongside the new dotted names so existing dashboards keep working. If extraction throws, the span records the exception and is marked as an error, so failed extractions stand out in your trace backend.
+
+### Resource Attributes
+
+Every span and log carries `service.name`, `service.version`, and `deployment.environment`. The last one is how you separate environments in New Relic: filter on `deployment.environment = prod` vs `loadtest` vs `dev`.
+
+Precedence for the endpoint: explicit argument > `OTEL_EXPORTER_OTLP_ENDPOINT` env > `Settings`. Precedence for `deployment.environment`: `OTEL_RESOURCE_ATTRIBUTES` (for example `deployment.environment=loadtest`) > `DEPLOYMENT_ENV` > `ENV_TYPE` > built-in default. Extra `OTEL_RESOURCE_ATTRIBUTES` pairs are merged in untouched.
 
 ## Metrics
 
@@ -135,6 +165,24 @@ curl -s http://localhost:8000/api/v1/metrics | grep extraction_duration
 | Extraction failures | `rate(parsed_documents_total{status="error"}[5m]) > 0.1` | 10m | More than 0.1 failures per second |
 | High rejection rate | `rate(rejected_uploads_total[5m]) > 1` | 15m | More than 1 rejection per second |
 | Pool saturation | `extraction_pool_queue_depth > 10` | 10m | Thread pool queue is growing |
+
+### Load-Test Observability (Opt-in)
+
+Normal load runs are fully offline -- no collector, no network calls. When you want traces, metrics, and logs in New Relic, add `WITH_OBSERVABILITY=1`:
+
+```bash
+export NEW_RELIC_LICENSE_KEY="..."   # ingest key, never commit it
+make load-test SCENARIO=load WITH_OBSERVABILITY=1 VUS=20 DURATION=2m
+```
+
+What that flag does: it starts `otel-collector-loadtest` alongside the service on the same `loadnet` network (see `infra/compose.load.observability.yml` + `infra/otel-collector-loadtest.yaml`). The collector scrapes `document-parser:8000/api/v1/metrics` every 15s, gathers host CPU and memory plus per-container CPU, memory, network, and throttling stats via the Docker socket, and exports everything to New Relic EU over `https://otlp.eu01.nr-data.net:443`. Keep port `443` -- port `4318` is blocked on this egress path.
+
+Two details that keep dashboards clean:
+
+- Telemetry is labeled `deployment.environment=loadtest` while `ENV_TYPE` stays `dev`, so app behavior is unchanged but k6 traffic never pollutes prod boards. Look for the `detectai-document-parser (loadtest)` dashboard.
+- The collector drops noisy but healthy spans (`/health`, `/ready`, `/metrics` with OK status) to control cost. Failed spans -- for example `503` from `/ready` when the pool is saturated -- are kept, so the "readiness 503s" panel still lights up during stress and soak runs.
+
+Give infra panels a few minutes to fill: parser scrapes and container stats tick every 15s, so short smoke runs mostly populate span and log panels. Memory-percentage panels rely on the `mem_limit` values in the overlay (parser 2g, k6 1g, collector 512m). If `NEW_RELIC_LICENSE_KEY` is empty, the collector retries and drops while the apps keep running -- fail-open by design.
 
 ## Monitoring Checklist
 

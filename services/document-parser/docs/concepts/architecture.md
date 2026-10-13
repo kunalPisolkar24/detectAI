@@ -150,12 +150,13 @@ When the service starts, it:
 1. **Loads configuration** - `get_settings()` reads from env vars, applies dev/prod defaults
 2. **Sets up logging** - JSON formatter to stdout at configured `LOG_LEVEL`
 3. **Creates FastAPI app** - `create_app()` wires middleware, exception handler, router
-4. **Lifespan begins**:
+4. **Forwards logs (if configured)** - `setup_log_export()` attaches an OTLP log handler when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; no-op locally and fail-open if the collector is unreachable
+5. **Instruments tracing (if configured)** - `setup_tracing()` runs before serving (Starlette forbids adding middleware after startup) with `service.name`, `service.version`, and `deployment.environment` merged from `OTEL_RESOURCE_ATTRIBUTES`
+6. **Lifespan begins**:
    - Creates `ThreadPoolExecutor(max_workers=WORKER_THREADS)`
    - Stores pool on `app.state.extraction_pool`
    - Registers pool for metrics tracking
-   - Sets up OTLP tracing (if `OTEL_EXPORTER_OTLP_ENDPOINT` configured)
-5. **Starts gunicorn** - Binds to `PORT` (default 8000) with `WORKERS` uvicorn workers
+7. **Starts gunicorn** - Binds to `PORT` (default 8000) with `WORKERS` uvicorn workers (`WORKERS` = processes, `WORKER_THREADS` = threads per process doing extractions)
 
 ```mermaid
 graph TB
@@ -182,16 +183,18 @@ graph TB
     C -->|valid| E[Read file content]
     E --> F[Create ExtractCommand]
     F --> G[Submit to ThreadPool<br/>run_in_executor]
-    G --> H[run_extraction_task<br/>record queue wait]
+    G --> H[run_extraction_task<br/>record queue wait + refresh gauges]
     H --> I[ExtractDocumentUseCase.execute]
     I --> J[Defense-in-depth size check]
     J --> K[Save to temp file]
     K --> L[ExtractorFactory.get<br/>pick strategy by MIME]
-    L --> M[Strategy.extract<br/>parse document]
-    M --> N[TextCleaner.clean<br/>normalize text]
-    N --> O[Return ExtractionResult]
-    O --> P[Delete temp file]
-    P --> Q[200 ExtractionResponse]
+    L --> M[extraction span<br/>mime + file size attrs]
+    M --> N[Strategy.extract<br/>parse document]
+    N --> O[TextCleaner.clean<br/>normalize text]
+    O --> P[Span records text length + truncated<br/>error status on failure]
+    P --> Q[Return ExtractionResult]
+    Q --> R[Delete temp file]
+    R --> S[200 ExtractionResponse]
 ```
 
 ## Thread Pool
@@ -213,6 +216,7 @@ graph TB
 - Pool size: `WORKER_THREADS` env or `os.cpu_count()` (default 4)
 - Readiness: `busy < max` AND `queued < READINESS_MAX_QUEUE_DEPTH (50)`
 - Timeout: `EXTRACTION_TIMEOUT_SECONDS` (default 30s) via `asyncio.wait_for`
+- Gauges refresh: `refresh_pool_gauges()` runs right after `mark_extraction_started()` (and again when finished) so `extraction_pool_active_threads` and `extraction_pool_queue_depth` reflect the moment work begins, not just the next scrape
 - Context propagation: `contextvars.copy_context()` + `ctx.run()` to thread
 
 ## Exception Hierarchy
@@ -264,7 +268,8 @@ classDiagram
 ### FastAPI App
 - Receives HTTP requests via gunicorn + uvicorn workers
 - Registers `DocumentParserError` exception handler (hides internal details for `ExtractionError`)
-- Single `CombinedMiddleware` handles logging, metrics timing, and in-flight tracking
+- Single `CombinedMiddleware` handles logging, metrics timing, and in-flight tracking; health, readiness, and metrics probes log at `DEBUG` to stay quiet
+- `setup_log_export()` forwards logs to the OTLP collector when an endpoint is set (fail-open, no-op locally)
 
 ### ExtractorFactory
 - Class-level dict maps MIME types to singleton extractor instances
@@ -277,7 +282,7 @@ classDiagram
 
 ### ThreadPool
 - Runs extraction in background threads
-- `mark_extraction_started/finished` tracks busy count under lock
+- `mark_extraction_started/finished` tracks busy count under lock, with `refresh_pool_gauges()` right after each change so Prometheus gauges stay fresh
 - `_pool_snapshot()` reads `_work_queue.qsize()` + `_max_workers` + `_shutdown`
 - `is_extraction_pool_healthy()` checks `not _shutdown`
 

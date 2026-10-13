@@ -6,7 +6,7 @@ This document explains how to configure the Document Parser service for `ENV_TYP
 
 | Var | Default | Required | Notes |
 |-----|---------|----------|-------|
-| `ENV_TYPE` | `dev` | no | Canonical switch. `dev` = local docker-compose with `.env` / `ENV_FILE`; `prod` = AWS Secrets Manager + SSM. `development` -> `dev`, `production` -> `prod` aliases accepted, otherwise must be `dev` or `prod`. |
+| `ENV_TYPE` | `dev` | no | Canonical switch. `dev` = local docker-compose with `.env` / `ENV_FILE`; `prod` = AWS Secrets Manager + SSM. `development` / `test` -> `dev`, `production` -> `prod` aliases accepted, otherwise must be `dev` or `prod`. |
 
 ## How Configuration Works
 
@@ -30,7 +30,11 @@ ENV_TYPE=dev                  # local development (default)
 ```bash
 PORT=8000                     # default 8000, gunicorn/uvicorn bind
 WORKERS=4                     # gunicorn worker processes (shell-only, not via SSM)
+API_TITLE="Document Parser Service"  # rarely changed, shown in OpenAPI docs
+API_VERSION=1.0.0             # rarely changed, shown in OpenAPI docs
 ```
+
+`WORKERS` controls how many gunicorn worker processes serve HTTP. `WORKER_THREADS` below controls how many threads *inside each worker* run extractions. Think of it as: workers handle web traffic, threads do the heavy file parsing. The load-test stack sets `WORKERS=1` by default so k6 and the service fit on one machine -- don't read those numbers as production capacity.
 
 ### Extraction Settings
 
@@ -64,7 +68,11 @@ LOG_LEVEL=INFO                       # DEBUG/INFO/WARNING/ERROR/CRITICAL (WARN -
 OTEL_EXPORTER_OTLP_ENDPOINT=         # http(s):// -- if empty, tracing disabled
 OTEL_SERVICE_NAME=document-parser    # resource attribute
 OTEL_SERVICE_VERSION=1.0.0           # alias SERVICE_VERSION
+OTEL_RESOURCE_ATTRIBUTES=            # comma-separated k=v pairs merged into every span/log, e.g. deployment.environment=prod
+DEPLOYMENT_ENV=                      # fallback for deployment.environment when OTEL_RESOURCE_ATTRIBUTES is empty
 ```
+
+How `deployment.environment` is decided: `OTEL_RESOURCE_ATTRIBUTES` wins first (for example `deployment.environment=loadtest` during load tests), then `DEPLOYMENT_ENV`, then `ENV_TYPE`, then a built-in default. You usually don't set this by hand -- prod compose sets it from `ENV_TYPE` automatically, and the load-test observability overlay sets it to `loadtest` so k6 traffic never pollutes prod dashboards.
 
 ### AWS Bootstrap (prod only)
 
@@ -171,7 +179,12 @@ The service includes a Makefile with common commands:
 | `make test-integration` | Run integration tests (requires Docker) |
 | `make lint` | Run ruff linter |
 | `make deps` | Install dependencies via Poetry |
-| `make load-test` | Run k6 load tests (options: `MODE`, `VUS`, `DURATION`, `RPS`) |
+| `make load-test` | Run k6 load tests (options: `SCENARIO`, `VUS`, `DURATION`, `RAMP_TIME`, `RPS`, `STAGES`, `MAX_VUS`, `WITH_OBSERVABILITY`) |
+| `make load-test-smoke` | Quick smoke check (health + one extract per type) |
+| `make load-test-load` | Realistic ramped load |
+| `make load-test-stress` | Arrival-rate stress to find saturation |
+| `make load-test-soak` | Low steady load for leaks and drift |
+| `make load-test-negative` | Rejection checks (expects 4xx) |
 | `make load-down` | Tear down the load test stack |
 | `make parser-build` | Build the Docker image |
 | `make parser-up` | Start the service with Docker Compose |
@@ -183,9 +196,12 @@ The service includes a Makefile with common commands:
 
 **Load test examples:**
 ```bash
-make load-test VUS=20 DURATION=1m RAMP_TIME=30s
-make load-test MODE=rps RPS=100 VUS=50 DURATION=2m
-make load-test MODE=vus VUS=100
+make load-test SCENARIO=smoke
+make load-test SCENARIO=load VUS=20 DURATION=1m RAMP_TIME=30s
+make load-test SCENARIO=stress RPS=20 STAGES="10s:5,30s:20,10s:0"
+make load-test SCENARIO=legacy MODE=rps VUS=50 RPS=100 DURATION=2m
+# Send telemetry to New Relic as deployment.environment=loadtest (needs NEW_RELIC_LICENSE_KEY):
+make load-test SCENARIO=load WITH_OBSERVABILITY=1 VUS=20 DURATION=2m
 ```
 
 ## Troubleshooting

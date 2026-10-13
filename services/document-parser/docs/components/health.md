@@ -114,6 +114,8 @@ curl http://localhost:8000/api/v1/metrics
 docker ps --format "table {{.Names}}\t{{.Status}}"
 ```
 
+These three probes log at `DEBUG` (not `INFO`) so scrapes and load-test health loops don't flood your logs. Pool gauges (`extraction_pool_active_threads`, `extraction_pool_queue_depth`) are refreshed the moment work starts and finishes, so what you see in metrics matches what readiness just decided.
+
 ## Troubleshooting
 
 ### "Service returns 503 unavailable?"

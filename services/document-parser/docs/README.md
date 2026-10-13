@@ -71,7 +71,7 @@ Start here:
 
 ## Related Files
 
-- **Main README**: [`../../README.md`](../../README.md) - Overview and quick start
-- **Makefile**: [`../../Makefile`](../../Makefile) - Build and test commands
-- **Docker Compose**: [`../../infra/compose.yml`](../../infra/compose.yml) - Local development setup
-- **Load Tests**: [`../../load/README.md`](../../load/README.md) - Load testing guide
+- **Main README**: [`../README.md`](../README.md) - Overview and quick start
+- **Makefile**: [`../Makefile`](../Makefile) - Build and test commands
+- **Docker Compose**: [`../infra/compose.yml`](../infra/compose.yml) - Local development setup
+- **Load Tests**: [`../load/README.md`](../load/README.md) - Load testing guide

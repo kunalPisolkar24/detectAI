@@ -100,7 +100,7 @@ Detection: `python-magic` reads first 4096 bytes and detects the **actual** MIME
 |------|-------|-------|
 | Extraction timeout | 30 seconds | `504 ExtractionTimeoutError` |
 
-The extraction runs in a thread pool with an `asyncio.wait_for` timeout. If the extraction takes longer than `EXTRACTION_TIMEOUT_SECONDS`, the request is killed.
+The extraction runs in a thread pool with an `asyncio.wait_for` timeout. If the extraction takes longer than `EXTRACTION_TIMEOUT_SECONDS`, the request is killed. The failed `extraction` span is marked as an error with the exception recorded, so timeouts stand out in traces. Load tests use a `35s` per-request timeout (`DOCPARSER_LOAD_REQUEST_TIMEOUT`) to give the `30s` extraction timeout a little breathing room.
 
 ## Error Response Format
 

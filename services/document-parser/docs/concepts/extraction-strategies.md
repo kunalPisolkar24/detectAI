@@ -142,6 +142,7 @@ When any strategy exceeds `MAX_TEXT_LENGTH` (1,000,000 characters):
 - The strategy **stops extracting** and returns what it has so far
 - The response includes `"truncated": true`
 - The `text_length` field shows the actual length of the returned text
+- The `extraction` trace span records `truncated=true` plus `mime.type`, `file.size_bytes`, and `text.length_bytes` so you can see which files truncate most often
 
 This prevents memory issues from extremely large documents.
 

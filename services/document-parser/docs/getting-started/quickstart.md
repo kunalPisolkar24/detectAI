@@ -174,8 +174,8 @@ make test
 # Integration tests (requires Docker)
 make test-integration
 
-# Load tests
-make load-test
+# Load tests (pick a scenario: smoke|load|stress|soak|negative|legacy)
+make load-test SCENARIO=smoke
 ```
 
 ## Stopping the Service
