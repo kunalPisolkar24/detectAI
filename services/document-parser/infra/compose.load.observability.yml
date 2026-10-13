@@ -1,0 +1,51 @@
+# Observability overlay for document-parser load tests.
+# Applied ONLY when `make load-test WITH_OBSERVABILITY=1` is used:
+#   docker compose -f compose.load.yml -f compose.load.observability.yml up
+# Base load-test behavior (no collector, no OTEL) is unchanged otherwise.
+#
+# What it adds on the existing `loadnet` network:
+# - otel-collector-loadtest: scrapes document-parser /api/v1/metrics + self,
+#   collects hostmetrics, exports traces/metrics/logs to New Relic EU with
+#   deployment.environment=loadtest.
+# - document-parser env override: OTLP endpoint + loadtest resource attributes.
+#   ENV_TYPE intentionally stays dev (app behavior unchanged).
+services:
+  document-parser:
+    mem_limit: 2g
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-loadtest:4318
+      - OTEL_SERVICE_NAME=document-parser
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-1.0.0}
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=loadtest
+    depends_on:
+      otel-collector-loadtest:
+        condition: service_started
+
+  k6:
+    mem_limit: 1g
+
+  otel-collector-loadtest:
+    image: otel/opentelemetry-collector-contrib:0.121.0
+    mem_limit: 512m
+    user: "0:0"
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector-loadtest.yaml:/etc/otelcol/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY:-}
+      # Do NOT change :443 to :4318. Port 4318 is TCP-blocked on this egress
+      # path (connection refused, exporter retries then drops every batch);
+      # :443 was verified to reach NR EU ingest (container probe to
+      # /v1/traces returned HTTP 403 from the auth layer, not a network
+      # failure — see commit 95c27f20). NR docs list :4318, but it does not
+      # survive this firewall. Env override still wins if ever needed.
+      - NEW_RELIC_OTLP_ENDPOINT=${NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:443}
+    networks:
+      - loadnet
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13133/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

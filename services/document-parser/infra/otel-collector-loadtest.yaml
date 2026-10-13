@@ -1,0 +1,125 @@
+# OTEL collector for document-parser load tests only.
+# Applied via infra/compose.load.observability.yml when
+# `make load-test WITH_OBSERVABILITY=1` is used (ENV_TYPE stays dev;
+# telemetry is labeled deployment.environment=loadtest so k6 traffic never
+# pollutes prod dashboards). Same New Relic EU endpoint as prod.
+#
+# Required env (shell only, never committed):
+#   NEW_RELIC_LICENSE_KEY  ingest key (eu01...)
+# Empty key = exporter retries and drops; apps keep running (fail-open SDKs).
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: otel-collector
+          static_configs:
+            - targets: ["localhost:8888"]
+        - job_name: document-parser
+          scrape_interval: 15s
+          metrics_path: /api/v1/metrics
+          static_configs:
+            - targets: ["document-parser:8000"]
+
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu: {}
+      memory: {}
+      disk: {}
+      filesystem: {}
+      load: {}
+      network: {}
+
+  # Per-container CPU/mem/net/throttling from the Docker daemon. Needs
+  # /var/run/docker.sock mounted (see compose.load.observability.yml).
+  # Unlike hostmetrics (whole shared host), these attribute to container.name.
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 15s
+    metrics:
+      container.cpu.throttling_data.throttled_time:
+        enabled: true
+      container.cpu.throttling_data.throttled_periods:
+        enabled: true
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  batch:
+    send_batch_size: 512
+    timeout: 10s
+
+  # Drop noisy health/readiness spans before export (cost control).
+  # Only STATUS_CODE_OK spans are dropped: non-OK spans (e.g. readiness
+  # 503s under pool saturation, which the stress/soak k6 scenarios sample
+  # via /api/v1/ready) are kept so the loadtest dashboard's
+  # "readiness 503s" panel keeps working.
+  filter/drop-health:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["http.route"] == "/api/v1/health" and status.code == STATUS_CODE_OK'
+        - 'attributes["http.route"] == "/api/v1/ready" and status.code == STATUS_CODE_OK'
+        - 'attributes["http.route"] == "/api/v1/metrics"'
+        - 'attributes["http.target"] == "/metrics"'
+
+  resource/env:
+    attributes:
+      - key: deployment.environment
+        value: loadtest
+        action: upsert
+
+exporters:
+  otlphttp/newrelic:
+    # Fallback default only; compose always sets NEW_RELIC_OTLP_ENDPOINT.
+    # Keep :443 (not :4318): port 4318 is blocked on this egress path, :443
+    # is verified to reach NR EU ingest. See the guard comment in
+    # compose.load.observability.yml and commit 95c27f20.
+    endpoint: ${env:NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:443}
+    headers:
+      api-key: ${env:NEW_RELIC_LICENSE_KEY}
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 5000
+
+  debug:
+    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/drop-health, resource/env, batch]
+      exporters: [otlphttp/newrelic]
+    metrics:
+      receivers: [otlp, prometheus, hostmetrics, docker_stats]
+      processors: [memory_limiter, resource/env, batch]
+      exporters: [otlphttp/newrelic]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/env, batch]
+      exporters: [otlphttp/newrelic]

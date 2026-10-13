@@ -3,16 +3,17 @@ locals {
   environment = var.environment
 
   dashboards = {
-    overview         = "overview.json"
-    web              = "web.json"
-    payment-gateway  = "payment-gateway.json"
-    worker-analytics = "worker-analytics.json"
-    worker-payments  = "worker-payments.json"
-    worker-cron      = "worker-cron.json"
-    inference        = "inference.json"
-    document-parser  = "document-parser.json"
-    chats            = "chats.json"
-    datastores       = "datastores.json"
+    overview                 = "overview.json"
+    web                      = "web.json"
+    payment-gateway          = "payment-gateway.json"
+    worker-analytics         = "worker-analytics.json"
+    worker-payments          = "worker-payments.json"
+    worker-cron              = "worker-cron.json"
+    inference                = "inference.json"
+    document-parser          = "document-parser.json"
+    document-parser-loadtest = "document-parser-loadtest.json"
+    chats                    = "chats.json"
+    datastores               = "datastores.json"
   }
 }
 

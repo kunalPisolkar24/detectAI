@@ -8,6 +8,32 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 
+def _parse_resource_attributes() -> dict[str, str]:
+    raw = os.getenv("OTEL_RESOURCE_ATTRIBUTES", "")
+    attrs: dict[str, str] = {}
+    for part in raw.split(","):
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+        key, _, value = part.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            attrs[key] = value
+    return attrs
+
+
+def _deployment_environment(fallback: str = "prod") -> str:
+    attrs = _parse_resource_attributes()
+    if attrs.get("deployment.environment"):
+        return attrs["deployment.environment"]
+    for key in ("DEPLOYMENT_ENV", "ENV_TYPE"):
+        value = os.getenv(key, "").strip()
+        if value:
+            return value
+    return fallback
+
+
 def setup_tracing(
     app,
     service_name: str | None = None,
@@ -19,6 +45,10 @@ def setup_tracing(
     Precedence: explicit ``endpoint`` arg > ``OTEL_EXPORTER_OTLP_ENDPOINT`` env
     > ``Settings.OTEL_EXPORTER_OTLP_ENDPOINT``. This keeps compose/dev simple
     while allowing DI via ``Settings`` in lifespan.
+
+    Resource attributes from ``OTEL_RESOURCE_ATTRIBUTES`` (e.g.
+    ``deployment.environment=prod``) are merged so New Relic NRQL filters on
+    ``deployment.environment`` keep working.
     """
     if endpoint is None:
         # Prefer env (highest), fall back to Settings via lazy import to avoid cycles
@@ -42,8 +72,22 @@ def setup_tracing(
         except Exception:
             service_name = service_name or "document-parser"
             service_version = service_version or "1.0.0"
-    resource = Resource.create({"service.name": service_name, "service.version": service_version})
+    resource_attrs: dict[str, str] = {
+        "service.name": service_name or "document-parser",
+        "service.version": service_version or "1.0.0",
+        "deployment.environment": _deployment_environment(),
+    }
+    resource_attrs.update(_parse_resource_attributes())
+    # Explicit args win over env-provided service.* keys.
+    if service_name:
+        resource_attrs["service.name"] = service_name
+    if service_version:
+        resource_attrs["service.version"] = service_version
+    resource = Resource.create(resource_attrs)
     provider = TracerProvider(resource=resource)
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint.rstrip("/") + "/v1/traces")))
-    trace.set_tracer_provider(provider)
+    try:
+        trace.set_tracer_provider(provider)
+    except Exception:
+        pass
     FastAPIInstrumentor.instrument_app(app)

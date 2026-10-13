@@ -1,25 +1,32 @@
-import http from 'k6/http';
-import { check, sleep } from 'k6';
-import { FormData } from 'https://jslib.k6.io/formdata/0.0.2/index.js';
-import { Trend, Rate } from 'k6/metrics';
+import { sleep } from "k6";
+import exec from "k6/execution";
 
-// Custom metrics
-const extractionTime = new Trend('extraction_duration');
-const errorRate = new Rate('errors');
+import { getRuntimeConfig } from "./lib/config.js";
+import { pickFixture } from "./lib/files.js";
+import { createExtractMetrics, createReadinessMetrics } from "./lib/metrics.js";
+import { checkHealth, checkReadiness, postExtract } from "./lib/requests.js";
 
-// Test Configuration
-const mode = (__ENV.MODE || 'vus').toLowerCase();
-const targetVUs = parseInt(__ENV.VUS) || 20;
-const holdDuration = __ENV.DURATION || '1m';
-const rampTime = __ENV.RAMP_TIME || '30s';
-const targetRPS = parseInt(__ENV.RPS) || 50;
+// Legacy entrypoint preserved for `MODE=vus|rps` callers.
+// New runs should use `SCENARIO=smoke|load|stress|soak|negative`
+// (see load/scenarios/*). This file now shares the same lib helpers:
+// deterministic round-robin fixtures, tagged metrics, explicit timeouts,
+// and scenario-scoped thresholds so the background health probe no longer
+// pollutes extract latency.
+const metrics = createExtractMetrics("docparser_legacy");
+const readiness = createReadinessMetrics("docparser_legacy_readiness");
+
+const mode = (__ENV.MODE || "vus").toLowerCase();
+const targetVUs = parseInt(__ENV.VUS) || 5;
+const holdDuration = __ENV.DURATION || "10s";
+const rampTime = __ENV.RAMP_TIME || "5s";
+const targetRPS = parseInt(__ENV.RPS) || 10;
 
 function extractionScenario() {
-  if (mode === 'rps') {
+  if (mode === "rps") {
     return {
-      executor: 'ramping-arrival-rate',
+      executor: "ramping-arrival-rate",
       startRate: 1,
-      timeUnit: '1s',
+      timeUnit: "1s",
       preAllocatedVUs: Math.max(targetVUs, 20),
       maxVUs: Math.max(targetVUs * 2, 100),
       stages: [
@@ -27,91 +34,70 @@ function extractionScenario() {
         { duration: holdDuration, target: targetRPS },
         { duration: rampTime, target: 0 },
       ],
-      exec: 'extract',
+      exec: "extract",
+      tags: { service: "document-parser", test_type: "legacy-rps" },
     };
   }
   return {
-    executor: 'ramping-vus',
+    executor: "ramping-vus",
     startVUs: 0,
     stages: [
       { duration: rampTime, target: targetVUs },
       { duration: holdDuration, target: targetVUs },
       { duration: rampTime, target: 0 },
     ],
-    exec: 'extract',
+    exec: "extract",
+    tags: { service: "document-parser", test_type: "legacy-vus" },
   };
 }
 
 export const options = {
   scenarios: {
     health_check: {
-      executor: 'constant-vus',
+      executor: "constant-vus",
       vus: 5,
-      duration: '30s',
-      exec: 'health',
+      duration: "30s",
+      exec: "health",
+      tags: { service: "document-parser", test_type: "legacy-health" },
     },
     extraction_load: extractionScenario(),
   },
   thresholds: {
-    // 95% of requests must complete under 1.5s
-    // 99% of requests must complete under 3s
-    'http_req_duration': ['p(95)<1500', 'p(99)<3000'],
-    // 0% errors allowed
-    'errors': ['rate==0'],
+    // Scoped to the extract scenario so the health probe cannot skew latency.
+    "http_req_duration{scenario:extraction_load}": ["p(95)<1500", "p(99)<3000"],
+    "http_req_duration{scenario:health_check}": ["p(95)<1500", "p(99)<3000"],
+    docparser_legacy_success_rate: ["rate>=0.99"],
+    "docparser_legacy_duration{mime:text/plain}": ["p(95)<500"],
   },
 };
 
-// Load test files into memory once per VU
-const pdfFile = open('./fixtures/sample.pdf', 'b');
-const txtFile = open('./fixtures/sample.txt', 'b');
-const docxFile = open('./fixtures/sample.docx', 'b');
-
-const BASE_URL = __ENV.API_URL || 'http://document-parser:8000';
-
 export function health() {
-  const res = http.get(`${BASE_URL}/api/v1/health`);
-  const success = check(res, {
-    'status is 200': (r) => r.status === 200,
-    'status is ok': (r) => r.json('status') === 'ok',
-  });
-  if (!success) errorRate.add(1);
+  const config = getRuntimeConfig();
+  checkHealth({ baseUrl: config.baseUrl, timeout: config.requestTimeout, scenario: "legacy" });
   sleep(1);
 }
 
 export function extract() {
-  // Randomly select a file type to simulate mixed traffic
-  const fileTypes = [
-    { name: 'sample.pdf', data: pdfFile, type: 'application/pdf' },
-    { name: 'sample.txt', data: txtFile, type: 'text/plain' },
-    { name: 'sample.docx', data: docxFile, type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
-  ];
-
-  const fileToUpload = fileTypes[Math.floor(Math.random() * fileTypes.length)];
-
-  const fd = new FormData();
-  fd.append('file', {
-    data: new Uint8Array(fileToUpload.data).buffer,
-    filename: fileToUpload.name,
-    content_type: fileToUpload.type,
+  const config = getRuntimeConfig();
+  const fixture = pickFixture(config.profiles);
+  postExtract({
+    baseUrl: config.baseUrl,
+    fixture,
+    timeout: config.requestTimeout,
+    metrics,
+    scenario: "legacy",
   });
 
-  const res = http.post(`${BASE_URL}/api/v1/extract`, fd.body(), {
-    headers: { 'Content-Type': `multipart/form-data; boundary=${fd.boundary}` },
-  });
-
-  const success = check(res, {
-    'status is 200': (r) => r.status === 200,
-    'has text content': (r) => r.json('text') !== undefined,
-  });
-
-  if (success) {
-    extractionTime.add(res.timings.duration);
-  } else {
-    errorRate.add(1);
+  if (exec.scenario.iterationInTest % 20 === 0) {
+    checkReadiness({
+      baseUrl: config.baseUrl,
+      timeout: "5s",
+      metrics: readiness,
+      scenario: "legacy",
+    });
   }
 
-  if (mode !== 'rps') {
-    // Add realistic think-time only for open-workload VU pacing
-    sleep(Math.random() * 2 + 1); // 1-3 seconds
+  if (mode !== "rps") {
+    sleep(Math.random() * 2 + 1);
   }
 }

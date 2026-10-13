@@ -32,6 +32,7 @@ def run_extraction_task(command: ExtractCommand, submitted_at: float) -> Extract
         mime_type=command.mime_type, wait_seconds=max(0.0, time.perf_counter() - submitted_at)
     )
     mark_extraction_started()
+    refresh_pool_gauges()
     try:
         return ExtractDocumentUseCase().execute(command)
     finally:
@@ -53,12 +54,16 @@ class ExtractDocumentUseCase:
         try:
             strategy = self._factory.get(cmd.mime_type)
             with tracer.start_as_current_span("extraction") as span:
+                span.set_attribute("mime.type", cmd.mime_type)
                 span.set_attribute("mime_type", cmd.mime_type)
+                span.set_attribute("file.size_bytes", len(cmd.content))
                 span.set_attribute("file_size", len(cmd.content))
                 started = time.perf_counter()
                 try:
                     raw = strategy.extract(path)
-                except Exception:
+                except Exception as exc:
+                    span.record_exception(exc)
+                    span.set_status(trace.Status(trace.StatusCode.ERROR))
                     record_extraction_duration(
                         mime_type=cmd.mime_type, status="error", duration_seconds=time.perf_counter() - started
                     )
@@ -67,6 +72,7 @@ class ExtractDocumentUseCase:
                     mime_type=cmd.mime_type, status="success", duration_seconds=time.perf_counter() - started
                 )
                 cleaned = TextCleaner.clean(raw.text)
+                span.set_attribute("text.length_bytes", len(cleaned.encode("utf-8")))
                 span.set_attribute("text_length", len(cleaned.encode("utf-8")))
                 span.set_attribute("truncated", raw.truncated)
                 record_extraction(

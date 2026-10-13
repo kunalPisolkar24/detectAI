@@ -29,6 +29,7 @@ def run_extraction_task(file: UploadFile, mime_type: str, submitted_at: float) -
         wait_seconds=max(0.0, time.perf_counter() - submitted_at),
     )
     mark_extraction_started()
+    refresh_process_pool_gauges()
     try:
         return ExtractionService.process_file(file, mime_type)
     finally:
@@ -55,13 +56,17 @@ class ExtractionService:
                 strategy = ExtractorFactory.get_strategy(mime_type)
 
                 with tracer.start_as_current_span("extraction") as span:
+                    span.set_attribute("mime.type", mime_type)
                     span.set_attribute("mime_type", mime_type)
+                    span.set_attribute("file.size_bytes", file_size_bytes)
                     span.set_attribute("file_size", file_size_bytes)
 
                     extraction_started = time.perf_counter()
                     try:
                         raw_result = strategy.extract(tmp_path)
-                    except Exception:
+                    except Exception as exc:
+                        span.record_exception(exc)
+                        span.set_status(trace.Status(trace.StatusCode.ERROR))
                         record_extraction_duration(
                             mime_type=mime_type,
                             status="error",
@@ -76,6 +81,7 @@ class ExtractionService:
 
                     cleaned_text = TextCleaner.clean(raw_result.text)
 
+                    span.set_attribute("text.length_bytes", len(cleaned_text.encode("utf-8")))
                     span.set_attribute("text_length", len(cleaned_text.encode("utf-8")))
                     span.set_attribute("truncated", raw_result.truncated)
 
