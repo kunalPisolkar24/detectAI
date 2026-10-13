@@ -23,9 +23,11 @@ graph TB
 
 | Queue | Purpose | Arguments |
 |-------|---------|-----------|
-| `payment_events` | Main queue for all events | `x-dead-letter-exchange: dlx` |
-| `payment_events_retry` | Temporary retry queue | `x-message-ttl: 5000`, `x-dead-letter-exchange: ""` |
-| `payment_events_dlq` | Dead letter queue for failed messages | - |
+| `payment_events` | Main queue for all events | `x-dead-letter-exchange: payment_events_dlx` (+ `x-queue-type: quorum` when quorum) |
+| `payment_events_retry` | Temporary retry queue | `x-message-ttl: 5000`, `x-dead-letter-exchange: ""`, routes back to `payment_events` |
+| `payment_events_dlq` | Dead letter queue for failed messages | `x-queue-type: quorum` when quorum |
+
+Actual resource names are suffixed (`payment_events_dlx`, `payment_events_retry_exchange`); the diagram shortens them to DLX/retry for readability.
 
 **Why this topology?**
 - **Retry with backoff** - Failed messages retry after 5 seconds

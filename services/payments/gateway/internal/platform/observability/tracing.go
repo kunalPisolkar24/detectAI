@@ -6,20 +6,14 @@ import (
 
 	"github.com/kunalPisolkar24/detectAI/services/payments/gateway/internal/config"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 func InitTracing(cfg *config.Config) (func(context.Context) error, error) {
 	if strings.TrimSpace(cfg.OtelEndpoint) == "" {
 		return func(context.Context) error { return nil }, nil
-	}
-	serviceName := cfg.OtelServiceName
-	if serviceName == "" {
-		serviceName = "payment-gateway"
 	}
 	ctx := context.Background()
 	// OtelEndpoint is a full base URL (http://otel-collector:4318); WithEndpoint
@@ -29,7 +23,7 @@ func InitTracing(cfg *config.Config) (func(context.Context) error, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := resource.Merge(resource.Default(), resource.NewSchemaless(attribute.String("service.name", serviceName)))
+	res, err := BuildResource(cfg)
 	if err != nil {
 		return nil, err
 	}

@@ -1,7 +1,7 @@
 ENV_FILE := $(if $(wildcard infra/.env),infra/.env,infra/.env.example)
 COMPOSE := docker compose --env-file $(ENV_FILE) -f infra/compose.yml
 COMPOSE_LOAD := docker compose -f infra/compose.load.yml
-COMPOSE_LOAD_OBS := docker compose -f infra/compose.load.yml -f infra/compose.load.observability.yml
+COMPOSE_LOAD_OBS := docker compose -f infra/compose.load.yml -f ../../infra/docker/otel/loadtest-observability.yml -f infra/compose.load.observability.yml
 WITH_OBSERVABILITY ?= 0
 SCENARIO ?= load
 

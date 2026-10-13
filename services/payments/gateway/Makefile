@@ -1,4 +1,4 @@
-.PHONY: build run test test-coverage test-integration deps load-test load-down load-test-spike load-test-stress load-test-soak load-test-internal gateway-build gateway-up gateway-down gateway-down-v gateway-logs gateway-ps help
+.PHONY: build run test test-coverage test-integration deps load-test load-down load-test-spike load-test-stress load-test-soak load-test-internal load-test-negative load-test-chaos gateway-build gateway-up gateway-down gateway-down-v gateway-logs gateway-ps help
 
 help:
 	@echo "Targets: build run test test-coverage test-integration load-test gateway-up/down"
@@ -26,12 +26,29 @@ test-integration-ha:
 # dedicated network, no dependency on the main detect_ai stack.
 # Load publishes 5673/15673 (not 5672/15672) so it runs side-by-side with `gateway-up`.
 # Usage: make load-test SCENARIO=spike TARGET_VUS=100 DURATION=60s
+# Opt-in observability: make load-test WITH_OBSERVABILITY=1 SCENARIO=spike
+# (adds otel-collector-loadtest -> New Relic EU as deployment.environment=loadtest;
+# needs NEW_RELIC_LICENSE_KEY in shell; ENV_TYPE stays dev).
+COMPOSE_LOAD := docker compose -f infra/compose.load.yml
+COMPOSE_LOAD_OBS := docker compose -f infra/compose.load.yml -f ../../../infra/docker/otel/loadtest-observability.yml -f infra/compose.load.observability.yml
+WITH_OBSERVABILITY ?= 0
 load-test:
-	RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
-	docker compose -f infra/compose.load.yml up --abort-on-container-exit --exit-code-from k6
+	@if [ "$(WITH_OBSERVABILITY)" != "0" ] && [ "$(WITH_OBSERVABILITY)" != "1" ]; then \
+		echo "Invalid WITH_OBSERVABILITY '$(WITH_OBSERVABILITY)'. Use 0 or 1."; exit 1; \
+	fi
+	@if [ "$(WITH_OBSERVABILITY)" = "1" ]; then \
+		if [ -z "$${NEW_RELIC_LICENSE_KEY:-}" ]; then \
+			echo "WITH_OBSERVABILITY=1 but NEW_RELIC_LICENSE_KEY is empty — collector will retry/drop, apps keep running."; \
+		fi; \
+		RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
+		$(COMPOSE_LOAD_OBS) up --abort-on-container-exit --exit-code-from k6; \
+	else \
+		RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
+		$(COMPOSE_LOAD) up --abort-on-container-exit --exit-code-from k6; \
+	fi
 
 load-down:
-	docker compose -f infra/compose.load.yml down -v --remove-orphans
+	$(COMPOSE_LOAD_OBS) down -v --remove-orphans
 
 load-test-spike:
 	@$(MAKE) load-test SCENARIO=spike
@@ -44,6 +61,37 @@ load-test-soak:
 
 load-test-internal:
 	@$(MAKE) load-test SCENARIO=internal
+
+load-test-negative:
+	@$(MAKE) load-test SCENARIO=negative
+
+# Failure injection: stops RabbitMQ mid-run and restarts it. Requests during
+# the outage must fast-fail 503 with Retry-After; traffic recovers after.
+# chaos.js holds 20 VUs for ~4min (30s ramp, 3m hold, 30s down); the outage
+# runs from t+75s to t+135s. Fails if no 503 was observed (orchestration
+# broken) or if traffic does not recover.
+load-test-chaos:
+	RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
+	docker compose -f infra/compose.load.yml up -d rabbitmq payment-gateway
+	@echo "Waiting for gateway healthy..."; \
+	for i in $$(seq 1 24); do \
+		if docker compose -f infra/compose.load.yml exec -T payment-gateway wget -q -O /dev/null http://localhost:8080/readyz 2>/dev/null; then break; fi; \
+		if [ $$i -eq 24 ]; then echo "Gateway never became healthy"; $(MAKE) load-down; exit 1; fi; \
+		sleep 5; \
+	done
+	RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
+	SCENARIO=chaos docker compose -f infra/compose.load.yml run --rm -T k6 & \
+	K6PID=$$!; \
+	sleep 75; \
+	RABBITMQ_CID=$$(docker compose -f infra/compose.load.yml ps -q rabbitmq); \
+	echo "Stopping RabbitMQ $${RABBITMQ_CID} (outage start)"; \
+	docker stop $${RABBITMQ_CID}; \
+	sleep 60; \
+	echo "Starting RabbitMQ $${RABBITMQ_CID} (outage end)"; \
+	docker start $${RABBITMQ_CID}; \
+	wait $$K6PID; CODE=$$?; \
+	$(MAKE) load-down; \
+	exit $$CODE
 
 deps:
 	go mod tidy

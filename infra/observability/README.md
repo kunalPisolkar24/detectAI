@@ -10,22 +10,23 @@ root has no AWS provider / emulator hacks.
 - `versions.tf`, `providers.tf` — `newrelic ~> 3.0`, `region = EU`. No `aws` provider.
 - `variables.tf` — `newrelic_account_id` (6428768), `newrelic_api_key` (sensitive,
   env only), `newrelic_region` (EU), `environment` (`prod|floci`), `alert_email`.
-- `main.tf` — 11 `newrelic_one_dashboard_json` resources from `dashboards/*.json`
+- `main.tf` — 12 `newrelic_one_dashboard_json` resources from `dashboards/*.json`
   via `templatefile` (`${account_id}`, `${environment}`). `document-parser-loadtest`
-  is environment-agnostic (hardcoded `deployment.environment = 'loadtest'`) and
-  ships with both envs so k6 runs never pollute prod boards.
-- `dashboards/` — `overview`, `web`, `payment-gateway`, `worker-analytics`,
-  `worker-payments`, `worker-cron`, `inference`, `document-parser`,
+  and `payment-gateway-loadtest` are environment-agnostic (hardcoded
+  `deployment.environment = 'loadtest'`) and ship with both envs so k6 runs
+  never pollute prod boards.
+- `dashboards/` — `overview`, `web`, `payment-gateway`, `payment-gateway-loadtest`,
+  `worker-analytics`, `worker-payments`, `worker-cron`, `inference`, `document-parser`,
   `document-parser-loadtest`, `chats`, `datastores`. Every prod NRQL filters `deployment.environment`.
 - `alerts.tf` — one policy per area, NRQL static conditions. Criticals are
   `enabled = environment == prod` so Floci test data never sends mail.
 - `notifications.tf` — email destination + channel + workflow only.
 - `envs/floci.tfvars|prod.tfvars` — non-secret values only. Keys via
   `TF_VAR_newrelic_api_key` or `NEW_RELIC_API_KEY` env.
-- `tests/valid.tftest.hcl` — mocked plan asserts 11 dashboards + channel.
+- `tests/valid.tftest.hcl` — mocked plan asserts 12 dashboards + channel.
 - `tags.tf` — `newrelic_entity_tags` per board (`team`, `managed-by`,
   `service`, `env`, `kind`) so boards group instead of listing flat. The
-  loadtest board always tags `env=loadtest`.
+  loadtest boards always tag `env=loadtest`.
 
 ## Data flow
 
@@ -77,5 +78,5 @@ make obs-apply ENV=prod CONFIRM_PROD=1
 ## Follow-ups (not in v1)
 
 - Link AWS account (`newrelic_cloud_aws_link_account`) + enable RDS/DocDB/ElastiCache/MQ integrations, then fill CloudWatch panels in `datastores.json`.
-- Service SDK gaps: `chat-service`/`chat-worker` emit no traces yet (metrics/logs only); Go gateway ignores `OTEL_RESOURCE_ATTRIBUTES` — needs `resource.WithFromEnv` merge.
+- Service SDK gaps: `chat-service`/`chat-worker` emit no traces yet (metrics/logs only); gateway log records carry `trace.id` only once handlers pass a span-bearing context (stdout + OTLP export already wired).
 - Browser RUM, Synthetics, SLO objects.

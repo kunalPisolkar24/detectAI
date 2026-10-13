@@ -175,7 +175,7 @@ export NEW_RELIC_LICENSE_KEY="..."   # ingest key, never commit it
 make load-test SCENARIO=load WITH_OBSERVABILITY=1 VUS=20 DURATION=2m
 ```
 
-What that flag does: it starts `otel-collector-loadtest` alongside the service on the same `loadnet` network (see `infra/compose.load.observability.yml` + `infra/otel-collector-loadtest.yaml`). The collector scrapes `document-parser:8000/api/v1/metrics` every 15s, gathers host CPU and memory plus per-container CPU, memory, network, and throttling stats via the Docker socket, and exports everything to New Relic EU over `https://otlp.eu01.nr-data.net:443`. Keep port `443` -- port `4318` is blocked on this egress path.
+What that flag does: it starts `otel-collector-loadtest` alongside the service on the same `loadnet` network (see `infra/compose.load.observability.yml` + shared atom `infra/docker/otel/`). The collector scrapes `document-parser:8000/api/v1/metrics` every 15s, gathers host CPU and memory plus per-container CPU, memory, network, and throttling stats via the Docker socket, and exports everything to New Relic EU over `https://otlp.eu01.nr-data.net:443`. Keep port `443` -- port `4318` is blocked on this egress path.
 
 Two details that keep dashboards clean:
 

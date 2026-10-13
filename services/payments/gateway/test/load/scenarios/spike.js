@@ -1,6 +1,9 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { generatePaddleSignature } from '../utils.js';
+import { Counter } from 'k6/metrics';
+import { pickProfile, buildRequest, buildInvalidSignatureRequest, secretsFromEnv } from '../lib/payloads.js';
+import { readBaseline, queueDepth, checkNoLoss } from '../lib/rabbitmq.js';
+import { publishedSuccessTotal } from '../lib/runtime.js';
 
 export const options = {
     stages: [
@@ -9,38 +12,40 @@ export const options = {
         { duration: __ENV.RAMP_DOWN || '10s', target: 0 },
     ],
     thresholds: {
-        http_req_failed: ['rate<0.01'],
+        // ~5% of traffic is intentional invalid-signature noise (expects 401),
+        // so the failure budget covers 1% unexpected on top of that.
+        http_req_failed: ['rate<0.06'],
         http_req_duration: ['p(95)<500'],
+        checks: ['rate==1.0'],
     },
 };
 
-const WEBHOOK_SECRET = __ENV.PADDLE_WEBHOOK_SECRET || 'test_secret';
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const published = new Counter('load_published_total');
+const secrets = secretsFromEnv();
+
+let iter = 0;
+
+export function setup() {
+    return { queue: readBaseline(), published: publishedSuccessTotal(secrets.baseUrl) };
+}
 
 export default function () {
-    const payload = JSON.stringify({
-        event_type: 'subscription.updated',
-        data: {
-            id: 'sub_123',
-            status: 'active',
-        },
+    const req = iter % 20 === 19 ? buildInvalidSignatureRequest(secrets) : buildRequest(pickProfile(iter), secrets);
+    iter += 1;
+
+    const res = http.post(`${secrets.baseUrl}${req.url}`, req.body, req.params);
+
+    const ok = check(res, {
+        'expected status': (r) => r.status === req.expect,
+        'queued body': (r) => req.expect !== 200 || r.json().status === 'queued',
     });
-
-    const signature = generatePaddleSignature(payload, WEBHOOK_SECRET);
-
-    const params = {
-        headers: {
-            'Content-Type': 'application/json',
-            'Paddle-Signature': signature,
-        },
-    };
-
-    const res = http.post(`${BASE_URL}/webhook/paddle`, payload, params);
-
-    check(res, {
-        'status is 200': (r) => r.status === 200,
-        'status is queued': (r) => r.json().status === 'queued',
-    });
+    if (ok && req.expect === 200) {
+        published.add(1);
+    }
 
     sleep(0.1); // 100ms between requests per VU
+}
+
+export function teardown(baseline) {
+    checkNoLoss(baseline, { depth: queueDepth(), published: publishedSuccessTotal(secrets.baseUrl) });
 }

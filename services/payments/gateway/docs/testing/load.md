@@ -42,7 +42,9 @@ make load-down
 |-----------|-------|
 | Duration | ~50 seconds |
 | VUs | 20 → 200 → 0 |
-| Thresholds | p95 < 500ms, error rate < 1% |
+| Thresholds | p95 < 500ms, failure rate < 6% (includes ~5% intentional invalid-signature noise), checks 100% |
+
+**Traffic:** deterministic profile mix (`webhook-small/medium/large/near-limit`, `internal-small/medium` from `lib/payloads.js`) with every 20th request as invalid-signature noise. Each VU sleeps 100–500ms between requests.
 
 **Stages:**
 1. **10 seconds** - Ramp up to 20 VUs
@@ -84,7 +86,7 @@ make load-down
 |-----------|-------|
 | Duration | ~30 minutes |
 | VUs | 200 (mixed traffic) |
-| Thresholds | p95 < 500ms, error rate < 1% |
+| Thresholds | p95 < 500ms, failure rate < 6% (includes ~5% noise), checks 100% |
 
 **Traffic mix:**
 - 50% Paddle webhooks

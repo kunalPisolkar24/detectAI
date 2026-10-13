@@ -1,0 +1,35 @@
+# Observability overlay for payment-gateway load tests.
+# Applied ONLY when `make load-test WITH_OBSERVABILITY=1` is used (see the
+# COMPOSE_LOAD_OBS target in the Makefile: base load stack + shared OTEL atom
+# at infra/docker/otel/loadtest-observability.yml + this file).
+# Base load-test behavior (no collector, no OTEL) is unchanged otherwise.
+#
+# What it adds:
+# - otel-collector-loadtest (shared atom at infra/docker/otel/): scrapes
+#   payment-gateway /metrics + self, collects hostmetrics, exports
+#   traces/metrics/logs to New Relic EU with deployment.environment=loadtest.
+# - payment-gateway env override: OTLP endpoint + loadtest resource attributes.
+#   ENV_TYPE intentionally stays dev (app behavior unchanged).
+services:
+  payment-gateway:
+    mem_limit: 1g
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-loadtest:4318
+      - OTEL_SERVICE_NAME=payment-gateway
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-dev}
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=loadtest
+    depends_on:
+      otel-collector-loadtest:
+        condition: service_started
+
+  k6:
+    mem_limit: 1g
+
+  otel-collector-loadtest:
+    environment:
+      - OTEL_SCRAPE_JOB=payment-gateway
+      - OTEL_SCRAPE_TARGET=payment-gateway:8080
+      - OTEL_SCRAPE_METRICS_PATH=/metrics
+    volumes:
+      - ../../../../infra/docker/otel/otel-collector-loadtest.yaml:/etc/otelcol/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro

@@ -8,18 +8,19 @@ import (
 )
 
 type Config struct {
-	RabbitMQURL       string
-	RabbitMQURLs      []string
-	RabbitMQQueueType string
-	WebhookSecret     string
-	InternalAPIKey    string
-	Port              string
-	GinMode           string
-	LogLevel          string
-	OtelEndpoint      string
-	OtelServiceName   string
-	AWSRegion         string
-	EnvType           string
+	RabbitMQURL        string
+	RabbitMQURLs       []string
+	RabbitMQQueueType  string
+	WebhookSecret      string
+	InternalAPIKey     string
+	Port               string
+	GinMode            string
+	LogLevel           string
+	OtelEndpoint       string
+	OtelServiceName    string
+	OtelServiceVersion string
+	AWSRegion          string
+	EnvType            string
 }
 
 func (c *Config) IsProd() bool { return c.EnvType == "prod" }
@@ -76,6 +77,13 @@ func (c *Config) Validate() error {
 
 	if c.GinMode != "" && c.GinMode != "debug" && c.GinMode != "release" && c.GinMode != "test" {
 		return fmt.Errorf("GIN_MODE must be debug, release or test, got %q", c.GinMode)
+	}
+	if v := strings.TrimSpace(c.OtelEndpoint); v != "" {
+		parsed, err := url.Parse(v)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+			return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT must be http(s) URL, got %q", c.OtelEndpoint)
+		}
+		c.OtelEndpoint = v
 	}
 	return nil
 }

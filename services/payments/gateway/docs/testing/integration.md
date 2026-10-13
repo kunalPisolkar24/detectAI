@@ -24,7 +24,7 @@ go test -v -tags=integration -run TestIntegration ./test/integration/...
 ## Prerequisites
 
 - **Docker** running
-- **Go 1.21+**
+- **Go 1.25+**
 - **Internet connection** (to pull RabbitMQ image)
 
 ## Test Structure
@@ -228,11 +228,12 @@ func setupTestEnvironment(t *testing.T) (string, func()) {
 
 ```go
 func setupTestHandler(rabbitmqURL string) *gin.Engine {
-    // Create real dependencies
+    // Create real dependencies (runtime uses adapters/application/platform;
+    // tests use the equivalent legacy packages with identical behavior)
     producer := rabbitmq.NewRabbitMQProducer(rabbitmqURL, "test_queue", "quorum", log, monitor)
-    validator := paddle.NewValidator()
-    service := application.NewPaymentService(producer, validator, monitor, "test_secret")
-    handler := http.NewHandler(http.HandlerConfig{
+    validator := paddle.NewPaddleValidator()
+    service := domain.NewPaymentService(producer, validator, monitor, "test_secret")
+    handler := transporthttp.NewHandler(transporthttp.HandlerConfig{
         Service:     service,
         Health:      producer,
         Metrics:     monitor,
@@ -246,6 +247,8 @@ func setupTestHandler(rabbitmqURL string) *gin.Engine {
     return router
 }
 ```
+
+Think of the test handler as the same secure mailroom with a different uniform: `infrastructure/rabbitmq` ≈ `adapters/outbound/rabbitmq`, `infrastructure/paddle` ≈ `adapters/outbound/paddle`, `domain.NewPaymentService` ≈ `application.NewPaymentService`, `transport/http` ≈ `adapters/inbound/http`.
 
 ## HA Integration Tests
 
@@ -349,7 +352,7 @@ go test -v -tags=integration -timeout=300s ./test/integration/...
 
 ```bash
 # Run integration tests in Docker
-docker run --rm -v $(pwd):/app -w /app -v /var/run/docker.sock:/var/run/docker.sock golang:1.21 go test -tags=integration ./test/integration/...
+docker run --rm -v $(pwd):/app -w /app -v /var/run/docker.sock:/var/run/docker.sock golang:1.25 go test -tags=integration ./test/integration/...
 ```
 
 ## Debugging Tests

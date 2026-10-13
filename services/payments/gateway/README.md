@@ -121,8 +121,14 @@ make test-integration
 # HA tests (3-node cluster)
 make test-integration-ha
 
-# Load tests (k6)
+# Load tests (k6, isolated on 5673/15673)
 make load-test
+
+# Rejection paths (fast)
+make load-test-negative
+
+# RabbitMQ outage mid-run
+make load-test-chaos
 ```
 
 See [Testing Overview](docs/testing/overview.md) for details.
@@ -157,7 +163,7 @@ See [Observability](docs/operations/observability.md) for metrics and alerts.
 
 ## Related Files
 
-- **Makefile**: Build and test commands
-- **Docker Compose**: Local development setup
-- **Load Testing**: k6 load test scenarios
-- **Go Module**: `go.mod` for dependencies
+- **Makefile**: [`Makefile`](Makefile) - Build and test commands
+- **Docker Compose**: [`infra/compose.yml`](infra/compose.yml) - Local development setup
+- **Load Testing**: [`test/load/README.md`](test/load/README.md) - k6 load test scenarios
+- **Go Module**: [`go.mod`](go.mod) for dependencies
