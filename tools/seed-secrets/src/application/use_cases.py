@@ -82,7 +82,7 @@ class SeedUseCase:
         return payloads
 
     def execute(self, config: SeedConfig, env: dict[str, str]) -> tuple[list[tuple[str, str]], list[str]]:
-        """Alias for seed — mirrors model-publisher's execute(cmd)."""
+        """Alias for seed."""
         return self.seed(config, env)
 
     def seed(

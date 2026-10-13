@@ -13,7 +13,7 @@ Monorepo. Stay inside the component you were asked to change.
 - `services/document-parser` — Python FastAPI text extraction (`app/`)
 - `services/workers` — TypeScript background workers (`src/modules`, `src/shared`)
 - `infra/terraform` — AWS infrastructure as code
-- `tools/` — one-off CLIs (`model-publisher`, `seed-secrets`)
+- `tools/` — one-off CLIs (`seed-secrets`)
 
 Do not cross service boundaries or share code between services except through explicit APIs or contracts.
 
