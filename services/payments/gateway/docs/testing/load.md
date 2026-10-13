@@ -23,6 +23,12 @@ make load-test SCENARIO=internal
 # Run with custom parameters
 make load-test SCENARIO=spike TARGET_VUS=100 DURATION=60s
 
+# Rejection paths (fast, 70 iterations)
+make load-test-negative
+
+# RabbitMQ outage mid-run (~5 minutes, orchestrated)
+make load-test-chaos
+
 # Clean up
 make load-down
 ```
@@ -125,6 +131,53 @@ fully offline. Empty license key = collector retries/drops, apps keep running.
 - Testing `user.cancel_subscription` path
 - Verifying internal event handling
 - Benchmarking internal API
+
+### Negative Test
+
+**What it tests:** Rejection paths stay exact under load (auth, validation, tolerance).
+
+| Parameter | Value |
+|-----------|-------|
+| VUs / iterations | 5 VUs, 70 iterations (7 cases × 10) |
+| Thresholds | `checks == 100%` (4xx here are correct, so failure rate is not gated) |
+
+**Cases:** tampered signature → `401`, missing signature → `401`, wrong/missing internal key → `401`, oversized body (>1 MiB) → `400`, unknown `event_type` → `200` (tolerant ingest), malformed JSON → `200` (parsed as unknown).
+
+**When to use:**
+- After touching validation, auth, or body limits
+- To lock the tolerant-ingest contract (unknown/malformed still queue)
+
+### Chaos Test
+
+**What it tests:** Broker outage mid-run: fast-fail `503` with `Retry-After: 5`, then full recovery.
+
+| Parameter | Value |
+|-----------|-------|
+| Duration | ~4 minutes (30s ramp, 3m hold at 20 VUs, 30s down) |
+| Outage | RabbitMQ stopped t+75s → t+135s via `make load-test-chaos` |
+| Thresholds | `checks > 99%`, `p95 < 1000ms`, plus a teardown proof that at least one `503` was observed |
+
+**When to use:**
+- Before releases touching RabbitMQ wiring or publish paths
+- To verify reconnect behavior and the `rabbitmq_reconnections_total` signal
+
+## End-to-End Delivery Proof
+
+The load stack runs no consumer, so every accepted request must add exactly one message. Each scenario records the `payment_events` depth plus the gateway `payment_events_published_total{status="success"}` counter in `setup()` and asserts in `teardown()` that both grew by exactly the same amount (`lib/rabbitmq.js`, `lib/runtime.js`). Both numbers come from the system under test. Any silent loss fails the run.
+
+## Production Profile and Budgets
+
+Initial budgets, traced to the scenarios above. Replace with measured prod traffic when available.
+
+| Budget | Value | Source |
+|--------|-------|--------|
+| Burst p95 | < 500ms | spike at 200 VUs |
+| Sustained p99 | < 1000ms | stress to 300 VUs |
+| Internal p95 | < 300ms | internal at 200 VUs |
+| Unexpected failure rate | < 1% | all scenarios (`spike`/`soak` allow ~5% intentional invalid-signature noise on top) |
+| Soak goroutine growth | < 100 | `SOAK_MAX_GOROUTINE_GROWTH`, teardown delta |
+| Soak RSS growth | < 50% | `SOAK_MAX_RSS_GROWTH_PCT`, teardown delta |
+| Message loss | 0 | teardown queue-depth proof |
 
 ## Test Architecture
 

@@ -1,5 +1,8 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
+import { Counter } from 'k6/metrics';
+import { readBaseline, queueDepth, checkNoLoss } from '../lib/rabbitmq.js';
+import { publishedSuccessTotal } from '../lib/runtime.js';
 
 export const options = {
     stages: [
@@ -10,11 +13,18 @@ export const options = {
     thresholds: {
         http_req_failed: ['rate<0.01'],
         http_req_duration: ['p(95)<300'],
+        checks: ['rate==1.0'],
     },
 };
 
+const published = new Counter('load_published_total');
+
 const INTERNAL_API_KEY = __ENV.INTERNAL_API_KEY || 'test_internal_key';
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+
+export function setup() {
+    return { queue: readBaseline(), published: publishedSuccessTotal(BASE_URL) };
+}
 
 export default function () {
     const payload = JSON.stringify({
@@ -34,10 +44,17 @@ export default function () {
 
     const res = http.post(`${BASE_URL}/internal/events`, payload, params);
 
-    check(res, {
+    const ok = check(res, {
         'status is 200': (r) => r.status === 200,
         'status is queued': (r) => r.json().status === 'queued',
     });
+    if (ok) {
+        published.add(1);
+    }
 
     sleep(0.1); // 100ms between requests per VU
+}
+
+export function teardown(baseline) {
+    checkNoLoss(baseline, { depth: queueDepth(), published: publishedSuccessTotal(BASE_URL) });
 }

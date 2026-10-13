@@ -1,6 +1,9 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
+import { Counter } from 'k6/metrics';
 import { generatePaddleSignature } from '../utils.js';
+import { readBaseline, queueDepth, checkNoLoss } from '../lib/rabbitmq.js';
+import { publishedSuccessTotal } from '../lib/runtime.js';
 
 export const options = {
     stages: [
@@ -13,11 +16,18 @@ export const options = {
     thresholds: {
         http_req_failed: ['rate<0.05'],
         http_req_duration: ['p(99)<1000'],
+        checks: ['rate==1.0'],
     },
 };
 
+const published = new Counter('load_published_total');
+
 const WEBHOOK_SECRET = __ENV.PADDLE_WEBHOOK_SECRET || 'test_secret';
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+
+export function setup() {
+    return { queue: readBaseline(), published: publishedSuccessTotal(BASE_URL) };
+}
 
 export default function () {
     const payload = JSON.stringify({
@@ -39,9 +49,16 @@ export default function () {
 
     const res = http.post(`${BASE_URL}/webhook/paddle`, payload, params);
 
-    check(res, {
+    const ok = check(res, {
         'status is 200': (r) => r.status === 200,
     });
+    if (ok) {
+        published.add(1);
+    }
 
     sleep(0.05); // 50ms between requests per VU
+}
+
+export function teardown(baseline) {
+    checkNoLoss(baseline, { depth: queueDepth(), published: publishedSuccessTotal(BASE_URL) });
 }

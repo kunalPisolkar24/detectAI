@@ -38,6 +38,19 @@ services:
       RAMP_UP: ${RAMP_UP:-10s}
       RAMP_DOWN: ${RAMP_DOWN:-10s}
       DURATION: ${DURATION:-30s}
+      VUS_LOW: ${VUS_LOW:-50}
+      VUS_MED: ${VUS_MED:-100}
+      VUS_HIGH: ${VUS_HIGH:-200}
+      VUS_MAX: ${VUS_MAX:-300}
+      RAMP_MED: ${RAMP_MED:-2m}
+      RAMP_HIGH: ${RAMP_HIGH:-2m}
+      RAMP_MAX: ${RAMP_MAX:-2m}
+      SOAK_MAX_GOROUTINE_GROWTH: ${SOAK_MAX_GOROUTINE_GROWTH:-100}
+      SOAK_MAX_RSS_GROWTH_PCT: ${SOAK_MAX_RSS_GROWTH_PCT:-50}
+      RABBITMQ_MGMT_URL: ${RABBITMQ_MGMT_URL:-http://rabbitmq:15672}
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-guest}
+      RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:-payment_events}
     volumes:
       - ../test/load:/scripts:ro
     depends_on:

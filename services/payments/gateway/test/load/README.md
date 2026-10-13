@@ -6,12 +6,14 @@ Simple k6 load tests for the payment gateway. Uses `compose.load.yml` to spin `r
 
 | Scenario | File | Stages | Thresholds | Payload |
 |---|---|---|---|---|
-| spike | `scenarios/spike.js` | 10s→20, 30s→200, 10s→0 | `p(95)<500`, `rate<0.01` | `subscription.updated` webhook |
-| stress | `scenarios/stress.js` | 1m→50, 2m→100, 2m→200, 2m→300, 1m→0 | `p(99)<1000`, `rate<0.05` | `subscription.created` |
-| soak | `scenarios/soak.js` | 30s at 200 + mix | `p(95)<500`, `rate<0.01` | 50/50 webhook + internal |
-| internal | `scenarios/internal.js` | 30s at 200 | `p(95)<300`, `rate<0.01` | `user.cancel_subscription` internal |
+| spike | `scenarios/spike.js` | 10s→20, 30s→200, 10s→0 | `p(95)<500`, `rate<0.06` (5% invalid-sig noise), `checks==1.0` | profile mix + 5% noise, queue no-loss proof |
+| stress | `scenarios/stress.js` | 1m→50, 2m→100, 2m→200, 2m→300, 1m→0 | `p(99)<1000`, `rate<0.05`, `checks==1.0` | `subscription.created`, queue no-loss proof |
+| soak | `scenarios/soak.js` | 30s at 200 + mix | `p(95)<500`, `rate<0.06` (noise), `checks==1.0` | profile mix + 5% noise, runtime + no-loss proof |
+| internal | `scenarios/internal.js` | 30s at 200 | `p(95)<300`, `rate<0.01`, `checks==1.0` | `user.cancel_subscription` internal, queue no-loss proof |
+| negative | `scenarios/negative.js` | 5 VUs, 70 iters (7 cases) | `checks==1.0` | 401/400 rejections + 200 tolerance cases |
+| chaos | `scenarios/chaos.js` | 30s→20, 3m hold, 30s→0 | `checks>0.99`, `p(95)<1000` | steady webhook, RabbitMQ stopped mid-run via `make load-test-chaos` |
 
-All sleep `50-500ms` per VU.
+Spike/soak sleep `100ms`/`500ms` per VU; stress `50ms`; chaos `200ms`. Spike and soak cycle `lib/payloads.js` profiles deterministically by iteration (webhook small/medium/large/near-limit, internal small/medium) with every 20th request as invalid-signature noise.
 
 ## Quick Start
 
@@ -22,6 +24,8 @@ make load-test SCENARIO=spike TARGET_VUS=100 DURATION=60s
 make load-test SCENARIO=stress
 make load-test SCENARIO=soak
 make load-test SCENARIO=internal
+make load-test-negative                   # rejection paths (70 iters, fast)
+make load-test-chaos                      # RabbitMQ outage mid-run (~5min)
 make load-down                          # down -v
 ```
 
@@ -65,15 +69,22 @@ Load publishes `5673/15673` (not `5672/15672`), so it runs side-by-side with `ma
 | `TARGET_VUS` | `20` (spike) | `options.stages` |
 | `DURATION` | `30s` | `options.stages` |
 | `WITH_OBSERVABILITY` | `0` | `1` → also start `otel-collector-loadtest`, push to New Relic as `loadtest` |
+| `RABBITMQ_MGMT_URL` / `USER` / `PASS` | `http://rabbitmq:15672`, `guest` | queue no-loss proof via management API |
+| `RABBITMQ_QUEUE` | `payment_events` | queue checked by teardown |
+| `SOAK_MAX_GOROUTINE_GROWTH` / `SOAK_MAX_RSS_GROWTH_PCT` | `100` / `50` | soak leak budgets |
 | `RAMP_UP` / `RAMP_DOWN` | `10s` | stages |
 
 ## How it Works
 
 - `utils.js` generates `Paddle-Signature: ts=...;h1=...` via `crypto.hmac('sha256', secret, ts:body)` — same as `signature.go`.
-- Each VU posts to `/webhook/paddle` or `/internal/events`, checks `status 200` and `status queued`.
+- Each VU posts to `/webhook/paddle` or `/internal/events`, checks the expected status (`200` + `status queued`, or `401`/`400` for rejection cases).
+- `lib/rabbitmq.js` proves end-to-end delivery: each scenario records queue depth plus the gateway `payment_events_published_total{status="success"}` counter in `setup()` and asserts in `teardown()` that both grew by exactly the same amount. Both numbers come from the system under test (k6 VU state is invisible to teardown). The load stack runs no consumer, so any silent loss fails the run.
+- `lib/runtime.js` scrapes `/metrics` for soak leak detection (goroutine + RSS growth budgets).
+- `scenarios/negative.js` locks rejection behavior: tampered/missing signature → `401`, wrong/missing internal key → `401`, oversized body → `400`, unknown event type and malformed JSON → `200` (tolerant ingest).
 
 ## When to Run
 
 - Spike before deploy to verify `p95<500ms` under burst.
-- Soak for 30m to catch `rabbitmq`/`307` leaks.
-- Internal for `user.cancel_subscription` path.
+- Negative after touching validation, auth, or limits.
+- Chaos before releases that touch RabbitMQ wiring or publish paths.
+- Soak for 30m to catch goroutine/memory leaks (teardown asserts growth budgets).
