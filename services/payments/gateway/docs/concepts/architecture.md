@@ -55,35 +55,41 @@ graph TB
     subgraph "Entry Point"
         Main[cmd/gateway/main.go]
     end
-    
-    subgraph "Transport Layer"
-        HTTP[transport/http/handler.go]
+
+    subgraph "Inbound Adapters"
+        HTTP[adapters/inbound/http/handler.go]
+        Routes[adapters/inbound/http/routes.go]
+        MW[adapters/inbound/http/middleware.go]
     end
-    
+
     subgraph "Application Layer"
         App[application/payment_service.go]
     end
-    
+
     subgraph "Domain Layer"
-        Domain[domain/service.go]
-        Ports[domain/ports/ports.go]
+        Event[domain/event.go]
+        DomainSvc[domain/service.go]
+        Ports[ports/]
     end
-    
-    subgraph "Infrastructure Layer"
-        RMQ[infrastructure/rabbitmq/]
-        Paddle[infrastructure/paddle/]
+
+    subgraph "Outbound Adapters"
+        RMQ[adapters/outbound/rabbitmq/]
+        Paddle[adapters/outbound/paddle/]
+    end
+
+    subgraph "Platform"
         Config[config/]
-        Monitor[monitoring/]
+        Obs[platform/observability/]
     end
-    
+
     Main --> HTTP
     HTTP --> App
-    App --> Domain
-    Domain --> Ports
+    App --> Event
+    App --> Ports
     Ports --> RMQ
     Ports --> Paddle
     Main --> Config
-    Main --> Monitor
+    Main --> Obs
 ```
 
 ### Layer Responsibilities
@@ -91,16 +97,21 @@ graph TB
 | Layer | Files | Responsibility |
 |-------|-------|----------------|
 | **Entry Point** | `cmd/gateway/main.go` | Bootstrap, wire dependencies, graceful shutdown |
-| **Transport** | `transport/http/handler.go` | HTTP routing, request parsing, error mapping |
+| **Inbound Adapters** | `adapters/inbound/http/` | HTTP routing, request parsing, error mapping |
 | **Application** | `application/payment_service.go` | Business logic orchestration |
-| **Domain** | `domain/service.go`, `domain/event.go` | Core business rules, event parsing |
-| **Ports** | `domain/ports/ports.go` | Interfaces (contracts between layers) |
-| **Infrastructure** | `infrastructure/` | External system integrations |
+| **Domain** | `domain/event.go`, `domain/errors.go` | Event parsing (`ParseEvent`), typed errors |
+| **Ports** | `ports/` | Interfaces (contracts between layers) |
+| **Outbound Adapters** | `adapters/outbound/rabbitmq/`, `adapters/outbound/paddle/` | External system integrations |
+| **Platform** | `config/`, `platform/observability/` | Configuration, metrics, logs, traces |
 
 **Why hexagonal architecture?**
 - Business logic is isolated from external systems
 - Easy to test (swap real RabbitMQ with mocks)
 - Can change infrastructure without touching business logic
+
+**A note on duplicate folders:**
+- Runtime (`cmd/gateway/main.go`) wires the `adapters/...`, `application/...`, `ports/...`, and `platform/...` implementations above.
+- Equivalent legacy copies (`transport/http/`, `domain/service.go`, `domain/ports/`, `infrastructure/...`, `monitoring/`, `logger/`, `tracing/`) still exist and are what current unit and integration tests exercise. Behavior is identical (same 1 MiB limit, 5s timeouts, `ts:body` HMAC, tolerant `unknown` parsing), but new code should use the `adapters/...` paths.
 
 ## Core Components
 
@@ -134,9 +145,10 @@ classDiagram
 
 **What it does:**
 - Registers routes: `/healthz`, `/readyz`, `/webhook/paddle`, `/internal/events`
-- Enforces 1 MiB body limit (prevents DoS)
+- Enforces 1 MiB body limit via `MaxBytesReader` (prevents DoS)
 - Sets 5s context timeout (prevents hanging)
-- Maps errors to HTTP status codes (401, 400, 500, 503)
+- Checks `X-Internal-Key` in middleware before reading the body
+- Maps errors to HTTP status codes (401, 400, 500, 503 with `Retry-After: 5`)
 
 ### Payment Service
 
@@ -151,8 +163,7 @@ classDiagram
         -webhookSecret: string
         +ProcessWebhook(ctx, sig, body) error
         +ProcessInternalEvent(ctx, body) error
-        -extractEventType(body) string
-        -extractEventID(body) string
+        -publishWithMetrics(ctx, eventType, body, span) error
     }
     PaymentService --> Publisher : uses
     PaymentService --> SignatureValidator : uses
@@ -160,9 +171,9 @@ classDiagram
 ```
 
 **What it does:**
-- Extracts event type and ID from JSON body
+- Parses event type and ID with `domain.ParseEvent` (tolerant: missing or broken JSON becomes `unknown`)
 - Validates Paddle signature (HMAC SHA256)
-- Publishes event to RabbitMQ
+- Publishes raw body to RabbitMQ
 - Records metrics for observability
 
 ### RabbitMQ Producer
@@ -209,8 +220,8 @@ classDiagram
 
 **What it does:**
 - Parses `Paddle-Signature: ts=...;h1=...` header
-- Validates timestamp is within 5 minutes (prevents replay)
-- Computes HMAC SHA256 and compares with constant-time compare
+- Validates timestamp is within 5 minutes in both directions (prevents replay and future-dated webhooks)
+- Computes HMAC SHA256 over `ts:body` and compares with constant-time compare
 - Returns true/false (no error details for security)
 
 ## Configuration Flow
@@ -242,25 +253,28 @@ sequenceDiagram
     participant GW as Gateway
     participant RMQ as RabbitMQ
     participant OTel as OTel Exporter
-    
+
     OS->>GW: SIGINT/SIGTERM
     GW->>GW: Stop accepting new requests
+    GW->>GW: Shutdown HTTP server (10s timeout)
     GW->>RMQ: Close connection
     GW->>OTel: Flush traces (5s timeout)
+    GW->>OTel: Flush logs (5s timeout)
     GW->>GW: Exit
 ```
 
 **What happens:**
 1. OS sends SIGINT or SIGTERM
-2. Gateway stops accepting new requests (10s timeout)
+2. Gateway stops accepting new requests (10s timeout for in-flight requests)
 3. Gateway closes RabbitMQ connection
-4. Gateway flushes OpenTelemetry traces (5s timeout)
-5. Gateway exits cleanly
+4. Gateway flushes OpenTelemetry traces (5s timeout, fail-open)
+5. Gateway flushes OpenTelemetry logs (5s timeout, fail-open)
+6. Gateway exits cleanly
 
 **Why graceful shutdown?**
 - In-flight requests complete normally
 - RabbitMQ messages aren't lost
-- Traces are flushed to collectors
+- Traces and logs are flushed to collectors
 
 ## Why No Database?
 

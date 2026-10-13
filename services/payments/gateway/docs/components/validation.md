@@ -63,8 +63,8 @@ Paddle-Signature: ts=1710000000;h1=abc123def456...
 
 | Rule | Why | Error |
 |------|-----|-------|
-| Timestamp within 5 minutes | Prevents replay attacks | 401 Invalid signature |
-| HMAC matches body | Ensures integrity | 401 Invalid signature |
+| Timestamp within 5 minutes (past or future) | Prevents replay and future-dated webhooks | 401 Invalid signature |
+| HMAC over `ts:body` matches `h1` | Ensures integrity | 401 Invalid signature |
 | Constant-time comparison | Prevents timing attacks | - |
 
 **Why 5 minutes?**
@@ -172,14 +172,22 @@ Both endpoints validate the request body:
 
 | Rule | Required | Why |
 |------|----------|-----|
-| Content-Type | `application/json` | Ensures valid JSON |
+| Content-Type | `application/json` | Signals JSON payloads |
 
-### JSON Parsing
+### Tolerant JSON Parsing
 
-| Rule | Why | Error |
-|------|-----|-------|
-| Valid JSON | Prevents parsing errors | 400 Bad Request |
-| No binary data | Ensures text-based processing | 400 Bad Request |
+The gateway never rejects on schema. It extracts `event_type` (fallback `alert_name`, then `unknown`) and `event_id` for metrics and tracing, then forwards the raw body:
+
+| Situation | Result | Why |
+|-----------|--------|-----|
+| Missing `event_type` and `alert_name` | Queued as `unknown`, `200` | Don't lose new Paddle types |
+| Unknown `event_type` | Queued, `200` | Worker decides, counted in `payment_webhooks_unknown_event_type_total` |
+| Malformed JSON | Queued as `unknown`, `200` | Raw bytes still reach RabbitMQ |
+
+**Why tolerant?**
+- Paddle can add new event types without breaking the gateway
+- `worker-payments` owns business validation, gateway owns authenticity
+- Load-test `negative` scenario locks this: unknown and malformed still return `200`
 
 ## Error Responses
 
@@ -192,9 +200,9 @@ Both endpoints validate the request body:
 ```
 
 **When this happens:**
-- HMAC doesn't match
-- Timestamp is too old
-- Body was tampered with
+- HMAC doesn't match (including tampered body or wrong secret)
+- Timestamp is older than 5 minutes or more than 5 minutes in the future
+- `Paddle-Signature` header is missing or malformed (`ts=...;h1=...` hex)
 
 **What to do:**
 - Verify your webhook secret
@@ -226,12 +234,12 @@ Both endpoints validate the request body:
 ```
 
 **When this happens:**
-- Body exceeds 1 MiB
-- Body is not valid JSON
+- Body exceeds 1 MiB (`MaxBytesReader` cut-off)
+- Body cannot be read from the connection
 
 **What to do:**
-- Reduce payload size
-- Ensure valid JSON format
+- Reduce payload size (large test payloads pad up to ~900 KiB, limit is 1 MiB)
+- Retry if the connection dropped mid-read
 
 ## Security Considerations
 
@@ -264,8 +272,8 @@ The gateway prevents replay attacks by checking timestamp:
 
 | Protection | How |
 |------------|-----|
-| Timestamp validation | Rejects webhooks older than 5 minutes |
-| HMAC binding | Timestamp is included in HMAC computation |
+| Timestamp validation | Rejects webhooks older than 5 minutes or more than 5 minutes in the future |
+| HMAC binding | Timestamp is included in HMAC as `ts:body` |
 | No idempotency | Each webhook is processed once |
 
 **Why no idempotency?**
@@ -295,7 +303,8 @@ The gateway has comprehensive tests for validation:
 # Run validation tests
 make test
 
-# Run with verbose output
+# Run with verbose output (runtime uses adapters/outbound/paddle,
+# tested via the identical infrastructure/paddle implementation)
 go test -v ./internal/infrastructure/paddle/...
 ```
 

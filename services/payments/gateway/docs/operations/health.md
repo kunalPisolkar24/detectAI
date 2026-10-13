@@ -195,6 +195,8 @@ healthcheck:
 - 3 retries allows transient failures
 - 15 seconds start period allows for initialization
 
+**Note:** the isolated load stack (`infra/compose.load.yml`) uses tighter checks (`interval: 5s`, `retries: 12`, `start_period: 5s`) so k6 waits for a healthy gateway before starting.
+
 ## Monitoring Health
 
 ### Key Metrics

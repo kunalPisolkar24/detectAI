@@ -30,8 +30,21 @@ make test-integration
 # Run HA integration (3-node quorum cluster)
 make test-integration-ha
 
-# Run load tests (k6)
+# Run load tests (k6, isolated network on 5673/15673)
 make load-test
+make load-test SCENARIO=spike TARGET_VUS=100 DURATION=60s
+
+# Rejection paths (fast, 70 iterations)
+make load-test-negative
+
+# RabbitMQ outage mid-run (orchestrated ~5 minutes)
+make load-test-chaos
+
+# Load with traces/metrics/logs to New Relic (opt-in)
+make load-test SCENARIO=spike WITH_OBSERVABILITY=1 TARGET_VUS=20
+
+# Clean up load stack
+make load-down
 ```
 
 ## Test Types
@@ -109,10 +122,10 @@ make load-test
 ```
 
 **What they verify:**
-- p95 latency < 500ms
-- Error rate < 1%
-- No memory leaks
-- RabbitMQ stays stable
+- Burst p95 < 500ms, sustained p99 < 1000ms (see [Load Tests](load.md) budgets)
+- Unexpected failure rate < 1% (spike/soak allow ~5% intentional invalid-signature noise on top)
+- No message loss (teardown queue-depth proof)
+- No memory leaks (soak goroutine/RSS budgets)
 
 See [Load Tests](load.md) for details.
 
@@ -145,10 +158,11 @@ graph TB
 
 | Test Type | Location | Run Command |
 |-----------|----------|-------------|
-| Unit | `internal/*/` | `make test` |
+| Unit | `internal/application/`, `internal/domain/`, `internal/adapters/`, `internal/config/`, `internal/platform/` | `make test` |
 | Integration | `test/integration/` | `make test-integration` |
 | HA | `test/integration/` | `make test-integration-ha` |
-| Load | `test/load/` | `make load-test` |
+| Load (spike/stress/soak/internal) | `test/load/scenarios/` + `test/load/lib/` | `make load-test SCENARIO=...` |
+| Load (negative/chaos) | `test/load/scenarios/negative.js`, `chaos.js` | `make load-test-negative`, `make load-test-chaos` |
 
 ## Test Configuration
 
@@ -165,7 +179,7 @@ graph TB
 
 | Dependency | Purpose | Required |
 |------------|---------|----------|
-| Go 1.21+ | Run tests | Yes |
+| Go 1.25+ | Run tests | Yes |
 | Docker | Integration tests | Yes |
 | RabbitMQ | Integration tests | Yes (testcontainers) |
 | k6 | Load tests | Yes (Docker) |
@@ -235,16 +249,16 @@ go tool cover -html=coverage.out
 
 | Component | Target | Why |
 |-----------|--------|-----|
-| Domain | 90%+ | Critical business logic |
-| Transport | 80%+ | HTTP handling |
-| Infrastructure | 70%+ | External integrations |
+| Domain + Application | 90%+ | Critical business logic |
+| Inbound adapters (`adapters/inbound/http`) | 80%+ | HTTP handling |
+| Outbound adapters + Platform | 70%+ | External integrations |
 | Overall | 80%+ | Good baseline |
 
 ### Coverage Exclusions
 
 - `cmd/gateway/main.go` - Bootstrap code
-- `config/provider.go` - AWS-specific code
-- `monitoring/monitoring.go` - Prometheus registration
+- `internal/config/aws.go` - AWS-specific code
+- `internal/platform/observability/metrics.go` - Prometheus registration
 
 ## Continuous Integration
 

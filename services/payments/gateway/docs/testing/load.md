@@ -23,31 +23,9 @@ make load-test SCENARIO=internal
 # Run with custom parameters
 make load-test SCENARIO=spike TARGET_VUS=100 DURATION=60s
 
-# Rejection paths (fast, 70 iterations)
-make load-test-negative
-
-# RabbitMQ outage mid-run (~5 minutes, orchestrated)
-make load-test-chaos
-
 # Clean up
 make load-down
 ```
-
-## Observability (opt-in)
-
-```bash
-# Push traces/metrics/logs to New Relic EU as deployment.environment=loadtest
-export NEW_RELIC_LICENSE_KEY="..."      # ingest key, never commit
-make load-test SCENARIO=spike WITH_OBSERVABILITY=1 TARGET_VUS=20
-```
-
-Adds `otel-collector-loadtest` (shared atom at `infra/docker/otel/`, same one
-document-parser uses: scrapes `/metrics`, collects per-container CPU/mem/net
-via `docker.sock` plus host CPU/mem, exports OTLP to EU). `ENV_TYPE` stays
-`dev` — only the telemetry label changes, so k6 traffic shows up in the
-`detectai-payment-gateway (loadtest)` dashboard and never pollutes prod boards.
-Without the flag (default `WITH_OBSERVABILITY=0`) the run is unchanged and
-fully offline. Empty license key = collector retries/drops, apps keep running.
 
 ## Prerequisites
 
@@ -64,7 +42,9 @@ fully offline. Empty license key = collector retries/drops, apps keep running.
 |-----------|-------|
 | Duration | ~50 seconds |
 | VUs | 20 → 200 → 0 |
-| Thresholds | p95 < 500ms, error rate < 1% |
+| Thresholds | p95 < 500ms, failure rate < 6% (includes ~5% intentional invalid-signature noise), checks 100% |
+
+**Traffic:** deterministic profile mix (`webhook-small/medium/large/near-limit`, `internal-small/medium` from `lib/payloads.js`) with every 20th request as invalid-signature noise. Each VU sleeps 100–500ms between requests.
 
 **Stages:**
 1. **10 seconds** - Ramp up to 20 VUs
@@ -106,7 +86,7 @@ fully offline. Empty license key = collector retries/drops, apps keep running.
 |-----------|-------|
 | Duration | ~30 minutes |
 | VUs | 200 (mixed traffic) |
-| Thresholds | p95 < 500ms, error rate < 1% |
+| Thresholds | p95 < 500ms, failure rate < 6% (includes ~5% noise), checks 100% |
 
 **Traffic mix:**
 - 50% Paddle webhooks
@@ -131,53 +111,6 @@ fully offline. Empty license key = collector retries/drops, apps keep running.
 - Testing `user.cancel_subscription` path
 - Verifying internal event handling
 - Benchmarking internal API
-
-### Negative Test
-
-**What it tests:** Rejection paths stay exact under load (auth, validation, tolerance).
-
-| Parameter | Value |
-|-----------|-------|
-| VUs / iterations | 5 VUs, 70 iterations (7 cases × 10) |
-| Thresholds | `checks == 100%` (4xx here are correct, so failure rate is not gated) |
-
-**Cases:** tampered signature → `401`, missing signature → `401`, wrong/missing internal key → `401`, oversized body (>1 MiB) → `400`, unknown `event_type` → `200` (tolerant ingest), malformed JSON → `200` (parsed as unknown).
-
-**When to use:**
-- After touching validation, auth, or body limits
-- To lock the tolerant-ingest contract (unknown/malformed still queue)
-
-### Chaos Test
-
-**What it tests:** Broker outage mid-run: fast-fail `503` with `Retry-After: 5`, then full recovery.
-
-| Parameter | Value |
-|-----------|-------|
-| Duration | ~4 minutes (30s ramp, 3m hold at 20 VUs, 30s down) |
-| Outage | RabbitMQ stopped t+75s → t+135s via `make load-test-chaos` |
-| Thresholds | `checks > 99%`, `p95 < 1000ms`, plus a teardown proof that at least one `503` was observed |
-
-**When to use:**
-- Before releases touching RabbitMQ wiring or publish paths
-- To verify reconnect behavior and the `rabbitmq_reconnections_total` signal
-
-## End-to-End Delivery Proof
-
-The load stack runs no consumer, so every accepted request must add exactly one message. Each scenario records the `payment_events` depth plus the gateway `payment_events_published_total{status="success"}` counter in `setup()` and asserts in `teardown()` that both grew by exactly the same amount (`lib/rabbitmq.js`, `lib/runtime.js`). Both numbers come from the system under test. Any silent loss fails the run.
-
-## Production Profile and Budgets
-
-Initial budgets, traced to the scenarios above. Replace with measured prod traffic when available.
-
-| Budget | Value | Source |
-|--------|-------|--------|
-| Burst p95 | < 500ms | spike at 200 VUs |
-| Sustained p99 | < 1000ms | stress to 300 VUs |
-| Internal p95 | < 300ms | internal at 200 VUs |
-| Unexpected failure rate | < 1% | all scenarios (`spike`/`soak` allow ~5% intentional invalid-signature noise on top) |
-| Soak goroutine growth | < 100 | `SOAK_MAX_GOROUTINE_GROWTH`, teardown delta |
-| Soak RSS growth | < 50% | `SOAK_MAX_RSS_GROWTH_PCT`, teardown delta |
-| Message loss | 0 | teardown queue-depth proof |
 
 ## Test Architecture
 
@@ -244,7 +177,6 @@ Each VU sends a realistic payload:
 | `INTERNAL_API_KEY` | `test_internal_key` | API key |
 | `TARGET_VUS` | `20` | Virtual users |
 | `DURATION` | `30s` | Test duration |
-| `WITH_OBSERVABILITY` | `0` | `1` → also start `otel-collector-loadtest`, push to New Relic as `loadtest` |
 
 ### Custom Configuration
 

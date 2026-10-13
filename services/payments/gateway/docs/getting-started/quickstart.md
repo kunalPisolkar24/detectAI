@@ -15,7 +15,7 @@ Think of it as a secure mailroom that checks IDs before forwarding packages to t
 ## Prerequisites
 
 - **Docker** and **Docker Compose** installed
-- **Go 1.21+** (only if you want to run without Docker)
+- **Go 1.25+** (only if you want to run without Docker)
 
 ## Quick Start with Docker
 

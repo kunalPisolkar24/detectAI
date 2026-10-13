@@ -85,7 +85,9 @@ The gateway outputs structured JSON logs to stdout:
 }
 ```
 
-When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the same logs are also forwarded to the collector over OTLP/HTTP (`/v1/logs`) — fail-open, so if the collector is down or no endpoint is set, the service keeps running and stdout logs are unaffected. Every span and log carries `service.name`, `service.version`, and `deployment.environment` (`OTEL_RESOURCE_ATTRIBUTES` wins, then `DEPLOYMENT_ENV`, then `ENV_TYPE`).
+When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the same logs are also forwarded to the collector over OTLP/HTTP (`/v1/logs`) — fail-open, so if the collector is down or no endpoint is set, the service keeps running and stdout logs are unaffected. Startup failures in tracing or log export only log an error and continue without traces. On shutdown the gateway flushes traces (5s timeout) and logs (5s timeout), best-effort. Every span and log carries `service.name`, `service.version`, and `deployment.environment` (`OTEL_RESOURCE_ATTRIBUTES` wins, then `DEPLOYMENT_ENV`, then `ENV_TYPE`; version is `OTEL_SERVICE_VERSION`, then `SERVICE_VERSION`, then `dev`).
+
+When a request runs inside a traced context, stdout logs also include `trace_id` and `span_id` so you can jump from logs to traces.
 
 ### Log Levels
 
@@ -129,6 +131,7 @@ The gateway supports OpenTelemetry tracing for distributed tracking.
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_SERVICE_NAME=payment-gateway
 OTEL_SERVICE_VERSION=1.0.0
+# SERVICE_VERSION is used only when OTEL_SERVICE_VERSION is unset
 # Optional: extra resource attributes merged into every span/log
 OTEL_RESOURCE_ATTRIBUTES=deployment.environment=loadtest
 ```
@@ -192,24 +195,6 @@ rate(payment_webhook_signatures_invalid_total[5m])
 4. **RabbitMQ Status** - Connection status (1 = connected, 0 = disconnected)
 5. **Publish Latency** - Time to publish messages
 6. **Invalid Signatures** - Security-related rejections
-
-## Load-Test Observability (Opt-in)
-
-Normal load runs are fully offline — no collector, no network calls. When you want traces, metrics, and logs in New Relic, add `WITH_OBSERVABILITY=1`:
-
-```bash
-export NEW_RELIC_LICENSE_KEY="..."   # ingest key, never commit it
-make load-test SCENARIO=spike WITH_OBSERVABILITY=1 TARGET_VUS=20
-```
-
-What that flag does: it starts `otel-collector-loadtest` (shared atom at `infra/docker/otel/`, same one document-parser uses) alongside the gateway on the load network. The collector scrapes `payment-gateway:8080/metrics` every 15s, gathers host CPU and memory plus per-container CPU, memory, network, and throttling stats via the Docker socket, and exports everything to New Relic EU over `https://otlp.eu01.nr-data.net:443`. Keep port `443` — port `4318` is blocked on this egress path.
-
-Two details that keep dashboards clean:
-
-- Telemetry is labeled `deployment.environment=loadtest` while `ENV_TYPE` stays `dev`, so app behavior is unchanged but k6 traffic never pollutes prod boards. Look for the `detectai-payment-gateway (loadtest)` dashboard; prod uses `detectai-payment-gateway (prod|floci)` with identical panels.
-- The collector drops noisy but healthy spans (`/healthz`, `/readyz`, `/metrics` with OK status) to control cost. Failed spans — for example `503` from `/readyz` when RabbitMQ is down — are kept.
-
-If `NEW_RELIC_LICENSE_KEY` is empty, the collector retries and drops while the apps keep running — fail-open by design.
 
 ## Alerts
 

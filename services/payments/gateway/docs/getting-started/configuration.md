@@ -38,11 +38,15 @@ graph TB
 | `PORT` | `8080` | HTTP listen port | Custom port |
 | `GIN_MODE` | `release` | Gin mode: `debug`, `release`, `test` | Debug mode |
 | `LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` | Verbose logging |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | *(empty)* | OpenTelemetry endpoint (`http(s)://`, empty disables) | Enable traces + log export |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | *(empty)* | OpenTelemetry endpoint (`http(s)://host`, empty disables) | Enable traces + log export |
 | `OTEL_SERVICE_NAME` | `payment-gateway` | OTel service name | Tracing identification |
-| `OTEL_SERVICE_VERSION` | `dev` | OTel service version (`SERVICE_VERSION` fallback) | Dashboard version split |
+| `OTEL_SERVICE_VERSION` | `dev` | OTel service version (`OTEL_SERVICE_VERSION` wins, then `SERVICE_VERSION`, then `dev`) | Dashboard version split |
 | `OTEL_RESOURCE_ATTRIBUTES` | *(empty)* | Extra resource attrs, e.g. `deployment.environment=loadtest` | Separate loadtest telemetry |
+| `SERVICE_VERSION` | *(empty)* | Fallback for `service.version` when `OTEL_SERVICE_VERSION` is unset | CI-injected version |
+| `DEPLOYMENT_ENV` | *(empty, falls back to `ENV_TYPE`)* | Override for `deployment.environment` | Label telemetry without changing app mode |
 | `AWS_REGION` | `ap-south-1` | AWS region | AWS secrets access |
+| `AWS_ENDPOINT_URL` | *(empty)* | Custom AWS endpoint (Floci/local) | Local AWS emulation |
+| `SSM_PREFIX` (`SSM_PARAM_PREFIX` fallback) | *(empty)* | SSM prefix for optional params | Load non-secret params |
 
 ## Configuration Validation
 
@@ -61,10 +65,12 @@ The gateway validates all configuration at startup. If validation fails, the ser
 | `PADDLE_WEBHOOK_SECRET` | Non-empty, 16+ characters | `PADDLE_WEBHOOK_SECRET must be at least 16 characters` |
 | `INTERNAL_API_KEY` | Non-empty, 16+ characters | `INTERNAL_API_KEY must be at least 16 characters` |
 | `RABBITMQ_URL` | Valid AMQP/AMQPS URL | `RABBITMQ_URL scheme must be amqp or amqps` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Empty or `http(s)://` URL | `OTEL_EXPORTER_OTLP_ENDPOINT must be http(s) URL` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Empty or `http(s)://host` URL | `OTEL_EXPORTER_OTLP_ENDPOINT must be http(s) URL` |
 | `RABBITMQ_QUEUE_TYPE` | `classic` or `quorum` | `RABBITMQ_QUEUE_TYPE must be classic or quorum` |
 | `PORT` | 1-65535 | `PORT must be 1-65535` |
 | `GIN_MODE` | `debug`, `release`, or `test` | `GIN_MODE must be debug, release or test` |
+
+Every span and log carries `service.name`, `service.version`, and `deployment.environment`. Precedence for environment is `OTEL_RESOURCE_ATTRIBUTES` (`deployment.environment=...`) wins, then `DEPLOYMENT_ENV`, then `ENV_TYPE`. Version is `OTEL_SERVICE_VERSION`, then `SERVICE_VERSION`, then `dev`.
 
 ## Dev Mode Configuration
 
@@ -87,8 +93,6 @@ When `ENV_TYPE=dev`, the gateway loads configuration from environment variables 
 | `GIN_MODE` | `release` | Production-like behavior |
 | `LOG_LEVEL` | `info` | Standard logging |
 | `OTEL_SERVICE_NAME` | `payment-gateway` | Identifies service in traces |
-| `OTEL_SERVICE_VERSION` | `dev` | Reported as `service.version` |
-| `OTEL_RESOURCE_ATTRIBUTES` | *(empty)* | Merged into every span/log; `deployment.environment` here wins over `DEPLOYMENT_ENV`/`ENV_TYPE` |
 | `AWS_REGION` | `ap-south-1` | Default AWS region |
 
 ### Example `.env` File
@@ -201,9 +205,9 @@ environment:
   - GIN_MODE=${GIN_MODE:-release}
   - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
   - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-payment-gateway}
-  - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-dev}
-  - OTEL_RESOURCE_ATTRIBUTES=${OTEL_RESOURCE_ATTRIBUTES:-}
   - AWS_REGION=${AWS_REGION:-}
+  - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-}
+  - SSM_PREFIX=${SSM_PREFIX:-}
 ```
 
 ## Queue Type Selection
