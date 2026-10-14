@@ -42,14 +42,22 @@ services:
       start_period: 10s
 
   k6:
-    image: grafana/k6:latest
-    command: run /scripts/cron.k6.js
+    image: grafana/k6:0.55.0
+    command: run --summary-export=/out/summary.json /scripts/cron.k6.js
     environment:
       - PROXY_URL=http://proxy:9999
       - SEED_COUNT=${SEED_COUNT:-1000}
+      - RUN_ID=${RUN_ID:-}
+      - CRON_VERIFY_TIMEOUT_MS=${CRON_VERIFY_TIMEOUT_MS:-}
+      - CRON_VERIFY_POLL_MS=${CRON_VERIFY_POLL_MS:-}
       - THRESHOLD_SUCCESS_RATE=${THRESHOLD_SUCCESS_RATE:-}
+      - THRESHOLD_SEED_P95=${THRESHOLD_SEED_P95:-}
     volumes:
       - ../src/tests/load:/scripts:ro
+      - k6-out:/out
     depends_on:
       proxy:
         condition: service_healthy
+
+volumes:
+  k6-out:

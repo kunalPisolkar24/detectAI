@@ -3,6 +3,11 @@ RPS ?= 5
 DURATION ?= 10s
 SEED_COUNT ?= 1000
 VUS ?=
+SCENARIO ?= load
+RUN_ID ?=
+POOL_SIZE ?= 100
+VERIFY_TIMEOUT_MS ?=
+VERIFY_POLL_MS ?=
 # Leave empty by default so each worker's compose fallback applies (payments 10,
 # analytics 1). Export so an explicit `RABBITMQ_PREFETCH=N make ...` reaches compose
 # interpolation (compose reads shell env, and make vars are not exported by default).
@@ -68,7 +73,7 @@ help:
 	@echo ""
 	@echo "Load Testing (containerized rigs in infra/compose.load-*.yml):"
 	@echo "  make load-test WORKER=analytics|payments|cron - Run k6 in containers (params below)"
-	@echo "    VUS=10 DURATION=2m RPS=50 SEED_COUNT=1000 (cron seed size) RABBITMQ_PREFETCH=(default: payments 10, analytics 1) POOL_MAX=(default 5)"
+	@echo "    VUS=10 DURATION=2m RPS=50 SCENARIO=load|smoke|stress|soak POOL_SIZE=100 RUN_ID= SEED_COUNT=1000 (cron seed size) RABBITMQ_PREFETCH=(default: payments 10, analytics 1) POOL_MAX=(default 5)"
 	@echo "    e.g. make load-test WORKER=payments VUS=10 DURATION=2m RPS=50 RABBITMQ_PREFETCH=10"
 	@echo "  make load-down WORKER=... - Tear down the load rig (removes volumes)"
 	@echo "  make proxy           - Start the load testing proxy on host (for local runs)"
@@ -206,7 +211,8 @@ proxy-stop:
 	@ss -tlnp | grep :9999 | grep -oP 'pid=\K[0-9]+' | xargs -I {} kill -9 {} 2>/dev/null || true
 
 # Containerized load testing: worker + proxy + k6 + isolated datastores.
-# Usage: make load-test WORKER=payments VUS=10 DURATION=2m RPS=50 RABBITMQ_PREFETCH=10 POOL_MAX=12
+# Usage: make load-test WORKER=payments VUS=10 DURATION=2m RPS=50 SCENARIO=load RABBITMQ_PREFETCH=10 POOL_MAX=12
+#        make load-test WORKER=payments SCENARIO=smoke|load|stress|soak POOL_SIZE=100 RUN_ID=ci_123
 #        make load-test WORKER=cron SEED_COUNT=1000
 # k6 exit code propagates (--exit-code-from k6), so threshold breaches fail.
 # Load host ports default away from dev stacks so rigs run side by side.
@@ -227,7 +233,7 @@ LOAD_RUN_ENV = POSTGRES_PORT=$(LOAD_POSTGRES_PORT) REDIS_PORT=$(LOAD_REDIS_PORT)
 load-test: worker-%
 	$(LOAD_COMPOSE) build
 	$(LOAD_RUN_ENV) $(LOAD_COMPOSE) -f infra/compose.migrate.yml run --rm db-migrate
-	$(LOAD_RUN_ENV) VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) SEED_COUNT=$(SEED_COUNT) \
+	$(LOAD_RUN_ENV) VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) SEED_COUNT=$(SEED_COUNT) SCENARIO=$(SCENARIO) RUN_ID=$(RUN_ID) POOL_SIZE=$(POOL_SIZE) VERIFY_TIMEOUT_MS=$(VERIFY_TIMEOUT_MS) VERIFY_POLL_MS=$(VERIFY_POLL_MS) \
 	$(LOAD_COMPOSE) up --build --abort-on-container-exit --exit-code-from k6
 
 load-down: worker-%
@@ -235,16 +241,16 @@ load-down: worker-%
 
 # Legacy host runs (proxy on host + local k6 binary; prefer load-test above)
 load-payments:
-	@echo "Running Payments Load Test (VUS=$(VUS) RPS=$(RPS), DURATION=$(DURATION))..."
-	VUS=$(VUS) RPS=$(RPS) DURATION=$(DURATION) k6 run src/tests/load/payments.k6.js
+	@echo "Running Payments Load Test (SCENARIO=$(SCENARIO) VUS=$(VUS) RPS=$(RPS), DURATION=$(DURATION))..."
+	VUS=$(VUS) RPS=$(RPS) DURATION=$(DURATION) SCENARIO=$(SCENARIO) RUN_ID=$(RUN_ID) POOL_SIZE=$(POOL_SIZE) k6 run src/tests/load/payments.k6.js
 
 load-analytics:
-	@echo "Running Analytics Load Test (VUS=$(VUS) RPS=$(RPS), DURATION=$(DURATION))..."
-	VUS=$(VUS) RPS=$(RPS) DURATION=$(DURATION) k6 run src/tests/load/analytics.k6.js
+	@echo "Running Analytics Load Test (SCENARIO=$(SCENARIO) VUS=$(VUS) RPS=$(RPS), DURATION=$(DURATION))..."
+	VUS=$(VUS) RPS=$(RPS) DURATION=$(DURATION) SCENARIO=$(SCENARIO) RUN_ID=$(RUN_ID) POOL_SIZE=$(POOL_SIZE) k6 run src/tests/load/analytics.k6.js
 
 load-cron:
 	@echo "Running Cron Seed (SEED_COUNT=$(SEED_COUNT))..."
-	SEED_COUNT=$(SEED_COUNT) k6 run src/tests/load/cron.k6.js
+	SEED_COUNT=$(SEED_COUNT) RUN_ID=$(RUN_ID) k6 run src/tests/load/cron.k6.js
 
 # Development (Local Bun)
 dev-payments:

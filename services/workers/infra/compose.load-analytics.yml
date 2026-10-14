@@ -43,16 +43,30 @@ services:
       start_period: 10s
 
   k6:
-    image: grafana/k6:latest
-    command: run /scripts/analytics.k6.js
+    image: grafana/k6:0.55.0
+    command: run --summary-export=/out/summary.json /scripts/analytics.k6.js
     environment:
       - PROXY_URL=http://proxy:9999
       - VUS=${VUS:-}
       - DURATION=${DURATION:-}
       - RPS=${RPS:-}
+      - SCENARIO=${SCENARIO:-load}
+      - RUN_ID=${RUN_ID:-}
+      - POOL_SIZE=${POOL_SIZE:-}
+      - VERIFY_TIMEOUT_MS=${VERIFY_TIMEOUT_MS:-}
+      - VERIFY_POLL_MS=${VERIFY_POLL_MS:-}
       - THRESHOLD_SUCCESS_RATE=${THRESHOLD_SUCCESS_RATE:-}
+      - THRESHOLD_INGEST_P95=${THRESHOLD_INGEST_P95:-}
+      - THRESHOLD_INGEST_P99=${THRESHOLD_INGEST_P99:-}
+      - THRESHOLD_VERIFY_P95=${THRESHOLD_VERIFY_P95:-}
+      - THRESHOLD_VERIFY_RATE=${THRESHOLD_VERIFY_RATE:-}
+      - THRESHOLD_NEGATIVE_RATE=${THRESHOLD_NEGATIVE_RATE:-}
     volumes:
       - ../src/tests/load:/scripts:ro
+      - k6-out:/out
     depends_on:
       proxy:
         condition: service_healthy
+
+volumes:
+  k6-out:
