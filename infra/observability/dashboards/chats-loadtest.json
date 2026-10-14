@@ -699,7 +699,7 @@
           }
         },
         {
-          "title": "Cache get hit vs miss (load)",
+          "title": "Cache read latency hit vs miss (load)",
           "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
@@ -712,7 +712,7 @@
           }
         },
         {
-          "title": "Cache hits vs misses (load)",
+          "title": "Cache read volume served vs missed (load)",
           "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
