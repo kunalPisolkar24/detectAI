@@ -41,7 +41,7 @@ docker-build:
 
 # Self-contained load test: compose brings up chat-mongo + chat-redis + service + worker + k6
 # on isolated chat_loadnet, no dependency on main stack or local k6 binary.
-# Usage: make load-test [SCENARIO=smoke|load|stress|soak] [VUS=2] [DURATION=30s] [RPS=10]
+# Usage: make load-test [SCENARIO=smoke|load|stress|soak|lifecycle|edge] [VUS=2] [DURATION=30s] [RPS=10]
 #   tiny smoke: make load-test SCENARIO=smoke VUS=1 DURATION=10s
 #   with RPS cap: make load-test SCENARIO=load VUS=10 DURATION=2m RPS=50
 # Opt-in observability: make load-test WITH_OBSERVABILITY=1 SCENARIO=load
