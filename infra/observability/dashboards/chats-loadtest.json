@@ -279,13 +279,13 @@
           }
         },
         {
-          "title": "Throughput by method (load)",
+          "title": "Throughput by family (load)",
           "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE deployment.environment = 'loadtest' AND service.name = 'chat-service' AND span.kind = 'server' FACET `rpc.method` TIMESERIES AUTO LIMIT 10" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE deployment.environment = 'loadtest' AND service.name = 'chat-service' AND span.kind = 'server' FACET cases(WHERE `rpc.method` IN ('GetChat', 'GetChatHistory', 'GetUserChats') AS 'reads', WHERE `rpc.method` IN ('CreateChat', 'SaveMessage') AS 'writes', WHERE `rpc.method` = 'RenameChat' AS 'updates', WHERE `rpc.method` = 'DeleteChat' AS 'deletes') TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
