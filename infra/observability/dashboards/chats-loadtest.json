@@ -307,14 +307,14 @@
         {
           "title": "Requests by status (load)",
           "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.stacked-bar" },
+          "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
               { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(chat_grpc_requests_total) WHERE deployment.environment = 'loadtest' FACET status TIMESERIES AUTO LIMIT 4" }
             ],
-            "facet": { "showOtherSeries": false },
-            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
