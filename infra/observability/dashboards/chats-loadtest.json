@@ -240,13 +240,39 @@
           }
         },
         {
-          "title": "Server latency p99 by method (load)",
+          "title": "Read p99 by method (load)",
           "layout": { "column": 1, "row": 2, "height": 3, "width": 12 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) WHERE deployment.environment = 'loadtest' AND service.name = 'chat-service' AND span.kind = 'server' FACET `rpc.method` TIMESERIES AUTO LIMIT 7" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) WHERE deployment.environment = 'loadtest' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` IN ('GetChat', 'GetChatHistory', 'GetUserChats') FACET `rpc.method` TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Write p99 by method (load)",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) WHERE deployment.environment = 'loadtest' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` IN ('CreateChat', 'SaveMessage') FACET `rpc.method` TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Update/delete p99 by method (load)",
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) WHERE deployment.environment = 'loadtest' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` IN ('RenameChat', 'DeleteChat') FACET `rpc.method` TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
@@ -254,7 +280,7 @@
         },
         {
           "title": "Throughput by method (load)",
-          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -267,7 +293,7 @@
         },
         {
           "title": "gRPC duration avg by method (load)",
-          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -280,7 +306,7 @@
         },
         {
           "title": "Requests by status (load)",
-          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
           "visualization": { "id": "viz.stacked-bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -293,7 +319,7 @@
         },
         {
           "title": "Errors by method/code (load)",
-          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
           "visualization": { "id": "viz.stacked-bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -306,7 +332,7 @@
         },
         {
           "title": "Published + sync fallback (load)",
-          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -320,7 +346,7 @@
         },
         {
           "title": "Message size avg (load)",
-          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -333,7 +359,7 @@
         },
         {
           "title": "Slowest methods (load)",
-          "layout": { "column": 1, "row": 6, "height": 3, "width": 12 },
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 12 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
