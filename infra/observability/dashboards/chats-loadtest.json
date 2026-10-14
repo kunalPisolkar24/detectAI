@@ -765,13 +765,13 @@
           }
         },
         {
-          "title": "Mongo exporter + datastore net (load)",
+          "title": "Datastore network rx/tx (load)",
           "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS `rx`, rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS `tx` WHERE deployment.environment = 'loadtest' AND (`container.name` LIKE '%mongo%' OR `container.name` LIKE '%redis%') FACET `container.name` TIMESERIES 1 minute LIMIT 6" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS `rx`, rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS `tx` WHERE deployment.environment = 'loadtest' AND (`container.name` LIKE '%mongo-chat%' OR `container.name` LIKE '%redis-chat%') FACET `container.name` TIMESERIES 1 minute LIMIT 4" }
             ],
             "yAxisLeft": { "zero": true, "min": 0 },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
