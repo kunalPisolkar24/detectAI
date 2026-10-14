@@ -195,36 +195,36 @@
       "description": "chat-service api deep dive: gRPC latency, throughput, cache, publish path",
       "widgets": [
         {
-          "title": "CreateChat p95 (load)",
+          "title": "Reads p95 (load)",
           "layout": { "column": 1, "row": 1, "height": 3, "width": 3 },
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = 'loadtest' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` = 'CreateChat'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = 'loadtest' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` IN ('GetChat', 'GetChatHistory', 'GetUserChats')" }
             ],
             "limit": 250
           }
         },
         {
-          "title": "GetHistory p95 (load)",
+          "title": "Writes p95 (load)",
           "layout": { "column": 4, "row": 1, "height": 3, "width": 3 },
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = 'loadtest' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` = 'GetChatHistory'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = 'loadtest' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` IN ('CreateChat', 'SaveMessage')" }
             ],
             "limit": 250
           }
         },
         {
-          "title": "GetUserChats p95 (load)",
+          "title": "Updates/deletes p95 (load)",
           "layout": { "column": 7, "row": 1, "height": 3, "width": 3 },
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = 'loadtest' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` = 'GetUserChats'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = 'loadtest' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` IN ('RenameChat', 'DeleteChat')" }
             ],
-            "limit": 250
+            "limit": 300
           }
         },
         {
