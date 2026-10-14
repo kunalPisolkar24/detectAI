@@ -12,7 +12,9 @@ Observability means being able to understand what's happening inside a system by
 
 ## Logs
 
-Logs are written to standard output in JSON format. They're useful for debugging specific issues.
+Logs are written to standard output in JSON format. They're useful for debugging specific issues. When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the same logs are also forwarded to the collector over OTLP/HTTP (`/v1/logs`) with trace correlation (`trace_id`/`span_id` on gRPC request logs) — fail-open, so if the collector is down or no endpoint is set, the service keeps running and stdout logs are unaffected.
+
+Traces are off by default — set `OTEL_EXPORTER_OTLP_ENDPOINT` to an `http(s)://` collector URL to turn them on. The service emits server spans per gRPC method (`rpc.method`) plus client spans for Mongo (`db.system=mongodb`), Redis (`db.system=redis`) and cache operations, all carrying `service.name`, `service.version` and `deployment.environment`.
 
 ### What Gets Logged
 
@@ -53,18 +55,33 @@ Metrics are numbers that help you understand performance. They're exposed at:
 
 ### Key Metrics
 
+#### gRPC (api)
+
+| Metric | What It Tells You |
+|--------|-------------------|
+| `chat_grpc_requests_total{method,status}` | Call rate per RPC and status |
+| `chat_grpc_errors_total{method,code}` | Failures per RPC and gRPC code |
+| `grpc_request_duration_seconds{method,status}` | Server-side latency histogram |
+
 #### Message Processing
 
 | Metric | What It Tells You |
 |--------|-------------------|
 | `chat_messages_ingested_total` | How many messages were saved to database |
 | `chat_messages_published_total` | How many messages were added to streams |
+| `chat_worker_consumed_total{partition}` | How many stream entries the worker consumed per partition |
+| `chat_stream_pending{stream}` | Unacked entries per stream (consumer-group backlog) |
+| `chat_message_bytes` | Ingested content size distribution (workload shape) |
+| `chat_batch_size` | Messages per worker batch (workload shape) |
 
-#### Performance
+#### Datastore latency
 
 | Metric | What It Tells You |
 |--------|-------------------|
-| `grpc_request_duration_seconds` | How long API requests take |
+| `chat_mongo_op_duration_seconds{operation}` | Mongo latency per operation (create_chat, get_history, bulk_upsert, …) |
+| `chat_redis_op_duration_seconds{operation}` | Redis latency per operation (publish, …) |
+| `chat_cache_op_duration_seconds{operation,result}` | Cache latency per operation and hit/miss/error result |
+| `chat_worker_batch_duration_seconds{stage}` | Worker batch time per stage (process, bulk_upsert) |
 
 #### Health
 
@@ -102,18 +119,16 @@ curl http://localhost:9099/metrics
 
 ## Dashboards
 
-The service comes with Grafana dashboards for visualization:
+New Relic (`infra/observability/dashboards/`):
 
 | Dashboard | What It Shows |
 |-----------|---------------|
-| `07-chat-service-overview.json` | API performance and health |
-| `08-chat-worker-overview.json` | Worker performance and health |
+| `chats.json` | API + worker roles, DocDB ops, Redis streams lag |
+| `chats-loadtest.json` | k6 loadtest view (`deployment.environment=loadtest`): 6 pages — Overview, Service, Service Logs, Worker, Worker Logs, Infra (Mongo + Redis, exporters). Area charts with smooth interpolation + gradient, no header markdown. |
 
-### Setting Up Dashboards
-
-1. Import the JSON files into Grafana
-2. Configure Prometheus as the data source
-3. Point to `chat-service:9091` and `chat-worker:9099`
+Run a loadtest with telemetry via `tests/load/README.md` (`WITH_OBSERVABILITY=1`).
+The api reports `service.name=chat-service`, the worker `chat-worker`
+(role-aware default when `OTEL_SERVICE_NAME` is unset).
 
 ## Alerts
 

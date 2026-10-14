@@ -7,6 +7,11 @@ function strOr(env, fallback) {
     return __ENV[env] || fallback;
 }
 
+function floatOr(env, fallback) {
+    const v = parseFloat(__ENV[env] || '');
+    return Number.isFinite(v) && v >= 0 ? v : fallback;
+}
+
 const genericVUs = intOr('VUS', 0);
 const genericDuration = strOr('DURATION', '');
 const genericRps = intOr('RPS', 0);
@@ -29,6 +34,21 @@ export const config = {
     stressDuration: genericDuration || strOr('STRESS_DURATION', '5m'),
     soakVUs: genericVUs || intOr('SOAK_VUS', 5),
     soakDuration: genericDuration || strOr('SOAK_DURATION', '10m'),
+    lifecycleVUs: genericVUs || intOr('LIFECYCLE_VUS', 5),
+    lifecycleDuration: genericDuration || strOr('LIFECYCLE_DURATION', '2m'),
+    edgeVUs: genericVUs || intOr('EDGE_VUS', 2),
+    edgeDuration: genericDuration || strOr('EDGE_DURATION', '1m'),
+    // Workload mix for load.js: must sum to ~1.0, normalized at runtime.
+    mixReadWrite: floatOr('MIX_READ_WRITE', 0.7),
+    mixLifecycle: floatOr('MIX_LIFECYCLE', 0.2),
+    mixPagination: floatOr('MIX_PAGINATION', 0.1),
+    // Contention mode: 0 = isolated per-VU users (safe deletes, default).
+    // 1 = shared user namespace to stress GetUserChats index path.
+    // HOT_CHAT_ID optionally pins writes to one pre-seeded chat; when set,
+    // per-iteration deletes are skipped to avoid destroying the hot chat.
+    sharedHotChat: strOr('SHARED_HOT_CHAT', '0') === '1',
+    hotChatId: strOr('HOT_CHAT_ID', ''),
+    hotChatUser: strOr('HOT_CHAT_USER', 'load_test_shared_user'),
 };
 
 export const thresholds = {
@@ -37,4 +57,10 @@ export const thresholds = {
     saveMessageP99: parseInt(__ENV.THRESHOLD_SAVE_MESSAGE_P99 || '250'),
     getHistoryP95: parseInt(__ENV.THRESHOLD_GET_HISTORY_P95 || '200'),
     e2eLatencyP95: parseInt(__ENV.THRESHOLD_E2E_LATENCY_P95 || '1000'),
+    createP95: parseInt(__ENV.THRESHOLD_CREATE_P95 || '200'),
+    getChatP95: parseInt(__ENV.THRESHOLD_GET_CHAT_P95 || '200'),
+    getUserChatsP95: parseInt(__ENV.THRESHOLD_GET_USER_CHATS_P95 || '200'),
+    renameP95: parseInt(__ENV.THRESHOLD_RENAME_P95 || '200'),
+    deleteP95: parseInt(__ENV.THRESHOLD_DELETE_P95 || '300'),
+    negativeRate: parseFloat(__ENV.THRESHOLD_NEGATIVE_RATE || '0.99'),
 };

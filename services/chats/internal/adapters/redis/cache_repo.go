@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
+	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/metrics"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/codes"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -65,6 +68,13 @@ func (r *CacheRepository) SaveToCache(ctx context.Context, msg *domain.Message) 
 	if msg == nil || msg.ChatID == "" || msg.ID == "" {
 		return nil
 	}
+	ctx, span, start := startSpan(ctx, "cache.save", "save")
+	err := r.saveToCache(ctx, msg)
+	finishCacheSpan(span, "save", start, err)
+	return err
+}
+
+func (r *CacheRepository) saveToCache(ctx context.Context, msg *domain.Message) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -79,6 +89,17 @@ func (r *CacheRepository) SaveToCache(ctx context.Context, msg *domain.Message) 
 		return nil
 	}
 	return r.saveToCacheFallback(ctx, key, data, msg, score, ttlSec)
+}
+
+func finishCacheSpan(span oteltrace.Span, operation string, start time.Time, err error) {
+	result := "ok"
+	if err != nil {
+		result = "error"
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+	}
+	metrics.CacheOpDuration.WithLabelValues(operation, result).Observe(time.Since(start).Seconds())
+	span.End()
 }
 
 func (r *CacheRepository) saveToCacheFallback(ctx context.Context, key string, data []byte, msg *domain.Message, score float64, ttlSec int64) error {
@@ -118,7 +139,13 @@ func (r *CacheRepository) PopulateCache(ctx context.Context, chatID string, mess
 	if len(messages) == 0 || chatID == "" {
 		return nil
 	}
+	ctx, span, start := startSpan(ctx, "cache.populate", "populate")
+	err := r.populateCache(ctx, chatID, messages)
+	finishCacheSpan(span, "populate", start, err)
+	return err
+}
 
+func (r *CacheRepository) populateCache(ctx context.Context, chatID string, messages []*domain.Message) error {
 	key := cacheKey(chatID)
 
 	seen := make(map[string]*domain.Message, len(messages))
@@ -178,6 +205,23 @@ func (r *CacheRepository) GetRecentMessages(ctx context.Context, chatID string) 
 	if chatID == "" {
 		return nil, nil
 	}
+	ctx, span, start := startSpan(ctx, "cache.get_recent", "get_recent")
+	msgs, err := r.getRecentMessages(ctx, chatID)
+	if err != nil {
+		finishCacheSpan(span, "get_recent", start, err)
+		return nil, err
+	}
+	if len(msgs) == 0 {
+		metrics.CacheOpDuration.WithLabelValues("get_recent", "miss").Observe(time.Since(start).Seconds())
+		span.End()
+		return nil, nil
+	}
+	metrics.CacheOpDuration.WithLabelValues("get_recent", "hit").Observe(time.Since(start).Seconds())
+	span.End()
+	return msgs, nil
+}
+
+func (r *CacheRepository) getRecentMessages(ctx context.Context, chatID string) ([]*domain.Message, error) {
 	key := cacheKey(chatID)
 
 	result, err := r.client.ZRevRange(ctx, key, 0, -1).Result()
@@ -214,6 +258,8 @@ func (r *CacheRepository) DeleteCache(ctx context.Context, chatID string) error 
 	if chatID == "" {
 		return nil
 	}
-	key := cacheKey(chatID)
-	return r.client.Del(ctx, key).Err()
+	ctx, span, start := startSpan(ctx, "cache.delete", "delete")
+	err := r.client.Del(ctx, cacheKey(chatID)).Err()
+	finishCacheSpan(span, "delete", start, err)
+	return err
 }

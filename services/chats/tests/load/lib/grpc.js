@@ -9,16 +9,27 @@ if (__ENV.PROTO_DIR) protoDirs.push(__ENV.PROTO_DIR);
 protoDirs.push('../../../api/proto');
 client.load(protoDirs, 'chat_service.proto');
 
+let connected = false;
+
 export function ensureConnected() {
-    client.connect(config.target, {
-        plaintext: config.plaintext,
-        timeout: config.timeout,
-    });
+    if (!connected) {
+        client.connect(config.target, {
+            plaintext: config.plaintext,
+            timeout: config.timeout,
+        });
+        connected = true;
+    }
     return client;
 }
 
 export function closeClient() {
-    client.close();
+    try {
+        client.close();
+    } catch (e) {
+        // Ignore close errors during teardown; k6 reaps VU runtimes anyway.
+    } finally {
+        connected = false;
+    }
 }
 
 export function getMetadata(userId) {

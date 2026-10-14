@@ -14,6 +14,7 @@ locals {
     document-parser          = "document-parser"
     document-parser-loadtest = "document-parser"
     chats                    = "chats"
+    chats-loadtest           = "chats"
     datastores               = "datastores"
   }
 
@@ -29,12 +30,13 @@ locals {
     document-parser          = "service-dashboard"
     document-parser-loadtest = "loadtest"
     chats                    = "service-dashboard"
+    chats-loadtest           = "loadtest"
     datastores               = "platform"
   }
 
   dashboard_env = {
     for k in keys(local.dashboard_scope) :
-    k => k == "document-parser-loadtest" || k == "payment-gateway-loadtest" ? "loadtest" : var.environment
+    k => k == "document-parser-loadtest" || k == "payment-gateway-loadtest" || k == "chats-loadtest" ? "loadtest" : var.environment
   }
 }
 

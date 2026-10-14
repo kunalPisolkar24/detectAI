@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/domain"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core/ports"
+	"github.com/kunalPisolkar24/detectAI/services/chats/pkg/metrics"
 	"go.uber.org/zap"
 )
 
@@ -263,6 +264,7 @@ func (s *ChatService) ProcessMessage(ctx context.Context, msg *domain.Message) e
 			return domain.ErrInvalidInput
 		}
 	}
+	metrics.MessageBytes.Observe(float64(len(msg.Content)))
 
 	if err := s.stream.Publish(ctx, msg); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {

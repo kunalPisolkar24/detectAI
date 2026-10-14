@@ -1,7 +1,7 @@
-import { sleep } from 'k6';
+import { sleep, check } from 'k6';
 import { generateUserId, generateChatTitle, generateMessage, generateUUID } from '../lib/data.js';
-import { config } from '../lib/config.js';
-import { createChat, saveMessage } from '../lib/chat.js';
+import { config, thresholds } from '../lib/config.js';
+import { createChat, saveMessage, getChat, getChatHistory } from '../lib/chat.js';
 import { closeClient } from '../lib/grpc.js';
 
 export const options = {
@@ -13,6 +13,13 @@ export const options = {
         { duration: '1m', target: 0 },
     ],
     ...(config.rps > 0 ? { rps: config.rps } : {}),
+    thresholds: {
+        // Stress finds the breaking point, so gate on crash-freedom rather
+        // than full SLOs: most RPCs should still succeed and checks pass.
+        'chat_rpc_success_rate': ['rate>=0.95'],
+        'checks': ['rate>=0.95'],
+        'chat_save_message_duration': [`p(99)<${thresholds.saveMessageP99 * 4}`],
+    },
 };
 
 export function teardown() {
@@ -21,17 +28,20 @@ export function teardown() {
 
 export default function () {
     const userId = generateUserId(__VU, __ITER);
-    const title = generateChatTitle();
-    
-    const chatId = createChat(userId, title);
+
+    const chatId = createChat(userId, generateChatTitle());
     if (!chatId) {
         sleep(1);
         return;
     }
 
-    const content = generateMessage();
-    const messageId = generateUUID();
-    saveMessage(chatId, userId, content, messageId);
+    // Rapid writes plus reads so stress covers the Mongo/Redis read path and
+    // worker stream lag, not just the write fast-path.
+    for (let i = 0; i < 3; i++) {
+        saveMessage(chatId, userId, generateMessage(), generateUUID());
+    }
+    check(getChat(chatId, userId), { 'stress: chat fetched': (c) => c !== null });
+    check(getChatHistory(chatId, userId), { 'stress: history read': (h) => h !== null });
 
     sleep(0.5);
 }

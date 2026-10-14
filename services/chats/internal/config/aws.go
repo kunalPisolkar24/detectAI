@@ -317,6 +317,10 @@ func loadSSMParameters(ctx context.Context, awsCfg aws.Config, cfg *Config) erro
 				if os.Getenv("OTEL_SERVICE_NAME") == "" && cfg.OtelServiceName == "" {
 					cfg.OtelServiceName = val
 				}
+			case "OTEL_SERVICE_VERSION", "SERVICE_VERSION":
+				if os.Getenv("OTEL_SERVICE_VERSION") == "" && os.Getenv("SERVICE_VERSION") == "" && cfg.OtelServiceVersion == "" {
+					cfg.OtelServiceVersion = val
+				}
 			case "AWS_REGION":
 				if os.Getenv("AWS_REGION") == "" && cfg.AWSRegion == "" {
 					cfg.AWSRegion = val
