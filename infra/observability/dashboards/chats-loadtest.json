@@ -318,13 +318,13 @@
           }
         },
         {
-          "title": "Errors by method/code (load)",
+          "title": "Errors by family/code (load)",
           "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
           "visualization": { "id": "viz.stacked-bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(chat_grpc_errors_total) AS errors WHERE deployment.environment = 'loadtest' FACET method, code TIMESERIES AUTO LIMIT 12" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(chat_grpc_errors_total) AS errors WHERE deployment.environment = 'loadtest' FACET cases(WHERE method IN ('GetChat', 'GetChatHistory', 'GetUserChats') AS 'reads', WHERE method IN ('CreateChat', 'SaveMessage') AS 'writes', WHERE method = 'RenameChat' AS 'updates', WHERE method = 'DeleteChat' AS 'deletes'), code TIMESERIES AUTO LIMIT 16" }
             ],
             "facet": { "showOtherSeries": false },
             "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
