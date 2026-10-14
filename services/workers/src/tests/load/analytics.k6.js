@@ -19,9 +19,21 @@ function baseThresholds() {
 }
 
 function buildOptions() {
-    const gracefulStop = config.gracefulStop;
+    // Edge traffic intentionally returns 400s, which k6 counts in
+    // http_req_failed: keep it in its own scenario with only negative-rate
+    // thresholds so happy-path SLOs stay pure.
+    if (config.scenario === 'edge') {
+        return {
+            vus: 2,
+            duration: '1m',
+            thresholds: {
+                checks: [`rate>=${thresholds.successRate}`],
+                worker_negative_check: [`rate>=${thresholds.negativeRate}`],
+            },
+        };
+    }
     if (config.scenario === 'smoke') {
-        return { vus: 2, duration: '30s', gracefulStop, thresholds: baseThresholds() };
+        return { vus: 2, duration: '30s', thresholds: baseThresholds() };
     }
     if (config.scenario === 'soak') {
         return {
@@ -35,7 +47,6 @@ function buildOptions() {
                     maxVUs: 50,
                 },
             },
-            gracefulStop,
             thresholds: baseThresholds(),
         };
     }
@@ -56,7 +67,6 @@ function buildOptions() {
                     ],
                 },
             },
-            gracefulStop,
             thresholds: baseThresholds(),
         };
     }
@@ -71,7 +81,6 @@ function buildOptions() {
                 maxVUs: Math.min(Math.max(config.analyticsVUs * 4, 50), 200),
             },
         },
-        gracefulStop,
         thresholds: baseThresholds(),
     };
 }
@@ -95,14 +104,17 @@ export function setup() {
     }
     check(ready, { 'setup: proxy ready': (v) => v === true });
     const run = config.runId || generateRunId('ana');
+    console.log(`analytics setup run=${run} pool=${config.poolSize}`);
+    let seeded = false;
     try {
-        http.post(
+        const r = http.post(
             `${config.proxyUrl}/seed-users`,
             JSON.stringify({ run, count: config.poolSize, prefix: 'ana' }),
             JSON_HEADERS,
         );
-    } catch (e) { /* best-effort */ }
-    return { run, mock };
+        seeded = r.status === 200;
+    } catch (e) { seeded = false; }
+    return { run, mock, seeded };
 }
 
 function pollVerify(userId) {
@@ -126,11 +138,11 @@ function pollVerify(userId) {
     return found;
 }
 
-function sendNormal(userId) {
+function sendNormal(userId, ensureUser) {
     const t0 = Date.now();
     const res = http.post(
         `${config.proxyUrl}/analytics`,
-        JSON.stringify({ userId, count: analyticsCount(), ensureUser: false }),
+        JSON.stringify({ userId, count: analyticsCount(), ensureUser }),
         JSON_HEADERS,
     );
     workerMetrics.ingestDuration.add(Date.now() - t0);
@@ -139,9 +151,9 @@ function sendNormal(userId) {
     return ok;
 }
 
-function sendDuplicate(userId) {
+function sendDuplicate(userId, ensureUser) {
     const eventId = generateUUID();
-    const payload = JSON.stringify({ userId, count: 1, eventId, ensureUser: false });
+    const payload = JSON.stringify({ userId, count: 1, eventId, ensureUser });
     const t0 = Date.now();
     const first = http.post(`${config.proxyUrl}/analytics`, payload, JSON_HEADERS);
     const second = http.post(`${config.proxyUrl}/analytics`, payload, JSON_HEADERS);
@@ -152,31 +164,43 @@ function sendDuplicate(userId) {
     return ok;
 }
 
+function sendInvalidBattery() {
+    const cases = [
+        ['empty userId', JSON.stringify({ userId: '', count: 1 })],
+        ['zero count', JSON.stringify({ userId: 'ana_edge_u1', count: 0 })],
+        ['negative count', JSON.stringify({ userId: 'ana_edge_u1', count: -5 })],
+        ['non-int count', JSON.stringify({ userId: 'ana_edge_u1', count: 1.5 })],
+        ['malformed json', '{not-json'],
+    ];
+    for (const [name, body] of cases) {
+        const res = http.post(`${config.proxyUrl}/analytics`, body, JSON_HEADERS);
+        const ok = check(res, { [`analytics edge ${name} rejected 400`]: (r) => r.status === 400 });
+        workerMetrics.negativeCheck.add(ok);
+    }
+}
+
 function sendInvalid() {
-    const res = http.post(
-        `${config.proxyUrl}/analytics`,
-        JSON.stringify({ userId: '', count: 0 }),
-        JSON_HEADERS,
-    );
-    const ok = check(res, { 'analytics: invalid rejected 400': (r) => r.status === 400 });
-    workerMetrics.negativeCheck.add(ok);
+    sendInvalidBattery();
 }
 
 export default function (data) {
+    // Edge scenario runs only the invalid battery (see buildOptions).
+    if (config.scenario === 'edge') {
+        sendInvalidBattery();
+        sleep(0.5);
+        return;
+    }
     const run = (data && data.run) || config.runId || 'local';
     const mock = !!(data && data.mock);
+    const ensureUser = !(data && data.seeded);
     // Bounded pool: (VU + ITER) % pool keeps DB size at poolSize instead of
     // unbounded VU*ITER growth.
     const userId = analyticsUser(run, __VU, __ITER, config.poolSize);
-    const mode = pickWeighted([[0.9, 'normal'], [0.05, 'dup'], [0.05, 'invalid']]);
+    const mode = pickWeighted([[0.95, 'normal'], [0.05, 'dup']]);
 
-    if (mode === 'invalid') {
-        sendInvalid();
-        return;
-    }
     let ok = false;
-    if (mode === 'dup') ok = sendDuplicate(userId);
-    else ok = sendNormal(userId);
+    if (mode === 'dup') ok = sendDuplicate(userId, ensureUser);
+    else ok = sendNormal(userId, ensureUser);
 
     if (ok && !mock && Math.random() < 0.1) {
         const found = pollVerify(userId);
@@ -188,7 +212,7 @@ export default function (data) {
 
 export function handleSummary(data) {
     const lines = [
-        `analytics scenario=${config.scenario} run=${(data.setup_data && data.setup_data.run) || config.runId || 'local'}`,
+        `analytics scenario=${config.scenario} run=${config.runId || 'local'}`,
         `checks=${data.metrics.checks ? data.metrics.checks.values.rate.toFixed(4) : 'n/a'}`,
         `ingest_p95=${data.metrics.worker_ingest_duration ? data.metrics.worker_ingest_duration.values['p(95)'].toFixed(1) : 'n/a'}ms`,
         `http_failed=${data.metrics.http_req_failed ? data.metrics.http_req_failed.values.rate.toFixed(4) : 'n/a'}`,

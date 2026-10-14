@@ -27,7 +27,6 @@ export const config = {
     // Distinct users per run. Keeps DB bounded (pool) instead of unbounded
     // VU*ITER growth, while still allowing contention via small pools.
     poolSize: intOr('POOL_SIZE', 100),
-    gracefulStop: strOr('GRACEFUL_STOP', '30s'),
     // Verify polling (payments/analytics sample, cron drain wait).
     verifyTimeoutMs: intOr('VERIFY_TIMEOUT_MS', 15000),
     verifyPollMs: intOr('VERIFY_POLL_MS', 500),

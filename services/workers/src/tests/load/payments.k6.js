@@ -19,12 +19,23 @@ function baseThresholds() {
 }
 
 function buildOptions() {
-    const gracefulStop = config.gracefulStop;
+    // Edge traffic intentionally returns 400s, which k6 counts in
+    // http_req_failed: keep it in its own scenario with only negative-rate
+    // thresholds so happy-path SLOs stay pure.
+    if (config.scenario === 'edge') {
+        return {
+            vus: 2,
+            duration: '1m',
+            thresholds: {
+                checks: [`rate>=${thresholds.successRate}`],
+                worker_negative_check: [`rate>=${thresholds.negativeRate}`],
+            },
+        };
+    }
     if (config.scenario === 'smoke') {
         return {
             vus: 2,
             duration: '30s',
-            gracefulStop,
             thresholds: baseThresholds(),
         };
     }
@@ -40,7 +51,6 @@ function buildOptions() {
                     maxVUs: 50,
                 },
             },
-            gracefulStop,
             thresholds: baseThresholds(),
         };
     }
@@ -61,7 +71,6 @@ function buildOptions() {
                     ],
                 },
             },
-            gracefulStop,
             thresholds: baseThresholds(),
         };
     }
@@ -76,7 +85,6 @@ function buildOptions() {
                 maxVUs: Math.min(Math.max(config.paymentsVUs * 4, 50), 200),
             },
         },
-        gracefulStop,
         thresholds: baseThresholds(),
     };
 }
@@ -100,16 +108,20 @@ export function setup() {
     }
     check(ready, { 'setup: proxy ready': (v) => v === true });
     const run = config.runId || generateRunId('pay');
+    console.log(`payments setup run=${run} pool=${config.poolSize}`);
     // Pre-seed the user pool so per-request upserts can be skipped
     // (ensureUser=false isolates worker cost from proxy DB writes).
+    // If seeding fails the run still works: requests fall back to ensureUser=true.
+    let seeded = false;
     try {
-        http.post(
+        const r = http.post(
             `${config.proxyUrl}/seed-users`,
             JSON.stringify({ run, count: config.poolSize, prefix: 'pay' }),
             JSON_HEADERS,
         );
-    } catch (e) { /* seed is best-effort; per-request upsert still works */ }
-    return { run, mock };
+        seeded = r.status === 200;
+    } catch (e) { seeded = false; }
+    return { run, mock, seeded };
 }
 
 function pollVerify(userId) {
@@ -133,12 +145,12 @@ function pollVerify(userId) {
     return found;
 }
 
-function sendNormal(userId) {
+function sendNormal(userId, ensureUser) {
     const eventType = paymentsEventFor(__ITER);
     const t0 = Date.now();
     const res = http.post(
         `${config.proxyUrl}/payments`,
-        JSON.stringify({ event_type: eventType, userId, ensureUser: false }),
+        JSON.stringify({ event_type: eventType, userId, ensureUser }),
         JSON_HEADERS,
     );
     workerMetrics.ingestDuration.add(Date.now() - t0);
@@ -147,13 +159,13 @@ function sendNormal(userId) {
     return ok;
 }
 
-function sendDuplicate(userId) {
+function sendDuplicate(userId, ensureUser) {
     const eventId = `dup_${userId}_${__ITER}`;
     const payload = JSON.stringify({
         event_type: 'subscription.updated',
         userId,
         event_id: eventId,
-        ensureUser: false,
+        ensureUser,
     });
     const t0 = Date.now();
     const first = http.post(`${config.proxyUrl}/payments`, payload, JSON_HEADERS);
@@ -166,29 +178,40 @@ function sendDuplicate(userId) {
     return ok;
 }
 
+function sendInvalidBattery() {
+    const cases = [
+        ['wrong-type event_type', JSON.stringify({ event_type: 123, userId: 'pay_edge_u1' })],
+        ['empty userId', JSON.stringify({ event_type: 'subscription.updated', userId: '' })],
+        ['oversized userId', JSON.stringify({ event_type: 'subscription.updated', userId: 'u'.repeat(100) })],
+        ['malformed json', '{not-json'],
+    ];
+    for (const [name, body] of cases) {
+        const res = http.post(`${config.proxyUrl}/payments`, body, JSON_HEADERS);
+        const ok = check(res, { [`payments edge ${name} rejected 400`]: (r) => r.status === 400 });
+        workerMetrics.negativeCheck.add(ok);
+    }
+}
+
 function sendInvalid() {
-    const res = http.post(
-        `${config.proxyUrl}/payments`,
-        JSON.stringify({ event_type: 123, userId: '', ensureUser: false }),
-        JSON_HEADERS,
-    );
-    const ok = check(res, { 'payments: invalid rejected 400': (r) => r.status === 400 });
-    workerMetrics.negativeCheck.add(ok);
+    sendInvalidBattery();
 }
 
 export default function (data) {
-    const run = (data && data.run) || config.runId || 'local';
-    const mock = !!(data && data.mock);
-    const userId = paymentsUser(run, __VU, config.poolSize);
-    const mode = pickWeighted([[0.9, 'normal'], [0.05, 'dup'], [0.05, 'invalid']]);
-
-    if (mode === 'invalid') {
-        sendInvalid();
+    // Edge scenario runs only the invalid battery (see buildOptions).
+    if (config.scenario === 'edge') {
+        sendInvalidBattery();
+        sleep(0.5);
         return;
     }
+    const run = (data && data.run) || config.runId || 'local';
+    const mock = !!(data && data.mock);
+    const ensureUser = !(data && data.seeded);
+    const userId = paymentsUser(run, __VU, config.poolSize);
+    const mode = pickWeighted([[0.95, 'normal'], [0.05, 'dup']]);
+
     let ok = false;
-    if (mode === 'dup') ok = sendDuplicate(userId);
-    else ok = sendNormal(userId);
+    if (mode === 'dup') ok = sendDuplicate(userId, ensureUser);
+    else ok = sendNormal(userId, ensureUser);
 
     // 10% sample verifies the worker actually materialized the row.
     // Skipped in MOCK_MODE (proxy never writes, verify would always miss).
@@ -202,7 +225,7 @@ export default function (data) {
 
 export function handleSummary(data) {
     const lines = [
-        `payments scenario=${config.scenario} run=${(data.setup_data && data.setup_data.run) || config.runId || 'local'}`,
+        `payments scenario=${config.scenario} run=${config.runId || 'local'}`,
         `checks=${data.metrics.checks ? data.metrics.checks.values.rate.toFixed(4) : 'n/a'}`,
         `ingest_p95=${data.metrics.worker_ingest_duration ? data.metrics.worker_ingest_duration.values['p(95)'].toFixed(1) : 'n/a'}ms`,
         `http_failed=${data.metrics.http_req_failed ? data.metrics.http_req_failed.values.rate.toFixed(4) : 'n/a'}`,

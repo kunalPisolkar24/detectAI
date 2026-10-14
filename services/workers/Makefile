@@ -8,6 +8,10 @@ RUN_ID ?=
 POOL_SIZE ?= 100
 VERIFY_TIMEOUT_MS ?=
 VERIFY_POLL_MS ?=
+# Fast sweep cadence for the load rig only (worker-up keeps the 15m stack
+# default): the worker idles this long when no rows are expired, so 15m would
+# always outlast the k6 drain poll. Only referenced by LOAD_RUN_ENV below.
+CRON_CHECK_INTERVAL_MS ?= 10000
 # Leave empty by default so each worker's compose fallback applies (payments 10,
 # analytics 1). Export so an explicit `RABBITMQ_PREFETCH=N make ...` reaches compose
 # interpolation (compose reads shell env, and make vars are not exported by default).
@@ -73,7 +77,7 @@ help:
 	@echo ""
 	@echo "Load Testing (containerized rigs in infra/compose.load-*.yml):"
 	@echo "  make load-test WORKER=analytics|payments|cron - Run k6 in containers (params below)"
-	@echo "    VUS=10 DURATION=2m RPS=50 SCENARIO=load|smoke|stress|soak POOL_SIZE=100 RUN_ID= SEED_COUNT=1000 (cron seed size) RABBITMQ_PREFETCH=(default: payments 10, analytics 1) POOL_MAX=(default 5)"
+	@echo "    VUS=10 DURATION=2m RPS=50 SCENARIO=load|smoke|stress|soak|edge POOL_SIZE=100 RUN_ID= SEED_COUNT=1000 (cron seed size) RABBITMQ_PREFETCH=(default: payments 10, analytics 1) POOL_MAX=(default 5)"
 	@echo "    e.g. make load-test WORKER=payments VUS=10 DURATION=2m RPS=50 RABBITMQ_PREFETCH=10"
 	@echo "  make load-down WORKER=... - Tear down the load rig (removes volumes)"
 	@echo "  make proxy           - Start the load testing proxy on host (for local runs)"
@@ -228,7 +232,8 @@ LOAD_COMPOSE = docker compose --env-file $(ENV_FILE) -f infra/compose.load-$(WOR
 LOAD_RUN_ENV = POSTGRES_PORT=$(LOAD_POSTGRES_PORT) REDIS_PORT=$(LOAD_REDIS_PORT) \
 	EVENT_REDIS_PORT=$(LOAD_EVENTS_PORT) RABBITMQ_PORT=$(LOAD_RABBITMQ_PORT) \
 	WORKER_ANALYTICS_PORT=$(LOAD_WORKER_PORT) WORKER_CRON_PORT=$(LOAD_WORKER_PORT) \
-	WORKER_PAYMENTS_PORT=$(LOAD_WORKER_PORT) RABBITMQ_PREFETCH=$(RABBITMQ_PREFETCH) POOL_MAX=$(POOL_MAX)
+	WORKER_PAYMENTS_PORT=$(LOAD_WORKER_PORT) RABBITMQ_PREFETCH=$(RABBITMQ_PREFETCH) POOL_MAX=$(POOL_MAX) \
+	CRON_CHECK_INTERVAL_MS=$(CRON_CHECK_INTERVAL_MS)
 
 load-test: worker-%
 	$(LOAD_COMPOSE) build

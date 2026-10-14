@@ -46,6 +46,9 @@ services:
 
   k6:
     image: grafana/k6:0.55.0
+    # Run as root: the k6 image defaults to a non-root user, which cannot
+    # write --summary-export=/out/summary.json to the fresh named volume.
+    user: "0:0"
     command: run --summary-export=/out/summary.json /scripts/payments.k6.js
     environment:
       - PROXY_URL=http://proxy:9999

@@ -86,6 +86,16 @@ function badRequest(message: string, details?: unknown): Response {
     return json({ error: message, details }, 400);
 }
 
+// Malformed JSON is a client error (400), not a server error: req.json()
+// throws SyntaxError on bad input, which must not fall through to the 500 path.
+async function readJson(req: Request): Promise<{ ok: true; body: unknown } | { ok: false; res: Response }> {
+    try {
+        return { ok: true, body: await req.json() };
+    } catch {
+        return { ok: false, res: badRequest("invalid JSON body") };
+    }
+}
+
 const paymentsBodySchema = z.object({
     event_type: z.string().min(1).max(64).optional(),
     event_id: z.string().min(1).max(128).optional(),
@@ -211,7 +221,9 @@ const server = serve({
 
         if (req.method === "POST" && url.pathname === "/seed-users") {
             try {
-                const parsed = seedUsersSchema.safeParse(await req.json());
+                const raw = await readJson(req);
+                if (!raw.ok) return raw.res;
+                const parsed = seedUsersSchema.safeParse(raw.body);
                 if (!parsed.success) return badRequest("invalid seed-users payload", parsed.error.format());
                 const { run, count, prefix } = parsed.data;
                 const users = Array.from({ length: count }).map((_, i) => ({
@@ -232,7 +244,9 @@ const server = serve({
 
         if (req.method === "POST" && url.pathname === "/payments") {
             try {
-                const parsed = paymentsBodySchema.safeParse(await req.json());
+                const raw = await readJson(req);
+                if (!raw.ok) return raw.res;
+                const parsed = paymentsBodySchema.safeParse(raw.body);
                 if (!parsed.success) return badRequest("invalid payments payload", parsed.error.format());
                 const body = parsed.data;
                 // Paddle-shaped payload (matches what the handlers parse):
@@ -291,7 +305,9 @@ const server = serve({
 
         if (req.method === "POST" && url.pathname === "/analytics") {
             try {
-                const parsed = analyticsBodySchema.safeParse(await req.json());
+                const raw = await readJson(req);
+                if (!raw.ok) return raw.res;
+                const parsed = analyticsBodySchema.safeParse(raw.body);
                 if (!parsed.success) return badRequest("invalid analytics payload", parsed.error.format());
                 const body = parsed.data;
                 const userId = body.userId || `user_${Math.floor(Math.random() * 10000)}`;
@@ -333,7 +349,9 @@ const server = serve({
 
         if (req.method === "POST" && url.pathname === "/cron/seed") {
             try {
-                const parsed = cronSeedSchema.safeParse(await req.json());
+                const raw = await readJson(req);
+                if (!raw.ok) return raw.res;
+                const parsed = cronSeedSchema.safeParse(raw.body);
                 if (!parsed.success) return badRequest("invalid cron seed payload", parsed.error.format());
                 const count = parsed.data.count;
                 const run = parsed.data.run || `run_${Date.now().toString(36)}`;

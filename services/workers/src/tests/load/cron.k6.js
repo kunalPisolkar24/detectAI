@@ -9,7 +9,6 @@ const JSON_HEADERS = { headers: { 'Content-Type': 'application/json' } };
 export const options = {
     vus: 1,
     iterations: 1,
-    gracefulStop: '5m',
     thresholds: {
         http_req_failed: ['rate<0.01'],
         http_req_duration: [`p(95)<${thresholds.seedP95}`],

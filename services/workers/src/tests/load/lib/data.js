@@ -11,14 +11,16 @@ export function generateRunId(prefix) {
     return `${prefix}_${Date.now().toString(36)}_${randomString(4)}`;
 }
 
+// Pool identities must match POST /seed-users (`${prefix}_${run}_${i}`)
+// so pre-seeded rows exist and per-request upserts can be skipped.
 export function paymentsUser(run, vu, pool) {
     const slot = Number.isFinite(pool) && pool > 0 ? vu % pool : vu;
-    return `pay_${run}_u${slot}`;
+    return `pay_${run}_${slot}`;
 }
 
 export function analyticsUser(run, vu, iter, pool) {
     const slot = Number.isFinite(pool) && pool > 0 ? (vu + iter) % pool : `${vu}_${iter}`;
-    return `ana_${run}_u${slot}`;
+    return `ana_${run}_${slot}`;
 }
 
 // Stable lifecycle per user: created-first, then valid transitions only.
