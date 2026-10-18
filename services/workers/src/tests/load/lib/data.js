@@ -23,16 +23,30 @@ export function analyticsUser(run, vu, iter, pool) {
     return `ana_${run}_${slot}`;
 }
 
+// Single-use identity for verification samples: the row it asserts on can only
+// exist because of the event published for this exact (VU, iteration), so a
+// lost publish or a stalled worker cannot pass by accident. Costs one extra
+// user row per sample; pool users stay free of verify traffic.
+export function verifyUser(prefix, run, vu, iter) {
+    return `${prefix}_verify_${run}_${vu}_${iter}`;
+}
+
 // Stable lifecycle per user: created-first, then valid transitions only.
 // Random mixes without this poison the DLQ with InvalidTransitionError.
-export function paymentsEventFor(iter) {
+//
+// sharedSlots (POOL_SIZE < VUS) drops `subscription.canceled` from the later
+// events: a slot is then driven by several VUs whose publishes interleave
+// freely, so a cancel can land on a row that does not exist yet and
+// stateMachine rejects null -> CANCELED. The remaining types all resolve to
+// ACTIVE, which is legal from every state, so ordering stops mattering.
+export function paymentsEventFor(iter, sharedSlots = false) {
     if (iter === 0) return 'subscription.created';
     const eventTypes = [
         'subscription.updated',
         'subscription.updated',
         'subscription.activated',
-        'subscription.canceled',
     ];
+    if (!sharedSlots) eventTypes.push('subscription.canceled');
     return eventTypes[Math.floor(Math.random() * eventTypes.length)];
 }
 
