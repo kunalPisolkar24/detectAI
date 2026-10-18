@@ -1,0 +1,36 @@
+# Observability overlay for worker load tests.
+# Applied ONLY when `make load-test WORKER=<name> WITH_OBSERVABILITY=1` is used:
+#   docker compose -f infra/compose.load-<worker>.yml \
+#                  -f ../../infra/docker/otel/loadtest-observability.yml \
+#                  -f infra/compose.load.observability.yml up
+# (-f paths resolve from services/workers; the volume paths below resolve from
+# services/workers/infra, which is the project directory.)
+# Default runs (WITH_OBSERVABILITY=0) stay fully offline: no collector, no
+# network calls, unchanged behaviour.
+#
+# What it adds on the existing load project network:
+# - otel-collector-loadtest (shared atom at
+#   infra/docker/otel/loadtest-observability.yml): scrapes the worker's
+#   /metrics endpoint, collects hostmetrics + container stats, and exports
+#   traces/metrics/logs to New Relic EU with deployment.environment=loadtest.
+#
+# The worker itself needs no override here: compose.analytics|cron|payments.yml
+# already pass through OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_SERVICE_NAME and
+# OTEL_RESOURCE_ATTRIBUTES, and the Makefile sets those when the flag is on.
+# That keeps this file worker-agnostic instead of one overlay per rig.
+#
+# Required env (shell only, never committed):
+#   NEW_RELIC_LICENSE_KEY  ingest key (eu01...)
+# Empty key = exporter retries and drops; the worker keeps processing (fail-open).
+services:
+  otel-collector-loadtest:
+    environment:
+      # In-network target, never the host-bound port: the rig remaps host ports
+      # (LOAD_WORKER_PORT) to keep rigs side by side, but container ports are
+      # fixed per worker (7001 analytics / 7002 cron / 7003 payments).
+      - OTEL_SCRAPE_JOB=${WORKER}
+      - OTEL_SCRAPE_TARGET=worker-${WORKER}:${WORKER_METRICS_PORT}
+      - OTEL_SCRAPE_METRICS_PATH=/metrics
+    volumes:
+      - ../../../infra/docker/otel/otel-collector-loadtest.yaml:/etc/otelcol/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro

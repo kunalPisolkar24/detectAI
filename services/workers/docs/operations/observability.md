@@ -169,27 +169,46 @@ The Workers service uses OpenTelemetry for distributed tracing.
 | `sweep_expired` | Cron sweep iteration |
 | `cache.invalidate` | Cache invalidation batch |
 
+## Logs in New Relic
+
+Console JSON remains the local and `docker logs` path. When
+`OTEL_EXPORTER_OTLP_ENDPOINT` is set, the same records are also exported over
+OTLP (`/v1/logs`) so they are queryable in New Relic alongside traces. Console
+output is unaffected when the endpoint is unset, and an exporter failure never
+blocks the worker.
+
+Sensitive keys (`email`, `apiKey`, `password`, `PADDLE_API_KEY`, `Authorization`,
+the Paddle customer/subscription ids) are masked before export, and structured
+context values are dropped rather than serialised, since OTLP attributes are
+primitives only.
+
 ## Dashboards
 
-The service works with Grafana dashboards for visualization:
+Dashboards are published as code from `infra/observability` (Terraform). All
+three workers share one board, `detectai-workers (<environment>)`, rather than a
+board each, following the `detectai-chats` precedent (multiple `service.name`s,
+one board, one page each) and because one alert policy covers all three.
 
-### Setting Up Dashboards
+| Page | What it answers |
+|---|---|
+| `Overview` | Is any worker unhealthy? Throughput, errors, broker/cache connectivity, DLQ, cron expiry lag, eventloop lag |
+| `Analytics` / `Payments` | Per-worker RED, retries, dead letters, dedup, Paddle latency |
+| `Cron` | Sweep cadence, batch size, expiry lag, DB lock contention |
+| `<Worker> Logs` | Error stream, volume by level, errors by message, slow jobs |
+| `Infra` | Eventloop lag, heap, DB pool states, container CPU/memory/network |
 
-1. Import JSON files into Grafana
-2. Configure Prometheus as the data source
-3. Point to each worker's metrics port
+Counts and rates come from the Prometheus metrics above; percentiles come from
+spans. Sampling at `traceidratio 0.1` distorts span *counts*, not percentiles, so
+red and green widgets never mix the two.
 
-### Key Panels to Create
+To see a load run on the `detectai-workers (loadtest)` board:
 
-| Panel | Metric | Visualization |
-|-------|--------|---------------|
-| Job success rate | `worker_jobs_processed_total` | Time series |
-| Error rate | `worker_job_errors_total` | Time series |
-| Processing duration | `worker_job_duration_seconds` | Heatmap |
-| DLQ depth | `worker_dead_lettered_total` | Stat |
-| RabbitMQ status | `rabbitmq_connection_status` | Stat |
-| DB pool pressure | `db_pool_connections{state="waiting"}` | Time series |
-| Cron expiry lag | `worker_cron_expiry_lag_seconds` | Time series |
+```bash
+export NEW_RELIC_LICENSE_KEY="eu01..."
+make load-test WORKER=analytics WITH_OBSERVABILITY=1 VUS=10 DURATION=2m RPS=50
+```
+
+See `src/tests/load/README.md` for details.
 
 ## Alerts
 
@@ -197,45 +216,19 @@ Alerts notify you when something needs attention.
 
 ### Built-in Alerts
 
+Managed in `infra/observability/alerts.tf` under the
+`detectai-workers-<environment>` policy. Criticals are enabled in prod only, so
+Floci traffic never mails.
+
 | Alert | Condition | What It Means |
 |-------|-----------|---------------|
-| **Worker down** | `rabbitmq_connection_status == 0` for 2 min | Worker disconnected from broker |
-| **High error rate** | `rate(worker_job_errors_total[5m]) > 0.1` | Too many errors |
-| **DLQ growing** | `rate(worker_dead_lettered_total[5m]) > 0` | Messages failing |
-| **DB pool pressure** | `db_pool_connections{state="waiting"} > 5` | Database bottleneck |
-| **Cron loop stale** | `worker_cron_loop_iterations_total{result="success"}` unchanged for 30 min | Cron not sweeping |
-| **High expiry lag** | `worker_cron_expiry_lag_seconds > 3600` | Subscriptions expired > 1 hour ago |
+| **Worker error share high** | span error share > 2% for 10 min, any `worker-*` | Too many failed jobs |
+| **Cron expiry lag high** | `worker_cron_expiry_lag_seconds` > 1800 for 15 min | Sweeper is not keeping up |
+| **Workers dead-lettering messages** | `rate(worker_dead_lettered_total)` > 0 for 5 min | Messages permanently failing |
+| **Workers disconnected from RabbitMQ** | `min(rabbitmq_connection_status)` < 1 for 2 min | Consumers cannot progress |
 
-### Alert Rules
-
-```yaml
-groups:
-  - name: workers
-    rules:
-      - alert: WorkerDown
-        expr: rabbitmq_connection_status == 0
-        for: 2m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Worker {{ $labels.service }} disconnected from RabbitMQ"
-
-      - alert: HighErrorRate
-        expr: rate(worker_job_errors_total[5m]) > 0.1
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High error rate in {{ $labels.service }}"
-
-      - alert: CronLoopStale
-        expr: increase(worker_cron_loop_iterations_total{result="success"}[30m]) == 0
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Cron worker has not swept in 30 minutes"
-```
+Expiry lag is gauge-driven rather than a tick count: it fires on a stalled loop
+even when the failure is in log delivery rather than in sweeping.
 
 ## Monitoring Checklist
 

@@ -7,9 +7,8 @@ locals {
     web                      = "web"
     payment-gateway          = "payment-gateway"
     payment-gateway-loadtest = "payment-gateway"
-    worker-analytics         = "worker-analytics"
-    worker-payments          = "worker-payments"
-    worker-cron              = "worker-cron"
+    workers                  = "workers"
+    workers-loadtest         = "workers"
     inference                = "inference"
     document-parser          = "document-parser"
     document-parser-loadtest = "document-parser"
@@ -23,9 +22,8 @@ locals {
     web                      = "service-dashboard"
     payment-gateway          = "service-dashboard"
     payment-gateway-loadtest = "loadtest"
-    worker-analytics         = "service-dashboard"
-    worker-payments          = "service-dashboard"
-    worker-cron              = "service-dashboard"
+    workers                  = "service-dashboard"
+    workers-loadtest         = "loadtest"
     inference                = "service-dashboard"
     document-parser          = "service-dashboard"
     document-parser-loadtest = "loadtest"
@@ -36,7 +34,7 @@ locals {
 
   dashboard_env = {
     for k in keys(local.dashboard_scope) :
-    k => k == "document-parser-loadtest" || k == "payment-gateway-loadtest" || k == "chats-loadtest" ? "loadtest" : var.environment
+    k => contains(["document-parser-loadtest", "payment-gateway-loadtest", "chats-loadtest", "workers-loadtest"], k) ? "loadtest" : var.environment
   }
 }
 
