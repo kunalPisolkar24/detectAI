@@ -278,11 +278,19 @@ load-test: worker-%
 # signals) rather than throughput, and is sized to pass on a laptop. Do not
 # use it to judge performance: thresholds tuned for dedicated hosts still
 # apply (override with THRESHOLD_*).
+#
+# VUS=8 is headroom, not parallelism. The arrival-rate executor drops an
+# iteration whenever every VU is busy at the instant it is due, and the extra
+# VUs are allocated lazily, so a profile sized to the *mean* iteration time
+# still drops iterations on a slow host. Ingest p95 on a laptop is ~500ms, so
+# 2 it/s wants ~1.1 VUs on average but several during tail latency; VUS=2
+# crosses dropped_iterations (count==0) that way. Preallocating 8 keeps the
+# drop count at zero without asking the host for more than 2 it/s of work.
 load-check: worker-%
 ifeq ($(WORKER),cron)
 	@$(MAKE) load-test WORKER=cron SEED_COUNT=200 CRON_CHECK_INTERVAL_MS=5000
 else
-	@$(MAKE) load-test WORKER=$(WORKER) SCENARIO=load RPS=2 DURATION=30s VUS=2 POOL_SIZE=10 VERIFY_SAMPLE_RATE=0.25 DUP_WEIGHT=0.25
+	@$(MAKE) load-test WORKER=$(WORKER) SCENARIO=load RPS=2 DURATION=30s VUS=8 POOL_SIZE=10 VERIFY_SAMPLE_RATE=0.25 DUP_WEIGHT=0.25
 endif
 
 load-down: worker-%
