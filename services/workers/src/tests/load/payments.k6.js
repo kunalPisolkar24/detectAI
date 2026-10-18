@@ -9,6 +9,7 @@ import { metricCount, metricP, metricRate, printSummary } from './lib/summary.js
 import {
     assertQueueDrained,
     assertQueueEmpty,
+    assertQueueNotEmpty,
     assertSeries,
     processStartTime,
     publishedCounts,
@@ -22,6 +23,7 @@ import {
 const SETUP_PARAMS = { headers: { 'Content-Type': 'application/json' }, tags: { phase: 'setup' } };
 const INGEST_PARAMS = { headers: { 'Content-Type': 'application/json' }, tags: { phase: 'ingest' } };
 const EDGE_PARAMS = { headers: { 'Content-Type': 'application/json' }, tags: { phase: 'edge' } };
+const INVALID_PARAMS = { headers: { 'Content-Type': 'application/json' }, tags: { phase: 'invalid' } };
 // In-network URL under compose.load-payments.yml; host runs hit the mapped port.
 const WORKER_METRICS_URL = config.workerMetricsUrl || 'http://localhost:7003/metrics';
 const QUEUE = 'payment_events';
@@ -80,10 +82,12 @@ function postPayments(payload, checkName) {
     return ok;
 }
 
-// Pool user: exercises lifecycle transitions and pool contention.
-function sendNormal(userId, ensureUser, sharedSlots) {
+// Pool user: exercises lifecycle transitions and pool contention. `event` is the
+// pool-event ordinal (not __ITER) so created-first always refers to this slot's
+// first pool event.
+function sendNormal(userId, ensureUser, sharedSlots, event) {
     return postPayments({
-        event_type: paymentsEventFor(__ITER, sharedSlots),
+        event_type: paymentsEventFor(event, sharedSlots),
         userId,
         ensureUser,
     }, 'payments: ingest 200');
@@ -141,10 +145,59 @@ function sendInvalidBattery() {
     }
 }
 
+// Payloads the proxy accepts but the worker rejects. The proxy spreads
+// `...body.data` last into the published payload, so `data` overrides any field
+// it would otherwise synthesise — including ones it cannot produce itself.
+// Each case throws MissingFieldError inside SubscriptionUpdatedHandler at a
+// point AFTER PaymentService's userId check, so unhandled_events stays clean.
+// MissingFieldError is non-retryable (see isRetryableError), so these
+// dead-letter on the first attempt instead of burning the retry budget.
+function sendWorkerInvalidBattery() {
+    const cases = [
+        // parseStatus() returns null for an unrecognised status -> "status"
+        ['unknown status', { status: 'not_a_status' }],
+        // falsy customer_id -> "customer_id"
+        ['empty customer_id', { customer_id: '' }],
+        // new Date('not-a-date') is NaN -> "occurred_at"
+        ['unparseable occurred_at', { occurred_at: 'not-a-date' }],
+    ];
+    for (const [name, dataOverride] of cases) {
+        const res = http.post(`${config.proxyUrl}/payments`, JSON.stringify({
+            event_type: 'subscription.updated',
+            userId: `pay_invalid_${name.replace(/\W+/g, '_')}`,
+            ensureUser: false,
+            data: dataOverride,
+        }), INVALID_PARAMS);
+        // The proxy MUST accept this — if it rejects, nothing reached the
+        // worker and the scenario silently proved nothing.
+        const ok = check(res, { [`payments worker-invalid ${name} accepted by proxy`]: (r) => r.status === 200 });
+        workerMetrics.invalidCheck.add(ok);
+    }
+}
+
+// Counts POOL events only, per VU (k6 gives each VU its own module instance).
+//
+// __ITER cannot drive the lifecycle: a verification iteration consumes an
+// iteration without producing a pool event, so when iteration 0 is drawn for
+// verification the slot's first pool event arrives at iteration 1 or later —
+// which paymentsEventFor treats as "not the first event" and fills with the
+// random mix. A draw from that mix can be subscription.canceled against a user
+// with no subscription row yet, and stateMachine rejects null -> CANCELED, so
+// the message is dead-lettered and the run fails on an assertion about the
+// worker that the rig actually provoked. Tracking pool events separately
+// guarantees every slot's first pool event really is subscription.created.
+let poolEvent = 0;
+
 export default function (data) {
     // Edge scenario runs only the invalid battery (see buildOptions).
     if (config.scenario === 'edge') {
         sendInvalidBattery();
+        sleep(0.5);
+        return;
+    }
+
+    if (config.scenario === 'invalid') {
+        sendWorkerInvalidBattery();
         sleep(0.5);
         return;
     }
@@ -161,7 +214,7 @@ export default function (data) {
         const userId = paymentsUser(run, __VU, config.poolSize);
         const mode = pickWeighted([[1 - config.dupWeight, 'normal'], [config.dupWeight, 'dup']]);
         if (mode === 'dup') sendDuplicate(userId, ensureUser);
-        else sendNormal(userId, ensureUser, config.poolSize < config.paymentsVUs);
+        else sendNormal(userId, ensureUser, config.poolSize < config.paymentsVUs, poolEvent++);
     }
 
     if (config.scenario === 'smoke') sleep(0.5);
@@ -177,6 +230,7 @@ export function teardown(data) {
         console.log('teardown: mock proxy, skipping worker signal assertions');
         return;
     }
+    if (config.scenario === 'invalid') return teardownInvalid(data);
 
     assertQueueDrained(QUEUE);
     assertQueueDrained(`${QUEUE}_retry`);
@@ -221,7 +275,56 @@ export function teardown(data) {
     // Edge sends no duplicates at all, so the path only applies elsewhere.
     if (config.scenario !== 'edge') {
         assertSeries(series, 'dedup path exercised', 'worker_duplicate_events_total', { labels: { event_type: 'subscription.updated' }, min: 1 });
+        // Cancel coverage must be real rather than incidental. SubscriptionCanceledHandler
+        // logs nothing, so without this a run where the mix stopped producing
+        // subscription.canceled would report success while the CANCELED branches of
+        // the state machine went untested. Skipped when pool slots are shared,
+        // because that configuration drops cancels from the mix by design.
+        if (config.poolSize >= config.paymentsVUs) {
+            assertSeries(series, 'cancel path exercised', 'worker_jobs_processed_total', { labels: { job_type: 'subscription.canceled' }, min: 1 });
+        }
     }
+}
+
+// Inverted counterpart of the happy-path teardown: here a dead letter is the
+// expected outcome, so the DLQ must fill while the worker handles nothing.
+// The conservation property is unchanged in spirit — every published message
+// has to be accounted for — but "accounted for" now means dead-lettered.
+function teardownInvalid(data) {
+    assertQueueDrained(QUEUE);
+    assertQueueDrained(`${QUEUE}_retry`);
+    assertQueueNotEmpty(`${QUEUE}_dlq`);
+
+    const published = publishedCounts();
+    if (!published) return recordHealth('proxy /stats reachable', false, `${config.proxyUrl}/stats`);
+    const publishedCount = published[QUEUE] || 0;
+    recordHealth('proxy /stats reachable', true, `${QUEUE} published=${publishedCount}`);
+
+    if (data && typeof data.startedAt === 'number') {
+        const startedAt = processStartTime(WORKER_METRICS_URL);
+        recordHealth('worker did not restart', startedAt === data.startedAt,
+            `start_time=${startedAt} setup_start_time=${data.startedAt}`);
+    }
+
+    const { series, accounted } = waitForAccounted(
+        WORKER_METRICS_URL,
+        publishedCount,
+        (s) => seriesValue(s, 'worker_dead_lettered_total'),
+    );
+    if (!series) return recordHealth('worker /metrics reachable', false, WORKER_METRICS_URL);
+    recordHealth('worker /metrics reachable', true, WORKER_METRICS_URL);
+
+    recordHealth('invalid payloads reached the worker', publishedCount >= 1, `published=${publishedCount}`);
+    recordHealth('every invalid payload dead-lettered', accounted >= publishedCount,
+        `dead_lettered=${accounted} published=${publishedCount}`);
+    assertSeries(series, 'worker handled none of them', 'worker_jobs_processed_total', { exact: 0 });
+    // Every rejection must be a validation failure, not something incidental.
+    assertSeries(series, 'rejections were validation errors', 'worker_job_errors_total', { labels: { error_type: 'missing_status' }, min: 1 });
+    assertSeries(series, 'rejections were validation errors (customer_id)', 'worker_job_errors_total', { labels: { error_type: 'missing_customer_id' }, min: 1 });
+    assertSeries(series, 'rejections were validation errors (occurred_at)', 'worker_job_errors_total', { labels: { error_type: 'missing_occurred_at' }, min: 1 });
+    // An infra fault during the run is not an expected rejection, so it must
+    // not hide behind the dead letters.
+    assertSeries(series, 'worker requeued nothing for infra faults', 'worker_infra_requeued_total', { exact: 0 });
 }
 
 export function handleSummary(data) {

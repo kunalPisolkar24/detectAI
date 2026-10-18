@@ -286,11 +286,23 @@ load-test: worker-%
 # 2 it/s wants ~1.1 VUs on average but several during tail latency; VUS=2
 # crosses dropped_iterations (count==0) that way. Preallocating 8 keeps the
 # drop count at zero without asking the host for more than 2 it/s of work.
+#
+# RABBITMQ_PREFETCH=1 makes the profile strictly serial for payments, and it is
+# needed together with the created-first lifecycle in payments.k6.js. Queue
+# order alone does not imply processing order: with prefetch>1 the worker can
+# handle a slot's second event while its first is still in flight, and the
+# guard in lockAndUpdateSubscription is SELECT ... FOR UPDATE, which takes no
+# lock on a row that does not exist yet. A concurrent subscription.canceled then
+# reads "no row" and hits validateStatusTransition(null, CANCELED) -> dead
+# letter. Serial delivery means the created row is committed before any later
+# event for that slot is picked up. Throughput profiles should pass
+# RABBITMQ_PREFETCH explicitly, since serialising the consumer is exactly what
+# they are not measuring.
 load-check: worker-%
 ifeq ($(WORKER),cron)
 	@$(MAKE) load-test WORKER=cron SEED_COUNT=200 CRON_CHECK_INTERVAL_MS=5000
 else
-	@$(MAKE) load-test WORKER=$(WORKER) SCENARIO=load RPS=2 DURATION=30s VUS=8 POOL_SIZE=10 VERIFY_SAMPLE_RATE=0.25 DUP_WEIGHT=0.25
+	@$(MAKE) load-test WORKER=$(WORKER) SCENARIO=load RPS=2 DURATION=30s VUS=8 POOL_SIZE=10 VERIFY_SAMPLE_RATE=0.25 DUP_WEIGHT=0.25 RABBITMQ_PREFETCH=$(if $(filter payments,$(WORKER)),1,)
 endif
 
 load-down: worker-%

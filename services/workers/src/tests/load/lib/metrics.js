@@ -12,6 +12,10 @@ export const workerMetrics = {
     ingestSuccess: new Rate('worker_ingest_success'),
     verifySuccess: new Rate('worker_verify_success'),
     negativeCheck: new Rate('worker_negative_check'),
+    // Worker-invalid payloads in SCENARIO=invalid: the proxy must ACCEPT these
+    // (otherwise they never reach the worker and the run proves nothing), so
+    // rate==1 is the correct gate here — the inverse of negative_check.
+    invalidCheck: new Rate('worker_invalid_check'),
     healthCheck: new Rate('worker_health_check'),
     // Verifications attempted; teardown thresholds guarantee this is non-zero
     // so a run that never verified anything cannot pass vacuously.

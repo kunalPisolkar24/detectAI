@@ -9,6 +9,7 @@ import { metricCount, metricP, metricRate, printSummary } from './lib/summary.js
 import {
     assertQueueDrained,
     assertQueueEmpty,
+    assertQueueNotEmpty,
     assertSeries,
     processStartTime,
     publishedCounts,
@@ -22,6 +23,7 @@ import {
 const SETUP_PARAMS = { headers: { 'Content-Type': 'application/json' }, tags: { phase: 'setup' } };
 const INGEST_PARAMS = { headers: { 'Content-Type': 'application/json' }, tags: { phase: 'ingest' } };
 const EDGE_PARAMS = { headers: { 'Content-Type': 'application/json' }, tags: { phase: 'edge' } };
+const INVALID_PARAMS = { headers: { 'Content-Type': 'application/json' }, tags: { phase: 'invalid' } };
 // In-network URL under compose.load-analytics.yml; host runs hit the mapped port.
 const WORKER_METRICS_URL = config.workerMetricsUrl || 'http://localhost:7001/metrics';
 const QUEUE = 'analytics.usage';
@@ -131,10 +133,41 @@ function sendInvalidBattery() {
     }
 }
 
+// Payloads the proxy accepts but the worker rejects. UsageEventSchema requires
+// eventId to be a UUID, while the proxy only checks min(1).max(128) — so a
+// non-UUID id reaches the worker and fails its own validation. The worker
+// raises MissingFieldError, which is non-retryable (see isRetryableError), so
+// the message dead-letters immediately instead of burning the retry budget.
+// ensureUser=false because validation fails before the user row is ever read.
+function sendWorkerInvalidBattery() {
+    // eventId is the only lever here: the proxy synthesises a *valid* random
+    // UUID when one is absent, so "missing eventId" would be accepted by the
+    // worker rather than rejected. Every case must therefore be a non-UUID
+    // string that still clears the proxy's min(1).max(128) check.
+    const cases = [
+        ['non-uuid eventId', { userId: 'ana_invalid_u1', count: 1, eventId: 'not-a-uuid', ensureUser: false }],
+        ['uuid shape with invalid hex', { userId: 'ana_invalid_u2', count: 1, eventId: 'ZZZZZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZZZZZZZZZ', ensureUser: false }],
+        ['uuid with trailing junk', { userId: 'ana_invalid_u3', count: 1, eventId: '123e4567-e89b-12d3-a456-426614174000x', ensureUser: false }],
+    ];
+    for (const [name, body] of cases) {
+        const res = http.post(`${config.proxyUrl}/analytics`, JSON.stringify(body), INVALID_PARAMS);
+        // The proxy MUST accept this — if it rejects, nothing reached the
+        // worker and the scenario silently proved nothing.
+        const ok = check(res, { [`analytics worker-invalid ${name} accepted by proxy`]: (r) => r.status === 200 });
+        workerMetrics.invalidCheck.add(ok);
+    }
+}
+
 export default function (data) {
     // Edge scenario runs only the invalid battery (see buildOptions).
     if (config.scenario === 'edge') {
         sendInvalidBattery();
+        sleep(0.5);
+        return;
+    }
+
+    if (config.scenario === 'invalid') {
+        sendWorkerInvalidBattery();
         sleep(0.5);
         return;
     }
@@ -167,6 +200,7 @@ export function teardown(data) {
         console.log('teardown: mock proxy, skipping worker signal assertions');
         return;
     }
+    if (config.scenario === 'invalid') return teardownInvalid(data);
 
     assertQueueDrained(QUEUE);
     assertQueueDrained(`${QUEUE}_retry`);
@@ -213,6 +247,43 @@ export function teardown(data) {
     if (config.scenario !== 'edge') {
         assertSeries(series, 'dedup path exercised', 'worker_cron_stale_events_filtered_total', { labels: { reason: 'duplicate' }, min: 1 });
     }
+}
+
+// Inverted counterpart of the happy-path teardown: here a dead letter is the
+// expected outcome, so the DLQ must fill while the worker handles nothing.
+// The conservation property is unchanged in spirit — every published message
+// has to be accounted for — but "accounted for" now means dead-lettered.
+function teardownInvalid(data) {
+    assertQueueDrained(QUEUE);
+    assertQueueDrained(`${QUEUE}_retry`);
+    assertQueueNotEmpty(`${QUEUE}_dlq`);
+
+    const published = publishedCounts();
+    if (!published) return recordHealth('proxy /stats reachable', false, `${config.proxyUrl}/stats`);
+    const publishedCount = published[QUEUE] || 0;
+    recordHealth('proxy /stats reachable', true, `${QUEUE} published=${publishedCount}`);
+
+    if (data && typeof data.startedAt === 'number') {
+        const startedAt = processStartTime(WORKER_METRICS_URL);
+        recordHealth('worker did not restart', startedAt === data.startedAt,
+            `start_time=${startedAt} setup_start_time=${data.startedAt}`);
+    }
+
+    const { series, accounted } = waitForAccounted(
+        WORKER_METRICS_URL,
+        publishedCount,
+        (s) => seriesValue(s, 'worker_dead_lettered_total'),
+    );
+    if (!series) return recordHealth('worker /metrics reachable', false, WORKER_METRICS_URL);
+    recordHealth('worker /metrics reachable', true, WORKER_METRICS_URL);
+
+    recordHealth('invalid payloads reached the worker', publishedCount >= 1, `published=${publishedCount}`);
+    recordHealth('every invalid payload dead-lettered', accounted >= publishedCount,
+        `dead_lettered=${accounted} published=${publishedCount}`);
+    assertSeries(series, 'worker handled none of them', 'worker_jobs_processed_total', { exact: 0 });
+    // An infra fault during the run is not an expected rejection, so it must
+    // not hide behind the dead letters.
+    assertSeries(series, 'worker requeued nothing for infra faults', 'worker_infra_requeued_total', { exact: 0 });
 }
 
 export function handleSummary(data) {

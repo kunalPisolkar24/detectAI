@@ -25,6 +25,22 @@ export function buildOptions({ vus, duration, rps, peakFloor }) {
         };
     }
 
+    if (config.scenario === 'invalid') {
+        return {
+            vus: config.vusOverride || 2,
+            duration: config.durationOverride || '30s',
+            thresholds: {
+                checks: [`rate>=${thresholds.successRate}`],
+                // rate==1, not >=: every payload here must get through the proxy
+                // so it can reach the worker. One silent proxy rejection would
+                // mean the run exercised worker validation with zero samples.
+                worker_invalid_check: ['rate==1'],
+                worker_health_check: ['rate==1'],
+                worker_teardown_runs: ['count>0'],
+            },
+        };
+    }
+
     if (config.scenario === 'smoke') {
         return {
             vus: config.vusOverride || 2,
@@ -43,7 +59,11 @@ export function buildOptions({ vus, duration, rps, peakFloor }) {
                     // A soak that inherits the 30s load default is not a soak.
                     duration: config.durationOverride || '10m',
                     preAllocatedVUs: Math.min(vus, 10),
-                    maxVUs: 50,
+                    // Derived like the other executors rather than pinned to 50:
+                    // a soak at 5 it/s with a long verify budget can need more
+                    // than a hardcoded ceiling, and one that needs fewer should
+                    // not be told to allocate 50 up front.
+                    maxVUs: Math.min(Math.max(vus * 4, 50), 200),
                 },
             },
             thresholds: baseThresholds(),
@@ -56,7 +76,9 @@ export function buildOptions({ vus, duration, rps, peakFloor }) {
             scenarios: {
                 stress: {
                     executor: 'ramping-arrival-rate',
-                    startRate: 5,
+                    // Must not exceed the first stage's target, or the ramp
+                    // starts above where it is supposed to be going.
+                    startRate: Math.min(5, rps),
                     timeUnit: '1s',
                     preAllocatedVUs: vus,
                     maxVUs: Math.min(Math.max(vus * 4, 50), 200),

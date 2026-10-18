@@ -106,6 +106,22 @@ export function assertSeries(series, label, name, { labels = {}, exact, min } = 
 // Polls /metrics until predicate(series) holds. The cron gauge that reports
 // "backlog drained" is only reset by the next empty sweep, so a one-shot read
 // right after the drain check races that sweep.
+// Inverse of assertQueueEmpty. The invalid-payload scenario needs messages to
+// land in the DLQ, so "non-empty" is the passing state there. Polls because a
+// message is dead-lettered when it is rejected, which is after the publish that
+// scheduled it.
+export function assertQueueNotEmpty(queue) {
+    const deadline = Date.now() + config.signalTimeoutMs;
+    let depth = null;
+    while (Date.now() < deadline) {
+        depth = queueDepth(queue);
+        if (depth && depth.messageCount > 0) break;
+        sleep(config.signalPollMs / 1000);
+    }
+    const ok = !!depth && depth.messageCount > 0;
+    return recordHealth(`${queue} received dead letters`, ok, depth ? `messageCount=${depth.messageCount}` : 'no /queue-depth response');
+}
+
 export function waitForWorkerSignal(url, predicate) {
     const deadline = Date.now() + config.signalTimeoutMs;
     let series = null;

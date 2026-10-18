@@ -13,6 +13,13 @@ const DRAIN_PARAMS = { tags: { phase: 'drain' } };
 // In-network URL under compose.load-cron.yml; host runs hit the mapped port.
 const WORKER_METRICS_URL = config.workerMetricsUrl || 'http://localhost:7002/metrics';
 
+// This rig is a single seed-then-drain check, not an arrival-rate profile, so
+// it does not go through buildOptions and cannot honour SCENARIO. Say so
+// instead of silently running the seed rig when a caller asks for edge/soak.
+if (config.scenario && config.scenario !== 'load') {
+    console.warn(`cron: SCENARIO=${config.scenario} is not implemented by the cron rig; running the seed-and-drain profile`);
+}
+
 export function setup() {
     // Boot time of the worker under test; teardown fails the run if it changed,
     // because a restart silently zeroes every in-process counter.
