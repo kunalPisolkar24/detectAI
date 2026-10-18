@@ -6,10 +6,17 @@ import { Logger } from "@shared/logging/Logger";
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 const PORT = parseInt(process.env.PROXY_PORT || "9999", 10) || 9999;
+// Host runs bind loopback; containers must bind all interfaces to be reachable
+// from the k6 container (compose.load-*.yml set PROXY_HOST=0.0.0.0).
+const HOST = process.env.PROXY_HOST || "127.0.0.1";
 const MOCK_MODE = process.env.MOCK_MODE === "true";
 // Cron rig has no broker (seed-only): REQUIRE_BROKER=0 drops the AMQP
 // requirement from /health and skips connecting altogether.
 const REQUIRE_BROKER = process.env.REQUIRE_BROKER !== "0";
+// Seeded subscriptions expire this long before the seed call, so the sweeper's
+// lag gauge measures sweep cadence instead of a fabricated fixture age (24h
+// ago made every lag reading meaningless).
+const DEFAULT_SEED_AGE_SECONDS = parseInt(process.env.SEED_AGE_SECONDS || "30", 10) || 30;
 
 const PAYMENTS_QUEUE = "payment_events";
 const ANALYTICS_QUEUE = "analytics.usage";
@@ -18,12 +25,21 @@ const ALLOWED_DEPTH_QUEUES = new Set([
     ANALYTICS_QUEUE,
     `${PAYMENTS_QUEUE}_dlq`,
     `${ANALYTICS_QUEUE}_dlq`,
+    // k6 teardown waits for retries to land before checking the DLQ.
+    `${PAYMENTS_QUEUE}_retry`,
+    `${ANALYTICS_QUEUE}_retry`,
 ]);
 
 // Connections (confirm channel so publishes are acked by the broker).
 let amqpConn: ChannelModel | null = null;
 let amqpChannel: ConfirmChannel | null = null;
 let connecting = false;
+
+// Publishes the broker has confirmed, per queue. This is the authority on how
+// much work the rig actually put on the wire: k6 cannot report its own totals
+// to teardown, and counting only confirmed publishes keeps a failed publish
+// from inflating the worker's share of the reconciliation.
+const publishStats: Record<string, number> = { [PAYMENTS_QUEUE]: 0, [ANALYTICS_QUEUE]: 0 };
 
 async function initAmqp(attempt = 1): Promise<void> {
     if (MOCK_MODE || !REQUIRE_BROKER || connecting) return;
@@ -71,6 +87,7 @@ async function publishConfirmed(queue: string, body: string): Promise<boolean> {
         const ok = ch.sendToQueue(queue, Buffer.from(body), { persistent: true });
         if (!ok) Logger.warn("Proxy publish buffer full, waiting for confirms", { queue });
         await ch.waitForConfirms();
+        publishStats[queue] = (publishStats[queue] ?? 0) + 1;
         return true;
     } catch (error) {
         Logger.error("Proxy publish failed", error, { queue });
@@ -122,6 +139,7 @@ const seedUsersSchema = z.object({
 const cronSeedSchema = z.object({
     count: z.number().int().min(1).max(20000).optional().default(100),
     run: z.string().min(1).max(64).optional(),
+    ageSeconds: z.number().int().min(1).max(86400).optional(),
 });
 
 async function checkDb(): Promise<boolean> {
@@ -136,6 +154,7 @@ async function checkDb(): Promise<boolean> {
 initAmqp().catch(() => {});
 
 const server = serve({
+    hostname: HOST,
     port: PORT,
     async fetch(req) {
         const url = new URL(req.url);
@@ -155,6 +174,10 @@ const server = serve({
             const amqpOk = MOCK_MODE || !REQUIRE_BROKER || !!amqpChannel;
             const ok = dbOk && amqpOk;
             return json({ status: ok ? "ready" : "not_ready", db: dbOk, amqp: amqpOk }, ok ? 200 : 503);
+        }
+
+        if (req.method === "GET" && url.pathname === "/stats") {
+            return json({ mock: MOCK_MODE, published: { ...publishStats } });
         }
 
         if (req.method === "GET" && url.pathname === "/queue-depth") {
@@ -355,9 +378,10 @@ const server = serve({
                 if (!parsed.success) return badRequest("invalid cron seed payload", parsed.error.format());
                 const count = parsed.data.count;
                 const run = parsed.data.run || `run_${Date.now().toString(36)}`;
+                const ageSeconds = parsed.data.ageSeconds ?? DEFAULT_SEED_AGE_SECONDS;
 
                 const now = new Date();
-                const expiredDate = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 1 day ago
+                const expiredDate = new Date(now.getTime() - ageSeconds * 1000);
 
                 const users = Array.from({ length: count }).map((_, i) => ({
                     id: `load_test_${run}_${i}`,
@@ -381,7 +405,7 @@ const server = serve({
                     await prisma.subscription.createMany({ data: subscriptions, skipDuplicates: true });
                 }
 
-                return json({ success: true, count, run });
+                return json({ success: true, count, run, ageSeconds });
             } catch (error) {
                 return json({ error: (error as Error).message }, 500);
             }
@@ -408,4 +432,4 @@ async function shutdown(signal: string): Promise<void> {
 process.once("SIGINT", () => shutdown("SIGINT"));
 process.once("SIGTERM", () => shutdown("SIGTERM"));
 
-Logger.info(`Load Testing Proxy running on http://localhost:${PORT}`);
+Logger.info(`Load Testing Proxy running on http://${HOST}:${PORT}`);

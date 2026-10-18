@@ -8,10 +8,36 @@ RUN_ID ?=
 POOL_SIZE ?= 100
 VERIFY_TIMEOUT_MS ?=
 VERIFY_POLL_MS ?=
+# Shares of the iteration mix (see src/tests/load/lib/config.js). Empty keeps
+# the script defaults (dup 5%; verify 10%); `make load-check` raises both so
+# the dedup/verify assertions stay deterministic on short runs.
+VERIFY_SAMPLE_RATE ?=
+DUP_WEIGHT ?=
 # Fast sweep cadence for the load rig only (worker-up keeps the 15m stack
 # default): the worker idles this long when no rows are expired, so 15m would
 # always outlast the k6 drain poll. Only referenced by LOAD_RUN_ENV below.
 CRON_CHECK_INTERVAL_MS ?= 10000
+CRON_BATCH_SIZE ?= 100
+# Cron drain budget must outlast the sweeper's work: SEED_COUNT rows drain in
+# ceil(SEED_COUNT/CRON_BATCH_SIZE) passes with a 5s cooldown between full
+# passes, plus ~60s slack for the first boot/migrate. Floor 180s.
+CRON_VERIFY_TIMEOUT_MS ?= $(shell t=$$(( (($(SEED_COUNT) + $(CRON_BATCH_SIZE) - 1) / $(CRON_BATCH_SIZE)) * 5000 + 60000 )); [ $$t -lt 180000 ] && t=180000; echo $$t)
+# Drain poll cadence for the cron rig. Raise it on slow hosts so a 1000-row
+# seed does not spend the whole budget waiting on Postgres round trips.
+CRON_VERIFY_POLL_MS ?=
+# Seeded cron rows expire this long before the seed call (proxy default 30s).
+SEED_AGE_SECONDS ?=
+# Runs the proxy in mock mode: no rows are ever written, so k6 skips row
+# verification and the worker-signal assertions. Both the proxy and k6 read this,
+# so it must reach both containers or the two skip paths disagree.
+MOCK_MODE ?=
+export MOCK_MODE
+# Teardown waits (queue drain, backlog settle) and their poll cadence.
+SIGNAL_TIMEOUT_MS ?=
+SIGNAL_POLL_MS ?=
+# Drain SLO for the cron rig: one sample, so it reads as "how long did the
+# sweep take". Raise for large SEED_COUNT, lower only with evidence.
+THRESHOLD_DRAIN_P95 ?=
 # Leave empty by default so each worker's compose fallback applies (payments 10,
 # analytics 1). Export so an explicit `RABBITMQ_PREFETCH=N make ...` reaches compose
 # interpolation (compose reads shell env, and make vars are not exported by default).
@@ -52,7 +78,7 @@ REDIS_URL ?= redis://:user_cache_password@localhost:6379
 EVENT_REDIS_URL ?= redis://:events_password@localhost:6382
 RABBITMQ_URL ?= amqp://guest:guest@localhost:5672
 
-.PHONY: help proxy proxy-stop load-test load-down load-payments load-analytics load-cron \
+.PHONY: help proxy proxy-stop load-test load-check load-down load-payments load-analytics load-cron \
 	dev-payments dev-analytics dev-cron test test-integration \
 	worker-up worker-down worker-down-v worker-logs worker-ps worker-build worker-config
 
@@ -77,8 +103,10 @@ help:
 	@echo ""
 	@echo "Load Testing (containerized rigs in infra/compose.load-*.yml):"
 	@echo "  make load-test WORKER=analytics|payments|cron - Run k6 in containers (params below)"
-	@echo "    VUS=10 DURATION=2m RPS=50 SCENARIO=load|smoke|stress|soak|edge POOL_SIZE=100 RUN_ID= SEED_COUNT=1000 (cron seed size) RABBITMQ_PREFETCH=(default: payments 10, analytics 1) POOL_MAX=(default 5)"
+	@echo "    VUS=10 DURATION=2m RPS=50 SCENARIO=load|smoke|stress|soak|edge POOL_SIZE=100 RUN_ID= SEED_COUNT=1000 (cron seed size) VERIFY_SAMPLE_RATE=(default 0.1) DUP_WEIGHT=(default 0.05) RABBITMQ_PREFETCH=(default: payments 10, analytics 1) POOL_MAX=(default 5)"
 	@echo "    e.g. make load-test WORKER=payments VUS=10 DURATION=2m RPS=50 RABBITMQ_PREFETCH=10"
+	@echo "    CRON_VERIFY_POLL_MS=(default 2000) MOCK_MODE=(default false; skips row verification and worker assertions)"
+	@echo "  make load-check WORKER=... - Small correctness run (~60 requests) that must pass on a laptop"
 	@echo "  make load-down WORKER=... - Tear down the load rig (removes volumes)"
 	@echo "  make proxy           - Start the load testing proxy on host (for local runs)"
 	@echo "  make proxy-stop      - Kill any existing proxy process on port 9999"
@@ -208,6 +236,7 @@ proxy:
 	 REDIS_URL=$(REDIS_URL) \
 	 EVENT_REDIS_URL=$(EVENT_REDIS_URL) \
 	 RABBITMQ_URL=$(RABBITMQ_URL) \
+	 MOCK_MODE=$(MOCK_MODE) \
 	 bun run src/tests/load/proxy.ts
 
 proxy-stop:
@@ -233,13 +262,48 @@ LOAD_RUN_ENV = POSTGRES_PORT=$(LOAD_POSTGRES_PORT) REDIS_PORT=$(LOAD_REDIS_PORT)
 	EVENT_REDIS_PORT=$(LOAD_EVENTS_PORT) RABBITMQ_PORT=$(LOAD_RABBITMQ_PORT) \
 	WORKER_ANALYTICS_PORT=$(LOAD_WORKER_PORT) WORKER_CRON_PORT=$(LOAD_WORKER_PORT) \
 	WORKER_PAYMENTS_PORT=$(LOAD_WORKER_PORT) RABBITMQ_PREFETCH=$(RABBITMQ_PREFETCH) POOL_MAX=$(POOL_MAX) \
-	CRON_CHECK_INTERVAL_MS=$(CRON_CHECK_INTERVAL_MS)
+	CRON_CHECK_INTERVAL_MS=$(CRON_CHECK_INTERVAL_MS) CRON_BATCH_SIZE=$(CRON_BATCH_SIZE) \
+	CRON_VERIFY_TIMEOUT_MS=$(CRON_VERIFY_TIMEOUT_MS) CRON_VERIFY_POLL_MS=$(CRON_VERIFY_POLL_MS) \
+	SEED_AGE_SECONDS=$(SEED_AGE_SECONDS) MOCK_MODE=$(MOCK_MODE) \
+	SIGNAL_TIMEOUT_MS=$(SIGNAL_TIMEOUT_MS) SIGNAL_POLL_MS=$(SIGNAL_POLL_MS)
 
 load-test: worker-%
 	$(LOAD_COMPOSE) build
 	$(LOAD_RUN_ENV) $(LOAD_COMPOSE) -f infra/compose.migrate.yml run --rm db-migrate
-	$(LOAD_RUN_ENV) VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) SEED_COUNT=$(SEED_COUNT) SCENARIO=$(SCENARIO) RUN_ID=$(RUN_ID) POOL_SIZE=$(POOL_SIZE) VERIFY_TIMEOUT_MS=$(VERIFY_TIMEOUT_MS) VERIFY_POLL_MS=$(VERIFY_POLL_MS) \
+	$(LOAD_RUN_ENV) VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) SEED_COUNT=$(SEED_COUNT) SCENARIO=$(SCENARIO) RUN_ID=$(RUN_ID) POOL_SIZE=$(POOL_SIZE) VERIFY_TIMEOUT_MS=$(VERIFY_TIMEOUT_MS) VERIFY_POLL_MS=$(VERIFY_POLL_MS) VERIFY_SAMPLE_RATE=$(VERIFY_SAMPLE_RATE) DUP_WEIGHT=$(DUP_WEIGHT) THRESHOLD_DRAIN_P95=$(THRESHOLD_DRAIN_P95) \
 	$(LOAD_COMPOSE) up --build --abort-on-container-exit --exit-code-from k6
+
+# Small correctness profile: ~60 requests, finishes in about a minute per
+# worker. Verifies assertions (verify tripwire, dedup counter, teardown
+# signals) rather than throughput, and is sized to pass on a laptop. Do not
+# use it to judge performance: thresholds tuned for dedicated hosts still
+# apply (override with THRESHOLD_*).
+#
+# VUS=8 is headroom, not parallelism. The arrival-rate executor drops an
+# iteration whenever every VU is busy at the instant it is due, and the extra
+# VUs are allocated lazily, so a profile sized to the *mean* iteration time
+# still drops iterations on a slow host. Ingest p95 on a laptop is ~500ms, so
+# 2 it/s wants ~1.1 VUs on average but several during tail latency; VUS=2
+# crosses dropped_iterations (count==0) that way. Preallocating 8 keeps the
+# drop count at zero without asking the host for more than 2 it/s of work.
+#
+# RABBITMQ_PREFETCH=1 makes the profile strictly serial for payments, and it is
+# needed together with the created-first lifecycle in payments.k6.js. Queue
+# order alone does not imply processing order: with prefetch>1 the worker can
+# handle a slot's second event while its first is still in flight, and the
+# guard in lockAndUpdateSubscription is SELECT ... FOR UPDATE, which takes no
+# lock on a row that does not exist yet. A concurrent subscription.canceled then
+# reads "no row" and hits validateStatusTransition(null, CANCELED) -> dead
+# letter. Serial delivery means the created row is committed before any later
+# event for that slot is picked up. Throughput profiles should pass
+# RABBITMQ_PREFETCH explicitly, since serialising the consumer is exactly what
+# they are not measuring.
+load-check: worker-%
+ifeq ($(WORKER),cron)
+	@$(MAKE) load-test WORKER=cron SEED_COUNT=200 CRON_CHECK_INTERVAL_MS=5000
+else
+	@$(MAKE) load-test WORKER=$(WORKER) SCENARIO=load RPS=2 DURATION=30s VUS=8 POOL_SIZE=10 VERIFY_SAMPLE_RATE=0.25 DUP_WEIGHT=0.25 RABBITMQ_PREFETCH=$(if $(filter payments,$(WORKER)),1,)
+endif
 
 load-down: worker-%
 	$(LOAD_COMPOSE) down -v --remove-orphans
@@ -247,15 +311,15 @@ load-down: worker-%
 # Legacy host runs (proxy on host + local k6 binary; prefer load-test above)
 load-payments:
 	@echo "Running Payments Load Test (SCENARIO=$(SCENARIO) VUS=$(VUS) RPS=$(RPS), DURATION=$(DURATION))..."
-	VUS=$(VUS) RPS=$(RPS) DURATION=$(DURATION) SCENARIO=$(SCENARIO) RUN_ID=$(RUN_ID) POOL_SIZE=$(POOL_SIZE) k6 run src/tests/load/payments.k6.js
+	VUS=$(VUS) RPS=$(RPS) DURATION=$(DURATION) SCENARIO=$(SCENARIO) RUN_ID=$(RUN_ID) POOL_SIZE=$(POOL_SIZE) VERIFY_SAMPLE_RATE=$(VERIFY_SAMPLE_RATE) DUP_WEIGHT=$(DUP_WEIGHT) MOCK_MODE=$(MOCK_MODE) k6 run src/tests/load/payments.k6.js
 
 load-analytics:
 	@echo "Running Analytics Load Test (SCENARIO=$(SCENARIO) VUS=$(VUS) RPS=$(RPS), DURATION=$(DURATION))..."
-	VUS=$(VUS) RPS=$(RPS) DURATION=$(DURATION) SCENARIO=$(SCENARIO) RUN_ID=$(RUN_ID) POOL_SIZE=$(POOL_SIZE) k6 run src/tests/load/analytics.k6.js
+	VUS=$(VUS) RPS=$(RPS) DURATION=$(DURATION) SCENARIO=$(SCENARIO) RUN_ID=$(RUN_ID) POOL_SIZE=$(POOL_SIZE) VERIFY_SAMPLE_RATE=$(VERIFY_SAMPLE_RATE) DUP_WEIGHT=$(DUP_WEIGHT) MOCK_MODE=$(MOCK_MODE) k6 run src/tests/load/analytics.k6.js
 
 load-cron:
 	@echo "Running Cron Seed (SEED_COUNT=$(SEED_COUNT))..."
-	SEED_COUNT=$(SEED_COUNT) RUN_ID=$(RUN_ID) k6 run src/tests/load/cron.k6.js
+	SEED_COUNT=$(SEED_COUNT) RUN_ID=$(RUN_ID) CRON_VERIFY_TIMEOUT_MS=$(CRON_VERIFY_TIMEOUT_MS) CRON_VERIFY_POLL_MS=$(CRON_VERIFY_POLL_MS) k6 run src/tests/load/cron.k6.js
 
 # Development (Local Bun)
 dev-payments:

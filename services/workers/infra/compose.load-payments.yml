@@ -30,6 +30,11 @@ services:
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - RABBITMQ_URL=${RABBITMQ_URL}
       - PROXY_PORT=9999
+      # k6 reaches the proxy over the compose network, so it must bind 0.0.0.0.
+      - PROXY_HOST=0.0.0.0
+      # Must reach k6 too: the runtime skip and the threshold skip both key off
+      # mock mode, and they read it from separate processes.
+      - MOCK_MODE=${MOCK_MODE:-false}
     depends_on:
       postgres-users:
         condition: service_healthy
@@ -46,12 +51,10 @@ services:
 
   k6:
     image: grafana/k6:0.55.0
-    # Run as root: the k6 image defaults to a non-root user, which cannot
-    # write --summary-export=/out/summary.json to the fresh named volume.
-    user: "0:0"
-    command: run --summary-export=/out/summary.json /scripts/payments.k6.js
+    command: run /scripts/payments.k6.js
     environment:
       - PROXY_URL=http://proxy:9999
+      - MOCK_MODE=${MOCK_MODE:-}
       - VUS=${VUS:-}
       - DURATION=${DURATION:-}
       - RPS=${RPS:-}
@@ -60,6 +63,11 @@ services:
       - POOL_SIZE=${POOL_SIZE:-}
       - VERIFY_TIMEOUT_MS=${VERIFY_TIMEOUT_MS:-}
       - VERIFY_POLL_MS=${VERIFY_POLL_MS:-}
+      - VERIFY_SAMPLE_RATE=${VERIFY_SAMPLE_RATE:-}
+      - DUP_WEIGHT=${DUP_WEIGHT:-}
+      - WORKER_METRICS_URL=${WORKER_METRICS_URL:-http://worker-payments:7003/metrics}
+      - SIGNAL_TIMEOUT_MS=${SIGNAL_TIMEOUT_MS:-}
+      - SIGNAL_POLL_MS=${SIGNAL_POLL_MS:-}
       - THRESHOLD_SUCCESS_RATE=${THRESHOLD_SUCCESS_RATE:-}
       - THRESHOLD_INGEST_P95=${THRESHOLD_INGEST_P95:-}
       - THRESHOLD_INGEST_P99=${THRESHOLD_INGEST_P99:-}
@@ -68,10 +76,6 @@ services:
       - THRESHOLD_NEGATIVE_RATE=${THRESHOLD_NEGATIVE_RATE:-}
     volumes:
       - ../src/tests/load:/scripts:ro
-      - k6-out:/out
     depends_on:
       proxy:
         condition: service_healthy
-
-volumes:
-  k6-out:

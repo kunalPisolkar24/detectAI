@@ -1,6 +1,7 @@
 # Cron load rig: worker-cron + proxy + k6 seed on isolated datastores.
-# Seeds N expired subscriptions via proxy, then the sweeper drains them —
-# measure via worker-cron /metrics (expiryLagSeconds / expiredBacklog).
+# Seeds N expired subscriptions via proxy, then the sweeper drains them; k6
+# asserts the drain and cross-checks worker-cron /metrics (backlog, loop
+# results) in teardown (see src/tests/load/README.md).
 # Self-contained project (`name:` below) with its own volumes — load data
 # never touches dev stacks. Datastores stay internal-only (no host ports).
 # Usage (from services/workers):
@@ -29,6 +30,14 @@ services:
       - DATABASE_URL_REPLICA=${DATABASE_URL_REPLICA}
       - REQUIRE_BROKER=0
       - PROXY_PORT=9999
+      # k6 reaches the proxy over the compose network, so it must bind 0.0.0.0.
+      - PROXY_HOST=0.0.0.0
+      # Seeded rows expire this long before the seed call; keeping it just past
+      # the sweep's reach makes worker_cron_expiry_lag_seconds interpretable.
+      - SEED_AGE_SECONDS=${SEED_AGE_SECONDS:-}
+      # Must reach k6 too: the runtime skip and the threshold skip both key off
+      # mock mode, and they read it from separate processes.
+      - MOCK_MODE=${MOCK_MODE:-false}
     depends_on:
       postgres-users:
         condition: service_healthy
@@ -43,24 +52,22 @@ services:
 
   k6:
     image: grafana/k6:0.55.0
-    # Run as root: the k6 image defaults to a non-root user, which cannot
-    # write --summary-export=/out/summary.json to the fresh named volume.
-    user: "0:0"
-    command: run --summary-export=/out/summary.json /scripts/cron.k6.js
+    command: run /scripts/cron.k6.js
     environment:
       - PROXY_URL=http://proxy:9999
+      - MOCK_MODE=${MOCK_MODE:-}
       - SEED_COUNT=${SEED_COUNT:-1000}
       - RUN_ID=${RUN_ID:-}
       - CRON_VERIFY_TIMEOUT_MS=${CRON_VERIFY_TIMEOUT_MS:-}
       - CRON_VERIFY_POLL_MS=${CRON_VERIFY_POLL_MS:-}
+      - WORKER_METRICS_URL=${WORKER_METRICS_URL:-http://worker-cron:7002/metrics}
+      - SIGNAL_TIMEOUT_MS=${SIGNAL_TIMEOUT_MS:-}
+      - SIGNAL_POLL_MS=${SIGNAL_POLL_MS:-}
       - THRESHOLD_SUCCESS_RATE=${THRESHOLD_SUCCESS_RATE:-}
       - THRESHOLD_SEED_P95=${THRESHOLD_SEED_P95:-}
+      - THRESHOLD_DRAIN_P95=${THRESHOLD_DRAIN_P95:-}
     volumes:
       - ../src/tests/load:/scripts:ro
-      - k6-out:/out
     depends_on:
       proxy:
         condition: service_healthy
-
-volumes:
-  k6-out:
