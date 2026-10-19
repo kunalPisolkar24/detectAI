@@ -26,9 +26,16 @@ root has no AWS provider / emulator hacks.
   Follows the `chats-loadtest` precedent (multiple `service.name`s, one board, one
   page each) rather than a board per worker. Rates and counts come from
   `FROM Metric` (exact); percentiles come from spans (sampling shifts counts, not
-  percentiles). Container widgets filter `container.name LIKE 'worker%'` because
-  the prod stack uses underscores (`worker_analytics`) and the load rigs hyphens.
-  `workers-loadtest.json` is page-for-page identical with `'loadtest'` hardcoded.
+  percentiles). Each worker page also carries that worker's own container
+  resources via `docker_stats` with an exact `container.name = 'worker_<name>'`
+  filter (prod stacks and load rigs name the containers the same), plus its
+  eventloop lag, heap and message size. `Infra` is datastore-only: RabbitMQ /
+  Redis users / Redis events / Postgres container stats matched with
+  `container.name LIKE '%rabbitmq%'`, `'%redis-users%'`, `'%redis-events%'`,
+  `'%postgres-users%'`, per-store `redis_connection_status` connectivity
+  (faceted by `client_name`), and the Postgres `db_pool_connections` pool
+  states. `workers-loadtest.json` is page-for-page identical with `'loadtest'`
+  hardcoded.
 - `alerts.tf` — one policy per area, NRQL static conditions, all enabled and
   filtering `deployment.environment = 'prod'` so loadtest runs never page. Workers
   policy: `workers_error_rate` (all three via `service.name LIKE 'worker-%'`),

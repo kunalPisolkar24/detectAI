@@ -9,222 +9,532 @@
       "widgets": [
         {
           "title": "Messages/min (all workers)",
-          "layout": { "column": 1, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min` WHERE deployment.environment = '${environment}' AND service IN ('worker-analytics', 'worker-payments')" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min` WHERE deployment.environment = '${environment}' AND service IN ('worker-analytics', 'worker-payments')"
+              }
             ],
             "limit": 500
           }
         },
         {
           "title": "Error share (all workers)",
-          "layout": { "column": 4, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 4,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT percentage(count(*), WHERE worker_job_errors_total > 0) AS `error %` WHERE deployment.environment = '${environment}' AND service IN ('worker-analytics', 'worker-payments')" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT percentage(count(*), WHERE worker_job_errors_total > 0) AS `error %` WHERE deployment.environment = '${environment}' AND service IN ('worker-analytics', 'worker-payments')"
+              }
             ],
-            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } },
+            "thresholds": {
+              "alert": {
+                "value": 2
+              },
+              "warning": {
+                "value": 1
+              }
+            },
             "limit": 2
           }
         },
         {
           "title": "Dead-lettered (total)",
-          "layout": { "column": 7, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 7,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(worker_dead_lettered_total) AS `dead letters` WHERE deployment.environment = '${environment}'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT sum(worker_dead_lettered_total) AS `dead letters` WHERE deployment.environment = '${environment}'"
+              }
             ],
-            "thresholds": { "alert": { "value": 1 } },
+            "thresholds": {
+              "alert": {
+                "value": 1
+              }
+            },
             "limit": 20
           }
         },
         {
           "title": "Retries/min",
-          "layout": { "column": 10, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 10,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_retry_total), 1 minute) AS `retries/min` WHERE deployment.environment = '${environment}'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_retry_total), 1 minute) AS `retries/min` WHERE deployment.environment = '${environment}'"
+              }
             ],
-            "thresholds": { "alert": { "value": 10 }, "warning": { "value": 3 } },
+            "thresholds": {
+              "alert": {
+                "value": 10
+              },
+              "warning": {
+                "value": 3
+              }
+            },
             "limit": 50
           }
         },
         {
           "title": "RabbitMQ connected (min across workers)",
-          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 1,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT min(rabbitmq_connection_status) AS `connected` WHERE deployment.environment = '${environment}' AND service IN ('worker-analytics', 'worker-payments')" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT min(rabbitmq_connection_status) AS `connected` WHERE deployment.environment = '${environment}' AND service IN ('worker-analytics', 'worker-payments')"
+              }
             ],
-            "thresholds": { "alert": { "value": 0.5 } },
+            "thresholds": {
+              "alert": {
+                "value": 0.5
+              }
+            },
             "limit": 1
           }
         },
         {
           "title": "Cron expiry lag (s)",
-          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 4,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(worker_cron_expiry_lag_seconds) AS `lag s` WHERE deployment.environment = '${environment}' AND service = 'worker-cron'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT latest(worker_cron_expiry_lag_seconds) AS `lag s` WHERE deployment.environment = '${environment}' AND service = 'worker-cron'"
+              }
             ],
-            "thresholds": { "alert": { "value": 3600 }, "warning": { "value": 900 } },
+            "thresholds": {
+              "alert": {
+                "value": 3600
+              },
+              "warning": {
+                "value": 900
+              }
+            },
             "limit": 86400
           }
         },
         {
           "title": "Expired backlog",
-          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 7,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(worker_cron_expired_backlog) AS `backlog` WHERE deployment.environment = '${environment}' AND service = 'worker-cron'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT latest(worker_cron_expired_backlog) AS `backlog` WHERE deployment.environment = '${environment}' AND service = 'worker-cron'"
+              }
             ],
-            "thresholds": { "alert": { "value": 100 }, "warning": { "value": 25 } },
+            "thresholds": {
+              "alert": {
+                "value": 100
+              },
+              "warning": {
+                "value": 25
+              }
+            },
             "limit": 500
           }
         },
         {
           "title": "Max eventloop lag (ms)",
-          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 10,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT max(process_runtime_nodejs_eventloop_lag_ms) AS `loop lag ms` WHERE deployment.environment = '${environment}'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT max(process_runtime_nodejs_eventloop_lag_ms) AS `loop lag ms` WHERE deployment.environment = '${environment}'"
+              }
             ],
-            "thresholds": { "alert": { "value": 200 }, "warning": { "value": 50 } },
+            "thresholds": {
+              "alert": {
+                "value": 200
+              },
+              "warning": {
+                "value": 50
+              }
+            },
             "limit": 2000
           }
         },
         {
           "title": "Throughput by worker",
-          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min` WHERE deployment.environment = '${environment}' FACET service TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min` WHERE deployment.environment = '${environment}' FACET service TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Errors by worker",
-          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 7,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_job_errors_total), 1 minute) AS `errors/min` WHERE deployment.environment = '${environment}' FACET service TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_job_errors_total), 1 minute) AS `errors/min` WHERE deployment.environment = '${environment}' FACET service TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Job duration p50/p95/p99 (all workers)",
-          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name LIKE 'worker-%' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name LIKE 'worker-%' AND deployment.environment = '${environment}' TIMESERIES AUTO"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Retries and dead letters/min",
-          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.stacked-bar" },
+          "layout": {
+            "column": 7,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.stacked-bar"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_retry_total), 1 minute) AS `retries/min` WHERE deployment.environment = '${environment}' TIMESERIES AUTO LIMIT 5" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_dead_lettered_total), 1 minute) AS `dead/min` WHERE deployment.environment = '${environment}' TIMESERIES AUTO LIMIT 5" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_retry_total), 1 minute) AS `retries/min` WHERE deployment.environment = '${environment}' TIMESERIES AUTO LIMIT 5"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_dead_lettered_total), 1 minute) AS `dead/min` WHERE deployment.environment = '${environment}' TIMESERIES AUTO LIMIT 5"
+              }
             ],
-            "facet": { "showOtherSeries": false },
-            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+            "facet": {
+              "showOtherSeries": false
+            },
+            "chartStyles": {
+              "gradient": {
+                "enabled": true
+              },
+              "seriesOrder": "original",
+              "stacked": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Broker and cache connectivity",
-          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 1,
+            "row": 5,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(rabbitmq_connection_status) AS `rabbitmq` WHERE deployment.environment = '${environment}' FACET service TIMESERIES AUTO LIMIT 6" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(redis_connection_status) AS `redis` WHERE deployment.environment = '${environment}' FACET service TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(rabbitmq_connection_status) AS `rabbitmq` WHERE deployment.environment = '${environment}' FACET service TIMESERIES AUTO LIMIT 6"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(redis_connection_status) AS `redis` WHERE deployment.environment = '${environment}' FACET service TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true, "min": 0, "max": 1 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 1
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Duplicate events filtered/min (idempotency)",
-          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 7,
+            "row": 5,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_duplicate_events_total), 1 minute) AS `duplicates/min` WHERE deployment.environment = '${environment}' FACET service TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_duplicate_events_total), 1 minute) AS `duplicates/min` WHERE deployment.environment = '${environment}' FACET service TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Worker container CPU %",
-          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 1,
+            "row": 6,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE 'worker%' FACET `container.name` TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE 'worker%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Worker container memory %",
-          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 7,
+            "row": 6,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE 'worker%' FACET `container.name` TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE 'worker%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Errors per worker and type",
-          "layout": { "column": 1, "row": 7, "height": 4, "width": 6 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 1,
+            "row": 7,
+            "height": 4,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_job_errors_total), 1 minute) AS `errors/min`, sum(worker_job_errors_total) AS `total` WHERE deployment.environment = '${environment}' FACET service, job_type, error_type LIMIT 25" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_job_errors_total), 1 minute) AS `errors/min`, sum(worker_job_errors_total) AS `total` WHERE deployment.environment = '${environment}' FACET service, job_type, error_type LIMIT 25"
+              }
             ]
           }
         },
         {
           "title": "Messages processed by worker and type",
-          "layout": { "column": 7, "row": 7, "height": 4, "width": 6 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 7,
+            "row": 7,
+            "height": 4,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min`, sum(worker_jobs_processed_total) AS `total`, average(worker_message_size_bytes) AS `avg bytes` WHERE deployment.environment = '${environment}' FACET service, job_type LIMIT 25" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min`, sum(worker_jobs_processed_total) AS `total`, average(worker_message_size_bytes) AS `avg bytes` WHERE deployment.environment = '${environment}' FACET service, job_type LIMIT 25"
+              }
             ]
           }
         }
@@ -236,139 +546,564 @@
       "widgets": [
         {
           "title": "Messages/min",
-          "layout": { "column": 1, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics'"
+              }
             ],
             "limit": 300
           }
         },
         {
           "title": "Error share",
-          "layout": { "column": 4, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 4,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT percentage(count(*), WHERE worker_job_errors_total > 0) AS `error %` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT percentage(count(*), WHERE worker_job_errors_total > 0) AS `error %` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics'"
+              }
             ],
-            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } },
+            "thresholds": {
+              "alert": {
+                "value": 2
+              },
+              "warning": {
+                "value": 1
+              }
+            },
             "limit": 2
           }
         },
         {
           "title": "Job p95",
-          "layout": { "column": 7, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 7,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}'"
+              }
             ],
             "limit": 1000
           }
         },
         {
           "title": "Dead-lettered (total)",
-          "layout": { "column": 10, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 10,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(worker_dead_lettered_total) AS `dead letters` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT sum(worker_dead_lettered_total) AS `dead letters` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics'"
+              }
             ],
-            "thresholds": { "alert": { "value": 1 } },
+            "thresholds": {
+              "alert": {
+                "value": 1
+              }
+            },
             "limit": 20
           }
         },
         {
           "title": "Throughput and duplicates",
-          "layout": { "column": 1, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 1,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_duplicate_events_total), 1 minute) AS `duplicates/min` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_duplicate_events_total), 1 minute) AS `duplicates/min` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Job duration p50/p95/p99",
-          "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 7,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' TIMESERIES AUTO"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Errors by type",
-          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.stacked-bar" },
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.stacked-bar"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_job_errors_total), 1 minute) AS `errors/min` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' FACET error_type TIMESERIES AUTO LIMIT 8" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_job_errors_total), 1 minute) AS `errors/min` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' FACET error_type TIMESERIES AUTO LIMIT 8"
+              }
             ],
-            "facet": { "showOtherSeries": false },
-            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+            "facet": {
+              "showOtherSeries": false
+            },
+            "chartStyles": {
+              "gradient": {
+                "enabled": true
+              },
+              "seriesOrder": "original",
+              "stacked": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Active jobs and instances",
-          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 7,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(worker_active_jobs) AS `active jobs` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(worker_active_instances) AS `instances` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(worker_active_jobs) AS `active jobs` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(worker_active_instances) AS `instances` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Cache hit rate (dedup lookups)",
-          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT percentage(count(*), WHERE cache_operations_total > 0 AND operation = 'hit') AS `hit %` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT percentage(count(*), WHERE cache_operations_total > 0 AND operation = 'hit') AS `hit %` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Redis and RabbitMQ connectivity",
-          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 7,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(redis_connection_status) AS `redis` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(rabbitmq_connection_status) AS `rabbitmq` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(redis_connection_status) AS `redis` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(rabbitmq_connection_status) AS `rabbitmq` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO"
+              }
             ],
-            "yAxisLeft": { "zero": true, "min": 0, "max": 1 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 1
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Errors by type and job (cumulative)",
-          "layout": { "column": 1, "row": 5, "height": 4, "width": 12 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 1,
+            "row": 5,
+            "height": 4,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(worker_job_errors_total) AS `errors`, max(worker_job_errors_total) AS `latest` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' FACET job_type, error_type LIMIT 25" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT sum(worker_job_errors_total) AS `errors`, max(worker_job_errors_total) AS `latest` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' FACET job_type, error_type LIMIT 25"
+              }
             ]
+          }
+        },
+        {
+          "title": "Worker container CPU %",
+          "layout": {
+            "column": 1,
+            "row": 6,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Worker container memory %",
+          "layout": {
+            "column": 7,
+            "row": 6,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Worker container network rx/tx",
+          "layout": {
+            "column": 1,
+            "row": 7,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Worker container CPU throttled",
+          "layout": {
+            "column": 7,
+            "row": 7,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Eventloop lag (ms)",
+          "layout": {
+            "column": 1,
+            "row": 8,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(process_runtime_nodejs_eventloop_lag_ms) AS `loop lag ms` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Heap used (MB)",
+          "layout": {
+            "column": 7,
+            "row": 8,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(process_heap_used_bytes) / 1000000 AS `heap MB` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Message size (bytes)",
+          "layout": {
+            "column": 1,
+            "row": 9,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(worker_message_size_bytes) AS `avg bytes` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         }
       ]
@@ -379,57 +1114,128 @@
       "widgets": [
         {
           "title": "Error log stream (latest 100)",
-          "layout": { "column": 1, "row": 1, "height": 4, "width": 12 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "height": 4,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, `severity.text`, message, traceId, spanId WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' LIMIT 100" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT timestamp, `severity.text`, message, traceId, spanId WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' LIMIT 100"
+              }
             ]
           }
         },
         {
           "title": "Log volume by level (click legend to isolate)",
-          "layout": { "column": 1, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 1,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' FACET `severity.text` TIMESERIES AUTO LIMIT 10" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' FACET `severity.text` TIMESERIES AUTO LIMIT 10"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Errors by message",
-          "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.stacked-bar" },
+          "layout": {
+            "column": 7,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.stacked-bar"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message TIMESERIES AUTO LIMIT 10" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message TIMESERIES AUTO LIMIT 10"
+              }
             ],
-            "facet": { "showOtherSeries": false },
-            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+            "facet": {
+              "showOtherSeries": false
+            },
+            "chartStyles": {
+              "gradient": {
+                "enabled": true
+              },
+              "seriesOrder": "original",
+              "stacked": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Recent errors with trace links",
-          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "height": 3,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(traceId) AS `sample trace` WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message LIMIT 20" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(traceId) AS `sample trace` WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message LIMIT 20"
+              }
             ]
           }
         },
         {
           "title": "Slow jobs over 1000ms",
-          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "height": 3,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT timestamp, name, duration.ms, trace.id WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' AND duration.ms > 1000 LIMIT 100" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT timestamp, name, duration.ms, trace.id WHERE service.name = 'worker-analytics' AND deployment.environment = '${environment}' AND duration.ms > 1000 LIMIT 100"
+              }
             ]
           }
         }
@@ -441,139 +1247,564 @@
       "widgets": [
         {
           "title": "Sweep ticks/min",
-          "layout": { "column": 1, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_cron_loop_iterations_total), 1 minute) AS `ticks/min` WHERE deployment.environment = '${environment}' AND service = 'worker-cron'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_cron_loop_iterations_total), 1 minute) AS `ticks/min` WHERE deployment.environment = '${environment}' AND service = 'worker-cron'"
+              }
             ],
             "limit": 1
           }
         },
         {
           "title": "Expiry lag (s)",
-          "layout": { "column": 4, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 4,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(worker_cron_expiry_lag_seconds) AS `lag s` WHERE deployment.environment = '${environment}' AND service = 'worker-cron'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT latest(worker_cron_expiry_lag_seconds) AS `lag s` WHERE deployment.environment = '${environment}' AND service = 'worker-cron'"
+              }
             ],
-            "thresholds": { "alert": { "value": 3600 }, "warning": { "value": 900 } },
+            "thresholds": {
+              "alert": {
+                "value": 3600
+              },
+              "warning": {
+                "value": 900
+              }
+            },
             "limit": 86400
           }
         },
         {
           "title": "Expired backlog",
-          "layout": { "column": 7, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 7,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(worker_cron_expired_backlog) AS `backlog` WHERE deployment.environment = '${environment}' AND service = 'worker-cron'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT latest(worker_cron_expired_backlog) AS `backlog` WHERE deployment.environment = '${environment}' AND service = 'worker-cron'"
+              }
             ],
-            "thresholds": { "alert": { "value": 100 }, "warning": { "value": 25 } },
+            "thresholds": {
+              "alert": {
+                "value": 100
+              },
+              "warning": {
+                "value": 25
+              }
+            },
             "limit": 500
           }
         },
         {
           "title": "Stale events filtered (total)",
-          "layout": { "column": 10, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 10,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(worker_cron_stale_events_filtered_total) AS `stale events` WHERE deployment.environment = '${environment}' AND service = 'worker-cron'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT sum(worker_cron_stale_events_filtered_total) AS `stale events` WHERE deployment.environment = '${environment}' AND service = 'worker-cron'"
+              }
             ],
-            "thresholds": { "alert": { "value": 1 } },
+            "thresholds": {
+              "alert": {
+                "value": 1
+              }
+            },
             "limit": 50
           }
         },
         {
           "title": "Sweep duration p50/p95/p99",
-          "layout": { "column": 1, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 1,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' TIMESERIES AUTO"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Batch size and expiry lag",
-          "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 7,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(worker_cron_sweep_batch_size) AS `batch size` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' TIMESERIES AUTO" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(worker_cron_sweep_batch_size) AS `batch size` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' TIMESERIES AUTO"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Loop iterations by result",
-          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.stacked-bar" },
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.stacked-bar"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_cron_loop_iterations_total), 1 minute) AS `iterations/min` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' FACET result TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_cron_loop_iterations_total), 1 minute) AS `iterations/min` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' FACET result TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "facet": { "showOtherSeries": false },
-            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+            "facet": {
+              "showOtherSeries": false
+            },
+            "chartStyles": {
+              "gradient": {
+                "enabled": true
+              },
+              "seriesOrder": "original",
+              "stacked": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Subscription status distribution",
-          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 7,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(worker_cron_subscription_status) AS `subscriptions` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' FACET status TIMESERIES AUTO LIMIT 8" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(worker_cron_subscription_status) AS `subscriptions` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' FACET status TIMESERIES AUTO LIMIT 8"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "DB lock skips and shutdown aborts",
-          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_cron_db_lock_skipped_total), 1 minute) AS `lock skips/min` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' TIMESERIES AUTO" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_cron_shutdown_aborts_total), 1 minute) AS `shutdown aborts/min` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' TIMESERIES AUTO" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_cron_db_lock_skipped_total), 1 minute) AS `lock skips/min` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' TIMESERIES AUTO"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_cron_shutdown_aborts_total), 1 minute) AS `shutdown aborts/min` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' TIMESERIES AUTO"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Cache invalidation duration",
-          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 7,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95) WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND name LIKE '%cache%' TIMESERIES AUTO" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT percentile(duration.ms, 50, 95) WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND name LIKE '%cache%' TIMESERIES AUTO"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Sweep outcomes and config",
-          "layout": { "column": 1, "row": 5, "height": 4, "width": 12 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 1,
+            "row": 5,
+            "height": 4,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(worker_cron_loop_iterations_total) AS `iterations`, max(worker_cron_loop_iterations_total) AS `latest` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' FACET result LIMIT 10" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(worker_cron_config) AS `config` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' FACET key LIMIT 10" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT sum(worker_cron_loop_iterations_total) AS `iterations`, max(worker_cron_loop_iterations_total) AS `latest` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' FACET result LIMIT 10"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT latest(worker_cron_config) AS `config` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' FACET key LIMIT 10"
+              }
             ]
+          }
+        },
+        {
+          "title": "Worker container CPU %",
+          "layout": {
+            "column": 1,
+            "row": 6,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Worker container memory %",
+          "layout": {
+            "column": 7,
+            "row": 6,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Worker container network rx/tx",
+          "layout": {
+            "column": 1,
+            "row": 7,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND service = 'worker-cron' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND service = 'worker-cron' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Worker container CPU throttled",
+          "layout": {
+            "column": 7,
+            "row": 7,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Eventloop lag (ms)",
+          "layout": {
+            "column": 1,
+            "row": 8,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(process_runtime_nodejs_eventloop_lag_ms) AS `loop lag ms` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Heap used (MB)",
+          "layout": {
+            "column": 7,
+            "row": 8,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(process_heap_used_bytes) / 1000000 AS `heap MB` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Message size (bytes)",
+          "layout": {
+            "column": 1,
+            "row": 9,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(worker_message_size_bytes) AS `avg bytes` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         }
       ]
@@ -584,57 +1815,128 @@
       "widgets": [
         {
           "title": "Error log stream (latest 100)",
-          "layout": { "column": 1, "row": 1, "height": 4, "width": 12 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "height": 4,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, `severity.text`, message, traceId, spanId WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' LIMIT 100" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT timestamp, `severity.text`, message, traceId, spanId WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' LIMIT 100"
+              }
             ]
           }
         },
         {
           "title": "Log volume by level (click legend to isolate)",
-          "layout": { "column": 1, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 1,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' FACET `severity.text` TIMESERIES AUTO LIMIT 10" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' FACET `severity.text` TIMESERIES AUTO LIMIT 10"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Errors by message",
-          "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.stacked-bar" },
+          "layout": {
+            "column": 7,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.stacked-bar"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message TIMESERIES AUTO LIMIT 10" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message TIMESERIES AUTO LIMIT 10"
+              }
             ],
-            "facet": { "showOtherSeries": false },
-            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+            "facet": {
+              "showOtherSeries": false
+            },
+            "chartStyles": {
+              "gradient": {
+                "enabled": true
+              },
+              "seriesOrder": "original",
+              "stacked": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Recent errors with trace links",
-          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "height": 3,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(traceId) AS `sample trace` WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message LIMIT 20" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(traceId) AS `sample trace` WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message LIMIT 20"
+              }
             ]
           }
         },
         {
           "title": "Sweep messages (latest 100)",
-          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "height": 3,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, `severity.text`, message, traceId WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND (message LIKE '%sweep%' OR message LIKE '%subscription%' OR message LIKE '%expired%' OR message LIKE '%paused%') LIMIT 100" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT timestamp, `severity.text`, message, traceId WHERE service.name = 'worker-cron' AND deployment.environment = '${environment}' AND (message LIKE '%sweep%' OR message LIKE '%subscription%' OR message LIKE '%expired%' OR message LIKE '%paused%') LIMIT 100"
+              }
             ]
           }
         }
@@ -646,138 +1948,556 @@
       "widgets": [
         {
           "title": "Messages/min",
-          "layout": { "column": 1, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments'"
+              }
             ],
             "limit": 200
           }
         },
         {
           "title": "Error share",
-          "layout": { "column": 4, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 4,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT percentage(count(*), WHERE worker_job_errors_total > 0) AS `error %` WHERE deployment.environment = '${environment}' AND service = 'worker-payments'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT percentage(count(*), WHERE worker_job_errors_total > 0) AS `error %` WHERE deployment.environment = '${environment}' AND service = 'worker-payments'"
+              }
             ],
-            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } },
+            "thresholds": {
+              "alert": {
+                "value": 2
+              },
+              "warning": {
+                "value": 1
+              }
+            },
             "limit": 2
           }
         },
         {
           "title": "Job p95",
-          "layout": { "column": 7, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 7,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}'"
+              }
             ],
             "limit": 2000
           }
         },
         {
           "title": "Dead-lettered (total)",
-          "layout": { "column": 10, "row": 1, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.gauge" },
+          "layout": {
+            "column": 10,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(worker_dead_lettered_total) AS `dead letters` WHERE deployment.environment = '${environment}' AND service = 'worker-payments'" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT sum(worker_dead_lettered_total) AS `dead letters` WHERE deployment.environment = '${environment}' AND service = 'worker-payments'"
+              }
             ],
-            "thresholds": { "alert": { "value": 1 } },
+            "thresholds": {
+              "alert": {
+                "value": 1
+              }
+            },
             "limit": 20
           }
         },
         {
           "title": "Throughput and requeues",
-          "layout": { "column": 1, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 1,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' TIMESERIES AUTO" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_infra_requeued_total), 1 minute) AS `requeues/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' TIMESERIES AUTO" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `msgs/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' TIMESERIES AUTO"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_infra_requeued_total), 1 minute) AS `requeues/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' TIMESERIES AUTO"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Job duration p50/p95/p99",
-          "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 7,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' TIMESERIES AUTO"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Errors by type",
-          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.stacked-bar" },
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.stacked-bar"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_job_errors_total), 1 minute) AS `errors/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' FACET error_type TIMESERIES AUTO LIMIT 8" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_job_errors_total), 1 minute) AS `errors/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' FACET error_type TIMESERIES AUTO LIMIT 8"
+              }
             ],
-            "facet": { "showOtherSeries": false },
-            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+            "facet": {
+              "showOtherSeries": false
+            },
+            "chartStyles": {
+              "gradient": {
+                "enabled": true
+              },
+              "seriesOrder": "original",
+              "stacked": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Events by type",
-          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 7,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `events/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' FACET job_type TIMESERIES AUTO LIMIT 10" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_jobs_processed_total), 1 minute) AS `events/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' FACET job_type TIMESERIES AUTO LIMIT 10"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Paddle API latency and cancels",
-          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(paddle_request_duration_seconds) * 1000 AS `paddle avg ms` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' TIMESERIES AUTO" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(paddle_request_duration_seconds) * 1000 AS `paddle avg ms` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' TIMESERIES AUTO"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Idempotency and connectivity",
-          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 7,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_duplicate_events_total), 1 minute) AS `duplicates/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' TIMESERIES AUTO" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(worker_idempotency_redis_errors_total), 1 minute) AS `redis errors/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' TIMESERIES AUTO" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_duplicate_events_total), 1 minute) AS `duplicates/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' TIMESERIES AUTO"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_idempotency_redis_errors_total), 1 minute) AS `redis errors/min` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' TIMESERIES AUTO"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Dead letters and errors by type",
-          "layout": { "column": 1, "row": 5, "height": 4, "width": 12 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 1,
+            "row": 5,
+            "height": 4,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(worker_dead_lettered_total) AS `dead letters`, sum(worker_job_errors_total) AS `errors`, max(worker_job_errors_total) AS `latest errors` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' FACET job_type, error_type LIMIT 25" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT sum(worker_dead_lettered_total) AS `dead letters`, sum(worker_job_errors_total) AS `errors`, max(worker_job_errors_total) AS `latest errors` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' FACET job_type, error_type LIMIT 25"
+              }
             ]
+          }
+        },
+        {
+          "title": "Worker container CPU %",
+          "layout": {
+            "column": 1,
+            "row": 6,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Worker container memory %",
+          "layout": {
+            "column": 7,
+            "row": 6,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Worker container network rx/tx",
+          "layout": {
+            "column": 1,
+            "row": 7,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND service = 'worker-payments' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND service = 'worker-payments' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Worker container CPU throttled",
+          "layout": {
+            "column": 7,
+            "row": 7,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Eventloop lag (ms)",
+          "layout": {
+            "column": 1,
+            "row": 8,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(process_runtime_nodejs_eventloop_lag_ms) AS `loop lag ms` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Heap used (MB)",
+          "layout": {
+            "column": 7,
+            "row": 8,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(process_heap_used_bytes) / 1000000 AS `heap MB` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Message size (bytes)",
+          "layout": {
+            "column": 1,
+            "row": 9,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(worker_message_size_bytes) AS `avg bytes` WHERE deployment.environment = '${environment}' AND service = 'worker-payments' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         }
       ]
@@ -788,57 +2508,128 @@
       "widgets": [
         {
           "title": "Error log stream (latest 100)",
-          "layout": { "column": 1, "row": 1, "height": 4, "width": 12 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "height": 4,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, `severity.text`, message, eventType, traceId WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' LIMIT 100" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT timestamp, `severity.text`, message, eventType, traceId WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' LIMIT 100"
+              }
             ]
           }
         },
         {
           "title": "Log volume by level (click legend to isolate)",
-          "layout": { "column": 1, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "layout": {
+            "column": 1,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' FACET `severity.text` TIMESERIES AUTO LIMIT 10" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' FACET `severity.text` TIMESERIES AUTO LIMIT 10"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Errors by message",
-          "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.stacked-bar" },
+          "layout": {
+            "column": 7,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.stacked-bar"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message TIMESERIES AUTO LIMIT 10" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT count(*) WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message TIMESERIES AUTO LIMIT 10"
+              }
             ],
-            "facet": { "showOtherSeries": false },
-            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+            "facet": {
+              "showOtherSeries": false
+            },
+            "chartStyles": {
+              "gradient": {
+                "enabled": true
+              },
+              "seriesOrder": "original",
+              "stacked": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Recent errors with trace links",
-          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "height": 3,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(traceId) AS `sample trace` WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message LIMIT 20" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(traceId) AS `sample trace` WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message LIMIT 20"
+              }
             ]
           }
         },
         {
           "title": "Slow jobs over 2000ms",
-          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "height": 3,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT timestamp, name, duration.ms, trace.id WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' AND duration.ms > 2000 LIMIT 100" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT timestamp, name, duration.ms, trace.id WHERE service.name = 'worker-payments' AND deployment.environment = '${environment}' AND duration.ms > 2000 LIMIT 100"
+              }
             ]
           }
         }
@@ -846,121 +2637,546 @@
     },
     {
       "name": "Infra",
-      "description": "Node runtime, containers and dependency pool pressure across all workers",
+      "description": "Datastore and broker the workers depend on: RabbitMQ / Redis (users + events) / Postgres container resources (docker_stats), per-store redis connectivity and the Postgres connection pool from the worker. Worker container resources moved to the per-worker pages.",
       "widgets": [
         {
-          "title": "Eventloop lag (ms)",
-          "layout": { "column": 1, "row": 1, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "title": "RabbitMQ container CPU %",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(process_runtime_nodejs_eventloop_lag_ms) AS `loop lag ms` WHERE deployment.environment = '${environment}' FACET service TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%rabbitmq%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
-          "title": "Heap used (MB)",
-          "layout": { "column": 7, "row": 1, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "title": "RabbitMQ container memory %",
+          "layout": {
+            "column": 4,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(process_heap_used_bytes) / 1000000 AS `heap MB` WHERE deployment.environment = '${environment}' FACET service TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%rabbitmq%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
-          "title": "DB pool by state",
-          "layout": { "column": 1, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "title": "RabbitMQ container network rx/tx",
+          "layout": {
+            "column": 7,
+            "row": 1,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(db_pool_connections) AS `connections` WHERE deployment.environment = '${environment}' FACET service, state TIMESERIES AUTO LIMIT 10" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%rabbitmq%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%rabbitmq%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
-          "title": "Message size (bytes)",
-          "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "title": "RabbitMQ container CPU throttled",
+          "layout": {
+            "column": 1,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(worker_message_size_bytes) AS `avg bytes` WHERE deployment.environment = '${environment}' FACET service TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%rabbitmq%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
-          "title": "Container CPU %",
-          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "title": "Redis users container CPU %",
+          "layout": {
+            "column": 4,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE 'worker%' FACET `container.name` TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
-          "title": "Container memory %",
-          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "title": "Redis users container memory %",
+          "layout": {
+            "column": 7,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE 'worker%' FACET `container.name` TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
-          "title": "Container network rx/tx",
-          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "title": "Redis events container CPU %",
+          "layout": {
+            "column": 10,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND `container.name` LIKE 'worker%' FACET `container.name` TIMESERIES AUTO LIMIT 6" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND `container.name` LIKE 'worker%' FACET `container.name` TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-events%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true, "min": 0 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
-          "title": "Container CPU throttled",
-          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
+          "title": "Redis events container memory %",
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
           "rawConfiguration": {
-            "legend": { "enabled": true },
+            "legend": {
+              "enabled": true
+            },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = '${environment}' AND `container.name` LIKE 'worker%' FACET `container.name` TIMESERIES AUTO LIMIT 6" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-events%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
             ],
-            "yAxisLeft": { "zero": true, "min": 0 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Redis users network rx/tx",
+          "layout": {
+            "column": 4,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Redis events network rx/tx",
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-events%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-events%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Redis connectivity by store",
+          "layout": {
+            "column": 7,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(redis_connection_status) AS `connected` WHERE deployment.environment = '${environment}' FACET client_name TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Postgres container CPU %",
+          "layout": {
+            "column": 1,
+            "row": 5,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%postgres-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Postgres container memory %",
+          "layout": {
+            "column": 4,
+            "row": 5,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%postgres-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0,
+              "max": 100
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Postgres container network rx/tx",
+          "layout": {
+            "column": 7,
+            "row": 5,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%postgres-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%postgres-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Postgres pool by state",
+          "layout": {
+            "column": 1,
+            "row": 6,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(db_pool_connections) AS `connections` WHERE deployment.environment = '${environment}' FACET service, state TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
           }
         },
         {
           "title": "Runtime and versions reporting",
-          "layout": { "column": 1, "row": 5, "height": 4, "width": 12 },
-          "visualization": { "id": "viz.table" },
+          "layout": {
+            "column": 7,
+            "row": 6,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS spans WHERE deployment.environment = '${environment}' AND service.name LIKE 'worker-%' FACET service.name, service.version LIMIT 20" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT count(*) AS metric_series WHERE deployment.environment = '${environment}' AND service LIKE 'worker%' FACET service LIMIT 10" }
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT count(*) AS spans WHERE deployment.environment = '${environment}' AND service.name LIKE 'worker-%' FACET service.name, service.version LIMIT 20"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT count(*) AS metric_series WHERE deployment.environment = '${environment}' AND service LIKE 'worker%' FACET service LIMIT 10"
+              }
             ]
           }
         }
