@@ -431,78 +431,10 @@
           }
         },
         {
-          "title": "Worker container CPU %",
-          "layout": {
-            "column": 1,
-            "row": 6,
-            "height": 3,
-            "width": 6
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE 'worker%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0,
-              "max": 100
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "Worker container memory %",
-          "layout": {
-            "column": 7,
-            "row": 6,
-            "height": 3,
-            "width": 6
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE 'worker%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0,
-              "max": 100
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
           "title": "Errors per worker and type",
           "layout": {
             "column": 1,
-            "row": 7,
+            "row": 6,
             "height": 4,
             "width": 6
           },
@@ -522,7 +454,7 @@
           "title": "Messages processed by worker and type",
           "layout": {
             "column": 7,
-            "row": 7,
+            "row": 6,
             "height": 4,
             "width": 6
           },
