@@ -122,6 +122,7 @@ All metrics are prefixed with the service name (e.g., `worker-payments`, `worker
 | `worker_cron_stale_events_filtered_total` | Counter | Phantom/stale events filtered |
 | `worker_cron_cache_invalidate_duration_seconds` | Histogram | Cache invalidation duration |
 | `worker_cron_db_lock_skipped_total` | Counter | SKIP LOCKED rows |
+| `worker_cron_db_transaction_duration_seconds` | Histogram | Sweep transaction duration by result (committed/rolled back) |
 | `worker_cron_shutdown_aborts_total` | Counter | Shutdown aborts by reason |
 | `worker_cron_jitter_seconds` | Histogram | Sleep duration with jitter |
 | `worker_cron_config` | Gauge | Config values for drift detection |
@@ -195,7 +196,17 @@ one board, one page each) and because one alert policy covers all three.
 | `Analytics` / `Payments` | Per-worker RED, retries, dead letters, dedup, Paddle latency |
 | `Cron` | Sweep cadence, batch size, expiry lag, DB lock contention |
 | `<Worker> Logs` | Error stream, volume by level, errors by message, slow jobs |
-| `Infra` | Eventloop lag, heap, DB pool states, container CPU/memory/network |
+| `Infra` | Are the datastores healthy? Postgres pool + exporter, Redis users/events, RabbitMQ broker |
+
+The `Infra` page is gauge-first and store-ordered: row 1 is four gauges (pool
+waiting, pool connections open against `POOL_MAX=5`, Redis disconnected, RabbitMQ
+disconnected — 1 means a client is down), rows 2-3 Postgres, rows 4-5 Redis,
+rows 6-7 RabbitMQ, rows 8-9 tables (dependency state snapshot, queue inventory).
+Worker-side widgets read the worker `/metrics` (`service LIKE 'worker-%'`);
+broker-side queue widgets need the RabbitMQ exporter pointed at the management
+API, and the Postgres and Redis exporter widgets need the exporter sidecars
+running. A widget with no data source stays empty by design rather than showing
+zeros.
 
 Counts and rates come from the Prometheus metrics above; percentiles come from
 spans. Sampling at `traceidratio 0.1` distorts span *counts*, not percentiles, so

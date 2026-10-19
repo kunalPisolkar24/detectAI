@@ -2637,10 +2637,10 @@
     },
     {
       "name": "Infra",
-      "description": "Datastore and broker the workers depend on: RabbitMQ / Redis (users + events) / Postgres container resources (docker_stats), per-store redis connectivity and the Postgres connection pool from the worker. Worker container resources moved to the per-worker pages.",
+      "description": "Datastores and broker the workers depend on: Postgres (pool + exporter), Redis users + events (exporter), RabbitMQ (app metrics + broker exporter). Row 1 gauges: pool waiting, pool connections open (POOL_MAX=5), Redis and RabbitMQ disconnected (1 = a client is down). Rows 2-3 Postgres, rows 4-5 Redis, rows 6-7 RabbitMQ, rows 8-9 tables. Worker-side widgets read the worker /metrics (service LIKE 'worker-%') and need the collector scrape jobs worker-analytics:7001, worker-cron:7002, worker-payments:7003. Broker-side widgets need the rabbitmq exporter pointed at the management API (RABBITMQ_MGMT_URL); until then they stay empty.",
       "widgets": [
         {
-          "title": "RabbitMQ container CPU %",
+          "title": "Postgres pool waiting (max)",
           "layout": {
             "column": 1,
             "row": 1,
@@ -2648,210 +2648,116 @@
             "width": 3
           },
           "visualization": {
-            "id": "viz.area"
+            "id": "viz.gauge"
           },
           "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%rabbitmq%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT max(db_pool_connections) AS `waiting` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' AND state = 'waiting'"
               }
             ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0,
-              "max": 100
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "RabbitMQ container memory %",
-          "layout": {
-            "column": 4,
-            "row": 1,
-            "height": 3,
-            "width": 3
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%rabbitmq%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0,
-              "max": 100
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "RabbitMQ container network rx/tx",
-          "layout": {
-            "column": 7,
-            "row": 1,
-            "height": 3,
-            "width": 6
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%rabbitmq%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+            "thresholds": {
+              "alert": {
+                "value": 5
               },
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%rabbitmq%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
+              "warning": {
+                "value": 2
               }
             }
           }
         },
         {
-          "title": "RabbitMQ container CPU throttled",
-          "layout": {
-            "column": 1,
-            "row": 2,
-            "height": 3,
-            "width": 3
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%rabbitmq%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "Redis users container CPU %",
+          "title": "Postgres pool connections open (max)",
           "layout": {
             "column": 4,
-            "row": 2,
+            "row": 1,
             "height": 3,
             "width": 3
           },
           "visualization": {
-            "id": "viz.area"
+            "id": "viz.gauge"
           },
           "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT max(db_pool_connections) AS `open` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' AND state = 'total'"
               }
             ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0,
-              "max": 100
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
+            "thresholds": {
+              "alert": {
+                "value": 5
+              },
+              "warning": {
+                "value": 4
               }
             }
           }
         },
         {
-          "title": "Redis users container memory %",
+          "title": "Redis disconnected (worst client)",
           "layout": {
             "column": 7,
-            "row": 2,
+            "row": 1,
             "height": 3,
             "width": 3
           },
           "visualization": {
-            "id": "viz.area"
+            "id": "viz.gauge"
           },
           "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT 1 - min(redis_connection_status) AS `disconnected` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%'"
               }
             ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0,
-              "max": 100
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
+            "thresholds": {
+              "alert": {
+                "value": 1
+              },
+              "warning": {
+                "value": 0.5
               }
             }
           }
         },
         {
-          "title": "Redis events container CPU %",
+          "title": "RabbitMQ disconnected (worst worker)",
           "layout": {
             "column": 10,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT 1 - min(rabbitmq_connection_status) AS `disconnected` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%'"
+              }
+            ],
+            "thresholds": {
+              "alert": {
+                "value": 1
+              },
+              "warning": {
+                "value": 0.5
+              }
+            }
+          }
+        },
+        {
+          "title": "Postgres pool by state (per worker)",
+          "layout": {
+            "column": 1,
             "row": 2,
             "height": 3,
-            "width": 3
+            "width": 4
           },
           "visualization": {
             "id": "viz.area"
@@ -2863,149 +2769,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-events%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0,
-              "max": 100
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "Redis events container memory %",
-          "layout": {
-            "column": 1,
-            "row": 3,
-            "height": 3,
-            "width": 3
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-events%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0,
-              "max": 100
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "Redis users network rx/tx",
-          "layout": {
-            "column": 4,
-            "row": 3,
-            "height": 3,
-            "width": 6
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              },
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "Redis events network rx/tx",
-          "layout": {
-            "column": 1,
-            "row": 4,
-            "height": 3,
-            "width": 6
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-events%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              },
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis-events%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "Redis connectivity by store",
-          "layout": {
-            "column": 7,
-            "row": 4,
-            "height": 3,
-            "width": 6
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(redis_connection_status) AS `connected` WHERE deployment.environment = '${environment}' FACET client_name TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(db_pool_connections) AS `connections` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' FACET service, state TIMESERIES AUTO LIMIT 20"
               }
             ],
             "yAxisLeft": {
@@ -3020,12 +2784,12 @@
           }
         },
         {
-          "title": "Postgres container CPU %",
+          "title": "Postgres sweep transaction duration (committed/rolled back)",
           "layout": {
-            "column": 1,
-            "row": 5,
+            "column": 5,
+            "row": 2,
             "height": 3,
-            "width": 3
+            "width": 4
           },
           "visualization": {
             "id": "viz.area"
@@ -3037,112 +2801,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%postgres-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0,
-              "max": 100
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "Postgres container memory %",
-          "layout": {
-            "column": 4,
-            "row": 5,
-            "height": 3,
-            "width": 3
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%postgres-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0,
-              "max": 100
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "Postgres container network rx/tx",
-          "layout": {
-            "column": 7,
-            "row": 5,
-            "height": 3,
-            "width": 6
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%postgres-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              },
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%postgres-users%' FACET `container.name` TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "Postgres pool by state",
-          "layout": {
-            "column": 1,
-            "row": 6,
-            "height": 3,
-            "width": 6
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(db_pool_connections) AS `connections` WHERE deployment.environment = '${environment}' FACET service, state TIMESERIES AUTO LIMIT 10"
+                "query": "FROM Metric SELECT average(worker_cron_db_transaction_duration_seconds) AS `tx s` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' FACET result TIMESERIES AUTO LIMIT 5"
               }
             ],
             "yAxisLeft": {
@@ -3157,12 +2816,460 @@
           }
         },
         {
-          "title": "Runtime and versions reporting",
+          "title": "Postgres requeues/min (DB-down requeues)",
           "layout": {
-            "column": 7,
-            "row": 6,
+            "column": 9,
+            "row": 2,
+            "height": 3,
+            "width": 4
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_infra_requeued_total), 1 minute) AS `requeues/min` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' FACET dep TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Postgres lock skips/min (cron lock contention)",
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "height": 3,
+            "width": 4
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_cron_db_lock_skipped_total), 1 minute) AS `skips/min` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' TIMESERIES AUTO"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Postgres backends and locks (exporter)",
+          "layout": {
+            "column": 5,
+            "row": 3,
+            "height": 3,
+            "width": 4
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(pg_stat_database_numbackends) AS backends, max(pg_locks_count) AS locks WHERE deployment.environment = '${environment}' TIMESERIES AUTO"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Postgres longest running transaction (exporter)",
+          "layout": {
+            "column": 9,
+            "row": 3,
+            "height": 3,
+            "width": 4
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT max(pg_stat_activity_max_tx_duration) AS `tx s` WHERE deployment.environment = '${environment}' TIMESERIES AUTO"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Redis connectivity by client",
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "height": 3,
+            "width": 4
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(redis_connection_status) AS `connected` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' FACET client_name TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Redis memory used MB by instance",
+          "layout": {
+            "column": 5,
+            "row": 4,
+            "height": 3,
+            "width": 4
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(redis_memory_used_bytes / 1000000) AS `mem MB` WHERE deployment.environment = '${environment}' AND `service.name` IN ('redis-users', 'redis-events', 'redis-exporter') FACET `service.name` TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Redis evictions/min by instance",
+          "layout": {
+            "column": 9,
+            "row": 4,
+            "height": 3,
+            "width": 4
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(redis_evicted_keys_total), 1 minute) AS `evicted/min` WHERE deployment.environment = '${environment}' AND `service.name` IN ('redis-users', 'redis-events', 'redis-exporter') FACET `service.name` TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Redis keyspace and clients by instance",
+          "layout": {
+            "column": 1,
+            "row": 5,
             "height": 3,
             "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT max(redis_db_keys) AS keys, max(redis_connected_clients) AS clients WHERE deployment.environment = '${environment}' AND `service.name` IN ('redis-users', 'redis-events', 'redis-exporter') FACET `service.name` TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Redis idempotency errors/min (fallback to Postgres)",
+          "layout": {
+            "column": 7,
+            "row": 5,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(worker_idempotency_redis_errors_total), 1 minute) AS `errors/min` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' FACET service TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "RabbitMQ reconnects/min",
+          "layout": {
+            "column": 1,
+            "row": 6,
+            "height": 3,
+            "width": 4
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(rabbitmq_reconnections_total), 1 minute) AS `reconnects/min` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' FACET service TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "RabbitMQ consume duration p50/p95",
+          "layout": {
+            "column": 5,
+            "row": 6,
+            "height": 3,
+            "width": 4
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT percentile(duration.ms, 50) AS `p50 ms`, percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = '${environment}' AND service.name LIKE 'worker-%' AND name LIKE 'queue.consume%' TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "RabbitMQ dead-letter events/min",
+          "layout": {
+            "column": 9,
+            "row": 6,
+            "height": 3,
+            "width": 4
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Log SELECT rate(count(*), 1 minute) AS `dlq/min` WHERE deployment.environment = '${environment}' AND service.name LIKE 'worker-%' AND (message LIKE '%DLQ%' OR message LIKE '%dead letter%') TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "RabbitMQ queue depth by queue",
+          "layout": {
+            "column": 1,
+            "row": 7,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT max(rabbitmq_queue_messages) AS `messages` WHERE deployment.environment = '${environment}' FACET `queue` TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "RabbitMQ consumers per queue",
+          "layout": {
+            "column": 7,
+            "row": 7,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT max(rabbitmq_queue_consumers) AS `consumers` WHERE deployment.environment = '${environment}' FACET `queue` TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Dependency state snapshot",
+          "layout": {
+            "column": 1,
+            "row": 8,
+            "height": 4,
+            "width": 12
           },
           "visualization": {
             "id": "viz.table"
@@ -3171,11 +3278,35 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Span SELECT count(*) AS spans WHERE deployment.environment = '${environment}' AND service.name LIKE 'worker-%' FACET service.name, service.version LIMIT 20"
+                "query": "FROM Metric SELECT average(redis_connection_status) AS `redis up` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' FACET service, client_name LIMIT 20"
               },
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT count(*) AS metric_series WHERE deployment.environment = '${environment}' AND service LIKE 'worker%' FACET service LIMIT 10"
+                "query": "FROM Metric SELECT average(rabbitmq_connection_status) AS `rabbitmq up` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' FACET service LIMIT 20"
+              },
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(db_pool_connections) AS `connections` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' FACET service, state LIMIT 20"
+              }
+            ]
+          }
+        },
+        {
+          "title": "RabbitMQ queue inventory",
+          "layout": {
+            "column": 1,
+            "row": 9,
+            "height": 4,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT max(rabbitmq_queue_messages) AS `messages`, max(rabbitmq_queue_consumers) AS `consumers`, max(rabbitmq_queue_messages_unacknowledged) AS `unacked` WHERE deployment.environment = '${environment}' FACET `queue` LIMIT 20"
               }
             ]
           }

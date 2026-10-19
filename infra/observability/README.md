@@ -29,12 +29,17 @@ root has no AWS provider / emulator hacks.
   percentiles). Each worker page also carries that worker's own container
   resources via `docker_stats` with an exact `container.name = 'worker_<name>'`
   filter (prod stacks and load rigs name the containers the same), plus its
-  eventloop lag, heap and message size. `Infra` is datastore-only: RabbitMQ /
-  Redis users / Redis events / Postgres container stats matched with
-  `container.name LIKE '%rabbitmq%'`, `'%redis-users%'`, `'%redis-events%'`,
-  `'%postgres-users%'`, per-store `redis_connection_status` connectivity
-  (faceted by `client_name`), and the Postgres `db_pool_connections` pool
-  states. `workers-loadtest.json` is page-for-page identical with `'loadtest'`
+  eventloop lag, heap and message size. `Infra` covers the four datastores the
+  workers depend on, gauges first, then one row per store, then tables: Postgres
+  (`db_pool_connections` states, sweep transaction duration, DB-down requeues,
+  lock skips, plus the `postgres-exporter` backends/locks/longest transaction),
+  Redis users + events (`redis_connection_status` per `client_name`, exporter
+  memory/evictions/keyspace/clients) and RabbitMQ (app-side reconnects, consume
+  duration percentiles, dead-letter log rate, plus broker-side queue depth and
+  consumers). Worker-side widgets filter `service LIKE 'worker-%'`, so the
+  `payment-gateway` copy of `rabbitmq_connection_status` never leaks in;
+  exporter widgets facet on `service.name` (`redis-users`, `redis-events`).
+  `workers-loadtest.json` is page-for-page identical with `'loadtest'`
   hardcoded.
 - `alerts.tf` — one policy per area, NRQL static conditions, all enabled and
   filtering `deployment.environment = 'prod'` so loadtest runs never page. Workers
@@ -68,6 +73,14 @@ OTLP/HTTP to EU with `NEW_RELIC_LICENSE_KEY` (ingest key, from gitignored
 `infra/docker/prod/.env`, never committed). Floci infra panels use exporter
 sidecars (`profiles: [floci]`); prod infra panels use CloudWatch after the AWS
 account link (see `dashboards/datastores.json` note).
+
+The workers push only OTLP traces and logs, so their Prometheus metrics need a
+Prometheus scrape: `infra/docker/prod/otel-collector-config.yaml` scrapes
+`worker-analytics:7001`, `worker-cron:7002` and `worker-payments:7003`, which
+is what feeds the worker-side widgets on the `Infra` page. The RabbitMQ broker
+metrics need the exporter pointed at the management API
+(`RABBITMQ_MGMT_URL` in `infra/docker/prod/.env`); the AMQP URL the apps use
+leaves `rabbitmq_up` at 0 and no queue metrics at all.
 
 ## Usage
 
