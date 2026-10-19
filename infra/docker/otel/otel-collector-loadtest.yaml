@@ -67,8 +67,12 @@ receivers:
   # Per-container CPU/mem/net/throttling from the Docker daemon. Needs
   # /var/run/docker.sock mounted (see per-service overlay).
   # Unlike hostmetrics (whole shared host), these attribute to container.name.
+  # api_version: the daemon rejects older clients since Docker 29 (min 1.40,
+  # repo hosts run 29.x; a rejected request fails the whole pipeline graph at
+  # startup). 1.40 also works back to Docker 20.10.
   docker_stats:
     endpoint: unix:///var/run/docker.sock
+    api_version: "1.40"
     collection_interval: 15s
     metrics:
       container.cpu.throttling_data.throttled_time:
