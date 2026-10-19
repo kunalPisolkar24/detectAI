@@ -211,7 +211,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT max(process_runtime_nodejs_eventloop_lag_ms) AS `loop lag ms` WHERE deployment.environment = 'loadtest'"
+                "query": "FROM Metric SELECT max(nodejs_eventloop_lag_seconds * 1000) AS `loop lag ms` WHERE deployment.environment = 'loadtest'"
               }
             ],
             "thresholds": {
@@ -890,7 +890,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = 'loadtest' AND service = 'worker-analytics' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -924,7 +924,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = 'loadtest' AND service = 'worker-analytics' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -958,11 +958,11 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = 'loadtest' AND service = 'worker-analytics' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
               },
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = 'loadtest' AND service = 'worker-analytics' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -995,7 +995,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = 'loadtest' AND service = 'worker-analytics' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -1028,7 +1028,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(process_runtime_nodejs_eventloop_lag_ms) AS `loop lag ms` WHERE deployment.environment = 'loadtest' AND service = 'worker-analytics' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(nodejs_eventloop_lag_seconds * 1000) AS `loop lag ms` WHERE deployment.environment = 'loadtest' AND service = 'worker-analytics' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -1060,7 +1060,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(process_heap_used_bytes) / 1000000 AS `heap MB` WHERE deployment.environment = 'loadtest' AND service = 'worker-analytics' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(nodejs_heap_space_size_used_bytes) / 1000000 AS `heap MB` WHERE deployment.environment = 'loadtest' AND service = 'worker-analytics' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -1591,7 +1591,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = 'loadtest' AND service = 'worker-cron' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -1625,7 +1625,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = 'loadtest' AND service = 'worker-cron' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -1659,11 +1659,11 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = 'loadtest' AND service = 'worker-cron' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
               },
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = 'loadtest' AND service = 'worker-cron' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -1696,7 +1696,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = 'loadtest' AND service = 'worker-cron' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -1729,7 +1729,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(process_runtime_nodejs_eventloop_lag_ms) AS `loop lag ms` WHERE deployment.environment = 'loadtest' AND service = 'worker-cron' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(nodejs_eventloop_lag_seconds * 1000) AS `loop lag ms` WHERE deployment.environment = 'loadtest' AND service = 'worker-cron' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -1761,7 +1761,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(process_heap_used_bytes) / 1000000 AS `heap MB` WHERE deployment.environment = 'loadtest' AND service = 'worker-cron' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(nodejs_heap_space_size_used_bytes) / 1000000 AS `heap MB` WHERE deployment.environment = 'loadtest' AND service = 'worker-cron' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -2284,7 +2284,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = 'loadtest' AND service = 'worker-payments' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -2318,7 +2318,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = 'loadtest' AND service = 'worker-payments' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -2352,11 +2352,11 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = 'loadtest' AND service = 'worker-payments' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
               },
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = 'loadtest' AND service = 'worker-payments' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -2389,7 +2389,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = 'loadtest' AND service = 'worker-payments' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = 'loadtest' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -2422,7 +2422,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(process_runtime_nodejs_eventloop_lag_ms) AS `loop lag ms` WHERE deployment.environment = 'loadtest' AND service = 'worker-payments' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(nodejs_eventloop_lag_seconds * 1000) AS `loop lag ms` WHERE deployment.environment = 'loadtest' AND service = 'worker-payments' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -2454,7 +2454,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(process_heap_used_bytes) / 1000000 AS `heap MB` WHERE deployment.environment = 'loadtest' AND service = 'worker-payments' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(nodejs_heap_space_size_used_bytes) / 1000000 AS `heap MB` WHERE deployment.environment = 'loadtest' AND service = 'worker-payments' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
