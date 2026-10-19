@@ -9,15 +9,15 @@ root has no AWS provider / emulator hacks.
 
 - `versions.tf`, `providers.tf` — `newrelic ~> 3.0`, `region = EU`. No `aws` provider.
 - `variables.tf` — `newrelic_account_id` (6428768), `newrelic_api_key` (sensitive,
-  env only), `newrelic_region` (EU), `environment` (`prod|floci`), `alert_email`.
+  env only), `newrelic_region` (EU), `alert_email`.
 - `main.tf` — 12 `newrelic_one_dashboard_json` resources from `dashboards/*.json`
-  via `templatefile` (`${account_id}`, `${environment}`). The four `-loadtest`
-  boards are environment-agnostic (hardcoded `deployment.environment = 'loadtest'`)
-  and ship with both envs so k6 runs never pollute prod boards.
+  via `templatefile` (`${account_id}`). Two statuses only: the eight prod boards
+  filter `deployment.environment = 'prod'`, and the four `-loadtest` boards hardcode
+  `deployment.environment = 'loadtest'` so k6 runs never pollute prod boards.
 - `dashboards/` — `overview`, `web`, `payment-gateway`, `payment-gateway-loadtest`,
   `workers`, `workers-loadtest`, `inference`, `document-parser`,
   `document-parser-loadtest`, `chats`, `chats-loadtest`, `datastores`. Every prod
-  NRQL filters `deployment.environment`.
+  NRQL filters `deployment.environment = 'prod'`.
 - `dashboards/workers.json` — one board for all three worker deployables
   (`worker-analytics`, `worker-cron`, `worker-payments`), each its own binary,
   container and `service.name`. Pages: `Overview` (cross-worker rollup: throughput,
@@ -29,15 +29,16 @@ root has no AWS provider / emulator hacks.
   percentiles). Container widgets filter `container.name LIKE 'worker%'` because
   the prod stack uses underscores (`worker_analytics`) and the load rigs hyphens.
   `workers-loadtest.json` is page-for-page identical with `'loadtest'` hardcoded.
-- `alerts.tf` — one policy per area, NRQL static conditions. Criticals are
-  `enabled = environment == prod` so Floci test data never sends mail. Workers
+- `alerts.tf` — one policy per area, NRQL static conditions, all enabled and
+  filtering `deployment.environment = 'prod'` so loadtest runs never page. Workers
   policy: `workers_error_rate` (all three via `service.name LIKE 'worker-%'`),
   `cron_expiry_lag` (gauge-driven, not tick counts), `workers_dead_letter_growth`,
   `workers_broker_disconnected`.
 - `notifications.tf` — email destination + channel + workflow only.
-- `envs/floci.tfvars|prod.tfvars` — non-secret values only. Keys via
+- `envs/prod.tfvars` — non-secret values only. Keys via
   `TF_VAR_newrelic_api_key` or `NEW_RELIC_API_KEY` env.
-- `tests/valid.tftest.hcl` — mocked plan asserts 12 dashboards + channel.
+- `tests/valid.tftest.hcl` — mocked plan asserts 12 dashboards (plus the workers
+  board page count) and prod policy names.
 
 ## Worker log export
 
@@ -49,8 +50,8 @@ never blocks a worker. `shared/logging/sink.ts` holds the sink contract, and
 `shared/logging/redact.ts` the masking, so neither depends on the `Logger` module
 that unit tests replace wholesale.
 - `tags.tf` — `newrelic_entity_tags` per board (`team`, `managed-by`,
-  `service`, `env`, `kind`) so boards group instead of listing flat. The
-  loadtest boards always tag `env=loadtest`.
+  `service`, `env`, `kind`) so boards group instead of listing flat. Prod boards
+  tag `env=prod`; the loadtest boards always tag `env=loadtest`.
 
 ## Data flow
 
@@ -71,33 +72,32 @@ terraform init -backend=false
 terraform fmt -check -recursive -diff
 terraform validate
 terraform test                                   # mocked, no network
-terraform plan -var-file=envs/floci.tfvars      # test render
-terraform plan -var-file=envs/prod.tfvars       # real publish dry-run
+terraform plan -var-file=envs/prod.tfvars
 
-# stateful (optional, mirrors infra/terraform):
+# stateful (current state lives in the local emulator S3 bucket):
 terraform init -reconfigure -backend-config=backend.local-s3.hcl
-terraform apply -var-file=envs/floci.tfvars
-cp backend.prod.hcl.example backend.prod.hcl    # fill bucket, never commit
-terraform init -reconfigure -backend-config=backend.prod.hcl
 terraform apply -var-file=envs/prod.tfvars
+
+# later, when moving state to real S3:
+cp backend.prod.hcl.example backend.prod.hcl    # fill bucket, never commit
+terraform init -migrate-state -backend-config=backend.prod.hcl
 ```
 
-From repo root (after Makefile targets land):
+From repo root:
 
 ```bash
 make obs-fmt obs-validate
-make obs-plan ENV=floci
-make obs-apply ENV=prod CONFIRM_PROD=1
+make obs-plan
+make obs-apply
 ```
 
-## Floci vs prod
+## Prod vs loadtest
 
-| | Floci (`ENV=floci`) | Prod (`ENV=prod`) |
+| | Prod (`(prod)` boards) | Loadtest rigs (`(loadtest)` boards) |
 |---|---|---|
-| Dashboards render | yes (`(floci)` titles) | yes (`(prod)` titles) |
-| App data | collector -> EU with `floci` label | collector -> EU with `prod` label |
-| Infra data | exporter sidecars | CloudWatch (needs account link follow-up) |
-| Alerts | warnings enabled, criticals disabled | all enabled -> email |
+| App data | collector -> EU with `prod` label | rig collector -> EU with `loadtest` label |
+| Infra data | CloudWatch (needs account link follow-up) | docker_stats + hostmetrics from the rig |
+| Alerts | conditions filter `deployment.environment = 'prod'` -> email | excluded by the prod filter |
 
 ## Follow-ups (not in v1)
 

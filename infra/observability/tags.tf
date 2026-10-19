@@ -34,7 +34,7 @@ locals {
 
   dashboard_env = {
     for k in keys(local.dashboard_scope) :
-    k => contains(["document-parser-loadtest", "payment-gateway-loadtest", "chats-loadtest", "workers-loadtest"], k) ? "loadtest" : var.environment
+    k => contains(["document-parser-loadtest", "payment-gateway-loadtest", "chats-loadtest", "workers-loadtest"], k) ? "loadtest" : "prod"
   }
 }
 

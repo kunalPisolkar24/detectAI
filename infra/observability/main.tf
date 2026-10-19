@@ -1,6 +1,8 @@
 locals {
-  account_id  = var.newrelic_account_id
-  environment = var.environment
+  account_id = var.newrelic_account_id
+  # Two dashboard statuses only: prod boards below, plus the loadtest boards
+  # whose JSON hardcodes deployment.environment = 'loadtest'.
+  environment = "prod"
 
   dashboards = {
     overview                 = "overview.json"

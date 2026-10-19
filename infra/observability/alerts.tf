@@ -1,9 +1,8 @@
 # Email-only alerting, no Slack/PagerDuty in v1.
-# Floci safety: critical conditions are disabled unless environment == prod,
-# so test data never sends mail. Warning conditions stay enabled for tuning.
+# Conditions filter deployment.environment = 'prod' only; loadtest runs are
+# excluded by that filter and never page anyone.
 locals {
-  is_prod = var.environment == "prod"
-  env     = var.environment
+  env = "prod"
 }
 
 resource "newrelic_alert_policy" "web" {
@@ -53,7 +52,7 @@ resource "newrelic_nrql_alert_condition" "web_error_rate" {
   account_id                   = var.newrelic_account_id
   policy_id                    = newrelic_alert_policy.web.id
   name                         = "Web 5xx share high"
-  enabled                      = local.is_prod
+  enabled                      = true
   type                         = "static"
   description                  = "Web server-span error share over 5 minutes."
   aggregation_window           = 60
@@ -98,7 +97,7 @@ resource "newrelic_nrql_alert_condition" "gateway_5xx" {
   account_id                   = var.newrelic_account_id
   policy_id                    = newrelic_alert_policy.payment_gateway.id
   name                         = "Gateway 5xx share high"
-  enabled                      = local.is_prod
+  enabled                      = true
   type                         = "static"
   description                  = "Payment gateway 5xx share over 5 minutes."
   aggregation_window           = 60
@@ -120,7 +119,7 @@ resource "newrelic_nrql_alert_condition" "gateway_mq_publish_fail" {
   account_id                   = var.newrelic_account_id
   policy_id                    = newrelic_alert_policy.payment_gateway.id
   name                         = "Gateway MQ publish failures"
-  enabled                      = local.is_prod
+  enabled                      = true
   type                         = "static"
   description                  = "Any MQ publish failure in 5 minutes."
   aggregation_window           = 60
@@ -143,7 +142,7 @@ resource "newrelic_nrql_alert_condition" "workers_error_rate" {
   account_id                   = var.newrelic_account_id
   policy_id                    = newrelic_alert_policy.workers.id
   name                         = "Worker error share high"
-  enabled                      = local.is_prod
+  enabled                      = true
   type                         = "static"
   description                  = "Any worker's span error share over 10 minutes. Covers analytics, payments and cron."
   aggregation_window           = 60
@@ -169,7 +168,7 @@ resource "newrelic_nrql_alert_condition" "cron_expiry_lag" {
   account_id                   = var.newrelic_account_id
   policy_id                    = newrelic_alert_policy.workers.id
   name                         = "Cron expiry lag high"
-  enabled                      = local.is_prod
+  enabled                      = true
   type                         = "static"
   description                  = "Oldest expired subscription has waited over 30 minutes (2x the default 15m sweep interval)."
   aggregation_window           = 60
@@ -191,7 +190,7 @@ resource "newrelic_nrql_alert_condition" "workers_dead_letter_growth" {
   account_id                   = var.newrelic_account_id
   policy_id                    = newrelic_alert_policy.workers.id
   name                         = "Workers dead-lettering messages"
-  enabled                      = local.is_prod
+  enabled                      = true
   type                         = "static"
   description                  = "Any worker is sending messages to the DLQ. Usually UserNotFoundError or an invalid subscription state transition."
   aggregation_window           = 60
@@ -199,7 +198,7 @@ resource "newrelic_nrql_alert_condition" "workers_dead_letter_growth" {
   aggregation_delay            = 120
   violation_time_limit_seconds = 3600
   nrql {
-    query = "FROM Metric SELECT sum(rate(sum(worker_dead_lettered_total), 1 minute)) AS dlq_per_minute WHERE deployment.environment = '${local.env}'"
+    query = "FROM Metric SELECT rate(sum(worker_dead_lettered_total), 1 minute) AS dlq_per_minute WHERE deployment.environment = '${local.env}'"
   }
   critical {
     operator              = "above"
@@ -213,7 +212,7 @@ resource "newrelic_nrql_alert_condition" "workers_broker_disconnected" {
   account_id                   = var.newrelic_account_id
   policy_id                    = newrelic_alert_policy.workers.id
   name                         = "Workers disconnected from RabbitMQ"
-  enabled                      = local.is_prod
+  enabled                      = true
   type                         = "static"
   description                  = "Any queue-consuming worker reports rabbitmq_connection_status below 1. Consumers cannot make progress while disconnected."
   aggregation_window           = 60
@@ -223,7 +222,7 @@ resource "newrelic_nrql_alert_condition" "workers_broker_disconnected" {
   fill_value                   = 1
   violation_time_limit_seconds = 3600
   nrql {
-    query = "FROM Metric SELECT min(average(rabbitmq_connection_status)) AS connected WHERE service IN ('worker-analytics', 'worker-payments') AND deployment.environment = '${local.env}'"
+    query = "FROM Metric SELECT min(rabbitmq_connection_status) AS connected WHERE service IN ('worker-analytics', 'worker-payments') AND deployment.environment = '${local.env}'"
   }
   critical {
     operator              = "below"
@@ -238,7 +237,7 @@ resource "newrelic_nrql_alert_condition" "inference_error_rate" {
   account_id                   = var.newrelic_account_id
   policy_id                    = newrelic_alert_policy.inference.id
   name                         = "Inference error share high"
-  enabled                      = local.is_prod
+  enabled                      = true
   type                         = "static"
   description                  = "Inference span error share over 10 minutes."
   aggregation_window           = 60
@@ -260,7 +259,7 @@ resource "newrelic_nrql_alert_condition" "inference_queue_drops" {
   account_id                   = var.newrelic_account_id
   policy_id                    = newrelic_alert_policy.inference.id
   name                         = "Inference queue drops"
-  enabled                      = local.is_prod
+  enabled                      = true
   type                         = "static"
   description                  = "Any batch queue drop in 5 minutes."
   aggregation_window           = 60
@@ -283,7 +282,7 @@ resource "newrelic_nrql_alert_condition" "parser_error_rate" {
   account_id                   = var.newrelic_account_id
   policy_id                    = newrelic_alert_policy.document_parser.id
   name                         = "Parser error share high"
-  enabled                      = local.is_prod
+  enabled                      = true
   type                         = "static"
   description                  = "Document parser error share over 10 minutes."
   aggregation_window           = 60
@@ -307,7 +306,7 @@ resource "newrelic_nrql_alert_condition" "parser_p95" {
   name                         = "Parser p95 latency high"
   enabled                      = true
   type                         = "static"
-  description                  = "Document parser extract p95 over 10 minutes (warning always on, critical prod only)."
+  description                  = "Document parser extract p95 over 10 minutes."
   aggregation_window           = 60
   aggregation_method           = "event_flow"
   aggregation_delay            = 120
@@ -333,7 +332,7 @@ resource "newrelic_nrql_alert_condition" "parser_extraction_errors" {
   account_id                   = var.newrelic_account_id
   policy_id                    = newrelic_alert_policy.document_parser.id
   name                         = "Parser extraction failures"
-  enabled                      = local.is_prod
+  enabled                      = true
   type                         = "static"
   description                  = "Failed extraction spans (timeouts, corrupt docs) in 5 minutes."
   aggregation_window           = 60
@@ -400,7 +399,7 @@ resource "newrelic_nrql_alert_condition" "chats_redis_degraded" {
   account_id                   = var.newrelic_account_id
   policy_id                    = newrelic_alert_policy.chats.id
   name                         = "Chats Redis degraded"
-  enabled                      = local.is_prod
+  enabled                      = true
   type                         = "static"
   description                  = "Chat Redis degraded flag set over 5 minutes."
   aggregation_window           = 60

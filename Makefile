@@ -362,11 +362,13 @@ tf-destroy-local:
 # Observability (New Relic dashboards + alerts, EU) — separate Terraform root
 # ---------------------------------------------------------------------------
 # Secrets via env only: TF_VAR_newrelic_api_key or NEW_RELIC_API_KEY (NRAK-...).
-#   make obs-plan ENV=floci|prod  -> plan with infra/observability/envs/<ENV>.tfvars
-#   make obs-apply ENV=prod CONFIRM_PROD=1 -> publish dashboards + alerts
+# Two dashboard statuses only: prod + loadtest. State currently lives in the
+# local emulator S3 backend; see infra/observability/README.md.
+#   make obs-plan  -> plan with infra/observability/envs/prod.tfvars
+#   make obs-apply -> publish dashboards + alerts
 OBS_DIR := infra/observability
-OBS_VARS := envs/$(ENV).tfvars
-OBS_BACKEND := $(if $(filter prod,$(ENV)),backend.prod.hcl,backend.local-s3.hcl)
+OBS_VARS := envs/prod.tfvars
+OBS_BACKEND := backend.local-s3.hcl
 
 obs-fmt:
 	terraform -chdir=$(OBS_DIR) fmt -check -recursive -diff
@@ -379,15 +381,15 @@ obs-validate:
 obs-test:
 	terraform -chdir=$(OBS_DIR) test
 
-obs-plan: validate-env
+obs-plan:
 	terraform -chdir=$(OBS_DIR) init -reconfigure -backend-config=$(OBS_BACKEND)
 	terraform -chdir=$(OBS_DIR) plan -var-file=$(OBS_VARS)
 
-obs-apply: validate-env guard-confirm-prod
+obs-apply:
 	terraform -chdir=$(OBS_DIR) init -reconfigure -backend-config=$(OBS_BACKEND)
 	terraform -chdir=$(OBS_DIR) apply -var-file=$(OBS_VARS)
 
-obs-destroy: validate-env guard-confirm-prod
+obs-destroy:
 	terraform -chdir=$(OBS_DIR) init -reconfigure -backend-config=$(OBS_BACKEND)
 	terraform -chdir=$(OBS_DIR) destroy -var-file=$(OBS_VARS)
 

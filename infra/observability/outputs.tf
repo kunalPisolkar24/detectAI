@@ -14,5 +14,5 @@ output "dashboard_urls" {
 
 output "environment" {
   description = "Environment label baked into dashboard NRQL."
-  value       = var.environment
+  value       = local.environment
 }
