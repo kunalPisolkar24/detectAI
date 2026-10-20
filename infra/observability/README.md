@@ -32,7 +32,7 @@ root has no AWS provider / emulator hacks.
   eventloop lag, heap and message size. `Infra` covers the four datastores the
   workers depend on, gauges first, then one row per store, then tables: Postgres
   (`db_pool_connections` states, sweep transaction duration, DB-down requeues,
-  lock skips, plus the `postgres-exporter` backends/locks/longest transaction),
+  sweep skips, plus the `postgres-exporter` backends/locks/longest transaction),
   Redis users + events (`redis_connection_status` per `client_name`, exporter
   memory/evictions/keyspace/clients) and RabbitMQ (app-side reconnects, consume
   duration percentiles, dead-letter log rate, plus broker-side queue depth and
