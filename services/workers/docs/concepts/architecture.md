@@ -462,6 +462,15 @@ graph TB
 
 **A note on the two Paddle keys.** They are keyed differently on purpose. `paddle:evt:EVENT_ID` answers *"have I seen this exact event before?"*, so it is keyed by the event id. `payment:event:ts:USER_ID` answers *"is this event older than the last one I processed for this user?"*, so it is keyed by the user id and stores a timestamp rather than a marker. `HASH` is the first 16 characters of the SHA-256 of the lower-cased email.
 
+### Cache Invalidation
+
+`UserCacheInvalidator` deletes three keys per user: `user:basic:USER_ID`, `user:basic:email:HASH` and `user:sub:USER_ID`. It never touches `rate_limit:*`, the analytics dedup keys, or the Paddle keys — those expire on their own TTL.
+
+- **It uses `UNLINK` where the client supports it**, falling back to `DEL`. `UNLINK` reclaims the memory in the background, so a large delete does not block the Redis event loop.
+- **Keys are deleted in chunks of 100**, and the chunks run one after another.
+- **It retries once**, 50 milliseconds later, if the whole batch fails.
+- **A failed invalidation does not throw.** The caller cannot tell "the cache was invalidated" from "Redis was down and the stale cache is still there". The only traces are an error log, a `worker_job_errors_total{job_type="cache_invalidate", error_type="redis_error"}` counter, and the `worker_cron_cache_invalidate_retries_total` counter.
+
 ## Message Queue Architecture
 
 The Payments and Analytics workers consume from RabbitMQ quorum queues with built-in retry and dead-lettering:

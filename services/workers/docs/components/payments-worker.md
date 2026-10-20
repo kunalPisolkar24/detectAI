@@ -149,7 +149,7 @@ classDiagram
 **Three details worth knowing:**
 
 - **The subscription id field differs by handler.** `SubscriptionUpdatedHandler` and `SubscriptionCanceledHandler` read the Paddle subscription id from `data.id`. `UserCancelHandler` reads it from `data.paddleSubscriptionId`, because `user.cancel_subscription` is published by the web app, not by Paddle.
-- **`UserCancelHandler` tolerates a self-transition.** If the subscription is already `CANCELED`, the `CANCELED -> CANCELED` change is treated as an idempotent success rather than an error, so a repeated cancel request does not dead-letter.
+- **`UserCancelHandler` tolerates a self-transition.** If the subscription is already `CANCELED`, the `CANCELED -> CANCELED` change is treated as an idempotent success rather than an error, so a repeated cancel request does not dead-letter. (The state machine already allows that transition, so the handler's catch branch for it is not reached in practice.)
 - **Only the subscription's Paddle identifiers are cleared.** Cancelling sets `Subscription.paddleSubscriptionId` and `Subscription.paddlePlanId` to `NULL`. The `User.paddleCustomerId` column is left alone — the cancel handlers pass an empty customer id, which the repository ignores, so a canceled user keeps their Paddle customer id.
 
 ### Event Processing Pipeline
@@ -251,6 +251,8 @@ stateDiagram-v2
 `CANCELED` is still not a one-way door. A customer who resubscribes produces a new event with `status = active` or `status = trialing`, which moves the subscription straight back out of `CANCELED` — that is what the two arrows leaving `CANCELED` cover.
 
 The state machine lives in `src/modules/payments/domain/stateMachine.ts`. It is a plain lookup table of `current status -> allowed next statuses`, and it is injected into the repository by the composition root, so the user module never imports the payments rules.
+
+**The check happens under the row lock, inside the database transaction.** The handler takes a `SELECT ... FOR UPDATE` on the subscription row, reads the stored status, and only then checks the transition — all within one transaction. An invalid transition therefore rolls the transaction back, and the row is never left locked or partially written. It is not a separate step that runs before the write.
 
 Invalid transitions throw `InvalidTransitionError` and send the event to the DLQ.
 

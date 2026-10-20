@@ -176,6 +176,8 @@ The Analytics worker does **not** invalidate user cache after incrementing usage
 
 **A schema failure never reaches `worker_job_errors_total`.** The validation happens in the queue handler, before the service is called, so the only metric that moves is `worker_dead_lettered_total`. An alert on `worker_job_errors_total{job_type="usage_event"}` stays flat while every message is being dead-lettered for schema reasons.
 
+**The service has its own guard for an empty `eventId`**, in case it is called directly rather than through the queue. It throws the same `MissingFieldError`, so the event is dead-lettered immediately rather than burning the retry budget on a message that can never succeed.
+
 ### Dedup Claim Release
 
 If processing fails after claiming dedup, the claim is released:

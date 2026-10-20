@@ -114,7 +114,7 @@ sequenceDiagram
 3. **Worker consumes message** — JSON parsed, job type resolved
 4. **Idempotency check** — `paddle:evt:EVENT_ID` in Redis (7d) + `ProcessedWebhook` in the database
 5. **Event routing** — Handler selected based on `event_type`
-6. **State machine validation** — Status transition checked (e.g., ACTIVE -> CANCELED is valid)
+6. **State machine validation** — Status transition checked (e.g., ACTIVE -> CANCELED is valid). The check happens under the row lock, inside the database transaction, so an invalid transition rolls the transaction back rather than failing a separate step.
 7. **Database update** — Subscription status, endsAt, paddle identifiers updated
 8. **Cache invalidation** — Three keys deleted: `user:basic:USER_ID`, `user:basic:email:HASH` and `user:sub:USER_ID`
 9. **Idempotency persistence** — Event ID written to the `ProcessedWebhook` table

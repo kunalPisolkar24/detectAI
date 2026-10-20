@@ -68,6 +68,14 @@ An error record has two extra fields, and they come before your context:
 
 `error` holds the error's **message**, not the error object, and `stack` is present only when the value was a real `Error`.
 
+### Logger Gotchas
+
+Three things about the logger that can bite you when you are reading logs:
+
+- **`Logger.error(message, value)` is ambiguous.** With two arguments, a plain object is treated as **context** when no trace span is active, and as the **error payload** when one is. The same call produces different JSON depending on the tracing state, so pass a real `Error` when you mean an error.
+- **`[Circular]` is over-eager.** The cycle detector keeps one set of seen objects for the whole record, so the *second* occurrence of any repeated object is replaced with the string `"[Circular]"` — even when nothing is actually circular. A payload that references the same object twice loses the second copy.
+- **A record that cannot be serialised loses its level.** If `JSON.stringify` throws, the fallback is `{"message": ..., "fallback": ...}` with no `level` key, and if that fails too it becomes `{"level":"error","message":"stringify_failed"}`. Log-level filters and "errors by level" dashboards will not bucket these lines the way you expect.
+
 ### Log Levels
 
 There are three levels. There is no `debug` level — if you need more detail than `info` gives you, look at a metric or a trace instead.
