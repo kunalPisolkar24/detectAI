@@ -15,6 +15,7 @@ describe("SubscriptionSweeper", () => {
     let metricsMock: MetricsService;
     let mockUserRepository: {
         expireDueSubscriptions: ReturnType<typeof mock>;
+        countExpiredSubscriptions: ReturnType<typeof mock>;
     };
 
     beforeEach(() => {
@@ -24,6 +25,7 @@ describe("SubscriptionSweeper", () => {
 
         mockUserRepository = {
             expireDueSubscriptions: mock(() => Promise.resolve([])),
+            countExpiredSubscriptions: mock(() => Promise.resolve(0)),
         };
 
         metricsMock = {
@@ -41,7 +43,7 @@ describe("SubscriptionSweeper", () => {
             expiredBacklog: { set: mock() },
             sweepBatchSize: { observe: mock() },
             staleEventsFilteredTotal: { inc: mock() },
-            dbLockSkippedTotal: { inc: mock() },
+            sweepSkippedTotal: { inc: mock() },
             subscriptionStatus: { set: mock() },
             cronConfig: { set: mock() },
             cacheInvalidateDurationSeconds: { startTimer: mock(() => mock()) },
@@ -101,6 +103,32 @@ describe("SubscriptionSweeper", () => {
             // pipeline path — verify cacheOperations metric was incremented
             expect(metricsMock.cacheOperations.inc).toHaveBeenCalled();
         }
+    });
+
+    test("should report the exact pending backlog, not the batch size", async () => {
+        mockUserRepository.expireDueSubscriptions.mockResolvedValue([
+            { id: "u1", email: "u1@test.com" },
+        ]);
+        // 5,000 subscriptions are still expired — the batch size would have
+        // reported 1 (or 2) and hidden the backlog entirely.
+        mockUserRepository.countExpiredSubscriptions.mockResolvedValue(5000);
+
+        await sweeper.processExpiredSubscriptions();
+
+        expect(mockUserRepository.countExpiredSubscriptions).toHaveBeenCalledTimes(1);
+        expect(metricsMock.expiredBacklog.set).toHaveBeenCalledWith(5000);
+    });
+
+    test("should report the backlog even when the sweep found nothing", async () => {
+        mockUserRepository.expireDueSubscriptions.mockResolvedValue([]);
+        // Every expired row was locked by another instance, so the sweep
+        // selected nothing while work remained.
+        mockUserRepository.countExpiredSubscriptions.mockResolvedValue(42);
+
+        const count = await sweeper.processExpiredSubscriptions();
+
+        expect(count).toBe(0);
+        expect(metricsMock.expiredBacklog.set).toHaveBeenCalledWith(42);
     });
 
     test("should propagate error if db throws and record an errored duration sample", async () => {

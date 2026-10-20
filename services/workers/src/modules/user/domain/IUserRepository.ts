@@ -29,6 +29,12 @@ export interface IUserRepository {
     ): Promise<ExpiredSubscription[]>;
     incrementUsage(userId: string, count: number): Promise<void>;
     /**
+     * Counts the expired subscriptions still pending at `sweepTime`, using the
+     * same predicate the sweep selects on. Read from the primary so the number
+     * is not a stale replica view.
+     */
+    countExpiredSubscriptions(sweepTime: Date): Promise<number>;
+    /**
      * Idempotent UTC-day reset for stale `Usage` rows. Returns rows reset.
      * Safety net for the atomic rollover in `incrementUsage`.
      */

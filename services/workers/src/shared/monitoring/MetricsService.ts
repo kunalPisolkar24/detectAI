@@ -29,7 +29,7 @@ export class MetricsService {
     public readonly cacheInvalidateDurationSeconds: Histogram;
     public readonly cacheInvalidateRetriesTotal: Counter;
     public readonly dbTransactionDurationSeconds: Histogram;
-    public readonly dbLockSkippedTotal: Counter;
+    public readonly sweepSkippedTotal: Counter;
     public readonly shutdownAbortsTotal: Counter;
     public readonly loopIterationsTotal: Counter;
     public readonly jitterSeconds: Histogram;
@@ -230,9 +230,9 @@ export class MetricsService {
             registers: [this.registry]
         });
 
-        this.dbLockSkippedTotal = new Counter({
-            name: "worker_cron_db_lock_skipped_total",
-            help: "Total SKIP LOCKED rows skipped during sweep (lock contention)",
+        this.sweepSkippedTotal = new Counter({
+            name: "worker_cron_sweep_skipped_total",
+            help: "Expired subscriptions selected for the sweep but not updated, because a fresher webhook or a concurrent change won the race",
             registers: [this.registry]
         });
 

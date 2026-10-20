@@ -168,7 +168,7 @@
           }
         },
         {
-          "title": "Expired backlog (approx)",
+          "title": "Expired backlog",
           "layout": {
             "column": 7,
             "row": 2,
@@ -1223,7 +1223,7 @@
           }
         },
         {
-          "title": "Expired backlog (approx)",
+          "title": "Expired backlog",
           "layout": {
             "column": 7,
             "row": 1,
@@ -1409,7 +1409,7 @@
           }
         },
         {
-          "title": "DB lock skips and shutdown aborts",
+          "title": "Sweep skips and shutdown aborts",
           "layout": {
             "column": 1,
             "row": 4,
@@ -1426,7 +1426,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(worker_cron_db_lock_skipped_total), 1 minute) AS `lock skips/min` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' TIMESERIES AUTO"
+                "query": "FROM Metric SELECT rate(sum(worker_cron_sweep_skipped_total), 1 minute) AS `sweep skips/min` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' TIMESERIES AUTO"
               },
               {
                 "accountId": ${account_id},
@@ -2772,7 +2772,7 @@
           }
         },
         {
-          "title": "Postgres lock skips/min (cron lock contention)",
+          "title": "Sweep skips/min (selected but not updated)",
           "layout": {
             "column": 1,
             "row": 3,
@@ -2789,7 +2789,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(worker_cron_db_lock_skipped_total), 1 minute) AS `skips/min` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' TIMESERIES AUTO"
+                "query": "FROM Metric SELECT rate(sum(worker_cron_sweep_skipped_total), 1 minute) AS `sweep skips/min` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' TIMESERIES AUTO"
               }
             ],
             "yAxisLeft": {

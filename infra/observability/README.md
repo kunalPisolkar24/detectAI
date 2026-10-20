@@ -140,11 +140,16 @@ Four readings that look wrong but are not:
 - **`container.cpu.utilization` is a percentage of a single core**, so it
   exceeds 100 % on a busy container. The panel title says so.
 
-One metric is an approximation: `worker_cron_expired_backlog` is
-`sweptCount + 1` when a batch came back full, so it can overstate the backlog
-by up to one batch. The board labels it *Expired backlog (approx)*; the exact
-count is a `COUNT(*)` on the expired subscriptions, which the load rig reads
-from the database instead.
+`worker_cron_expired_backlog` is an exact count, not an estimate. The sweeper
+asks the database how many expired subscriptions are still pending, using the
+same predicate the sweep selects on. Rows another instance holds a lock on
+still count, so a backlog the batch size would have hidden shows up. The board
+labels it *Expired backlog*.
+
+`worker_cron_sweep_skipped_total` counts expired subscriptions the sweeper
+selected but did not update, because a fresher webhook or a concurrent change
+won the race. It is not a lock-contention counter: `FOR UPDATE SKIP LOCKED`
+does not report how many rows it skipped.
 
 ## Empty worker panels: "no data" is not always "no signal"
 

@@ -52,10 +52,21 @@ export class SubscriptionSweeper {
 
             // P0 SLO: expiry lag + backlog gauges (issue #207)
             // lag = max(sweepTime - endsAt) piggybacked on selected endsAt to avoid extra RTT.
-            // backlog heuristic for b1: when batch full, pending > batch; refined to exact COUNT(*) in b2 when limit hit.
+            //
+            // backlog = the exact number of expired subscriptions still pending.
+            // Counted after the sweep so the rows just cancelled are excluded, and
+            // it also covers rows another instance holds a lock on, which the batch
+            // size alone could never tell us about.
+            let backlog = 0;
+            try {
+                backlog = await this.userRepository.countExpiredSubscriptions(sweepTime);
+            } catch {
+                // The gauge is best-effort; sweep success takes precedence
+            }
+            this.metrics.expiredBacklog.set(backlog);
+
             if (sweptUsers.length === 0) {
                 this.metrics.expiryLagSeconds.set(0);
-                this.metrics.expiredBacklog.set(0);
                 sweepSpan.setAttribute("result.count", 0);
                 timer({ status: "empty" });
                 return 0;
@@ -71,9 +82,6 @@ export class SubscriptionSweeper {
                     .filter(v => v > 0);
                 const maxLag = lags.length ? Math.max(...lags) : 0;
                 this.metrics.expiryLagSeconds.set(Math.max(0, maxLag));
-                // Heuristic backlog: swept count +1 when batch full indicates remaining work (exact count in b2)
-                const backlog = sweptUsers.length >= this.BATCH_SIZE ? sweptUsers.length + 1 : sweptUsers.length;
-                this.metrics.expiredBacklog.set(backlog);
             } catch {
                 // gauges are best-effort; sweep success takes precedence
             }

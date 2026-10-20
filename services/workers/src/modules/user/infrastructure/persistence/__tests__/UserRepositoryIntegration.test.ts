@@ -42,4 +42,92 @@ describe("UserRepository Integration", () => {
         const found = await repository.findUniqueById(user.id);
         expect(found?.email).toBe("test-find@example.com");
     });
+
+    describe("expireDueSubscriptions", () => {
+        const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
+
+        const seedExpired = async (email: string, endsAt: Date, eventTimestamp?: Date) => {
+            const user = await prismaPrimary.user.create({ data: { email } });
+            await prismaPrimary.subscription.create({
+                data: {
+                    userId: user.id,
+                    status: "ACTIVE",
+                    endsAt,
+                    eventTimestamp: eventTimestamp ?? null,
+                },
+            });
+            return user;
+        };
+
+        test("cancels the expired subscriptions it selects and returns them", async () => {
+            const user = await seedExpired("expired-1@example.com", daysAgo(1));
+
+            const swept = await repository.expireDueSubscriptions(
+                100,
+                { status: "CANCELED", cancellationScheduled: false, paddleSubscriptionId: null, paddlePlanId: null },
+                new Date(),
+            );
+
+            expect(swept.map((s) => s.id)).toEqual([user.id]);
+
+            const sub = await prismaPrimary.subscription.findUnique({ where: { userId: user.id } });
+            expect(sub?.status).toBe("CANCELED");
+        });
+
+        test("does not return a row that lost the race to a fresher webhook", async () => {
+            // Selected by the sweep, but its eventTimestamp is newer than the
+            // sweep clock, so the UPDATE must leave it alone. The row used to
+            // be returned anyway by a slice fallback, which meant the sweeper
+            // invalidated caches for a subscription it had not touched.
+            const user = await seedExpired("expired-2@example.com", daysAgo(1), new Date(Date.now() + 60_000));
+
+            const swept = await repository.expireDueSubscriptions(
+                100,
+                { status: "CANCELED", cancellationScheduled: false, paddleSubscriptionId: null, paddlePlanId: null },
+                new Date(),
+            );
+
+            expect(swept.map((s) => s.id)).not.toContain(user.id);
+
+            const sub = await prismaPrimary.subscription.findUnique({ where: { userId: user.id } });
+            expect(sub?.status).toBe("ACTIVE");
+        });
+
+        test("returns only the rows it updated when some are skipped", async () => {
+            const stale = await seedExpired("expired-3a@example.com", daysAgo(2), new Date(Date.now() + 60_000));
+            const fresh = await seedExpired("expired-3b@example.com", daysAgo(1));
+
+            const swept = await repository.expireDueSubscriptions(
+                100,
+                { status: "CANCELED", cancellationScheduled: false, paddleSubscriptionId: null, paddlePlanId: null },
+                new Date(),
+            );
+
+            const ids = swept.map((s) => s.id);
+            expect(ids).toContain(fresh.id);
+            expect(ids).not.toContain(stale.id);
+        });
+
+        test("countExpiredSubscriptions counts what is still pending", async () => {
+            await seedExpired("count-1@example.com", daysAgo(1));
+            await seedExpired("count-2@example.com", daysAgo(1));
+            // Not expired yet.
+            const active = await prismaPrimary.user.create({ data: { email: "count-active@example.com" } });
+            await prismaPrimary.subscription.create({
+                data: { userId: active.id, status: "ACTIVE", endsAt: new Date(Date.now() + 86_400_000) },
+            });
+
+            const before = await repository.countExpiredSubscriptions(new Date());
+            expect(before).toBe(2);
+
+            await repository.expireDueSubscriptions(
+                100,
+                { status: "CANCELED", cancellationScheduled: false, paddleSubscriptionId: null, paddlePlanId: null },
+                new Date(),
+            );
+
+            const after = await repository.countExpiredSubscriptions(new Date());
+            expect(after).toBe(0);
+        });
+    });
 });

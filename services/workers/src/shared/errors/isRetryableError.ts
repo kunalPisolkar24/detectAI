@@ -2,6 +2,7 @@ const NON_RETRYABLE = new Set([
   "UserNotFoundError",
   "MissingFieldError",
   "InvalidTransitionError",
+  "UnhandledEventError",
   "SyntaxError",
 ]);
 

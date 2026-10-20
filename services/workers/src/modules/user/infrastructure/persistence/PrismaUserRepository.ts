@@ -63,7 +63,7 @@ export class PrismaUserRepository implements IUserRepository {
             // Now intentionally NOT called inside transaction to avoid Redis I/O while holding locks.
             // Caller handles post-commit cache invalidation.
 
-            const result = await tx.subscription.updateMany({
+            const updated = await tx.subscription.updateManyAndReturn({
                 where: {
                     userId: { in: users.map(user => user.id) },
                     status: {
@@ -85,44 +85,24 @@ export class PrismaUserRepository implements IUserRepository {
                     ...data,
                     eventTimestamp: data.eventTimestamp ?? sweepTime,
                 },
+                select: { userId: true },
             });
 
             if (this.metrics) {
-                this.metrics.sweepBatchSize.observe({ stage: "updated" }, result.count);
-                const filtered = users.length - result.count;
+                this.metrics.sweepBatchSize.observe({ stage: "updated" }, updated.length);
+                const filtered = users.length - updated.length;
                 if (filtered > 0) {
                     this.metrics.staleEventsFilteredTotal.inc({ reason: "phantom_select" }, filtered);
-                }
-                // SKIP LOCKED pressure: when selected < limit but update count < selected, or selected < limit indicates locks held
-                if (users.length > 0 && users.length < limit) {
-                    const skipped = limit - users.length;
-                    // Best-effort: partial fill may be due to locks or simply not enough rows; still valuable as contention signal
-                    try { this.metrics.dbLockSkippedTotal.inc(skipped); } catch {}
-                } else if (filtered > 0) {
-                    // phantom filtered also indicates clock drift / concurrent mutation contention
-                    try { this.metrics.dbLockSkippedTotal.inc(filtered); } catch {}
+                    try { this.metrics.sweepSkippedTotal.inc(filtered); } catch {}
                 }
             }
 
-            // Fix for slice bug: instead of users.slice(0, count) which assumes ordered IN, re-query updated rows.
-            // Use returned count to filter via DB lookup for exact updated set.
-            if (result.count === users.length) {
-                return users;
-            }
-            if (result.count === 0) return [];
-            // Partial update: fetch actual updated rows via follow-up query
-            const updatedIds = users.map(u => u.id);
-            // Fallback: return first N as approximation but log — ideally use RETURNING in raw query.
-            // For correctness without RETURNING, query for rows that now match CANCELED + sweepTime
-            try {
-                const refreshed = await tx.$queryRawUnsafe<ExpiredSubscription[]>(
-                    `SELECT u.id, u.email, s."paddleSubscriptionId", s."endsAt" FROM "User" u INNER JOIN "Subscription" s ON s."userId" = u.id WHERE s."userId" = ANY($1::text[]) AND s.status = 'CANCELED' AND s."eventTimestamp" = $2`,
-                    updatedIds,
-                    data.eventTimestamp ?? sweepTime,
-                );
-                if (refreshed.length > 0) return refreshed;
-            } catch {}
-            return users.slice(0, result.count);
+            // The rows that were actually updated, in the order the SELECT returned
+            // them. The eventTimestamp guard above means a selected row can lose the
+            // race to a fresher webhook, so the updated set is not necessarily the
+            // selected set.
+            const updatedIds = new Set(updated.map((row) => row.userId));
+            return users.filter((user) => updatedIds.has(user.id));
         });
             // Post-commit cache invalidation (outside lock) — previously held FOR UPDATE while doing Redis I/O
             if (onSelected && result.length > 0) {
@@ -139,6 +119,23 @@ export class PrismaUserRepository implements IUserRepository {
             try { txTimer?.({ result: txResult }); } catch {}
             try { span.end(); } catch {}
         }
+    }
+
+    /**
+     * Counts the expired subscriptions that are still pending at `sweepTime`,
+     * using the same predicate the sweep selects on. Read from the primary so
+     * the number is not a stale replica view. Rows that another instance holds
+     * a lock on still count here, which is what makes this a true backlog
+     * rather than a restatement of the last batch size.
+     */
+    async countExpiredSubscriptions(sweepTime: Date): Promise<number> {
+        const rows = await this.prismaWriter.$queryRawUnsafe<{ count: bigint }[]>(
+            `SELECT COUNT(*)::bigint AS count FROM "Subscription"
+              WHERE status IS NOT NULL AND status IN ('ACTIVE', 'TRIALING', 'PAST_DUE', 'PAUSED')
+                AND "endsAt" IS NOT NULL AND "endsAt" < $1`,
+            sweepTime,
+        );
+        return Number(rows[0]?.count ?? 0);
     }
 
     /**

@@ -78,6 +78,29 @@ describe("EventDeduplicator", () => {
     );
   });
 
+  test("markProcessed does not move the stored timestamp backwards", async () => {
+    redis.get.mockResolvedValue("2024-01-01T01:00:00.000Z");
+
+    await dedup.markProcessed("user_1", new Date("2024-01-01T00:00:00Z"));
+
+    // The fallback compares before writing, so a late event cannot regress the
+    // stored timestamp and re-open the stale-event window.
+    expect(redis.set).not.toHaveBeenCalled();
+  });
+
+  test("markProcessed overwrites an older stored timestamp", async () => {
+    redis.get.mockResolvedValue("2024-01-01T00:00:00.000Z");
+
+    await dedup.markProcessed("user_1", new Date("2024-01-01T01:00:00Z"));
+
+    expect(redis.set).toHaveBeenCalledWith(
+      "payment:event:ts:user_1",
+      "2024-01-01T01:00:00.000Z",
+      "EX",
+      2592000,
+    );
+  });
+
   test("markProcessed handles Redis errors gracefully", async () => {
     redis.set.mockRejectedValue(new Error("Connection lost"));
 

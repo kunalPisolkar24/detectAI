@@ -100,6 +100,41 @@ describe("PaymentService idempotency", () => {
     expect(mockHandler.handle).toHaveBeenCalledTimes(1);
   });
 
+  test("fallback id is stable for the same event", async () => {
+    const service = buildService();
+    mockIdempotency.isDuplicate.mockResolvedValue(false);
+    // Two separate deliveries of the same event: each is parsed from its own
+    // JSON, so each has its own data object.
+    const build = () => ({
+      event_type: "subscription.updated",
+      occurred_at: "2024-01-01T00:00:00Z",
+      data: { custom_data: { userId: "user_1" }, id: "sub_123" },
+    });
+
+    await service.handleEvent(build() as any);
+    await service.handleEvent(build() as any);
+
+    const ids = (mockIdempotency.isDuplicate.mock.calls as any[]).map((c) => c[0]);
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).toBe(ids[1]);
+  });
+
+  test("fallback id differs when occurred_at differs but the data is identical", async () => {
+    const service = buildService();
+    mockIdempotency.isDuplicate.mockResolvedValue(false);
+    const base = {
+      event_type: "subscription.updated",
+      data: { custom_data: { userId: "user_1" }, id: "sub_123" },
+    };
+
+    await service.handleEvent({ ...base, occurred_at: "2024-01-01T00:00:00Z" } as any);
+    await service.handleEvent({ ...base, occurred_at: "2024-01-01T01:00:00Z" } as any);
+
+    const ids = (mockIdempotency.isDuplicate.mock.calls as any[]).map((c) => c[0]);
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).not.toBe(ids[1]);
+  });
+
   test("isDuplicate true returns ACK without throwing", async () => {
     const service = buildService();
     mockIdempotency.isDuplicate.mockResolvedValue(true);

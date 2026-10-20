@@ -70,9 +70,14 @@ export class EventDeduplicator {
           await (this.redis as any).eval(script, 1, key, value, String(EventDeduplicator.TTL_SECONDS));
           return;
         } catch {
-          // Fallback to simple SET if eval fails
+          // Fall through to the compare-then-write path below
         }
       }
+      // Fallback when EVAL is unavailable: compare before writing so a late
+      // event cannot move the stored timestamp backwards. Not atomic, but it
+      // only ever refuses a write that would regress the value.
+      const stored = await this.redis.get(key);
+      if (stored && stored >= value) return;
       await this.redis.set(key, value, "EX", EventDeduplicator.TTL_SECONDS);
     } catch (error) {
       Logger.warn("Failed to set event timestamp in Redis", { userId, error });

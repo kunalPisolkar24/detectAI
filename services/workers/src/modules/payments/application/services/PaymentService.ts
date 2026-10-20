@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import { Logger } from "@shared/logging/Logger";
 import { MetricsService } from "@shared/monitoring/MetricsService";
 import type { PaymentEvent } from "../../domain/types";
-import { UserNotFoundError, MissingFieldError } from "../../domain/errors";
+import { UserNotFoundError, MissingFieldError, UnhandledEventError } from "../../domain/errors";
 import { InvalidTransitionError } from "../../domain/stateMachine";
 import type { IPaymentEventHandler } from "../handlers/IPaymentEventHandler";
 import { type IdempotencyStore } from "@shared/cache/IdempotencyStore";
@@ -41,9 +41,17 @@ export class PaymentService {
         if (raw && typeof raw === "string" && raw.length > 0) {
             return raw;
         }
-        // Fallback for internal events without event_id: stable hash of event_type + data (sorted keys)
+        // Fallback for internal events without an id: stable hash of the event
+        // type, its timestamp and its data. The timestamp has to be part of the
+        // hash — two events with identical data but different timestamps are
+        // different events, and hashing the data alone would drop the second
+        // one as a duplicate.
         try {
-            const canonical = stableStringify({ event_type: event.event_type, data: event.data ?? {} });
+            const canonical = stableStringify({
+                event_type: event.event_type,
+                occurred_at: event.occurred_at ?? null,
+                data: event.data ?? {},
+            });
             return createHash("sha256").update(canonical).digest("hex").slice(0, 32);
         } catch {
             return `fallback_${event.event_type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -78,10 +86,14 @@ export class PaymentService {
             try {
                 this.metrics.unhandledEventsTotal.inc({ event_type: jobLabel });
             } catch {}
+            try {
+                this.metrics.jobErrors.inc({ job_type: jobLabel, error_type: "unhandled_event_type" });
+            } catch {}
             timer({ status: "unhandled" });
-            // For unhandled types, mark as processed to allow future handler rollout to reprocess via DB replay window
-            // But also throw to route to DLQ for visibility
-            return;
+            // Dead-letter it instead of acknowledging it. The event is not written
+            // to the ProcessedWebhook ledger, so it stays replayable once a handler
+            // for the type ships — acknowledging would drop it for good.
+            throw new UnhandledEventError(event_type);
         }
 
         if (!event.occurred_at) {
@@ -155,7 +167,12 @@ export class PaymentService {
             }
             // Check by name for JSON-serialized errors
             const name = (error as any)?.name;
-            if (name === "UserNotFoundError" || name === "MissingFieldError" || name === "InvalidTransitionError") {
+            if (
+                name === "UserNotFoundError" ||
+                name === "MissingFieldError" ||
+                name === "InvalidTransitionError" ||
+                name === "UnhandledEventError"
+            ) {
                 timer({ status: "dlq" });
                 throw error;
             }
