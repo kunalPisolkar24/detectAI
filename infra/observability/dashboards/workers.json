@@ -3193,7 +3193,7 @@
           }
         },
         {
-          "title": "Dependency state snapshot",
+          "title": "Dependency health by worker",
           "layout": {
             "column": 1,
             "row": 8,
@@ -3207,15 +3207,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(redis_connection_status) AS `redis up` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' FACET service, client_name LIMIT 20"
-              },
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(rabbitmq_connection_status) AS `rabbitmq up` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' FACET service LIMIT 20"
-              },
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(db_pool_connections) AS `connections` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' FACET service, state LIMIT 20"
+                "query": "FROM Metric SELECT latest(redis_connection_status) AS `redis up`, latest(rabbitmq_connection_status) AS `rabbitmq up`, max(db_pool_connections) AS `pool open (peak)` WHERE deployment.environment = '${environment}' AND service LIKE 'worker-%' FACET service LIMIT 20"
               }
             ]
           }
