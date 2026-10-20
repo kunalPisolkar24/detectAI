@@ -397,6 +397,36 @@ stateDiagram-v2
 
 Invalid transitions throw `InvalidTransitionError` and send the event to the DLQ.
 
+### Database Connections
+
+The service talks to PostgreSQL through two clients: a **primary** client and a **replica** client. When `DATABASE_URL_REPLICA` is not set, or is the same as `DATABASE_URL`, the two are the same client and there is only one pool.
+
+**Read routing.** Eight operations are routed to the replica:
+
+| Operation | Goes to |
+|-----------|----------|
+| `findUnique`, `findUniqueOrThrow`, `findFirst`, `findFirstOrThrow`, `findMany`, `count`, `aggregate`, `groupBy` | The replica, falling back to the primary on a connection failure |
+| `create`, `update`, `upsert`, `delete`, `updateMany`, `deleteMany` | The primary |
+| `$queryRaw`, `$executeRaw`, `$queryRawUnsafe`, `$transaction` | The primary |
+
+Two details are easy to get wrong:
+
+- **The fallback covers connection failures, not lag.** If the replica is up but has not caught up, the read simply returns stale data. The primary is only consulted when the connection itself fails.
+- **A read inside a transaction always uses the primary.** The transaction callback bypasses the routing, so a read taken inside `$transaction` sees the same snapshot as the writes around it.
+
+**Which worker reads where.** The Cron worker reads and writes the primary. The Payments and Analytics workers read the replica, with one exception that matters:
+
+- `findUniqueById` looks the user up on the replica and **confirms on the primary** when the replica does not have the row. A webhook for a user whose row was just written must not be mistaken for a missing user, or it would be dead-lettered as a permanent failure.
+
+**Pool limits.**
+
+| Setting | Value | Meaning |
+|---------|-------|---------|
+| `POOL_MAX` | 5 | Connections per pool. With a distinct replica URL there are two pools, so 10 connections per worker process. |
+| `statement_timeout` | 30 seconds | Queries are killed by PostgreSQL after this. It surfaces as a database error, which is retryable, so the message is retried and then dead-lettered. |
+| `idleTimeoutMillis` | 30 seconds | How long an idle connection is kept. |
+| `connectionTimeoutMillis` | 10 seconds | How long to wait for a connection from the pool. |
+
 ## Cache Architecture
 
 The service uses two Redis instances with different purposes:

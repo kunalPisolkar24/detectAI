@@ -326,7 +326,7 @@ graph LR
 
 | Error | Retryable? | Action |
 |-------|------------|--------|
-| `UserNotFoundError` | No | DLQ (webhook before user exists) |
+| `UserNotFoundError` | No | DLQ (the user row does not exist on the primary) |
 | `MissingFieldError` | No | DLQ (missing required data) |
 | `InvalidTransitionError` | No | DLQ (invalid status change) |
 | `UnhandledEventError` | No | DLQ (no handler registered for this event type) |
@@ -336,6 +336,8 @@ graph LR
 | Redis error (idempotency) | N/A | Fail-open, process anyway |
 
 Retryability is decided by the error's `name`, not by the class hierarchy. That is deliberate: it means a `UserNotFoundError` that crossed a process boundary and arrived as plain JSON is still classified correctly.
+
+**`UserNotFoundError` is decided on the primary.** The handlers look the user up on the read replica, and confirm on the primary when the replica does not have the row. A webhook that arrives before the replica catches up therefore still finds the user — otherwise a moment of replication lag would dead-letter a perfectly good event as a permanent failure.
 
 **The database health check runs first.** Before any of this, the worker asks whether PostgreSQL is reachable. If it is not, the message is requeued regardless of what went wrong — including a poison message that would otherwise be dead-lettered. Those messages only reach the dead letter queue once the database recovers.
 
@@ -413,7 +415,7 @@ See [Configuration](../getting-started/configuration.md) for the full list of sh
 **Many messages in DLQ?**
 - Check `worker_dead_lettered_total` metric
 - Review error logs for specific failure reasons
-- Common: `UserNotFoundError` (webhook before user row), `InvalidTransitionError` (out-of-order webhooks)
+- Common: `UserNotFoundError` (the user row does not exist on the primary), `InvalidTransitionError` (out-of-order webhooks)
 
 **High duplicate count?**
 - Paddle may be retrying webhooks — check Paddle dashboard

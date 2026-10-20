@@ -21,7 +21,17 @@ export class PrismaUserRepository implements IUserRepository {
     ) {}
 
     async findUniqueById(userId: string): Promise<UserRecord | null> {
-        return this.prismaReader.user.findUnique({
+        const fromReader = await this.prismaReader.user.findUnique({
+            where: { id: userId },
+            select: { email: true },
+        });
+        if (fromReader) return fromReader;
+        // The read replica can lag behind the primary, and the replica fallback
+        // in PrismaService only covers connection failures, not lag. Without this
+        // second lookup a webhook for a user whose row was just written looks
+        // like a missing user, and the caller dead-letters it as a permanent
+        // failure. Confirm on the primary before saying the user does not exist.
+        return this.prismaWriter.user.findUnique({
             where: { id: userId },
             select: { email: true },
         });

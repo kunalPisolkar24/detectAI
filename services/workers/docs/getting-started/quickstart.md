@@ -99,7 +99,7 @@ The payload has to match the shape the handler expects. These are the fields tha
 
 #### Before you send it: the user has to exist
 
-The worker looks up the user before it touches anything. If there is no row with that `userId`, the event is rejected with a `UserNotFoundError` and sent to the dead letter queue — this is the normal case for a webhook that arrives before the user row has been written.
+The worker looks up the user before it touches anything. If there is no row with that `userId` on the primary, the event is rejected with a `UserNotFoundError` and sent to the dead letter queue — this is the normal case for a webhook that arrives before the user row has been written.
 
 To try the example above, create the user first:
 
