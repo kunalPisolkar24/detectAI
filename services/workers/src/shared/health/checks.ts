@@ -27,7 +27,10 @@ export async function checkRedis(client: RedisClient): Promise<boolean> {
         (async () => {
             try {
                 const res = await client.ping();
-                return res === "PONG" || client.status === "ready";
+                // Only a real PONG counts. `client.status` is a connection state,
+                // not a command result, so a Redis that answers PING with an error
+                // (-LOADING, -BUSY) while the socket is up would look healthy.
+                return res === "PONG";
             } catch {
                 return false;
             }

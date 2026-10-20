@@ -32,9 +32,9 @@ export class SubscriptionSweeper {
             sweepSpan.setAttribute("batch.size", this.BATCH_SIZE);
             sweepSpan.setAttribute("sweepTime", sweepTime.toISOString());
 
-            // Expiry is a terminal downgrade; it intentionally bypasses the
-            // payments stateMachine (PAUSED->CANCELED is invalid via webhooks
-            // but is the whole point of the sweep, see #196/#178).
+            // Expiry is a terminal downgrade, and it intentionally bypasses the
+            // payments stateMachine: expiry goes through expireDueSubscriptions
+            // (a raw UPDATE), not the webhook path, so no transition is checked.
             // cancellationScheduled:false is intentional: once endsAt has passed,
             // a scheduled cancellation is moot — the row is fully canceled.
             const sweptUsers = await this.userRepository.expireDueSubscriptions(this.BATCH_SIZE, {
@@ -44,7 +44,7 @@ export class SubscriptionSweeper {
                 paddlePlanId: null,
                 eventTimestamp: sweepTime,
             }, sweepTime, async (selected) => {
-                // Pre-commit DEL (payments-style double-del): shrinks the window
+                // Post-commit DEL, first of the two invalidation passes: shrinks the window
                 // where a replica-lag read repopulates stale entries after commit.
                 // ~100ms replica lag remains possible; see #187.
                 await this.cacheInvalidator.invalidateUsers(selected);

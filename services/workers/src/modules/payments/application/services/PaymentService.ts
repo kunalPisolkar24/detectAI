@@ -87,9 +87,10 @@ export class PaymentService {
         if (!event.occurred_at) {
             Logger.warn("Event missing occurred_at, using server timestamp", { event_type, userId });
         }
-        // Do not mutate original event data; handlers parse occurred_at themselves with strict validation
+        // Producers send `occurred_at` on the event envelope, but the handlers read it
+        // from `data`. Copy it down so they see the producer's timestamp rather than the
+        // server's processing time, and fall back to the server clock when it is absent.
         const effectiveOccurredAt = event.occurred_at ?? new Date().toISOString();
-        // Ensure data has occurred_at for handlers that read it, but clone-safe
         if (data && typeof data === "object" && !data.occurred_at) {
             (data as any).occurred_at = effectiveOccurredAt;
         }

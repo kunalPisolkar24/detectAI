@@ -66,7 +66,7 @@ export class MetricsService {
 
         this.cacheOperations = new Counter({
             name: "cache_operations_total",
-            help: "Total cache hits and misses",
+            help: "Total cache invalidation operations",
             labelNames: ["operation", "cache_type"],
             registers: [this.registry]
         });
