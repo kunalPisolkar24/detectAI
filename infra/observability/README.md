@@ -53,7 +53,8 @@ root has no AWS provider / emulator hacks.
 - `envs/prod.tfvars` — non-secret values only. Keys via
   `TF_VAR_newrelic_api_key` or `NEW_RELIC_API_KEY` env.
 - `tests/valid.tftest.hcl` — mocked plan asserts 12 dashboards (plus the workers
-  board page count) and prod policy names.
+  board page count), the chats prod board's pages and panels against the chats
+  loadtest board, and prod policy names.
 
 ## Worker log export
 

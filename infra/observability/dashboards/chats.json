@@ -1,128 +1,803 @@
 {
   "name": "detectai-chats (${environment})",
-  "description": "Go chat service api + worker roles: gRPC, Mongo chat_db, Redis streams. service.name = chat-service | chat-worker. Metrics :9091/:9099.",
+  "description": "Chats (deployment.environment = ${environment}): gRPC traffic across chat-service (api) + chat-worker roles, Mongo chat_db, Redis streams/cache. Roles split by service.name facet.",
   "permissions": "PUBLIC_READ_WRITE",
   "pages": [
     {
-      "name": "Chats",
-      "description": "gRPC RED per role, DocDB ops, Redis streams lag",
+      "name": "Overview",
+      "description": "Combined RED per role, publish-to-ingest flow, cache health, container saturation",
       "widgets": [
         {
-          "title": "",
-          "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
-          "visualization": { "id": "viz.markdown" },
+          "title": "RPC/min",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
-            "text": "## Chats (`chat-service` api + `chat-worker`, `${environment}`)\nKnown gap: Go services log `otel_service` but traces may be absent until SDK init lands — metrics (`:9091/:9099/metrics` via collector prometheus) and logs work today. Roles split by `service.name` facet. Datastores: `chat_db` Mongo (mode `standalone` on Floci), chat Redis streams. Degraded mode = `NoopStream` Mongo fallback."
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker') AND span.kind = 'server'" }
+            ],
+            "limit": 500
           }
         },
         {
-          "title": "API gRPC rate",
-          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.billboard" },
+          "title": "Error share",
+          "layout": { "column": 4, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_grpc_requests_total), 1 minute) AS `req/min` WHERE service.name = 'chat-service' AND deployment.environment = '${environment}'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker') AND span.kind = 'server'" }
+            ],
+            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } },
+            "limit": 2
+          }
+        },
+        {
+          "title": "RPC p95 all ops",
+          "layout": { "column": 7, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker') AND span.kind = 'server'" }
+            ],
+            "limit": 250
+          }
+        },
+        {
+          "title": "RPC p99 all ops",
+          "layout": { "column": 10, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) AS `p99 ms` WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker') AND span.kind = 'server'" }
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "title": "Current CPU %",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 4 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(`container.cpu.utilization`) AS `cpu %` WHERE deployment.environment = '${environment}' AND (`container.name` LIKE '%chat-service%' OR `container.name` LIKE '%chat-worker%')" }
+            ],
+            "thresholds": { "alert": { "value": 85 }, "warning": { "value": 70 } },
+            "limit": 100
+          }
+        },
+        {
+          "title": "Current memory %",
+          "layout": { "column": 5, "row": 2, "height": 3, "width": 4 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(`container.memory.percent`) AS `mem %` WHERE deployment.environment = '${environment}' AND (`container.name` LIKE '%chat-service%' OR `container.name` LIKE '%chat-worker%')" }
+            ],
+            "thresholds": { "alert": { "value": 85 }, "warning": { "value": 70 } },
+            "limit": 100
+          }
+        },
+        {
+          "title": "Redis degraded",
+          "layout": { "column": 9, "row": 2, "height": 3, "width": 4 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT max(chat_redis_degraded) AS `degraded` WHERE deployment.environment = '${environment}'" }
+            ],
+            "thresholds": { "alert": { "value": 0.5 } },
+            "limit": 1
+          }
+        },
+        {
+          "title": "Publish vs ingest",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_messages_published_total), 1 minute) AS `published/min`, rate(sum(chat_messages_ingested_total), 1 minute) AS `ingested/min`, rate(sum(chat_worker_consumed_total), 1 minute) AS `consumed/min` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Tail latency p95 by family",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND span.kind = 'server' FACET cases(WHERE `rpc.method` IN ('GetChat', 'GetChatHistory', 'GetUserChats') AS 'reads', WHERE `rpc.method` IN ('CreateChat', 'SaveMessage') AS 'writes', WHERE `rpc.method` = 'RenameChat' AS 'updates', WHERE `rpc.method` = 'DeleteChat' AS 'deletes') TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Stream lag worst/avg + pending",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT max(chat_redis_stream_lag) AS `worst lag`, average(chat_redis_stream_lag) AS `avg lag` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(chat_stream_pending) AS `pending total` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Cache hit ratio",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_cache_hits_total), 1 minute) AS `hits/min`, rate(sum(chat_cache_misses_total), 1 minute) AS `misses/min` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Container CPU % per role",
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND (`container.name` LIKE '%chat-service%' OR `container.name` LIKE '%chat-worker%') FACET `container.name` TIMESERIES 1 minute LIMIT 4" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Container memory % per role",
+          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND (`container.name` LIKE '%chat-service%' OR `container.name` LIKE '%chat-worker%') FACET `container.name` TIMESERIES 1 minute LIMIT 4" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Lag by partition",
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT max(chat_redis_stream_lag) AS `lag` WHERE deployment.environment = '${environment}' FACET partition LIMIT 16" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT max(chat_stream_pending) AS `pending` WHERE deployment.environment = '${environment}' FACET stream LIMIT 16" }
             ]
+          }
+        },
+        {
+          "title": "Service versions reporting",
+          "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS spans FACET service.name, service.version WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker') LIMIT 20" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Service",
+      "description": "chat-service api deep dive: gRPC latency, throughput, cache, publish path",
+      "widgets": [
+        {
+          "title": "Reads p95",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` IN ('GetChat', 'GetChatHistory', 'GetUserChats')" }
+            ],
+            "limit": 250
+          }
+        },
+        {
+          "title": "Writes p95",
+          "layout": { "column": 4, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` IN ('CreateChat', 'SaveMessage')" }
+            ],
+            "limit": 250
+          }
+        },
+        {
+          "title": "Updates/deletes p95",
+          "layout": { "column": 7, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` IN ('RenameChat', 'DeleteChat')" }
+            ],
+            "limit": 300
           }
         },
         {
           "title": "API error share",
-          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.billboard" },
+          "layout": { "column": 10, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT (sum(chat_grpc_errors_total) / (sum(chat_grpc_requests_total) + 1)) * 100 AS `error %` WHERE service.name = 'chat-service' AND deployment.environment = '${environment}'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND span.kind = 'server'" }
             ],
-            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } }
+            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } },
+            "limit": 2
           }
         },
         {
-          "title": "Worker consume rate",
-          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.billboard" },
+          "title": "Read p99 by method",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.area" },
           "rawConfiguration": {
+            "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_worker_consumed_total), 1 minute) AS `consumed/min` WHERE service.name = 'chat-worker' AND deployment.environment = '${environment}'" }
-            ]
-          }
-        },
-        {
-          "title": "Redis degraded flag",
-          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
-          "visualization": { "id": "viz.billboard" },
-          "rawConfiguration": {
-            "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT max(chat_redis_degraded) AS degraded WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker')" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` IN ('GetChat', 'GetChatHistory', 'GetUserChats') FACET `rpc.method` TIMESERIES AUTO" }
             ],
-            "thresholds": { "alert": { "value": 1 } }
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
-          "title": "gRPC latency by method",
+          "title": "Write p99 by method",
           "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.line" },
+          "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name IN ('chat-service', 'chat-worker') AND deployment.environment = '${environment}' FACET service.name, name TIMESERIES AUTO LIMIT 12" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(chat_grpc_duration_ms) AS `avg ms` WHERE service.name = 'chat-service' AND deployment.environment = '${environment}' FACET grpc_method TIMESERIES AUTO LIMIT 10" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` IN ('CreateChat', 'SaveMessage') FACET `rpc.method` TIMESERIES AUTO" }
             ],
-            "yAxisLeft": { "zero": true }
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
-          "title": "Produce -> consume lag proxy",
+          "title": "Update/delete p99 by method",
           "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.line" },
+          "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_stream_produced_total), 1 minute) AS `produced/min`, rate(sum(chat_worker_consumed_total), 1 minute) AS `consumed/min` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT max(chat_stream_pending) AS pending WHERE deployment.environment = '${environment}' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND span.kind = 'server' AND `rpc.method` IN ('RenameChat', 'DeleteChat') FACET `rpc.method` TIMESERIES AUTO" }
             ],
-            "yAxisLeft": { "zero": true }
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
-          "title": "Mongo op health (chat_db)",
-          "layout": { "column": 1, "row": 4, "height": 4, "width": 6 },
-          "visualization": { "id": "viz.table" },
+          "title": "Throughput by family",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
           "rawConfiguration": {
+            "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS rpm, average(duration.ms) AS `avg ms`, percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker') AND (`db.system` = 'mongodb' OR name LIKE '%mongo%') FACET name LIMIT 20" }
-            ]
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND span.kind = 'server' FACET cases(WHERE `rpc.method` IN ('GetChat', 'GetChatHistory', 'GetUserChats') AS 'reads', WHERE `rpc.method` IN ('CreateChat', 'SaveMessage') AS 'writes', WHERE `rpc.method` = 'RenameChat' AS 'updates', WHERE `rpc.method` = 'DeleteChat' AS 'deletes') TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
-          "title": "Redis stream + cache ops",
-          "layout": { "column": 7, "row": 4, "height": 4, "width": 6 },
-          "visualization": { "id": "viz.table" },
+          "title": "Slow RPC rate by family",
+          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
           "rawConfiguration": {
+            "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS rpm, average(duration.ms) AS `avg ms` WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker') AND (name LIKE '%redis%' OR name LIKE '%stream%' OR name LIKE '%cache%') FACET name LIMIT 20" }
-            ]
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `slow/min` WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND span.kind = 'server' AND duration.ms > 100 FACET cases(WHERE `rpc.method` IN ('GetChat', 'GetChatHistory', 'GetUserChats') AS 'reads', WHERE `rpc.method` IN ('CreateChat', 'SaveMessage') AS 'writes', WHERE `rpc.method` = 'RenameChat' AS 'updates', WHERE `rpc.method` = 'DeleteChat' AS 'deletes') TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
-          "title": "TLS + connection errors",
+          "title": "Requests by status",
           "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(chat_grpc_requests_total) WHERE deployment.environment = '${environment}' FACET status TIMESERIES AUTO LIMIT 4" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Errors by family/code",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.stacked-bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(chat_grpc_errors_total) AS errors WHERE deployment.environment = '${environment}' FACET cases(WHERE method IN ('GetChat', 'GetChatHistory', 'GetUserChats') AS 'reads', WHERE method IN ('CreateChat', 'SaveMessage') AS 'writes', WHERE method = 'RenameChat' AS 'updates', WHERE method = 'DeleteChat' AS 'deletes'), code TIMESERIES AUTO LIMIT 16" }
+            ],
+            "facet": { "showOtherSeries": false },
+            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Published + sync fallback",
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_messages_published_total), 1 minute) AS `published/min` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_sync_fallback_total), 1 minute) AS `fallback/min` WHERE deployment.environment = '${environment}' FACET reason TIMESERIES AUTO LIMIT 5" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Message size avg",
+          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(chat_message_bytes) AS `avg bytes` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Slowest methods",
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 12 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker') AND (message LIKE '%TLS%' OR message LIKE '%tls%' OR message LIKE '%AUTH%' OR message LIKE '%connect%fail%' OR message LIKE '%degraded%') FACET service.name LIMIT 15" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND span.kind = 'server' FACET `rpc.method` LIMIT 20" }
             ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Service Logs",
+      "description": "chat-service api logs: error-first stream, volume, slow RPC",
+      "widgets": [
+        {
+          "title": "Error log stream (latest 100)",
+          "layout": { "column": 1, "row": 1, "height": 4, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, `severity.text`, message, method, code, `trace.id` WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND `severity.text` = 'ERROR' LIMIT 100" }
+            ]
+          }
+        },
+        {
+          "title": "Log volume by level",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' FACET `severity.text` TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Errors by method",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.stacked-bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND `severity.text` = 'ERROR' FACET method TIMESERIES AUTO LIMIT 10" }
+            ],
+            "facet": { "showOtherSeries": false },
+            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Recent api errors",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(`trace.id`) AS `sample trace` WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND `severity.text` = 'ERROR' FACET method LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Slow RPC over 500ms",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT timestamp, name, `rpc.method`, duration.ms, `trace.id` WHERE deployment.environment = '${environment}' AND service.name = 'chat-service' AND span.kind = 'server' AND duration.ms > 500 LIMIT 100" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Worker",
+      "description": "chat-worker deep dive: consume, batches, BulkUpsert, DLQ, stream errors",
+      "widgets": [
+        {
+          "title": "Ingested/min",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_messages_ingested_total), 1 minute) AS `ingested/min` WHERE deployment.environment = '${environment}'" }
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "title": "Consumed/min",
+          "layout": { "column": 4, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_worker_consumed_total), 1 minute) AS `consumed/min` WHERE deployment.environment = '${environment}'" }
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "title": "DLQ messages",
+          "layout": { "column": 7, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(chat_dlq_messages_total) AS `dlq` WHERE deployment.environment = '${environment}'" }
+            ],
+            "thresholds": { "alert": { "value": 1 } },
+            "limit": 10
+          }
+        },
+        {
+          "title": "Stream pending",
+          "layout": { "column": 10, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT max(chat_stream_pending) AS `pending` WHERE deployment.environment = '${environment}'" }
+            ],
+            "thresholds": { "alert": { "value": 100 }, "warning": { "value": 25 } },
+            "limit": 500
+          }
+        },
+        {
+          "title": "Batch process vs BulkUpsert latency",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(chat_worker_batch_duration_seconds) * 1000 AS `avg ms` WHERE deployment.environment = '${environment}' FACET stage TIMESERIES AUTO LIMIT 5" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Batch size avg",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(chat_batch_size) AS `avg batch` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Stream errors by operation",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.stacked-bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(chat_stream_errors_total) AS errors WHERE deployment.environment = '${environment}' FACET operation TIMESERIES AUTO LIMIT 10" }
+            ],
+            "facet": { "showOtherSeries": false },
+            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+          }
+        },
+        {
+          "title": "DB errors by operation",
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.stacked-bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(chat_database_errors_total) AS errors WHERE deployment.environment = '${environment}' FACET operation TIMESERIES AUTO LIMIT 10" }
+            ],
+            "facet": { "showOtherSeries": false },
+            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Consumed vs ingested",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_worker_consumed_total), 1 minute) AS `consumed/min`, rate(sum(chat_messages_ingested_total), 1 minute) AS `ingested/min`, rate(sum(chat_dlq_messages_total), 1 minute) AS `dlq/min` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
           "title": "Go runtime per role",
-          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.line" },
+          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(go_goroutines) AS goroutines WHERE deployment.environment = '${environment}' AND service.name IN ('chat-service', 'chat-worker') FACET service.name TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(go_goroutines) AS goroutines WHERE deployment.environment = '${environment}' AND `service.name` IN ('chat-service', 'chat-worker') FACET `service.name` TIMESERIES AUTO LIMIT 5" }
             ],
-            "yAxisLeft": { "zero": true }
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Worker Logs",
+      "description": "chat-worker logs: consume, BulkUpsert, DLQ, recovery",
+      "widgets": [
+        {
+          "title": "Error log stream (latest 100)",
+          "layout": { "column": 1, "row": 1, "height": 4, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, `severity.text`, message, stream, `trace.id` WHERE deployment.environment = '${environment}' AND service.name = 'chat-worker' AND `severity.text` = 'ERROR' LIMIT 100" }
+            ]
+          }
+        },
+        {
+          "title": "Log volume by level",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE deployment.environment = '${environment}' AND service.name = 'chat-worker' FACET `severity.text` TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Errors by message",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.stacked-bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE deployment.environment = '${environment}' AND service.name = 'chat-worker' AND `severity.text` = 'ERROR' FACET message TIMESERIES AUTO LIMIT 10" }
+            ],
+            "facet": { "showOtherSeries": false },
+            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Recent worker errors",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(`trace.id`) AS `sample trace` WHERE deployment.environment = '${environment}' AND service.name = 'chat-worker' AND `severity.text` = 'ERROR' FACET message LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Slow BulkUpsert over 1000ms",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT timestamp, name, `db.operation`, duration.ms, `trace.id` WHERE deployment.environment = '${environment}' AND service.name = 'chat-worker' AND `db.operation` = 'bulk_upsert' AND duration.ms > 1000 LIMIT 100" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Infra",
+      "description": "Mongo + Redis datastore depth: op latency, cache behavior, exporter saturation, collector pipeline",
+      "widgets": [
+        {
+          "title": "Mongo op p95",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = '${environment}' AND `db.system` = 'mongodb'" }
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "title": "Redis cmd p95",
+          "layout": { "column": 4, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = '${environment}' AND `db.system` = 'redis'" }
+            ],
+            "limit": 250
+          }
+        },
+        {
+          "title": "Cache hit %",
+          "layout": { "column": 7, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT (sum(chat_cache_hits_total) / (sum(chat_cache_hits_total) + sum(chat_cache_misses_total) + 1)) * 100 AS `hit %` WHERE deployment.environment = '${environment}'" }
+            ],
+            "thresholds": { "warning": { "value": 50 } },
+            "limit": 100
+          }
+        },
+        {
+          "title": "Exporter scrape ok",
+          "layout": { "column": 10, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT max(redis_connected_clients) AS `redis clients` WHERE deployment.environment = '${environment}'" }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "title": "Mongo p95 slowest 4 ops",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) WHERE deployment.environment = '${environment}' AND `db.system` = 'mongodb' FACET `db.operation` TIMESERIES AUTO LIMIT 4" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Redis p95 slowest 4 ops",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) WHERE deployment.environment = '${environment}' AND `db.system` = 'redis' FACET `db.operation` TIMESERIES AUTO LIMIT 4" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Cache read latency hit vs miss",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(chat_cache_op_duration_seconds) * 1000 AS `avg ms` WHERE deployment.environment = '${environment}' AND operation = 'get_recent' FACET result TIMESERIES AUTO LIMIT 4" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Cache read volume served vs missed",
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(chat_cache_hits_total), 1 minute) AS `hits/min`, rate(sum(chat_cache_misses_total), 1 minute) AS `misses/min` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Mongo container CPU/mem",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu`, average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%mongo%' TIMESERIES 1 minute" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Redis container CPU/mem",
+          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu`, average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%redis%' TIMESERIES 1 minute" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Redis exporter",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(redis_connected_clients) AS clients, max(redis_memory_used_bytes / 1000000) AS `mem MB` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(redis_evicted_keys_total), 1 minute) AS `evicted/min`, rate(sum(redis_expired_keys_total), 1 minute) AS `expired/min` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Datastore network rx/tx",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS `rx`, rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS `tx` WHERE deployment.environment = '${environment}' AND (`container.name` LIKE '%mongo-chat%' OR `container.name` LIKE '%redis-chat%') FACET `container.name` TIMESERIES 1 minute LIMIT 4" }
+            ],
+            "yAxisLeft": { "zero": true, "min": 0 },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Slowest datastore ops",
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE deployment.environment = '${environment}' AND `db.system` IN ('mongodb', 'redis') FACET `db.system`, `db.operation` LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Collector pipeline",
+          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT sum(otelcol_receiver_accepted_spans) AS accepted, sum(otelcol_receiver_refused_spans) AS refused, sum(otelcol_exporter_sent_spans) AS sent, sum(otelcol_exporter_send_failed_spans) AS failed WHERE deployment.environment = '${environment}' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         }
       ]

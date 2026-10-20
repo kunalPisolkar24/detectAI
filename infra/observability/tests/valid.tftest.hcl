@@ -20,6 +20,24 @@ run "dashboards_render" {
     condition     = length(jsondecode(newrelic_one_dashboard_json.dashboards["workers"].json).pages) == 8
     error_message = "workers board must have 8 pages."
   }
+
+  # The chats boards are twins: same pages, same panels, only the env filter and
+  # the "(load)" title suffix differ. Drift here means prod lost coverage.
+  assert {
+    condition = (
+      [for p in jsondecode(newrelic_one_dashboard_json.dashboards["chats"].json).pages : p.name] ==
+      [for p in jsondecode(newrelic_one_dashboard_json.dashboards["chats-loadtest"].json).pages : p.name]
+    )
+    error_message = "Chats prod board must have the same pages as the chats loadtest board."
+  }
+
+  assert {
+    condition = (
+      { for p in jsondecode(newrelic_one_dashboard_json.dashboards["chats"].json).pages : p.name => [for w in p.widgets : lookup(w, "title", "")] } ==
+      { for p in jsondecode(newrelic_one_dashboard_json.dashboards["chats-loadtest"].json).pages : p.name => [for w in p.widgets : trimsuffix(lookup(w, "title", ""), " (load)")] }
+    )
+    error_message = "Chats prod board must have the same panels as the chats loadtest board."
+  }
 }
 
 run "policies_exist" {
