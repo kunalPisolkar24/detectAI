@@ -30,7 +30,7 @@ receivers:
           static_configs:
             - targets: ["localhost:8888"]
         - job_name: ${env:OTEL_SCRAPE_JOB:-app}
-          scrape_interval: 15s
+          scrape_interval: ${env:OTEL_SCRAPE_INTERVAL:-15s}
           metrics_path: ${env:OTEL_SCRAPE_METRICS_PATH:-/metrics}
           static_configs:
             - targets: ["${env:OTEL_SCRAPE_TARGET:-app:8080}"]
@@ -39,17 +39,17 @@ receivers:
         # Single-target services leave these unset; the discard-port target
         # fails closed in the receiver and changes nothing for them.
         - job_name: ${env:OTEL_SCRAPE_JOB_2:-unused-2}
-          scrape_interval: 15s
+          scrape_interval: ${env:OTEL_SCRAPE_INTERVAL:-15s}
           metrics_path: ${env:OTEL_SCRAPE_METRICS_PATH:-/metrics}
           static_configs:
             - targets: ["${env:OTEL_SCRAPE_TARGET_2:-localhost:9}"]
         - job_name: ${env:OTEL_SCRAPE_JOB_3:-unused-3}
-          scrape_interval: 15s
+          scrape_interval: ${env:OTEL_SCRAPE_INTERVAL:-15s}
           metrics_path: ${env:OTEL_SCRAPE_METRICS_PATH:-/metrics}
           static_configs:
             - targets: ["${env:OTEL_SCRAPE_TARGET_3:-localhost:9}"]
         - job_name: ${env:OTEL_SCRAPE_JOB_4:-unused-4}
-          scrape_interval: 15s
+          scrape_interval: ${env:OTEL_SCRAPE_INTERVAL:-15s}
           metrics_path: ${env:OTEL_SCRAPE_METRICS_PATH:-/metrics}
           static_configs:
             - targets: ["${env:OTEL_SCRAPE_TARGET_4:-localhost:9}"]

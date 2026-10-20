@@ -55,6 +55,13 @@ inspected side by side. A missing `NEW_RELIC_LICENSE_KEY` is a warning, not a
 failure: the exporter retries and drops while the worker keeps processing, and
 k6 thresholds are unaffected.
 
+The rig also runs the datastore exporters (postgres, redis, and rabbitmq for
+the queue-backed rigs) so the board's `Infra` page has data too. The
+collector's scrape interval is 5s here, not the 15s the shared collector config
+defaults to: a rig is torn down about 40s after the worker boots, and at 15s
+the collector never closes a series that only changed once — the cron
+histograms (`Batch size and expiry lag`) never reached New Relic at all.
+
 ## Three layers of verification
 
 1. **Ingest checks** (`worker_ingest_success`, `checks`): the proxy returned 200.

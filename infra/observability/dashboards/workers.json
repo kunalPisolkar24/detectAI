@@ -43,7 +43,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT percentage(count(*), WHERE worker_job_errors_total > 0) AS `error %` WHERE deployment.environment = '${environment}' AND service IN ('worker-analytics', 'worker-payments')"
+                "query": "FROM Metric SELECT 100 * sum(worker_job_errors_total) / (sum(worker_job_errors_total) + sum(worker_jobs_processed_total)) AS `error %` WHERE deployment.environment = '${environment}' AND service IN ('worker-analytics', 'worker-payments')"
               }
             ],
             "thresholds": {
@@ -168,7 +168,7 @@
           }
         },
         {
-          "title": "Expired backlog",
+          "title": "Expired backlog (approx)",
           "layout": {
             "column": 7,
             "row": 2,
@@ -512,7 +512,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT percentage(count(*), WHERE worker_job_errors_total > 0) AS `error %` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics'"
+                "query": "FROM Metric SELECT 100 * sum(worker_job_errors_total) / (sum(worker_job_errors_total) + sum(worker_jobs_processed_total)) AS `error %` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics'"
               }
             ],
             "thresholds": {
@@ -595,7 +595,7 @@
               },
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(worker_duplicate_events_total), 1 minute) AS `duplicates/min` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO"
+                "query": "FROM Metric SELECT rate(sum(worker_cron_stale_events_filtered_total), 1 minute) AS `dupes/min` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' FACET reason TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -721,29 +721,24 @@
             "width": 6
           },
           "visualization": {
-            "id": "viz.area"
+            "id": "viz.gauge"
           },
           "rawConfiguration": {
-            "legend": {
-              "enabled": true
-            },
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT percentage(count(*), WHERE cache_operations_total > 0 AND operation = 'hit') AS `hit %` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT 100 * sum(worker_cron_stale_events_filtered_total) / (sum(worker_cron_stale_events_filtered_total) + sum(worker_jobs_processed_total)) AS `dedup hit %` WHERE deployment.environment = '${environment}' AND service = 'worker-analytics'"
               }
             ],
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0,
-              "max": 100
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
+            "thresholds": {
+              "alert": {
+                "value": 25
+              },
+              "warning": {
+                "value": 10
               }
-            }
+            },
+            "limit": 2
           }
         },
         {
@@ -805,7 +800,7 @@
           }
         },
         {
-          "title": "Worker container CPU %",
+          "title": "Worker container CPU % (of one core)",
           "layout": {
             "column": 1,
             "row": 6,
@@ -839,7 +834,7 @@
           }
         },
         {
-          "title": "Worker container memory %",
+          "title": "Worker container memory used (MB)",
           "layout": {
             "column": 7,
             "row": 6,
@@ -856,7 +851,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(container.memory.usage.total) / 1024 / 1024 AS `mem MB` WHERE deployment.environment = '${environment}' AND `container.name` = 'worker_analytics' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -1228,7 +1223,7 @@
           }
         },
         {
-          "title": "Expired backlog",
+          "title": "Expired backlog (approx)",
           "layout": {
             "column": 7,
             "row": 1,
@@ -1500,13 +1495,13 @@
               },
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT latest(worker_cron_config) AS `config` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' FACET key LIMIT 10"
+                "query": "FROM Metric SELECT latest(worker_cron_config) AS `config` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' FACET param LIMIT 10"
               }
             ]
           }
         },
         {
-          "title": "Worker container CPU %",
+          "title": "Worker container CPU % (of one core)",
           "layout": {
             "column": 1,
             "row": 6,
@@ -1540,7 +1535,7 @@
           }
         },
         {
-          "title": "Worker container memory %",
+          "title": "Worker container memory used (MB)",
           "layout": {
             "column": 7,
             "row": 6,
@@ -1557,7 +1552,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(container.memory.usage.total) / 1024 / 1024 AS `mem MB` WHERE deployment.environment = '${environment}' AND `container.name` = 'worker_cron' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -1708,7 +1703,7 @@
           }
         },
         {
-          "title": "Message size (bytes)",
+          "title": "Cache invalidation retries/min",
           "layout": {
             "column": 1,
             "row": 9,
@@ -1725,7 +1720,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(worker_message_size_bytes) AS `avg bytes` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT rate(sum(worker_cron_cache_invalidate_retries_total), 1 minute) AS `retries/min` WHERE deployment.environment = '${environment}' AND service = 'worker-cron' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -2196,7 +2191,7 @@
           }
         },
         {
-          "title": "Worker container CPU %",
+          "title": "Worker container CPU % (of one core)",
           "layout": {
             "column": 1,
             "row": 6,
@@ -2230,7 +2225,7 @@
           }
         },
         {
-          "title": "Worker container memory %",
+          "title": "Worker container memory used (MB)",
           "layout": {
             "column": 7,
             "row": 6,
@@ -2247,7 +2242,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT average(container.memory.usage.total) / 1024 / 1024 AS `mem MB` WHERE deployment.environment = '${environment}' AND `container.name` = 'worker_payments' TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {
@@ -2986,7 +2981,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT max(redis_db_keys) AS keys, max(redis_connected_clients) AS clients WHERE deployment.environment = '${environment}' AND `service.name` IN ('redis-users', 'redis-events', 'redis-exporter') FACET `service.name` TIMESERIES AUTO LIMIT 6"
+                "query": "FROM Metric SELECT sum(redis_db_keys) AS keys, max(redis_connected_clients) AS clients WHERE deployment.environment = '${environment}' AND `service.name` IN ('redis-users', 'redis-events', 'redis-exporter') FACET `service.name` TIMESERIES AUTO LIMIT 6"
               }
             ],
             "yAxisLeft": {

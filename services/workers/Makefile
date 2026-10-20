@@ -264,9 +264,15 @@ LOAD_COMPOSE = docker compose --env-file $(ENV_FILE) -f infra/compose.load-$(WOR
 # processing, so a failed export never fails a run. Default runs stay offline.
 # -f paths resolve from the Makefile's cwd (services/workers); volume paths
 # inside the overlay resolve from the project dir (services/workers/infra).
+# The datastore exporters feed the Infra page of the workers dashboard. The
+# rabbitmq exporter reads the broker's management API, so it is merged only
+# for the queue-backed workers: the cron rig has no broker at all.
 LOAD_COMPOSE_OBS = $(LOAD_COMPOSE) \
 	-f ../../infra/docker/otel/loadtest-observability.yml \
+	-f ../../infra/docker/redis-exporter/standalone.yml \
+	-f ../../infra/docker/postgres-exporter/standalone.yml \
 	-f infra/compose.load.observability.yml
+LOAD_COMPOSE_OBS += $(if $(filter analytics payments,$(WORKER)),-f ../../infra/docker/rabbitmq-exporter/standalone.yml -f infra/compose.load.rabbitmq.yml)
 WITH_OBSERVABILITY ?= 0
 # Container ports are fixed per worker; only host ports are remapped per rig.
 WORKER_METRICS_PORT_analytics = 7001

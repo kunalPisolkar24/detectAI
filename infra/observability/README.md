@@ -40,7 +40,10 @@ root has no AWS provider / emulator hacks.
   `payment-gateway` copy of `rabbitmq_connection_status` never leaks in;
   exporter widgets facet on `service.name` (`redis-users`, `redis-events`).
   `workers-loadtest.json` is page-for-page identical with `'loadtest'`
-  hardcoded.
+  hardcoded, except for the one panel that only one environment can fill:
+  `Paddle API latency and cancels` needs a real call to Paddle's API, which
+  only a user-initiated cancellation makes, so the prod board keeps it and the
+  loadtest board shows `Cancel events/min` (the rig's cancel path) instead.
 - `alerts.tf` — one policy per area, NRQL static conditions, all enabled and
   filtering `deployment.environment = 'prod'` so loadtest runs never page. Workers
   policy: `workers_error_rate` (all three via `service.name LIKE 'worker-%'`),
@@ -81,6 +84,114 @@ is what feeds the worker-side widgets on the `Infra` page. The RabbitMQ broker
 metrics need the exporter pointed at the management API
 (`RABBITMQ_MGMT_URL` in `infra/docker/prod/.env`); the AMQP URL the apps use
 leaves `rabbitmq_up` at 0 and no queue metrics at all.
+
+### Datastore metrics in the load rigs
+
+The prod stack scrapes its datastore exporters (postgres, redis, rabbitmq). The
+worker load rigs used to scrape only the worker itself, so every `Infra` panel
+that reads an exporter metric was blank there. `services/workers/infra/
+compose.load.observability.yml` now adds the postgres and redis exporters to
+every rig, and `compose.load.rabbitmq.yml` adds the rabbitmq exporter to the
+queue-backed rigs only (the cron rig has no broker). The exporter atoms live at
+`infra/docker/{postgres,redis,rabbitmq}-exporter/standalone.yml` and are merged
+by extra `-f` flags in `services/workers/Makefile`; the collector's spare
+scrape slots are pointed at them there. The rabbitmq exporter reads the
+broker's **management** API, not the AMQP URL, and it retries until the broker
+is up — it does not fail the rig.
+
+The load collector scrapes every `OTEL_SCRAPE_INTERVAL` (5s in the worker rigs,
+15s elsewhere). 15s is too slow for a short rig: the cron rig is torn down
+about 40s after the worker boots, and at 15s the collector never closes the
+cron histogram series, so `Batch size and expiry lag` read as empty. At 5s the
+same rig lands them.
+
+### What the infra metrics actually mean
+
+The exporter metrics were checked against the datastores' own answers during a
+load run (same window, same scrape):
+
+| Board metric | Source of truth | Match |
+|---|---|---|
+| `redis_memory_used_bytes` | `INFO memory` -> `used_memory` | 1.09-1.34 MB vs 1.14-1.29 MB |
+| `redis_connected_clients` | `INFO clients` -> `connected_clients` | 2 = 2 |
+| `redis_evicted_keys_total` | `INFO stats` -> `evicted_keys` | 0 = 0 |
+| `redis_db_keys` | `INFO keyspace` (per db) | sum matches; see below |
+| `pg_stat_database_numbackends` | `pg_stat_database.numbackends` | 2-5 vs 0-4 |
+| `pg_locks_count` | `count(*) FROM pg_locks` | 2-10 vs 0-2 |
+| `pg_stat_activity_max_tx_duration` | `max(extract(epoch from now()-xact_start))` | 0-0.057 s vs 0-0.0009 s |
+| `rabbitmq_queue_messages` | management API `/api/queues` | 0-1 vs 0-0 |
+| `rabbitmq_queue_consumers` | management API `/api/queues` | 0-1 vs 0-1 |
+| `container.memory.usage.total` | `docker stats` | 83.3-101.0 MiB vs 83.4-87.4 MiB |
+| `container.cpu.utilization` | `docker stats` | 0.56-8.57 % vs 0.45-4.25 % |
+
+Four readings that look wrong but are not:
+
+- **`rabbitmq_queue_messages` is ready + unacknowledged**, not ready alone. The
+  management API reports `messages = messages_ready + messages_unacknowledged`
+  (confirmed: `m=1, r=0, u=1`), so the queue-depth panels show true depth.
+- **`redis_db_keys` is per database** (db0..db15). Keyspace is the **sum**; the
+  board uses `sum(redis_db_keys)`. A `max()` here reported the biggest single
+  DB and understated the keyspace by ~5x.
+- **`container.memory.percent` is usage divided by the container's cgroup
+  limit.** The worker containers set no `mem_limit`, so their limit is the
+  host's memory and the percentage reads as a share of host RAM. The board
+  shows **memory used in MB** instead, which is unambiguous.
+- **`container.cpu.utilization` is a percentage of a single core**, so it
+  exceeds 100 % on a busy container. The panel title says so.
+
+One metric is an approximation: `worker_cron_expired_backlog` is
+`sweptCount + 1` when a batch came back full, so it can overstate the backlog
+by up to one batch. The board labels it *Expired backlog (approx)*; the exact
+count is a `COUNT(*)` on the expired subscriptions, which the load rig reads
+from the database instead.
+
+## Empty worker panels: "no data" is not always "no signal"
+
+Three NRDB behaviours decide whether a worker widget renders anything. Check
+them before chasing an empty panel.
+
+- **A labeled counter with no observations is absent, not zero.** prom-client
+  emits a child series only after the first `.inc()`, so `worker_job_errors_total`
+  and `worker_dead_lettered_total` reach New Relic only once that worker has
+  actually errored or dead-lettered something. `Errors by type` and `Errors by
+  type and job` are therefore blank on a clean run — that is the healthy state,
+  and the same blank would appear if the worker stopped reporting altogether.
+  `sum()` over an absent series is `0`, but over a series whose datapoints lack
+  the board's `deployment.environment` it is `null`; the error-share widgets are
+  ratios of that counter against `worker_jobs_processed_total` for this reason.
+- **Cumulative counters are stored as per-interval deltas.** `sum()` over a
+  window gives the total, but the final scrape is lost whenever the collector
+  is stopped before its batch timeout (10s) expires — the load rig stops it as
+  soon as k6 exits — so board totals trail the worker's own counters by about
+  one 15s scrape interval. A run shorter than a single interval can land
+  entirely inside that gap and read as zero.
+- **A ratio over two metrics only holds as a whole-window aggregate.** Inside
+  one time bucket one of the two metrics is absent, so the per-bucket ratio is
+  `null`. `Cache hit rate (dedup lookups)` is a gauge for that reason: it
+  computes `duplicates / (duplicates + processed)` across the selected window,
+  and its per-bucket form would render empty.
+- **A metric that only changes once may never get a scrape.** The cron rig's
+  sweep happens in a two-second window, so at a 15s scrape interval the
+  collector never observes the change and the series never reaches New Relic
+  at all — not even as a zero. The worker rigs scrape every 5s for this
+  reason; see "Datastore metrics in the load rigs" above.
+
+`cache_operations_total` is the user-cache hit/miss counter and only the
+payments worker increments it; the analytics worker's dedup counter is
+`worker_cron_stale_events_filtered_total{reason="duplicate"}`.
+
+### Panels that stay blank on purpose
+
+These are correct when empty — the event they report never happened, so there
+is no series to draw:
+
+| Panel | Blank because |
+|---|---|
+| `Errors by type`, `Errors by type and job` | No error has ever been counted (labeled counter, never incremented) |
+| `Postgres requeues/min (DB-down requeues)` | No DB-down event has ever been requeued |
+| `Slow jobs over 1000ms` / `over 2000ms` | No job has run that long |
+| `Stale events filtered (total)` (cron) | No sweep has ever filtered a phantom row |
+| `Paddle API latency and cancels` | The load rig has no Paddle API to call, so the request timer is never observed |
 
 ## Usage
 
