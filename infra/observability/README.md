@@ -28,6 +28,9 @@ root has no AWS provider / emulator hacks.
   Postgres / Redis / RabbitMQ exporter panels). `web-loadtest.json` is
   page-for-page identical with `'loadtest'` hardcoded and ` (load)` appended to
   the panel titles, like the chats pair.
+- Log pages share one layout across every board: the tables are full width
+  (a log message needs the columns) and the two chart panels sit side by side
+  at half width.
 - `dashboards/workers.json` — one board for all three worker deployables
   (`worker-analytics`, `worker-cron`, `worker-payments`), each its own binary,
   container and `service.name`. Pages: `Overview` (cross-worker rollup: throughput,

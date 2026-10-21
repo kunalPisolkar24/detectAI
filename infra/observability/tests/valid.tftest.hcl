@@ -95,6 +95,28 @@ run "dashboards_render" {
     )
     error_message = "The Spark and Flare inference panels must each filter on their own model."
   }
+
+  # Log tables need the full width to fit a message column, and the two chart
+  # panels sit side by side at half width — the layout every other Logs page
+  # already uses.
+  assert {
+    condition = alltrue([
+      for w in one([for p in jsondecode(newrelic_one_dashboard_json.dashboards["web"].json).pages : p if p.name == "Service Logs"]).widgets :
+      w.visualization.id != "viz.table" || w.layout.width == 12
+    ])
+    error_message = "Every table on the web Service Logs page must be full width."
+  }
+
+  assert {
+    condition = (
+      { for w in one([for p in jsondecode(newrelic_one_dashboard_json.dashboards["web"].json).pages : p if p.name == "Service Logs"]).widgets : w.title => [w.layout.column, w.layout.width] if w.visualization.id != "viz.table" } ==
+      {
+        "Log volume by level" = [1, 6]
+        "Errors by message"   = [7, 6]
+      }
+    )
+    error_message = "The web Service Logs chart panels must sit side by side at half width."
+  }
 }
 
 run "policies_exist" {
