@@ -241,6 +241,11 @@ nothing records it, so the board does not read it; `ai_inference_duration_second
 is the one app histogram the board does use, and it does arrive as an OpenTelemetry
 histogram, which New Relic can take percentiles from directly.
 
+That histogram is split into two panels on the `Service` page — `Spark inference
+latency` and `Flare inference latency` — each filtering on `model`, instead of one
+chart faceting both models. Spark is TF-IDF and Flare is BERT, so their latencies
+sit an order of magnitude apart and a shared axis flattens Flare's line.
+
 One counter nuance applies to the web board's app counters. prom-client only
 creates a labelled child the first time it is incremented, and New Relic takes
 the first value of a cumulative series as its baseline. A counter that is

@@ -62,6 +62,39 @@ run "dashboards_render" {
     )
     error_message = "Web prod board must have the same panels as the web loadtest board."
   }
+
+  # The AI inference panels are split per model on purpose: one faceted chart
+  # put Flare and Spark on the same axis, where Spark's scale hid Flare's
+  # latency. Each panel must stay, and each must filter on its own model.
+  assert {
+    condition = (
+      [for w in one([for p in jsondecode(newrelic_one_dashboard_json.dashboards["web"].json).pages : p if p.name == "Service"]).widgets : w.title] ==
+      [
+        "Requests by path",
+        "Slow requests over 1s",
+        "Spark inference latency",
+        "Flare inference latency",
+        "Auth failures (401/403)",
+        "Rate limit rejections",
+        "Cache hit and miss",
+        "Analytics publish failures",
+        "Usage Redis errors and sync fallback",
+        "Slowest paths",
+      ]
+    )
+    error_message = "Web board Service page must keep the split Spark/Flare inference panels."
+  }
+
+  assert {
+    condition = (
+      [for w in one([for p in jsondecode(newrelic_one_dashboard_json.dashboards["web"].json).pages : p if p.name == "Service"]).widgets : w.rawConfiguration.nrqlQueries[0].query if strcontains(w.title, "inference latency")] ==
+      [
+        "FROM Metric SELECT percentile(ai_inference_duration_seconds, 50, 95, 99) WHERE deployment.environment = 'prod' AND service.name = 'web' AND model = 'spark' TIMESERIES AUTO",
+        "FROM Metric SELECT percentile(ai_inference_duration_seconds, 50, 95, 99) WHERE deployment.environment = 'prod' AND service.name = 'web' AND model = 'flare' TIMESERIES AUTO",
+      ]
+    )
+    error_message = "The Spark and Flare inference panels must each filter on their own model."
+  }
 }
 
 run "policies_exist" {
