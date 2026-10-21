@@ -45,7 +45,12 @@ export type LogForwarder = (level: LogLevel, message: string, attributes: LogAtt
 // pino swaps every level method for this hook, so the original logger has to
 // be invoked here or nothing would reach stdout.
 export function createLogMethodHook(forward: LogForwarder) {
-  return function logMethod(this: Logger, args: unknown[], method: LogFn, level: number): void {
+  return function logMethod(
+    this: Logger,
+    args: Parameters<LogFn>,
+    method: LogFn,
+    level: number,
+  ): void {
     method.apply(this, args)
 
     const name = LEVEL_NAMES[level]
