@@ -62,9 +62,12 @@ export class WorkerServer {
         },
       });
     } catch (error: any) {
-      if (String(error?.message ?? "").includes("EADDRINUSE")) {
+      // Bun reports the busy port on `error.code`, not in the message
+      // ("Failed to start server. Is port 7001 in use?"), so match both.
+      const code = (error as any)?.code;
+      const message = String(error?.message ?? "");
+      if (code === "EADDRINUSE" || message.includes("EADDRINUSE") || message.includes("already in use")) {
         Logger.error(`Worker server port ${this.port} already in use`, error);
-        throw error;
       }
       throw error;
     }

@@ -51,7 +51,7 @@ Each worker runs in its own Docker Compose stack with only the datastores it nee
 | Document | What You'll Learn | When to Read |
 |----------|-------------------|--------------|
 | [Health](operations/health.md) | Health checks and monitoring | Monitoring the service |
-| [Observability](operations/observability.md) | Metrics, logs, and alerts | Monitoring and debugging |
+| [Observability](operations/observability.md) | Metrics, their labels, logs, and alerts | Monitoring and debugging |
 
 ### Reference
 
@@ -80,11 +80,24 @@ Each worker runs in its own Docker Compose stack with only the datastores it nee
 3. [Message Flows](concepts/message-flows.md) - Understand event flows
 4. [Cron Worker](components/cron-worker.md) - Understand background jobs
 
+## Diagrams in These Docs
+
+Every conceptual page carries a diagram so you can picture the system before reading the words:
+
+| Diagram type | Where you'll find it | What it shows |
+|--------------|----------------------|---------------|
+| **Class diagram** | [Architecture](concepts/architecture.md), [Message Flows](concepts/message-flows.md), and each [Component](components/) page | The classes in each worker and which interfaces they implement |
+| **State diagram** | [Architecture](concepts/architecture.md), [Payments Worker](components/payments-worker.md) | Every valid subscription status change, labelled with the event that causes it |
+| **Sequence diagram** | [Message Flows](concepts/message-flows.md), [Cron Worker](components/cron-worker.md) | The order of calls between the worker, the broker and the database |
+| **Flowchart** | Throughout | The decision points in a single code path |
+
+**Looking up a metric?** [Observability](operations/observability.md) has a label reference — every metric, its labels, and every value those labels can take.
+
 ## Related Files
 
-- **Main README**: [`../../README.md`](../../README.md) - Project overview
-- **Makefile**: [`../../Makefile`](../../Makefile) - Build and run commands
-- **Docker Compose**: [`../../infra/compose.payments.yml`](../../infra/compose.payments.yml) - Payments stack
-- **Docker Compose**: [`../../infra/compose.analytics.yml`](../../infra/compose.analytics.yml) - Analytics stack
-- **Docker Compose**: [`../../infra/compose.cron.yml`](../../infra/compose.cron.yml) - Cron stack
-- **Prisma Schema**: [`../../prisma/schema.prisma`](../../prisma/schema.prisma) - Database models
+- **Main README**: [`../../../README.md`](../../../README.md) - Project overview
+- **Makefile**: [`../Makefile`](../Makefile) - Build and run commands
+- **Docker Compose**: [`../infra/compose.payments.yml`](../infra/compose.payments.yml) - Payments stack
+- **Docker Compose**: [`../infra/compose.analytics.yml`](../infra/compose.analytics.yml) - Analytics stack
+- **Docker Compose**: [`../infra/compose.cron.yml`](../infra/compose.cron.yml) - Cron stack
+- **Prisma Schema**: [`../prisma/schema.prisma`](../prisma/schema.prisma) - Database models

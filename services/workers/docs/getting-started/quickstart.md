@@ -67,10 +67,13 @@ A healthy response looks like:
 The Payments worker processes messages from a RabbitMQ queue. You can send a test message:
 
 ```bash
-# Publish a test Paddle webhook event to RabbitMQ
+# The stack runs under its own Compose project, so find the broker container first
+RABBIT=$(docker ps --filter "name=detect-ai-workers-payments-rabbitmq" --format "{{.Names}}" | head -1)
+
+# Publish a test Paddle webhook event
 # (This simulates a subscription.created event)
-docker exec rabbitmq rabbitmqadmin publish exchange=amq.default routing_key=payment_events \
-  payload='{"event_type":"subscription.created","event_id":"test-001","occurred_at":"2024-09-10T12:00:00Z","data":{"custom_data":{"userId":"user123"},"status":"active","subscription_id":"sub_abc","plan_id":"plan_xyz"}}'
+docker exec "$RABBIT" rabbitmqadmin publish exchange=amq.default routing_key=payment_events \
+  payload='{"event_type":"subscription.created","event_id":"test-001","occurred_at":"2024-09-10T12:00:00Z","data":{"id":"sub_abc","customer_id":"ctm_abc","status":"active","custom_data":{"userId":"user123"},"items":[{"price":{"id":"plan_xyz"}}]}}'
 ```
 
 Check the worker logs to see it process the message:
@@ -78,6 +81,36 @@ Check the worker logs to see it process the message:
 ```bash
 make worker-logs WORKER=payments
 ```
+
+#### The fields the worker reads
+
+The payload has to match the shape the handler expects. These are the fields that matter:
+
+| Field in the payload | What the worker does with it |
+|----------------------|-----------------------------|
+| `event_type` | Chooses the handler. `subscription.created`, `subscription.updated` and `subscription.activated` all use the same one. |
+| `event_id` | The idempotency key. The worker refuses to process the same one twice. |
+| `occurred_at` | The event timestamp, used to detect stale events. |
+| `data.custom_data.userId` | Which user the subscription belongs to. |
+| `data.id` | The Paddle subscription id. |
+| `data.customer_id` | The Paddle customer id. |
+| `data.status` | The new subscription status. Upper-cased, so `"active"` works the same as `"ACTIVE"`. |
+| `data.items[0].price.id` | The Paddle plan id. |
+
+#### Before you send it: the user has to exist
+
+The worker looks up the user before it touches anything. If there is no row with that `userId` on the primary, the event is rejected with a `UserNotFoundError` and sent to the dead letter queue — this is the normal case for a webhook that arrives before the user row has been written.
+
+To try the example above, create the user first:
+
+```bash
+PG=$(docker ps --filter "name=detect-ai-workers-payments-postgres-users" --format "{{.Names}}" | head -1)
+
+docker exec "$PG" psql -U user -d detect_ai -c \
+  "INSERT INTO \"User\" (id, email, \"updatedAt\") VALUES ('user123', 'user123@example.com', NOW()) ON CONFLICT DO NOTHING;"
+```
+
+If the log shows `Duplicate Paddle event filtered`, the event was already processed. If it shows a validation error, compare your payload against the field table above.
 
 ## What Just Happened?
 

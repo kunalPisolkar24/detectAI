@@ -25,7 +25,7 @@ const READ_OPERATIONS = [
 // Used to bypass replica routing for transactional reads.
 const txContext = new AsyncLocalStorage<boolean>();
 
-const REPLICA_RETRY_CODES = new Set(["P1001", "P1002", "P1017", "P1008", "P1003_TIMEOUT"]);
+const REPLICA_RETRY_CODES = new Set(["P1001", "P1002", "P1017", "P1008"]);
 
 function redactConnectionString(url: string | undefined): string {
   if (!url) return "<missing>";

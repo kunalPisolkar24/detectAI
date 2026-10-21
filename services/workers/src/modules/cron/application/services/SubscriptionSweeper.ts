@@ -32,9 +32,9 @@ export class SubscriptionSweeper {
             sweepSpan.setAttribute("batch.size", this.BATCH_SIZE);
             sweepSpan.setAttribute("sweepTime", sweepTime.toISOString());
 
-            // Expiry is a terminal downgrade; it intentionally bypasses the
-            // payments stateMachine (PAUSED->CANCELED is invalid via webhooks
-            // but is the whole point of the sweep, see #196/#178).
+            // Expiry is a terminal downgrade, and it intentionally bypasses the
+            // payments stateMachine: expiry goes through expireDueSubscriptions
+            // (a raw UPDATE), not the webhook path, so no transition is checked.
             // cancellationScheduled:false is intentional: once endsAt has passed,
             // a scheduled cancellation is moot — the row is fully canceled.
             const sweptUsers = await this.userRepository.expireDueSubscriptions(this.BATCH_SIZE, {
@@ -44,7 +44,7 @@ export class SubscriptionSweeper {
                 paddlePlanId: null,
                 eventTimestamp: sweepTime,
             }, sweepTime, async (selected) => {
-                // Pre-commit DEL (payments-style double-del): shrinks the window
+                // Post-commit DEL, first of the two invalidation passes: shrinks the window
                 // where a replica-lag read repopulates stale entries after commit.
                 // ~100ms replica lag remains possible; see #187.
                 await this.cacheInvalidator.invalidateUsers(selected);
@@ -52,10 +52,21 @@ export class SubscriptionSweeper {
 
             // P0 SLO: expiry lag + backlog gauges (issue #207)
             // lag = max(sweepTime - endsAt) piggybacked on selected endsAt to avoid extra RTT.
-            // backlog heuristic for b1: when batch full, pending > batch; refined to exact COUNT(*) in b2 when limit hit.
+            //
+            // backlog = the exact number of expired subscriptions still pending.
+            // Counted after the sweep so the rows just cancelled are excluded, and
+            // it also covers rows another instance holds a lock on, which the batch
+            // size alone could never tell us about.
+            let backlog = 0;
+            try {
+                backlog = await this.userRepository.countExpiredSubscriptions(sweepTime);
+            } catch {
+                // The gauge is best-effort; sweep success takes precedence
+            }
+            this.metrics.expiredBacklog.set(backlog);
+
             if (sweptUsers.length === 0) {
                 this.metrics.expiryLagSeconds.set(0);
-                this.metrics.expiredBacklog.set(0);
                 sweepSpan.setAttribute("result.count", 0);
                 timer({ status: "empty" });
                 return 0;
@@ -71,9 +82,6 @@ export class SubscriptionSweeper {
                     .filter(v => v > 0);
                 const maxLag = lags.length ? Math.max(...lags) : 0;
                 this.metrics.expiryLagSeconds.set(Math.max(0, maxLag));
-                // Heuristic backlog: swept count +1 when batch full indicates remaining work (exact count in b2)
-                const backlog = sweptUsers.length >= this.BATCH_SIZE ? sweptUsers.length + 1 : sweptUsers.length;
-                this.metrics.expiredBacklog.set(backlog);
             } catch {
                 // gauges are best-effort; sweep success takes precedence
             }

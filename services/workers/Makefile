@@ -106,6 +106,8 @@ help:
 	@echo "    VUS=10 DURATION=2m RPS=50 SCENARIO=load|smoke|stress|soak|edge POOL_SIZE=100 RUN_ID= SEED_COUNT=1000 (cron seed size) VERIFY_SAMPLE_RATE=(default 0.1) DUP_WEIGHT=(default 0.05) RABBITMQ_PREFETCH=(default: payments 10, analytics 1) POOL_MAX=(default 5)"
 	@echo "    e.g. make load-test WORKER=payments VUS=10 DURATION=2m RPS=50 RABBITMQ_PREFETCH=10"
 	@echo "    CRON_VERIFY_POLL_MS=(default 2000) MOCK_MODE=(default false; skips row verification and worker assertions)"
+	@echo "    WITH_OBSERVABILITY=(default 0; 1 also runs otel-collector-loadtest -> New Relic as deployment.environment=loadtest)"
+	@echo "      e.g. make load-test WORKER=analytics WITH_OBSERVABILITY=1 VUS=10 DURATION=2m RPS=50"
 	@echo "  make load-check WORKER=... - Small correctness run (~60 requests) that must pass on a laptop"
 	@echo "  make load-down WORKER=... - Tear down the load rig (removes volumes)"
 	@echo "  make proxy           - Start the load testing proxy on host (for local runs)"
@@ -255,6 +257,28 @@ LOAD_EVENTS_PORT ?= 6491
 LOAD_RABBITMQ_PORT ?= 5690
 LOAD_WORKER_PORT ?= 7199
 LOAD_COMPOSE = docker compose --env-file $(ENV_FILE) -f infra/compose.load-$(WORKER).yml
+# Opt-in observability: make load-test WORKER=payments WITH_OBSERVABILITY=1
+# Adds otel-collector-loadtest (-> New Relic EU as deployment.environment=loadtest)
+# and points the worker's OTLP exporter at it. Needs NEW_RELIC_LICENSE_KEY in the
+# shell; without a key the collector retries and drops while the worker keeps
+# processing, so a failed export never fails a run. Default runs stay offline.
+# -f paths resolve from the Makefile's cwd (services/workers); volume paths
+# inside the overlay resolve from the project dir (services/workers/infra).
+# The datastore exporters feed the Infra page of the workers dashboard. The
+# rabbitmq exporter reads the broker's management API, so it is merged only
+# for the queue-backed workers: the cron rig has no broker at all.
+LOAD_COMPOSE_OBS = $(LOAD_COMPOSE) \
+	-f ../../infra/docker/otel/loadtest-observability.yml \
+	-f ../../infra/docker/redis-exporter/standalone.yml \
+	-f ../../infra/docker/postgres-exporter/standalone.yml \
+	-f infra/compose.load.observability.yml
+LOAD_COMPOSE_OBS += $(if $(filter analytics payments,$(WORKER)),-f ../../infra/docker/rabbitmq-exporter/standalone.yml -f infra/compose.load.rabbitmq.yml)
+WITH_OBSERVABILITY ?= 0
+# Container ports are fixed per worker; only host ports are remapped per rig.
+WORKER_METRICS_PORT_analytics = 7001
+WORKER_METRICS_PORT_cron = 7002
+WORKER_METRICS_PORT_payments = 7003
+WORKER_METRICS_PORT = $(WORKER_METRICS_PORT_$(WORKER))
 # Host bindings for the rig (dev defaults are usually taken by dev stacks).
 # RABBITMQ_PREFETCH / POOL_MAX are forwarded explicitly so per-run overrides reach
 # the worker container even though they are absent from infra/.env.example.
@@ -265,13 +289,23 @@ LOAD_RUN_ENV = POSTGRES_PORT=$(LOAD_POSTGRES_PORT) REDIS_PORT=$(LOAD_REDIS_PORT)
 	CRON_CHECK_INTERVAL_MS=$(CRON_CHECK_INTERVAL_MS) CRON_BATCH_SIZE=$(CRON_BATCH_SIZE) \
 	CRON_VERIFY_TIMEOUT_MS=$(CRON_VERIFY_TIMEOUT_MS) CRON_VERIFY_POLL_MS=$(CRON_VERIFY_POLL_MS) \
 	SEED_AGE_SECONDS=$(SEED_AGE_SECONDS) MOCK_MODE=$(MOCK_MODE) \
-	SIGNAL_TIMEOUT_MS=$(SIGNAL_TIMEOUT_MS) SIGNAL_POLL_MS=$(SIGNAL_POLL_MS)
+	SIGNAL_TIMEOUT_MS=$(SIGNAL_TIMEOUT_MS) SIGNAL_POLL_MS=$(SIGNAL_POLL_MS) \
+	WORKER=$(WORKER) WORKER_METRICS_PORT=$(WORKER_METRICS_PORT) \
+	$(if $(filter 1,$(WITH_OBSERVABILITY)),OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-loadtest:4318 OTEL_RESOURCE_ATTRIBUTES=deployment.environment=loadtest)
 
 load-test: worker-%
+	@if [ "$(WITH_OBSERVABILITY)" != "0" ] && [ "$(WITH_OBSERVABILITY)" != "1" ]; then \
+		echo "Invalid WITH_OBSERVABILITY '$(WITH_OBSERVABILITY)'. Use 0 or 1."; exit 1; \
+	fi
+	@if [ "$(WITH_OBSERVABILITY)" = "1" ]; then \
+		if [ -z "$${NEW_RELIC_LICENSE_KEY:-}" ]; then \
+			echo "WITH_OBSERVABILITY=1 but NEW_RELIC_LICENSE_KEY is empty — collector will retry/drop, worker keeps processing."; \
+		fi; \
+	fi
 	$(LOAD_COMPOSE) build
 	$(LOAD_RUN_ENV) $(LOAD_COMPOSE) -f infra/compose.migrate.yml run --rm db-migrate
 	$(LOAD_RUN_ENV) VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) SEED_COUNT=$(SEED_COUNT) SCENARIO=$(SCENARIO) RUN_ID=$(RUN_ID) POOL_SIZE=$(POOL_SIZE) VERIFY_TIMEOUT_MS=$(VERIFY_TIMEOUT_MS) VERIFY_POLL_MS=$(VERIFY_POLL_MS) VERIFY_SAMPLE_RATE=$(VERIFY_SAMPLE_RATE) DUP_WEIGHT=$(DUP_WEIGHT) THRESHOLD_DRAIN_P95=$(THRESHOLD_DRAIN_P95) \
-	$(LOAD_COMPOSE) up --build --abort-on-container-exit --exit-code-from k6
+	$(if $(filter 1,$(WITH_OBSERVABILITY)),$(LOAD_COMPOSE_OBS),$(LOAD_COMPOSE)) up --build --abort-on-container-exit --exit-code-from k6
 
 # Small correctness profile: ~60 requests, finishes in about a minute per
 # worker. Verifies assertions (verify tripwire, dedup counter, teardown
@@ -306,7 +340,7 @@ else
 endif
 
 load-down: worker-%
-	$(LOAD_COMPOSE) down -v --remove-orphans
+	$(LOAD_COMPOSE_OBS) down -v --remove-orphans
 
 # Legacy host runs (proxy on host + local k6 binary; prefer load-test above)
 load-payments:

@@ -1,0 +1,31 @@
+# RabbitMQ exporter overlay for worker load tests.
+# Merged only for the queue-backed rigs (analytics, payments): the exporter
+# reads the broker's management API, and the cron rig has no broker.
+#   docker compose -f infra/compose.load-<worker>.yml \
+#                  -f ../../infra/docker/otel/loadtest-observability.yml \
+#                  -f infra/compose.load.observability.yml \
+#                  -f infra/compose.load.rabbitmq.yml up
+#
+# The exporter service itself comes from the reusable atom at
+# infra/docker/rabbitmq-exporter/standalone.yml (merged via an extra `-f`
+# flag in the Makefile); this file only points it at the rig's broker and
+# gives the collector its last scrape slot.
+#
+# The standalone rabbitmq atom runs the management-alpine image, so the
+# management API is already listening on 15672 inside the compose network.
+services:
+  rabbitmq-exporter:
+    environment:
+      - RABBIT_URL=http://rabbitmq:15672
+      - RABBIT_USER=${RABBITMQ_USER:-guest}
+      - RABBIT_PASSWORD=${RABBITMQ_PASSWORD:-guest}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      otel-collector-loadtest:
+        condition: service_started
+
+  otel-collector-loadtest:
+    environment:
+      - OTEL_SCRAPE_JOB_4=rabbitmq-exporter
+      - OTEL_SCRAPE_TARGET_4=rabbitmq-exporter:9419

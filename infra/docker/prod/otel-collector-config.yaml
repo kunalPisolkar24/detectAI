@@ -40,6 +40,22 @@ receivers:
           metrics_path: /metrics
           static_configs:
             - targets: ["payment-gateway:8080"]
+        # Workers expose /metrics on fixed container ports (7001/7002/7003).
+        # Without these three jobs every worker Metric widget on the workers
+        # board is empty in prod: the workers only send OTLP traces/logs and
+        # never push their prom-client metrics anywhere.
+        - job_name: worker-analytics
+          metrics_path: /metrics
+          static_configs:
+            - targets: ["worker-analytics:7001"]
+        - job_name: worker-cron
+          metrics_path: /metrics
+          static_configs:
+            - targets: ["worker-cron:7002"]
+        - job_name: worker-payments
+          metrics_path: /metrics
+          static_configs:
+            - targets: ["worker-payments:7003"]
         - job_name: postgres-exporter
           static_configs:
             - targets: ["postgres-exporter:9187"]

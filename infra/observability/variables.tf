@@ -27,17 +27,6 @@ variable "newrelic_region" {
   }
 }
 
-variable "environment" {
-  description = "Deployment environment label baked into every NRQL filter (OTEL deployment.environment)."
-  type        = string
-  default     = "prod"
-
-  validation {
-    condition     = contains(["prod", "floci"], var.environment)
-    error_message = "environment must be prod or floci."
-  }
-}
-
 variable "alert_email" {
   description = "Email destination for all alert workflows. No Slack/PagerDuty in v1."
   type        = string

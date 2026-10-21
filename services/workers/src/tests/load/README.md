@@ -32,6 +32,36 @@ make load-down WORKER=payments
 One rig at a time: the container names (`worker_payments`, ...) are fixed, so a
 rig cannot run alongside a dev stack for the same worker.
 
+## Watching a run in New Relic
+
+Rigs are offline by default: no collector, no network calls. Add
+`WITH_OBSERVABILITY=1` to stream the run into the `detectai-workers (loadtest)`
+board (see `infra/observability/`):
+
+```bash
+export NEW_RELIC_LICENSE_KEY="eu01..."   # ingest key, shell only, never commit
+
+make load-test WORKER=analytics WITH_OBSERVABILITY=1 VUS=10 DURATION=2m RPS=50
+```
+
+This adds `otel-collector-loadtest`, which scrapes the worker's `/metrics`,
+collects host and container metrics, and exports traces, metrics and logs with
+`deployment.environment=loadtest` — the same label every other service's load
+rig uses, so k6 runs never land on prod boards.
+
+The collector targets the worker's in-network port (`7001` analytics, `7002`
+cron, `7003` payments), not the remapped host port, so several rigs can be
+inspected side by side. A missing `NEW_RELIC_LICENSE_KEY` is a warning, not a
+failure: the exporter retries and drops while the worker keeps processing, and
+k6 thresholds are unaffected.
+
+The rig also runs the datastore exporters (postgres, redis, and rabbitmq for
+the queue-backed rigs) so the board's `Infra` page has data too. The
+collector's scrape interval is 5s here, not the 15s the shared collector config
+defaults to: a rig is torn down about 40s after the worker boots, and at 15s
+the collector never closes a series that only changed once — the cron
+histograms (`Batch size and expiry lag`) never reached New Relic at all.
+
 ## Three layers of verification
 
 1. **Ingest checks** (`worker_ingest_success`, `checks`): the proxy returned 200.
@@ -228,6 +258,7 @@ The Makefile forwards these to the k6 container (defaults live in
 | `WORKER_METRICS_URL` | per rig | Worker `/metrics` endpoint |
 | `MOCK_MODE` | `false` | Mock proxy: no rows written, so k6 skips verification and the worker-signal assertions. Forwarded to **both** the proxy and k6 containers, since the runtime skip and the threshold skip read it from separate processes |
 | `THRESHOLD_*` | (see `lib/config.js`) | Per-run threshold overrides |
+| `WITH_OBSERVABILITY` | `0` | `1` → also runs `otel-collector-loadtest`, pushing traces, metrics and logs to New Relic as `deployment.environment=loadtest` |
 
 Short runs need higher mix weights: at ~60 iterations a 5% dup weight yields
 zero dup pairs about 5% of the time, so `load-check` uses

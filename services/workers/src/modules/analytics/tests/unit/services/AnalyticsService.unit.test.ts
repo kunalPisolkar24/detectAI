@@ -1,6 +1,7 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
 import { UsageEventDeduplicator } from "../../../infrastructure/UsageEventDeduplicator";
 import { MetricsService } from "@shared/monitoring/MetricsService";
+import { isRetryableError } from "@shared/errors/isRetryableError";
 
 const mockLogger = { info: mock(), error: mock(), warn: mock() };
 mock.module("@shared/logging/Logger", () => ({
@@ -78,6 +79,16 @@ describe("AnalyticsService", () => {
 
   test("should reject events without eventId (dedup would be bypassed)", async () => {
     await expect(service.handleUsageEvent("user_1", 3, "" as any)).rejects.toThrow(/eventId/);
+    expect(mockUserRepository.incrementUsage).not.toHaveBeenCalled();
+  });
+
+  test("should reject events without eventId as a non-retryable error", async () => {
+    // A malformed event can never succeed, so it has to dead-letter straight
+    // away instead of burning the retry budget.
+    const error = await service.handleUsageEvent("user_1", 3, "   " as any).catch((e) => e);
+
+    expect(error.name).toBe("MissingFieldError");
+    expect(isRetryableError(error)).toBe(false);
     expect(mockUserRepository.incrementUsage).not.toHaveBeenCalled();
   });
 

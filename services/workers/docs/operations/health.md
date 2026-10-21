@@ -21,9 +21,9 @@ Each worker runs a Bun HTTP server with three endpoints:
 
 ```mermaid
 graph TB
-    Client[Client] --> Health[/health<br/>Liveness]
-    Client --> Ready[/ready<br/>Readiness]
-    Client --> Metrics[/metrics<br/>Prometheus]
+    Client[Client] --> Health["/health<br/>Liveness"]
+    Client --> Ready["/ready<br/>Readiness"]
+    Client --> Metrics["/metrics<br/>Prometheus"]
     
     Health --> Worker[Worker Process]
     Ready --> Worker
@@ -38,7 +38,7 @@ The liveness endpoint answers: **"Is the worker process alive?"**
 
 ```mermaid
 graph TB
-    A[/health] --> B{Shutting down?}
+    A["/health"] --> B{Shutting down?}
     B -->|Yes| C[503 - Unhealthy]
     B -->|No| D[200 - Healthy]
 ```
@@ -57,7 +57,7 @@ The readiness endpoint answers: **"Can the worker handle messages right now?"**
 
 ```mermaid
 graph TB
-    A[/ready] --> B{Shutting down?}
+    A["/ready"] --> B{Shutting down?}
     B -->|Yes| C[503 - Not Ready]
     B -->|No| D{All deps healthy?}
     D -->|No| C
@@ -92,16 +92,37 @@ All workers also expose `/metrics` on the same port.
 
 ## Response Format
 
+Every JSON response has the same shape: `status`, `timestamp` and `checks`. The `checks` object tells you **which** dependency is unhappy — without it you would only know that something is wrong, not what.
+
+Two exceptions, both plain text rather than JSON: an unknown path returns `404 Not Found`, and a failure inside the metrics handler returns `500 Internal Server Error`.
+
+The `status` value depends on which endpoint you called:
+
+| Endpoint | Healthy | Not healthy | HTTP status |
+|----------|---------|-------------|-------------|
+| `/health` | `"ok"` | `"error"` | 200 / 503 |
+| `/ready` | `"ready"` | `"not_ready"` | 200 / 503 |
+
 ### Healthy Response
+
+`/health` always includes a `checks` object. Which fields it holds depends on the worker:
 
 ```json
 {
   "status": "ok",
-  "timestamp": "2024-09-10T12:00:00.000Z"
+  "timestamp": "2024-09-10T12:00:00.000Z",
+  "checks": {
+    "isShuttingDown": false,
+    "loopStarted": true
+  }
 }
 ```
 
+The Payments and Analytics workers report only `isShuttingDown`, because their liveness check has nothing else to say.
+
 ### Ready Response (with checks)
+
+This is the Payments worker. The `checks` object lists every dependency it depends on:
 
 ```json
 {
@@ -121,9 +142,11 @@ All workers also expose `/metrics` on the same port.
 
 ### Unhealthy Response
 
+The same shape, with the failing dependency set to `false`:
+
 ```json
 {
-  "status": "error",
+  "status": "not_ready",
   "timestamp": "2024-09-10T12:00:00.000Z",
   "checks": {
     "db": false,
@@ -132,6 +155,60 @@ All workers also expose `/metrics` on the same port.
     "poolWaiting": 5,
     "poolPressured": true,
     "isShuttingDown": false
+  }
+}
+```
+
+On `/health` the same failure is reported with `"status": "error"`.
+
+### Checks by Worker
+
+| Worker | `/health` checks | `/ready` checks |
+|--------|------------------|-----------------|
+| Payments | `isShuttingDown` | `db`, `redis`, `eventRedis`, `rabbitmq`, `poolWaiting`, `poolPressured`, `isShuttingDown` |
+| Analytics | `isShuttingDown` | `db`, `redis`, `dedupRedis`, `rabbitmq`, `poolWaiting`, `poolPressured`, `isShuttingDown` |
+| Cron | `isShuttingDown`, `loopStarted` (plus `bootAgeMs` and `reason` when the loop has not started) | `db`, `redis`, `poolWaiting`, `poolPressured`, `lastSuccessAgeMs`, `thresholdMs`, `loopStale`, `isShuttingDown` |
+
+A few of these need explaining:
+
+| Field | Meaning |
+|-------|---------|
+| `poolWaiting` | How many queries are queued waiting for a database connection |
+| `poolPressured` | True when more than 5 queries are waiting at once. Only the **primary** pool is measured — a saturated replica never shows up here. |
+| `dedupRedis` | The Analytics dedup Redis. It reports the same value as `redis`, because both point at the same instance. |
+| `loopStale` | Cron only. True when the last completed loop iteration is older than twice the check interval. |
+| `thresholdMs` | Cron only. The staleness limit in milliseconds — twice `CRON_CHECK_INTERVAL_MS`, so 30 minutes by default. |
+
+**The Redis check wants a real `PONG`.** A reply of anything else — `-LOADING`, `-BUSY` — is reported as unhealthy, even when the connection is up.
+
+### Timeout Response
+
+A readiness check that takes longer than 3 seconds is cut short:
+
+```json
+{
+  "status": "not_ready",
+  "timestamp": "2024-09-10T12:00:00.000Z",
+  "checks": {
+    "timeout": true
+  }
+}
+```
+
+The liveness endpoint has the same 3-second limit, but returns a plain `false` instead of an object, so its timeout response has no `checks` field at all.
+
+**The 3-second budget is shorter than the database check's own timeout.** The database probe allows 10 seconds and the Redis probe 3 seconds, but the endpoint wraps both in a 3-second limit. A database that accepts the connection and then answers slowly therefore produces `{"checks":{"timeout":true}}` — **not** `{"db":false}`. The per-dependency breakdown is lost exactly when it would be most useful.
+
+### Exception Response
+
+If the check itself throws, the error is reported in place of the dependency breakdown:
+
+```json
+{
+  "status": "error",
+  "timestamp": "2024-09-10T12:00:00.000Z",
+  "checks": {
+    "error": "Error: something went wrong"
   }
 }
 ```
@@ -173,6 +250,14 @@ healthcheck:
 - Timeout after 5 seconds
 - Fail after 3 consecutive failures
 - Wait 20 seconds before first check (startup time)
+
+The endpoint each worker checks is different:
+
+| Worker | Endpoint checked | Why |
+|--------|------------------|-----|
+| Payments | `/ready` | All of its dependencies have to be up before it can consume |
+| Analytics | `/ready` | All of its dependencies have to be up before it can consume |
+| Cron | `/health` | It only needs the process to be alive. The sweep recovers on its own if the database is briefly unavailable. |
 
 ## Port Layout
 
@@ -228,6 +313,10 @@ curl -s http://localhost:7003/ready | jq .checks
 - Verify PostgreSQL is running: `docker ps | grep postgres`
 - Verify Redis is running: `docker ps | grep redis`
 - Verify RabbitMQ is running (payments/analytics): `docker ps | grep rabbitmq`
+
+**The response says `timeout` instead of naming a dependency?**
+- The check took longer than 3 seconds. Look at database latency first.
+- A slow database is the usual cause — the database probe allows 10 seconds on its own, but the endpoint only waits 3.
 
 **Health check timeout?**
 - Check database performance

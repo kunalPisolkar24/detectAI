@@ -75,7 +75,16 @@ services:
     image: kbudde/rabbitmq-exporter:1.0.0
     restart: always
     environment:
-      - RABBIT_URL=${RABBITMQ_URL:-}
+      # Management HTTP API, NOT the AMQP URL the apps use. kbudde reads
+      # /api/queues, so the AMQP URL leaves rabbitmq_up = 0 and every queue
+      # metric on the workers board stays empty. RABBIT_URL must start with
+      # http:// or https:// (the exporter panics otherwise) and stays empty
+      # here until the management host is known - an empty value falls back
+      # to the exporter default, which simply fails to connect. The broker
+      # user comes from RABBIT_USER/RABBIT_PASSWORD, not from the URL.
+      - RABBIT_URL=${RABBITMQ_MGMT_URL:-}
+      - RABBIT_USER=${RABBITMQ_USER:-}
+      - RABBIT_PASSWORD=${RABBITMQ_PASSWORD:-}
       - RABBIT_CAPABILITIES=bert,no_sort
     extra_hosts:
       - "host.docker.internal:host-gateway"

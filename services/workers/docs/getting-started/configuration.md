@@ -15,10 +15,22 @@ graph LR
     Validated --> App[Worker App]
 ```
 
-* **ENV_TYPE=dev** — loads `.env` file from `infra/` directory (or `infra/.env.example` as fallback), applies dev defaults, validates.
+* **ENV_TYPE=dev** — loads a `.env` file from the working directory (or the file named by `ENV_FILE`), applies dev defaults, validates.
 * **ENV_TYPE=prod** — loads secrets from AWS Secrets Manager and parameters from SSM, validates with strict prod checks.
 
-Precedence: Shell environment > `.env` file > Dev defaults.
+**Precedence in dev:** Shell environment > `.env` file > dev defaults.
+
+**Precedence in prod:** Shell environment > AWS Secrets Manager > AWS SSM.
+
+Under Docker Compose there is no `.env` file to read inside the container. The Makefile passes `--env-file infra/.env` (falling back to `infra/.env.example`) to `docker compose`, so the values arrive as environment variables and the shell-environment rule applies.
+
+**`CONFIG_SOURCE` is deprecated.** It used to select between `env` and `aws`. Use `ENV_TYPE=dev|prod` instead. Setting it still works, but logs a warning.
+
+**How `ENV_TYPE` is decided**, in order:
+1. `ENV_TYPE`, if set
+2. `CONFIG_SOURCE` (deprecated)
+3. `NODE_ENV` — `production` means `prod`, `test` means `dev`
+4. `dev`
 
 ## Env Type
 
@@ -34,22 +46,29 @@ These variables are shared by all three workers:
 
 | Var | Default | Required | Notes |
 |---|---|---|---|
-| `DATABASE_URL` | `postgresql://user:password@postgres-users:5432/detect_ai` | yes | Primary PostgreSQL connection string |
-| `REDIS_URL` | `redis://:user_cache_password@redis-users:6379` | yes | Redis connection string for user cache + dedup |
+| `DATABASE_URL` | none | yes | Primary PostgreSQL connection string |
+| `REDIS_URL` | none | yes | Redis connection string for user cache + dedup |
+
+These two have **no default in code**. If they are missing, the worker exits immediately with a validation error. The Makefile and the compose files supply working local values, so `make worker-up` works without setting them by hand.
 
 ### Optional
 
 | Var | Default | Required | Notes |
 |---|---|---|---|
 | `ENV_TYPE` | `dev` | no | `dev` or `prod` |
-| `DATABASE_URL_REPLICA` | same as `DATABASE_URL` | no | Read replica endpoint. In dev, equals primary. In Aurora, use reader endpoint. |
-| `REDIS_PASSWORD` | (extracted from URL) | no | Password for Redis. Extracted from `REDIS_URL` if empty. |
-| `RABBITMQ_URL` | `amqp://guest:guest@rabbitmq:5672/` | no | RabbitMQ connection. Required in prod for payments + analytics workers. |
-| `RABBITMQ_PREFETCH` | `1` | no | How many unacked messages per consumer (1-1000) |
+| `DATABASE_URL_REPLICA` | same as `DATABASE_URL` | no | Read replica endpoint. In dev, equals primary. In Aurora, use reader endpoint. **Set it, do not leave it blank** — an empty value fails validation. |
+| `REDIS_PASSWORD` | (empty) | no | Password for Redis. When empty, ioredis uses the password embedded in `REDIS_URL`. |
+| `RABBITMQ_URL` | `amqp://guest:guest@rabbitmq:5672/` in dev | no | RabbitMQ connection. Required in prod for payments + analytics workers. |
+| `RABBITMQ_PREFETCH` | `1` | no | How many unacked messages per consumer (1-1000). The Payments worker overrides this to `10`. |
 | `INFRA_REQUEUE_DELAY_MS` | `5000` | no | Delay before infra-requeue when DB is down (0-60000) |
 | `PORT` | `7777` | no | Health server port. Each worker overrides this in compose. |
+| `POOL_MAX` | `5` | no | Maximum PostgreSQL connections per pool. Read directly from the environment, not validated by the schema. Only the Payments compose stack forwards it — `POOL_MAX=10 make worker-up WORKER=analytics` has no effect. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | (empty) | no | OpenTelemetry collector URL. Empty disables tracing. |
 | `OTEL_SERVICE_NAME` | (worker-specific) | no | Service name for traces |
+| `AWS_REGION` | `ap-south-1` | no | Used when loading configuration from AWS. |
+| `ENV_FILE` | (empty) | no | Path to a `.env` file to load when there is no `.env` in the working directory. |
+
+**A blank `DATABASE_URL_REPLICA` is a startup failure.** The variable is optional in the schema, but an *empty* value is not the same as an unset one — it fails URL validation with `Invalid URL`. Docker Compose substitutes an empty string for a variable that is not set, so removing the line from `infra/.env` makes the worker exit immediately. The "same as `DATABASE_URL`" fallback is applied further down, in `PrismaService`, not by the config layer.
 
 ## Payments Worker Configuration
 
@@ -59,8 +78,8 @@ Extends the base schema with Paddle and events-redis settings:
 |---|---|---|---|
 | `PADDLE_API_KEY` | (none) | yes | Paddle API key for cancel requests |
 | `PADDLE_ENVIRONMENT` | `sandbox` | no (prod: yes) | `sandbox` or `production` |
-| `EVENT_REDIS_URL` | `redis://:events_password@redis-events:6379` | yes | Separate Redis for Paddle event dedup (`paddle:evt:*`, `payment:event:ts:*`) |
-| `EVENT_REDIS_PASSWORD` | (extracted from URL) | no | Password for events Redis |
+| `EVENT_REDIS_URL` | (none) | yes | Separate Redis for Paddle event dedup (`paddle:evt:*`) and event ordering (`payment:event:ts:*`) |
+| `EVENT_REDIS_PASSWORD` | (empty) | no | Password for events Redis. When empty, ioredis uses the password embedded in `EVENT_REDIS_URL`. |
 | `RABBITMQ_URL` | (from base) | prod: yes | Required in prod |
 
 Load-tested guidance (payments only): default `RABBITMQ_PREFETCH` is `10`, which
@@ -125,7 +144,6 @@ ENV_TYPE=dev
 DATABASE_URL=postgresql://user:password@localhost:5432/detect_ai
 REDIS_URL=redis://:user_cache_password@localhost:6379
 RABBITMQ_URL=amqp://guest:guest@localhost:5672/
-LOG_LEVEL=debug
 ```
 
 ### Docker Compose (dev)
@@ -170,22 +188,33 @@ Failed validation causes the worker to exit immediately with a descriptive error
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `DATABASE_URL is required` | Missing PostgreSQL connection | Set `DATABASE_URL` |
+| `Invalid input: expected string, received undefined` on `DATABASE_URL` | Missing PostgreSQL connection | Set `DATABASE_URL` |
 | `REDIS_URL must be a valid redis:// or rediss:// URL` | Bad Redis URL | Use `redis://host:port` or `rediss://host:port` |
 | `RABBITMQ_URL is required in prod` | Missing RabbitMQ in prod | Set `RABBITMQ_URL` in prod |
-| `PADDLE_API_KEY is required` | Missing Paddle key (payments) | Set `PADDLE_API_KEY` |
+| `Invalid input: expected string, received undefined` on `PADDLE_API_KEY` | Missing Paddle key (payments) | Set `PADDLE_API_KEY` |
 | `PADDLE_ENVIRONMENT is required in prod` | Missing Paddle env in prod | Set `PADDLE_ENVIRONMENT=production` |
-| `RABBITMQ_URL must be a valid URL` | Bad RabbitMQ URL | Use `amqp://user:pass@host:port/` |
-| `CRON_CHECK_INTERVAL_MS must be >= 5000` | Interval too short | Set to 5000 or higher |
-| `CRON_BATCH_SIZE must be <= 1000` | Batch too large | Set to 1000 or lower |
-| `PORT must be 1-65535` | Invalid port number | Use a valid port |
+| `Invalid URL` on `RABBITMQ_URL` | Bad RabbitMQ URL | Use `amqp://user:pass@host:port/` |
+| `Too small: expected number to be >=5000` on `CRON_CHECK_INTERVAL_MS` | Interval too short | Set to 5000 or higher |
+| `Too big: expected number to be <=1000` on `CRON_BATCH_SIZE` | Batch too large | Set to 1000 or lower |
+| `Too small: expected number to be >=1` on `PORT` | Invalid port number | Use a valid port |
+| `ENV_TYPE=prod must not use default dev RabbitMQ URL` | The dev `guest:guest` URL leaked into prod | Load `RABBITMQ_URL` from AWS |
+| `ENV_TYPE=prod requires RABBITMQ_URL from AWS (detectai/mq/urls) or SSM` | Nothing supplied a broker URL | Seed the MQ secret |
+| `ENV_TYPE=prod requires PADDLE_API_KEY from AWS (detectai/workers/secrets)` | Nothing supplied the Paddle key | Seed the workers secret |
+
+The first nine rows come from the Zod schema, and the wording is Zod's own — so a missing field says `Invalid input: expected string, received undefined` rather than naming the variable in the message. The variable is the *path* in the error object, not the text. The last three are extra checks that only run in prod.
 
 ## Viewing Current Configuration
 
-The worker logs its config at startup (without secrets):
+The worker logs the fact that it loaded its configuration at startup (without any secrets):
 
 ```json
-{"level":"info","message":"Payments config loaded","service":"Payments","timestamp":"..."}
+{"level":"info","message":"Environment variables loaded for [Payments] worker","envType":"dev","timestamp":"..."}
+```
+
+If validation fails, the same worker name appears in the error, along with every field that was wrong. Zod nests its messages under `_errors`:
+
+```json
+{"level":"error","message":"Invalid environment variables for [Payments] worker","errors":{"_errors":[],"PADDLE_API_KEY":{"_errors":["Invalid input: expected string, received undefined"]},"PORT":{"_errors":["Too small: expected number to be >=1"]}},"timestamp":"..."}
 ```
 
 Metrics: `http://localhost:<PORT>/metrics` (default ports: 7001/7002/7003).
@@ -208,6 +237,11 @@ The service includes a Makefile with common commands:
 | `make dev-cron` | Start cron in watch mode (local Bun) |
 | `make test` | Run unit tests |
 | `make test-integration` | Run integration tests |
+| `make test-integration-ha` | Run the high-availability integration tests |
+| `make load-test WORKER=X` | Run the containerized k6 load rig |
+| `make load-check WORKER=X` | Run a small correctness profile (~60 requests) that must pass locally |
+| `make load-down WORKER=X` | Tear down the load rig |
+| `make proxy` | Start the load-test proxy on the host |
 
 ## Troubleshooting
 

@@ -6,8 +6,10 @@ import { type PrismaClient } from "../../../generated/prisma/client";
 /**
  * Permanent DB ledger + 7d Redis fast path for Paddle event_id dedup.
  * Keys: paddle:evt:{eventId} -> "1" with EX 604800 NX (atomic).
- * DB ProcessedWebhook is authoritative for 90d manual replay window.
- * Fail-open on Redis error: fallback to DB findUnique, warn and inc metric.
+ * The DB ProcessedWebhook ledger has no TTL — rows stay until something
+ * deletes them — so it outlives the Redis fast path and is the record to
+ * replay from. Fail-open on Redis error: fallback to DB findUnique, warn
+ * and inc metric.
  */
 export class IdempotencyStore {
   private static readonly PREFIX = "paddle:evt:";
@@ -43,8 +45,9 @@ export class IdempotencyStore {
         // Fallback: treat any other truthy as not duplicate
         return false;
       }
-      // Claimed in Redis — now check DB for 7d-expiry / 90d replay window.
-      // If DB already has this eventId, treat as duplicate even though Redis expired.
+      // Claimed in Redis — now check the DB ledger, which has no TTL and so
+      // outlives the 7d Redis key. If the DB already has this eventId, treat
+      // it as a duplicate even though Redis expired.
       try {
         const existing = await (this.prisma as any).processedWebhook.findUnique({
           where: { eventId },

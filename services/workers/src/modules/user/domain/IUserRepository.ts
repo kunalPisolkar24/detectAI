@@ -17,8 +17,9 @@ export interface IUserRepository {
      * `sweepTime` drives both the SELECT and UPDATE predicates so the sweep reads as one clock,
      * and is stamped onto swept rows as their eventTimestamp for webhook ordering.
      * Returns only the rows actually mutated, not merely selected.
-     * `onSelected` runs inside the transaction after the rows are locked, before the
-     * UPDATE and COMMIT — used for pre-commit cache invalidation (payments-style double-del).
+     * `onSelected` runs after the transaction commits, outside the row locks — it used to run
+     * inside the transaction, which held FOR UPDATE locks across Redis I/O. The caller
+     * handles post-commit cache invalidation.
      */
     expireDueSubscriptions(
         limit: number,
@@ -27,6 +28,12 @@ export interface IUserRepository {
         onSelected?: (users: ExpiredSubscription[]) => Promise<void>
     ): Promise<ExpiredSubscription[]>;
     incrementUsage(userId: string, count: number): Promise<void>;
+    /**
+     * Counts the expired subscriptions still pending at `sweepTime`, using the
+     * same predicate the sweep selects on. Read from the primary so the number
+     * is not a stale replica view.
+     */
+    countExpiredSubscriptions(sweepTime: Date): Promise<number>;
     /**
      * Idempotent UTC-day reset for stale `Usage` rows. Returns rows reset.
      * Safety net for the atomic rollover in `incrementUsage`.

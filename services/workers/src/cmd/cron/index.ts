@@ -129,8 +129,21 @@ async function main(): Promise<void> {
 
   for (let attempt = 1; attempt <= 5; attempt++) {
     try {
-      await withTimeout(prismaPrimary.$queryRaw`SELECT 1`, 3000, null as any);
-      await withTimeout(redisClient.ping(), 3000, null as any);
+      // withTimeout resolves with the fallback on a hang, so a failed probe has
+      // to be checked explicitly — otherwise a database that accepts the
+      // connection but never answers breaks out on the first attempt.
+      const dbOk = await withTimeout(
+        prismaPrimary.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
+        3000,
+        false,
+      );
+      const redisOk = await withTimeout(
+        redisClient.ping().then(() => true).catch(() => false),
+        3000,
+        false,
+      );
+      if (!dbOk) throw new Error("PostgreSQL not ready");
+      if (!redisOk) throw new Error("Redis not ready");
       break;
     } catch (e) {
       Logger.warn(`Cron bootstrap waiting for deps (attempt ${attempt}/5)`, { error: e });
@@ -165,6 +178,7 @@ async function main(): Promise<void> {
         try {
           metricsService.shutdownAbortsTotal.inc({ reason: "job_grace_timeout" });
         } catch {}
+        Logger.warn("Cron shutdown grace timeout: in-flight job did not finish in time");
       }
     }
     if (loopDone) {
@@ -174,6 +188,7 @@ async function main(): Promise<void> {
         try {
           metricsService.shutdownAbortsTotal.inc({ reason: "loop_grace_timeout" });
         } catch {}
+        Logger.warn("Cron shutdown grace timeout: main loop did not finish in time");
       }
     }
     try {

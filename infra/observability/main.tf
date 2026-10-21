@@ -1,15 +1,16 @@
 locals {
-  account_id  = var.newrelic_account_id
-  environment = var.environment
+  account_id = var.newrelic_account_id
+  # Two dashboard statuses only: prod boards below, plus the loadtest boards
+  # whose JSON hardcodes deployment.environment = 'loadtest'.
+  environment = "prod"
 
   dashboards = {
     overview                 = "overview.json"
     web                      = "web.json"
     payment-gateway          = "payment-gateway.json"
     payment-gateway-loadtest = "payment-gateway-loadtest.json"
-    worker-analytics         = "worker-analytics.json"
-    worker-payments          = "worker-payments.json"
-    worker-cron              = "worker-cron.json"
+    workers                  = "workers.json"
+    workers-loadtest         = "workers-loadtest.json"
     inference                = "inference.json"
     document-parser          = "document-parser.json"
     document-parser-loadtest = "document-parser-loadtest.json"

@@ -1,7 +1,7 @@
 # Emulator S3 backend (Floci / LocalStack) — smoke-test observability state flow locally.
 # Usage:
 #   aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-tfstate-local --region ap-south-1 || true
-#   terraform init -reconfigure -backend-config=backend.local-s3.hcl -var-file=envs/floci.tfvars
+#   terraform init -reconfigure -backend-config=backend.local-s3.hcl -var-file=envs/prod.tfvars
 # Ephemeral (emulator volume) — local file backend remains the daily default.
 
 bucket                      = "detectai-tfstate-local"

@@ -1,0 +1,28 @@
+# Reusable rabbitmq-exporter template (Prometheus exporter for RabbitMQ).
+#
+# The exporter reads the broker's MANAGEMENT HTTP API, not the AMQP URL the
+# apps use: given an AMQP URL it fails to start and every queue metric stays
+# missing. RABBIT_URL must start with http:// or https://.
+#
+# Merge it into a stack with an extra `-f` flag, then point it at the stack's
+# broker from the service overlay, e.g.:
+#   docker compose -f compose.load.yml \
+#     -f ../../../infra/docker/rabbitmq-exporter/standalone.yml \
+#     -f compose.load.observability.yml up
+#   services:
+#     rabbitmq-exporter:
+#       environment:
+#         - RABBIT_URL=http://rabbitmq:15672
+# Everything varying is a variable; importing projects isolate volumes and
+# networks by project name. No `volumes:` / `networks:` / `container_name`
+# here so multiple projects can run side by side. Serves /metrics for the
+# shared OTEL collector (see infra/docker/otel/otel-collector-loadtest.yaml).
+services:
+  rabbitmq-exporter:
+    image: kbudde/rabbitmq-exporter:1.0.0
+    restart: unless-stopped
+    environment:
+      - RABBIT_URL=${RABBITMQ_MGMT_URL:-http://localhost:15672}
+      - RABBIT_USER=${RABBITMQ_USER:-guest}
+      - RABBIT_PASSWORD=${RABBITMQ_PASSWORD:-guest}
+      - RABBIT_CAPABILITIES=bert,no_sort

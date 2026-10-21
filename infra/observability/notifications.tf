@@ -2,7 +2,7 @@
 # all policies to that channel. No Slack/PagerDuty in v1.
 resource "newrelic_notification_destination" "email" {
   account_id = var.newrelic_account_id
-  name       = "detectai-email-${var.environment}"
+  name       = "detectai-email-${local.environment}"
   type       = "EMAIL"
 
   property {
@@ -13,7 +13,7 @@ resource "newrelic_notification_destination" "email" {
 
 resource "newrelic_notification_channel" "email" {
   account_id     = var.newrelic_account_id
-  name           = "detectai-email-${var.environment}"
+  name           = "detectai-email-${local.environment}"
   type           = "EMAIL"
   destination_id = newrelic_notification_destination.email.id
   product        = "IINT"
@@ -26,7 +26,7 @@ resource "newrelic_notification_channel" "email" {
 
 resource "newrelic_workflow" "email_all" {
   account_id = var.newrelic_account_id
-  name       = "detectai-email-all-${var.environment}"
+  name       = "detectai-email-all-${local.environment}"
 
   muting_rules_handling = "NOTIFY_ALL_ISSUES"
 

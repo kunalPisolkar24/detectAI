@@ -1,5 +1,6 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
 import { UserNotFoundError } from "../../../domain/errors";
+import { isRetryableError } from "@shared/errors/isRetryableError";
 
 const mockLogger = { info: mock(), error: mock(), warn: mock() };
 mock.module("@shared/logging/Logger", () => ({ Logger: mockLogger }));
@@ -91,16 +92,36 @@ describe("PaymentService", () => {
         expect(metricsMock.jobErrors.inc).toHaveBeenCalledWith({ job_type: "subscription.updated", error_type: "missing_userId" });
     });
 
-    test("logs warning and ignores unknown event types", async () => {
+    test("dead-letters unknown event types so they stay replayable", async () => {
         const service = buildService();
         const event = {
             event_type: "unknown.event",
             data: { custom_data: { userId: "user_1" } }
         };
-        await service.handleEvent(event as any);
+
+        await expect(service.handleEvent(event as any)).rejects.toThrow(
+            "No handler registered for event type: unknown.event",
+        );
+
         expect(mockLogger.warn).toHaveBeenCalled();
         expect(metricsMock.unhandledEventsTotal.inc).toHaveBeenCalledWith({ event_type: "other" });
+        expect(metricsMock.jobErrors.inc).toHaveBeenCalledWith({
+            job_type: "other",
+            error_type: "unhandled_event_type",
+        });
         expect(metricsMock.jobTotal.inc).not.toHaveBeenCalled();
+    });
+
+    test("an unknown event type is not retryable", async () => {
+        const service = buildService();
+        const event = {
+            event_type: "unknown.event",
+            data: { custom_data: { userId: "user_1" } }
+        };
+
+        const error = await service.handleEvent(event as any).catch((e) => e);
+
+        expect(isRetryableError(error)).toBe(false);
     });
 
     test("routes user-not-found failures onto the DLQ path", async () => {

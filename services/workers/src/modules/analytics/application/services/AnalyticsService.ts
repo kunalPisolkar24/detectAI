@@ -2,6 +2,7 @@ import { type IUserRepository } from "@modules/user/domain/IUserRepository";
 import { type UsageEventDeduplicator } from "../../infrastructure/UsageEventDeduplicator";
 import { Logger } from "@shared/logging/Logger";
 import { MetricsService } from "@shared/monitoring/MetricsService";
+import { MissingFieldError } from "@shared/errors/AppError";
 
 export class AnalyticsService {
   constructor(
@@ -29,7 +30,10 @@ export class AnalyticsService {
     let claimed = false;
     try {
       if (!eventId || typeof eventId !== "string" || !eventId.trim()) {
-        throw new Error("handleUsageEvent requires a non-empty eventId");
+        // MissingFieldError is non-retryable, so a malformed event dead-letters
+        // straight away instead of burning the retry budget on a message that
+        // can never succeed.
+        throw new MissingFieldError("eventId");
       }
       if (this.deduplicator) {
         const isNew = await this.deduplicator.tryBegin(eventId);
