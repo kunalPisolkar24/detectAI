@@ -221,6 +221,26 @@ is no series to draw:
 | `Slow jobs over 1000ms` / `over 2000ms` | No job has run that long |
 | `Stale events filtered (total)` (cron) | No sweep has ever filtered a phantom row |
 | `Paddle API latency and cancels` | The load rig has no Paddle API to call, so the request timer is never observed |
+| `Errors by path` (web) | No request has failed |
+| `Slow requests over 1s` / `over 500ms` (web) | No request has run that long |
+| `Auth failures (401/403)` (web) | No request has been denied |
+| `Rate limit rejections`, `Cache hit and miss`, `Analytics publish failures` (web) | The counter has never been incremented: prom-client only emits a labeled series after the first observation, so these are blank until the app actually rate-limits, caches or fails a publish |
+
+The web board's percentiles come from spans, not from the app's Prometheus
+histograms. The `http_request_duration_seconds` histogram exists in the app but
+nothing records it, so the board does not read it; `ai_inference_duration_seconds`
+is the one app histogram the board does use, and it does arrive as an OpenTelemetry
+histogram, which New Relic can take percentiles from directly.
+
+One counter nuance applies to the web board's app counters. prom-client only
+creates a labelled child the first time it is incremented, and New Relic takes
+the first value of a cumulative series as its baseline. A counter that is
+incremented once and then never again therefore reads `0` forever, because the
+single increment is what established the baseline. Counters that keep
+incrementing — a cache counter on every hit, a rate-limit counter on every
+rejection — lose only their first increment and read correctly afterwards. The
+web load rig triggers most of these paths once, which is why they stay empty
+there and are expected to populate in prod.
 
 ## Usage
 
