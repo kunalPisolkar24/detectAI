@@ -1,0 +1,1105 @@
+{
+  "name": "detectai-web (loadtest)",
+  "description": "Web frontend + BFF (deployment.environment = loadtest): Next.js SSR and API routes, AI inference, auth, database and cache. service.name = web.",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Overview",
+      "description": "Golden signals for the web frontend and BFF",
+      "widgets": [
+        {
+          "title": "",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "height": 3,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "yAxisLeft": {
+              "zero": true
+            },
+            "text": "## Web (`service.name = web`, env `loadtest`)\nNext.js SSR + API routes. **Dependency map:** `AI_SERVICE_URL`, `CHAT_SERVICE_URL`, `FILE_EXTRACTOR_API_URL`, PG pool (`DB_POOL_MAX`), users-Redis. Auth: NextAuth GitHub/Google + Turnstile. Slow routes and 5xx here page first."
+          }
+        },
+        {
+          "title": "Request rate (load)",
+          "layout": {
+            "column": 1,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Error share (load)",
+          "layout": {
+            "column": 4,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server'"
+              }
+            ],
+            "thresholds": {
+              "alert": {
+                "value": 2
+              },
+              "warning": {
+                "value": 1
+              }
+            }
+          }
+        },
+        {
+          "title": "p95 latency (load)",
+          "layout": {
+            "column": 7,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Satisfied requests (< 500ms) (load)",
+          "layout": {
+            "column": 10,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Span SELECT percentage(count(*), WHERE duration.ms < 500) AS `satisfied %` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server'"
+              }
+            ],
+            "thresholds": {
+              "alert": {
+                "value": 95,
+                "direction": "below"
+              }
+            }
+          }
+        },
+        {
+          "title": "Request rate by path (load)",
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server' FACET http.route TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Latency p50/p95/p99 (load)",
+          "layout": {
+            "column": 7,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server' TIMESERIES AUTO LIMIT 3"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Responses by status code (load)",
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.stacked-bar"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server' FACET http.status_code TIMESERIES AUTO LIMIT 12"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "gradient": {
+                "enabled": true
+              },
+              "seriesOrder": "original",
+              "stacked": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Errors by path (load)",
+          "layout": {
+            "column": 7,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Span SELECT rate(count(*), 1 minute) AS `errors/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server' AND error = true FACET http.route TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Service",
+      "description": "RED per route, AI inference latency, auth and app counters",
+      "widgets": [
+        {
+          "title": "Requests by path (load)",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.stacked-bar"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server' FACET http.route TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "gradient": {
+                "enabled": true
+              },
+              "seriesOrder": "original",
+              "stacked": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Slow requests over 1s (load)",
+          "layout": {
+            "column": 7,
+            "row": 1,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Span SELECT rate(count(*), 1 minute) AS `slow/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server' AND duration.ms > 1000 FACET http.route TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "AI inference latency (load)",
+          "layout": {
+            "column": 1,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT percentile(ai_inference_duration_seconds, 50, 95, 99) WHERE deployment.environment = 'loadtest' AND service.name = 'web' FACET model TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Auth failures (401/403) (load)",
+          "layout": {
+            "column": 7,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Span SELECT rate(count(*), 1 minute) AS `denials/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server' AND http.status_code IN ('401', '403') FACET http.route TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Rate limit rejections (load)",
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT rate(sum(rate_limit_hits_total), 1 minute) AS `usage/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' TIMESERIES AUTO"
+              },
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT rate(sum(abuse_rate_limit_hits_total), 1 minute) AS `abuse/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' TIMESERIES AUTO"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Cache hit and miss (load)",
+          "layout": {
+            "column": 7,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT rate(sum(cache_operations_total), 1 minute) AS `ops/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' FACET status TIMESERIES AUTO LIMIT 4"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Analytics publish failures (load)",
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT rate(sum(analytics_publish_failures_total), 1 minute) AS `failures/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' FACET stage TIMESERIES AUTO LIMIT 4"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Usage Redis errors and sync fallback (load)",
+          "layout": {
+            "column": 7,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT rate(sum(usage_redis_errors_total), 1 minute) AS `redis errors/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' FACET operation TIMESERIES AUTO LIMIT 6"
+              },
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT rate(sum(usage_sync_fallback_total), 1 minute) AS `fallbacks/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' TIMESERIES AUTO"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Slowest paths (load)",
+          "layout": {
+            "column": 1,
+            "row": 5,
+            "height": 3,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Span SELECT rate(count(*), 1 minute) AS rpm, percentage(count(*), WHERE error = true) AS `error %`, percentile(duration.ms, 50, 95, 99) WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server' FACET http.route LIMIT 30"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Service Logs",
+      "description": "Log stream, volume by level and recent failures",
+      "widgets": [
+        {
+          "title": "Error log stream (latest 100) (load)",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "height": 4,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Log SELECT timestamp, `severity.text`, message, traceId, spanId WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND (`severity.text` LIKE 'error' OR `severity.text` LIKE 'warn') LIMIT 100"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            }
+          }
+        },
+        {
+          "title": "Log volume by level (load)",
+          "layout": {
+            "column": 7,
+            "row": 1,
+            "height": 4,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Log SELECT rate(count(*), 1 minute) AS `logs/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' FACET `severity.text` TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Errors by message (load)",
+          "layout": {
+            "column": 1,
+            "row": 5,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.stacked-bar"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Log SELECT rate(count(*), 1 minute) AS `logs/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND (`severity.text` LIKE 'error' OR `severity.text` LIKE 'warn') FACET message TIMESERIES AUTO LIMIT 8"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "gradient": {
+                "enabled": true
+              },
+              "seriesOrder": "original",
+              "stacked": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Recent errors with trace links (load)",
+          "layout": {
+            "column": 7,
+            "row": 5,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(traceId) AS `sample trace` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND `severity.text` LIKE 'error' FACET message LIMIT 20"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            }
+          }
+        },
+        {
+          "title": "Slow requests over 500ms (load)",
+          "layout": {
+            "column": 1,
+            "row": 6,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Span SELECT timestamp, http.route AS path, http.status_code AS status, duration.ms AS `ms` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server' AND duration.ms > 500 LIMIT 50"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Infra",
+      "description": "Node runtime, database, cache and broker depth",
+      "widgets": [
+        {
+          "title": "Event loop lag p99 (ms) (load)",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT average(nodejs_eventloop_lag_p99_seconds) * 1000 AS `lag ms` WHERE deployment.environment = 'loadtest' AND service.name = 'web'"
+              }
+            ],
+            "thresholds": {
+              "alert": {
+                "value": 100
+              },
+              "warning": {
+                "value": 50
+              }
+            }
+          }
+        },
+        {
+          "title": "Heap used (MB) (load)",
+          "layout": {
+            "column": 4,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT average(nodejs_heap_size_used_bytes) / 1048576 AS `heap MB` WHERE deployment.environment = 'loadtest' AND service.name = 'web'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Resident memory (MB) (load)",
+          "layout": {
+            "column": 7,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT average(process_resident_memory_bytes) / 1048576 AS `rss MB` WHERE deployment.environment = 'loadtest' AND service.name = 'web'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Container CPU % (load)",
+          "layout": {
+            "column": 10,
+            "row": 1,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT average(container.cpu.utilization) AS `cpu %` WHERE deployment.environment = 'loadtest' AND container.name LIKE '%frontend%'"
+              }
+            ],
+            "thresholds": {
+              "alert": {
+                "value": 85
+              },
+              "warning": {
+                "value": 70
+              }
+            }
+          }
+        },
+        {
+          "title": "Event loop lag p50/p99 (load)",
+          "layout": {
+            "column": 1,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT average(nodejs_eventloop_lag_p50_seconds) * 1000 AS `p50 ms`, average(nodejs_eventloop_lag_p99_seconds) * 1000 AS `p99 ms` WHERE deployment.environment = 'loadtest' AND service.name = 'web' TIMESERIES AUTO"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Heap and resident memory (MB) (load)",
+          "layout": {
+            "column": 7,
+            "row": 2,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT average(nodejs_heap_size_used_bytes) / 1048576 AS `heap MB`, average(process_resident_memory_bytes) / 1048576 AS `rss MB` WHERE deployment.environment = 'loadtest' AND service.name = 'web' TIMESERIES AUTO"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Postgres backends and locks (load)",
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT average(pg_stat_database_numbackends) AS backends, max(pg_locks_count) AS locks WHERE deployment.environment = 'loadtest' TIMESERIES AUTO"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Postgres longest transaction (load)",
+          "layout": {
+            "column": 7,
+            "row": 3,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT max(pg_stat_activity_max_tx_duration) AS `longest tx s` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Redis memory and evictions (load)",
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT max(redis_memory_used_bytes) / 1048576 AS `memory MB` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO"
+              },
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT rate(sum(redis_evicted_keys_total), 1 minute) AS `evictions/min` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Redis keyspace and clients (load)",
+          "layout": {
+            "column": 7,
+            "row": 4,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT sum(redis_db_keys) AS `keys` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO"
+              },
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT max(redis_connected_clients) AS `clients` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "RabbitMQ queue depth (load)",
+          "layout": {
+            "column": 1,
+            "row": 5,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT max(rabbitmq_queue_messages) AS `messages` WHERE deployment.environment = 'loadtest' FACET queue TIMESERIES AUTO LIMIT 8"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "RabbitMQ consumers and queues (load)",
+          "layout": {
+            "column": 7,
+            "row": 5,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT max(rabbitmq_consumers) AS `consumers`, max(rabbitmq_queues) AS `queues` WHERE deployment.environment = 'loadtest' TIMESERIES AUTO"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Exporter health (load)",
+          "layout": {
+            "column": 1,
+            "row": 6,
+            "height": 3,
+            "width": 12
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": "${account_id}",
+                "query": "FROM Metric SELECT max(redis_up) AS redis, max(rabbitmq_up) AS rabbitmq, max(pg_scrape_collector_success) AS postgres WHERE deployment.environment = 'loadtest' LIMIT 20"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

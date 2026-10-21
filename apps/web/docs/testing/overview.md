@@ -312,15 +312,15 @@ Load tests use **k6** to check performance under heavy traffic.
 
 ### Running Load Tests
 
+The `make load-test` target brings up a self-contained rig (throwaway Postgres
+and Redis, a mock backend server and k6) and runs a script against it.
+
 ```bash
-# Smoke test (quick check)
-k6 run test/load/chat-api.k6.js --vus 1 --duration 10s
+# Default script (landing page)
+make load-test VUS=10 DURATION=2m
 
-# Load test (realistic traffic)
-k6 run test/load/chat-api.k6.js --vus 10 --duration 2m
-
-# Stress test (find breaking point)
-k6 run test/load/chat-api.k6.js --vus 50 --duration 5m
+# A different script
+make load-test SCRIPT=chat-api.k6.js VUS=10 DURATION=2m
 ```
 
 ### Load Test Scenarios
@@ -330,6 +330,28 @@ k6 run test/load/chat-api.k6.js --vus 50 --duration 5m
 | Smoke | 1 | 10 seconds | Quick sanity check |
 | Load | 10 | 2 minutes | Realistic traffic |
 | Stress | 50 | 5 minutes | Find breaking point |
+
+### Load Test Observability
+
+By default a load run is fully offline: no collector, no network calls, no
+change in what the rig does. Add `WITH_OBSERVABILITY=1` to also stream the run
+into New Relic, so the run shows up on the `detectai-web (loadtest)` board
+instead of the prod one.
+
+```bash
+export NEW_RELIC_LICENSE_KEY="eu01..."   # ingest key, never commit
+make load-test WITH_OBSERVABILITY=1 VUS=10 DURATION=2m
+```
+
+This starts an OpenTelemetry collector alongside the rig, points the app's OTLP
+exporter at it, and adds the Postgres, Redis and RabbitMQ exporters so the
+board's Infra page has datastore depth. The collector tags everything with
+`deployment.environment = loadtest`, so a load run never pollutes the prod
+boards and never triggers the prod alerts.
+
+Without a license key the collector retries and drops while the app keeps
+serving, so a failed export never fails a run.
+
 
 ## Common Testing Issues
 

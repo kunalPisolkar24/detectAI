@@ -68,6 +68,25 @@ mixin() {
 
 This allows you to correlate logs with traces for debugging.
 
+### Log Export
+
+Logs are also exported over OTLP so they are queryable in New Relic next to
+the traces. The exporter is optional: with no `OTEL_EXPORTER_OTLP_ENDPOINT` set
+the logs stay on stdout only, and a failing exporter never blocks a request.
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318   # Empty disables tracing
+OTEL_SERVICE_NAME=web
+```
+
+The endpoint carries both signals, so the same value is used for
+`/v1/traces` and `/v1/logs`. Each record is exported with its level as the
+severity, the log message as the body and the remaining fields as attributes,
+and it inherits the active span so New Relic can link the log to its trace.
+
+Console output is unchanged either way — the logger writes to stdout and
+forwards to the OTLP sink separately.
+
 ### Sensitive Data Redaction
 
 The logger automatically redacts sensitive fields:

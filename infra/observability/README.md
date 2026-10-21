@@ -10,14 +10,24 @@ root has no AWS provider / emulator hacks.
 - `versions.tf`, `providers.tf` — `newrelic ~> 3.0`, `region = EU`. No `aws` provider.
 - `variables.tf` — `newrelic_account_id` (6428768), `newrelic_api_key` (sensitive,
   env only), `newrelic_region` (EU), `alert_email`.
-- `main.tf` — 12 `newrelic_one_dashboard_json` resources from `dashboards/*.json`
-  via `templatefile` (`${account_id}`). Two statuses only: the eight prod boards
+- `main.tf` — 13 `newrelic_one_dashboard_json` resources from `dashboards/*.json`
+  via `templatefile` (`${account_id}`). Two statuses only: the nine prod boards
   filter `deployment.environment = 'prod'`, and the four `-loadtest` boards hardcode
   `deployment.environment = 'loadtest'` so k6 runs never pollute prod boards.
-- `dashboards/` — `overview`, `web`, `payment-gateway`, `payment-gateway-loadtest`,
-  `workers`, `workers-loadtest`, `inference`, `document-parser`,
-  `document-parser-loadtest`, `chats`, `chats-loadtest`, `datastores`. Every prod
-  NRQL filters `deployment.environment = 'prod'`.
+- `dashboards/` — `overview`, `web`, `web-loadtest`, `payment-gateway`,
+  `payment-gateway-loadtest`, `workers`, `workers-loadtest`, `inference`,
+  `document-parser`, `document-parser-loadtest`, `chats`, `chats-loadtest`,
+  `datastores`. Every prod NRQL filters `deployment.environment = 'prod'`.
+- `dashboards/web.json` — one board for the Next.js frontend and BFF
+  (`service.name = web`). Pages: `Overview` (request rate, error share, p95,
+  Apdex, container CPU/heap), `Service` (RED per route, status split,
+  downstream dependency latency and errors, auth failures, AI inference
+  latency, rate-limit and cache counters), `Service Logs` (error stream, log
+  volume by level, errors by message, recent errors, slow requests) and
+  `Infra` (DB query percentiles, cache behaviour, Node runtime, and the
+  Postgres / Redis / RabbitMQ exporter panels). `web-loadtest.json` is
+  page-for-page identical with `'loadtest'` hardcoded and ` (load)` appended to
+  the panel titles, like the chats pair.
 - `dashboards/workers.json` — one board for all three worker deployables
   (`worker-analytics`, `worker-cron`, `worker-payments`), each its own binary,
   container and `service.name`. Pages: `Overview` (cross-worker rollup: throughput,
@@ -52,9 +62,10 @@ root has no AWS provider / emulator hacks.
 - `notifications.tf` — email destination + channel + workflow only.
 - `envs/prod.tfvars` — non-secret values only. Keys via
   `TF_VAR_newrelic_api_key` or `NEW_RELIC_API_KEY` env.
-- `tests/valid.tftest.hcl` — mocked plan asserts 12 dashboards (plus the workers
-  board page count), the chats prod board's pages and panels against the chats
-  loadtest board, and prod policy names.
+- `tests/valid.tftest.hcl` — mocked plan asserts 13 dashboards (plus the workers
+  board page count and the web board page count), the chats prod board's pages
+  and panels against the chats loadtest board, the same twin check for the web
+  boards, and prod policy names.
 
 ## Worker log export
 
@@ -85,6 +96,18 @@ is what feeds the worker-side widgets on the `Infra` page. The RabbitMQ broker
 metrics need the exporter pointed at the management API
 (`RABBITMQ_MGMT_URL` in `infra/docker/prod/.env`); the AMQP URL the apps use
 leaves `rabbitmq_up` at 0 and no queue metrics at all.
+
+The web app is scraped the same way, on `frontend:3000/api/metrics` (not
+`/metrics`). Its endpoint only enforces a bearer token when
+`PROMETHEUS_WEB_SCRAPE_TOKEN` is set, and the collector sends the same value:
+both come from `infra/docker/prod/.env`, the app's copy through the
+`detectai/web/secrets` secret. Change it in one place and re-seed, or the
+scrape gets a 401 and the web board's Metric panels stay empty.
+
+The web app also pushes logs over OTLP, which is what fills the `Service Logs`
+page. The collector's `logs` pipeline only accepts OTLP, so without the log
+exporter every `FROM Log` widget stays empty even though the logs are on
+stdout.
 
 ### Datastore metrics in the load rigs
 
@@ -243,4 +266,6 @@ make obs-apply
 - Workers load rigs need `make load-test WORKER=<name> WITH_OBSERVABILITY=1` plus
   `NEW_RELIC_LICENSE_KEY` in the shell before `workers-loadtest.json` shows data; the
   default `WITH_OBSERVABILITY=0` stays offline.
+- The web load rig works the same way: `make load-test WITH_OBSERVABILITY=1`
+  in `apps/web` before `web-loadtest.json` shows data.
 - Browser RUM, Synthetics, SLO objects.

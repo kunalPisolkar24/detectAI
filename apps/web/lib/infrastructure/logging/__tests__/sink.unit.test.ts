@@ -41,4 +41,22 @@ describe("lib/infrastructure/logging/sink", () => {
 
     expect(() => emitLog("info", "hello", {})).not.toThrow()
   })
+
+  // Next.js compiles the instrumentation, the app and the middleware as
+  // separate layers, each with its own copy of this module. The sink has to
+  // survive that split, or only the instrumentation layer could log.
+  it("stays reachable from a separate module instance", async () => {
+    vi.resetModules()
+    const first = await import("@/lib/infrastructure/logging/sink")
+    const calls: string[] = []
+    first.setLogSink((_level, message) => {
+      calls.push(message)
+    })
+
+    vi.resetModules()
+    const second = await import("@/lib/infrastructure/logging/sink")
+    second.emitLog("info", "from another layer", {})
+
+    expect(calls).toEqual(["from another layer"])
+  })
 })
