@@ -7,21 +7,44 @@ import { rateLimitService } from "@/lib/application/rate-limit"
 import { abuseRateLimitService, extractClientIp, getAbuseRateLimitHeaders } from "@/lib/application/abuse-rate-limit"
 import { getPreviewUserId, isPreviewMode } from "@/lib/config/preview"
 import { env } from "@/lib/config/env"
-import { ChatAnalyzeRequestSchema } from "@/lib/domain/schemas/chat"
+import { ChatAnalyzeRequestSchema, type ChatAnalyzeRequest } from "@/lib/domain/schemas/chat"
 
 export const runtime = "nodejs"
 
 const requestSchema = ChatAnalyzeRequestSchema
 
+type ParsedBody = { ok: true; data: ChatAnalyzeRequest } | { ok: false; response: NextResponse }
+
+/**
+ * Parses and validates the analyze body. A malformed or empty body is a
+ * client error, so it answers 400 instead of falling through to the 500
+ * handler: a 5xx for bad input pollutes the error budget and trips the
+ * server-error alerts.
+ */
+async function parseBody(request: Request): Promise<ParsedBody> {
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return { ok: false, response: NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }) }
+  }
+
+  const parsed = requestSchema.safeParse(body)
+  if (!parsed.success) {
+    return { ok: false, response: NextResponse.json({ error: "Invalid request payload" }, { status: 400 }) }
+  }
+
+  return { ok: true, data: parsed.data }
+}
+
 export async function POST(request: Request) {
   if (isPreviewMode()) {
     try {
-      const body = await request.json()
-      const parsed = requestSchema.safeParse(body)
-      if (!parsed.success) {
-        return NextResponse.json({ error: "Invalid request payload" }, { status: 400 })
+      const parsedBody = await parseBody(request)
+      if (!parsedBody.ok) {
+        return parsedBody.response
       }
-      const { content } = parsed.data
+      const { content } = parsedBody.data
       if (content.length > MAX_LIVE_ANALYSIS_CHARS) {
         return NextResponse.json(
           { error: `Text exceeds maximum length of ${MAX_LIVE_ANALYSIS_CHARS} characters` },
@@ -33,7 +56,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
       }
       const { createPreviewStream } = await import("@/features/preview/lib/preview-stream")
-      const stream = await createPreviewStream({ ...parsed.data, userId: previewUserId }, request.signal)
+      const stream = await createPreviewStream({ ...parsedBody.data, userId: previewUserId }, request.signal)
       return new Response(stream, {
         status: 200,
         headers: {
@@ -83,13 +106,12 @@ export async function POST(request: Request) {
       }
     }
 
-    const body = await request.json()
-    const parsed = requestSchema.safeParse(body)
-    if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid request payload" }, { status: 400 })
+    const parsedBody = await parseBody(request)
+    if (!parsedBody.ok) {
+      return parsedBody.response
     }
 
-    const { content } = parsed.data
+    const { content } = parsedBody.data
     if (content.length > MAX_LIVE_ANALYSIS_CHARS) {
       return NextResponse.json(
         { error: `Text exceeds maximum length of ${MAX_LIVE_ANALYSIS_CHARS} characters` },
@@ -109,7 +131,7 @@ export async function POST(request: Request) {
     const eventId = crypto.randomUUID()
 
     const stream = await analysisOrchestrator.execute({
-      ...parsed.data,
+      ...parsedBody.data,
       userId: userId!,
       eventId,
     }, request.signal)

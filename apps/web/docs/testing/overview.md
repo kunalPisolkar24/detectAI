@@ -110,7 +110,12 @@ apps/web/
 │   ├── infrastructure/
 │   │   └── ...                  # Infrastructure tests
 │   ├── load/
-│   │   └── chat-api.k6.js       # k6 load test scripts
+│   │   ├── scripts/                # k6 load test scripts
+│   │   │   ├── lib/                # Shared config, payloads, checks
+│   │   │   └── *.k6.js             # One script per scenario
+│   │   ├── mock-server/            # gRPC and HTTP doubles
+│   │   ├── seed/                   # Seeds the accounts the scripts sign in with
+│   │   └── results/                # Run summaries (gitignored)
 │   ├── mocks/
 │   │   └── ...                  # Test mocks
 │   ├── msw-server.ts            # MSW server setup
@@ -308,12 +313,14 @@ npx playwright test --headed
 
 ## Load Testing
 
-Load tests use **k6** to check performance under heavy traffic.
+Load tests use **k6** to check performance under heavy traffic, and to pin
+down what the service does with the requests it does *not* accept.
 
 ### Running Load Tests
 
 The `make load-test` target brings up a self-contained rig (throwaway Postgres
-and Redis, a mock backend server and k6) and runs a script against it.
+and Redis, a mock backend server, a seeder and k6) and runs one script
+against it.
 
 ```bash
 # Default script (landing page)
@@ -321,15 +328,115 @@ make load-test VUS=10 DURATION=2m
 
 # A different script
 make load-test SCRIPT=chat-api.k6.js VUS=10 DURATION=2m
+
+# The whole suite, one fresh rig per script
+make load-suite
 ```
 
+The rig starts a throwaway Postgres, Redis and RabbitMQ, applies the
+migrations, seeds two accounts (one free, one premium) and starts the app
+against it. Every run tears the rig down again, so the counters one script
+drives never leak into the next.
+
 ### Load Test Scenarios
+
+`SCENARIO` picks a traffic shape. `VUS` and `DURATION` override it, so a
+one-off run does not need a change to a script.
 
 | Scenario | Virtual Users | Duration | Purpose |
 |----------|---------------|----------|---------|
 | Smoke | 1 | 10 seconds | Quick sanity check |
-| Load | 10 | 2 minutes | Realistic traffic |
-| Stress | 50 | 5 minutes | Find breaking point |
+| Load | 10 | 2 minutes | Realistic traffic (default) |
+| Stress | 50 | 5 minutes, ramped | Find breaking point |
+
+```bash
+make load-test SCRIPT=chat-api.k6.js SCENARIO=stress
+```
+
+### The Scripts
+
+| Script | What it covers |
+|--------|----------------|
+| `landing.k6.js` | The landing page: status, content type, latency |
+| `chat-api.k6.js` | The analyze endpoint under load, on both models, with the full NDJSON stream checked |
+| `chat-api-invalid.k6.js` | Every body the service has to reject, and the two it has to accept |
+| `chat-api-session.k6.js` | The analyze endpoint as a signed-in premium user, on the session path |
+| `auth.k6.js` | The NextAuth endpoints: providers, CSRF, the credentials callback, the session |
+| `chat-api-rate-limit.k6.js` | The rejection contract of the abuse limiter and the daily cap |
+
+### The Rate Limit Scenarios
+
+Two limiters stand in front of the analyze endpoint, and they need
+different settings to be the one that refuses. The scenario takes a case:
+
+```bash
+# The abuse limiter refuses, with Retry-After and the rate limit headers
+make load-test SCRIPT=chat-api-rate-limit.k6.js RATE_LIMIT_CASE=abuse
+
+# The daily cap refuses, with a plain body and no headers
+make load-test SCRIPT=chat-api-rate-limit.k6.js RATE_LIMIT_CASE=daily
+```
+
+The rig is configured to match: the abuse case runs with the abuse limit
+lowered so the limiter itself refuses, the daily case with it out of the way
+so the daily cap is the only one standing. `make load-suite` runs both.
+
+### What "Invalid" Means Here
+
+k6 counts every status of 400 and above as a failed request. The scripts
+that expect a rejection widen the accepted set with
+`http.setResponseCallback`, so a refusal does not read as a failure while a
+5xx still does.
+
+`chat-api-invalid.k6.js` cycles through the whole matrix on every run:
+
+| Case | Expected |
+|------|----------|
+| `chatId`, `content` or `model` missing or empty | 400 |
+| `content`, `chatId` or `model` of the wrong type | 400 |
+| `model` outside `spark` and `flare` | 400 |
+| `assistantCreatedAt` or `userCreatedAt` that is not a timestamp | 400 |
+| `sourceMessageId` without the assistant message it implies | 400 |
+| Content past 50 000 characters | 400 |
+| A body that is not JSON at all | 400 |
+| A missing or wrong internal key | 401 |
+| A method the route does not implement | 405 |
+| Content of exactly 50 000 characters | 200 |
+| An unknown field alongside the valid ones | 200 |
+
+The rejections have to be cheap. A refused request should be faster than one
+that runs the analysis, and the thresholds say so.
+
+### Thresholds
+
+Every script fails the run when a threshold is crossed, so a regression
+stops the pipeline rather than scrolling past.
+
+| Metric | What it means |
+|--------|----------------|
+| `http_req_failed` | The share of requests that failed. Near zero everywhere. |
+| `checks` | The share of assertions that held. Near one everywhere. |
+| `http_req_duration` | The latency budget for the endpoint, p95 and p99. |
+| `dropped_iterations` | Iterations k6 could not start. Must be zero. |
+
+### Run Summaries
+
+Each run writes its k6 summary to `test/load/results/`. The directory is
+gitignored; the file is the evidence of what the run did, including the
+metric values, the checks and the threshold results.
+
+### Notes for Anyone Adding a Script
+
+- k6 empties the per-VU cookie jar between iterations, so a script that
+  needs a session has to sign in during the iteration that uses it.
+- k6 counts every status of 400 and above as a failed request. A script
+  that expects a refusal widens the accepted set with
+  `http.setResponseCallback`, so a refusal does not read as a failure while
+  a 5xx still does.
+- The shared helpers in `test/load/scripts/lib/` hold the environment
+  handling, the payload matrix, the check builders and the NDJSON parser.
+  The expected statuses live with the payloads, so a behaviour change shows
+  up in one place.
 
 ### Load Test Observability
 
