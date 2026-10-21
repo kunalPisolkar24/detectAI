@@ -221,10 +221,19 @@ is no series to draw:
 | `Slow jobs over 1000ms` / `over 2000ms` | No job has run that long |
 | `Stale events filtered (total)` (cron) | No sweep has ever filtered a phantom row |
 | `Paddle API latency and cancels` | The load rig has no Paddle API to call, so the request timer is never observed |
-| `Errors by path` (web) | No request has failed |
+| `Server error share` (web) | Nothing has thrown. Next.js sets the span error attribute for a thrown exception, so this counts 5xx, not the 4xx rejections the invalid scenario produces |
 | `Slow requests over 1s` / `over 500ms` (web) | No request has run that long |
-| `Auth failures (401/403)` (web) | No request has been denied |
-| `Rate limit rejections`, `Cache hit and miss`, `Analytics publish failures` (web) | The counter has never been incremented: prom-client only emits a labeled series after the first observation, so these are blank until the app actually rate-limits, caches or fails a publish |
+| `Rate limit rejections` (web) | The limiter refused once, and a counter that is incremented once is invisible: New Relic takes the first value of a cumulative series as its baseline, so only the increments after the first are ever seen. The load scenario also stops at the first refusal, which is shorter than the collector's scrape interval |
+| `Cache hit and miss` (web) | The analyze path does not touch the user cache, so `cache_operations_total` has never been incremented |
+| `Analytics publish failures` (web) | No publish has failed |
+| `Usage Redis errors and sync fallback` (web) | The counter went from zero to five once, and the first value became the baseline (see `Rate limit rejections`) |
+| `Redis memory and evictions` (web) | No key has been evicted |
+
+`http.status_code` is stored as a number, not a string: `http.status_code IN
+('401', '403')` matches nothing, while `http.status_code IN (401, 403)` matches
+every 401. Faceting by the attribute works either way, which is how a panel can
+show a status chart while the panel that filters on the same attribute counts
+nothing.
 
 The web board's percentiles come from spans, not from the app's Prometheus
 histograms. The `http_request_duration_seconds` histogram exists in the app but
@@ -241,6 +250,12 @@ incrementing — a cache counter on every hit, a rate-limit counter on every
 rejection — lose only their first increment and read correctly afterwards. The
 web load rig triggers most of these paths once, which is why they stay empty
 there and are expected to populate in prod.
+
+A short scenario adds a second way to miss a counter: the app's metrics only
+reach New Relic when the collector scrapes them, and the worker rigs scrape
+every 5s. The rate-limit scenario stops at the first refusal, which happens
+inside a second, so the counter may never be observed at all. The traces and
+logs of the same run are unaffected — those are pushed, not scraped.
 
 ## Usage
 
