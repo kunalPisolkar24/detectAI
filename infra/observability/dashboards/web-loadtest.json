@@ -28,7 +28,7 @@
           }
         },
         {
-          "title": "Error share (load)",
+          "title": "Server error share (load)",
           "layout": {
             "column": 4,
             "row": 1,
@@ -42,7 +42,7 @@
             "nrqlQueries": [
               {
                 "accountId": "${account_id}",
-                "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server'"
+                "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `server error %` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server'"
               }
             ],
             "thresholds": {
@@ -204,7 +204,7 @@
           }
         },
         {
-          "title": "Errors by path (load)",
+          "title": "Failed responses by path (load)",
           "layout": {
             "column": 7,
             "row": 3,
@@ -218,7 +218,7 @@
             "nrqlQueries": [
               {
                 "accountId": "${account_id}",
-                "query": "FROM Span SELECT rate(count(*), 1 minute) AS `errors/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server' AND error = true FACET http.route TIMESERIES AUTO LIMIT 10"
+                "query": "FROM Span SELECT rate(count(*), 1 minute) AS `failed/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server' AND http.status_code >= 400 FACET http.route TIMESERIES AUTO LIMIT 10"
               }
             ],
             "legend": {
