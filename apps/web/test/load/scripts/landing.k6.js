@@ -1,22 +1,27 @@
-import http from 'k6/http';
-import { check, sleep } from 'k6';
+import http from 'k6/http'
+import { check, sleep } from 'k6'
+import { BASE_URL, loadOptions } from './lib/config.js'
+import { expectStatus } from './lib/checks.js'
 
-export const options = {
-  vus: __ENV.VUS || 20,
-  duration: __ENV.DURATION || '1m',
+// The landing page: the first thing a visitor hits, and the cheapest request
+// the service serves.
+
+export const options = loadOptions({
   thresholds: {
-    http_req_duration: ['p(95)<500'], // 95% of requests should be below 500ms
+    'http_req_failed': ['rate<0.01'],
+    'checks': ['rate>0.99'],
+    'http_req_duration': ['p(95)<500', 'p(99)<1000'],
+    'dropped_iterations': ['count==0'],
   },
-};
+})
 
 export default function () {
-  const url = __ENV.BASE_URL || 'http://localhost:3001';
-  const res = http.get(url);
-  
-  check(res, {
-    'status is 200': (r) => r.status === 200,
-    'contains welcome text': (r) => r.body.includes('AI') || r.body.includes('Detect'),
-  });
+  const res = http.get(BASE_URL, { tags: { endpoint: 'landing' } })
 
-  sleep(1);
+  expectStatus(res, 200, 'landing')
+  check(res, {
+    'landing serves an html page': (r) => String(r.headers['Content-Type'] || '').includes('text/html'),
+  })
+
+  sleep(1)
 }

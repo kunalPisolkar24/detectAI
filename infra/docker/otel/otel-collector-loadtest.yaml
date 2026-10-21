@@ -38,19 +38,22 @@ receivers:
         # worker :9099, redis-exporter :9121, mongo-exporter :9216).
         # Single-target services leave these unset; the discard-port target
         # fails closed in the receiver and changes nothing for them.
+        # The extra slots carry their OWN metrics path: the first slot's path
+        # is the app's (web serves /api/metrics, document-parser /api/v1/metrics)
+        # and the datastore exporters all serve /metrics.
         - job_name: ${env:OTEL_SCRAPE_JOB_2:-unused-2}
           scrape_interval: ${env:OTEL_SCRAPE_INTERVAL:-15s}
-          metrics_path: ${env:OTEL_SCRAPE_METRICS_PATH:-/metrics}
+          metrics_path: ${env:OTEL_SCRAPE_METRICS_PATH_2:-/metrics}
           static_configs:
             - targets: ["${env:OTEL_SCRAPE_TARGET_2:-localhost:9}"]
         - job_name: ${env:OTEL_SCRAPE_JOB_3:-unused-3}
           scrape_interval: ${env:OTEL_SCRAPE_INTERVAL:-15s}
-          metrics_path: ${env:OTEL_SCRAPE_METRICS_PATH:-/metrics}
+          metrics_path: ${env:OTEL_SCRAPE_METRICS_PATH_3:-/metrics}
           static_configs:
             - targets: ["${env:OTEL_SCRAPE_TARGET_3:-localhost:9}"]
         - job_name: ${env:OTEL_SCRAPE_JOB_4:-unused-4}
           scrape_interval: ${env:OTEL_SCRAPE_INTERVAL:-15s}
-          metrics_path: ${env:OTEL_SCRAPE_METRICS_PATH:-/metrics}
+          metrics_path: ${env:OTEL_SCRAPE_METRICS_PATH_4:-/metrics}
           static_configs:
             - targets: ["${env:OTEL_SCRAPE_TARGET_4:-localhost:9}"]
 

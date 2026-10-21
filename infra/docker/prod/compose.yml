@@ -463,6 +463,12 @@ services:
       - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY:-}
       - NEW_RELIC_OTLP_ENDPOINT=${NEW_RELIC_OTLP_ENDPOINT:-https://otlp.eu01.nr-data.net:443}
       - DEPLOYMENT_ENV=${ENV_TYPE:-prod}
+      # Bearer token for the web app's /api/metrics. The app only enforces it
+      # when PROMETHEUS_WEB_SCRAPE_TOKEN is set, so a token the app does not
+      # have is ignored. When the app DOES enforce one, both sides must carry
+      # the same value (the app reads its copy from the web secret, seeded
+      # from the same .env).
+      - PROMETHEUS_WEB_SCRAPE_TOKEN=${PROMETHEUS_WEB_SCRAPE_TOKEN:-mock-prometheus-scrape-token-32ch}
     ports:
       - "${OTEL_GRPC_PORT:-4317}:4317"
       - "${OTEL_HTTP_PORT:-4318}:4318"

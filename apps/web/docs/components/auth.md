@@ -31,13 +31,14 @@ graph TB
 **How it works:**
 1. User enters email and password on the login page
 2. NextAuth calls the `authorize` function
-3. Function looks up the user in PostgreSQL by email
-4. Password is compared using bcrypt
-5. If valid, user object is returned and JWT is created
+3. The function validates the credentials with a Zod schema — a valid email and a non-empty password
+4. It looks up the user in PostgreSQL by email, including their subscription
+5. The password is compared using bcrypt
+6. If valid, the user object is returned and a JWT is created
 
 **Security features:**
 - Passwords are hashed with bcrypt
-- Turnstile CAPTCHA protection (configurable)
+- Turnstile CAPTCHA protection on both sign-in and sign-up
 - JWT expires after 1 hour
 
 **Preview mode:** Any syntactically valid email/password works. No database lookup.
@@ -57,8 +58,8 @@ GOOGLE_SECRET=your-google-client-secret
 2. Browser redirects to Google's OAuth consent screen
 3. Google redirects back with an authorization code
 4. NextAuth exchanges the code for tokens
-5. User profile is extracted and matched/created in database
-6. JWT session is created
+5. The user profile is extracted and matched or created in the database
+6. A JWT session is created
 
 ### 3. GitHub OAuth
 
@@ -71,6 +72,34 @@ GITHUB_SECRET=your-github-client-secret
 ```
 
 **How it works:** Same flow as Google OAuth, but with GitHub's authorization endpoint.
+
+**Both OAuth providers refuse to link accounts by email.** `allowDangerousEmailAccountLinking` is `false` for both, so signing in with Google and then with GitHub using the same address creates two separate users rather than silently merging them.
+
+## Signing Up
+
+**What it does:** Creates a new account. Signing up is a **server action**, not a NextAuth callback — the user is created first, then signed in.
+
+The form is validated with a Zod schema:
+
+```typescript
+export const SignupSchema = z.object({
+  email: z.string().email({ message: "Please enter a valid email address" }),
+  firstName: z.string().min(1, { message: "Please enter your first name" }),
+  lastName: z.string().min(1, { message: "Please enter your last name" }),
+  password: z.string().min(8, { message: "Password must be at least 8 characters long" }),
+  confirmPassword: z.string().min(8, { message: "Password must be at least 8 characters long" }),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords must match",
+  path: ["confirmPassword"],
+})
+```
+
+**The rules that catch people out:**
+- A first name and a last name are both **required**. The display name is built from them.
+- The password must be at least **8 characters**, and the confirmation must match.
+- The password is hashed with bcrypt at cost factor 10 before it is stored.
+- The email must not already be registered.
+- A Turnstile token is required, and it is verified against Cloudflare before the user is written.
 
 ## Session Strategy
 
@@ -85,14 +114,6 @@ graph LR
     Validate --> Session[Attach Session to Request]
 ```
 
-**JWT payload contains:**
-- `id` — User's database ID
-- `name` — User's display name
-- `email` — User's email address
-- `picture` — Profile image URL
-- `isPremium` — Whether user has active subscription
-- `iat` — Issued at timestamp
-
 **Session configuration:**
 ```typescript
 session: {
@@ -100,6 +121,17 @@ session: {
   maxAge: 60 * 60,    // 1 hour expiry
 }
 ```
+
+**JWT payload contains:**
+- `id` — User's database ID
+- `name` — User's display name
+- `email` — User's email address
+- `picture` — Profile image URL
+- `isPremium` — Whether user has active subscription
+- `iat` — Issued at timestamp
+- `_lastPremiumCheck` — When the premium status was last revalidated
+
+NextAuth also manages `sub` and `exp`.
 
 **Why JWT?**
 - Stateless — no database lookup on every request
@@ -123,11 +155,12 @@ async jwt({ token, user, trigger, session }) {
     token.picture = user.image ?? null
   }
 
-  // On session update: refresh token data
+  // On session update: refresh token data and return early
   if (trigger === "update" && session) {
     if (typeof session.name === "string") token.name = session.name
     if (typeof session.picture === "string") token.picture = session.picture
     if (typeof session.isPremium === "boolean") token.isPremium = session.isPremium
+    return token
   }
 
   // Periodic premium check (non-premium users only, 60s throttle)
@@ -138,6 +171,8 @@ async jwt({ token, user, trigger, session }) {
   return token
 }
 ```
+
+**Note the early return on an update.** When the session is explicitly updated, the callback returns straight away and the premium re-check is skipped.
 
 ### `session` callback
 
@@ -161,54 +196,51 @@ async session({ session, token }) {
 - JWT is cached for 1 hour; premium status could be stale
 - Throttled to 1 check per 60 seconds to avoid database overload
 
-## Custom Pages
-
-| Page | Route | Purpose |
-|------|-------|---------|
-| Sign In | `/login` | Custom login page |
-| Error | `/auth/error` | Authentication error page |
-
-## Preview Mode
-
-In preview mode (`ENV_TYPE=preview`), authentication is simplified:
-
-```mermaid
-graph LR
-    User[User] --> AnyEmail[Any email + password]
-    AnyEmail --> MockUser[Create mock user]
-    MockUser --> PreviewSession[Preview session]
-```
-
-**What changes:**
-- Any syntactically valid email/password works
-- No database lookup
-- User ID is `preview-{email}`
-- `isPremium` is always `false`
-- Prisma adapter is disabled
-
-**Why preview mode?**
-- UI development without backend services
-- Testing frontend changes quickly
-- Demo environments
-
 ## Protected Routes
 
-### Client-Side Protection
+### Automatic Redirects
 
-Use the `useSession` hook to check authentication:
+Route protection is handled by `proxy.ts` at the root of the app. Next.js 16 calls this file instead of the older `middleware.ts`.
 
 ```typescript
-import { useSession } from "next-auth/react"
+export async function proxy(request: NextRequest) {
+  const token = await getToken({ req: request })
+  const isAuth = !!token
+  const { pathname } = request.nextUrl
 
-function MyComponent() {
-  const { data: session, status } = useSession()
+  if (isAuth) {
+    if (pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/signup")) {
+      response = NextResponse.redirect(new URL("/chat", request.url))
+    }
+  }
 
-  if (status === "loading") return <Spinner />
-  if (status === "unauthenticated") return <Redirect to="/login" />
-
-  return <div>Hello, {session.user.name}</div>
+  if (!isAuth) {
+    if (pathname.startsWith("/chat") || pathname.startsWith("/profile")) {
+      const url = new URL("/login", request.url)
+      url.searchParams.set("callbackUrl", pathname)
+      response = NextResponse.redirect(url)
+    }
+  }
+  // ...
 }
 ```
+
+**The rules:**
+
+| Who | Path | What happens |
+|-----|------|--------------|
+| Signed in | `/`, `/login`, `/signup` | Redirected to `/chat` |
+| Signed out | `/chat`, `/profile` | Redirected to `/login?callbackUrl=<path>` |
+| Anyone | Everything else | Served as normal |
+
+The `callbackUrl` is where the user lands after signing in, so they end up back where they were trying to go.
+
+**These paths skip the proxy entirely**, so they are neither redirected nor logged:
+
+- `/api/auth/*`
+- `/api/healthz`, `/api/readyz`, `/api/metrics`
+- `/api/services/*/status`
+- `/_next/*` and `favicon.ico`
 
 ### Server-Side Protection
 
@@ -224,6 +256,23 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   // ... handle request
+}
+```
+
+### Client-Side Protection
+
+Use the `useSession` hook to check authentication:
+
+```typescript
+import { useSession } from "next-auth/react"
+
+function MyComponent() {
+  const { data: session, status } = useSession()
+
+  if (status === "loading") return <Spinner />
+  if (status === "unauthenticated") return <Redirect to="/login" />
+
+  return <div>Hello, {session.user.name}</div>
 }
 ```
 
@@ -243,13 +292,51 @@ export async function saveMessage(content: string) {
 }
 ```
 
+## Custom Pages
+
+| Page | Route | Purpose |
+|------|-------|---------|
+| Sign In | `/login` | Custom login page |
+| Sign Up | `/signup` | Custom signup page |
+| Error | `/auth/error` | Authentication error page — **not implemented yet** |
+
+NextAuth is configured to send failed sign-ins to `/auth/error`, but no route exists there, so an authentication error currently returns a 404. Signing in and signing up both work.
+
+## Preview Mode
+
+In preview mode (`ENV_TYPE=preview`), authentication is simplified:
+
+```mermaid
+graph LR
+    User[User] --> AnyEmail[Any email + password]
+    AnyEmail --> MockUser[Create mock user]
+    MockUser --> PreviewSession[Preview session]
+```
+
+**What changes:**
+- Any syntactically valid email/password works
+- No database lookup
+- The user ID is `preview-{email}`
+- The Prisma adapter is disabled
+- Registering does not create a user — the action returns success without writing anything
+- Turnstile verification short-circuits: any non-empty token passes
+- The Google and GitHub buttons are disabled
+- Tracing is off and the database and Redis clients are replaced by stubs that throw or return nothing
+
+**Premium status is deliberately toggleable in preview mode.** The credentials provider starts every user as non-premium, but the upgrade page can flip the flag on the client and the JWT callback copies that value into the token, so the premium UI can be tried without a payment provider. The choice is stored in `localStorage` under `preview:isPremium[:userId]`.
+
+**Why preview mode?**
+- UI development without backend services
+- Testing frontend changes quickly
+- Demo environments
+
 ## Premium Status
 
 The `isPremium` flag indicates whether a user has an active subscription:
 
 **How it's determined:**
-1. On login: checked from database (`subscription.status === ACTIVE`)
-2. In JWT: stored as `token.isPremium`
+1. On login: checked from the database (`subscription.status === ACTIVE`)
+2. In the JWT: stored as `token.isPremium`
 3. Periodically revalidated: every 60 seconds for non-premium users
 
 **Why revalidate?**
@@ -276,6 +363,12 @@ The `isPremium` flag indicates whether a user has an active subscription:
 - Check `NEXTAUTH_SECRET` is set and consistent
 - Verify cookies are not being blocked
 - Ensure `NEXTAUTH_URL` matches your dev server URL
+
+### A signed-in user still lands on `/login`
+
+- The proxy reads the token from the cookie, not from a database session
+- In local development the cookie is `next-auth.session-token`; in production over HTTPS it is `__Secure-next-auth.session-token`
+- Check that the browser is sending the cookie at all
 
 ### Premium status not updating
 

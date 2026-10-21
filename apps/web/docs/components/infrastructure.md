@@ -1,6 +1,6 @@
 # Infrastructure
 
-This document explains the infrastructure components that the Web service depends on: PostgreSQL, Redis, RabbitMQ, analytics publishing, rate limiting, and distributed tracing.
+This document explains the infrastructure components that the Web service depends on: PostgreSQL, Redis, RabbitMQ, analytics publishing, caching, locking, and distributed tracing.
 
 ## Overview
 
@@ -11,6 +11,7 @@ graph TB
         RateLimit[Rate Limiter]
         Analytics[Analytics Publisher]
         Cache[Cache Service]
+        Lock[Lock Service]
     end
 
     subgraph "Data Stores"
@@ -30,8 +31,10 @@ graph TB
     App --> RabbitMQ
     RateLimit --> Redis
     RateLimit --> PG
+    RateLimit --> RabbitMQ
     Analytics --> RabbitMQ
     Cache --> Redis
+    Lock --> Redis
     App --> Logger
     App --> Metrics
     App --> Tracing
@@ -39,22 +42,50 @@ graph TB
 
 ## PostgreSQL (Prisma ORM)
 
-**What it does:** Stores user data, sessions, subscriptions, and usage records.
+**What it does:** Stores user data, subscriptions, and usage records.
 
 ### Connection
 
+The Prisma client is generated into the app rather than taken from the `@prisma/client` package, and it connects through a **driver adapter** instead of Prisma's own connection handling:
+
 ```typescript
 // lib/infrastructure/prisma.ts
-import { PrismaClient } from "@prisma/client"
+import { PrismaClient } from '../shared/generated/prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 
-export const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: env.DATABASE_URL,
-    },
-  },
-})
+const poolPrimary = new Pool({ connectionString: primaryUrl, ...poolConfig })
+const poolReplica = replicaUrl === primaryUrl ? poolPrimary : new Pool({ connectionString: replicaUrl, ...poolConfig })
+
+const adapterPrimary = new PrismaPg(poolPrimary);
+const adapterReplica = new PrismaPg(poolReplica);
+
+const prismaPrimary = new PrismaClient({ adapter: adapterPrimary });
+const prismaReplica = new PrismaClient({ adapter: adapterReplica });
 ```
+
+**Two clients, one primary and one replica.** The client is extended with a query interceptor that sends reads to the replica and writes to the primary:
+
+```typescript
+const READ_OPERATIONS = [
+  'findUnique', 'findUniqueOrThrow', 'findFirst', 'findFirstOrThrow',
+  'findMany', 'count', 'aggregate', 'groupBy',
+]
+```
+
+The interceptor also times every query and records it in the `db_query_duration_seconds` metric.
+
+**Pool configuration:**
+
+| Setting | Value |
+|---------|-------|
+| `max` | `DB_POOL_MAX` (default 5) |
+| `idleTimeoutMillis` | 30 000 |
+| `connectionTimeoutMillis` | 10 000 |
+| `options` | `-c statement_timeout=30000` |
+| `ssl` | Enabled when the URL contains `sslmode=require` or `sslmode=verify` |
+
+**In preview mode** the client is replaced by a proxy that throws on every call, so a mistake in preview mode fails loudly instead of quietly writing to a mock database.
 
 ### Configuration
 
@@ -69,11 +100,11 @@ DB_POOL_MAX=5                                   # Connection pool size (1-50)
 | Model | Purpose |
 |-------|---------|
 | `User` | User accounts and profiles |
-| `Session` | Active sessions (if using DB sessions) |
+| `Session` | Active sessions (unused — the app uses JWT sessions) |
 | `Account` | OAuth provider links |
 | `Usage` | API usage tracking for rate limiting |
 | `Subscription` | Paddle subscription data |
-| `VerificationToken` | Email verification tokens |
+| `VerificationToken` | Standard NextAuth model, unused by the app |
 | `ProcessedWebhook` | Idempotent webhook event tracking |
 
 ### Database Schema
@@ -94,6 +125,8 @@ erDiagram
         string firstName
         string lastName
         string password
+        string image
+        datetime emailVerified
         string paddleCustomerId UK
         datetime createdAt
         datetime updatedAt
@@ -101,21 +134,25 @@ erDiagram
 
     Subscription {
         string id PK
-        string userId UK FK
+        string userId FK "unique"
         string paddleSubscriptionId UK
         string paddlePlanId
         enum status
         datetime endsAt
         boolean cancellationScheduled
         datetime eventTimestamp
+        datetime createdAt
+        datetime updatedAt
     }
 
     Usage {
         string id PK
-        string userId UK FK
+        string userId FK "unique"
         int apiCallCountDaily
         int apiCallCountTotal
         datetime lastApiCallReset
+        datetime createdAt
+        datetime updatedAt
     }
 
     Account {
@@ -127,6 +164,10 @@ erDiagram
         text refresh_token
         text access_token
         int expires_at
+        string token_type
+        string scope
+        text id_token
+        string session_state
     }
 
     Session {
@@ -151,13 +192,12 @@ erDiagram
 
 #### User & Authentication
 
-How users log in. Accounts link to OAuth providers (Google, GitHub). Sessions track active logins. Verification tokens handle email verification flows.
+How users log in. Accounts link to OAuth providers (Google, GitHub). Sessions track active logins.
 
 ```mermaid
 erDiagram
     User ||--o{ Account : "OAuth providers"
     User ||--o{ Session : "active sessions"
-    User ||--o{ VerificationToken : "email verification"
 
     User {
         string id PK
@@ -180,13 +220,9 @@ erDiagram
         string userId FK
         datetime expires
     }
-
-    VerificationToken {
-        string identifier
-        string token UK
-        datetime expires
-    }
 ```
+
+**There is no email-verification flow.** `VerificationToken` exists in the schema as a standard NextAuth model, but it has no foreign key to `User` and nothing in the app reads or writes it. The `User.emailVerified` column exists too, but it is never set.
 
 #### Subscription & Billing
 
@@ -205,7 +241,7 @@ erDiagram
 
     Subscription {
         string id PK
-        string userId UK FK
+        string userId FK "unique"
         string paddleSubscriptionId UK
         string paddlePlanId
         enum status
@@ -214,7 +250,7 @@ erDiagram
 
     Usage {
         string id PK
-        string userId UK FK
+        string userId FK "unique"
         int apiCallCountDaily
         int apiCallCountTotal
         datetime lastApiCallReset
@@ -251,6 +287,8 @@ The readiness probe (`/api/readyz`) checks PostgreSQL with:
 SELECT 1
 ```
 
+It opens its own short-lived pool for the check, so the probe does not compete with the application's pool.
+
 ## Redis (ioredis)
 
 **What it does:** Caches data, tracks rate limits, and provides fast key-value operations.
@@ -259,10 +297,23 @@ SELECT 1
 
 ```typescript
 // lib/infrastructure/redis.ts
-import Redis from "ioredis"
-
-export const redis = new Redis(env.REDIS_URL)
+const { url, options } = getStandaloneConfig()
+const client = new Redis(url, options)
 ```
+
+The client is configured to fail fast rather than queue requests forever:
+
+| Option | Value | Why |
+|--------|-------|-----|
+| `password` | `REDIS_PASSWORD` | Extracted from the URL when not set separately |
+| `retryStrategy` | Up to 3 attempts, then stop | Fail fast so callers can degrade to database-only mode |
+| `maxRetriesPerRequest` | 2 | Same |
+| `enableOfflineQueue` | `false` | Do not queue commands while disconnected |
+| `family` | 4 | IPv4 only, which is what the container network uses |
+| `keepAlive` | 10 000 | Keepalive interval in milliseconds |
+| `lazyConnect` | `true` | Connect on first command |
+
+**In preview mode** the client is replaced by a proxy whose methods return `null`, so nothing actually talks to Redis.
 
 ### Configuration
 
@@ -273,9 +324,19 @@ REDIS_PASSWORD=                                  # Optional, extracted from URL
 
 ### Key Patterns
 
+The keys are defined in `lib/domain/cache-keys.ts`, and re-exported from `lib/services/cache-keys.ts` for callers that import from there.
+
 | Pattern | Purpose | TTL |
 |---------|---------|-----|
-| `usage:daily:{userId}:{date}` | Daily API usage counter | Resets at midnight UTC |
+| `user:basic:{id}` | Cached user record | 1 hour |
+| `user:basic:email:{hash}` | Cached user record, keyed by a hashed email | 1 hour |
+| `user:sub:{id}` | Cached user subject | 10 minutes |
+| `rate_limit:{userId}:daily:{utcDay}` | Daily usage counter | Until midnight UTC |
+| `abuse:{scope}:{identifierHash}:{windowId}` | Abuse-limiter window counter | Until the window ends |
+| `analytics:usage:event:{eventId}` | Deduplication key for usage events | 7 days |
+| `lock:{resource}` | Distributed lock | Set by the caller |
+
+**Emails are hashed before they become keys**, so a raw address never lands in Redis.
 
 ### Health Check
 
@@ -289,35 +350,9 @@ Expected response: `PONG`
 
 ## Rate Limiting
 
-**What it does:** Limits API usage to prevent abuse. Free tier users get 100 requests per day.
+**What it does:** Limits API usage to prevent abuse. The service has two limiters — a daily cap for free users and an abuse limiter for bursts. See [Rate Limiting](rate-limiting.md) for the full picture.
 
-### How It Works
-
-```mermaid
-sequenceDiagram
-    participant User as User Request
-    participant Redis as Redis
-    participant DB as PostgreSQL
-    participant Queue as RabbitMQ
-
-    User->>Redis: GET usage key
-    alt Redis available
-        Redis-->>User: Current count
-    else Redis unavailable
-        User->>DB: Fallback query
-        DB-->>User: Current count
-    end
-
-    alt Under limit
-        User-->>User: Allow request
-        User->>Redis: INCR usage key
-        User->>Queue: Publish usage event
-    else Over limit
-        User-->>User: 429 Rate Limit Exceeded
-    end
-```
-
-### Implementation
+### Daily Cap
 
 Located at `lib/application/rate-limit.ts`:
 
@@ -325,15 +360,22 @@ Located at `lib/application/rate-limit.ts`:
 export class RedisRateLimitService implements IRateLimitService {
   private static readonly FREE_TIER_LIMIT = 100
 
-  async checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }> {
-    if (isPremium) return { allowed: true, remaining: -1 }
+  public async checkLimit(userId: string, isPremium: boolean): Promise<{ allowed: boolean; remaining: number }> {
+    if (isPremium) {
+      return { allowed: true, remaining: -1 }
+    }
 
-    const key = this.getDailyKey(userId)
-    const usage = await usageRedis.get(key)
-    const currentUsage = parseInt(usage ?? "0", 10)
-    const allowed = currentUsage < RedisRateLimitService.FREE_TIER_LIMIT
-
-    return { allowed, remaining: Math.max(0, FREE_TIER_LIMIT - currentUsage) }
+    try {
+      const key = this.getDailyKey(userId)
+      const usage = await usageRedis.get(key)
+      const currentUsage = this.parseCounter(usage, userId, "get")
+      const allowed = currentUsage < RedisRateLimitService.FREE_TIER_LIMIT
+      // ...
+    } catch (error) {
+      try { metrics.usageRedisErrors.inc({ operation: "get" }) } catch {}
+      logger.error({ msg: "Rate limit check failed, falling back to DB", userId, error })
+      return this.checkLimitFromDB(userId)
+    }
   }
 }
 ```
@@ -342,9 +384,9 @@ export class RedisRateLimitService implements IRateLimitService {
 
 When a request is counted:
 
-1. **Redis INCR** — Atomically increments the daily counter
-2. **RabbitMQ publish** — Sends usage event for billing
-3. **DB fallback** — If both fail, writes directly to PostgreSQL
+1. **Redis increment** — atomically increments the daily counter
+2. **RabbitMQ publish** — sends the usage event for billing
+3. **Direct database write** — if the publish failed, so the usage is not lost
 
 ### Lua Script for Atomicity
 
@@ -354,7 +396,7 @@ redis.call('EXPIREAT', KEYS[1], ARGV[2])
 return current
 ```
 
-This ensures the increment and expiry are atomic.
+This ensures the increment and the expiry are atomic. `EXPIREAT` uses the timestamp of the next midnight in UTC, so the key disappears exactly when the next day's counter starts.
 
 ## Analytics Publishing (RabbitMQ)
 
@@ -368,6 +410,7 @@ This ensures the increment and expiry are atomic.
 | Queue type | `quorum` (durable, replicated) |
 | Dead letter exchange | `analytics.usage_dlx` |
 | Content type | `application/json` |
+| Delivery mode | Persistent |
 
 ### Event Format
 
@@ -399,20 +442,25 @@ sequenceDiagram
 
 | Error | Handling |
 |-------|----------|
-| Connection failure | Retry once, then throw `AnalyticsPublishError` |
-| Channel closed | Reconnect and retry |
-| Buffer full (backpressure) | Treat as failure, caller decides fallback |
-| Queue mismatch (406) | Throw with diagnostic message |
+| Connection failure | Throws `AnalyticsPublishError`, recorded with stage `connect` |
+| Queue declaration rejected (406) | Throws with a diagnostic message about the broker having incompatible queue arguments |
+| Channel closed | The channel is invalidated and reconnected |
+| Buffer full (backpressure) | Treated as a failure, so the caller retries instead of assuming delivery |
+| Publish failed | Retried once, then throws with stage `dropped` |
+
+The publisher also validates its input before dialling the broker: the user ID must not be empty, the count must be a positive integer, and the event ID must be a UUID.
 
 ### Fallback: Direct DB Write
 
-If both Redis and RabbitMQ are unavailable, usage is written directly to PostgreSQL:
+If the RabbitMQ publish fails, the usage is written directly to PostgreSQL so it is not lost:
 
 ```sql
 INSERT INTO "Usage" ("id", "userId", "apiCallCountTotal", "apiCallCountDaily", "lastApiCallReset", "updatedAt", "createdAt")
 VALUES (gen_random_uuid(), $1, $2, $2, NOW(), NOW(), NOW())
 ON CONFLICT ("userId") DO UPDATE SET ...
 ```
+
+**The fallback is triggered by the queue, not by Redis.** If Redis fails but the publish succeeds, the event is already in the queue and the worker will flush it — no direct write is needed.
 
 ## Caching
 
@@ -424,24 +472,38 @@ Located at `lib/services/cache-service.ts`:
 
 ```typescript
 export class CacheService {
+  constructor(private storage: ICacheStorage) {}
+
   async get<T>(key: string): Promise<T | null> {
-    const raw = await redis.get(key)
-    return raw ? JSON.parse(raw) : null
+    try {
+      const data = await this.storage.get(key)
+      if (!data) {
+        metrics.cacheOperations.inc({ operation: 'get', status: 'miss' })
+        return null
+      }
+      metrics.cacheOperations.inc({ operation: 'get', status: 'hit' })
+      return JsonSerializer.deserialize<T>(data)
+    } catch (error) {
+      metrics.cacheOperations.inc({ operation: 'get', status: 'error' })
+      logger.error({ msg: "Cache Read Error", key, error })
+      return null
+    }
   }
 
-  async set(key: string, value: unknown, ttlSeconds: number): Promise<void> {
-    await redis.set(key, JSON.stringify(value), "EX", ttlSeconds)
+  async set<T>(key: string, data: T, ttl: number): Promise<void> {
+    try {
+      const serialized = JsonSerializer.serialize(data)
+      await this.storage.setex(key, ttl, serialized)
+      metrics.cacheOperations.inc({ operation: 'set', status: 'success' })
+    } catch (error) {
+      metrics.cacheOperations.inc({ operation: 'set', status: 'error' })
+      logger.error({ msg: "Cache Write Error", key, error })
+    }
   }
 }
 ```
 
-### Cache Keys
-
-Defined in `lib/services/cache-keys.ts`:
-
-| Pattern | Purpose |
-|---------|---------|
-| `usage:daily:{userId}:{date}` | Daily usage counter |
+**Two things to know:** the storage is injected through the constructor, so a test can pass a fake; and the cache **never throws** — a read that fails returns `null` and a write that fails is logged. A cache problem must not take a request down.
 
 ## Distributed Locking
 
@@ -452,17 +514,48 @@ Defined in `lib/services/cache-keys.ts`:
 Located at `lib/services/lock-service.ts`:
 
 ```typescript
-export class LockService {
-  async acquire(key: string, ttlMs: number): Promise<boolean> {
-    const result = await redis.set(`lock:${key}`, "1", "PX", ttlMs, "NX")
-    return result === "OK"
-  }
+export const lockService = {
+  async execute<T>(resource: string, task: () => Promise<T>, ttlMs = 5000): Promise<T> {
+    const lockKey = `lock:${resource}`
+    const lockValue = crypto.randomUUID()
 
-  async release(key: string): Promise<void> {
-    await redis.del(`lock:${key}`)
-  }
+    for (let attempt = 0; attempt <= RETRY_COUNT; attempt++) {
+      let acquired: string | null = null
+      try {
+        acquired = await redis.set(lockKey, lockValue, "PX", ttlMs, "NX")
+      } catch (error) {
+        // Redis unavailable — degrade to postgres-only mode: run without lock.
+        logger.warn({ msg: "Lock store unavailable, running without lock", resource, error })
+        return await task()
+      }
+
+      if (acquired) {
+        try {
+          return await task()
+        } finally {
+          try {
+            await redis.eval(
+              `if redis.call("GET", KEYS[1]) == ARGV[1] then redis.call("DEL", KEYS[1]) end`,
+              1, lockKey, lockValue
+            )
+          } catch (error) {
+            logger.warn({ msg: "Failed to release lock", resource, error })
+          }
+        }
+      }
+      // ... wait and retry
+    }
+
+    // Contended without Redis error — also degrade rather than throw.
+    logger.warn({ msg: "Could not acquire lock, running without lock", resource })
+    return await task()
+  },
 }
 ```
+
+**The lock value is a random UUID, and the release is a compare-and-delete.** A blind `DEL` could remove a lock that another process had since taken. The Lua script only deletes the key if it still holds the caller's UUID.
+
+**The lock never blocks the work.** If Redis is unavailable, or if the lock is contended for all ten retries, the task runs anyway without the lock. A transient lock race should not fail a request.
 
 ## OpenTelemetry Tracing
 
@@ -493,7 +586,8 @@ Located at `lib/infrastructure/tracing.ts`:
 - Uses `@opentelemetry/sdk-node` for SDK setup
 - Uses `@opentelemetry/auto-instrumentations-node` for automatic instrumentation
 - Disables fs, DNS, and net instrumentations (noisy, low value)
-- Injects trace context into logs via `logger.mixin()`
+- Shares one endpoint between the two signals, swapping the path suffix: the traces go to `/v1/traces` and the logs to `/v1/logs`
+- Is **disabled in preview mode**, as well as when no endpoint is configured
 
 ### Trace Context in Logs
 
@@ -507,6 +601,34 @@ Every log entry includes `traceId` and `spanId` when tracing is active:
   "spanId": "def456..."
 }
 ```
+
+The context is injected by a pino `mixin` option, which is called for every log record:
+
+```typescript
+// lib/infrastructure/logger.ts
+export const logger = pino({
+  // ...
+  mixin() {
+    return withTraceContext()
+  },
+})
+```
+
+`withTraceContext()` reads the active OpenTelemetry span and returns its IDs, or an empty object when there is no span.
+
+### Log Export
+
+Logs are also exported over OTLP, so they are queryable in New Relic next to the traces. The exporter is optional: with no `OTEL_EXPORTER_OTLP_ENDPOINT` set the logs stay on stdout only, and a failing exporter never blocks a request.
+
+The export path has three parts:
+
+| File | Role |
+|------|------|
+| `lib/infrastructure/logging/sink.ts` | Holds the sink on `globalThis` and exports `emitLog`. It lives on `globalThis` rather than in a module variable because Next.js compiles the instrumentation, the app and the proxy as separate layers, each with its own copy of the module |
+| `lib/infrastructure/logging/pino-hook.ts` | A pino `logMethod` hook that splits each record into a message and its attributes |
+| `lib/infrastructure/tracing.ts` | Installs the OpenTelemetry log sink that writes to the OTLP endpoint |
+
+Each record is exported with its level as the severity, the log message as the body and the remaining fields as attributes, and it inherits the active span so New Relic can link the log to its trace.
 
 ## Graceful Shutdown
 
@@ -535,25 +657,38 @@ process.on("unhandledRejection", (reason) => { ... })
 process.on("uncaughtException", (err) => { ... })
 ```
 
+The handlers are registered from `instrumentation.ts`, and a global flag stops them being registered twice during development hot reloads.
+
 ### What Gets Cleaned Up
 
 1. OpenTelemetry tracing (flushes remaining spans)
 2. Prisma client (disconnects from PostgreSQL)
-3. Redis client (closes connection)
-4. Process exits after 500ms grace period
+3. Redis client (closes the connection)
+4. Process exits after a 500 ms grace period
+
+**The 500 ms is a maximum, not a delay.** The exit timer is `unref`'d, so it does not hold the event loop open — the process exits as soon as everything else is done.
+
+**The RabbitMQ connection is not closed on shutdown.** The publisher has a `close()` method, but only the tests call it.
 
 ## Configuration Reference
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `ENV_TYPE` | `dev` | Configuration mode: `dev`, `prod` or `preview` |
 | `DATABASE_URL` | — | PostgreSQL connection string |
 | `DATABASE_URL_REPLICA` | — | Read replica URL (optional) |
-| `DB_POOL_MAX` | `5` | Max PostgreSQL connections |
+| `DB_POOL_MAX` | `5` | Max PostgreSQL connections (1-50) |
 | `REDIS_URL` | — | Redis connection string |
 | `REDIS_PASSWORD` | — | Redis password (optional if in URL) |
 | `RABBITMQ_URL` | — | RabbitMQ connection string |
+| `INTERNAL_API_KEY` | — | Key for the load-test bypass |
+| `PROMETHEUS_WEB_SCRAPE_TOKEN` | — | Bearer token for the metrics endpoint |
+| `LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn` or `error` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OTEL collector URL (empty = disabled) |
 | `OTEL_SERVICE_NAME` | `web` | Service name in traces |
+| `AWS_REGION` | `ap-south-1` | AWS region for Secrets Manager and SSM |
+
+The abuse-limiter variables are listed in [Rate Limiting](rate-limiting.md).
 
 ## Troubleshooting
 
@@ -578,8 +713,8 @@ process.on("uncaughtException", (err) => { ... })
 ### Rate limiting not working
 
 - Check Redis connectivity
-- Look at `usage_redis_errors_total` metric
-- Verify cache key format
+- Look at `usage_redis_errors_total` and `abuse_redis_errors_total`
+- Verify the cache key format
 
 ### Tracing not appearing
 
@@ -587,8 +722,15 @@ process.on("uncaughtException", (err) => { ... })
 - Verify collector is running and accessible
 - Look at logs for "OTEL tracing disabled" message
 
+### Logs are not reaching New Relic
+
+- Check the endpoint is set and reachable
+- Look for "OTEL log export disabled" in the logs — that means the exporter failed to install and only stdout is working
+- Remember the traces and logs go to different paths on the same endpoint
+
 ## Related Documentation
 
 - [Configuration](../getting-started/configuration.md) - Infrastructure settings
+- [Rate Limiting](rate-limiting.md) - The two limiters and their Redis keys
 - [Observability](../operations/observability.md) - Metrics and monitoring
 - [Health Checks](../operations/health.md) - Infrastructure health probes

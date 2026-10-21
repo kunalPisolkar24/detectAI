@@ -7,6 +7,7 @@ locals {
   dashboards = {
     overview                 = "overview.json"
     web                      = "web.json"
+    web-loadtest             = "web-loadtest.json"
     payment-gateway          = "payment-gateway.json"
     payment-gateway-loadtest = "payment-gateway-loadtest.json"
     workers                  = "workers.json"

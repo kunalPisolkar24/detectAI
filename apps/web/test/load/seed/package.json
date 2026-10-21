@@ -1,0 +1,14 @@
+{
+  "name": "web-load-seed",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "seed.mjs",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "pg": "^8.16.3"
+  },
+  "scripts": {
+    "start": "node seed.mjs"
+  }
+}

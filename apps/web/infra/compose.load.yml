@@ -9,6 +9,32 @@ include:
   - path: ../../../infra/docker/rabbitmq/standalone.yml
 
 services:
+  db-migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: migrate
+    restart: "no"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres-users:5432/detectai_load
+    depends_on:
+      postgres-users:
+        condition: service_healthy
+
+  # The accounts the load scripts sign in with. Registration is a server
+  # action, not an HTTP route, so the rig has to plant the rows itself.
+  load-seed:
+    build:
+      context: ..
+      dockerfile: test/load/seed/Dockerfile
+    restart: "no"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres-users:5432/detectai_load
+      - LOAD_USER_PASSWORD=LoadTest123!
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+
   mock-server:
     build:
       context: ..
@@ -42,6 +68,12 @@ services:
       - FILE_EXTRACTOR_API_URL=http://mock-server:8000
       - PAYMENT_GATEWAY_URL=http://mock-server:8000
       - INTERNAL_API_KEY=load-test-key
+      # The abuse limiter caps how fast one account may analyze. Every
+      # scenario but the rate-limit one runs with it out of the way so a
+      # throughput run measures the service, not the limiter. The rate-limit
+      # scenario sets its own values (see the makefile).
+      - ABUSE_RATE_LIMIT_ANALYZE_MAX=${ABUSE_RATE_LIMIT_ANALYZE_MAX:-10000}
+      - ABUSE_RATE_LIMIT_ANALYZE_WINDOW_MS=${ABUSE_RATE_LIMIT_ANALYZE_WINDOW_MS:-60000}
       - NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
       - NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=load-test-token
       - TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
@@ -58,6 +90,10 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+      load-seed:
+        condition: service_completed_successfully
     ports:
       - "3001:3000"
 
@@ -65,9 +101,14 @@ services:
     image: grafana/k6
     volumes:
       - ../test/load/scripts:/scripts
+      - ../test/load/results:/results
     environment:
       - BASE_URL=http://frontend:3000
+      - INTERNAL_KEY=load-test-key
     depends_on:
       frontend:
         condition: service_started
-    command: run /scripts/landing.k6.js
+    # The rig only carries the runner; the makefile starts a script with
+    # `compose run`. A command here would start a second, uninvited run of
+    # its own on every `compose up`.
+    command: ["sleep", "infinity"]

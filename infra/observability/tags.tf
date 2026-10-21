@@ -5,6 +5,7 @@ locals {
   dashboard_scope = {
     overview                 = "platform"
     web                      = "web"
+    web-loadtest             = "web"
     payment-gateway          = "payment-gateway"
     payment-gateway-loadtest = "payment-gateway"
     workers                  = "workers"
@@ -20,6 +21,7 @@ locals {
   dashboard_kind = {
     overview                 = "platform"
     web                      = "service-dashboard"
+    web-loadtest             = "loadtest"
     payment-gateway          = "service-dashboard"
     payment-gateway-loadtest = "loadtest"
     workers                  = "service-dashboard"
@@ -34,7 +36,7 @@ locals {
 
   dashboard_env = {
     for k in keys(local.dashboard_scope) :
-    k => contains(["document-parser-loadtest", "payment-gateway-loadtest", "chats-loadtest", "workers-loadtest"], k) ? "loadtest" : "prod"
+    k => contains(["document-parser-loadtest", "payment-gateway-loadtest", "chats-loadtest", "workers-loadtest", "web-loadtest"], k) ? "loadtest" : "prod"
   }
 }
 

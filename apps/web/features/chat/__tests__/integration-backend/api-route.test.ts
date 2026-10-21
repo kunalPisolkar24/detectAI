@@ -100,4 +100,38 @@ describe('Chat Analyze Stream API Route Integration', () => {
     const decoded = new TextDecoder().decode(value)
     expect(JSON.parse(decoded)).toEqual({ type: 'delta', content: 'hello' })
   })
+
+  it('returns 400 for a malformed body instead of a server error', async () => {
+    const request = new Request('http://localhost/api/chat/analyze/stream', {
+      method: 'POST',
+      body: '{"chatId": "c1", "content": ',
+    })
+
+    const response = await POST(request)
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid JSON body' })
+    expect(analysisOrchestrator.execute).not.toHaveBeenCalled()
+  })
+
+  it('returns 400 for an empty body instead of a server error', async () => {
+    const request = new Request('http://localhost/api/chat/analyze/stream', {
+      method: 'POST',
+      body: '',
+    })
+
+    const response = await POST(request)
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid JSON body' })
+  })
+
+  it('returns 400 for a body that is not an object', async () => {
+    const request = new Request('http://localhost/api/chat/analyze/stream', {
+      method: 'POST',
+      body: '[]',
+    })
+
+    const response = await POST(request)
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid request payload' })
+  })
 })

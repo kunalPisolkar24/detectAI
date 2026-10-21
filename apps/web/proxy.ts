@@ -1,6 +1,7 @@
 import { getToken } from "next-auth/jwt"
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
+import { emitLog } from "@/lib/infrastructure/logging/sink"
 
 export async function proxy(request: NextRequest) {
   const start = performance.now()
@@ -29,16 +30,18 @@ export async function proxy(request: NextRequest) {
   }
 
   const duration = performance.now() - start
-  console.log(JSON.stringify({
-    level: "info",
-    ts: Date.now(),
-    msg: "Incoming Request",
+  const record = {
     method: request.method,
     url: pathname,
     status: response.status,
     durationMs: duration.toFixed(2),
-    userId: token?.id || "anonymous"
-  }))
+    userId: token?.id || "anonymous",
+  }
+  console.log(JSON.stringify({ level: "info", ts: Date.now(), msg: "Incoming Request", ...record }))
+  // Also hand the record to the log sink so it reaches New Relic over OTLP.
+  // The middleware cannot use the pino logger: importing it would pull the
+  // whole config chain into the middleware bundle.
+  emitLog("info", "Incoming Request", record)
 
   return response
 }

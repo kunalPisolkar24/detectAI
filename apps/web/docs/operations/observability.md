@@ -19,6 +19,7 @@ Logs are written to standard output in JSON format using **Pino** (a fast JSON l
 | Component | What It Logs |
 |-----------|--------------|
 | API Routes | Request handling, errors |
+| Proxy | Every incoming request, with its method, path, status and duration |
 | Auth | Login attempts, session creation |
 | Services | gRPC calls, HTTP requests |
 | Infrastructure | Database queries, cache operations |
@@ -42,12 +43,16 @@ Logs are written to standard output in JSON format using **Pino** (a fast JSON l
 
 ### Log Levels
 
+`LOG_LEVEL` controls what the console prints:
+
 | Level | When to Use |
 |-------|-------------|
 | `debug` | Detailed information for debugging |
 | `info` | Normal operations |
 | `warn` | Something unexpected but not critical |
 | `error` | Something failed |
+
+The OTLP export path understands two more levels — `trace` and `fatal` — so a record logged at those levels is exported even though the console configuration cannot select them.
 
 ### Configuration
 
@@ -76,6 +81,30 @@ The logger automatically redacts sensitive fields:
 redact: ["password", "token", "secret", "cookie", "authorization"]
 ```
 
+### Log Export
+
+Logs are also exported over OTLP so they are queryable in New Relic next to
+the traces. The exporter is optional: with no `OTEL_EXPORTER_OTLP_ENDPOINT` set
+the logs stay on stdout only, and a failing exporter never blocks a request.
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318   # Empty disables tracing
+OTEL_SERVICE_NAME=web
+```
+
+The endpoint carries both signals, so the same value is used for
+`/v1/traces` and `/v1/logs`. Each record is exported with its level as the
+severity, the log message as the body and the remaining fields as attributes,
+and it inherits the active span so New Relic can link the log to its trace.
+
+Console output is unchanged either way — the logger writes to stdout and
+forwards to the OTLP sink separately.
+
+**If the export breaks, only the export breaks.** A missing or broken logs
+exporter logs an "OTEL log export disabled" message and the console output
+carries on. The sink itself is wrapped in a try/catch, so a failing exporter
+can never take a request down.
+
 ## Metrics
 
 Metrics are exposed at `/api/metrics` in Prometheus format. They're collected using **prom-client**.
@@ -90,6 +119,8 @@ Metrics are exposed at `/api/metrics` in Prometheus format. They're collected us
 | Labels: `method`, `route`, `status_code` | Request details |
 
 **Buckets:** 0.1s, 0.3s, 0.5s, 0.7s, 1s, 3s, 5s, 10s
+
+**This histogram is defined but nothing records it.** No code path calls `observe()` on it, so it never appears in the scrape output, and the New Relic board does not read it. Request latency comes from the trace spans instead. Treat it as a placeholder rather than a live signal.
 
 #### Database
 
@@ -116,19 +147,23 @@ Metrics are exposed at `/api/metrics` in Prometheus format. They're collected us
 
 **Buckets:** 0.5s, 1s, 2s, 5s, 10s, 20s
 
+This is the one application histogram the New Relic board reads, and it arrives as an OpenTelemetry histogram, so New Relic can take percentiles from it directly. It is split into two panels on the `Service` page — one per model — because Spark and Flare sit an order of magnitude apart in latency and a shared axis would flatten Flare's line.
+
 #### Rate Limiting
 
 | Metric | What It Tells You |
 |--------|-------------------|
-| `rate_limit_hits_total` | Total rate limit hits |
-| Labels: `tier` | User tier (free, premium) |
+| `rate_limit_hits_total` | Requests the daily cap refused |
+| Labels: `tier` | User tier. Only `free` is ever recorded, because premium users are allowed before the counter is touched |
+| `abuse_rate_limit_hits_total` | Requests the abuse limiter refused |
+| Labels: `scope` | The limiter scope, currently always `analyze` |
 
 #### Analytics Publishing
 
 | Metric | What It Tells You |
 |--------|-------------------|
 | `analytics_publish_failures_total` | Failed analytics publishes |
-| Labels: `stage` | Failure stage (connect, publish, dropped) |
+| Labels: `stage` | Failure stage: `connect`, `assertQueue`, `publish` or `dropped` |
 
 #### Usage Tracking
 
@@ -138,6 +173,8 @@ Metrics are exposed at `/api/metrics` in Prometheus format. They're collected us
 | Labels: `operation` | Operation type (get, incr, corrupt_value) |
 | `usage_sync_fallback_total` | Fallback to direct DB writes |
 | Labels: `reason` | Fallback reason (redis_and_queue_down, queue_down) |
+| `abuse_redis_errors_total` | Redis errors in the abuse limiter |
+| Labels: `operation` | Operation type (incr) |
 
 #### Default Metrics
 
@@ -158,17 +195,17 @@ curl http://localhost:3000/api/metrics
 curl -H "Authorization: Bearer your-token" http://localhost:3000/api/metrics
 
 # Pretty print
-curl -s http://localhost:3000/api/metrics | grep http_request_duration
+curl -s http://localhost:3000/api/metrics | grep ai_inference_duration
 ```
 
 ### Metric Examples
 
-**Request duration histogram:**
+**AI inference duration histogram:**
 
 ```
-http_request_duration_seconds_bucket{method="POST",route="/api/chat/analyze/stream",status_code="200",le="0.5"} 12
-http_request_duration_seconds_bucket{method="POST",route="/api/chat/analyze/stream",status_code="200",le="1"} 45
-http_request_duration_seconds_bucket{method="POST",route="/api/chat/analyze/stream",status_code="200",le="3"} 78
+ai_inference_duration_seconds_bucket{model="spark",status="success",le="1"} 45
+ai_inference_duration_seconds_bucket{model="spark",status="success",le="2"} 78
+ai_inference_duration_seconds_bucket{model="flare",status="success",le="1"} 12
 ```
 
 **Rate limit hits counter:**
@@ -214,59 +251,61 @@ The service uses `@opentelemetry/auto-instrumentations-node` which automatically
 
 ### Trace Context Propagation
 
-When making outgoing requests, the trace context is automatically propagated:
+Trace context is propagated by the auto-instrumentation, which injects the `traceparent` header into outgoing HTTP and gRPC calls.
+
+The service's own gRPC helpers add **identity**, not trace context:
 
 ```typescript
-// gRPC metadata includes trace context
-const metadata = getGrpcMetadata()  // Includes traceparent header
+// lib/infrastructure/grpc-client.ts
+export const getGrpcMetadata = () => {
+  const metadata = new grpc.Metadata()
+  metadata.add("x-api-key", env.AI_SERVICE_API_KEY)
+  return metadata
+}
+```
+
+```typescript
+// lib/shared/grpc/chat-client.ts
+export const buildUserMetadata = (userId: string) => {
+  const md = new grpc.Metadata()
+  md.set("x-user-id", userId)
+  return md
+}
 ```
 
 ## Dashboards
 
-### Recommended Grafana Panels
+Dashboards are published as code from [`infra/observability`](../../../../infra/observability) using Terraform. The web board is `detectai-web (<environment>)`, and it has four pages:
 
-| Panel | Metric | Purpose |
-|-------|--------|---------|
-| Request Rate | `rate(http_request_duration_seconds_count[5m])` | Requests per second |
-| Request Latency | `histogram_quantile(0.95, ...)` | 95th percentile latency |
-| Error Rate | `rate(http_request_duration_seconds_count{status_code=~"5.."}[5m])` | Server errors |
-| AI Inference Duration | `histogram_quantile(0.95, ai_inference_duration_seconds)` | AI analysis speed |
-| Rate Limit Hits | `rate(rate_limit_hits_total[5m])` | Users hitting limits |
-| Cache Hit Rate | `rate(cache_operations_total{status="hit"}[5m])` | Cache effectiveness |
+| Page | What it answers |
+|---|---|
+| `Overview` | Is the app healthy? Request rate, server error share, p95 latency, responses by status code |
+| `Service` | What is slow or failing per path? Requests by path, slow requests, per-model inference latency, auth failures, rate limit rejections, cache hits and misses, analytics publish failures |
+| `Service Logs` | What went wrong? Error stream, log volume by level, errors by message, slow requests |
+| `Infra` | Are the datastores healthy? Event loop lag, heap and resident memory, container CPU, Postgres, Redis and RabbitMQ |
+
+**Request latency percentiles come from spans.** The board takes its HTTP request latency from the trace spans, because `http_request_duration_seconds` is never recorded. The inference panels are the exception — they read `ai_inference_duration_seconds` directly, because that histogram is recorded and arrives in New Relic as an OpenTelemetry histogram.
+
+**Some panels are empty on purpose.** A panel that reads a counter which has never been incremented is showing you that the event has not happened, not that something is broken. The most common ones on the web board are the server error share, the rate limit rejections, the cache hits and misses, and the analytics publish failures.
+
+### Load Test Board
+
+A load run has its own board, `detectai-web (loadtest)`, so it never mixes with production data. See [Testing](../testing/overview.md) for how to start a load run with observability enabled.
 
 ## Alerts
+
+Alerts notify you when something needs attention. They are managed in `infra/observability/alerts.tf` at the repository root, under the `detectai-web-<environment>` policy.
 
 ### Built-in Alerts
 
 | Alert | Condition | What It Means |
 |-------|-----------|---------------|
-| **High error rate** | > 5% errors for 5 minutes | Something is broken |
-| **High latency** | P95 > 3s for 10 minutes | Performance issue |
-| **Rate limit surge** | > 100 hits/minute | Possible abuse |
-| **Analytics failures** | > 10 dropped/minute | Queue issue |
+| **Web 5xx share high** | More than 2% of server spans failed, for 5 minutes | Something is broken |
+| **Web p95 latency high** | p95 latency above 2000 ms, for 10 minutes | Performance issue |
 
-### Alert Rules (Prometheus)
+Both are computed from server spans, filtered to `service.name = 'web'` and the current deployment environment.
 
-```yaml
-groups:
-  - name: web-service
-    rules:
-      - alert: WebHighErrorRate
-        expr: rate(http_request_duration_seconds_count{status_code=~"5.."}[5m]) / rate(http_request_duration_seconds_count[5m]) > 0.05
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High error rate in web service"
-
-      - alert: WebHighLatency
-        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 3
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High latency in web service"
-```
+**There are no rate limit or analytics alerts for the web service.** The two counters exist, but nothing pages on them.
 
 ## Monitoring Checklist
 
@@ -292,16 +331,17 @@ groups:
 
 ### Slow Response Times
 
-1. Check `http_request_duration_seconds` — Are requests taking too long?
+1. Check the `Service` page's latency panels — are requests taking too long?
 2. Check `db_query_duration_seconds` — Database issues?
 3. Check `ai_inference_duration_seconds` — AI service slow?
 4. Check `cache_operations_total` — Cache not working?
 
 ### Rate Limiting Issues
 
-1. Check `rate_limit_hits_total` — How many users are hitting limits?
-2. Check `usage_redis_errors_total` — Redis issues?
-3. Check `usage_sync_fallback_total` — Fallback to DB?
+1. Check `abuse_rate_limit_hits_total` — How many clients are hitting the abuse limit?
+2. Check `rate_limit_hits_total` — How many users are hitting the daily cap?
+3. Check `usage_redis_errors_total` and `abuse_redis_errors_total` — Redis issues?
+4. Check `usage_sync_fallback_total` — Fallback to the database?
 
 ### Analytics Not Working
 
@@ -315,8 +355,15 @@ groups:
 2. Check for memory leaks in logs
 3. Consider increasing container memory limits
 
+### Logs Are Not Reaching New Relic
+
+1. Check `OTEL_EXPORTER_OTLP_ENDPOINT` is set and reachable
+2. Look for "OTEL log export disabled" in the logs
+3. Remember traces go to `/v1/traces` and logs to `/v1/logs` on the same endpoint
+
 ## Related Documentation
 
 - [Health](health.md) - Health check details
 - [Configuration](../getting-started/configuration.md) - Monitoring settings
 - [Infrastructure](../components/infrastructure.md) - Component details
+- [Rate Limiting](../components/rate-limiting.md) - The counters behind the limit metrics

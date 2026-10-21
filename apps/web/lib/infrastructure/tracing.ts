@@ -1,4 +1,7 @@
-import { trace, type Tracer } from "@opentelemetry/api"
+import { context, trace, type Tracer } from "@opentelemetry/api"
+import type { LogAttributes as OtelLogAttributes } from "@opentelemetry/api-logs"
+import type { LogRecordProcessor } from "@opentelemetry/sdk-logs"
+import { setLogSink, type LogLevel } from "@/lib/infrastructure/logging/sink"
 
 let started = false
 let sdkInstance: { shutdown: () => Promise<void> } | null = null
@@ -10,9 +13,16 @@ function getOtelConfig(fallback: string): { endpoint: string; serviceName: strin
   }
 }
 
-function normalizeEndpoint(endpoint: string): string {
-  const trimmed = endpoint.replace(/\/$/, "")
-  return trimmed.endsWith("/v1/traces") ? trimmed : `${trimmed}/v1/traces`
+// Both signals share one endpoint. Pointing it at a signal-specific path is
+// allowed, but the other signal then swaps the suffix rather than appending
+// to it, which would build "/v1/logs/v1/traces".
+function signalEndpoint(endpoint: string, signal: "traces" | "logs"): string {
+  const base = endpoint.replace(/\/$/, "")
+  if (base.endsWith(`/v1/${signal}`)) return base
+  if (base.endsWith("/v1/traces") || base.endsWith("/v1/logs")) {
+    return base.replace(/\/v1\/(traces|logs)$/, `/v1/${signal}`)
+  }
+  return `${base}/v1/${signal}`
 }
 
 export async function initTracing(serviceNameFallback = "web"): Promise<void> {
@@ -39,7 +49,7 @@ export async function initTracing(serviceNameFallback = "web"): Promise<void> {
     return
   }
 
-  const url = normalizeEndpoint(endpoint)
+  const url = signalEndpoint(endpoint, "traces")
 
   if (started) return
   started = true
@@ -51,9 +61,56 @@ export async function initTracing(serviceNameFallback = "web"): Promise<void> {
 
     const traceExporter = new OTLPTraceExporter({ url })
 
+    // Log export is optional. A missing or broken logs exporter must not take
+    // tracing down with it, so it is wired separately and failures only
+    // disable the logs pipeline.
+    let logRecordProcessors: LogRecordProcessor[] = []
+    let installLogSink: (() => void) | null = null
+    try {
+      const { OTLPLogExporter } = await import("@opentelemetry/exporter-logs-otlp-http")
+      const { BatchLogRecordProcessor } = await import("@opentelemetry/sdk-logs")
+      const { logs, SeverityNumber } = await import("@opentelemetry/api-logs")
+
+      const severities = {
+        trace: SeverityNumber.TRACE,
+        debug: SeverityNumber.DEBUG,
+        info: SeverityNumber.INFO,
+        warn: SeverityNumber.WARN,
+        error: SeverityNumber.ERROR,
+        fatal: SeverityNumber.FATAL,
+      } as const
+
+      logRecordProcessors = [
+        new BatchLogRecordProcessor(new OTLPLogExporter({ url: signalEndpoint(endpoint, "logs") })),
+      ]
+
+      installLogSink = () => {
+        const otelLogger = logs.getLogger(serviceName)
+        setLogSink((level: LogLevel, message: string, attributes: Record<string, unknown>) => {
+          otelLogger.emit({
+            severityNumber: severities[level],
+            severityText: level,
+            body: message,
+            attributes: attributes as unknown as OtelLogAttributes,
+            // Carries the active span so New Relic can link the log to its trace.
+            context: context.active(),
+          })
+        })
+      }
+    } catch (error) {
+      try {
+        const { logger } = await import("@/lib/infrastructure/logger")
+        logger.error({
+          msg: `OTEL log export disabled for ${serviceName}`,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      } catch {}
+    }
+
     const sdk = new NodeSDK({
       serviceName,
       traceExporter,
+      logRecordProcessors,
       instrumentations: [
         getNodeAutoInstrumentations({
           "@opentelemetry/instrumentation-fs": { enabled: false },
@@ -67,6 +124,10 @@ export async function initTracing(serviceNameFallback = "web"): Promise<void> {
 
     sdkInstance = sdk as unknown as { shutdown: () => Promise<void> }
 
+    // sdk.start() installs the global LoggerProvider, so the sink has to be
+    // resolved after it returns.
+    installLogSink?.()
+
     try {
       const { logger } = await import("@/lib/infrastructure/logger")
       logger.info({ msg: `OTEL tracing initialized for ${serviceName} -> ${url}` })
@@ -76,6 +137,7 @@ export async function initTracing(serviceNameFallback = "web"): Promise<void> {
 
     const shutdown = async () => {
       try {
+        setLogSink(null)
         await sdkInstance?.shutdown()
         try {
           const { logger } = await import("@/lib/infrastructure/logger")
@@ -101,6 +163,7 @@ export async function initTracing(serviceNameFallback = "web"): Promise<void> {
 export async function shutdownTracing(): Promise<void> {
   if (!sdkInstance) return
   try {
+    setLogSink(null)
     await sdkInstance.shutdown()
   } catch {}
   sdkInstance = null
@@ -114,4 +177,5 @@ export function getTracer(name = "web"): Tracer {
 export function resetTracingForTests(): void {
   started = false
   sdkInstance = null
+  setLogSink(null)
 }

@@ -15,6 +15,7 @@ dist
 coverage
 test
 !test/load/mock-server
+!test/load/seed
 .pytest_cache
 .vscode
 .idea

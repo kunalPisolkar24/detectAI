@@ -1,0 +1,94 @@
+# Observability overlay for the web load-test rig.
+# Applied ONLY when `make load-test WITH_OBSERVABILITY=1` is used (see the
+# LOAD_COMPOSE_OBS target in the makefile: base load rig + shared OTEL atom at
+# infra/docker/otel/loadtest-observability.yml + the datastore exporter atoms
+# + this file).
+# Base load-test behaviour (no collector, no OTEL) is unchanged otherwise.
+#
+# What it adds on the rig's network:
+# - otel-collector-loadtest (shared atom at infra/docker/otel/): scrapes the
+#   frontend's /api/metrics plus the datastore exporters, collects hostmetrics
+#   and container stats, and exports traces/metrics/logs to New Relic EU with
+#   deployment.environment=loadtest.
+# - postgres-exporter + redis-exporter + rabbitmq-exporter (reusable atoms at
+#   infra/docker/*-exporter/standalone.yml, merged via extra `-f` flags in the
+#   makefile): datastore depth for the Infra page of the web board.
+# - frontend env override: OTLP endpoint + service.name + loadtest resource
+#   attributes. ENV_TYPE intentionally stays dev (app behaviour unchanged).
+services:
+  frontend:
+    mem_limit: 1g
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-loadtest:4318
+      - OTEL_SERVICE_NAME=web
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-dev}
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=loadtest
+    depends_on:
+      otel-collector-loadtest:
+        condition: service_started
+
+  k6:
+    mem_limit: 1g
+
+  postgres-exporter:
+    environment:
+      # Built from the rig's parts rather than DATABASE_URL: the exporter needs
+      # sslmode=disable (the rig's postgres has no TLS) and DATABASE_URL
+      # carries no query string.
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres-users:5432/${POSTGRES_DB}?sslmode=disable
+    depends_on:
+      postgres-users:
+        condition: service_healthy
+      otel-collector-loadtest:
+        condition: service_started
+
+  redis-exporter:
+    environment:
+      # The redis_exporter takes host/port in REDIS_ADDR and the password
+      # separately; a credentials-in-URL REDIS_ADDR is not parsed by it.
+      - REDIS_ADDR=redis://redis-users:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      redis-users:
+        condition: service_healthy
+      otel-collector-loadtest:
+        condition: service_started
+
+  rabbitmq-exporter:
+    environment:
+      # The exporter reads the broker's MANAGEMENT HTTP API, not the AMQP URL
+      # the apps use: given an AMQP URL it fails to start and every queue
+      # metric stays missing.
+      - RABBIT_URL=http://rabbitmq:15672
+      - RABBIT_USER=${RABBITMQ_USER:-guest}
+      - RABBIT_PASSWORD=${RABBITMQ_PASSWORD:-guest}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      otel-collector-loadtest:
+        condition: service_started
+
+  otel-collector-loadtest:
+    environment:
+      # The web app serves Prometheus metrics on /api/metrics (not /metrics)
+      # and only enforces its bearer token when PROMETHEUS_WEB_SCRAPE_TOKEN is
+      # set. The rig leaves it unset, so the scrape needs no credentials.
+      - OTEL_SCRAPE_JOB=web
+      - OTEL_SCRAPE_TARGET=frontend:3000
+      - OTEL_SCRAPE_METRICS_PATH=/api/metrics
+      # Datastore exporters fill the collector's spare scrape slots. The job
+      # name is what the dashboard filters on, so keep it aligned with the
+      # datastore it reports for.
+      - OTEL_SCRAPE_JOB_2=postgres-exporter
+      - OTEL_SCRAPE_TARGET_2=postgres-exporter:9187
+      - OTEL_SCRAPE_JOB_3=redis-exporter
+      - OTEL_SCRAPE_TARGET_3=redis-exporter:9121
+      - OTEL_SCRAPE_JOB_4=rabbitmq-exporter
+      - OTEL_SCRAPE_TARGET_4=rabbitmq-exporter:9419
+      # A short rig is torn down before a 15s scrape can close a metric
+      # series, so the histograms never reach New Relic at 15s. 5s gives every
+      # rig several samples.
+      - OTEL_SCRAPE_INTERVAL=${OTEL_SCRAPE_INTERVAL:-5s}
+    volumes:
+      - ../../../infra/docker/otel/otel-collector-loadtest.yaml:/etc/otelcol/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro

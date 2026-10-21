@@ -4,38 +4,45 @@ This guide will help you get the Web service running quickly.
 
 ## Prerequisites
 
-- Node.js 20+ and npm/pnpm
+- Node.js 20+ and pnpm
 - Docker and Docker Compose
 - Git
 
+## Two Ways to Run It
+
+| | Docker stack | Directly on your machine |
+|---|---|---|
+| Command | `make start` | `pnpm dev` |
+| What you need | Docker only | PostgreSQL, Redis and RabbitMQ running on `localhost` |
+| Service URLs | The Compose service names | `localhost` |
+| Best for | Working on the whole system | Fast frontend iteration |
+
+Both paths use the same `.env` file. The only difference is which hostnames it points at.
+
 ## Running Locally
 
-### Step 1: Start Infrastructure Services
-
-First, start the database and cache services that the web app depends on:
-
-```bash
-# From the project root
-docker compose -f infra/docker/data/compose.yml up -d
-```
-
-This starts:
-- **postgres-users** - PostgreSQL database on port 5432
-- **redis-users** - Redis cache on port 6379
-
-### Step 2: Install Dependencies
+### Step 1: Install Dependencies
 
 ```bash
 cd apps/web
-npm install
+pnpm install
 ```
 
-### Step 3: Set Up Environment Variables
+The repository uses **pnpm**, and `pnpm-lock.yaml` is the source of truth. Using `npm install` would resolve a fresh, unpinned tree that does not match the lockfile.
 
-Create a `.env` file in the `apps/web` directory:
+### Step 2: Set Up Environment Variables
+
+Create a `.env` file in the `apps/web` directory. The quickest way is to copy the example:
 
 ```bash
-# Minimal .env for local development
+cd apps/web
+cp .env.example .env
+```
+
+That gives you a working configuration for the Docker stack. If you want to run `pnpm dev` on your own machine instead, change the service URLs to point at `localhost`:
+
+```bash
+# Minimal .env for running the app directly on your machine
 ENV_TYPE=dev
 DATABASE_URL=postgresql://user:password@localhost:5432/detect_ai
 REDIS_URL=redis://:user_cache_password@localhost:6379
@@ -58,63 +65,103 @@ RABBITMQ_URL=amqp://guest:guest@localhost:5672/
 
 > **Tip:** Many of these have sensible dev defaults. See [Configuration](configuration.md) for the full list.
 
-### Step 4: Start the Dev Server
+### Step 3: Start the Datastores
+
+If you are running the app on your own machine, it still needs a database, a cache and a queue:
 
 ```bash
-npm run dev
+# From the project root
+docker compose -f infra/docker/data/compose.yml up -d
+```
+
+This starts:
+- **postgres-users** — PostgreSQL database on port 5432
+- **redis-users** — Redis cache on port 6379
+
+The queue is part of the web Compose stack rather than this bundle. `make start` brings it up along with everything else.
+
+> **Do not run this and `make start` at the same time.** They both bind port 5432 and 6379 on the host, and the second one to start will fail. Pick one path.
+
+### Step 4: Start the App
+
+**With Docker**, from `apps/web`:
+
+```bash
+make start
+```
+
+That builds the image and starts the web service along with PostgreSQL and Redis. Watch the logs with `make logs`.
+
+**Without Docker**, from `apps/web`:
+
+```bash
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### Step 5: Try It Out
 
-1. **Sign up** with any email/password (credentials provider in dev mode)
+1. **Sign up** with an email, a first name, a last name, and a password of at least 8 characters
 2. **Navigate** to the chat page
 3. **Enter text** in the analysis input
 4. **Click Analyze** to see AI detection results
 
+The analysis needs the inference service to be running. Without it the request fails with `AI Analysis Service Unavailable` — the rest of the app still works.
+
 ## What Just Happened?
 
-1. **Frontend** rendered the React components with Next.js App Router
+1. **The proxy** checked your session and let the request through (`proxy.ts`)
 2. **Authentication** created a session via NextAuth (JWT strategy)
 3. **API Route** (`/api/chat/analyze/stream`) received the analysis request
-4. **Rate Limiting** checked your daily usage against Redis
-5. **Inference Service** analyzed the text (if running) or returned mock data
-6. **Streaming** sent results back as NDJSON chunks
+4. **The abuse limiter** checked how fast you were calling the endpoint
+5. **Rate Limiting** checked your daily usage against Redis
+6. **The Chats service** stored your message and the analysis shell
+7. **The Inference service** analyzed the text
+8. **Streaming** sent results back as NDJSON chunks
 
 ## Preview Mode
 
 For running the app without any backend services (great for UI development):
 
 ```bash
-npm run preview:build
-npm run preview:start
+pnpm preview:build
+pnpm preview:start
 ```
 
-Preview mode uses mock values for all services and accepts any credentials. See [Configuration](configuration.md) for details.
+Or, with Docker:
 
-## Docker Compose (Full Stack)
+```bash
+make preview
+```
 
-To run the web service with its infrastructure:
+Preview mode uses mock values for all services and accepts any credentials. It needs no `.env` file, no database, and no queue. See [Configuration](configuration.md) for details.
+
+## Running the Whole Stack
+
+To run the web service together with the backend services:
 
 ```bash
 # From the project root
 make local-up
 ```
 
-This starts the web service along with PostgreSQL, Redis, and other services.
+This starts the web service along with PostgreSQL, Redis, the chats service, the inference service, the document parser, the payment gateway and the background workers.
 
 ## Running Tests
 
 ```bash
-# Unit tests
-npm run test:run
+# Unit and integration tests
+pnpm test:run
 
-# Integration tests (requires Docker containers)
-npm run test:integration:backend
+# Backend integration tests
+pnpm test:integration:backend
 
-# E2E tests (requires preview build running)
-npm run test:e2e
+# High-availability tests (needs Docker containers)
+pnpm test:integration:ha
+
+# E2E tests (needs a preview build running)
+pnpm test:e2e
 ```
 
 ## Next Steps
@@ -129,7 +176,7 @@ npm run test:e2e
 
 Make sure you've installed dependencies:
 ```bash
-npm install
+pnpm install
 ```
 
 ### "Database connection refused"
@@ -147,7 +194,7 @@ Another process is using port 3000. Either stop it or change the port:
 lsof -i :3000
 
 # Or use a different port
-PORT=3001 npm run dev
+PORT=3001 pnpm dev
 ```
 
 ### "NEXTAUTH_SECRET is missing"
@@ -161,13 +208,28 @@ openssl rand -base64 32
 
 Run the Prisma generate command:
 ```bash
-npx prisma generate
+pnpm db:generate
 ```
+
+### The app starts but the analysis always fails
+
+The inference service is not running. Start the whole stack with `make local-up` from the project root, or point `AI_SERVICE_URL` at a running instance.
+
+### The OAuth buttons do nothing
+
+The mock OAuth credentials in `.env.example` are not valid client credentials.
+The buttons still work — they start a real OAuth round trip — but the provider
+rejects them. Add real client IDs and secrets to use Google or GitHub sign-in.
+
+In preview mode the buttons are disabled outright.
 
 ## Stopping Services
 
 ```bash
-# Stop infrastructure
+# Stop the web stack
+cd apps/web && make down
+
+# Stop infrastructure only
 docker compose -f infra/docker/data/compose.yml down
 
 # Stop and remove volumes (fresh start)
