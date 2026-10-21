@@ -359,7 +359,7 @@
             "nrqlQueries": [
               {
                 "accountId": "${account_id}",
-                "query": "FROM Span SELECT rate(count(*), 1 minute) AS `denials/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server' AND http.status_code IN ('401', '403') FACET http.route TIMESERIES AUTO LIMIT 10"
+                "query": "FROM Span SELECT rate(count(*), 1 minute) AS `denials/min` WHERE deployment.environment = 'loadtest' AND service.name = 'web' AND span.kind = 'server' AND http.status_code IN (401, 403) FACET http.route TIMESERIES AUTO LIMIT 10"
               }
             ],
             "legend": {
