@@ -40,6 +40,17 @@ receivers:
           metrics_path: /metrics
           static_configs:
             - targets: ["payment-gateway:8080"]
+        # The web app serves Prometheus metrics on /api/metrics (not /metrics).
+        # Without this job every FROM Metric widget on the web board is empty:
+        # the web only sends OTLP traces and logs and never pushes its
+        # prom-client metrics anywhere.
+        - job_name: web
+          metrics_path: /api/metrics
+          authorization:
+            type: bearer
+            credentials: ${env:PROMETHEUS_WEB_SCRAPE_TOKEN}
+          static_configs:
+            - targets: ["frontend:3000"]
         # Workers expose /metrics on fixed container ports (7001/7002/7003).
         # Without these three jobs every worker Metric widget on the workers
         # board is empty in prod: the workers only send OTLP traces/logs and

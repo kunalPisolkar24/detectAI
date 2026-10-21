@@ -450,6 +450,12 @@ floci-seed:
 	randhex() { openssl rand -hex "$$1" 2>/dev/null || od -An -tx1 -N "$$1" /dev/urandom | tr -d ' \n'; }; \
 	local_val() { if [ -f "$$LOCAL_ENV_FILE" ]; then awk -F= -v k="$$1" '$$1==k{sub($$1"=","");print}' "$$LOCAL_ENV_FILE" | tail -n 1; fi; }; \
 	with_local() { v="$$(local_val "$$1")"; if [ -n "$$v" ]; then printf '%s' "$$v"; else printf '%s' "$$2"; fi; }; \
+	PROD_ENV_FILE="infra/docker/prod/.env"; \
+	prod_val() { if [ -f "$$PROD_ENV_FILE" ]; then awk -F= -v k="$$1" '$$1==k{sub($$1"=","");print}' "$$PROD_ENV_FILE" | tail -n 1; fi; }; \
+	# The collector scrapes the web app's /api/metrics with this token, so the
+	# seed and the compose env have to agree. infra/docker/prod/.env is the
+	# single source of truth for both.
+	SCRAPE_TOKEN="$$(prod_val PROMETHEUS_WEB_SCRAPE_TOKEN)"; [ -n "$$SCRAPE_TOKEN" ] || SCRAPE_TOKEN="mock-prometheus-scrape-token-32ch"; \
 	INTERNAL_KEY="$$(randhex 24)"; AI_KEY="$$(randhex 24)"; \
 	GOOGLE_ID="$$(with_local GOOGLE_ID floci-test-google-client-id)"; \
 	GOOGLE_SECRET="$$(with_local GOOGLE_SECRET floci-test-google-client-secret)"; \
@@ -470,7 +476,7 @@ floci-seed:
 		fi; \
 		echo "seeded $$name"; \
 	}; \
-	put_secret "detectai/web/secrets" "{\"NEXTAUTH_SECRET\":\"$$AUTH_SECRET\",\"INTERNAL_API_KEY\":\"$$INTERNAL_KEY\",\"AI_SERVICE_API_KEY\":\"$$AI_KEY\",\"NEXT_PUBLIC_TURNSTILE_SITE_KEY\":\"$$TS_SITE\",\"TURNSTILE_SECRET_KEY\":\"$$TS_SECRET\",\"NEXT_PUBLIC_PADDLE_CLIENT_TOKEN\":\"$$CLIENT_TOKEN\",\"GOOGLE_ID\":\"$$GOOGLE_ID\",\"GOOGLE_SECRET\":\"$$GOOGLE_SECRET\",\"GITHUB_ID\":\"$$GITHUB_ID\",\"GITHUB_SECRET\":\"$$GITHUB_SECRET\",\"PROMETHEUS_WEB_SCRAPE_TOKEN\":\"mock-prometheus-scrape-token-32ch\"}"; \
+	put_secret "detectai/web/secrets" "{\"NEXTAUTH_SECRET\":\"$$AUTH_SECRET\",\"INTERNAL_API_KEY\":\"$$INTERNAL_KEY\",\"AI_SERVICE_API_KEY\":\"$$AI_KEY\",\"NEXT_PUBLIC_TURNSTILE_SITE_KEY\":\"$$TS_SITE\",\"TURNSTILE_SECRET_KEY\":\"$$TS_SECRET\",\"NEXT_PUBLIC_PADDLE_CLIENT_TOKEN\":\"$$CLIENT_TOKEN\",\"GOOGLE_ID\":\"$$GOOGLE_ID\",\"GOOGLE_SECRET\":\"$$GOOGLE_SECRET\",\"GITHUB_ID\":\"$$GITHUB_ID\",\"GITHUB_SECRET\":\"$$GITHUB_SECRET\",\"PROMETHEUS_WEB_SCRAPE_TOKEN\":\"$$SCRAPE_TOKEN\"}"; \
 	put_secret "detectai/gateway/secrets" "{\"PADDLE_WEBHOOK_SECRET\":\"$$HOOK_SECRET\",\"INTERNAL_API_KEY\":\"$$INTERNAL_KEY\"}"; \
 	put_secret "detectai/workers/secrets" "{\"PADDLE_API_KEY\":\"$$PADDLE_KEY\",\"PADDLE_ENVIRONMENT\":\"sandbox\"}"; \
 	put_secret "detectai/inference/secrets" "{\"API_KEY\":\"$$AI_KEY\"}"; \
