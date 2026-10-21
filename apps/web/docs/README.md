@@ -18,7 +18,7 @@ The Web service is the **full-stack user-facing application** for Detect AI. It 
 - The **backend-for-frontend (BFF)** that orchestrates calls to backend services
 - The **authentication hub** (NextAuth with email/password, Google, GitHub)
 - The **AI text detection interface** where users submit text for analysis
-- The **subscription management** portal (Paddle.js payments)
+- The **subscription management portal** (Paddle.js payments)
 
 ```mermaid
 graph TB
@@ -31,6 +31,8 @@ graph TB
     Web --> Redis[(Redis)]
     Web --> RabbitMQ[RabbitMQ]
 ```
+
+The hostnames in that diagram are the Docker Compose service names. The ports and URLs change with the environment — see [Configuration](getting-started/configuration.md) for the full table.
 
 ## Documentation by Topic
 
@@ -53,7 +55,8 @@ graph TB
 | Document | What You'll Learn | When to Read |
 |----------|-------------------|--------------|
 | [API Routes](components/api-routes.md) | How to call the service's API endpoints | Integrating with the frontend |
-| [Authentication](components/auth.md) | How login/signup works | Implementing auth features |
+| [Authentication](components/auth.md) | How login/signup works, and which routes are protected | Implementing auth features |
+| [Rate Limiting](components/rate-limiting.md) | The daily cap and the abuse limiter | Tuning limits or debugging a 429 |
 | [Backend Services](components/services.md) | How the service connects to backends | Understanding service integrations |
 | [Infrastructure](components/infrastructure.md) | Redis, database, analytics, tracing | Debugging infrastructure |
 
@@ -62,7 +65,7 @@ graph TB
 | Document | What You'll Learn | When to Read |
 |----------|-------------------|--------------|
 | [Health Checks](operations/health.md) | Health probes and degradation | Monitoring the service |
-| [Observability](operations/observability.md) | Metrics, logs, and alerts | Monitoring and debugging |
+| [Observability](operations/observability.md) | Metrics, logs, dashboards and alerts | Monitoring and debugging |
 
 ### Testing
 
@@ -95,11 +98,13 @@ graph TB
 1. [Backend Services](components/services.md) - Learn service integrations
 2. [Request Flows](concepts/request-flows.md) - Understand the flow
 3. [API Routes](components/api-routes.md) - Learn the API
-4. [Testing Overview](testing/overview.md) - Write and run tests
+4. [Rate Limiting](components/rate-limiting.md) - Understand the limits
+5. [Testing Overview](testing/overview.md) - Write and run tests
 
 ## Related Files
 
-- **Main README**: [`../../README.md`](../../README.md) - Project overview
-- **Makefile**: [`../../Makefile`](../../Makefile) - Docker orchestration commands
+- **Main README**: [`../../../README.md`](../../../README.md) - Project overview
+- **Makefile**: [`../../../Makefile`](../../../Makefile) - Docker orchestration commands
 - **Package.json**: [`../package.json`](../package.json) - Dependencies and scripts
-- **Docker Compose**: [`../../infra/docker/`](../../infra/docker/) - Infrastructure stacks
+- **Web makefile**: [`../makefile`](../makefile) - Start, preview and load-test targets
+- **Docker Compose**: [`../../../infra/docker/`](../../../infra/docker/) - Infrastructure stacks

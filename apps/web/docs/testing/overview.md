@@ -4,7 +4,7 @@ This document explains how to test the Web service. Testing ensures the service 
 
 ## Why Test?
 
-Testing helps you:
+Testing helps you to:
 - **Catch bugs early** — Find problems before users do
 - **Ensure quality** — Verify features work as expected
 - **Enable changes** — Safely modify code knowing tests will catch mistakes
@@ -26,10 +26,10 @@ The Web service has three levels of testing, each with different tradeoffs:
 
 ```bash
 # Run unit tests
-npm run test:run
+pnpm test:run
 
 # Run in watch mode (re-runs on file changes)
-npm run test
+pnpm test
 ```
 
 **Example:** Testing that a rate limiter correctly checks usage limits.
@@ -46,23 +46,35 @@ describe("Rate Limiter", () => {
 
 ### Integration Tests
 
-**What they are:** Tests that check multiple parts working together with real databases.
+**What they are:** Tests that check several parts working together, with the boundaries between them mocked.
 
 **When to use:** Before committing code.
 
 **Speed:** Medium (minutes).
 
-**Dependencies:** Docker (for real databases).
+**Dependencies:** None. The backend integration suite mocks Redis, the analytics publisher and Prisma, so it runs without Docker. One test in this tier starts a container to stand up a stub OTLP collector, but it only runs in CI or when `RUN_OTEL_TESTS` is set, and it skips itself when no container runtime is available.
 
 ```bash
 # Run backend integration tests
-npm run test:integration:backend
-
-# Run HA integration tests
-npm run test:integration:ha
+pnpm test:integration:backend
 ```
 
-**Example:** Testing that saving a message and retrieving it works end-to-end.
+**Example:** Testing that the analysis route rejects a malformed body before it reaches the inference service.
+
+### High-Availability Tests
+
+**What they are:** Tests that run against a real three-node RabbitMQ cluster, to check that the analytics publisher behaves correctly when the broker is genuinely unreliable.
+
+**When to use:** Before changing the analytics publisher or the queue topology.
+
+**Speed:** Slow (minutes).
+
+**Dependencies:** Docker. The cluster is started with testcontainers, not Compose.
+
+```bash
+# Run HA integration tests
+pnpm test:integration:ha
+```
 
 ### E2E Tests
 
@@ -75,8 +87,8 @@ npm run test:integration:ha
 **Dependencies:** Playwright browser binaries.
 
 ```bash
-# Run E2E tests (requires preview build running)
-npm run test:e2e
+# Run E2E tests (requires a preview build running)
+pnpm test:e2e
 ```
 
 **Example:** Testing that a user can sign in and see the chat interface.
@@ -90,6 +102,7 @@ npm run test:e2e
 | Configuration change | Unit + Integration |
 | UI component change | Unit + E2E |
 | API route change | Unit + Integration |
+| Analytics publisher or queue change | Unit + Integration + HA |
 | Quick check | Unit tests |
 | Before deployment | All tests |
 
@@ -99,16 +112,33 @@ npm run test:e2e
 apps/web/
 ├── features/
 │   └── chat/
-│       └── __tests__/           # Feature-specific unit tests
-│           ├── mappers.test.ts
-│           └── ...
+│       └── __tests__/           # Feature-specific tests, split by tier
+│           ├── unit/            # Pure unit tests
+│           │   ├── components/
+│           │   ├── hooks/
+│           │   ├── services/
+│           │   └── utils/
+│           ├── integration/     # Tests across the feature boundary
+│           └── integration-backend/  # Tests against the API routes
+├── lib/
+│   └── infrastructure/
+│       └── __tests__/
+│           └── ha/              # High-availability tests (*.ha.test.ts)
 ├── test/
 │   ├── custom-renderer.tsx      # Custom test renderer
 │   ├── example.test.ts          # Example test
 │   ├── handlers/
-│   │   └── chat-handlers.ts     # MSW handlers for API mocking
+│   │   ├── auth-handlers.ts     # MSW handlers for the auth routes
+│   │   └── chat-handlers.ts     # MSW handlers for the chat routes
+│   ├── ha/
+│   │   └── rabbitmq-cluster.ts  # Three-node RabbitMQ testcontainer
 │   ├── infrastructure/
-│   │   └── ...                  # Infrastructure tests
+│   │   ├── common.ts            # Shared test helpers
+│   │   ├── env.ts               # Environment mocking
+│   │   ├── metrics.ts           # Metrics mocking
+│   │   ├── prisma.ts            # Prisma mocking
+│   │   ├── redis.ts             # Redis mocking
+│   │   └── ui.ts                # UI test helpers
 │   ├── load/
 │   │   ├── scripts/                # k6 load test scripts
 │   │   │   ├── lib/                # Shared config, payloads, checks
@@ -117,9 +147,9 @@ apps/web/
 │   │   ├── seed/                   # Seeds the accounts the scripts sign in with
 │   │   └── results/                # Run summaries (gitignored)
 │   ├── mocks/
-│   │   └── ...                  # Test mocks
+│   │   └── empty.ts             # Empty module, aliased in place of server-only
 │   ├── msw-server.ts            # MSW server setup
-│   ├── prisma-mock.ts           # Prisma mock
+│   ├── prisma-mock.ts           # Re-export of the Prisma mock
 │   ├── setup-node.ts            # Node test setup
 │   ├── setup.ts                 # General test setup
 │   └── test-utils.tsx           # Test utilities
@@ -129,13 +159,15 @@ apps/web/
     └── upgrade.spec.ts          # Upgrade E2E tests
 ```
 
+**Every feature uses the same three-tier layout**, so a test's location tells you what it needs. A test in `__tests__/integration-backend/` is part of the backend integration suite; a test in `__tests__/unit/` runs in the default job.
+
 ## Writing Tests
 
 ### Unit Test Example
 
 ```typescript
 import { describe, it, expect, vi } from "vitest"
-import { mapGrpcMessageToDomain } from "../utils/mappers"
+import { mapGrpcMessageToDomain } from "../../../utils/mappers"
 
 describe("mapGrpcMessageToDomain", () => {
   it("should map gRPC message to domain message", () => {
@@ -162,36 +194,20 @@ describe("mapGrpcMessageToDomain", () => {
 ### Integration Test Example
 
 ```typescript
-import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { PrismaClient } from "@prisma/client"
+import { describe, it, expect, beforeEach } from "vitest"
+import { prismaMock, setupPrismaMocks } from "@/test/infrastructure/prisma"
 
-describe("Database Operations", () => {
-  const prisma = new PrismaClient()
+setupPrismaMocks()
 
-  beforeAll(async () => {
-    await prisma.$connect()
+describe("Rate limit check", () => {
+  beforeEach(() => {
+    prismaMock.usage.findUnique.mockResolvedValue(null)
   })
 
-  afterAll(async () => {
-    await prisma.$disconnect()
-  })
-
-  it("should create and retrieve a user", async () => {
-    const user = await prisma.user.create({
-      data: {
-        email: "test@example.com",
-        name: "Test User",
-      },
-    })
-
-    expect(user.id).toBeDefined()
-    expect(user.email).toBe("test@example.com")
-
-    const found = await prisma.user.findUnique({
-      where: { id: user.id },
-    })
-
-    expect(found).toEqual(user)
+  it("allows a user under the daily cap", async () => {
+    const service = new RedisRateLimitService(mockRedis)
+    const result = await service.checkLimit("user123", false)
+    expect(result.allowed).toBe(true)
   })
 })
 ```
@@ -230,71 +246,107 @@ test.describe("Chat Interaction", () => {
 
 ### Custom Renderer
 
-`test/custom-renderer.tsx` provides a custom render function with providers:
+`test/custom-renderer.tsx` provides a `render` function that wraps the component in the app's providers:
 
 ```typescript
 import { render } from "@testing-library/react"
 import { SessionProvider } from "next-auth/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
-export function customRender(ui: React.ReactElement) {
-  const queryClient = new QueryClient()
+const renderWithProviders = (
+  ui: React.ReactElement,
+  { session = null, ...options }: ExtendedRenderOptions = {}
+) => {
+  const queryClient = createTestQueryClient()
 
-  return render(
-    <SessionProvider session={null}>
-      <QueryClientProvider client={queryClient}>
-        {ui}
-      </QueryClientProvider>
+  const AllProviders = ({ children }: { children: React.ReactNode }) => (
+    <SessionProvider session={session}>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+        <QueryClientProvider client={queryClient}>
+          <LazyMotionProvider>{children}</LazyMotionProvider>
+        </QueryClientProvider>
+      </ThemeProvider>
     </SessionProvider>
   )
+
+  return render(ui, { wrapper: AllProviders, ...options })
 }
+
+export * from '@testing-library/react'
+export { renderWithProviders as render }
 ```
+
+The query client has `retry: false` and `gcTime: 0`, so a test never waits for a retry or for a cache to expire.
 
 ### MSW (Mock Service Worker)
 
-MSW intercepts network requests for testing:
+MSW intercepts network requests for testing. The handlers are grouped per area and composed in `test/msw-server.ts`:
 
 ```typescript
 // test/handlers/chat-handlers.ts
-import { http, HttpResponse } from "msw"
+export const chatHandlers = [
+  http.post("/api/chat/analyze/stream", async () => {
+    const events = [
+      { type: "accepted", message: { id: "msg-assistant", role: "assistant", content: "", createdAt: new Date().toISOString() } },
+      { type: "started", totalChars: 100, totalChunks: 2 },
+      { type: "progress", processedChunks: 1, totalChunks: 2 },
+      { type: "progress", processedChunks: 2, totalChunks: 2 },
+      { type: "final", message: createFinalMessage() },
+    ]
 
-export const handlers = [
-  http.post("/api/chat/analyze/stream", () => {
-    return HttpResponse.json({
-      type: "final",
-      result: { model: "spark", label: "Human", confidence: 0.95 },
+    const body = events.map(e => JSON.stringify(e)).join('\n') + '\n'
+
+    return new HttpResponse(body, {
+      headers: { 'Content-Type': 'application/x-ndjson' },
     })
   }),
 ]
 ```
 
+The analyze handler returns NDJSON, the same shape the real route returns — not a single JSON object.
+
 ### Prisma Mock
 
-`test/prisma-mock.ts` provides a mock Prisma client:
+The Prisma mock lives in `test/infrastructure/prisma.ts`, and `test/prisma-mock.ts` re-exports it:
 
 ```typescript
-import { mockDeep } from "vitest-mock-extended"
-import { PrismaClient } from "@prisma/client"
+// test/infrastructure/prisma.ts
+import { PrismaClient } from '@/lib/shared/generated/prisma/client'
+import { vi, beforeEach } from 'vitest'
+import { mockDeep, mockReset, DeepMockProxy } from 'vitest-mock-extended'
 
-export const prismaMock = mockDeep<PrismaClient>()
+export const prismaMock = mockDeep<PrismaClient>() as unknown as DeepMockProxy<PrismaClient>
+
+export const setupPrismaMocks = () => {
+  vi.mock('@/lib/infrastructure/prisma', () => ({
+    prisma: prismaMock,
+  }))
+
+  beforeEach(() => {
+    mockReset(prismaMock)
+  })
+}
 ```
+
+Note the import path: the Prisma client is generated into `lib/shared/generated/prisma`, not taken from the `@prisma/client` package.
 
 ## Test Configuration
 
 ### Vitest
 
-Unit and integration tests use Vitest:
+Three configs, one per suite:
 
-```bash
-# Unit tests (default config)
-npm run test:run
+| Config | Command | Environment | Includes |
+|--------|---------|-------------|----------|
+| `vitest.config.ts` | `pnpm test:run` | `jsdom` | Everything except the HA tests, `e2e/**` and `.next/**` |
+| `vitest.node.config.ts` | `pnpm test:integration:backend` | `node` | `features/**/__tests__/integration-backend/**/*.test.ts` |
+| `vitest.node.ha.config.ts` | `pnpm test:integration:ha` | `node` | `lib/infrastructure/__tests__/ha/**/*.ha.test.ts` |
 
-# Backend integration tests (Node config)
-npm run test:integration:backend
+The default config has coverage thresholds on the `features/` directory: 75% branches, 80% functions, 80% lines and 80% statements.
 
-# HA integration tests (Node HA config)
-npm run test:integration:ha
-```
+The backend integration config aliases `server-only` to an empty module, so a module that imports it can be loaded in a test.
+
+The HA config deliberately does **not** load `test/setup-node.ts`. Those global mocks would stub out the very broker the HA tests are exercising. Its timeouts are generous — 180 s per test and 300 s per hook — because a three-node cluster takes a while to settle.
 
 ### Playwright
 
@@ -302,14 +354,16 @@ E2E tests use Playwright:
 
 ```bash
 # Run all E2E tests
-npm run test:e2e
+pnpm test:e2e
 
 # Run specific test file
-npx playwright test e2e/chat.spec.ts
+pnpm exec playwright test e2e/chat.spec.ts
 
 # Run in headed mode (see browser)
-npx playwright test --headed
+pnpm exec playwright test --headed
 ```
+
+The test directory is `e2e/`, the base URL is `http://localhost:3000`, and the three browser engines all run.
 
 ## Load Testing
 
@@ -323,7 +377,7 @@ and Redis, a mock backend server, a seeder and k6) and runs one script
 against it.
 
 ```bash
-# Default script (landing page)
+# From apps/web
 make load-test VUS=10 DURATION=2m
 
 # A different script
@@ -434,7 +488,9 @@ metric values, the checks and the threshold results.
   `http.setResponseCallback`, so a refusal does not read as a failure while
   a 5xx still does.
 - The shared helpers in `test/load/scripts/lib/` hold the environment
-  handling, the payload matrix, the check builders and the NDJSON parser.
+  handling (`config.js`), the session helper (`auth.js`), the payload matrix
+  (`payloads.js`), the check builders (`checks.js`) and the NDJSON parser
+  (`ndjson.js`).
   The expected statuses live with the payloads, so a behaviour change shows
   up in one place.
 
@@ -464,9 +520,9 @@ serving, so a failed export never fails a run.
 
 ### "Docker not running"
 
-**Problem:** Integration tests fail because Docker isn't running.
+**Problem:** The HA integration tests fail because Docker isn't running.
 
-**Solution:** Start Docker Desktop or run `dockerd`.
+**Solution:** Start Docker. The other suites do not need it locally, though CI runs one container-backed test in the backend integration tier.
 
 ### "Port already in use"
 
@@ -480,8 +536,8 @@ serving, so a failed export never fails a run.
 
 **Solution:**
 - Run only unit tests for quick feedback
-- Use test tags to run specific tests
 - Check if tests are doing unnecessary work
+- Remember the HA suite starts a three-node broker and is slow by design
 
 ### "Flaky tests"
 
@@ -499,7 +555,7 @@ serving, so a failed export never fails a run.
 
 **Solution:**
 - Check `tsconfig.json` paths
-- Run `npm install` to ensure dependencies are installed
+- Run `pnpm install` to ensure dependencies are installed
 - Check `vite-tsconfig-paths` configuration
 
 ## Best Practices
@@ -518,3 +574,4 @@ serving, so a failed export never fails a run.
 - [Architecture](../concepts/architecture.md) - How components are structured
 - [Configuration](../getting-started/configuration.md) - Test environment settings
 - [Observability](../operations/observability.md) - Monitor test performance
+- [Rate Limiting](../components/rate-limiting.md) - The limits the load scripts exercise

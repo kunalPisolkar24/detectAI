@@ -80,10 +80,14 @@ graph TB
 
 | Check | Protocol | Timeout | What It Tests |
 |-------|----------|---------|---------------|
-| Inference Service | gRPC health | 8s | AI analysis availability |
-| Chats Service | gRPC health | 8s | Chat storage availability |
-| Document Parser | HTTP `/health` | 8s | File extraction availability |
-| Payment Gateway | HTTP `/readyz` | 8s | Payment processing availability |
+| Inference Service | gRPC health | 2s | AI analysis availability |
+| Chats Service | gRPC health | 2s | Chat storage availability |
+| Document Parser | HTTP `/api/v1/health` | 2s | File extraction availability |
+| Payment Gateway | HTTP `/readyz` | 2s | Payment processing availability |
+
+The optional checks give up sooner than the required ones. Every check has the same 8-second outer bound, but the optional ones also carry their own shorter inner deadline — a 2-second `AbortController` on the two HTTP probes and a 2-second deadline on each gRPC probe. A slow backend therefore degrades the app quickly instead of holding up the whole probe.
+
+**The whole suite is capped at 20 seconds.** Each check is individually bounded *and* the suite has its own outer timeout, so a probe can never hang — a partial stack with no inference service still answers, with `degraded`.
 
 **Response (all healthy):**
 
@@ -116,7 +120,7 @@ graph TB
     "redis": { "status": "ok", "latencyMs": 3 },
     "documentParser": { "status": "error", "error": "health 503" },
     "paymentGateway": { "status": "ok", "latencyMs": 30 },
-    "analysis": { "status": "ok", "checks": { ... } }
+    "analysis": { "status": "ok", "checks": { "inference": { "status": "ok", "latencyMs": 8 } } }
   }
 }
 ```
@@ -128,17 +132,24 @@ graph TB
   "status": "not_ready",
   "checks": {
     "postgres": { "status": "error", "error": "connection refused" },
-    "redis": { "status": "ok", "latencyMs": 3 }
+    "redis": { "status": "ok", "latencyMs": 3 },
+    "documentParser": { "status": "ok", "latencyMs": 45 },
+    "paymentGateway": { "status": "ok", "latencyMs": 30 },
+    "analysis": { "status": "ok", "checks": { "inference": { "status": "ok", "latencyMs": 8 } } }
   }
 }
 ```
+
+All five checks are always present in the response, whatever the outcome.
 
 **HTTP status codes:**
 
 | Status | Meaning |
 |--------|---------|
-| `200` | Ready (required checks pass) |
-| `503` | Not ready (required checks fail) |
+| `200` | The required checks passed. The body's `status` says `"ready"` or `"degraded"` |
+| `503` | A required check failed. The body's `status` says `"not_ready"` |
+
+A `degraded` result is still a `200`. Kubernetes keeps routing traffic to a degraded pod, because the core routes — chat, auth, billing — still work.
 
 ## Why Two Types of Checks?
 
@@ -154,16 +165,18 @@ graph TB
 
 ## Caching
 
-Results are cached for 10 seconds to avoid overwhelming dependencies with every probe:
+The PostgreSQL and Redis results are cached for 10 seconds:
 
 ```typescript
 const PG_REDIS_TTL_MS = 10_000  // 10 seconds
 ```
 
+**Only those two are cached.** A cold connection to either can take several seconds, and a probe runs every few seconds, so caching them keeps the probe cheap. The three optional checks — which probe four services between them — are probed on every request, because they are fast and you want them to be current.
+
 This means:
-- First probe after cache expires: runs all checks
-- Subsequent probes within 10 seconds: returns cached results
-- Balance between freshness and performance
+- First probe after the cache expires: PostgreSQL and Redis are actually queried
+- Subsequent probes within 10 seconds: the PostgreSQL and Redis results are reused
+- The document parser, payment gateway and both gRPC services are probed every time
 
 ## Preview Mode
 
@@ -183,7 +196,7 @@ In preview mode (`ENV_TYPE=preview`), all checks are skipped:
 }
 ```
 
-**Why skip in preview?** No real databases or services are running.
+The response is a `200`. **Why skip in preview?** No real databases or services are running, and a preview deployment should not be pulled out of rotation because nothing is behind it.
 
 ## Kubernetes Configuration
 
@@ -209,9 +222,11 @@ readinessProbe:
     port: 3000
   initialDelaySeconds: 15
   periodSeconds: 10
-  timeoutSeconds: 10
+  timeoutSeconds: 25
   failureThreshold: 3
 ```
+
+**Keep `timeoutSeconds` above the app's own 20-second suite cap.** If the probe timeout is lower than the cap, Kubernetes gives up on the request before the service can report which check timed out, and the probe fails without saying why.
 
 ## Monitoring Health
 
@@ -258,16 +273,20 @@ curl -s http://localhost:3000/api/readyz | jq .checks.postgres
 - Check database performance
 - Verify no network issues
 - Look at service logs
-- Increase timeout if needed (currently 8s per check, 20s total)
+- The optional checks give up after 2s and the suite after 20s
 
 **Probe causing high load?**
-- Results are cached for 10 seconds
-- Each check has its own 8s timeout
-- Total suite has 20s timeout
+- PostgreSQL and Redis results are cached for 10 seconds
+- Each check has its own timeout: 8s for the required ones, 2s for the optional ones
+- The whole suite has a 20-second cap
 - Consider adjusting probe intervals
+
+**A check reports `skipped` outside preview mode?**
+Only the optional checks can be skipped, and only in preview mode. If you see `skipped` in production, the service is running with `ENV_TYPE=preview`, which also means it is serving mock data.
 
 ## Related Documentation
 
 - [Configuration](../getting-started/configuration.md) - Health check settings
 - [Observability](observability.md) - Metrics and alerts
 - [Architecture](../concepts/architecture.md) - How components connect
+- [Backend Services](../components/services.md) - What the optional checks probe
