@@ -8,28 +8,10 @@
       "description": "Golden signals for the web frontend and BFF",
       "widgets": [
         {
-          "title": "",
-          "layout": {
-            "column": 1,
-            "row": 1,
-            "height": 3,
-            "width": 12
-          },
-          "visualization": {
-            "id": "viz.markdown"
-          },
-          "rawConfiguration": {
-            "yAxisLeft": {
-              "zero": true
-            },
-            "text": "## Web (`service.name = web`, env `${environment}`)\nNext.js SSR + API routes. **Dependency map:** `AI_SERVICE_URL`, `CHAT_SERVICE_URL`, `FILE_EXTRACTOR_API_URL`, PG pool (`DB_POOL_MAX`), users-Redis. Auth: NextAuth GitHub/Google + Turnstile. Slow routes and 5xx here page first."
-          }
-        },
-        {
           "title": "Request rate",
           "layout": {
             "column": 1,
-            "row": 2,
+            "row": 1,
             "height": 3,
             "width": 3
           },
@@ -49,7 +31,7 @@
           "title": "Error share",
           "layout": {
             "column": 4,
-            "row": 2,
+            "row": 1,
             "height": 3,
             "width": 3
           },
@@ -77,7 +59,7 @@
           "title": "p95 latency",
           "layout": {
             "column": 7,
-            "row": 2,
+            "row": 1,
             "height": 3,
             "width": 3
           },
@@ -97,7 +79,7 @@
           "title": "Satisfied requests (< 500ms)",
           "layout": {
             "column": 10,
-            "row": 2,
+            "row": 1,
             "height": 3,
             "width": 3
           },
@@ -123,7 +105,7 @@
           "title": "Request rate by path",
           "layout": {
             "column": 1,
-            "row": 3,
+            "row": 2,
             "height": 3,
             "width": 6
           },
@@ -156,7 +138,7 @@
           "title": "Latency p50/p95/p99",
           "layout": {
             "column": 7,
-            "row": 3,
+            "row": 2,
             "height": 3,
             "width": 6
           },
@@ -189,7 +171,7 @@
           "title": "Responses by status code",
           "layout": {
             "column": 1,
-            "row": 4,
+            "row": 3,
             "height": 3,
             "width": 6
           },
@@ -225,7 +207,7 @@
           "title": "Errors by path",
           "layout": {
             "column": 7,
-            "row": 4,
+            "row": 3,
             "height": 3,
             "width": 6
           },
