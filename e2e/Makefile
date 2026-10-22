@@ -13,6 +13,7 @@ TARGETS_DIR := $(E2E_DIR)/targets
 # Where each service lives. The gateway is nested under services/payments.
 SERVICE_DIR_document-parser := $(E2E_DIR)/../services/document-parser
 SERVICE_DIR_payment-gateway := $(E2E_DIR)/../services/payments/gateway
+SERVICE_DIR_web             := $(E2E_DIR)/../apps/web
 
 COMPOSE_E2E := docker compose -f $(E2E_DIR)/compose.yml -p e2e
 
@@ -20,9 +21,10 @@ TIERS := preflight smoke load stress soak
 TIER ?= smoke
 TARGET ?= local
 SERVICE ?=
-# Overrides the tier's scenario for a service, for the cases the tier ladder
-# does not cover (the gateway's internal endpoint, for instance).
-SCENARIO ?=
+# Overrides the tier's script for a single run. The document parser and the
+# gateway name their scripts after the scenario; the web names them after
+# what they exercise, so it takes both a script and a load profile.
+SCRIPT ?=
 TARGET_FILE ?= $(TARGETS_DIR)/.env.$(TARGET)
 
 # The target file's settings, exported so a service started against this
@@ -39,7 +41,7 @@ export $(foreach pair,$(TARGET_ENV),$(firstword $(subst =, ,$(pair))))
 endif
 
 # Services wired into the harness so far.
-WIRED_SERVICES := document-parser payment-gateway
+WIRED_SERVICES := document-parser payment-gateway web
 
 # The services a run covers. SERVICE narrows it to one.
 RUN_SERVICES := $(if $(SERVICE),$(SERVICE),$(WIRED_SERVICES))
@@ -56,7 +58,20 @@ TIER_SCENARIO_payment-gateway_load   := spike
 TIER_SCENARIO_payment-gateway_stress := stress
 TIER_SCENARIO_payment-gateway_soak   := soak
 
+# The web names its scripts after what they exercise, not after the profile
+# they run with, so it needs both.
+TIER_SCRIPT_web_smoke  := auth.k6.js
+TIER_SCRIPT_web_load   := chat-api.k6.js
+TIER_SCRIPT_web_stress := chat-api.k6.js
+TIER_SCRIPT_web_soak   := chat-api.k6.js
+
+TIER_SCENARIO_web_smoke  := smoke
+TIER_SCENARIO_web_load   := load
+TIER_SCENARIO_web_stress := stress
+TIER_SCENARIO_web_soak   := load
+
 tier_scenario = $(or $(TIER_SCENARIO_$(1)_$(TIER)),$(TIER))
+tier_script = $(or $(TIER_SCRIPT_$(1)_$(TIER)),$(call tier_scenario,$(1)))
 
 # Tier shape. The service's own scenario defaults apply where a tier leaves a
 # knob empty. Anything set on the command line wins over the tier.
@@ -70,6 +85,8 @@ SERVICE_UP_document-parser   := parser-up
 SERVICE_DOWN_document-parser := parser-down
 SERVICE_UP_payment-gateway   := gateway-up
 SERVICE_DOWN_payment-gateway := gateway-down
+SERVICE_UP_web               := start
+SERVICE_DOWN_web             := down
 
 .PHONY: help load $(addprefix load-,$(WIRED_SERVICES)) preflight target-init up down
 
@@ -126,20 +143,30 @@ load:
 
 load-document-parser:
 	@echo ""
-	@echo "=== document-parser (tier=$(TIER), scenario=$(or $(SCENARIO),$(call tier_scenario,document-parser))) ==="
+	@echo "=== document-parser (tier=$(TIER), scenario=$(or $(SCRIPT),$(call tier_scenario,document-parser))) ==="
 	@$(MAKE) --no-print-directory -C $(SERVICE_DIR_document-parser) load-test \
 		REMOTE=1 \
 		TARGET_ENV_FILE=$(TARGET_FILE) \
-		SCENARIO=$(or $(SCENARIO),$(call tier_scenario,document-parser)) \
+		SCENARIO=$(or $(SCRIPT),$(call tier_scenario,document-parser)) \
 		VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) STAGES=$(STAGES) MAX_VUS=$(MAX_VUS) ITERATIONS=$(ITERATIONS)
 
 load-payment-gateway:
 	@echo ""
-	@echo "=== payment-gateway (tier=$(TIER), scenario=$(or $(SCENARIO),$(call tier_scenario,payment-gateway))) ==="
+	@echo "=== payment-gateway (tier=$(TIER), scenario=$(or $(SCRIPT),$(call tier_scenario,payment-gateway))) ==="
 	@$(MAKE) --no-print-directory -C $(SERVICE_DIR_payment-gateway) load-test \
 		REMOTE=1 \
 		TARGET_ENV_FILE=$(TARGET_FILE) \
-		SCENARIO=$(or $(SCENARIO),$(call tier_scenario,payment-gateway)) \
+		SCENARIO=$(or $(SCRIPT),$(call tier_scenario,payment-gateway)) \
+		VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) STAGES=$(STAGES) MAX_VUS=$(MAX_VUS) ITERATIONS=$(ITERATIONS)
+
+load-web:
+	@echo ""
+	@echo "=== web (tier=$(TIER), script=$(or $(SCRIPT),$(call tier_script,web)), profile=$(call tier_scenario,web)) ==="
+	@$(MAKE) --no-print-directory -C $(SERVICE_DIR_web) load-test \
+		REMOTE=1 \
+		TARGET_ENV_FILE=$(TARGET_FILE) \
+		SCRIPT=$(or $(SCRIPT),$(call tier_script,web)) \
+		SCENARIO=$(call tier_scenario,web) \
 		VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) STAGES=$(STAGES) MAX_VUS=$(MAX_VUS) ITERATIONS=$(ITERATIONS)
 
 # Start a service on its own compose file, the way it normally runs.

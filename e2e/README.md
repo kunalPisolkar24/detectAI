@@ -54,6 +54,7 @@ make -C e2e load TIER=load TARGET=prod VUS=25 RPS=50
 | `TIER` | `preflight`, `smoke`, `load`, `stress` or `soak` | `smoke` |
 | `TARGET` | an environment file in `targets/.env.<name>` | `local` |
 | `SERVICE` | one service instead of every wired one | all wired ones |
+| `SCRIPT` | the script a tier runs, for the cases the ladder does not cover | the tier's own |
 
 ## Targets
 
@@ -99,6 +100,18 @@ on the broker: a queue nothing consumes can be counted directly, while a
 queue with a live consumer has to be proved from the gateway's own publish
 counters. `GATEWAY_LOAD_QUEUE_PROOF` picks the mode per target.
 
+The web's load rig answers from a mock backend, so its latency budget is
+milliseconds. Against a real deployment the analyze endpoint waits on real
+inference and takes seconds, so `WEB_ANALYZE_P95_MS` and
+`WEB_ANALYZE_P99_MS` carry the budget a target is held to. The scripts that
+do not reach a backend — landing, the auth surface, the rejection matrix —
+keep the same budget in both places.
+
+The web's scripts also sign in with real accounts, so a target needs them
+planted once: the free account carries no subscription, the premium one an
+ACTIVE one. The load rig seeds them; a deployed target needs them created by
+hand. The target file carries the credentials.
+
 ## Wiring up another service
 
 1. Generalize the target value in the service's `infra/compose.load.yml`:
@@ -108,7 +121,9 @@ counters. `GATEWAY_LOAD_QUEUE_PROOF` picks the mode per target.
    (see `services/document-parser/Makefile`).
 3. Add the service's endpoints to `e2e/targets/.env.example`.
 4. Add the tier mapping to `e2e/Makefile`:
-   `TIER_SCENARIO_<service>_<tier> := <scenario>`.
+   `TIER_SCENARIO_<service>_<tier> := <scenario>`. A service whose scripts are
+   named after what they exercise rather than after the profile they run with
+   also needs `TIER_SCRIPT_<service>_<tier> := <script>`.
 5. Add the service to `WIRED_SERVICES`, and its `up`/`down` targets to
    `SERVICE_UP_<service>` / `SERVICE_DOWN_<service>`.
 

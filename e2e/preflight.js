@@ -17,6 +17,8 @@ const TARGETS = [
   // /readyz also reports the broker connection: it answers 503 with
   // {"rabbitmq":"disconnected"} when the gateway cannot reach RabbitMQ.
   { name: "payment-gateway", url: __ENV.GATEWAY_BASE_URL, path: "/readyz" },
+  // The landing page: the cheapest thing the app serves.
+  { name: "web", url: __ENV.WEB_BASE_URL, path: "/" },
 ];
 
 // The broker's management API is part of the delivery proof only when the
