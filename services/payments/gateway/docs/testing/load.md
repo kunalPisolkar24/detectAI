@@ -15,6 +15,7 @@ Think of load tests as **stress tests** - they find breaking points before produ
 make load-test
 
 # Run specific scenario
+make load-test SCENARIO=smoke
 make load-test SCENARIO=spike
 make load-test SCENARIO=stress
 make load-test SCENARIO=soak
@@ -26,6 +27,38 @@ make load-test SCENARIO=spike TARGET_VUS=100 DURATION=60s
 # Clean up
 make load-down
 ```
+
+## Running Against an Existing Deployment
+
+The rig above starts its own broker and gateway. To measure a deployment that is already running -- a local stack, the Floci stack, prod -- point the same scripts at it instead. Nothing is provisioned: the k6 container runs with `--no-deps`, so the gateway and its broker are never started by the load run.
+
+```bash
+# The target file carries the endpoint and any credentials.
+# See e2e/targets/.env.example for the template.
+make load-test REMOTE=1 TARGET_ENV_FILE=../../../e2e/targets/.env.prod SCENARIO=spike
+```
+
+Observability is the target's business here: a deployed stack already exports its own telemetry, so `WITH_OBSERVABILITY` is ignored in remote mode. `SCENARIO=chaos` is refused in remote mode too -- it stops the RabbitMQ container mid-run, which only works against the rig.
+
+How the delivery is proved depends on the broker the target uses. The gateway publishes synchronously and only answers `200 {"status":"queued"}` after the broker acked the message, so a 200 with `queued` already proves the broker took it. On top of that:
+
+| `GATEWAY_LOAD_QUEUE_PROOF` | Proves | Use when |
+|---|---|---|
+| `exact` (default) | the broker's queue depth grew by exactly the gateway's publish count | an idle queue that nothing consumes -- the rig |
+| `at_least` | the queue depth grew by at least the publish count | other producers write to the same queue |
+| `off` | the gateway's `status="success"` publish count grew and `status="error"` did not | a live consumer drains the queue, so a depth comparison can only produce false failures |
+
+`off` reads the broker's management API not at all, so a target whose broker does not expose it still works.
+
+The cross-app harness in `e2e/` drives this and the other services together:
+
+```bash
+make -C e2e load TIER=preflight TARGET=prod   # is everything reachable
+make -C e2e load TIER=smoke TARGET=prod        # is everything correct
+make -C e2e load TIER=load TARGET=prod         # does everything hold
+```
+
+See [e2e/README.md](../../../../../e2e/README.md) for the tiers and the target files.
 
 ## Prerequisites
 
@@ -171,7 +204,8 @@ Each VU sends a realistic payload:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BASE_URL` | `http://payment-gateway:8080` | Gateway URL |
+| `GATEWAY_BASE_URL` | `http://payment-gateway:8080` | Gateway URL (`BASE_URL` still works as the older name) |
+| `GATEWAY_LOAD_QUEUE_PROOF` | `exact` | `exact` / `at_least` / `off` -- how the delivery is proved |
 | `RABBITMQ_URL` | `amqp://guest:guest@rabbitmq:5672/` | RabbitMQ URL |
 | `PADDLE_WEBHOOK_SECRET` | `test_secret` | HMAC secret |
 | `INTERNAL_API_KEY` | `test_internal_key` | API key |

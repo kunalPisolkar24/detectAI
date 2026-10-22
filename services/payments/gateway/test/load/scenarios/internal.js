@@ -1,8 +1,8 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
-import { readBaseline, queueDepth, checkNoLoss } from '../lib/rabbitmq.js';
-import { publishedSuccessTotal } from '../lib/runtime.js';
+import { readBaseline, readCurrent, checkNoLoss } from '../lib/rabbitmq.js';
+import { secretsFromEnv } from '../lib/payloads.js';
 
 export const options = {
     stages: [
@@ -20,18 +20,19 @@ export const options = {
 const published = new Counter('load_published_total');
 
 const INTERNAL_API_KEY = __ENV.INTERNAL_API_KEY || 'test_internal_key';
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const BASE_URL = __ENV.GATEWAY_BASE_URL || __ENV.BASE_URL || 'http://localhost:8080';
+const secrets = secretsFromEnv();
 
 export function setup() {
-    return { queue: readBaseline(), published: publishedSuccessTotal(BASE_URL) };
+    return readBaseline(BASE_URL);
 }
 
 export default function () {
     const payload = JSON.stringify({
         event_type: 'user.cancel_subscription',
         data: {
-            userId: 'user-123',
-            paddleSubscriptionId: 'sub_456',
+            userId: secrets.userId,
+            paddleSubscriptionId: secrets.paddleSubId,
         },
     });
 
@@ -56,5 +57,5 @@ export default function () {
 }
 
 export function teardown(baseline) {
-    checkNoLoss(baseline, { depth: queueDepth(), published: publishedSuccessTotal(BASE_URL) });
+    checkNoLoss(baseline, readCurrent(BASE_URL));
 }

@@ -2,8 +2,7 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
 import { generatePaddleSignature } from '../utils.js';
-import { readBaseline, queueDepth, checkNoLoss } from '../lib/rabbitmq.js';
-import { publishedSuccessTotal } from '../lib/runtime.js';
+import { readBaseline, readCurrent, checkNoLoss } from '../lib/rabbitmq.js';
 
 export const options = {
     stages: [
@@ -26,7 +25,7 @@ const WEBHOOK_SECRET = __ENV.PADDLE_WEBHOOK_SECRET || 'test_secret';
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 
 export function setup() {
-    return { queue: readBaseline(), published: publishedSuccessTotal(BASE_URL) };
+    return readBaseline(BASE_URL);
 }
 
 export default function () {
@@ -60,5 +59,5 @@ export default function () {
 }
 
 export function teardown(baseline) {
-    checkNoLoss(baseline, { depth: queueDepth(), published: publishedSuccessTotal(BASE_URL) });
+    checkNoLoss(baseline, readCurrent(BASE_URL));
 }

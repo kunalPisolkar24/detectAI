@@ -2,8 +2,7 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
 import { pickProfile, buildRequest, buildInvalidSignatureRequest, secretsFromEnv } from '../lib/payloads.js';
-import { readBaseline, queueDepth, checkNoLoss } from '../lib/rabbitmq.js';
-import { publishedSuccessTotal } from '../lib/runtime.js';
+import { readBaseline, readCurrent, checkNoLoss } from '../lib/rabbitmq.js';
 
 export const options = {
     stages: [
@@ -26,7 +25,7 @@ const secrets = secretsFromEnv();
 let iter = 0;
 
 export function setup() {
-    return { queue: readBaseline(), published: publishedSuccessTotal(secrets.baseUrl) };
+    return readBaseline(secrets.baseUrl);
 }
 
 export default function () {
@@ -47,5 +46,5 @@ export default function () {
 }
 
 export function teardown(baseline) {
-    checkNoLoss(baseline, { depth: queueDepth(), published: publishedSuccessTotal(secrets.baseUrl) });
+    checkNoLoss(baseline, readCurrent(secrets.baseUrl));
 }
