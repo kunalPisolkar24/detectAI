@@ -13,6 +13,7 @@ TARGETS_DIR := $(E2E_DIR)/targets
 # Where each service lives. The gateway is nested under services/payments.
 SERVICE_DIR_document-parser := $(E2E_DIR)/../services/document-parser
 SERVICE_DIR_payment-gateway := $(E2E_DIR)/../services/payments/gateway
+SERVICE_DIR_chats            := $(E2E_DIR)/../services/chats
 SERVICE_DIR_web             := $(E2E_DIR)/../apps/web
 
 COMPOSE_E2E := docker compose -f $(E2E_DIR)/compose.yml -p e2e
@@ -41,7 +42,7 @@ export $(foreach pair,$(TARGET_ENV),$(firstword $(subst =, ,$(pair))))
 endif
 
 # Services wired into the harness so far.
-WIRED_SERVICES := document-parser payment-gateway web
+WIRED_SERVICES := document-parser payment-gateway chats web
 
 # The services a run covers. SERVICE narrows it to one.
 RUN_SERVICES := $(if $(SERVICE),$(SERVICE),$(WIRED_SERVICES))
@@ -59,6 +60,9 @@ TIER_SCENARIO_payment-gateway_contract := negative
 TIER_SCENARIO_payment-gateway_load     := spike
 TIER_SCENARIO_payment-gateway_stress   := stress
 TIER_SCENARIO_payment-gateway_soak     := soak
+
+# The chats scenarios are named after the tiers already.
+TIER_SCENARIO_chats_contract := edge
 
 # The web names its scripts after what they exercise, not after the profile
 # they run with, so it needs both.
@@ -89,6 +93,8 @@ SERVICE_UP_document-parser   := parser-up
 SERVICE_DOWN_document-parser := parser-down
 SERVICE_UP_payment-gateway   := gateway-up
 SERVICE_DOWN_payment-gateway := gateway-down
+SERVICE_UP_chats             := chats-up
+SERVICE_DOWN_chats           := chats-down
 SERVICE_UP_web               := start
 SERVICE_DOWN_web             := down
 
@@ -171,6 +177,15 @@ load-web:
 		TARGET_ENV_FILE=$(TARGET_FILE) \
 		SCRIPT=$(or $(SCRIPT),$(call tier_script,web)) \
 		SCENARIO=$(call tier_scenario,web) \
+		VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) STAGES=$(STAGES) MAX_VUS=$(MAX_VUS) ITERATIONS=$(ITERATIONS)
+
+load-chats:
+	@echo ""
+	@echo "=== chats (tier=$(TIER), scenario=$(or $(SCRIPT),$(call tier_scenario,chats))) ==="
+	@$(MAKE) --no-print-directory -C $(SERVICE_DIR_chats) load-test \
+		REMOTE=1 \
+		TARGET_ENV_FILE=$(TARGET_FILE) \
+		SCENARIO=$(or $(SCRIPT),$(call tier_scenario,chats)) \
 		VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) STAGES=$(STAGES) MAX_VUS=$(MAX_VUS) ITERATIONS=$(ITERATIONS)
 
 # Start a service on its own compose file, the way it normally runs.

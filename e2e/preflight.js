@@ -17,6 +17,10 @@ const TARGETS = [
   // /readyz also reports the broker connection: it answers 503 with
   // {"rabbitmq":"disconnected"} when the gateway cannot reach RabbitMQ.
   { name: "payment-gateway", url: __ENV.GATEWAY_BASE_URL, path: "/readyz" },
+  // The chat service and its worker. The worker is what persists a message,
+  // so the end-to-end check needs one even though the API is what answers.
+  { name: "chats", url: __ENV.CHAT_METRICS_URL, path: "/metrics" },
+  { name: "chat-worker", url: __ENV.CHAT_WORKER_METRICS_URL, path: "/metrics" },
   // The landing page: the cheapest thing the app serves.
   { name: "web", url: __ENV.WEB_BASE_URL, path: "/" },
 ];
