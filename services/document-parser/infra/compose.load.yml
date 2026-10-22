@@ -1,3 +1,6 @@
+# Its own compose project, so two services' rigs never share one.
+name: document-parser-load
+
 services:
   document-parser:
     build:

@@ -56,7 +56,7 @@ clean:
 restart: down start
 
 # Load Testing Targets
-.PHONY: load-up load-down load-test
+.PHONY: load-up load-down load-down-remote load-test
 
 # Opt-in observability: make load-test WITH_OBSERVABILITY=1
 # Adds otel-collector-loadtest (-> New Relic EU as deployment.environment=loadtest)
@@ -74,12 +74,29 @@ LOAD_COMPOSE_OBS := $(LOAD_COMPOSE) \
 WITH_OBSERVABILITY ?= 0
 # The set actually used for this run.
 LOAD_COMPOSE_ACTIVE = $(if $(filter 1,$(WITH_OBSERVABILITY)),$(LOAD_COMPOSE_OBS),$(LOAD_COMPOSE))
+# Remote mode points the load test at a deployment that is already running
+# instead of starting the rig. The endpoint and the credentials come from
+# TARGET_ENV_FILE (see e2e/targets/.env.example). Nothing is provisioned in
+# remote mode: the runner starts with --no-deps, so the frontend and its
+# datastores stay down. The target's own stack exports its telemetry, so
+# WITH_OBSERVABILITY does not apply here.
+REMOTE ?= 0
+TARGET_ENV_FILE ?=
+# The rig's compose project is "web-load"; the remote run gets its own
+# project so it can never touch a running local rig.
+LOAD_REMOTE_PROJECT := e2e-web
 
 load-up:
 	$(LOAD_ENV) $(LOAD_COMPOSE_ACTIVE) up -d --build
 
 load-down:
 	$(LOAD_ENV) $(LOAD_COMPOSE_OBS) down -v --remove-orphans
+
+# Remove the remote compose project: a `run --rm --no-deps` leaves its network
+# and the datastore volumes behind. Kept apart from load-down so tearing down
+# a remote run never touches the local rig's volumes.
+load-down-remote:
+	$(LOAD_COMPOSE) -p $(LOAD_REMOTE_PROJECT) down -v --remove-orphans
 
 # The scripts the suite runs, each in its own rig. A fresh rig per script
 # keeps the counters the scenarios drive (usage, abuse) from one run leaking
@@ -97,6 +114,42 @@ load-test:
 	@if [ "$(WITH_OBSERVABILITY)" != "0" ] && [ "$(WITH_OBSERVABILITY)" != "1" ]; then \
 		echo "Invalid WITH_OBSERVABILITY '$(WITH_OBSERVABILITY)'. Use 0 or 1."; exit 1; \
 	fi
+	@if [ "$(REMOTE)" = "1" ]; then \
+		$(MAKE) --no-print-directory _load-test-remote; \
+	else \
+		$(MAKE) --no-print-directory _load-test-local; \
+	fi
+
+# The runner against a deployment that is already running. The endpoint and
+# the credentials come from TARGET_ENV_FILE; the frontend and its datastores
+# are never started.
+_load-test-remote:
+	@if [ -z "$(TARGET_ENV_FILE)" ]; then \
+		echo "REMOTE=1 requires TARGET_ENV_FILE (see e2e/targets/.env.example)."; exit 1; \
+	fi
+	@if [ ! -f "$(TARGET_ENV_FILE)" ]; then \
+		echo "TARGET_ENV_FILE not found: $(TARGET_ENV_FILE)"; exit 1; \
+	fi
+	@if [ "$(WITH_OBSERVABILITY)" = "1" ]; then \
+		echo "WITH_OBSERVABILITY is ignored in remote mode: the target's own stack exports its telemetry."; \
+	fi
+	@if [ "$(SCRIPT_NAME)" = "chat-api-rate-limit" ]; then \
+		echo "chat-api-rate-limit needs the abuse limiter's own setting on the frontend, so it only works against the rig."; exit 1; \
+	fi
+	@mkdir -p test/load/results
+	@# The k6 container writes the run summaries as its own user, so the
+	@# directory has to be open to it.
+	@chmod 777 test/load/results
+	@echo "\nRunning k6 load tests against $(TARGET_ENV_FILE) (SCRIPT=$(SCRIPT_FILE), SCENARIO=$(or $(SCENARIO),load), VUS=$(VUS), DURATION=$(DURATION))..."
+	$(LOAD_COMPOSE) --env-file $(TARGET_ENV_FILE) -p $(LOAD_REMOTE_PROJECT) run --rm --no-deps \
+		-e VUS=$(VUS) \
+		-e DURATION=$(DURATION) \
+		-e SCENARIO=$(SCENARIO) \
+		-e RATE_LIMIT_CASE=$(RATE_LIMIT_CASE) \
+		k6 run --summary-export=$(SUMMARY_FILE) /scripts/$(SCRIPT_FILE)
+
+# The rig: a throwaway stack, the frontend in it, and the runner against it.
+_load-test-local:
 	@if [ "$(WITH_OBSERVABILITY)" = "1" ]; then \
 		if [ -z "$${NEW_RELIC_LICENSE_KEY:-}" ]; then \
 			echo "WITH_OBSERVABILITY=1 but NEW_RELIC_LICENSE_KEY is empty — collector will retry/drop, app keeps serving."; \

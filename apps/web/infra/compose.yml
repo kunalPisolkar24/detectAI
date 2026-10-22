@@ -1,6 +1,10 @@
 # Web stack. ENV_TYPE=dev|prod|preview. dev/preview use compose env; prod hydrates from AWS
 # Secrets Manager (detectai/pg/urls, detectai/redis/users/urls, detectai/mq/urls, detectai/web/secrets)
 # + SSM /detectai/web/. Datastores via shared atoms.
+# Its own compose project (like chats and gateway): the load rig in this
+# directory has its own `name:` and would otherwise default to the same one.
+name: web
+
 include:
   - path: ../../../infra/docker/postgres-users/standalone.yml
   - path: ../../../infra/docker/redis-users/standalone.yml

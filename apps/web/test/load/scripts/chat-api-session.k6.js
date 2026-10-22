@@ -13,11 +13,16 @@ import { expectCompleteStream } from './lib/ndjson.js'
 
 const ENDPOINT = `${BASE_URL}/api/chat/analyze/stream`
 
+// The rig answers from a mock backend, so its budget is milliseconds. A real
+// inference stream takes seconds, so the target file carries the real budget.
+const analyzeP95 = Number(__ENV.WEB_ANALYZE_P95_MS || 2000)
+const analyzeP99 = Number(__ENV.WEB_ANALYZE_P99_MS || 4000)
+
 export const options = loadOptions({
   thresholds: {
     'http_req_failed': ['rate<0.01'],
     'checks': ['rate>0.99'],
-    'http_req_duration{endpoint:analyze}': ['p(95)<2000', 'p(99)<4000'],
+    'http_req_duration{endpoint:analyze}': [`p(95)<${analyzeP95}`, `p(99)<${analyzeP99}`],
     'http_req_duration{endpoint:auth}': ['p(95)<1000', 'p(99)<2000'],
     'dropped_iterations': ['count==0'],
   },
