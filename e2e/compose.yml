@@ -1,0 +1,27 @@
+# Runner for the e2e-owned scripts (the shared preflight).
+#
+# Never provisions anything: it starts the k6 container only. The per-service
+# load rigs stay untouched and keep running their own scripts; this file only
+# carries the cross-service ones.
+#
+# Endpoints come from the target file (targets/.env.<target>) via --env-file.
+services:
+  k6:
+    image: grafana/k6
+    volumes:
+      - .:/e2e:ro
+    # Lets the k6 container reach a service published on the Docker host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - API_URL=${API_URL:-}
+      - WEB_BASE_URL=${WEB_BASE_URL:-}
+      - INFERENCE_LOAD_GRPC_TARGET=${INFERENCE_LOAD_GRPC_TARGET:-}
+      - CHAT_SERVICE_ADDR=${CHAT_SERVICE_ADDR:-}
+      - GATEWAY_BASE_URL=${GATEWAY_BASE_URL:-}
+    networks:
+      - e2e_net
+
+networks:
+  e2e_net:
+    name: e2e_net
