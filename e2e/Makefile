@@ -17,7 +17,7 @@ SERVICE_DIR_web             := $(E2E_DIR)/../apps/web
 
 COMPOSE_E2E := docker compose -f $(E2E_DIR)/compose.yml -p e2e
 
-TIERS := preflight smoke load stress soak
+TIERS := preflight smoke contract load stress soak
 TIER ?= smoke
 TARGET ?= local
 SERVICE ?=
@@ -48,27 +48,31 @@ RUN_SERVICES := $(if $(SERVICE),$(SERVICE),$(WIRED_SERVICES))
 
 # Tier -> k6 scenario, per service. A service with no entry for a tier runs
 # the scenario named after the tier.
-TIER_SCENARIO_document-parser_smoke  := smoke
-TIER_SCENARIO_document-parser_load   := load
-TIER_SCENARIO_document-parser_stress := stress
-TIER_SCENARIO_document-parser_soak   := soak
+TIER_SCENARIO_document-parser_smoke    := smoke
+TIER_SCENARIO_document-parser_contract := negative
+TIER_SCENARIO_document-parser_load     := load
+TIER_SCENARIO_document-parser_stress   := stress
+TIER_SCENARIO_document-parser_soak     := soak
 
-TIER_SCENARIO_payment-gateway_smoke  := smoke
-TIER_SCENARIO_payment-gateway_load   := spike
-TIER_SCENARIO_payment-gateway_stress := stress
-TIER_SCENARIO_payment-gateway_soak   := soak
+TIER_SCENARIO_payment-gateway_smoke    := smoke
+TIER_SCENARIO_payment-gateway_contract := negative
+TIER_SCENARIO_payment-gateway_load     := spike
+TIER_SCENARIO_payment-gateway_stress   := stress
+TIER_SCENARIO_payment-gateway_soak     := soak
 
 # The web names its scripts after what they exercise, not after the profile
 # they run with, so it needs both.
-TIER_SCRIPT_web_smoke  := auth.k6.js
-TIER_SCRIPT_web_load   := chat-api.k6.js
-TIER_SCRIPT_web_stress := chat-api.k6.js
-TIER_SCRIPT_web_soak   := chat-api.k6.js
+TIER_SCRIPT_web_smoke    := auth.k6.js
+TIER_SCRIPT_web_contract := chat-api-invalid.k6.js
+TIER_SCRIPT_web_load     := chat-api.k6.js
+TIER_SCRIPT_web_stress   := chat-api.k6.js
+TIER_SCRIPT_web_soak     := chat-api.k6.js
 
-TIER_SCENARIO_web_smoke  := smoke
-TIER_SCENARIO_web_load   := load
-TIER_SCENARIO_web_stress := stress
-TIER_SCENARIO_web_soak   := load
+TIER_SCENARIO_web_smoke    := smoke
+TIER_SCENARIO_web_contract := smoke
+TIER_SCENARIO_web_load     := load
+TIER_SCENARIO_web_stress   := stress
+TIER_SCENARIO_web_soak     := load
 
 tier_scenario = $(or $(TIER_SCENARIO_$(1)_$(TIER)),$(TIER))
 tier_script = $(or $(TIER_SCRIPT_$(1)_$(TIER)),$(call tier_scenario,$(1)))

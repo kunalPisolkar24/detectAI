@@ -35,13 +35,19 @@ encode their own shape, so a tier mostly selects which script runs.
 |---|---|---|---|
 | `preflight` | no load, 3s timeout | ~5s | is the target reachable at all |
 | `smoke` | 2 VUs x 2 iterations | ~10s | is it correct |
+| `contract` | the service's own negative profile | ~10s - 1m | does it still refuse what it must refuse |
 | `load` | the service's sustained profile | ~20s - 3m | does it hold under expected traffic |
 | `stress` | beyond expected capacity | ~1-10m | where does it break |
 | `soak` | long, low rate | ~30m | leaks and drift |
 
-`preflight` and `smoke` are the ones to reach for first. A tier is a default,
-not a cage: `VUS`, `DURATION`, `RPS`, `STAGES`, `MAX_VUS` and `ITERATIONS`
-override it, so an intermediate shape never needs a new tier.
+`preflight` and `smoke` are the ones to reach for first. `contract` is the
+cheapest check there is — a rejection never reaches the backend — and a
+regression there silently lets bad input through, so it is worth running on
+every deploy even though it is not a load profile.
+
+A tier is a default, not a cage: `VUS`, `DURATION`, `RPS`, `STAGES`, `MAX_VUS`
+and `ITERATIONS` override it, so an intermediate shape never needs a new tier.
+`SCRIPT=` overrides the tier's script where the ladder does not cover it.
 
 ```bash
 make -C e2e load TIER=load TARGET=prod VUS=25 RPS=50
