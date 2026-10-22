@@ -5,7 +5,19 @@ COMPOSE_LOAD_OBS := docker compose -f infra/compose.load.yml -f ../../infra/dock
 WITH_OBSERVABILITY ?= 0
 SCENARIO ?= load
 
-.PHONY: build run test test-coverage test-integration lint deps load-test load-test-smoke load-test-load load-test-stress load-test-soak load-test-negative load-down parser-build parser-up parser-down parser-down-v parser-logs parser-ps parser-config
+# Remote mode points the load test at an already-running deployment instead of
+# starting the rig. Endpoints and credentials come from TARGET_ENV_FILE (see
+# e2e/targets/.env.example). Nothing is provisioned in remote mode: the k6
+# container runs with --no-deps, so the parser stays down and only the runner
+# is started. The target's own stack exports its telemetry, so
+# WITH_OBSERVABILITY does not apply here.
+REMOTE ?= 0
+TARGET_ENV_FILE ?=
+# The rig's compose project defaults to "infra"; the remote run gets its own
+# project so it can never touch a running local rig.
+LOAD_REMOTE_PROJECT := e2e-document-parser
+
+.PHONY: build run test test-coverage test-integration lint deps load-test load-test-smoke load-test-load load-test-stress load-test-soak load-test-negative load-down load-down-remote parser-build parser-up parser-down parser-down-v parser-logs parser-ps parser-config
 
 build:
 	docker build -t detectai-document-parser .
@@ -37,6 +49,8 @@ deps:
 # Opt-in observability: make load-test WITH_OBSERVABILITY=1 SCENARIO=load
 # (adds otel-collector-loadtest -> New Relic EU as deployment.environment=loadtest;
 # needs NEW_RELIC_LICENSE_KEY in shell; ENV_TYPE stays dev).
+# Remote mode: make load-test REMOTE=1 TARGET_ENV_FILE=../../e2e/targets/.env.prod
+# (runs the k6 container only, against a deployment that is already running).
 # Note: the load stack intentionally runs WORKERS=1 (override with WORKERS=4)
 # so k6 and the service fit on one machine. Do not read these numbers as
 # production capacity without accounting for that.
@@ -44,13 +58,26 @@ load-test:
 	@if [ "$(WITH_OBSERVABILITY)" != "0" ] && [ "$(WITH_OBSERVABILITY)" != "1" ]; then \
 		echo "Invalid WITH_OBSERVABILITY '$(WITH_OBSERVABILITY)'. Use 0 or 1."; exit 1; \
 	fi
-	@if [ "$(WITH_OBSERVABILITY)" = "1" ]; then \
-		if [ -z "$${NEW_RELIC_LICENSE_KEY:-}" ]; then \
-			echo "WITH_OBSERVABILITY=1 but NEW_RELIC_LICENSE_KEY is empty — collector will retry/drop, apps keep running."; \
+	@if [ "$(REMOTE)" = "1" ]; then \
+		if [ -z "$(TARGET_ENV_FILE)" ]; then \
+			echo "REMOTE=1 requires TARGET_ENV_FILE (see e2e/targets/.env.example)."; exit 1; \
 		fi; \
-		$(MAKE) --no-print-directory _load-test COMPOSE_TARGET=obs; \
-	else \
+		if [ ! -f "$(TARGET_ENV_FILE)" ]; then \
+			echo "TARGET_ENV_FILE not found: $(TARGET_ENV_FILE)"; exit 1; \
+		fi; \
+		if [ "$(WITH_OBSERVABILITY)" = "1" ]; then \
+			echo "WITH_OBSERVABILITY is ignored in remote mode: the target's own stack exports its telemetry."; \
+		fi; \
 		$(MAKE) --no-print-directory _load-test COMPOSE_TARGET=base; \
+	else \
+		if [ "$(WITH_OBSERVABILITY)" = "1" ]; then \
+			if [ -z "$${NEW_RELIC_LICENSE_KEY:-}" ]; then \
+				echo "WITH_OBSERVABILITY=1 but NEW_RELIC_LICENSE_KEY is empty — collector will retry/drop, apps keep running."; \
+			fi; \
+			$(MAKE) --no-print-directory _load-test COMPOSE_TARGET=obs; \
+		else \
+			$(MAKE) --no-print-directory _load-test COMPOSE_TARGET=base; \
+		fi; \
 	fi
 
 _load-test:
@@ -67,6 +94,9 @@ _load-test:
 		export DOCPARSER_LOAD_SOAK_VUS="$(VUS)"; \
 		export DOCPARSER_LOAD_NEGATIVE_VUS="$(VUS)"; \
 		export DOCPARSER_LOAD_STRESS_PREALLOCATED_VUS="$(VUS)"; \
+	fi; \
+	if [ -n "$(ITERATIONS)" ]; then \
+		export DOCPARSER_LOAD_SMOKE_ITERATIONS="$(ITERATIONS)"; \
 	fi; \
 	if [ -n "$(DURATION)" ]; then \
 		export DURATION="$(DURATION)"; \
@@ -88,7 +118,9 @@ _load-test:
 	fi; \
 	if [ -n "$(MAX_VUS)" ]; then export DOCPARSER_LOAD_STRESS_MAX_VUS="$(MAX_VUS)"; fi; \
 	echo "Load test SCENARIO=$$SCENARIO_VAL K6_SCRIPT=$$K6_SCRIPT MODE=$${MODE_VAL:-vus}"; \
-	if [ "$(COMPOSE_TARGET)" = "obs" ]; then \
+	if [ "$(REMOTE)" = "1" ]; then \
+		$(COMPOSE_LOAD) --env-file $(TARGET_ENV_FILE) -p $(LOAD_REMOTE_PROJECT) run --rm --no-deps k6 run /load/$$K6_SCRIPT; \
+	elif [ "$(COMPOSE_TARGET)" = "obs" ]; then \
 		$(COMPOSE_LOAD_OBS) up --abort-on-container-exit --exit-code-from k6; \
 	else \
 		$(COMPOSE_LOAD) up --abort-on-container-exit --exit-code-from k6; \
@@ -111,6 +143,12 @@ load-test-negative:
 
 load-down:
 	$(COMPOSE_LOAD_OBS) down -v --remove-orphans
+
+# Remove the remote compose project: a `run --rm --no-deps` leaves its network
+# behind. Kept apart from load-down so tearing down a remote run never touches
+# the local rig's volumes.
+load-down-remote:
+	$(COMPOSE_LOAD) -p $(LOAD_REMOTE_PROJECT) down --remove-orphans
 
 # Document parser via infra compose files
 parser-build:
