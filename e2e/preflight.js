@@ -10,10 +10,27 @@
 
 import http from "k6/http";
 import { check } from "k6";
+import encoding from "k6/encoding";
 
 const TARGETS = [
   { name: "document-parser", url: __ENV.API_URL, path: "/api/v1/health" },
+  // /readyz also reports the broker connection: it answers 503 with
+  // {"rabbitmq":"disconnected"} when the gateway cannot reach RabbitMQ.
+  { name: "payment-gateway", url: __ENV.GATEWAY_BASE_URL, path: "/readyz" },
 ];
+
+// The broker's management API is part of the delivery proof only when the
+// queue depth is compared. With "off" the proof comes from the gateway's own
+// publish counters, and the management API may not be exposed at all.
+if ((__ENV.GATEWAY_LOAD_QUEUE_PROOF || "exact").toLowerCase() !== "off") {
+  TARGETS.push({
+    name: "payment-gateway rabbitmq",
+    url: __ENV.RABBITMQ_MGMT_URL,
+    path: `/api/queues/%2F/${__ENV.RABBITMQ_QUEUE || "payment_events"}`,
+    user: __ENV.RABBITMQ_USER,
+    pass: __ENV.RABBITMQ_PASS,
+  });
+}
 
 export const options = {
   vus: 1,
@@ -31,7 +48,14 @@ export default function () {
     }
 
     const url = `${target.url.replace(/\/+$/, "")}${target.path}`;
-    const res = http.get(url, { timeout: "3s" });
+    const params = { timeout: "3s" };
+    if (target.user) {
+      params.headers = {
+        Authorization: `Basic ${encoding.b64encode(`${target.user}:${target.pass || ""}`)}`,
+      };
+    }
+
+    const res = http.get(url, params);
     const reachable = check(res, { [`${target.name} reachable`]: (r) => r.status === 200 });
     console.log(`${reachable ? "OK  " : "FAIL"} ${target.name} ${url} -> ${res.status}`);
   }

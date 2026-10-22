@@ -93,6 +93,12 @@ Observability in remote mode is the target's business: a deployed stack
 already exports its own traces, metrics and logs. `WITH_OBSERVABILITY` only
 applies to the local rigs, where the collector is started for the run.
 
+Some services need more than an endpoint to be measured correctly. The
+payment gateway publishes to RabbitMQ, and how the delivery is proved depends
+on the broker: a queue nothing consumes can be counted directly, while a
+queue with a live consumer has to be proved from the gateway's own publish
+counters. `GATEWAY_LOAD_QUEUE_PROOF` picks the mode per target.
+
 ## Wiring up another service
 
 1. Generalize the target value in the service's `infra/compose.load.yml`:

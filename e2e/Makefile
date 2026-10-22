@@ -8,8 +8,11 @@
 # the k6 container is started.
 
 E2E_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
-SERVICES_DIR := $(E2E_DIR)/../services
 TARGETS_DIR := $(E2E_DIR)/targets
+
+# Where each service lives. The gateway is nested under services/payments.
+SERVICE_DIR_document-parser := $(E2E_DIR)/../services/document-parser
+SERVICE_DIR_payment-gateway := $(E2E_DIR)/../services/payments/gateway
 
 COMPOSE_E2E := docker compose -f $(E2E_DIR)/compose.yml -p e2e
 
@@ -17,10 +20,26 @@ TIERS := preflight smoke load stress soak
 TIER ?= smoke
 TARGET ?= local
 SERVICE ?=
+# Overrides the tier's scenario for a service, for the cases the tier ladder
+# does not cover (the gateway's internal endpoint, for instance).
+SCENARIO ?=
 TARGET_FILE ?= $(TARGETS_DIR)/.env.$(TARGET)
 
+# The target file's settings, exported so a service started against this
+# target gets the same secrets the test signs with, and so the compose
+# interpolation picks up the same endpoints the test uses.
+#
+# The pairs are set as make variables first and exported by name: `export
+# A=1` makes GNU Make hand the value over as "1=", which the broker and the
+# compose substitution then read as a different credential.
+TARGET_ENV := $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=\(.*\)$$/\1=\2/p' $(TARGET_FILE) 2>/dev/null)
+ifneq ($(strip $(TARGET_ENV)),)
+$(foreach pair,$(TARGET_ENV),$(eval $(pair)))
+export $(foreach pair,$(TARGET_ENV),$(firstword $(subst =, ,$(pair))))
+endif
+
 # Services wired into the harness so far.
-WIRED_SERVICES := document-parser
+WIRED_SERVICES := document-parser payment-gateway
 
 # The services a run covers. SERVICE narrows it to one.
 RUN_SERVICES := $(if $(SERVICE),$(SERVICE),$(WIRED_SERVICES))
@@ -31,6 +50,11 @@ TIER_SCENARIO_document-parser_smoke  := smoke
 TIER_SCENARIO_document-parser_load   := load
 TIER_SCENARIO_document-parser_stress := stress
 TIER_SCENARIO_document-parser_soak   := soak
+
+TIER_SCENARIO_payment-gateway_smoke  := smoke
+TIER_SCENARIO_payment-gateway_load   := spike
+TIER_SCENARIO_payment-gateway_stress := stress
+TIER_SCENARIO_payment-gateway_soak   := soak
 
 tier_scenario = $(or $(TIER_SCENARIO_$(1)_$(TIER)),$(TIER))
 
@@ -44,6 +68,8 @@ ITERATIONS ?= $(TIER_ITERATIONS_$(TIER))
 # The per-service make target that starts/stops that service on its own.
 SERVICE_UP_document-parser   := parser-up
 SERVICE_DOWN_document-parser := parser-down
+SERVICE_UP_payment-gateway   := gateway-up
+SERVICE_DOWN_payment-gateway := gateway-down
 
 .PHONY: help load $(addprefix load-,$(WIRED_SERVICES)) preflight target-init up down
 
@@ -100,23 +126,32 @@ load:
 
 load-document-parser:
 	@echo ""
-	@echo "=== document-parser (tier=$(TIER), scenario=$(call tier_scenario,document-parser)) ==="
-	@$(MAKE) --no-print-directory -C $(SERVICES_DIR)/document-parser load-test \
+	@echo "=== document-parser (tier=$(TIER), scenario=$(or $(SCENARIO),$(call tier_scenario,document-parser))) ==="
+	@$(MAKE) --no-print-directory -C $(SERVICE_DIR_document-parser) load-test \
 		REMOTE=1 \
 		TARGET_ENV_FILE=$(TARGET_FILE) \
-		SCENARIO=$(call tier_scenario,document-parser) \
+		SCENARIO=$(or $(SCENARIO),$(call tier_scenario,document-parser)) \
+		VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) STAGES=$(STAGES) MAX_VUS=$(MAX_VUS) ITERATIONS=$(ITERATIONS)
+
+load-payment-gateway:
+	@echo ""
+	@echo "=== payment-gateway (tier=$(TIER), scenario=$(or $(SCENARIO),$(call tier_scenario,payment-gateway))) ==="
+	@$(MAKE) --no-print-directory -C $(SERVICE_DIR_payment-gateway) load-test \
+		REMOTE=1 \
+		TARGET_ENV_FILE=$(TARGET_FILE) \
+		SCENARIO=$(or $(SCENARIO),$(call tier_scenario,payment-gateway)) \
 		VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) STAGES=$(STAGES) MAX_VUS=$(MAX_VUS) ITERATIONS=$(ITERATIONS)
 
 # Start a service on its own compose file, the way it normally runs.
 up:
 	@test -n "$(SERVICE)" || { echo "SERVICE is required (e.g. SERVICE=document-parser)"; exit 1; }
-	$(foreach svc,$(SERVICE),$(MAKE) --no-print-directory -C $(SERVICES_DIR)/$(svc) $(SERVICE_UP_$(svc));)
+	$(foreach svc,$(SERVICE),$(MAKE) --no-print-directory -C $(SERVICE_DIR_$(svc)) $(SERVICE_UP_$(svc));)
 
 # Stop a service and remove the compose projects a remote load run leaves
 # behind: the per-service one and the shared e2e runner. The local load rig is
 # left alone.
 down:
 	@test -n "$(SERVICE)" || { echo "SERVICE is required (e.g. SERVICE=document-parser)"; exit 1; }
-	$(foreach svc,$(SERVICE),$(MAKE) --no-print-directory -C $(SERVICES_DIR)/$(svc) $(SERVICE_DOWN_$(svc));)
-	$(foreach svc,$(SERVICE),$(MAKE) --no-print-directory -C $(SERVICES_DIR)/$(svc) load-down-remote;)
+	$(foreach svc,$(SERVICE),$(MAKE) --no-print-directory -C $(SERVICE_DIR_$(svc)) $(SERVICE_DOWN_$(svc));)
+	$(foreach svc,$(SERVICE),$(MAKE) --no-print-directory -C $(SERVICE_DIR_$(svc)) load-down-remote;)
 	$(COMPOSE_E2E) down --remove-orphans

@@ -148,7 +148,7 @@ load-down:
 # behind. Kept apart from load-down so tearing down a remote run never touches
 # the local rig's volumes.
 load-down-remote:
-	$(COMPOSE_LOAD) -p $(LOAD_REMOTE_PROJECT) down --remove-orphans
+	$(COMPOSE_LOAD) -p $(LOAD_REMOTE_PROJECT) down -v --remove-orphans
 
 # Document parser via infra compose files
 parser-build:
