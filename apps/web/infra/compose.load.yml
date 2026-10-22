@@ -120,6 +120,9 @@ services:
       # backend, so its own defaults are milliseconds.
       - WEB_ANALYZE_P95_MS=${WEB_ANALYZE_P95_MS:-}
       - WEB_ANALYZE_P99_MS=${WEB_ANALYZE_P99_MS:-}
+      # The chat the requests are addressed to. A real chats service needs
+      # one that exists and belongs to the user the request carries.
+      - WEB_CHAT_ID=${WEB_CHAT_ID:-}
     depends_on:
       frontend:
         condition: service_started

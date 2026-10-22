@@ -118,6 +118,12 @@ planted once: the free account carries no subscription, the premium one an
 ACTIVE one. The load rig seeds them; a deployed target needs them created by
 hand. The target file carries the credentials.
 
+The web's analyze path also needs a chat that exists. The rig's mock backend
+accepts any chat id, but a real chats service answers `NOT_FOUND` for one
+that does not exist, and the analyze route turns that into a 500.
+`WEB_CHAT_ID` points the requests at a chat that belongs to the user the
+request carries.
+
 ## Wiring up another service
 
 1. Generalize the target value in the service's `infra/compose.load.yml`:

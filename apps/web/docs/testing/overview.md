@@ -419,6 +419,12 @@ Two things differ from the rig, and both are the target's business:
   them planted once — the free account with no subscription, the premium one
   with an ACTIVE one. The target file carries the credentials.
 
+The analyze path needs one more thing the rig fakes: a **chat that exists**.
+The rig's mock backend accepts any chat id, but a real chats service answers
+`NOT_FOUND` for one that does not exist, and the analyze route turns that
+into a 500. `WEB_CHAT_ID` points the requests at a chat that exists and
+belongs to the user the request carries.
+
 `chat-api-rate-limit.k6.js` is refused in remote mode: it needs the abuse
 limiter's own setting on the frontend, which only the rig controls.
 

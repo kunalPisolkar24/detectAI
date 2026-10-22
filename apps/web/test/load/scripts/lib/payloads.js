@@ -7,6 +7,11 @@
 
 const MAX_LIVE_ANALYSIS_CHARS = 50000
 
+// The chat the requests are addressed to. The rig's mock backend accepts any
+// id, but a real chats service needs one that exists and belongs to the user
+// the request carries, or the analyze route answers 500 with NOT_FOUND.
+const CHAT_ID = __ENV.WEB_CHAT_ID || 'mock-chat-id'
+
 const SCHEMA_ERROR = 'Invalid request payload'
 const JSON_ERROR = 'Invalid JSON body'
 const OVERSIZE_ERROR = 'Text exceeds maximum length'
@@ -14,7 +19,7 @@ const UNAUTHORIZED_ERROR = 'Unauthorized'
 
 export function validPayload(overrides = {}) {
   return {
-    chatId: 'mock-chat-id',
+    chatId: CHAT_ID,
     content: 'This is a sample text to be analyzed by the AI service during a load test.',
     model: 'spark',
     ...overrides,
@@ -106,13 +111,13 @@ export const BOUNDARY_CASES = [
     name: 'content_at_max',
     group: 'boundary',
     expectedStatus: 200,
-    payload: { chatId: 'c', content: 'x'.repeat(MAX_LIVE_ANALYSIS_CHARS), model: 'spark' },
+    payload: { chatId: CHAT_ID, content: 'x'.repeat(MAX_LIVE_ANALYSIS_CHARS), model: 'spark' },
   },
   {
     name: 'unknown_extra_field',
     group: 'boundary',
     expectedStatus: 200,
-    payload: { chatId: 'c', content: 'text', model: 'spark', unexpectedField: 'ignored' },
+    payload: { chatId: CHAT_ID, content: 'text', model: 'spark', unexpectedField: 'ignored' },
   },
 ]
 
