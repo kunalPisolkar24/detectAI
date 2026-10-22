@@ -87,8 +87,17 @@ services:
   k6:
     image: grafana/k6:latest
     command: run /scripts/scenarios/${SCENARIO:-smoke}.js
+    # Lets the k6 container reach a service published on the Docker host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      CHAT_SERVICE_ADDR: chat-service:50051
+      CHAT_SERVICE_ADDR: ${CHAT_SERVICE_ADDR:-chat-service:50051}
+      # A remote target usually speaks TLS; the rig's own service does not.
+      CHAT_SERVICE_PLAINTEXT: ${CHAT_SERVICE_PLAINTEXT:-true}
+      CHAT_SERVICE_TIMEOUT: ${CHAT_SERVICE_TIMEOUT:-5s}
+      RPC_TIMEOUT_MS: ${RPC_TIMEOUT_MS:-2000}
+      E2E_TIMEOUT_MS: ${E2E_TIMEOUT_MS:-5000}
+      E2E_POLLING_INTERVAL_MS: ${E2E_POLLING_INTERVAL_MS:-200}
       PROTO_DIR: /proto
       # single-knob overrides (generic wins, per-scenario vars kept as fallback in config.js)
       VUS: ${VUS:-}

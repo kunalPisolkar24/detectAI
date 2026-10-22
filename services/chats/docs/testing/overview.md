@@ -223,6 +223,34 @@ make load-down
 | `load` | 10 | 2 minutes | Realistic traffic |
 | `stress` | 50 | 5 minutes | Find breaking point |
 
+### Running Against an Existing Deployment
+
+The rig above starts its own Mongo, Redis, chat service and worker. To measure
+a deployment that is already running -- a local stack, the Floci stack, prod --
+point the same scripts at it instead. Nothing is provisioned: the k6 container
+runs with `--no-deps`, so the chat service and its datastores are never
+started by the load run.
+
+```bash
+# The target file carries the endpoint and the timeouts.
+# See e2e/targets/.env.example for the template.
+make load-test REMOTE=1 TARGET_ENV_FILE=../../e2e/targets/.env.prod SCENARIO=load
+```
+
+The target has to run the chat worker as well as the API: the end-to-end
+check saves a message and reads it back, and the worker is what persists it.
+
+The cross-app harness in `e2e/` drives this and the other services together:
+
+```bash
+make -C e2e load TIER=preflight TARGET=prod   # is everything reachable
+make -C e2e load TIER=smoke TARGET=prod        # is everything correct
+make -C e2e load TIER=contract TARGET=prod     # does everything still refuse bad input
+make -C e2e load TIER=load TARGET=prod         # does everything hold
+```
+
+See [e2e/README.md](../../../../e2e/README.md) for the tiers and the target files.
+
 ## Common Testing Issues
 
 ### "Docker not running"
