@@ -30,6 +30,7 @@ override.tf.json
 terraform.rc
 infra/terraform/backend.prod.hcl
 infra/observability/backend.prod.hcl
+services/document-parser/infra/terraform/backend.prod.hcl
 
 # Local working docs (not for review)
 services/document-parser/diagrams/
