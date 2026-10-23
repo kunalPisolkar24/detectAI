@@ -1,5 +1,6 @@
 import logging
 import math
+from typing import Literal
 
 from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,6 +14,10 @@ class Settings(BaseSettings):
     # default keeps missing and invalid keys on the same min_length failure
     # path instead of a "field required" constructor error.
     api_key: str = Field(default="", min_length=16)
+
+    # Deployment mode (repo-wide ENV_TYPE convention, apps/web): unset boots
+    # as dev; an invalid value falls back to dev like the numeric bounds.
+    env_type: Literal["dev", "prod"] = Field(default="dev")
 
     # Field names map to env names case-insensitively (API_KEY,
     # MAX_PDF_PAGES, ...).
@@ -99,3 +104,20 @@ class Settings(BaseSettings):
             )
             return default
         return parsed
+
+    @field_validator("env_type", mode="before")
+    @classmethod
+    def _fall_back_to_safe_env_type(cls, value: object, info: ValidationInfo) -> str:
+        field_name = info.field_name
+        assert field_name is not None
+        if isinstance(value, str):
+            raw = value.strip().lower()
+            if raw in ("dev", "prod"):
+                return raw
+        logger.warning(
+            "%s must be dev or prod (%r); using the safe default %s",
+            field_name.upper(),
+            value,
+            "dev",
+        )
+        return "dev"
