@@ -25,4 +25,4 @@ clean:
 	find app -name "*.py[cod]" -delete
 
 run:
-	poetry run uvicorn app.main:app --reload --port 8000
+	poetry run uvicorn app.main:app --reload --port 8000 --timeout-graceful-shutdown 12
