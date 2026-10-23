@@ -48,7 +48,7 @@ Detailed designs: [spec index](README.md) · [HTTP contract](http.md) · [observ
 | Processing budget | 10 s | Timeout response; document abandoned |
 | PDF pages | 1,000 | Reject with a "too large" error before parsing |
 | DOCX uncompressed size | 100 MiB | Reject with a "too large" error (zip-bomb guard) |
-| Output text cap | TBD (see open decisions) | TBD |
+| Output text cap | 1,000,000 chars | Not an error — truncate once after cleaning; the response flags it with `truncated: true` |
 
 All bounds are configurable at boot via environment variables with these defaults. Bounds fail closed: an unset or invalid value falls back to the safe default.
 
@@ -68,7 +68,7 @@ All bounds are configurable at boot via environment variables with these default
 
 - [x] Exact HTTP contract: endpoints, paths, request/response JSON shape, status codes — resolved in [http.md](http.md)
 - [x] Metrics list — resolved in [observability.md](observability.md)
-- [ ] Output text cap: keep (protects response size; returns truncated flag) or drop (caller gets full text, protected only by upload/timeout limits)
+- [x] Output text cap: kept — 1,000,000 chars cap, truncation is not an error (`truncated: true`), enforced uniformly for all types; rationale in [http.md](http.md)
 - [ ] Text fidelity: plain text returned raw, or cleaned/normalized text
 - [ ] Load testing: keep the existing k6 rig or defer
 
