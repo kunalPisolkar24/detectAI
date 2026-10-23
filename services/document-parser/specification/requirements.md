@@ -4,6 +4,8 @@ A stateless service that receives a document and returns its extracted text.
 
 **Stack:** Python 3.11, FastAPI.
 
+Detailed designs: [spec index](README.md) · [HTTP contract](http.md) · [observability](observability.md)
+
 ## Functional requirements
 
 | ID | Requirement |
@@ -64,10 +66,10 @@ All bounds are configurable at boot via environment variables with these default
 
 ## Open decisions (to be cleared before build starts)
 
-- [ ] Exact HTTP contract: endpoints, paths, request/response JSON shape, status codes
+- [x] Exact HTTP contract: endpoints, paths, request/response JSON shape, status codes — resolved in [http.md](http.md)
+- [x] Metrics list — resolved in [observability.md](observability.md)
 - [ ] Output text cap: keep (protects response size; returns truncated flag) or drop (caller gets full text, protected only by upload/timeout limits)
 - [ ] Text fidelity: plain text returned raw, or cleaned/normalized text
-- [ ] Metrics list
 - [ ] Load testing: keep the existing k6 rig or defer
 
 Resolved: authentication is API-key based, always required, mirroring the inference service (see Authentication scheme above).
