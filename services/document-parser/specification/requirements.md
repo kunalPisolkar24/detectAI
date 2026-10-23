@@ -69,7 +69,7 @@ All bounds are configurable at boot via environment variables with these default
 - [x] Exact HTTP contract: endpoints, paths, request/response JSON shape, status codes — resolved in [http.md](http.md)
 - [x] Metrics list — resolved in [observability.md](observability.md)
 - [x] Output text cap: kept — 1,000,000 chars cap, truncation is not an error (`truncated: true`), enforced uniformly for all types; rationale in [http.md](http.md)
-- [ ] Text fidelity: plain text returned raw, or cleaned/normalized text
-- [ ] Load testing: keep the existing k6 rig or defer
+- [x] Text fidelity: cleaned/normalized text with format-aware header/footer suppression — contract in [cleaning.md](cleaning.md)
+- [x] Load testing: k6 rig kept, moved `load/` → `tests/load/` unchanged (same scenarios and assertions against the same endpoints)
 
 Resolved: authentication is API-key based, always required, mirroring the inference service (see Authentication scheme above).
