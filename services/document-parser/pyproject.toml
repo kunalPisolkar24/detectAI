@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "detectai-document-parser"
+version = "0.1.0"
+description = "Document parser service for DetectAI"
+authors = ["Your Name <you@example.com>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.14"
+fastapi = "0.161.1"
+uvicorn = "0.54.0"
+pydantic-settings = "^2.16.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "ruff (>=0.17.2,<0.18.0)"
+]
