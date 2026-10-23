@@ -14,6 +14,7 @@ Plane selection (single flick, from EMULATOR_ENDPOINT in .env):
 from __future__ import annotations
 
 import argparse
+import io
 import os
 import re
 import shutil
@@ -132,7 +133,8 @@ def run_terraform(args: list[str], tf_vars: dict[str, str], env_overlay: dict[st
 
 
 def main() -> int:
-    sys.stdout.reconfigure(line_buffering=True)
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(line_buffering=True)
     parser = argparse.ArgumentParser(
         prog="secrets.py",
         description="Validate the service .env and drive the secrets terraform stack.",
