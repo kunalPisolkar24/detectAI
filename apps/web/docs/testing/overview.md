@@ -392,6 +392,52 @@ migrations, seeds two accounts (one free, one premium) and starts the app
 against it. Every run tears the rig down again, so the counters one script
 drives never leak into the next.
 
+### Running Load Tests Against an Existing Deployment
+
+The rig above is self-contained. To measure a deployment that is already
+running — a local stack, the Floci stack, prod — point the same scripts at it
+instead. Nothing is provisioned: the k6 container runs with `--no-deps`, so
+the frontend and its datastores are never started by the load run.
+
+```bash
+# The target file carries the endpoint and the credentials.
+# See e2e/targets/.env.example for the template.
+make load-test REMOTE=1 TARGET_ENV_FILE=../../e2e/targets/.env.prod SCRIPT=chat-api.k6.js
+```
+
+Observability is the target's business here: a deployed stack already exports
+its own telemetry, so `WITH_OBSERVABILITY` is ignored in remote mode.
+
+Two things differ from the rig, and both are the target's business:
+
+- **The backend is real.** The rig answers from a mock server, so its latency
+  budget is milliseconds. A real deployment waits on real inference and takes
+  seconds, so `WEB_ANALYZE_P95_MS` and `WEB_ANALYZE_P99_MS` carry the budget
+  the target is held to. The scripts that never reach a backend — landing, the
+  auth surface, the rejection matrix — keep the same budget in both places.
+- **The accounts exist already.** The rig seeds them; a deployed target needs
+  them planted once — the free account with no subscription, the premium one
+  with an ACTIVE one. The target file carries the credentials.
+
+The analyze path needs one more thing the rig fakes: a **chat that exists**.
+The rig's mock backend accepts any chat id, but a real chats service answers
+`NOT_FOUND` for one that does not exist, and the analyze route turns that
+into a 500. `WEB_CHAT_ID` points the requests at a chat that exists and
+belongs to the user the request carries.
+
+`chat-api-rate-limit.k6.js` is refused in remote mode: it needs the abuse
+limiter's own setting on the frontend, which only the rig controls.
+
+The cross-app harness in `e2e/` drives this and the other services together:
+
+```bash
+make -C e2e load TIER=preflight TARGET=prod   # is everything reachable
+make -C e2e load TIER=smoke TARGET=prod        # is everything correct
+make -C e2e load TIER=load TARGET=prod         # does everything hold
+```
+
+See [e2e/README.md](../../../../e2e/README.md) for the tiers and the target files.
+
 ### Load Test Scenarios
 
 `SCENARIO` picks a traffic shape. `VUS` and `DURATION` override it, so a

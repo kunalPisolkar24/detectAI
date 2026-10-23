@@ -16,7 +16,7 @@ export const options = {
 
 const WEBHOOK_SECRET = __ENV.PADDLE_WEBHOOK_SECRET || 'test_secret';
 const INTERNAL_KEY = __ENV.INTERNAL_API_KEY || 'test_internal_key';
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const BASE_URL = __ENV.GATEWAY_BASE_URL || __ENV.BASE_URL || 'http://localhost:8080';
 
 let caseIndex = 0;
 

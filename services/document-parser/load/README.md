@@ -32,6 +32,26 @@ make load-down                          # down -v
 
 Aliases: `make load-test-smoke`, `load-test-load`, `load-test-stress`, `load-test-soak`, `load-test-negative`.
 
+## Running Against an Existing Deployment
+
+The rig above is self-contained: it starts a throwaway parser and its own k6. To measure a deployment that is already running -- a local stack, the Floci stack, prod -- run the same scripts against it instead. Nothing is provisioned: the k6 container runs with `--no-deps`, so the parser under test is never started by the load run.
+
+```bash
+# The target file carries the endpoint and any credentials.
+# See e2e/targets/.env.example for the template.
+make load-test REMOTE=1 TARGET_ENV_FILE=../../e2e/targets/.env.prod SCENARIO=load
+```
+
+`REMOTE=1` switches the run to `docker compose run --rm --no-deps k6`, in its own compose project (`e2e-document-parser`) so it never disturbs a running local rig. The scenario knobs (`VUS`, `DURATION`, `RPS`, `STAGES`, `MAX_VUS`, `ITERATIONS`) work exactly as they do in rig mode.
+
+Observability is the target's business here: a deployed stack already exports its own traces, metrics and logs, so `WITH_OBSERVABILITY` is ignored in remote mode and says so.
+
+Use the cross-app harness in `e2e/` to drive this and the other services together:
+
+```bash
+make -C e2e load TIER=smoke TARGET=prod
+```
+
 ## Observability (opt-in)
 
 ```bash

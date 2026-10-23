@@ -3,6 +3,8 @@
 # Datastores come from the shared atoms; their values are fixed inline in
 # the makefile (LOAD_ENV) — reproducible, no env file. Keep the hardcoded
 # frontend URLs below in sync with LOAD_ENV (db name, redis password).
+name: web-load
+
 include:
   - path: ../../../infra/docker/postgres-users/standalone.yml
   - path: ../../../infra/docker/redis-users/standalone.yml
@@ -102,9 +104,25 @@ services:
     volumes:
       - ../test/load/scripts:/scripts
       - ../test/load/results:/results
+    # Lets the k6 container reach a service published on the Docker host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      - BASE_URL=http://frontend:3000
-      - INTERNAL_KEY=load-test-key
+      - BASE_URL=${BASE_URL:-http://frontend:3000}
+      # The name the e2e harness uses for the web endpoint. It wins over
+      # BASE_URL in the scripts.
+      - WEB_BASE_URL=${WEB_BASE_URL:-}
+      - INTERNAL_KEY=${INTERNAL_KEY:-load-test-key}
+      # The key the deployed frontend checks the internal key against. It wins
+      # over INTERNAL_KEY when both are set.
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-}
+      # The analyze budget for the target. The rig answers from a mock
+      # backend, so its own defaults are milliseconds.
+      - WEB_ANALYZE_P95_MS=${WEB_ANALYZE_P95_MS:-}
+      - WEB_ANALYZE_P99_MS=${WEB_ANALYZE_P99_MS:-}
+      # The chat the requests are addressed to. A real chats service needs
+      # one that exists and belongs to the user the request carries.
+      - WEB_CHAT_ID=${WEB_CHAT_ID:-}
     depends_on:
       frontend:
         condition: service_started

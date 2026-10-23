@@ -3,11 +3,14 @@
 // Every knob comes from the environment so the same script runs unchanged in
 // the Docker rig (infra/compose.load.yml) and on a developer machine.
 
-export const BASE_URL = (__ENV.BASE_URL || 'http://localhost:3001').replace(/\/+$/, '')
+// WEB_BASE_URL is the name the e2e harness uses; BASE_URL is the older name
+// and still wins when both are set.
+export const BASE_URL = (__ENV.WEB_BASE_URL || __ENV.BASE_URL || 'http://localhost:3001').replace(/\/+$/, '')
 
-// The rig's INTERNAL_API_KEY. A request carrying it takes the load-test path
+// The key the frontend checks the internal key against. INTERNAL_KEY is the
+// older name the rig uses. A request carrying it takes the load-test path
 // in the analyze route: a fixed user, premium, no abuse limiter.
-export const INTERNAL_KEY = __ENV.INTERNAL_KEY || 'load-test-key'
+export const INTERNAL_KEY = __ENV.INTERNAL_API_KEY || __ENV.INTERNAL_KEY || 'load-test-key'
 
 // Seeded accounts (see test/load/seed/).
 const LOAD_PASSWORD = __ENV.LOAD_USER_PASSWORD || 'LoadTest123!'
@@ -40,12 +43,21 @@ const SCENARIOS = {
 function loadProfile() {
   const vus = Number.parseInt(__ENV.VUS, 10)
   const duration = __ENV.DURATION
+  const named = SCENARIOS[String(__ENV.SCENARIO || 'load').toLowerCase()] || SCENARIOS.load
+
   if (Number.isFinite(vus) && vus > 0 && duration) {
     return { vus, duration }
   }
-
-  const name = String(__ENV.SCENARIO || 'load').toLowerCase()
-  return SCENARIOS[name] || SCENARIOS.load
+  // An override on its own still applies: the named profile supplies the
+  // half that was not given. Ignoring a lone VUS made a run look like it
+  // had used the value it was given.
+  if (Number.isFinite(vus) && vus > 0) {
+    return { vus, duration: named.duration }
+  }
+  if (duration) {
+    return { vus: named.vus, duration }
+  }
+  return named
 }
 
 /**

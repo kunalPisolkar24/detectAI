@@ -13,13 +13,19 @@ const ENDPOINT = `${BASE_URL}/api/chat/analyze/stream`
 // Anything outside this set - a 5xx, a timeout - still fails the request.
 http.setResponseCallback(http.expectedStatuses(200, 400, 401, 405))
 
+// The boundary cases are valid payloads, so they reach the backend the way a
+// real analyze does. The rig answers from a mock, so its budget is
+// milliseconds; the target file carries the real one.
+const boundaryP95 = Number(__ENV.WEB_ANALYZE_P95_MS || 2000)
+const boundaryP99 = Number(__ENV.WEB_ANALYZE_P99_MS || 4000)
+
 export const options = loadOptions({
   thresholds: {
     'http_req_failed': ['rate<0.01'],
     'checks': ['rate>0.99'],
     // A rejection should be cheaper than the work that actually runs.
     'http_req_duration{group:invalid}': ['p(95)<500', 'p(99)<1000'],
-    'http_req_duration{group:boundary}': ['p(95)<2000', 'p(99)<4000'],
+    'http_req_duration{group:boundary}': [`p(95)<${boundaryP95}`, `p(99)<${boundaryP99}`],
     'dropped_iterations': ['count==0'],
   },
 })

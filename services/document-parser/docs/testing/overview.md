@@ -220,6 +220,26 @@ make load-down
 
 Shortcuts exist too: `make load-test-smoke`, `load-test-load`, `load-test-stress`, `load-test-soak`, `load-test-negative`.
 
+### Running Against an Existing Deployment
+
+The rig above starts its own throwaway parser. To measure a deployment that is already running -- a local stack, the Floci stack, prod -- point the same scripts at it instead. Nothing is provisioned: the k6 container runs with `--no-deps`, so the parser under test is never started by the load run.
+
+```bash
+make load-test REMOTE=1 TARGET_ENV_FILE=../../e2e/targets/.env.prod SCENARIO=load
+```
+
+The target file carries the endpoint and any credentials. A deployed stack already exports its own telemetry, so `WITH_OBSERVABILITY` does not apply to remote runs.
+
+The `e2e/` harness drives this and the other services together, one tier at a time:
+
+```bash
+make -C e2e load TIER=preflight TARGET=prod   # is everything reachable
+make -C e2e load TIER=smoke TARGET=prod        # is everything correct
+make -C e2e load TIER=load TARGET=prod         # does everything hold
+```
+
+See [e2e/README.md](../../../../e2e/README.md) for the tiers and the target files.
+
 ### What Each Scenario Does
 
 Think of scenarios as answering different questions:

@@ -1,0 +1,2 @@
+# Target files hold endpoints and credentials. The template stays tracked.
+!.env.example

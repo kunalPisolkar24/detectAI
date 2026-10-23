@@ -33,6 +33,23 @@ export function publishedSuccessTotal(baseUrl) {
     return total;
 }
 
+// Sum of payment_events_published_total{status="error"} across event types.
+// The gateway records "success" only after the broker acked the message, so
+// a flat error count means nothing failed to publish.
+export function publishedErrorTotal(baseUrl) {
+    const res = http.get(`${baseUrl}/metrics`, { timeout: '10s' });
+    if (res.status !== 200) {
+        return null;
+    }
+    let total = 0;
+    const re = /^payment_events_published_total\{[^}]*status="error"[^}]*\}\s+([0-9.eE+-]+)/gm;
+    let m;
+    while ((m = re.exec(res.body)) !== null) {
+        total += parseFloat(m[1]);
+    }
+    return total;
+}
+
 // Sum of http_request_errors_total for one status code (e.g. "503").
 export function errorTotal(baseUrl, code) {
     const res = http.get(`${baseUrl}/metrics`, { timeout: '10s' });

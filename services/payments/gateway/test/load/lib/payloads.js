@@ -33,7 +33,7 @@ function padPayload(obj, size) {
 
 export function buildRequest(profile, secrets) {
     if (profile.kind === 'internal') {
-        const payload = padPayload({ event_type: profile.eventType, data: { userId: 'user-123' } }, profile.size);
+        const payload = padPayload({ event_type: profile.eventType, data: { userId: secrets.userId } }, profile.size);
         return {
             method: 'POST',
             url: '/internal/events',
@@ -48,7 +48,7 @@ export function buildRequest(profile, secrets) {
         };
     }
     const payload = padPayload(
-        { event_id: `evt_${profile.name}`, event_type: profile.eventType, data: { id: 'sub_123', status: 'active' } },
+        { event_id: `evt_${profile.name}`, event_type: profile.eventType, data: { id: secrets.subId, status: 'active' } },
         profile.size
     );
     return {
@@ -87,6 +87,14 @@ export function secretsFromEnv() {
     return {
         webhookSecret: __ENV.PADDLE_WEBHOOK_SECRET || 'test_secret',
         internalKey: __ENV.INTERNAL_API_KEY || 'test_internal_key',
-        baseUrl: __ENV.BASE_URL || 'http://localhost:8080',
+        // GATEWAY_BASE_URL is the name the e2e harness uses; BASE_URL is the
+        // older name and still wins when both are set.
+        baseUrl: __ENV.GATEWAY_BASE_URL || __ENV.BASE_URL || 'http://localhost:8080',
+        // The records the events are addressed to. They land in the target's
+        // own database once the worker consumes them, so point them at a
+        // dedicated record when the target is shared with real traffic.
+        subId: __ENV.GATEWAY_LOAD_SUB_ID || 'sub_123',
+        userId: __ENV.GATEWAY_LOAD_USER_ID || 'user-123',
+        paddleSubId: __ENV.GATEWAY_LOAD_PADDLE_SUB_ID || 'sub_456',
     };
 }

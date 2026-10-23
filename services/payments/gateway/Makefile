@@ -1,4 +1,4 @@
-.PHONY: build run test test-coverage test-integration deps load-test load-down load-test-spike load-test-stress load-test-soak load-test-internal load-test-negative load-test-chaos gateway-build gateway-up gateway-down gateway-down-v gateway-logs gateway-ps help
+.PHONY: build run test test-coverage test-integration deps load-test load-down load-down-remote load-test-smoke load-test-spike load-test-stress load-test-soak load-test-internal load-test-negative load-test-chaos gateway-build gateway-up gateway-down gateway-down-v gateway-logs gateway-ps help
 
 help:
 	@echo "Targets: build run test test-coverage test-integration load-test gateway-up/down"
@@ -29,26 +29,66 @@ test-integration-ha:
 # Opt-in observability: make load-test WITH_OBSERVABILITY=1 SCENARIO=spike
 # (adds otel-collector-loadtest -> New Relic EU as deployment.environment=loadtest;
 # needs NEW_RELIC_LICENSE_KEY in shell; ENV_TYPE stays dev).
+# Remote mode: make load-test REMOTE=1 TARGET_ENV_FILE=../../e2e/targets/.env.prod
+# (runs the k6 container only, against a deployment that is already running).
 COMPOSE_LOAD := docker compose -f infra/compose.load.yml
 COMPOSE_LOAD_OBS := docker compose -f infra/compose.load.yml -f ../../../infra/docker/otel/loadtest-observability.yml -f infra/compose.load.observability.yml
 WITH_OBSERVABILITY ?= 0
+# Remote mode points the load test at an already-running deployment instead of
+# starting the rig. Endpoints and credentials come from TARGET_ENV_FILE (see
+# e2e/targets/.env.example). Nothing is provisioned in remote mode: the k6
+# container runs with --no-deps, so the gateway and its broker stay down and
+# only the runner is started. The target's own stack exports its telemetry,
+# so WITH_OBSERVABILITY does not apply here.
+REMOTE ?= 0
+TARGET_ENV_FILE ?=
+# The rig's compose project is "gateway-load"; the remote run gets its own
+# project so it can never touch a running local rig.
+LOAD_REMOTE_PROJECT := e2e-payment-gateway
 load-test:
 	@if [ "$(WITH_OBSERVABILITY)" != "0" ] && [ "$(WITH_OBSERVABILITY)" != "1" ]; then \
 		echo "Invalid WITH_OBSERVABILITY '$(WITH_OBSERVABILITY)'. Use 0 or 1."; exit 1; \
 	fi
-	@if [ "$(WITH_OBSERVABILITY)" = "1" ]; then \
-		if [ -z "$${NEW_RELIC_LICENSE_KEY:-}" ]; then \
-			echo "WITH_OBSERVABILITY=1 but NEW_RELIC_LICENSE_KEY is empty — collector will retry/drop, apps keep running."; \
+	@if [ "$(REMOTE)" = "1" ]; then \
+		if [ -z "$(TARGET_ENV_FILE)" ]; then \
+			echo "REMOTE=1 requires TARGET_ENV_FILE (see e2e/targets/.env.example)."; exit 1; \
 		fi; \
-		RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
-		$(COMPOSE_LOAD_OBS) up --abort-on-container-exit --exit-code-from k6; \
+		if [ ! -f "$(TARGET_ENV_FILE)" ]; then \
+			echo "TARGET_ENV_FILE not found: $(TARGET_ENV_FILE)"; exit 1; \
+		fi; \
+		if [ "$(WITH_OBSERVABILITY)" = "1" ]; then \
+			echo "WITH_OBSERVABILITY is ignored in remote mode: the target's own stack exports its telemetry."; \
+		fi; \
+		if [ "$(SCENARIO)" = "chaos" ]; then \
+			echo "SCENARIO=chaos stops the RabbitMQ container mid-run and only works against the rig."; exit 1; \
+		fi; \
+		if [ -n "$(VUS)" ]; then export SMOKE_VUS="$(VUS)"; export TARGET_VUS="$(VUS)"; fi; \
+		if [ -n "$(ITERATIONS)" ]; then export SMOKE_ITERATIONS="$(ITERATIONS)"; fi; \
+		$(COMPOSE_LOAD) --env-file $(TARGET_ENV_FILE) -p $(LOAD_REMOTE_PROJECT) run --rm --no-deps k6 run /scripts/scenarios/$(or $(SCENARIO),spike).js; \
 	else \
-		RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
-		$(COMPOSE_LOAD) up --abort-on-container-exit --exit-code-from k6; \
+		if [ "$(WITH_OBSERVABILITY)" = "1" ]; then \
+			if [ -z "$${NEW_RELIC_LICENSE_KEY:-}" ]; then \
+				echo "WITH_OBSERVABILITY=1 but NEW_RELIC_LICENSE_KEY is empty — collector will retry/drop, apps keep running."; \
+			fi; \
+			RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
+			$(COMPOSE_LOAD_OBS) up --abort-on-container-exit --exit-code-from k6; \
+		else \
+			RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
+			$(COMPOSE_LOAD) up --abort-on-container-exit --exit-code-from k6; \
+		fi; \
 	fi
 
 load-down:
 	$(COMPOSE_LOAD_OBS) down -v --remove-orphans
+
+# Remove the remote compose project: a `run --rm --no-deps` leaves its network
+# and the broker volume behind. Kept apart from load-down so tearing down a
+# remote run never touches the local rig's volumes.
+load-down-remote:
+	$(COMPOSE_LOAD) -p $(LOAD_REMOTE_PROJECT) down -v --remove-orphans
+
+load-test-smoke:
+	@$(MAKE) load-test SCENARIO=smoke
 
 load-test-spike:
 	@$(MAKE) load-test SCENARIO=spike
@@ -71,6 +111,9 @@ load-test-negative:
 # runs from t+75s to t+135s. Fails if no 503 was observed (orchestration
 # broken) or if traffic does not recover.
 load-test-chaos:
+	@if [ "$(REMOTE)" = "1" ]; then \
+		echo "load-test-chaos stops the RabbitMQ container mid-run and only works against the rig."; exit 1; \
+	fi
 	RABBITMQ_PORT=$${RABBITMQ_PORT:-5673} RABBITMQ_UI_PORT=$${RABBITMQ_UI_PORT:-15673} \
 	docker compose -f infra/compose.load.yml up -d rabbitmq payment-gateway
 	@echo "Waiting for gateway healthy..."; \

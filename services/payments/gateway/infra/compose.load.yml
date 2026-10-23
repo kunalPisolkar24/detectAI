@@ -31,7 +31,7 @@ services:
     image: grafana/k6:latest
     command: run /scripts/scenarios/${SCENARIO:-spike}.js
     environment:
-      BASE_URL: http://payment-gateway:8080
+      GATEWAY_BASE_URL: ${GATEWAY_BASE_URL:-http://payment-gateway:8080}
       PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET:-test_webhook_secret_16chars}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-test_internal_key_16chars}
       TARGET_VUS: ${TARGET_VUS:-20}
@@ -51,8 +51,22 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_PASS: ${RABBITMQ_PASS:-guest}
       RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:-payment_events}
+      # How the delivery proof is taken: exact (broker queue depth, needs an
+      # idle queue with no consumer), at_least, or off (the gateway's own
+      # publish counters, for a broker with a live consumer).
+      GATEWAY_LOAD_QUEUE_PROOF: ${GATEWAY_LOAD_QUEUE_PROOF:-exact}
+      # Fixture ids the events are addressed to. Point them at a dedicated
+      # record when the target is shared with real traffic.
+      GATEWAY_LOAD_SUB_ID: ${GATEWAY_LOAD_SUB_ID:-sub_123}
+      GATEWAY_LOAD_USER_ID: ${GATEWAY_LOAD_USER_ID:-user-123}
+      GATEWAY_LOAD_PADDLE_SUB_ID: ${GATEWAY_LOAD_PADDLE_SUB_ID:-sub_456}
+      SMOKE_VUS: ${SMOKE_VUS:-2}
+      SMOKE_ITERATIONS: ${SMOKE_ITERATIONS:-2}
     volumes:
       - ../test/load:/scripts:ro
+    # Lets the k6 container reach a service published on the Docker host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       payment-gateway:
         condition: service_healthy

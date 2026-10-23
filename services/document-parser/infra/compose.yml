@@ -1,3 +1,7 @@
+# Its own compose project (like chats and gateway): the load rig in this
+# directory has no `name:` and would otherwise default to the same project.
+name: document-parser
+
 services:
   document-parser:
     container_name: detect_ai_doc_parser

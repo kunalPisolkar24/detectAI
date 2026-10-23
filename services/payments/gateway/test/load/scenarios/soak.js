@@ -2,8 +2,8 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
 import { pickProfile, buildRequest, buildInvalidSignatureRequest, secretsFromEnv } from '../lib/payloads.js';
-import { readBaseline, queueDepth, checkNoLoss } from '../lib/rabbitmq.js';
-import { sampleRuntime, checkRuntimeStable, publishedSuccessTotal } from '../lib/runtime.js';
+import { readBaseline, readCurrent, checkNoLoss } from '../lib/rabbitmq.js';
+import { sampleRuntime, checkRuntimeStable } from '../lib/runtime.js';
 
 export const options = {
     stages: [
@@ -26,8 +26,7 @@ let iter = 0;
 
 export function setup() {
     return {
-        queue: readBaseline(),
-        published: publishedSuccessTotal(secrets.baseUrl),
+        ...readBaseline(secrets.baseUrl),
         runtime: sampleRuntime(secrets.baseUrl),
     };
 }
@@ -52,7 +51,7 @@ export default function () {
 }
 
 export function teardown(baseline) {
-    checkNoLoss(baseline, { depth: queueDepth(), published: publishedSuccessTotal(secrets.baseUrl) });
+    checkNoLoss(baseline, readCurrent(secrets.baseUrl));
     for (const assertion of checkRuntimeStable(baseline.runtime, sampleRuntime(secrets.baseUrl))) {
         check(null, { [assertion.name]: () => assertion.ok });
     }

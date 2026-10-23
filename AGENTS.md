@@ -12,6 +12,7 @@ Monorepo. Stay inside the component you were asked to change.
 - `services/inference` — Python gRPC model serving (`src/domain`, `src/application`, `src/adapters`, `src/infrastructure`)
 - `services/document-parser` — Python FastAPI text extraction (`app/`)
 - `services/workers` — TypeScript background workers (`src/modules`, `src/shared`)
+- `e2e/` — cross-app load testing harness (k6; drives the per-service load scripts against a target environment)
 - `infra/terraform` — AWS infrastructure as code
 - `tools/` — one-off CLIs (`seed-secrets`)
 

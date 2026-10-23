@@ -1,3 +1,6 @@
+# Its own compose project, so two services' rigs never share one.
+name: document-parser-load
+
 services:
   document-parser:
     build:
@@ -23,8 +26,11 @@ services:
     command: run /load/${K6_SCRIPT:-scenarios/load.js}
     volumes:
       - ../load:/load:ro
+    # Lets the k6 container reach a service published on the Docker host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      - API_URL=http://document-parser:8000
+      - API_URL=${API_URL:-http://document-parser:8000}
       - MODE=${MODE:-vus}
       - VUS=${VUS:-5}
       - DURATION=${DURATION:-10s}

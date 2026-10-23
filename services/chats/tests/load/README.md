@@ -51,6 +51,48 @@ make load-test SCENARIO=edge VUS=2 DURATION=1m
 make load-down
 ```
 
+## Running Against an Existing Deployment
+
+The rig above is self-contained: it starts its own Mongo, Redis, chat service
+and chat worker. To measure a deployment that is already running -- a local
+stack, the Floci stack, prod -- run the same scripts against it instead.
+Nothing is provisioned: the k6 container runs with `--no-deps`, so the chat
+service and its datastores are never started by the load run.
+
+```bash
+# The target file carries the endpoint and the timeouts.
+# See e2e/targets/.env.example for the template.
+make load-test REMOTE=1 TARGET_ENV_FILE=../../e2e/targets/.env.prod SCENARIO=load
+```
+
+`REMOTE=1` switches the run to `docker compose run --rm --no-deps k6`, in its
+own compose project (`e2e-chats`) so it never disturbs a running local rig.
+The profile knobs (`VUS`, `DURATION`, `RPS`) work exactly as they do in rig
+mode, and so does every `THRESHOLD_*` budget.
+
+Observability is the target's business here: a deployed stack already exports
+its own traces, metrics and logs, so `WITH_OBSERVABILITY` is ignored in remote
+mode and says so.
+
+Two things the target has to provide:
+
+- **The chat worker.** The API publishes a message to a Redis stream and the
+  worker persists it, so the end-to-end check -- save a message and read it
+  back -- only passes when the worker is consuming. A target running the API
+  role alone fails that check.
+- **TLS off, or on.** `CHAT_SERVICE_PLAINTEXT=false` speaks TLS to the target.
+
+The suite creates the chats it works with and deletes them again, so it leaves
+nothing behind. `SHARED_HOT_CHAT=1` is the exception: it pins the writes to
+one chat and skips the delete.
+
+Use the cross-app harness in `e2e/` to drive this and the other services
+together:
+
+```bash
+make -C e2e load TIER=smoke TARGET=prod
+```
+
 ## Observability (opt-in)
 
 ```bash
