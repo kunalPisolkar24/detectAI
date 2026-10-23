@@ -1,0 +1,54 @@
+# Document Parser — Requirements
+
+A stateless service that receives a document and returns its extracted text.
+
+**Stack:** Python 3.11, FastAPI.
+
+## Functional requirements
+
+| ID | Requirement |
+|----|-------------|
+| FR-1 | Accept a document upload over HTTP (multipart form) |
+| FR-2 | Accept only the supported formats: PDF, DOCX, TXT. Reject anything else |
+| FR-3 | Extract the text content of the document |
+| FR-4 | Return the extracted text in the HTTP response |
+| FR-5 | Return a clear error response when a request cannot be processed (wrong type, corrupt file, too large, processing failure) |
+
+## Non-functional requirements
+
+| ID | Requirement |
+|----|-------------|
+| NFR-1 | Stateless: no database, no persistent storage, no instance-to-instance state |
+| NFR-2 | One request must not block another; slow or failing requests must not take the service down |
+| NFR-3 | Every request completes, succeeds, or fails within 10 seconds (configurable). A document that exceeds the budget is abandoned — the caller receives a timeout response. Notes: (a) the deadline applies to processing the document; oversized *input* is rejected by size limits, not the clock; (b) abandonment is soft: the worker thread may keep running until the bounded-size work finishes naturally; interior size caps guarantee it terminates quickly |
+| NFR-4 | Upload size is bounded (10 MiB default, configurable) |
+| NFR-5 | Observability: logs are emitted; key metrics are available for scraping; work is traceable when configured |
+| NFR-6 | Health and readiness endpoints for probes and orchestrators; readiness sheds traffic when the service is saturated |
+| NFR-7 | Tests: unit, integration, and load tests cover the service |
+
+## Numeric bounds
+
+| Bound | Default | Failure behavior |
+|-------|---------|------------------|
+| Upload size | 10 MiB | Reject with a "too large" error before parsing |
+| Processing budget | 10 s | Timeout response; document abandoned |
+| PDF pages | 1,000 | Reject with a "too large" error before parsing |
+| DOCX uncompressed size | 100 MiB | Reject with a "too large" error (zip-bomb guard) |
+| Output text cap | TBD (see open decisions) | TBD |
+
+All bounds are configurable at boot via environment variables with these defaults. Bounds fail closed: an unset or invalid value falls back to the safe default.
+
+## Explicitly out of scope
+
+- Anything beyond text output of PDF / DOCX / TXT (no images, tables as data, or other formats)
+- Durable or async processing — synchronous request/response only
+- Authentication, rate limiting, or retries (handled by the caller / gateway)
+- Explicit admission control (429/503 on full worker pool) — readiness shedding covers queue wait for now
+
+## Open decisions (to be cleared before build starts)
+
+- [ ] Exact HTTP contract: endpoints, paths, request/response JSON shape, status codes
+- [ ] Output text cap: keep (protects response size; returns truncated flag) or drop (caller gets full text, protected only by upload/timeout limits)
+- [ ] Text fidelity: plain text returned raw, or cleaned/normalized text
+- [ ] Metrics list
+- [ ] Load testing: keep the existing k6 rig or defer
