@@ -1,4 +1,5 @@
 import logging
+import math
 
 from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,6 +18,7 @@ class Settings(BaseSettings):
     # MAX_PDF_PAGES, ...).
 
     max_upload_size_bytes: int = Field(default=10_485_760)
+    process_budget_seconds: float = Field(default=10.0)
     max_pdf_pages: int = Field(default=1_000)
     max_docx_uncompressed_bytes: int = Field(default=104_857_600)
     max_text_length: int = Field(default=1_000_000)
@@ -48,6 +50,43 @@ class Settings(BaseSettings):
                 "%s is not a valid integer (%r); using the safe default %s",
                 field_name.upper(),
                 value,
+                default,
+            )
+            return default
+        if parsed <= 0:
+            logger.warning(
+                "%s must be positive (got %s); using the safe default %s",
+                field_name.upper(),
+                parsed,
+                default,
+            )
+            return default
+        return parsed
+
+    # NFR-3 budget: float parsing keeps tuned sub-second rigs honest ("2.5" would
+    # otherwise fail int parsing and silently drop back to 10 s), and a finite
+    # check rejects "1e400"/"inf" (inf would disable the budget entirely).
+    @field_validator("process_budget_seconds", mode="before")
+    @classmethod
+    def _fall_back_to_safe_budget(cls, value: object, info: ValidationInfo) -> float:
+        field_name = info.field_name
+        assert field_name is not None
+        default = cls.model_fields[field_name].default
+        try:
+            parsed = float(str(value))
+        except ValueError:
+            logger.warning(
+                "%s is not a valid number (%r); using the safe default %s",
+                field_name.upper(),
+                value,
+                default,
+            )
+            return default
+        if not math.isfinite(parsed):
+            logger.warning(
+                "%s must be finite (got %s); using the safe default %s",
+                field_name.upper(),
+                parsed,
                 default,
             )
             return default
