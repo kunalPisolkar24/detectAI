@@ -5,9 +5,12 @@ Basic build: health and readiness endpoints per the [HTTP contract](specificatio
 
 ## Run
 
+Run `make help` for the full command index.
+
 ```sh
-poetry install
-poetry run uvicorn app.main:app --port 8000
+make install
+make env    # creates infra/.env from infra/.env.example
+make run
 ```
 
 ## Verify
@@ -22,6 +25,6 @@ curl http://localhost:8000/api/v1/ready
 ## Docker
 
 ```sh
-docker build -t detectai-document-parser .
-docker run --rm -p 8000:8000 detectai-document-parser
+make build
+PORT=8000 make up
 ```
