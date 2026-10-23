@@ -13,9 +13,34 @@ The contract is byte-for-byte identical to the pre-refactor service, with exactl
 | `POST /api/v1/extract` | required | Multipart upload → extracted text |
 | `GET /api/v1/health` | open | Liveness probe |
 | `GET /api/v1/ready` | open | Readiness probe — signals shedding when saturated |
-| `GET /api/v1/metrics` | open | Observability pickup point (see [observability.md](observability.md)) |
 
-The `/api/v1` prefix stays — future versioning without breaking callers. Error codes follow the FastAPI convention: `{"detail": "…"}`.
+The `/api/v1` prefix stays — future versioning without breaking callers. Error codes follow the FastAPI convention: `{"detail": "…"}`. There is **no metrics endpoint** — the service is observed exclusively through the OTel pipeline (see [observability.md](observability.md)).
+
+### Request lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Caller (web BFF)
+    participant E as Extract endpoint
+    participant P as Worker thread
+    participant X as Parser
+
+    C->>E: POST /api/v1/extract (multipart file, x-api-key / Bearer)
+    E-->>C: 401 if key missing or invalid
+    E-->>C: 413 if body exceeds 10 MiB + 1
+    E-->>C: 415 if sniffed MIME not in allow-list
+    E->>P: submit (bytes)
+    alt within 10 s budget
+        P->>X: extract + clean
+        X-->>E: text
+        E-->>C: 200 {filename, content_type, text_length, text, truncated}
+    else deadline exceeded
+        E-->>C: 504 (bounded worker resumes and finishes alone)
+    else parser rejects content
+        E-->>C: 422 generic detail
+    end
+```
 
 ## POST /api/v1/extract
 

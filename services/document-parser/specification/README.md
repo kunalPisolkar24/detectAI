@@ -8,7 +8,7 @@ Specifications for the document-parser service. This file is the hub — every d
 |-----|--------|
 | [requirements.md](requirements.md) | Functional and non-functional requirements, bounds, out-of-scope |
 | [http.md](http.md) | The HTTP wire contract — endpoints, JSON shapes, status codes, semantics |
-| [observability.md](observability.md) | Metrics/traces/logs pipeline and the metric inventory |
+| [observability.md](observability.md) | OTel pipeline (push, no pull endpoint) and the metric inventory |
 
 ## Planned docs
 

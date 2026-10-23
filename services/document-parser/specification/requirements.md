@@ -35,7 +35,7 @@ Detailed designs: [spec index](README.md) · [HTTP contract](http.md) · [observ
 | NFR-2 | One request must not block another; slow or failing requests must not take the service down |
 | NFR-3 | Every request completes, succeeds, or fails within 10 seconds (configurable). A document that exceeds the budget is abandoned — the caller receives a timeout response. Notes: (a) the deadline applies to processing the document; oversized *input* is rejected by size limits, not the clock; (b) abandonment is soft: the worker thread may keep running until the bounded-size work finishes naturally; interior size caps guarantee it terminates quickly |
 | NFR-4 | Upload size is bounded (10 MiB default, configurable) |
-| NFR-5 | Observability: logs are emitted; key metrics are available for scraping; work is traceable when configured |
+| NFR-5 | Observability is OTel-native — logs, traces, and metrics export via OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is configured; without it nothing is emitted. There is no pull/metrics endpoint. Metric names are a stable contract and change only with a dashboard/alert migration (see [observability.md](observability.md)) |
 | NFR-6 | Health and readiness endpoints for probes and orchestrators; readiness sheds traffic when the service is saturated |
 | NFR-7 | Tests: unit, integration, and load tests cover the service |
 | NFR-8 | Authentication failures are logged and counted as rejected requests |

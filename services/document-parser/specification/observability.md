@@ -8,15 +8,16 @@ Observability for the document-parser service. Requirements live in [requirement
 
 Everything exports through one OTel pipeline:
 
+```mermaid
+flowchart LR
+    dp["document-parser<br/>OTel SDK · MeterProvider · TracerProvider · LoggerProvider"]
+    coll["otel-collector"]
+    nr[("New Relic")]
+    dp -- "OTLP/HTTP push<br/>metrics + traces + logs" --> coll
+    coll -- "export" --> nr
+    web["apps/web<br/>(prom-client on /api/metrics)"] -- "prometheus receiver scrape" --> coll
+    dp -. "no pull endpoint — /api/v1/metrics removed" .-> dp
 ```
-service ──OTLP/HTTP──> otel-collector ──> New Relic
-           ▲                ▲
-           │                └── prometheus receiver scrapes sibling services
-           │                    (their /metrics stays — infra, not this service)
-           └── metrics are PUSHED natively from the OTel SDK;
-               no in-app Prometheus pull endpoint for document-parser
-```
-
 ## Metric inventory
 
 Nine instruments, with names and attribute keys preserved from the pre-refactor service so New Relic dashboards and Terraform alerts keep their queries unchanged.
@@ -41,8 +42,9 @@ Dropped: `http_requests_total` and `http_request_duration_seconds` (request/erro
 - Export interval aligns with the old 15s scrape cadence.
 - Without `OTEL_EXPORTER_OTLP_ENDPOINT` the SDK hands out no-op meters — every record call is a safe no-op in dev.
 - Gauges sample pool counters at export time; no private pool internals, no scrape-time refresh logic.
+- **Removal inventory** for the pull endpoint: the `/api/v1/metrics` route, the `prometheus-client` dependency, the multiprocess registry logic, `PROMETHEUS_MULTIPROC_DIR` (+ its cleanup step) in the Dockerfile and compose files, the entire `gunicorn.conf.py` (`child_exit` hook existed only for multiprocess metrics), and the request middleware's metric recording — middleware becomes logging-only.
 
 ## Infra follow-on (outside this service)
 
-- `infra/docker/prod/otel-collector-config.yaml`: the document-parser scrape entry (`metrics_path: /api/v1/metrics`) becomes dead — removed in an **infra pull request**, not this build.
-- Loadtest collector: the load rig sets `OTEL_EXPORTER_OTLP_ENDPOINT` to the collector's OTLP receiver.
+- `infra/docker/prod/otel-collector-config.yaml`: the document-parser scrape entry (`metrics_path: /api/v1/metrics`) becomes dead — removed in an **infra pull request**, not this build. Sequence it close behind: until it lands, the collector logs harmless scrape 404s for this service.
+- Loadtest collector: the load rig sets `OTEL_EXPORTER_OTLP_ENDPOINT` to the collector's OTLP receiver; its scrape slot for this service is removed in the same infra effort.
