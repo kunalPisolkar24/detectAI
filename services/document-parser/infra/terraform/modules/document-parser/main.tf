@@ -13,8 +13,3 @@ resource "aws_secretsmanager_secret_version" "services" {
   secret_id     = aws_secretsmanager_secret.services.id
   secret_string = jsonencode({ API_KEY = var.api_key })
 }
-
-output "secrets_name" {
-  description = "Secret name (the identifier every consumer uses)."
-  value       = aws_secretsmanager_secret.services.name
-}
