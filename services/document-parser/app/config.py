@@ -8,9 +8,13 @@ logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
     # requirements.md: the key is mandatory in every environment and must be
-    # at least 16 characters; an invalid value fails the boot. Env names map
-    # from field names case-insensitively (API_KEY, MAX_PDF_PAGES, ...).
-    api_key: str = Field(min_length=16)
+    # at least 16 characters; an invalid value fails the boot. The empty
+    # default keeps missing and invalid keys on the same min_length failure
+    # path instead of a "field required" constructor error.
+    api_key: str = Field(default="", min_length=16)
+
+    # Field names map to env names case-insensitively (API_KEY,
+    # MAX_PDF_PAGES, ...).
 
     max_upload_size_bytes: int = Field(default=10_485_760)
     max_pdf_pages: int = Field(default=1_000)
