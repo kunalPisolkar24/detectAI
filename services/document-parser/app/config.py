@@ -1,0 +1,55 @@
+import logging
+
+from pydantic import Field, ValidationInfo, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+
+class Settings(BaseSettings):
+    # requirements.md: the key is mandatory in every environment and must be
+    # at least 16 characters; an invalid value fails the boot. Env names map
+    # from field names case-insensitively (API_KEY, MAX_PDF_PAGES, ...).
+    api_key: str = Field(min_length=16)
+
+    max_upload_size_bytes: int = Field(default=10_485_760)
+    max_pdf_pages: int = Field(default=1_000)
+    max_docx_uncompressed_bytes: int = Field(default=104_857_600)
+    max_text_length: int = Field(default=1_000_000)
+
+    otel_exporter_otlp_endpoint: str | None = Field(default=None)
+    otel_service_name: str = Field(default="document-parser")
+
+    model_config = SettingsConfigDict(env_file="infra/.env", extra="ignore")
+
+    # requirements.md numeric bounds fail closed: an unset or invalid value
+    # falls back to the safe default instead of failing the boot.
+    @field_validator(
+        "max_upload_size_bytes",
+        "max_pdf_pages",
+        "max_docx_uncompressed_bytes",
+        "max_text_length",
+        mode="before",
+    )
+    @classmethod
+    def _fall_back_to_safe_default(cls, value: object, info: ValidationInfo) -> int:
+        default = cls.model_fields[info.field_name].default
+        try:
+            parsed = int(str(value))
+        except ValueError:
+            logger.warning(
+                "%s is not a valid integer (%r); using the safe default %s",
+                info.field_name.upper(),
+                value,
+                default,
+            )
+            return default
+        if parsed <= 0:
+            logger.warning(
+                "%s must be positive (got %s); using the safe default %s",
+                info.field_name.upper(),
+                parsed,
+                default,
+            )
+            return default
+        return parsed

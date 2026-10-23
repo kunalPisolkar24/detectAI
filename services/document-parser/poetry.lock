@@ -296,6 +296,46 @@ files = [
 typing-extensions = ">=4.16.0"
 
 [[package]]
+name = "pydantic-settings"
+version = "2.16.1"
+description = "Settings management using Pydantic"
+optional = false
+python-versions = ">=3.11"
+groups = ["main"]
+files = [
+    {file = "pydantic_settings-2.16.1-py3-none-any.whl", hash = "sha256:30f5313340da4e8f1b440d1910b92a5bc3ccbb6b4ba70ec2b8395bc921f418f5"},
+    {file = "pydantic_settings-2.16.1.tar.gz", hash = "sha256:aff602a1886338c2df3d1e958e2193a8dc33cec75b91f202e83fd98484b4b0da"},
+]
+
+[package.dependencies]
+pydantic = ">=2.7.0"
+python-dotenv = ">=1.2.2"
+typing-extensions = ">=4.0.0"
+typing-inspection = ">=0.4.0"
+
+[package.extras]
+aws-secrets-manager = ["boto3 (>=1.35.0)"]
+aws-systems-manager = ["boto3 (>=1.35.0)"]
+azure-key-vault = ["azure-identity (>=1.16.0)", "azure-keyvault-secrets (>=4.8.0)"]
+gcp-secret-manager = ["google-cloud-secret-manager (>=2.23.1)"]
+yaml = ["pyyaml (>=6.0.1)"]
+
+[[package]]
+name = "python-dotenv"
+version = "1.2.4"
+description = "Read key-value pairs from a .env file and set them as environment variables"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "python_dotenv-1.2.4-py3-none-any.whl", hash = "sha256:42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc"},
+    {file = "python_dotenv-1.2.4.tar.gz", hash = "sha256:f0d53e69935a851c0dcc78f3ab7aaccd8cabef0b92382b576b824212902873c0"},
+]
+
+[package.extras]
+cli = ["click (>=5.0)"]
+
+[[package]]
 name = "starlette"
 version = "1.9.0"
 description = "The little ASGI library that shines."
@@ -362,4 +402,4 @@ standard = ["httptools (>=0.8.0)", "python-dotenv (>=0.13)", "pyyaml (>=5.1)", "
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.14"
-content-hash = "2f119cf74c7d2fa3ff0b65231664c8e0165d117e1dae7e6ecbd7aa6492c65eda"
+content-hash = "b9c6b5cca4808e257a5bf21d249ed1a5e414330b899f70cbffc8346dfca43822"
