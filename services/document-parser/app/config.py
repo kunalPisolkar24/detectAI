@@ -37,13 +37,16 @@ class Settings(BaseSettings):
     )
     @classmethod
     def _fall_back_to_safe_default(cls, value: object, info: ValidationInfo) -> int:
-        default = cls.model_fields[info.field_name].default
+        # Field validators always run on a field, but the type stays Optional.
+        field_name = info.field_name
+        assert field_name is not None
+        default = cls.model_fields[field_name].default
         try:
             parsed = int(str(value))
         except ValueError:
             logger.warning(
                 "%s is not a valid integer (%r); using the safe default %s",
-                info.field_name.upper(),
+                field_name.upper(),
                 value,
                 default,
             )
@@ -51,7 +54,7 @@ class Settings(BaseSettings):
         if parsed <= 0:
             logger.warning(
                 "%s must be positive (got %s); using the safe default %s",
-                info.field_name.upper(),
+                field_name.upper(),
                 parsed,
                 default,
             )
