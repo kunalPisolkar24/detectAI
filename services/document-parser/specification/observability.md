@@ -10,14 +10,14 @@ Everything exports through one OTel pipeline:
 
 ```mermaid
 flowchart LR
-    dp["document-parser<br/>OTel SDK · MeterProvider · TracerProvider · LoggerProvider"]
+    dp["document-parser<br/>OTel SDK — metrics, traces, logs"]
     coll["otel-collector"]
     nr[("New Relic")]
-    dp -- "OTLP/HTTP push<br/>metrics + traces + logs" --> coll
+    dp -- "OTLP/HTTP push" --> coll
     coll -- "export" --> nr
-    web["apps/web<br/>(prom-client on /api/metrics)"] -- "prometheus receiver scrape" --> coll
-    dp -. "no pull endpoint — /api/v1/metrics removed" .-> dp
 ```
+Version-safe scope: this document covers one producer of telemetry — document-parser — and its push path. The collector keeps serving other services' scrape entries; that is unchanged, out of scope here. Only this service's entry dies once this build removes its endpoint.
+
 ## Metric inventory
 
 Nine instruments, with names and attribute keys preserved from the pre-refactor service so New Relic dashboards and Terraform alerts keep their queries unchanged.
