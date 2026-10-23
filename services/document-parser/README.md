@@ -18,3 +18,10 @@ curl http://localhost:8000/api/v1/health
 curl http://localhost:8000/api/v1/ready
 # {"status":"ready"}
 ```
+
+## Docker
+
+```sh
+docker build -t detectai-document-parser .
+docker run --rm -p 8000:8000 detectai-document-parser
+```
