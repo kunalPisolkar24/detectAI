@@ -39,6 +39,7 @@ Detailed designs: [spec index](README.md) · [HTTP contract](http.md) · [observ
 | NFR-6 | Health and readiness endpoints for probes and orchestrators; readiness sheds traffic when the service is saturated |
 | NFR-7 | Tests: unit, integration, and load tests cover the service |
 | NFR-8 | Authentication failures are logged and counted as rejected requests |
+| NFR-9 | SIGTERM/SIGINT stop new requests and drain in-flight work within 12 s (processing budget + slack), honouring the NFR-3 abandonment rules; the drain is logged |
 
 ## Numeric bounds
 
