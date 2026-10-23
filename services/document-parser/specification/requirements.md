@@ -13,6 +13,17 @@ A stateless service that receives a document and returns its extracted text.
 | FR-3 | Extract the text content of the document |
 | FR-4 | Return the extracted text in the HTTP response |
 | FR-5 | Return a clear error response when a request cannot be processed (wrong type, corrupt file, too large, processing failure) |
+| FR-6 | Extraction requests authenticate with a shared API key. Missing or invalid credentials are rejected with 401. Probes (health, readiness) and the metrics endpoint stay unauthenticated |
+
+### Authentication scheme
+
+| Piece | Decision |
+|-------|----------|
+| Credential | Shared secret `API_KEY` — mandatory in every environment (dev, load rig, prod); in prod it is delivered via Secrets Manager, elsewhere via env |
+| Validation at boot | Non-empty and at least 16 characters |
+| Headers | `x-api-key` or `Authorization: Bearer` (both accepted, matching the inference service) |
+| Comparison | Constant-time (`secrets.compare_digest`) |
+| Failure | 401 with a generic message; missing and invalid credentials are indistinguishable in the response |
 
 ## Non-functional requirements
 
@@ -25,6 +36,7 @@ A stateless service that receives a document and returns its extracted text.
 | NFR-5 | Observability: logs are emitted; key metrics are available for scraping; work is traceable when configured |
 | NFR-6 | Health and readiness endpoints for probes and orchestrators; readiness sheds traffic when the service is saturated |
 | NFR-7 | Tests: unit, integration, and load tests cover the service |
+| NFR-8 | Authentication failures are logged and counted as rejected requests |
 
 ## Numeric bounds
 
@@ -42,8 +54,13 @@ All bounds are configurable at boot via environment variables with these default
 
 - Anything beyond text output of PDF / DOCX / TXT (no images, tables as data, or other formats)
 - Durable or async processing — synchronous request/response only
-- Authentication, rate limiting, or retries (handled by the caller / gateway)
+- Rate limiting or retries (handled by the caller / gateway)
 - Explicit admission control (429/503 on full worker pool) — readiness shedding covers queue wait for now
+
+## Caller-side knock-on (out of this build, tracked here)
+
+- `apps/web` sends the API key with each extraction request (`FILE_EXTRACTOR_API_KEY` config + header on the extract call) — its own pull request
+- Load rig and e2e remote target env files carry the key
 
 ## Open decisions (to be cleared before build starts)
 
@@ -52,3 +69,5 @@ All bounds are configurable at boot via environment variables with these default
 - [ ] Text fidelity: plain text returned raw, or cleaned/normalized text
 - [ ] Metrics list
 - [ ] Load testing: keep the existing k6 rig or defer
+
+Resolved: authentication is API-key based, always required, mirroring the inference service (see Authentication scheme above).
