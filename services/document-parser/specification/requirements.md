@@ -2,7 +2,7 @@
 
 A stateless service that receives a document and returns its extracted text.
 
-**Stack:** Python 3.11, FastAPI.
+**Stack:** Python 3.14, FastAPI.
 
 Detailed designs: [spec index](README.md) · [HTTP contract](http.md) · [observability](observability.md)
 
