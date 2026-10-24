@@ -40,7 +40,9 @@ SERVICE_DIR = Path(__file__).resolve().parents[1]
 TF_DIR = SERVICE_DIR / "infra" / "terraform"
 ENV_FILE = SERVICE_DIR / "infra" / ".env"
 
-SECRETS_NAME_DEFAULT = "detectai/document-parser/secrets"
+# The fixed service contract: seeding, runtime pull, and teardown all expect
+# this exact name; Terraform's variables.tf keeps enforcing it.
+SECRETS_NAME = "detectai/document-parser/secrets"
 REGION_DEFAULT = "ap-southeast-2"
 DEFAULT_STATE_BUCKET = "detectai-docparser-tfstate"
 FLOCI_STATE_KEY = "document-parser/floci/terraform.tfstate"
@@ -55,10 +57,6 @@ ENV_TYPES = ("dev", "prod")
 EMULATOR_RECOVERY_WINDOW = 0
 PROD_RECOVERY_WINDOW = 30
 STATE_PREFIX = "document-parser"
-
-
-def effective_secret_name(values: dict[str, str]) -> str:
-    return values.get("DP_API_KEY_SECRET_NAME") or SECRETS_NAME_DEFAULT
 
 
 def die(message: str, fix: str) -> NoReturn:
@@ -194,8 +192,6 @@ def build_tf_vars(values: dict[str, str]) -> dict[str, str]:
             EMULATOR_RECOVERY_WINDOW if is_emulator else PROD_RECOVERY_WINDOW
         ),
     }
-    if (name := values.get("DP_API_KEY_SECRET_NAME")) and name != SECRETS_NAME_DEFAULT:
-        tf_vars["TF_VAR_secrets_name"] = name
     if is_emulator:
         tf_vars["TF_VAR_emulator_endpoint"] = values["EMULATOR_ENDPOINT"]
     return tf_vars
@@ -347,7 +343,7 @@ def ensure_state_bucket(is_emulator: bool, values: dict[str, str]) -> int:
 def force_delete_command(is_emulator: bool, values: dict[str, str]) -> list[str]:
     return aws_base(is_emulator, values) + [
         "secretsmanager", "delete-secret",
-        "--secret-id", effective_secret_name(values),
+        "--secret-id", SECRETS_NAME,
         "--force-delete-without-recovery",
     ]
 
@@ -514,7 +510,7 @@ def main() -> int:
 
     print(f"plane:  {plane}")
     print(f"stack:  {TF_DIR}")
-    print(f"secret: {effective_secret_name(values)}")
+    print(f"secret: {SECRETS_NAME}")
     print(f"key:    *** ({key_len} chars, hidden)")
     print(f"state:  {state_bucket} / {state_key}")
     for note in plane_notes(values, plane):

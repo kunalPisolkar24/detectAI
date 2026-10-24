@@ -108,11 +108,11 @@ def test_build_tf_vars_maps_both_planes():
     assert real["TF_VAR_aws_region"] == "ap-southeast-2"
 
 
-def test_build_tf_vars_region_and_secret_name_overrides():
-    values = {**EMULATOR_VALUE, "AWS_REGION": "us-east-1", "DP_API_KEY_SECRET_NAME": "detectai/document-parser/secrets-x"}
+def test_build_tf_vars_region_override_and_pinned_secret_name():
+    values = {**EMULATOR_VALUE, "AWS_REGION": "us-east-1"}
     mapped = dp_secrets.build_tf_vars(values)
     assert mapped["TF_VAR_aws_region"] == "us-east-1"
-    assert mapped["TF_VAR_secrets_name"] == "detectai/document-parser/secrets-x"
+    assert "TF_VAR_secrets_name" not in mapped  # the contract name is terraform's own default
 
 
 def test_build_backend_hcl_emulator():
@@ -340,10 +340,9 @@ def test_main_rejects_destroy_flags_on_other_verbs(monkeypatch, tmp_path):
     assert excinfo.value.code == 1
 
 
-def test_effective_secret_name_resolution():
-    assert dp_secrets.effective_secret_name(VALID) == "detectai/document-parser/secrets"
-    assert dp_secrets.effective_secret_name({"DP_API_KEY_SECRET_NAME": ""}) == "detectai/document-parser/secrets"
-    assert dp_secrets.effective_secret_name({"DP_API_KEY_SECRET_NAME": "custom/name"}) == "custom/name"
+def test_force_delete_command_pins_the_contract_name():
+    command = " ".join(dp_secrets.force_delete_command(False, REAL_VALUE))
+    assert "--secret-id detectai/document-parser/secrets --force-delete-without-recovery" in command
 
 
 def test_purge_state_wipes_versions_and_delete_markers_then_bucket(monkeypatch, capsys):
