@@ -12,11 +12,11 @@ variable "emulator_endpoint" {
 variable "aws_region" {
   description = "AWS region (the emulator accepts any value)."
   type        = string
-  default     = "ap-south-1"
+  default     = "ap-southeast-2"
 
   validation {
     condition     = can(regex("^[a-z]{2}-[a-z]+-[0-9]+$", var.aws_region))
-    error_message = "aws_region must be a valid AWS region (e.g. ap-south-1, us-east-1)."
+    error_message = "aws_region must be a valid AWS region (e.g. ap-southeast-2, us-east-1)."
   }
 }
 

@@ -17,7 +17,7 @@ One stack, two destinations, flipped by `EMULATOR_ENDPOINT` in `infra/.env`:
 |---------------------|-----------------------------------|--------------------------------|
 | Selected by         | `EMULATOR_ENDPOINT` set           | line empty or removed          |
 | Credentials         | dummy `test`/`test`               | real AWS keys                  |
-| State bucket        | `TF_STATE_BUCKET` or default `detectai-tfstate-local` | `TF_STATE_BUCKET` (required)  |
+| State bucket        | `TF_STATE_BUCKET` or default `detectai-docparser-tfstate` | `TF_STATE_BUCKET` (required)  |
 | Secret deletion     | instant (0-day recovery window)   | 30-day recovery window         |
 | Apply               | auto-approved                     | interactive confirm            |
 
@@ -44,8 +44,10 @@ State expectations:
   a new/empty ledger: `plan` will offer to create everything again; nothing migrates,
   and the old bucket keeps its old state files until you delete it.
 - the emulator's S3/Secrets data is in-memory (only setup views persist to its
-  volume): a container restart can drop everything. Recovery is cheap —
-  `make secrets-bootstrap-state && make secrets-apply` recreates the whole plane.
+  volume): a container restart can drop everything. Recovery is cheap — any
+  terraform verb now recreates the missing bucket itself
+  (`ensure_state_bucket`), so a bare `make secrets-apply` rebuilds the plane;
+  `make secrets-bootstrap-state && make secrets-apply` stays equivalent.
 - never run bare `terraform init` — the stacked backend is intentionally partial and
   only the script supplies it.
 - the real-AWS plane needs Terraform >= 1.10 for the `use_lockfile` backend flag.
@@ -77,10 +79,10 @@ make secrets-bootstrap-state
 ```
 
 Manual equivalent, for reference. Emulator (bucket name: `TF_STATE_BUCKET` or, if
-unset, the default `detectai-tfstate-local`):
+unset, the default `detectai-docparser-tfstate`):
 
 ```bash
-aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-tfstate-local --region ap-south-1
+aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-docparser-tfstate --region ap-southeast-2
 ```
 
 Real AWS requires `TF_STATE_BUCKET=<bucket>` in `infra/.env` — a sandbox bucket per
@@ -88,8 +90,8 @@ engineer/tester (versioned, encrypted, private; bootstrap enables versioning, SS
 defaults to on; Terraform >= 1.10 for `use_lockfile`):
 
 ```bash
-aws s3 mb s3://<bucket> --region ap-south-1
-aws s3api put-bucket-versioning --bucket <bucket> --versioning-configuration Status=Enabled --region ap-south-1
+aws s3 mb s3://<bucket> --region ap-southeast-2
+aws s3api put-bucket-versioning --bucket <bucket> --versioning-configuration Status=Enabled --region ap-southeast-2
 ```
 
 ## Teardown

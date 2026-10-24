@@ -6,9 +6,9 @@
 # Emulator plane (EMULATOR_ENDPOINT set: state lives in the Floci volume).
 # Bucket: TF_STATE_BUCKET from .env when set, else the default below:
 #
-#   bucket                      = "detectai-tfstate-local"
+#   bucket                      = "detectai-docparser-tfstate"
 #   key                         = "document-parser/floci/terraform.tfstate"
-#   region                      = "ap-south-1"
+#   region                      = "ap-southeast-2"
 #   encrypt                     = false
 #   skip_credentials_validation = true
 #   skip_metadata_api_check     = true
@@ -22,6 +22,6 @@
 
 bucket       = "REPLACE-me-<unique sandbox bucket>"
 key          = "document-parser/terraform.tfstate"
-region       = "ap-south-1"
+region       = "ap-southeast-2"
 encrypt      = true
 use_lockfile = true

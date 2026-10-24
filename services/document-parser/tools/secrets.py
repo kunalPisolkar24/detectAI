@@ -13,9 +13,9 @@ Plane selection (single flick, from EMULATOR_ENDPOINT in .env):
   - http(s) URL     -> Floci/LocalStack; state in the emulator's S3; auto-approved
   - unset or empty  -> real AWS; state in the TF_STATE_BUCKET bucket; confirm prompt
 
-State bucket comes from TF_STATE_BUCKET in .env on both planes; on the emulator
-an unset value falls back to the fixed local default, while real AWS requires
-it. `bootstrap` is the one direct AWS-API step the script performs (via the
+State bucket comes from TF_STATE_BUCKET in .env on both planes: on the emulator
+an unset value falls back to the service default (detectai-docparser-tfstate)
+and a missing bucket self-heals before terraform runs; real AWS requires it. `bootstrap` is the one direct AWS-API step the script performs (via the
 `aws` CLI, opt-in): it creates the resolved bucket on the armed plane —
 everything resource-side still goes through terraform alone. There are no
 backend.*.hcl files: backend.example.hcl documents the shapes for scriptless
@@ -41,8 +41,8 @@ TF_DIR = SERVICE_DIR / "infra" / "terraform"
 ENV_FILE = SERVICE_DIR / "infra" / ".env"
 
 SECRETS_NAME_DEFAULT = "detectai/document-parser/secrets"
-REGION_DEFAULT = "ap-south-1"
-FLOCI_STATE_BUCKET = "detectai-tfstate-local"
+REGION_DEFAULT = "ap-southeast-2"
+DEFAULT_STATE_BUCKET = "detectai-docparser-tfstate"
 FLOCI_STATE_KEY = "document-parser/floci/terraform.tfstate"
 PROD_STATE_KEY = "document-parser/terraform.tfstate"
 
@@ -103,7 +103,7 @@ def resolve_state_bucket(is_emulator: bool, values: dict[str, str]) -> str | Non
     bucket = values.get("TF_STATE_BUCKET", "")
     if bucket:
         return bucket
-    return FLOCI_STATE_BUCKET if is_emulator else None
+    return DEFAULT_STATE_BUCKET if is_emulator else None
 
 
 BUCKET_MISSING_ERROR = "the real-AWS plane needs a state bucket: TF_STATE_BUCKET is not set in .env"
@@ -143,7 +143,7 @@ def validate(is_emulator: bool, values: dict[str, str]) -> list[str]:
     if (region := values.get("AWS_REGION")) is not None and not REGION_RE.fullmatch(region):
         fail(
             f"AWS_REGION is not a valid region: {region!r}",
-            "use a plain region code, e.g. ap-south-1",
+            "use a plain region code, e.g. ap-southeast-2",
         )
     if (env_type := values.get("ENV_TYPE")) is not None and env_type not in ENV_TYPES:
         fail(
@@ -172,7 +172,7 @@ def validate_bootstrap(is_emulator: bool, values: dict[str, str]) -> list[str]:
     if (region := values.get("AWS_REGION")) is not None and not REGION_RE.fullmatch(region):
         fail(
             f"AWS_REGION is not a valid region: {region!r}",
-            "use a plain region code, e.g. ap-south-1",
+            "use a plain region code, e.g. ap-southeast-2",
         )
     if is_emulator:
         endpoint = values["EMULATOR_ENDPOINT"]
@@ -244,7 +244,7 @@ def plane_notes(values: dict[str, str], plane: str) -> list[str]:
     if values.get("ENV_TYPE") == "dev" and plane == "real AWS":
         notes.append("warning: applying to real AWS while ENV_TYPE=dev (dev runtime reads .env, not SM)")
     if plane == "emulator (Floci)" and not values.get("TF_STATE_BUCKET"):
-        notes.append(f"note: TF_STATE_BUCKET unset; the Floci plane defaults to {FLOCI_STATE_BUCKET}")
+        notes.append(f"note: TF_STATE_BUCKET unset; the Floci plane defaults to {DEFAULT_STATE_BUCKET}")
     return notes
 
 
@@ -326,6 +326,22 @@ def bootstrap_state(is_emulator: bool, values: dict[str, str], dry_run: bool) ->
             return 1
         print("versioning: Enabled")
     return 0
+
+
+def ensure_state_bucket(is_emulator: bool, values: dict[str, str]) -> int:
+    """Emulator-only self-heal: the local emulator loses its S3 data on restart,
+    so any terraform verb may start against a missing bucket — recreate it with
+    the default name instead of failing. Real AWS keeps its explicit, required
+    bucket; auto-creating one on a prod account is never the script's call."""
+    if not is_emulator:
+        return 0
+    bucket = resolve_state_bucket(True, values)  # the fallback keeps this resolvable
+    assert bucket is not None
+    head = run_aws_captured(aws_base(True, values) + ["s3api", "head-bucket", "--bucket", bucket], True)
+    if head[0] == 0:
+        return 0
+    print(f"note: emulator state bucket {bucket} is missing; creating it")
+    return bootstrap_state(True, values, False)
 
 
 def force_delete_command(is_emulator: bool, values: dict[str, str]) -> list[str]:
@@ -524,6 +540,11 @@ def main() -> int:
     # terraform does not manage, and a refusal after destroy would strand the
     # plane deliberately wiped with no ledger to re-apply from.
     if args.command == "destroy" and args.purge_state and not confirm_purge(is_emulator, values):
+        return 1
+
+    # A dropped emulator bucket (in-memory data, restart-prone) heals itself;
+    # real AWS keeps failing loudly on its missing explicit bucket.
+    if ensure_state_bucket(is_emulator, values) != 0:
         return 1
 
     backend_file = write_backend_hcl(backend_hcl)

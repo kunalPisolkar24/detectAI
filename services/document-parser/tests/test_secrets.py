@@ -105,7 +105,7 @@ def test_build_tf_vars_maps_both_planes():
     real = dp_secrets.build_tf_vars(REAL_VALUE)
     assert "TF_VAR_emulator_endpoint" not in real
     assert real["TF_VAR_secret_recovery_window"] == "30"
-    assert real["TF_VAR_aws_region"] == "ap-south-1"
+    assert real["TF_VAR_aws_region"] == "ap-southeast-2"
 
 
 def test_build_tf_vars_region_and_secret_name_overrides():
@@ -117,7 +117,7 @@ def test_build_tf_vars_region_and_secret_name_overrides():
 
 def test_build_backend_hcl_emulator():
     hcl = dp_secrets.build_backend_hcl(True, EMULATOR_VALUE)
-    assert _field(hcl, "bucket") == "detectai-tfstate-local"
+    assert _field(hcl, "bucket") == "detectai-docparser-tfstate"
     assert _field(hcl, "key").endswith("/floci/terraform.tfstate")
     assert _field(hcl, "encrypt") == "false"
     assert _field(hcl, "skip_credentials_validation") == "true"
@@ -137,16 +137,16 @@ def test_build_backend_hcl_real_aws():
 
 
 def test_build_backend_hcl_region_resolution():
-    assert _field(dp_secrets.build_backend_hcl(True, EMULATOR_VALUE), "region") == "ap-south-1"
+    assert _field(dp_secrets.build_backend_hcl(True, EMULATOR_VALUE), "region") == "ap-southeast-2"
     custom = {**REAL_VALUE, "AWS_REGION": "us-east-1"}
     assert _field(dp_secrets.build_backend_hcl(False, custom), "region") == "us-east-1"
 
 
 def test_resolve_state_bucket_defaults_and_overrides():
     # Emulator: unset falls back to the fixed local default; set passes through.
-    assert dp_secrets.resolve_state_bucket(True, EMULATOR_VALUE) == "detectai-tfstate-local"
-    custom = dp_secrets.resolve_state_bucket(True, {**EMULATOR_VALUE, "TF_STATE_BUCKET": "docparser-sandbox-1"})
-    assert custom == "docparser-sandbox-1"
+    assert dp_secrets.resolve_state_bucket(True, EMULATOR_VALUE) == "detectai-docparser-tfstate"
+    custom = dp_secrets.resolve_state_bucket(True, {**EMULATOR_VALUE, "TF_STATE_BUCKET": "dp-tester-sandbox"})
+    assert custom == "dp-tester-sandbox"
     # Real AWS: unset stays None (validation rejects it); set passes through.
     assert dp_secrets.resolve_state_bucket(False, VALID) is None
     assert dp_secrets.resolve_state_bucket(False, REAL_VALUE) == "detectai-tfstate-sandbox"
@@ -154,14 +154,14 @@ def test_resolve_state_bucket_defaults_and_overrides():
 
 def test_plane_notes_defaults_on_emulator_when_bucket_unset():
     defaulting = "\n".join(dp_secrets.plane_notes(EMULATOR_VALUE, "emulator (Floci)"))
-    assert "defaults to detectai-tfstate-local" in defaulting
-    custom = {**EMULATOR_VALUE, "TF_STATE_BUCKET": "docparser-sandbox-1"}
+    assert "defaults to detectai-docparser-tfstate" in defaulting
+    custom = {**EMULATOR_VALUE, "TF_STATE_BUCKET": "dp-tester-sandbox"}
     assert all("defaults" not in note for note in dp_secrets.plane_notes(custom, "emulator (Floci)"))
 
 
 def test_build_backend_hcl_emulator_honors_custom_bucket():
-    hcl = dp_secrets.build_backend_hcl(True, {**EMULATOR_VALUE, "TF_STATE_BUCKET": "docparser-sandbox-1"})
-    assert _field(hcl, "bucket") == "docparser-sandbox-1"
+    hcl = dp_secrets.build_backend_hcl(True, {**EMULATOR_VALUE, "TF_STATE_BUCKET": "dp-tester-sandbox"})
+    assert _field(hcl, "bucket") == "dp-tester-sandbox"
     assert _field(hcl, "key").endswith("/floci/terraform.tfstate")
 
 
@@ -173,12 +173,12 @@ def test_validate_emulator_plane_rejects_bad_bucket_name():
 def test_bootstrap_commands_emulator():
     commands = dp_secrets.bootstrap_commands(True, EMULATOR_VALUE)
     assert len(commands) == 2  # head-bucket then mb; no versioning pinning on the emulator
-    assert commands[0][-3:] == ["head-bucket", "--bucket", "detectai-tfstate-local"]
+    assert commands[0][-3:] == ["head-bucket", "--bucket", "detectai-docparser-tfstate"]
     assert "--endpoint-url http://localhost:4566" in " ".join(commands[0])
-    assert commands[1][-1] == "s3://detectai-tfstate-local"
+    assert commands[1][-1] == "s3://detectai-docparser-tfstate"
 
-    custom = dp_secrets.bootstrap_commands(True, {**EMULATOR_VALUE, "TF_STATE_BUCKET": "docparser-sandbox-1"})
-    assert custom[0][-3:] == ["head-bucket", "--bucket", "docparser-sandbox-1"]
+    custom = dp_secrets.bootstrap_commands(True, {**EMULATOR_VALUE, "TF_STATE_BUCKET": "dp-tester-sandbox"})
+    assert custom[0][-3:] == ["head-bucket", "--bucket", "dp-tester-sandbox"]
 
 
 def test_bootstrap_commands_real_aws():
@@ -188,7 +188,7 @@ def test_bootstrap_commands_real_aws():
     assert "endpoint-url" not in commands[0]
     assert commands[1][-1] == "s3://detectai-tfstate-sandbox"
     assert " ".join(commands[2]) == (
-        "aws --region ap-south-1 s3api put-bucket-versioning "
+        "aws --region ap-southeast-2 s3api put-bucket-versioning "
         "--bucket detectai-tfstate-sandbox --versioning-configuration Status=Enabled"
     )
 
@@ -217,7 +217,7 @@ def test_warn_shell_conflicts_only_when_env_bucket_set(monkeypatch, capsys):
     monkeypatch.setenv("TF_STATE_BUCKET", "shell-bucket")
     dp_secrets.warn_shell_conflicts(EMULATOR_VALUE)  # .env bucket unset: nothing to conflict
     assert capsys.readouterr().out == ""
-    dp_secrets.warn_shell_conflicts({**EMULATOR_VALUE, "TF_STATE_BUCKET": "docparser-sandbox-1"})
+    dp_secrets.warn_shell_conflicts({**EMULATOR_VALUE, "TF_STATE_BUCKET": "dp-tester-sandbox"})
     assert "the .env value wins" in capsys.readouterr().out
 
 
@@ -227,6 +227,7 @@ def test_main_verb_args_per_plane(monkeypatch, tmp_path):
         dp_secrets, "run_terraform", lambda args, tf_vars, env_overlay=None: calls.append(list(args)) or 0
     )
     monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
+    monkeypatch.setattr(dp_secrets, "ensure_state_bucket", lambda is_emulator, values: 0)
     env = tmp_path / ".env"
     monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
 
@@ -254,6 +255,7 @@ def test_destroy_verb_args_per_plane(monkeypatch, tmp_path):
         dp_secrets, "run_terraform", lambda args, tf_vars, env_overlay=None: calls.append(list(args)) or 0
     )
     monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
+    monkeypatch.setattr(dp_secrets, "ensure_state_bucket", lambda is_emulator, values: 0)
     env = tmp_path / ".env"
     monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
 
@@ -275,6 +277,7 @@ def test_destroy_with_purge_runs_after_destroy(monkeypatch, tmp_path):
         dp_secrets, "run_terraform", lambda args, tf_vars, env_overlay=None: calls.append(list(args)) or 0
     )
     monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
+    monkeypatch.setattr(dp_secrets, "ensure_state_bucket", lambda is_emulator, values: 0)
     monkeypatch.setattr(dp_secrets, "confirm_purge", lambda is_emulator, values: True)
     purged = []
     monkeypatch.setattr(
@@ -419,3 +422,48 @@ def test_confirm_purge_bucket_missing_is_a_noop(monkeypatch, capsys):
     monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator: 255)  # head-bucket 404
     assert dp_secrets.confirm_purge(False, REAL_VALUE) is True
     assert "does not exist; the purge step will be a no-op" in capsys.readouterr().out
+
+
+def test_ensure_state_bucket_self_heals_missing_emulator_bucket(monkeypatch, capsys):
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (255, "", "NoSuchBucket"))
+    created = []
+    monkeypatch.setattr(
+        dp_secrets, "bootstrap_state", lambda is_emulator, values, dry_run: created.append(dry_run) or 0
+    )
+    assert dp_secrets.ensure_state_bucket(True, EMULATOR_VALUE) == 0
+    assert created == [False]  # a real, acting creation — never a dry run
+    assert "detectai-docparser-tfstate is missing; creating it" in capsys.readouterr().out
+
+
+def test_ensure_state_bucket_skips_existing_bucket_and_real_plane(monkeypatch, capsys):
+    created = []
+    monkeypatch.setattr(dp_secrets, "bootstrap_state", lambda *__: created.append(True) or 1)
+
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (0, "", ""))
+    assert dp_secrets.ensure_state_bucket(True, EMULATOR_VALUE) == 0  # bucket exists: nothing to do
+
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (255, "", "NoSuchBucket"))
+    assert dp_secrets.ensure_state_bucket(False, REAL_VALUE) == 0  # real AWS never auto-creates
+    assert created == []
+    assert capsys.readouterr().out == ""
+
+
+def test_apply_self_heals_the_emulator_bucket(monkeypatch, tmp_path):
+    terraform_calls: list[list[str]] = []
+    monkeypatch.setattr(
+        dp_secrets, "run_terraform", lambda args, tf_vars, env_overlay=None: terraform_calls.append(list(args)) or 0
+    )
+    monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
+    created = []
+    monkeypatch.setattr(
+        dp_secrets, "bootstrap_state", lambda is_emulator, values, dry_run: created.append(dry_run) or 0
+    )
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (255, "", "NoSuchBucket"))
+
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+    env.write_text("API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=http://localhost:4566\n")
+    monkeypatch.setattr("sys.argv", ["secrets.py", "apply"])
+    assert dp_secrets.main() == 0
+    assert created == [False]  # the verb heals the plane before touching terraform
+    assert terraform_calls[0][0] == "init"
