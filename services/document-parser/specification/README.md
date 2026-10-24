@@ -13,4 +13,10 @@ Specifications for the document-parser service. This file is the hub — every d
 
 ## Planned docs
 
-- `design.md` — module layout, config and secrets, worker pool model, testing strategy (starts once HTTP/observability are stable)
+- `design.md` — module layout, worker pool model, testing strategy (starts once HTTP/observability are stable)
+
+## References
+
+Review artifacts kept outside the hub list:
+
+- [references/config.md](references/config.md) — LLD for per-plane config resolution: ENV_TYPE flick, AWS-exact prod source, class + boot-sequence diagrams, fail-fast contract
