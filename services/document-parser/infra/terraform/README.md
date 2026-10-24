@@ -92,6 +92,30 @@ aws s3 mb s3://<bucket> --region ap-south-1
 aws s3api put-bucket-versioning --bucket <bucket> --versioning-configuration Status=Enabled --region ap-south-1
 ```
 
+## Teardown
+
+| Command                | Removes                                                                                               | Keeps                   |
+|------------------------|-------------------------------------------------------------------------------------------------------|-------------------------|
+| `make secrets-clean`   | the secret + version (terraform destroy)                                                              | state bucket and ledger |
+| `make secrets-destroy` | the secret **and** the state bucket (wipe every object version and delete marker, then `delete-bucket`) | nothing                 |
+
+Both verbs share the apply pipeline: same `.env` validation, same backend
+config, `--dry-run` prints everything first, and the emulator plane
+auto-approves where real AWS keeps its interactive confirmations.
+
+- `terraform destroy` never deletes the S3 state bucket — it is backend
+  storage, not a stack resource. Only `--purge-state` touches it, and only
+  after destroy succeeded (the ledger must not be needed again).
+- On real AWS, `secrets-destroy` asks for the bucket name as a typed barrier
+  before any destruction; a refusal cancels everything. It also warns when the
+  listing shows objects outside `document-parser/` — deleting the bucket wipes
+  sibling stacks' state in a shared sandbox too.
+- Destroying on real AWS schedules the secret with the 30-day recovery window.
+  To skip it add `--force-delete`:
+  `poetry run python tools/secrets.py destroy --force-delete`.
+- After `secrets-clean`, re-apply is just `make secrets-apply` again — init
+  reuses the kept ledger, which now holds an empty state.
+
 ## Testing
 
 `terraform test` — `tests/document-parser.tftest.hcl`, mocked AWS provider, no

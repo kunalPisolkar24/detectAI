@@ -7,9 +7,12 @@ stdlib `secrets` module, so load it by path under an unambiguous name.
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 SERVICE_DIR = Path(__file__).resolve().parents[1]
 SCRIPT = SERVICE_DIR / "tools" / "secrets.py"
@@ -243,3 +246,176 @@ def test_main_verb_args_per_plane(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.argv", ["secrets.py", "apply"])
     assert dp_secrets.main() == 0
     assert calls[-1] == ["apply", "-input=false", "-auto-approve"]
+
+
+def test_destroy_verb_args_per_plane(monkeypatch, tmp_path):
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        dp_secrets, "run_terraform", lambda args, tf_vars, env_overlay=None: calls.append(list(args)) or 0
+    )
+    monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+
+    env.write_text("API_KEY=" + "a" * 20 + "\nTF_STATE_BUCKET=detectai-tfstate-sandbox\n")
+    monkeypatch.setattr("sys.argv", ["secrets.py", "destroy"])
+    assert dp_secrets.main() == 0
+    assert calls[-1] == ["destroy"]  # real AWS keeps its confirmation prompt
+
+    env.write_text("API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=http://localhost:4566\n")
+    calls.clear()
+    monkeypatch.setattr("sys.argv", ["secrets.py", "destroy"])
+    assert dp_secrets.main() == 0
+    assert calls[-1] == ["destroy", "-input=false", "-auto-approve"]
+
+
+def test_destroy_with_purge_runs_after_destroy(monkeypatch, tmp_path):
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        dp_secrets, "run_terraform", lambda args, tf_vars, env_overlay=None: calls.append(list(args)) or 0
+    )
+    monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
+    monkeypatch.setattr(dp_secrets, "confirm_purge", lambda is_emulator, values: True)
+    purged = []
+    monkeypatch.setattr(
+        dp_secrets, "purge_state", lambda is_emulator, values: purged.append(True) or 0
+    )
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+    env.write_text("API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=http://localhost:4566\n")
+
+    monkeypatch.setattr("sys.argv", ["secrets.py", "destroy", "--purge-state"])
+    assert dp_secrets.main() == 0
+    assert calls[-1] == ["destroy", "-input=false", "-auto-approve"]
+    assert purged == [True]  # the wipe runs only after terraform destroy succeeded
+
+    calls.clear()
+    monkeypatch.setattr("sys.argv", ["secrets.py", "clean"])  # invalid verb choice
+    with pytest.raises(SystemExit) as excinfo:
+        dp_secrets.main()
+    assert excinfo.value.code == 2  # argparse rejects the verb
+
+
+def test_destroy_dry_run_lists_purge_and_force_delete(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+    env.write_text("API_KEY=" + "a" * 20 + "\nTF_STATE_BUCKET=detectai-tfstate-sandbox\n")
+
+    monkeypatch.setattr(
+        "sys.argv", ["secrets.py", "destroy", "--purge-state", "--force-delete", "--dry-run"]
+    )
+    assert dp_secrets.main() == 0
+    out = capsys.readouterr().out
+    assert "then terraform destroy" in out
+    assert "purge: every object version in detectai-tfstate-sandbox" in out
+    assert "--force-delete-without-recovery" in out
+
+    env.write_text("API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=http://localhost:4566\n")
+    monkeypatch.setattr(
+        "sys.argv", ["secrets.py", "destroy", "--purge-state", "--force-delete", "--dry-run"]
+    )
+    assert dp_secrets.main() == 0
+    out = capsys.readouterr().out
+    assert "no effect on the emulator" in out  # recovery window is 0 there
+    assert "--purge: every object version" in out or "purge: every object version" in out
+
+
+def test_main_rejects_destroy_flags_on_other_verbs(monkeypatch, tmp_path):
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+    env.write_text("API_KEY=" + "a" * 20 + "\n")
+
+    monkeypatch.setattr("sys.argv", ["secrets.py", "apply", "--purge-state"])
+    with pytest.raises(SystemExit) as excinfo:
+        dp_secrets.main()
+    assert excinfo.value.code == 1
+
+    monkeypatch.setattr("sys.argv", ["secrets.py", "plan", "--force-delete"])
+    with pytest.raises(SystemExit) as excinfo:
+        dp_secrets.main()
+    assert excinfo.value.code == 1
+
+
+def test_effective_secret_name_resolution():
+    assert dp_secrets.effective_secret_name(VALID) == "detectai/document-parser/secrets"
+    assert dp_secrets.effective_secret_name({"DP_API_KEY_SECRET_NAME": ""}) == "detectai/document-parser/secrets"
+    assert dp_secrets.effective_secret_name({"DP_API_KEY_SECRET_NAME": "custom/name"}) == "custom/name"
+
+
+def test_purge_state_wipes_versions_and_delete_markers_then_bucket(monkeypatch, capsys):
+    calls: list[list[str]] = []
+
+    def fake_run_aws(command: list[str], is_emulator: bool) -> int:
+        calls.append(list(command))
+        return 0
+
+    listing = {
+        "Versions": [
+            {"Key": "document-parser/terraform.tfstate", "VersionId": "v1"},
+            {"Key": "chats/terraform.tfstate", "VersionId": "v2"},
+        ],
+        "DeleteMarkers": [
+            {"Key": "document-parser/terraform.tflock", "VersionId": "d1"},
+        ],
+    }
+
+    monkeypatch.setattr(dp_secrets, "run_aws", fake_run_aws)
+
+    def fake_captured(command: list[str], is_emulator: bool) -> tuple[int, str, str]:
+        calls.append(list(command))
+        return 0, json.dumps(listing), ""
+
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", fake_captured)
+    assert dp_secrets.purge_state(False, REAL_VALUE) == 0
+
+    joined = [" ".join(call) for call in calls]
+    assert "head-bucket" in joined[0]  # the purge walks over existing buckets only
+    assert "list-object-versions" in joined[1]
+    assert len([call for call in joined if "delete-object" in call]) == 3  # two versions + one marker
+    assert "--version-id v1" in joined[2] and "--version-id v2" in joined[3] and "--version-id d1" in joined[4]
+    assert joined[-1].endswith("delete-bucket --bucket detectai-tfstate-sandbox")
+    assert all("detectai-tfstate-sandbox" in call for call in joined)
+    assert "deleted: detectai-tfstate-sandbox" in capsys.readouterr().out
+
+
+def test_purge_state_skips_missing_bucket(monkeypatch, capsys):
+    def fake_run_aws(command: list[str], is_emulator: bool) -> int:
+        return 255 if "head-bucket" in command else 0
+
+    monkeypatch.setattr(dp_secrets, "run_aws", fake_run_aws)
+    assert dp_secrets.purge_state(False, REAL_VALUE) == 0
+    assert "already gone; nothing to purge" in capsys.readouterr().out
+
+
+def test_confirm_purge_typed_barrier_on_real_plane(monkeypatch, capsys):
+    monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator: 0)  # bucket exists
+    listing = [("document-parser/terraform.tfstate", "v1"), ("chats/terraform.tfstate", "v2")]
+    monkeypatch.setattr(dp_secrets, "list_bucket_versions", lambda is_emulator, values: listing)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "wrong-name")
+    assert dp_secrets.confirm_purge(False, REAL_VALUE) is False
+    out = capsys.readouterr().out
+    assert "purge will wipe 2 object version(s)" in out
+    assert "outside document-parser/" in out  # sibling stacks in the shared sandbox are called out
+    assert "cancelled: nothing was destroyed" in out
+
+    monkeypatch.setattr(dp_secrets, "list_bucket_versions", lambda is_emulator, values: [])
+    monkeypatch.setattr("builtins.input", lambda prompt="": "detectai-tfstate-sandbox")
+    assert dp_secrets.confirm_purge(False, REAL_VALUE) is True
+
+
+def test_confirm_purge_emulator_never_prompts(monkeypatch):
+    monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator: 0)  # bucket exists
+    monkeypatch.setattr(dp_secrets, "list_bucket_versions", lambda is_emulator, values: [])
+
+    def no_prompt(prompt=""):
+        raise AssertionError("emulator plane must not prompt")
+
+    monkeypatch.setattr("builtins.input", no_prompt)
+    assert dp_secrets.confirm_purge(True, EMULATOR_VALUE) is True
+
+
+def test_confirm_purge_bucket_missing_is_a_noop(monkeypatch, capsys):
+    monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator: 255)  # head-bucket 404
+    assert dp_secrets.confirm_purge(False, REAL_VALUE) is True
+    assert "does not exist; the purge step will be a no-op" in capsys.readouterr().out

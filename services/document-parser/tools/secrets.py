@@ -4,8 +4,10 @@
 Input compiler only: parse and validate infra/.env, map the values onto
 TF_VAR_* environment variables and a generated backend config, then drive
 `terraform plan/apply` for the service-scoped stack (infra/terraform).
-Terraform alone touches AWS on the resource path; the script's one direct
-AWS-API step is the opt-in `bootstrap` verb (below, via the `aws` CLI).
+Terraform alone touches AWS on the resource path; the script's direct AWS-API
+steps are the opt-in `bootstrap` verb (create the plane's state bucket), the
+`destroy --purge-state` object wipe and bucket delete, and the opt-in
+`--force-delete` secret delete — all via the `aws` CLI.
 
 Plane selection (single flick, from EMULATOR_ENDPOINT in .env):
   - http(s) URL     -> Floci/LocalStack; state in the emulator's S3; auto-approved
@@ -24,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import os
 import re
 import shutil
@@ -51,6 +54,11 @@ API_KEY_MIN_LENGTH = 16
 ENV_TYPES = ("dev", "prod")
 EMULATOR_RECOVERY_WINDOW = 0
 PROD_RECOVERY_WINDOW = 30
+STATE_PREFIX = "document-parser"
+
+
+def effective_secret_name(values: dict[str, str]) -> str:
+    return values.get("DP_API_KEY_SECRET_NAME") or SECRETS_NAME_DEFAULT
 
 
 def die(message: str, fix: str) -> NoReturn:
@@ -247,12 +255,17 @@ def warn_shell_conflicts(values: dict[str, str]) -> None:
         print(f"note: TF_STATE_BUCKET also exported in the shell ({shell_bucket!r}); the .env value wins")
 
 
+def aws_base(is_emulator: bool, values: dict[str, str]) -> list[str]:
+    base = ["aws", "--region", resolve_region(values)]
+    if is_emulator:
+        base += ["--endpoint-url", values["EMULATOR_ENDPOINT"]]
+    return base
+
+
 def bootstrap_commands(is_emulator: bool, values: dict[str, str]) -> list[list[str]]:
     bucket = resolve_state_bucket(is_emulator, values)
     assert bucket is not None  # a None bucket is a validation error, not a bootstrap input
-    command_base = ["aws", "--region", resolve_region(values)]
-    if is_emulator:
-        command_base += ["--endpoint-url", values["EMULATOR_ENDPOINT"]]
+    command_base = aws_base(is_emulator, values)
     head_bucket = command_base + ["s3api", "head-bucket", "--bucket", bucket]
     return [
         head_bucket,
@@ -266,11 +279,23 @@ def bootstrap_commands(is_emulator: bool, values: dict[str, str]) -> list[list[s
     ]
 
 
+def aws_env(is_emulator: bool) -> dict[str, str]:
+    return os.environ | ({"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"} if is_emulator else {})
+
+
 def run_aws(command: list[str], is_emulator: bool) -> int:
-    env = os.environ | ({"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"} if is_emulator else {})
     print(f"running: {' '.join(command)}")
     try:
-        return subprocess.run(command, check=False, env=env).returncode
+        return subprocess.run(command, check=False, env=aws_env(is_emulator)).returncode
+    except OSError as exc:
+        die(f"failed to run aws: {exc}", "install the AWS CLI (see README prerequisites)")
+
+
+def run_aws_captured(command: list[str], is_emulator: bool) -> tuple[int, str, str]:
+    """Like run_aws but keeps the streams captured: (returncode, stdout, stderr)."""
+    try:
+        process = subprocess.run(command, check=False, env=aws_env(is_emulator), capture_output=True, text=True)
+        return process.returncode, process.stdout, process.stderr
     except OSError as exc:
         die(f"failed to run aws: {exc}", "install the AWS CLI (see README prerequisites)")
 
@@ -303,6 +328,100 @@ def bootstrap_state(is_emulator: bool, values: dict[str, str], dry_run: bool) ->
     return 0
 
 
+def force_delete_command(is_emulator: bool, values: dict[str, str]) -> list[str]:
+    return aws_base(is_emulator, values) + [
+        "secretsmanager", "delete-secret",
+        "--secret-id", effective_secret_name(values),
+        "--force-delete-without-recovery",
+    ]
+
+
+def list_bucket_versions(is_emulator: bool, values: dict[str, str]) -> list[tuple[str, str]] | None:
+    """Every (key, version id) — object versions and delete markers — in the
+    plane's state bucket, or None when the listing failed. The AWS CLI
+    paginates automatically, so one call spans the whole bucket."""
+    bucket = resolve_state_bucket(is_emulator, values)
+    assert bucket is not None  # a None bucket is a validation error, not a listing input
+    code, stdout, stderr = run_aws_captured(
+        aws_base(is_emulator, values)
+        + ["s3api", "list-object-versions", "--bucket", bucket, "--output", "json"],
+        is_emulator,
+    )
+    if code != 0:
+        print(f"error: could not list object versions in {bucket}")
+        if stderr.strip():
+            print(stderr.strip())
+        return None
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        print(f"error: list-object-versions returned unparseable output: {exc}")
+        return None
+    items = []
+    for kind in ("Versions", "DeleteMarkers"):
+        for entry in payload.get(kind) or []:
+            items.append((entry["Key"], entry["VersionId"]))
+    return items
+
+
+def confirm_purge(is_emulator: bool, values: dict[str, str]) -> bool:
+    """Typed barrier against wiping the state bucket — Terraform does not
+    manage it, so its own destroy prompt never covers the wipe. Runs before
+    any destruction so a refusal leaves everything intact."""
+    bucket = resolve_state_bucket(is_emulator, values)
+    assert bucket is not None  # validation already rejected a missing bucket
+    if run_aws(aws_base(is_emulator, values) + ["s3api", "head-bucket", "--bucket", bucket], is_emulator) != 0:
+        print(f"note: bucket {bucket} does not exist; the purge step will be a no-op")
+        return True
+    items = list_bucket_versions(is_emulator, values) or []
+    if items:
+        print(f"purge will wipe {len(items)} object version(s) in {bucket}")
+        prefixes = sorted({key.split("/", 1)[0] for key, _ in items})
+        others = [prefix for prefix in prefixes if prefix != STATE_PREFIX]
+        if others:
+            print(
+                f"warning: {bucket} also holds objects outside {STATE_PREFIX}/ "
+                f"(prefixes: {', '.join(others)}); deleting the bucket removes them too"
+            )
+    if is_emulator:
+        print(f"note: emulator plane purges {bucket} without a typed confirmation (auto-apply plane)")
+        return True
+    answer = input(f'type "{bucket}" to wipe it and delete it: ').strip()
+    if answer != bucket:
+        print("cancelled: nothing was destroyed")
+        return False
+    return True
+
+
+def purge_state(is_emulator: bool, values: dict[str, str]) -> int:
+    """Wipe every object version and delete marker from the plane's state
+    bucket, then delete the bucket. Runs only after a successful terraform
+    destroy — the ledger must not be needed again once this succeeds. Safe to
+    rerun: a missing bucket is reported as a no-op."""
+    bucket = resolve_state_bucket(is_emulator, values)
+    assert bucket is not None  # validation already rejected a missing bucket
+    base = aws_base(is_emulator, values)
+    if run_aws(base + ["s3api", "head-bucket", "--bucket", bucket], is_emulator) != 0:
+        print(f"note: bucket {bucket} is already gone; nothing to purge")
+        return 0
+    items = list_bucket_versions(is_emulator, values)
+    if items is None:
+        return 1
+    if not items:
+        print(f"purge: {bucket} holds no objects")
+    for key, version_id in items:
+        print(f"purging: {key}")
+        delete = base + ["s3api", "delete-object", "--bucket", bucket,
+                         "--key", key, "--version-id", version_id]
+        if run_aws(delete, is_emulator) != 0:
+            return 1
+    if run_aws(base + ["s3api", "delete-bucket", "--bucket", bucket], is_emulator) != 0:
+        print("fix: rerun `make secrets-destroy` — safe to repeat when the deletions are still settling")
+        return 1
+    print(f"deleted: {bucket}")
+    return 0
+
+
 def run_terraform(args: list[str], tf_vars: dict[str, str], env_overlay: dict[str, str] | None = None) -> int:
     terraform = shutil.which("terraform")
     if terraform is None:
@@ -325,14 +444,29 @@ def main() -> int:
         description="Validate the service .env and drive the secrets terraform stack.",
     )
     parser.add_argument(
-        "command", choices=("plan", "apply", "bootstrap"),
-        help="terraform plan/apply, or bootstrap (create the plane's state bucket via the aws CLI)",
+        "command", choices=("plan", "apply", "bootstrap", "destroy"),
+        help="terraform plan/apply/destroy, or bootstrap (create the plane's state bucket via the aws CLI)",
+    )
+    parser.add_argument(
+        "--purge-state", action="store_true",
+        help="destroy only: after terraform destroy, wipe and delete the plane's state bucket",
+    )
+    parser.add_argument(
+        "--force-delete", action="store_true",
+        help="destroy only: delete the secret immediately after destroy, skipping the 30-day recovery window on real AWS",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
         help="print everything that would be fed to terraform; run nothing",
     )
     args = parser.parse_args()
+
+    if args.purge_state and args.command != "destroy":
+        die("--purge-state only applies to the destroy command",
+            "run it with destroy (make secrets-destroy)")
+    if args.force_delete and args.command != "destroy":
+        die("--force-delete only applies to the destroy command",
+            "run it with destroy (poetry run python tools/secrets.py destroy --force-delete)")
 
     if not ENV_FILE.exists():
         die(f"{ENV_FILE} not found", "run `make env` in services/document-parser first")
@@ -364,7 +498,7 @@ def main() -> int:
 
     print(f"plane:  {plane}")
     print(f"stack:  {TF_DIR}")
-    print(f"secret: {SECRETS_NAME_DEFAULT}")
+    print(f"secret: {effective_secret_name(values)}")
     print(f"key:    *** ({key_len} chars, hidden)")
     print(f"state:  {state_bucket} / {state_key}")
     for note in plane_notes(values, plane):
@@ -375,8 +509,22 @@ def main() -> int:
         for line in backend_hcl.splitlines():
             print(f"  {line}")
         print(f"commands: terraform init -reconfigure -backend-config <backend.hcl>, then terraform {args.command}")
+        if args.command == "destroy":
+            if args.force_delete:
+                if is_emulator:
+                    print("then skip: --force-delete has no effect on the emulator (0-day recovery window)")
+                else:
+                    print(f"then run: {' '.join(force_delete_command(is_emulator, values))}")
+            if args.purge_state:
+                print(f"then purge: every object version in {state_bucket}, then delete the bucket")
         print("(dry run: no terraform, no AWS)")
         return 0
+
+    # The typed barrier gates the whole destroy run: purging removes the bucket
+    # terraform does not manage, and a refusal after destroy would strand the
+    # plane deliberately wiped with no ledger to re-apply from.
+    if args.command == "destroy" and args.purge_state and not confirm_purge(is_emulator, values):
+        return 1
 
     backend_file = write_backend_hcl(backend_hcl)
     try:
@@ -386,7 +534,7 @@ def main() -> int:
         verb_args = [args.command]
         if args.command == "plan" or is_emulator:
             verb_args.append("-input=false")
-        if args.command == "apply" and is_emulator:
+        if args.command in ("apply", "destroy") and is_emulator:
             verb_args.append("-auto-approve")
         backend_creds = {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"} if is_emulator else None
 
@@ -405,7 +553,17 @@ def main() -> int:
                     f"(region {resolve_region(values)}); make secrets-bootstrap-state can create it"
                 )
             return 1
-        return run_terraform(verb_args, tf_vars, backend_creds)
+        destroyed = run_terraform(verb_args, tf_vars, backend_creds)
+        if args.command != "destroy" or destroyed != 0:
+            return destroyed
+        if args.force_delete:
+            if is_emulator:
+                print("note: --force-delete has no effect on the emulator (0-day recovery window)")
+            else:
+                run_aws(force_delete_command(is_emulator, values), is_emulator)
+        if args.purge_state:
+            return purge_state(is_emulator, values)
+        return 0
     finally:
         backend_file.unlink(missing_ok=True)
 

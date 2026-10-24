@@ -1,9 +1,10 @@
 # Secrets pipeline. tools/secrets.py is the only brain here: it validates
 # infra/.env, maps it onto TF_VAR_* variables and drives the service terraform
-# stack (infra/terraform). Its `bootstrap` verb (below) is the one step that
-# calls AWS directly — the `aws` CLI creating the state bucket.
+# stack (infra/terraform). Its `bootstrap` verb creates the plane's state
+# bucket, and `destroy --purge-state` deletes it again — the steps that touch
+# AWS directly beside terraform itself.
 
-.PHONY: secrets-check secrets-plan secrets-apply secrets-bootstrap-state secrets-test help-secrets
+.PHONY: secrets-check secrets-plan secrets-apply secrets-clean secrets-destroy secrets-bootstrap-state secrets-test help-secrets
 
 help-secrets:
 	@echo "  Secrets pipeline (mk/secrets.mk):"
@@ -11,6 +12,8 @@ help-secrets:
 	@echo "    secrets-bootstrap-state create the state bucket for the plane .env selects (idempotent)"
 	@echo "    secrets-plan            terraform plan against the plane .env selects"
 	@echo "    secrets-apply           terraform apply (auto on Floci, interactive confirm on real AWS)"
+	@echo "    secrets-clean           terraform destroy the secrets blob; keeps the state bucket and ledger"
+	@echo "    secrets-destroy         full teardown: terraform destroy, then wipe and delete the state bucket"
 	@echo "    secrets-test            run the focused pytest for tools/secrets.py"
 	@echo ""
 
@@ -28,3 +31,9 @@ secrets-plan:
 
 secrets-apply:
 	poetry run python tools/secrets.py apply
+
+secrets-clean:
+	poetry run python tools/secrets.py destroy
+
+secrets-destroy:
+	poetry run python tools/secrets.py destroy --purge-state
