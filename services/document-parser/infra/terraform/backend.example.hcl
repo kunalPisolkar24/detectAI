@@ -20,7 +20,10 @@
 #     s3 = "http://localhost:4566"
 #   }
 
-bucket       = "REPLACE-me-<unique sandbox bucket>"
+# Real-AWS shape: keep a unique per-engineer bucket (the mock below matches the
+# .env default; swap it for your own on a real account —
+# renaming it re-points terraform at a fresh ledger, nothing migrates).
+bucket       = "detectai-docparser-tfstate"
 key          = "document-parser/terraform.tfstate"
 region       = "ap-southeast-2"
 encrypt      = true
