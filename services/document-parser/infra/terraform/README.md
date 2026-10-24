@@ -17,13 +17,33 @@ One stack, two destinations, flipped by `EMULATOR_ENDPOINT` in `infra/.env`:
 |---------------------|-----------------------------------|--------------------------------|
 | Selected by         | `EMULATOR_ENDPOINT` set           | line empty or removed          |
 | Credentials         | dummy `test`/`test`               | real AWS keys                  |
-| State               | Floci S3 (`detectai-tfstate-local`) | versioned + encrypted S3     |
+| State bucket        | fixed: `detectai-tfstate-local`   | `TF_STATE_BUCKET` from `.env`  |
 | Secret deletion     | instant (0-day recovery window)   | 30-day recovery window         |
 | Apply               | auto-approved                     | interactive confirm            |
 
 The provider block adapts (`providers.tf`): the emulator plane gets `test`
 credentials, `skip_*` flags, and a `secretsmanager` endpoint override; the real-AWS
 plane leaves all of those unset.
+
+## State config
+
+There are no `backend.*.hcl` files in this stack. `tools/secrets.py` composes the
+backend config (bucket, key, region, per-plane flags, and on the emulator the
+`s3` endpoint — the same value as `EMULATOR_ENDPOINT`, never a second source of
+truth), writes it to a temp file, and feeds `terraform init -reconfigure -backend-config <file>`.
+`backend.example.hcl` documents the shapes for manual, scriptless runs; the script
+never reads it.
+
+State expectations:
+- the state *key* is fixed per plane (`document-parser/floci/terraform.tfstate` vs
+  `document-parser/terraform.tfstate`); the state *bucket* on the real-AWS plane is
+  per engineer/tester — one sandbox bucket each, so parallel testing never collides
+  or cross-contaminates state.
+- changing `TF_STATE_BUCKET` (or the region) after a first apply points Terraform at
+  a new/empty ledger: `plan` will offer to create everything again; nothing migrates.
+- never run bare `terraform init` — the stacked backend is intentionally partial and
+  only the script supplies it.
+- the real-AWS plane needs Terraform >= 1.10 for the `use_lockfile` backend flag.
 
 ## Data flow
 
@@ -43,14 +63,19 @@ make secrets-plan    # plan against the plane .env selects
 make secrets-apply   # apply (auto on Floci, interactive on real AWS)
 ```
 
-The state bucket must exist before the first `init`:
+Emulator state bucket must exist before the first `init`:
 
 ```bash
 aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-tfstate-local --region ap-south-1
 ```
 
-For real AWS, copy `backend.prod.hcl.example` → `backend.prod.hcl` and fill in the
-bucket name (versioned, encrypted, access-restricted to operators running the seed).
+For real AWS, set `TF_STATE_BUCKET=<bucket>` in `infra/.env` and create your sandbox
+bucket first (versioned, encrypted, private; Terraform >= 1.10):
+
+```bash
+aws s3 mb s3://<bucket> --region ap-south-1
+aws s3api put-bucket-versioning --bucket <bucket> --versioning-configuration Status=Enabled --region ap-south-1
+```
 
 ## Testing
 

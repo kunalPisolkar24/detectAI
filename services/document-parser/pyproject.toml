@@ -17,5 +17,6 @@ build-backend = "poetry.core.masonry.api"
 
 [dependency-groups]
 dev = [
+    "pytest (>=9.0,<10.0)",
     "ruff (>=0.17.2,<0.18.0)"
 ]

@@ -2,14 +2,18 @@
 # infra/.env, maps it onto TF_VAR_* variables and drives the service terraform
 # stack (infra/terraform). Nothing in this file talks to AWS itself.
 
-.PHONY: secrets-check secrets-plan secrets-apply help-secrets
+.PHONY: secrets-check secrets-plan secrets-apply secrets-test help-secrets
 
 help-secrets:
 	@echo "  Secrets pipeline (mk/secrets.mk):"
 	@echo "    secrets-check   validate infra/.env and preview the plane/vars (no terraform, no AWS)"
 	@echo "    secrets-plan    terraform plan against the plane .env selects"
 	@echo "    secrets-apply   terraform apply (auto on Floci, interactive confirm on real AWS)"
+	@echo "    secrets-test    run the focused pytest for tools/secrets.py"
 	@echo ""
+
+secrets-test:
+	poetry run pytest tests/test_secrets.py -q
 
 secrets-check:
 	poetry run python tools/secrets.py plan --dry-run
