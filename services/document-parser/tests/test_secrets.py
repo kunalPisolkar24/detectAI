@@ -80,7 +80,7 @@ def test_validate_emulator_plane_rejects_bad_endpoint():
 
 def test_validate_real_plane_requires_bucket():
     errors = "\n".join(dp_secrets.validate(False, {**VALID, "TF_STATE_BUCKET": ""}))
-    assert "TF_STATE_BUCKET" in errors and "create it first" in errors
+    assert "TF_STATE_BUCKET" in errors and "make secrets-bootstrap-state" in errors
 
 
 def test_validate_real_plane_rejects_bad_bucket_names():
@@ -139,7 +139,80 @@ def test_build_backend_hcl_region_resolution():
     assert _field(dp_secrets.build_backend_hcl(False, custom), "region") == "us-east-1"
 
 
-def test_plane_notes_flags_ignored_bucket_on_emulator():
-    values = {**EMULATOR_VALUE, "TF_STATE_BUCKET": "detectai-tfstate-sandbox"}
-    notes = "\n".join(dp_secrets.plane_notes(values, "emulator (Floci)"))
-    assert "TF_STATE_BUCKET is ignored" in notes
+def test_resolve_state_bucket_defaults_and_overrides():
+    # Emulator: unset falls back to the fixed local default; set passes through.
+    assert dp_secrets.resolve_state_bucket(True, EMULATOR_VALUE) == "detectai-tfstate-local"
+    custom = dp_secrets.resolve_state_bucket(True, {**EMULATOR_VALUE, "TF_STATE_BUCKET": "docparser-sandbox-1"})
+    assert custom == "docparser-sandbox-1"
+    # Real AWS: unset stays None (validation rejects it); set passes through.
+    assert dp_secrets.resolve_state_bucket(False, VALID) is None
+    assert dp_secrets.resolve_state_bucket(False, REAL_VALUE) == "detectai-tfstate-sandbox"
+
+
+def test_plane_notes_defaults_on_emulator_when_bucket_unset():
+    defaulting = "\n".join(dp_secrets.plane_notes(EMULATOR_VALUE, "emulator (Floci)"))
+    assert "defaults to detectai-tfstate-local" in defaulting
+    custom = {**EMULATOR_VALUE, "TF_STATE_BUCKET": "docparser-sandbox-1"}
+    assert all("defaults" not in note for note in dp_secrets.plane_notes(custom, "emulator (Floci)"))
+
+
+def test_build_backend_hcl_emulator_honors_custom_bucket():
+    hcl = dp_secrets.build_backend_hcl(True, {**EMULATOR_VALUE, "TF_STATE_BUCKET": "docparser-sandbox-1"})
+    assert _field(hcl, "bucket") == "docparser-sandbox-1"
+    assert _field(hcl, "key").endswith("/floci/terraform.tfstate")
+
+
+def test_validate_emulator_plane_rejects_bad_bucket_name():
+    errors = "\n".join(dp_secrets.validate(True, {**EMULATOR_VALUE, "TF_STATE_BUCKET": "Bad_Bucket"}))
+    assert "TF_STATE_BUCKET" in errors and "valid S3 bucket name" in errors
+
+
+def test_bootstrap_commands_emulator():
+    commands = dp_secrets.bootstrap_commands(True, EMULATOR_VALUE)
+    assert len(commands) == 2  # head-bucket then mb; no versioning pinning on the emulator
+    assert commands[0][-3:] == ["head-bucket", "--bucket", "detectai-tfstate-local"]
+    assert "--endpoint-url http://localhost:4566" in " ".join(commands[0])
+    assert commands[1][-1] == "s3://detectai-tfstate-local"
+
+    custom = dp_secrets.bootstrap_commands(True, {**EMULATOR_VALUE, "TF_STATE_BUCKET": "docparser-sandbox-1"})
+    assert custom[0][-3:] == ["head-bucket", "--bucket", "docparser-sandbox-1"]
+
+
+def test_bootstrap_commands_real_aws():
+    commands = dp_secrets.bootstrap_commands(False, REAL_VALUE)
+    assert len(commands) == 3  # head-bucket, mb, put-bucket-versioning
+    assert commands[0][-3:] == ["head-bucket", "--bucket", "detectai-tfstate-sandbox"]
+    assert "endpoint-url" not in commands[0]
+    assert commands[1][-1] == "s3://detectai-tfstate-sandbox"
+    assert " ".join(commands[2]) == (
+        "aws --region ap-south-1 s3api put-bucket-versioning "
+        "--bucket detectai-tfstate-sandbox --versioning-configuration Status=Enabled"
+    )
+
+
+def test_validate_bootstrap_skips_key_and_env_type_checks():
+    assert dp_secrets.validate_bootstrap(True, {"EMULATOR_ENDPOINT": "http://localhost:4566"}) == []
+    assert dp_secrets.validate_bootstrap(False, {"TF_STATE_BUCKET": "detectai-tfstate-sandbox"}) == []
+
+
+def test_validate_bootstrap_keeps_bucket_region_and_endpoint_checks():
+    missing = "\n".join(dp_secrets.validate_bootstrap(False, {}))
+    assert "TF_STATE_BUCKET" in missing
+
+    bad_shape = "\n".join(
+        dp_secrets.validate_bootstrap(True, {"EMULATOR_ENDPOINT": "http://localhost:4566", "TF_STATE_BUCKET": "Bad"})
+    )
+    assert "valid S3 bucket name" in bad_shape
+
+    bad_plane = "\n".join(
+        dp_secrets.validate_bootstrap(True, {"EMULATOR_ENDPOINT": "nope", "AWS_REGION": "Mars-1"})
+    )
+    assert "EMULATOR_ENDPOINT" in bad_plane and "AWS_REGION" in bad_plane
+
+
+def test_warn_shell_conflicts_only_when_env_bucket_set(monkeypatch, capsys):
+    monkeypatch.setenv("TF_STATE_BUCKET", "shell-bucket")
+    dp_secrets.warn_shell_conflicts(EMULATOR_VALUE)  # .env bucket unset: nothing to conflict
+    assert capsys.readouterr().out == ""
+    dp_secrets.warn_shell_conflicts({**EMULATOR_VALUE, "TF_STATE_BUCKET": "docparser-sandbox-1"})
+    assert "the .env value wins" in capsys.readouterr().out

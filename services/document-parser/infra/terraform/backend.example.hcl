@@ -3,7 +3,8 @@
 # to `terraform init -reconfigure -backend-config <generated file>`. Use this
 # shape (edit a copy) only for manual, scriptless terraform runs.
 #
-# Emulator plane (EMULATOR_ENDPOINT set: state lives in the Floci volume):
+# Emulator plane (EMULATOR_ENDPOINT set: state lives in the Floci volume).
+# Bucket: TF_STATE_BUCKET from .env when set, else the default below:
 #
 #   bucket                      = "detectai-tfstate-local"
 #   key                         = "document-parser/floci/terraform.tfstate"

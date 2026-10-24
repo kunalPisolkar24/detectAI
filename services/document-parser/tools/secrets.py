@@ -3,16 +3,21 @@
 
 Input compiler only: parse and validate infra/.env, map the values onto
 TF_VAR_* environment variables and a generated backend config, then drive
-`terraform plan/apply` for the service-scoped stack (infra/terraform). The
-script never talks to AWS itself — terraform is the only component touching it.
+`terraform plan/apply` for the service-scoped stack (infra/terraform).
+Terraform alone touches AWS on the resource path; the script's one direct
+AWS-API step is the opt-in `bootstrap` verb (below, via the `aws` CLI).
 
 Plane selection (single flick, from EMULATOR_ENDPOINT in .env):
   - http(s) URL     -> Floci/LocalStack; state in the emulator's S3; auto-approved
   - unset or empty  -> real AWS; state in the TF_STATE_BUCKET bucket; confirm prompt
 
-There are no backend.*.hcl files: the script composes the backend config for
-both planes from .env plus in-script constants (backend.example.hcl documents
-the shapes for scriptless runs).
+State bucket comes from TF_STATE_BUCKET in .env on both planes; on the emulator
+an unset value falls back to the fixed local default, while real AWS requires
+it. `bootstrap` is the one direct AWS-API step the script performs (via the
+`aws` CLI, opt-in): it creates the resolved bucket on the armed plane —
+everything resource-side still goes through terraform alone. There are no
+backend.*.hcl files: backend.example.hcl documents the shapes for scriptless
+runs.
 """
 
 from __future__ import annotations
@@ -84,6 +89,38 @@ def resolve_region(values: dict[str, str]) -> str:
     return values.get("AWS_REGION") or REGION_DEFAULT
 
 
+def resolve_state_bucket(is_emulator: bool, values: dict[str, str]) -> str | None:
+    """State bucket for the plane: .env value if set; Floci falls back to the
+    fixed local default; real AWS stays required (no guessing)."""
+    bucket = values.get("TF_STATE_BUCKET", "")
+    if bucket:
+        return bucket
+    return FLOCI_STATE_BUCKET if is_emulator else None
+
+
+BUCKET_MISSING_ERROR = "the real-AWS plane needs a state bucket: TF_STATE_BUCKET is not set in .env"
+BUCKET_MISSING_FIX = (
+    "add TF_STATE_BUCKET=<unique 3-63 char lowercase bucket> to .env and create it "
+    "(make secrets-bootstrap-state does it, or aws s3 mb + versioning)"
+)
+BUCKET_SHAPE_ERROR = "TF_STATE_BUCKET is not a valid S3 bucket name: {bucket!r}"
+BUCKET_SHAPE_FIX = (
+    "use 3-63 lowercase letters, digits or hyphens, starting and ending alphanumeric"
+)
+
+
+def bucket_errors(errors: list[str], bucket: str, required: bool) -> None:
+    def fail(message: str, fix: str) -> None:
+        errors.append(f"error: {message}\nfix:   {fix}")
+
+    if not bucket:
+        if required:
+            fail(BUCKET_MISSING_ERROR, BUCKET_MISSING_FIX)
+        return
+    if not BUCKET_RE.fullmatch(bucket):
+        fail(BUCKET_SHAPE_ERROR.format(bucket=bucket), BUCKET_SHAPE_FIX)
+
+
 def validate(is_emulator: bool, values: dict[str, str]) -> list[str]:
     errors: list[str] = []
 
@@ -112,19 +149,31 @@ def validate(is_emulator: bool, values: dict[str, str]) -> list[str]:
                 f"EMULATOR_ENDPOINT is not a valid http(s) URL: {endpoint!r}",
                 "set it to the Floci URL (http://localhost:4566) or remove the line for real AWS",
             )
-    else:
-        bucket = values.get("TF_STATE_BUCKET", "")
-        if not bucket:
+    bucket_errors(errors, values.get("TF_STATE_BUCKET", ""), required=not is_emulator)
+    return errors
+
+
+def validate_bootstrap(is_emulator: bool, values: dict[str, str]) -> list[str]:
+    """Narrow checks for the state-bucket bootstrap: only what bucket creation
+    consumes. In particular it does not demand API_KEY or ENV_TYPE."""
+    errors: list[str] = []
+
+    def fail(message: str, fix: str) -> None:
+        errors.append(f"error: {message}\nfix:   {fix}")
+
+    if (region := values.get("AWS_REGION")) is not None and not REGION_RE.fullmatch(region):
+        fail(
+            f"AWS_REGION is not a valid region: {region!r}",
+            "use a plain region code, e.g. ap-south-1",
+        )
+    if is_emulator:
+        endpoint = values["EMULATOR_ENDPOINT"]
+        if not URL_RE.fullmatch(endpoint):
             fail(
-                "the real-AWS plane needs a state bucket: TF_STATE_BUCKET is not set in .env",
-                "add TF_STATE_BUCKET=<unique 3-63 char lowercase bucket> to .env and create it first "
-                "(aws s3 mb s3://<bucket> + versioning)",
+                f"EMULATOR_ENDPOINT is not a valid http(s) URL: {endpoint!r}",
+                "set it to the Floci URL (http://localhost:4566) or remove the line for real AWS",
             )
-        elif not BUCKET_RE.fullmatch(bucket):
-            fail(
-                f"TF_STATE_BUCKET is not a valid S3 bucket name: {bucket!r}",
-                "use 3-63 lowercase letters, digits or hyphens, starting and ending alphanumeric",
-            )
+    bucket_errors(errors, values.get("TF_STATE_BUCKET", ""), required=not is_emulator)
     return errors
 
 
@@ -146,10 +195,12 @@ def build_tf_vars(values: dict[str, str]) -> dict[str, str]:
 
 def build_backend_hcl(is_emulator: bool, values: dict[str, str]) -> str:
     region = resolve_region(values)
+    bucket = resolve_state_bucket(is_emulator, values)
+    state_key = FLOCI_STATE_KEY if is_emulator else PROD_STATE_KEY
     if is_emulator:
         lines = [
-            'bucket                      = "detectai-tfstate-local"',
-            f'key                         = "{FLOCI_STATE_KEY}"',
+            f'bucket                      = "{bucket}"',
+            f'key                         = "{state_key}"',
             f'region                      = "{region}"',
             "encrypt                     = false",
             "skip_credentials_validation = true",
@@ -163,8 +214,8 @@ def build_backend_hcl(is_emulator: bool, values: dict[str, str]) -> str:
         ]
     else:
         lines = [
-            f'bucket                      = "{values["TF_STATE_BUCKET"]}"',
-            f'key                         = "{PROD_STATE_KEY}"',
+            f'bucket                      = "{bucket}"',
+            f'key                         = "{state_key}"',
             f'region                      = "{region}"',
             "encrypt                     = true",
             "use_lockfile                = true",
@@ -184,16 +235,72 @@ def plane_notes(values: dict[str, str], plane: str) -> list[str]:
         notes.append("note: ENV_TYPE=prod with the emulator — the local-testing shape for the prod pull path")
     if values.get("ENV_TYPE") == "dev" and plane == "real AWS":
         notes.append("warning: applying to real AWS while ENV_TYPE=dev (dev runtime reads .env, not SM)")
-    if plane == "emulator (Floci)" and values.get("TF_STATE_BUCKET"):
-        notes.append("note: TF_STATE_BUCKET is ignored on the emulator plane (state is fixed to Floci)")
+    if plane == "emulator (Floci)" and not values.get("TF_STATE_BUCKET"):
+        notes.append(f"note: TF_STATE_BUCKET unset; the Floci plane defaults to {FLOCI_STATE_BUCKET}")
     return notes
 
 
 def warn_shell_conflicts(values: dict[str, str]) -> None:
-    shell_bucket = os.environ.get("TF_STATE_BUCKET")
     env_bucket = values.get("TF_STATE_BUCKET", "")
-    if shell_bucket and shell_bucket != env_bucket:
+    shell_bucket = os.environ.get("TF_STATE_BUCKET")
+    if env_bucket and shell_bucket and shell_bucket != env_bucket:
         print(f"note: TF_STATE_BUCKET also exported in the shell ({shell_bucket!r}); the .env value wins")
+
+
+def bootstrap_commands(is_emulator: bool, values: dict[str, str]) -> list[list[str]]:
+    bucket = resolve_state_bucket(is_emulator, values)
+    assert bucket is not None  # a None bucket is a validation error, not a bootstrap input
+    command_base = ["aws", "--region", resolve_region(values)]
+    if is_emulator:
+        command_base += ["--endpoint-url", values["EMULATOR_ENDPOINT"]]
+    head_bucket = command_base + ["s3api", "head-bucket", "--bucket", bucket]
+    return [
+        head_bucket,
+        command_base + ["s3", "mb", f"s3://{bucket}"],
+        *(
+            []
+            if is_emulator
+            else [command_base + ["s3api", "put-bucket-versioning", "--bucket", bucket,
+                                  "--versioning-configuration", "Status=Enabled"]]
+        ),
+    ]
+
+
+def run_aws(command: list[str], is_emulator: bool) -> int:
+    env = os.environ | ({"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"} if is_emulator else {})
+    print(f"running: {' '.join(command)}")
+    try:
+        return subprocess.run(command, check=False, env=env).returncode
+    except OSError as exc:
+        die(f"failed to run aws: {exc}", "install the AWS CLI (see README prerequisites)")
+
+
+def bootstrap_state(is_emulator: bool, values: dict[str, str], dry_run: bool) -> int:
+    commands = bootstrap_commands(is_emulator, values)
+    if dry_run:
+        for command in commands:
+            print(f"would run: {' '.join(command)}")
+        print("(dry run: no AWS)")
+        return 0
+
+    bucket = resolve_state_bucket(is_emulator, values)
+    head_result = run_aws(commands[0], is_emulator)
+    if head_result == 0:
+        print(f"ok:  bucket {bucket} already exists")
+    else:
+        if run_aws(commands[1], is_emulator) != 0:
+            if is_emulator:
+                print()
+                print(f"fix: check that the emulator is reachable at {values['EMULATOR_ENDPOINT']} (e.g. docker start floci)")
+            return 1
+        print(f"created: {bucket}")
+    if not is_emulator:
+        bucket_put_versioning = commands[-1]
+        if run_aws(bucket_put_versioning, is_emulator) != 0:
+            print("fix: enable bucket versioning manually (required for terraform state safety)")
+            return 1
+        print("versioning: Enabled")
+    return 0
 
 
 def run_terraform(args: list[str], tf_vars: dict[str, str], env_overlay: dict[str, str] | None = None) -> int:
@@ -217,7 +324,10 @@ def main() -> int:
         prog="secrets.py",
         description="Validate the service .env and drive the secrets terraform stack.",
     )
-    parser.add_argument("command", choices=("plan", "apply"), help="the terraform verb")
+    parser.add_argument(
+        "command", choices=("plan", "apply", "bootstrap"),
+        help="terraform plan/apply, or bootstrap (create the plane's state bucket via the aws CLI)",
+    )
     parser.add_argument(
         "--dry-run", action="store_true",
         help="print everything that would be fed to terraform; run nothing",
@@ -229,6 +339,15 @@ def main() -> int:
 
     values = parse_env_file(ENV_FILE)
     plane, is_emulator = resolve_plane(values)
+
+    if args.command == "bootstrap":
+        errors = validate_bootstrap(is_emulator, values)
+        for error in errors:
+            print(error)
+        if errors:
+            return 1
+        return bootstrap_state(is_emulator, values, args.dry_run)
+
     errors = validate(is_emulator, values)
     for error in errors:
         print(error)
@@ -239,7 +358,8 @@ def main() -> int:
     backend_hcl = build_backend_hcl(is_emulator, values)
     warn_shell_conflicts(values)
     key_len = len(tf_vars["TF_VAR_api_key"])
-    state_bucket = FLOCI_STATE_BUCKET if is_emulator else values["TF_STATE_BUCKET"]
+    state_bucket = resolve_state_bucket(is_emulator, values)
+    assert state_bucket is not None  # validation already rejected a missing bucket
     state_key = FLOCI_STATE_KEY if is_emulator else PROD_STATE_KEY
 
     print(f"plane:  {plane}")
@@ -267,12 +387,18 @@ def main() -> int:
         backend_creds = {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"} if is_emulator else None
 
         if run_terraform(init_args, tf_vars, backend_creds) != 0:
+            bucket = resolve_state_bucket(is_emulator, values)
+            print()
             if is_emulator:
-                print()
-                print("fix: create the emulator state bucket and retry")
+                print("fix: create the emulator state bucket and retry (make secrets-bootstrap-state)")
                 print(
                     f"fix: aws --endpoint-url {values['EMULATOR_ENDPOINT']} "
-                    f"s3 mb s3://{FLOCI_STATE_BUCKET} --region {resolve_region(values)}"
+                    f"s3 mb s3://{bucket} --region {resolve_region(values)}"
+                )
+            else:
+                print(
+                    f"fix: confirm bucket {bucket} exists and your credentials allow access "
+                    f"(region {resolve_region(values)}); make secrets-bootstrap-state can create it"
                 )
             return 1
         return run_terraform(verb_args, tf_vars, backend_creds)

@@ -17,7 +17,7 @@ One stack, two destinations, flipped by `EMULATOR_ENDPOINT` in `infra/.env`:
 |---------------------|-----------------------------------|--------------------------------|
 | Selected by         | `EMULATOR_ENDPOINT` set           | line empty or removed          |
 | Credentials         | dummy `test`/`test`               | real AWS keys                  |
-| State bucket        | fixed: `detectai-tfstate-local`   | `TF_STATE_BUCKET` from `.env`  |
+| State bucket        | `TF_STATE_BUCKET` or default `detectai-tfstate-local` | `TF_STATE_BUCKET` (required)  |
 | Secret deletion     | instant (0-day recovery window)   | 30-day recovery window         |
 | Apply               | auto-approved                     | interactive confirm            |
 
@@ -36,11 +36,16 @@ never reads it.
 
 State expectations:
 - the state *key* is fixed per plane (`document-parser/floci/terraform.tfstate` vs
-  `document-parser/terraform.tfstate`); the state *bucket* on the real-AWS plane is
-  per engineer/tester — one sandbox bucket each, so parallel testing never collides
-  or cross-contaminates state.
+  `document-parser/terraform.tfstate`); the state *bucket* is per engineer/tester on
+  both planes — one sandbox bucket each, so parallel testing never collides or
+  cross-contaminates state. On the emulator an unset `TF_STATE_BUCKET` falls back to
+  the fixed local default; on real AWS it is required.
 - changing `TF_STATE_BUCKET` (or the region) after a first apply points Terraform at
-  a new/empty ledger: `plan` will offer to create everything again; nothing migrates.
+  a new/empty ledger: `plan` will offer to create everything again; nothing migrates,
+  and the old bucket keeps its old state files until you delete it.
+- the emulator's S3/Secrets data is in-memory (only setup views persist to its
+  volume): a container restart can drop everything. Recovery is cheap —
+  `make secrets-bootstrap-state && make secrets-apply` recreates the whole plane.
 - never run bare `terraform init` — the stacked backend is intentionally partial and
   only the script supplies it.
 - the real-AWS plane needs Terraform >= 1.10 for the `use_lockfile` backend flag.
@@ -48,7 +53,8 @@ State expectations:
 ## Data flow
 
 `infra/.env` → `tools/secrets.py` (parse → validate → `TF_VAR_*`) → terraform → AWS.
-Terraform never reads `.env`; the Python tool never talks to AWS. Validation repeats
+Terraform never reads `.env`; the Python tool's only direct AWS step is the opt-in
+bucket bootstrap (`make secrets-bootstrap-state`, via the `aws` CLI). Validation repeats
 by design at three layers (defense-in-depth, not duplication): `tools/secrets.py`
 checks human input before terraform runs, root `variables.tf` protects the stack, and
 `modules/document-parser/variables.tf` protects the contract for any caller.
@@ -63,14 +69,23 @@ make secrets-plan    # plan against the plane .env selects
 make secrets-apply   # apply (auto on Floci, interactive on real AWS)
 ```
 
-Emulator state bucket must exist before the first `init`:
+The state bucket must exist before the first `init` — one command for whichever
+plane `.env` selects (idempotent; verified-account or emulator):
+
+```bash
+make secrets-bootstrap-state
+```
+
+Manual equivalent, for reference. Emulator (bucket name: `TF_STATE_BUCKET` or, if
+unset, the default `detectai-tfstate-local`):
 
 ```bash
 aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-tfstate-local --region ap-south-1
 ```
 
-For real AWS, set `TF_STATE_BUCKET=<bucket>` in `infra/.env` and create your sandbox
-bucket first (versioned, encrypted, private; Terraform >= 1.10):
+Real AWS requires `TF_STATE_BUCKET=<bucket>` in `infra/.env` — a sandbox bucket per
+engineer/tester (versioned, encrypted, private; bootstrap enables versioning, SSE
+defaults to on; Terraform >= 1.10 for `use_lockfile`):
 
 ```bash
 aws s3 mb s3://<bucket> --region ap-south-1
@@ -87,4 +102,4 @@ emulator or AWS needed: the contract name is the output, the emulator plane keep
 
 - `api_key` is `sensitive`; the driver prints only its length.
 - The state file stores `secret_string` in plaintext — the prod state bucket must be
-  versioned, encrypted, and access-restricted (see `backend.prod.hcl.example`).
+  versioned, encrypted, and access-restricted (see `backend.example.hcl`).
