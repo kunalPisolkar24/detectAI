@@ -381,7 +381,11 @@ def main() -> int:
     backend_file = write_backend_hcl(backend_hcl)
     try:
         init_args = ["init", "-reconfigure", "-backend-config", str(backend_file)]
-        verb_args = [args.command, "-input=false"]
+        # -input=false disables ALL prompts, including the apply approval; real AWS
+        # must keep its confirm prompt, so it applies without the flag.
+        verb_args = [args.command]
+        if args.command == "plan" or is_emulator:
+            verb_args.append("-input=false")
         if args.command == "apply" and is_emulator:
             verb_args.append("-auto-approve")
         backend_creds = {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"} if is_emulator else None

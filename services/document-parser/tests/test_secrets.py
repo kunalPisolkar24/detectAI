@@ -216,3 +216,30 @@ def test_warn_shell_conflicts_only_when_env_bucket_set(monkeypatch, capsys):
     assert capsys.readouterr().out == ""
     dp_secrets.warn_shell_conflicts({**EMULATOR_VALUE, "TF_STATE_BUCKET": "docparser-sandbox-1"})
     assert "the .env value wins" in capsys.readouterr().out
+
+
+def test_main_verb_args_per_plane(monkeypatch, tmp_path):
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        dp_secrets, "run_terraform", lambda args, tf_vars, env_overlay=None: calls.append(list(args)) or 0
+    )
+    monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+
+    env.write_text("API_KEY=" + "a" * 20 + "\nTF_STATE_BUCKET=detectai-tfstate-sandbox\n")
+    monkeypatch.setattr("sys.argv", ["secrets.py", "apply"])
+    assert dp_secrets.main() == 0
+    assert calls[0][0] == "init"
+    assert calls[-1] == ["apply"]  # real AWS keeps its confirmation prompt
+
+    calls.clear()
+    monkeypatch.setattr("sys.argv", ["secrets.py", "plan"])
+    assert dp_secrets.main() == 0
+    assert calls[-1] == ["plan", "-input=false"]
+
+    env.write_text("API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=http://localhost:4566\n")
+    calls.clear()
+    monkeypatch.setattr("sys.argv", ["secrets.py", "apply"])
+    assert dp_secrets.main() == 0
+    assert calls[-1] == ["apply", "-input=false", "-auto-approve"]
