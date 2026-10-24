@@ -9,13 +9,22 @@ from __future__ import annotations
 import importlib.util
 import re
 from pathlib import Path
+from typing import Any
 
 SERVICE_DIR = Path(__file__).resolve().parents[1]
 SCRIPT = SERVICE_DIR / "tools" / "secrets.py"
 
-spec = importlib.util.spec_from_file_location("dp_secrets", SCRIPT)
-dp_secrets = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(dp_secrets)
+
+def _load_script(path: Path) -> Any:
+    spec = importlib.util.spec_from_file_location("dp_secrets", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load terraform script from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+dp_secrets: Any = _load_script(SCRIPT)
 
 VALID = {"API_KEY": "a" * 20}
 EMULATOR_VALUE = {**VALID, "EMULATOR_ENDPOINT": "http://localhost:4566"}
