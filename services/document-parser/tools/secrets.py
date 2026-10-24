@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""Seed the document-parser Secrets Manager blob from the service .env.
+"""Seed the document-parser secrets blob and config parameters from the service .env.
 
 Input compiler only: parse and validate infra/.env, map the values onto
 TF_VAR_* environment variables and a generated backend config, then drive
 `terraform plan/apply` for the service-scoped stack (infra/terraform).
+Non-secret runtime config rides along: an allowlist of .env keys becomes
+TF_VAR_ssm_parameters, which terraform writes to SSM under
+/detectai/document-parser/ — every .env key the stack knows about lands in
+AWS/Floci on apply, and absent keys seed nothing.
 Terraform alone touches AWS on the resource path; the script's direct AWS-API
 steps are the opt-in `bootstrap` verb (create the plane's state bucket), the
-`destroy --purge-state` object wipe and bucket delete, and the opt-in
-`--force-delete` secret delete — all via the `aws` CLI.
+`destroy --purge-state` object wipe and bucket delete, the opt-in
+`--force-delete` secret delete, and the opt-in `iam-bootstrap` verb (create or
+update the out-of-stack deploy role) — all via the `aws` CLI.
 
 Plane selection (single flick, from EMULATOR_ENDPOINT in .env):
   - http(s) URL     -> Floci/LocalStack; state in the emulator's S3; auto-approved
@@ -34,7 +39,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
 SERVICE_DIR = Path(__file__).resolve().parents[1]
 TF_DIR = SERVICE_DIR / "infra" / "terraform"
@@ -57,6 +62,36 @@ ENV_TYPES = ("dev", "prod")
 EMULATOR_RECOVERY_WINDOW = 0
 PROD_RECOVERY_WINDOW = 30
 STATE_PREFIX = "document-parser"
+
+# Non-secret runtime config: .env keys terraform writes to SSM
+# (SSM_SEED_PREFIX + KEY) on apply. Absent, empty or commented .env lines
+# seed nothing; API_KEY and pipeline keys (EMULATOR_ENDPOINT, AWS_REGION,
+# ENV_TYPE, TF_STATE_BUCKET, PORT) are deliberately not seedable here.
+SSM_SEED_PREFIX = "/detectai/document-parser/"
+SSM_SEED_KEYS = (
+    "MAX_UPLOAD_SIZE_BYTES",
+    "PROCESS_BUDGET_SECONDS",
+    "MAX_PDF_PAGES",
+    "MAX_DOCX_UNCOMPRESSED_BYTES",
+    "MAX_TEXT_LENGTH",
+    "WORKER_THREADS",
+    "READINESS_MAX_QUEUE_DEPTH",
+    "LOG_LEVEL",
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_SERVICE_NAME",
+    "OTEL_SERVICE_VERSION",
+)
+
+# Out-of-stack deploy identity: the role terraform runs under on real AWS.
+# Created once with `iam-bootstrap` (never by terraform, so the role never has
+# to manage itself). Trust: the caller's own IAM user + MFA. On the emulator
+# the role is structural — nothing enforces IAM there — and a placeholder user
+# keeps the document shape identical.
+DEPLOY_ROLE_NAME = "detectai-document-parser-deploy"
+DEPLOY_POLICY_NAME = "deploy-policy"
+DEFAULT_ACCOUNT_ID = "000000000000"
+DEPLOY_USER_DEFAULT = "detectai-deploy"
+USER_ARN_RE = re.compile(r"^arn:aws:iam::[0-9]{12}:user/[a-zA-Z0-9+=,.@_-]+$")
 
 
 def die(message: str, fix: str) -> NoReturn:
@@ -194,6 +229,11 @@ def build_tf_vars(values: dict[str, str]) -> dict[str, str]:
     }
     if is_emulator:
         tf_vars["TF_VAR_emulator_endpoint"] = values["EMULATOR_ENDPOINT"]
+    # Non-secret config rides along to SSM; absent or empty keys seed nothing
+    # (an empty map is terraform's own default, seeding zero parameters).
+    config = {key: values[key] for key in SSM_SEED_KEYS if values.get(key, "") != ""}
+    if config:
+        tf_vars["TF_VAR_ssm_parameters"] = json.dumps(config)
     return tf_vars
 
 
@@ -348,6 +388,235 @@ def force_delete_command(is_emulator: bool, values: dict[str, str]) -> list[str]
     ]
 
 
+def resolve_trust_user_arn(is_emulator: bool, values: dict[str, str]) -> str:
+    """Deploy role trust: the caller's own IAM user on real AWS (mandatory), a
+    documented placeholder on the emulator (nothing enforces IAM there)."""
+    if is_emulator:
+        user_arn = values.get("DEPLOY_TRUST_USER_ARN", "")
+        if user_arn:
+            return user_arn
+        return f"arn:aws:iam::{DEFAULT_ACCOUNT_ID}:user/{DEPLOY_USER_DEFAULT}"
+    return values["DEPLOY_TRUST_USER_ARN"]
+
+
+def iam_account_id(user_arn: str) -> str:
+    assert USER_ARN_RE.fullmatch(user_arn) is not None  # validate_iam_bootstrap guards both planes
+    return user_arn.split(":")[4]
+
+
+def validate_iam_bootstrap(is_emulator: bool, values: dict[str, str]) -> list[str]:
+    """Narrow checks for the deploy-role bootstrap: region, emulator endpoint,
+    the state bucket (its ARN is embedded in the policy) and the trust user."""
+    errors: list[str] = []
+
+    def fail(message: str, fix: str) -> None:
+        errors.append(f"error: {message}\nfix:   {fix}")
+
+    if (region := values.get("AWS_REGION")) is not None and not REGION_RE.fullmatch(region):
+        fail(
+            f"AWS_REGION is not a valid region: {region!r}",
+            "use a plain region code, e.g. ap-southeast-2",
+        )
+    if is_emulator:
+        endpoint = values["EMULATOR_ENDPOINT"]
+        if not URL_RE.fullmatch(endpoint):
+            fail(
+                f"EMULATOR_ENDPOINT is not a valid http(s) URL: {endpoint!r}",
+                "set it to the Floci URL (http://localhost:4566) or remove the line for real AWS",
+            )
+    bucket_errors(errors, values.get("TF_STATE_BUCKET", ""), required=not is_emulator)
+    user_arn = values.get("DEPLOY_TRUST_USER_ARN", "")
+    bad_arn = f"DEPLOY_TRUST_USER_ARN is not a plain IAM user ARN: {user_arn!r}"
+    bad_arn_fix = "set DEPLOY_TRUST_USER_ARN=arn:aws:iam::<account-id>:user/<your-user> in .env"
+    if not is_emulator and not USER_ARN_RE.fullmatch(user_arn):
+        fail(bad_arn + " (missing on the real-AWS plane)", bad_arn_fix)
+    elif user_arn and not USER_ARN_RE.fullmatch(user_arn):
+        fail(bad_arn, bad_arn_fix)
+    return errors
+
+
+def deploy_trust_document(user_arn: str) -> dict[str, Any]:
+    """The deploy setup runs on purpose-built credentials, not personal keys:
+    the caller (or CI later) assumes this role under MFA."""
+    return {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"AWS": user_arn},
+                "Action": "sts:AssumeRole",
+                "Condition": {"Bool": {"aws:MultiFactorAuthPresent": "true"}},
+            }
+        ],
+    }
+
+
+def deploy_policy_document(is_emulator: bool, values: dict[str, str], user_arn: str) -> dict[str, Any]:
+    """Least-privilege deploy scope, service-pinned on every ARN: this
+    service's state bucket, secret blob, SSM config prefix, and the runtime
+    role it administers (the runtime role is in-stack, so terraform under this
+    identity must be able to create and shape it)."""
+    region = resolve_region(values)
+    account = iam_account_id(user_arn)
+    bucket = resolve_state_bucket(is_emulator, values)
+    assert bucket is not None  # validation already rejected a missing bucket
+    return {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "RunTerraformStateBucket",
+                "Effect": "Allow",
+                "Action": [
+                    "s3:CreateBucket", "s3:PutBucketVersioning", "s3:GetBucketVersioning",
+                    "s3:ListBucket", "s3:ListBucketVersions", "s3:DeleteBucket",
+                ],
+                "Resource": [f"arn:aws:s3:::{bucket}"],
+            },
+            {
+                "Sid": "RunTerraformStateObjects",
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:DeleteObject"],
+                "Resource": [f"arn:aws:s3:::{bucket}/*"],
+            },
+            {
+                "Sid": "ManageServiceSecret",
+                "Effect": "Allow",
+                "Action": [
+                    "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue",
+                    "secretsmanager:UpdateSecret", "secretsmanager:DeleteSecret",
+                    "secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue",
+                    "secretsmanager:TagResource",
+                ],
+                "Resource": [f"arn:aws:secretsmanager:{region}:{account}:secret:detectai/document-parser/secrets-*"],
+            },
+            {
+                "Sid": "ManageServiceConfig",
+                "Effect": "Allow",
+                "Action": [
+                    "ssm:PutParameter", "ssm:DeleteParameter", "ssm:GetParameter",
+                    "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:AddTagsToResource",
+                ],
+                "Resource": [f"arn:aws:ssm:{region}:{account}:parameter{SSM_SEED_PREFIX}*"],
+            },
+            {
+                "Sid": "ManageRuntimeRole",
+                "Effect": "Allow",
+                "Action": [
+                    "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:PutRolePolicy",
+                    "iam:GetRolePolicy", "iam:DeleteRolePolicy", "iam:TagRole",
+                ],
+                "Resource": [f"arn:aws:iam::{account}:role/detectai-document-parser"],
+            },
+        ],
+    }
+
+
+def iam_bootstrap_commands(is_emulator: bool, values: dict[str, str]) -> list[list[str]]:
+    user_arn = resolve_trust_user_arn(is_emulator, values)
+    base = aws_base(is_emulator, values)
+    return [
+        base + ["iam", "create-role", "--role-name", DEPLOY_ROLE_NAME,
+                "--assume-role-policy-document", json.dumps(deploy_trust_document(user_arn))],
+        base + ["iam", "put-role-policy", "--role-name", DEPLOY_ROLE_NAME,
+                "--policy-name", DEPLOY_POLICY_NAME,
+                "--policy-document", json.dumps(deploy_policy_document(is_emulator, values, user_arn))],
+    ]
+
+
+def confirm_iam_bootstrap(user_arn: str) -> bool:
+    answer = input(
+        f'type "{DEPLOY_ROLE_NAME}" to create or update it (trust: {user_arn}): '
+    ).strip()
+    if answer != DEPLOY_ROLE_NAME:
+        print("cancelled: the deploy role is untouched")
+        return False
+    return True
+
+
+def iam_bootstrap_flow(is_emulator: bool, values: dict[str, str], dry_run: bool) -> int:
+    """Create or update the deploy identity: idempotent (an existing role is
+    kept, the inline policy is always refreshed). The emulator plane runs
+    unattended; real AWS requires a typed barrier first."""
+    user_arn = resolve_trust_user_arn(is_emulator, values)
+    print(f"plane:  {'emulator (Floci)' if is_emulator else 'real AWS'}")
+    print(f"role:   {DEPLOY_ROLE_NAME} (out-of-stack deploy identity)")
+    print(f"trust:  {user_arn} (MFA required)")
+    commands = iam_bootstrap_commands(is_emulator, values)
+    if dry_run:
+        for command in commands:
+            print(f"would run: {' '.join(command)}")
+        print("(dry run: no AWS)")
+        return 0
+    if not is_emulator and not confirm_iam_bootstrap(user_arn):
+        return 1
+
+    code, _, stderr = run_aws_captured(commands[0], is_emulator)
+    if code == 0:
+        print(f"created: {DEPLOY_ROLE_NAME}")
+    elif "EntityAlreadyExists" in (stderr or ""):
+        print(f"ok: role {DEPLOY_ROLE_NAME} already exists")
+    else:
+        print("error: create-role failed")
+        if (stderr or "").strip():
+            print(stderr.strip())
+        return 1
+
+    if run_aws(commands[1], is_emulator) != 0:
+        print(f"fix: inspect the role and attach {DEPLOY_POLICY_NAME} manually, then retry")
+        return 1
+    scopes = ", ".join(statement["Sid"] for statement in deploy_policy_document(is_emulator, values, user_arn)["Statement"])
+    print(f"policy: {DEPLOY_POLICY_NAME} attached ({scopes})")
+    print("next:   assume this role for real-aws terraform runs instead of personal keys")
+    return 0
+
+
+def deploy_role_exists(is_emulator: bool, values: dict[str, str]) -> bool:
+    code, _, _ = run_aws_captured(
+        aws_base(is_emulator, values) + ["iam", "get-role", "--role-name", DEPLOY_ROLE_NAME],
+        is_emulator,
+    )
+    return code == 0
+
+
+def drop_iam_commands(is_emulator: bool, values: dict[str, str]) -> list[list[str]]:
+    base = aws_base(is_emulator, values)
+    return [
+        base + ["iam", "delete-role-policy", "--role-name", DEPLOY_ROLE_NAME,
+                "--policy-name", DEPLOY_POLICY_NAME],
+        base + ["iam", "delete-role", "--role-name", DEPLOY_ROLE_NAME],
+    ]
+
+
+def drop_iam_flow(is_emulator: bool, values: dict[str, str], dry_run: bool) -> int:
+    """Remove the deploy identity: policy first, then the role. A missing role
+    is an already-gone no-op; the untouched shapes make the wipe repeatable.
+    The emulator plane drops unattended; real AWS demands the same typed
+    barrier as the purge wipe."""
+    commands = drop_iam_commands(is_emulator, values)
+    if dry_run:
+        for command in commands:
+            print(f"would run: {' '.join(command)}")
+        print("(dry run: no AWS)")
+        return 0
+    if not deploy_role_exists(is_emulator, values):
+        print(f"ok: role {DEPLOY_ROLE_NAME} does not exist; nothing to drop")
+        return 0
+    if not is_emulator:
+        answer = input(f'type "{DEPLOY_ROLE_NAME}" to detach its policy and delete the role: ').strip()
+        if answer != DEPLOY_ROLE_NAME:
+            print("cancelled: the deploy role is untouched")
+            return 1
+    if run_aws(commands[0], is_emulator) != 0:
+        print(f"fix: detach {DEPLOY_POLICY_NAME} manually, then rerun (an existing policy is overwritten by reruns)")
+        return 1
+    print(f"detached: {DEPLOY_POLICY_NAME}")
+    if run_aws(commands[1], is_emulator) != 0:
+        print("fix: delete the role manually once its inline policies are gone")
+        return 1
+    print(f"deleted: {DEPLOY_ROLE_NAME}")
+    return 0
+
+
 def list_bucket_versions(is_emulator: bool, values: dict[str, str]) -> list[tuple[str, str]] | None:
     """Every (key, version id) — object versions and delete markers — in the
     plane's state bucket, or None when the listing failed. The AWS CLI
@@ -456,8 +725,9 @@ def main() -> int:
         description="Validate the service .env and drive the secrets terraform stack.",
     )
     parser.add_argument(
-        "command", choices=("plan", "apply", "bootstrap", "destroy"),
-        help="terraform plan/apply/destroy, or bootstrap (create the plane's state bucket via the aws CLI)",
+        "command", choices=("plan", "apply", "bootstrap", "destroy", "iam-bootstrap"),
+        help="terraform plan/apply/destroy, bootstrap (create the plane's state bucket via the aws CLI), "
+             "or iam-bootstrap (create/update the out-of-stack deploy role via the aws CLI)",
     )
     parser.add_argument(
         "--purge-state", action="store_true",
@@ -466,6 +736,11 @@ def main() -> int:
     parser.add_argument(
         "--force-delete", action="store_true",
         help="destroy only: delete the secret immediately after destroy, skipping the 30-day recovery window on real AWS",
+    )
+    parser.add_argument(
+        "--drop-iam", action="store_true",
+        help="destroy only: after terraform destroy, drop the out-of-stack deploy role "
+             "(detach its inline policy, then delete the role)",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -479,6 +754,9 @@ def main() -> int:
     if args.force_delete and args.command != "destroy":
         die("--force-delete only applies to the destroy command",
             "run it with destroy (poetry run python tools/secrets.py destroy --force-delete)")
+    if args.drop_iam and args.command != "destroy":
+        die("--drop-iam only applies to the destroy command",
+            "run it with destroy (make secrets-destroy)")
 
     if not ENV_FILE.exists():
         die(f"{ENV_FILE} not found", "run `make env` in services/document-parser first")
@@ -493,6 +771,14 @@ def main() -> int:
         if errors:
             return 1
         return bootstrap_state(is_emulator, values, args.dry_run)
+
+    if args.command == "iam-bootstrap":
+        errors = validate_iam_bootstrap(is_emulator, values)
+        for error in errors:
+            print(error)
+        if errors:
+            return 1
+        return iam_bootstrap_flow(is_emulator, values, args.dry_run)
 
     errors = validate(is_emulator, values)
     for error in errors:
@@ -513,6 +799,9 @@ def main() -> int:
     print(f"secret: {SECRETS_NAME}")
     print(f"key:    *** ({key_len} chars, hidden)")
     print(f"state:  {state_bucket} / {state_key}")
+    config_keys = [key for key in SSM_SEED_KEYS if values.get(key, "") != ""]
+    if config_keys:
+        print(f"config: {len(config_keys)} key(s) -> SSM {SSM_SEED_PREFIX}")
     for note in plane_notes(values, plane):
         print(note)
 
@@ -529,6 +818,8 @@ def main() -> int:
                     print(f"then run: {' '.join(force_delete_command(is_emulator, values))}")
             if args.purge_state:
                 print(f"then purge: every object version in {state_bucket}, then delete the bucket")
+            if args.drop_iam:
+                print(f"then drop: {DEPLOY_POLICY_NAME} and the {DEPLOY_ROLE_NAME} role")
         print("(dry run: no terraform, no AWS)")
         return 0
 
@@ -578,8 +869,13 @@ def main() -> int:
                 print("note: --force-delete has no effect on the emulator (0-day recovery window)")
             else:
                 run_aws(force_delete_command(is_emulator, values), is_emulator)
-        if args.purge_state:
-            return purge_state(is_emulator, values)
+        # The wipe chain runs only after terraform succeeded: bucket purge, then
+        # the deploy role — a destroyed ledger and a surviving identity would
+        # strand the plane half-clean on purpose, otherwise.
+        if args.purge_state and purge_state(is_emulator, values) != 0:
+            return 1
+        if args.drop_iam:
+            return drop_iam_flow(is_emulator, values, args.dry_run)
         return 0
     finally:
         backend_file.unlink(missing_ok=True)

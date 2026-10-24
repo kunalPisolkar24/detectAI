@@ -1,13 +1,28 @@
-# document-parser — Secrets Terraform Stack
+# document-parser — App-Side AWS: Secrets, Config, and IAM
 
-Provisions one thing: the Secrets Manager secret `detectai/document-parser/secrets`
-(infrastructure `main.tf` holds the blob shape), seeded with the service API key as a
-JSON blob: `{"API_KEY": "..."}`. The blob is the contract — consumers pull the whole
-secret at boot and read keys by name, so adding keys later is a terraform-only change
-with no consumer-side schema migration.
+Provisions this service's app-side slice of AWS as three contracts, all pinned
+to the `detectai/document-parser/` naming:
 
-The stack does not deploy the app; the app runs via `infra/compose.yml`. This stack
-manages the credential store only.
+1. **Secrets blob** — `detectai/document-parser/secrets`, seeded with the API
+   key as JSON `{"API_KEY": "..."}`; consumers pull the whole blob at boot and
+   read keys by name, so adding keys later is a terraform-only change with no
+   consumer-side schema migration.
+2. **Config parameters** — non-secret runtime config from `.env`, seeded under
+   SSM paths `/detectai/document-parser/<KEY>` (type String). The seed
+   allowlist lives in `tools/secrets.py` (`SSM_SEED_KEYS`); absent or empty
+   `.env` keys seed nothing, and everything env-provided in dev stays
+   env-provided in prod. Terraform is compose-free for secrets on purpose.
+3. **Runtime IAM role** — `detectai-document-parser`, the service's read
+   identity: `GetSecretValue/DescribeSecret` on the blob and
+   `GetParameter*` on the config prefix, nothing else. No S3 — the app is
+   stateless (requirements.md NFR-1); the state bucket is deploy-tooling
+   territory. Trust is in-account (`sts:AssumeRole` with a root principal)
+   and gains a concrete host principal (ECS/EC2/EKS) when the runtime host
+   materializes.
+
+The stack does not deploy the app; the app runs via `infra/compose.yml`. This
+stack manages the credential store, the config parameters, and the runtime
+role only.
 
 ## Planes
 
@@ -22,8 +37,29 @@ One stack, two destinations, flipped by `EMULATOR_ENDPOINT` in `infra/.env`:
 | Apply               | auto-approved                     | interactive confirm            |
 
 The provider block adapts (`providers.tf`): the emulator plane gets `test`
-credentials, `skip_*` flags, and a `secretsmanager` endpoint override; the real-AWS
-plane leaves all of those unset.
+credentials, `skip_*` flags, and endpoint overrides (`secretsmanager`, `ssm`,
+`iam`, `sts`); the real-AWS plane leaves all of those unset. IAM policy ARNs
+need a 12-digit account id: real AWS resolves it via a caller-identity data
+source; the emulator pins it via `aws_account_id` (default `000000000000`,
+settable through `TF_VAR_aws_account_id`).
+
+## IAM identities
+
+Two roles, one per plane of responsibility:
+
+| Role | Created by | Trust | Can do |
+|------|------------|-------|--------|
+| `detectai-document-parser` (runtime, in-stack) | terraform on both planes | in-account `sts:AssumeRole` (root principal, no service principal yet) | `secretsmanager:GetSecretValue/DescribeSecret` on the blob; `ssm:GetParameter(s)(ByPath)` on the config prefix — nothing else |
+| `detectai-document-parser-deploy` (deploy, out-of-stack) | `make secrets-iam-bootstrap` (one-time CLI) | your IAM user + MFA | terraform's workload for this service only: state-bucket lifecycle (`RunTerraformStateBucket/Objects`), secret write/read (`ManageServiceSecret`), SSM write/read (`ManageServiceConfig`), and administering the runtime role (`ManageRuntimeRole`) |
+
+The runtime role is inline-policy-scoped (`modules/document-parser/iam.tf`), so
+the deploy role never needs managed-policy churn or `PassRole` — and nothing
+here creates deployment resources. The deploy role is deliberately out-of-stack
+so terraform never manages its own identity; the first-ever apply (which creates
+the roles' own ledger) still happens under your current credentials.
+
+Emulator-plane caveats: Floci accepts the calls but never enforces IAM policies,
+so `terraform plan/apply` there proves structure; enforcement bites on real AWS.
 
 ## State config
 
@@ -54,11 +90,14 @@ State expectations:
 
 ## Data flow
 
-`infra/.env` → `tools/secrets.py` (parse → validate → `TF_VAR_*`) → terraform → AWS.
-Terraform never reads `.env`; the Python tool's only direct AWS step is the opt-in
-bucket bootstrap (`make secrets-bootstrap-state`, via the `aws` CLI). Validation repeats
-by design at three layers (defense-in-depth, not duplication): `tools/secrets.py`
-checks human input before terraform runs, root `variables.tf` protects the stack, and
+`infra/.env` → `tools/secrets.py` (parse → validate → `TF_VAR_*`, including
+`TF_VAR_ssm_parameters` for the allowlisted non-secret config) → terraform →
+AWS. Terraform never reads `.env`. The Python tool's direct AWS steps are the
+opt-in bucket bootstrap (`make secrets-bootstrap-state`), the opt-in deploy
+role bootstrap (`make secrets-iam-bootstrap`), and the destroy-time wipe —
+all via the `aws` CLI. Validation repeats by design at three layers
+(defense-in-depth, not duplication): `tools/secrets.py` checks human input
+before terraform runs, root `variables.tf` protects the stack, and
 `modules/document-parser/variables.tf` protects the contract for any caller.
 
 ## Quick start
@@ -98,8 +137,15 @@ aws s3api put-bucket-versioning --bucket <bucket> --versioning-configuration Sta
 
 | Command                | Removes                                                                                               | Keeps                   |
 |------------------------|-------------------------------------------------------------------------------------------------------|-------------------------|
-| `make secrets-clean`   | the secret + version (terraform destroy)                                                              | state bucket and ledger |
-| `make secrets-destroy` | the secret **and** the state bucket (wipe every object version and delete marker, then `delete-bucket`) | nothing                 |
+| `make secrets-clean`   | the secret + version, the SSM config parameters, the runtime role (terraform destroy)                  | state bucket, ledger, deploy role |
+| `make secrets-destroy` | everything in `secrets-clean` **plus** every object version and the state bucket (purge) **and** the out-of-stack deploy role (`--drop-iam`) | nothing |
+
+`make secrets-destroy` is the true full wipe: terraform destroy runs first, then
+the purge wipe removes the state bucket, and only then does `--drop-iam` detach
+`deploy-policy` and delete `detectai-document-parser-deploy` (typed barrier on
+real AWS, unattended on the emulator). A missing deploy role is a no-op, so the
+step is safe to repeat. To bring the deploy identity back without re-bootstrapping
+anything: `make secrets-iam-bootstrap` recreates it (idempotent).
 
 Both verbs share the apply pipeline: same `.env` validation, same backend
 config, `--dry-run` prints everything first, and the emulator plane
@@ -122,7 +168,9 @@ auto-approves where real AWS keeps its interactive confirmations.
 
 `terraform test` — `tests/document-parser.tftest.hcl`, mocked AWS provider, no
 emulator or AWS needed: the contract name is the output, the emulator plane keeps a
-0-day recovery window, and the prod plane keeps 30 days.
+0-day recovery window, the prod plane keeps 30 days, the runtime role keeps its
+service-scoped name, and the SSM seeding only follows the
+`/detectai/document-parser/` prefix (an unset map seeds nothing).
 
 ## Hygiene
 

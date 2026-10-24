@@ -53,3 +53,20 @@ variable "secret_recovery_window" {
     error_message = "secret_recovery_window must be 0 (emulator/dev) or 7-30 (prod)."
   }
 }
+
+variable "ssm_parameters" {
+  description = "Non-secret runtime config seeded from .env via tools/secrets.py; each key becomes /detectai/document-parser/<KEY>."
+  type        = map(string)
+  default     = {}
+}
+
+variable "aws_account_id" {
+  description = "Account id for the IAM policy ARNs. Emulator plane: pins the docs (defaults to 000000000000 when unset). Real AWS: a data source resolves it; this variable is ignored there."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.aws_account_id == null || can(regex("^[0-9]{12}$", var.aws_account_id))
+    error_message = "aws_account_id must be a 12-digit account id (or unset)."
+  }
+}
