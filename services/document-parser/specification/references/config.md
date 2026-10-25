@@ -10,9 +10,10 @@ prefix `/detectai/document-parser/<KEY>`, both seeded by `tools/secrets.py`.
 
 ## Source model
 
-`Settings` is the single typed contract — today exactly one field, `api_key`
-(the consume-first rule: fields land when the runtime consumes them, seeded
-keys ride along on the planes either way). *Where values come from* is
+`Settings` is the single typed contract — today the mandatory credential plus
+the three consumed bounds (`api_key`, `upload_limit_bytes`, `max_pdf_pages`,
+`docx_max_uncompressed_bytes`; the consume-first rule: fields land when the
+runtime consumes them, seeded keys ride along on the planes either way). *Where values come from* is
 selected once at boot by the `ENV_TYPE` flick and composed through the
 factories:
 
@@ -35,6 +36,12 @@ factories:
 in real prod; the endpoint override points a prod-config fetch at Floci).
 Credentials ride boto3's default chain (the task role), never the config.
 
+The config classes split cleanly in two: the boot shell — who builds what
+from the flick, and who reads the result — and the plane machinery, the
+adapters and AWS plumbing behind each plane.
+
+### The boot shell
+
 ```mermaid
 classDiagram
     direction LR
@@ -53,6 +60,38 @@ classDiagram
         +get(key, default) string or None
     }
 
+    class Settings {
+        <<pydantic BaseModel>>
+        +api_key : str
+        +upload_limit_bytes : int
+        +max_pdf_pages : int
+        +docx_max_uncompressed_bytes : int
+        +from_provider(provider)$ Settings
+    }
+
+    class ExtractRoute {
+        <<api/extract.py, auth guard>>
+        +POST /api/v1/extract
+    }
+
+    Main ..> ConfigFactory : create(deployment_flick())
+    Main ..> Settings : from_provider
+    ConfigFactory --> ConfigProvider : dev flick / prod flick
+    ExtractRoute ..> Settings : the key and the bounds via app.state
+
+```
+
+### The plane machinery
+
+```mermaid
+classDiagram
+    direction LR
+
+    class ConfigFactory {
+        <<factory>>
+        +create(env_type)$ ConfigProvider
+    }
+
     class DevConfig {
         -values : dict
     }
@@ -63,7 +102,6 @@ classDiagram
 
     class DotEnvAdapter {
         +fetch() dict
-        +get(key, default) string or None
     }
 
     class ParameterStoreAdapter {
@@ -79,34 +117,19 @@ classDiagram
         +create_client(service) Any
     }
 
-    class Settings {
-        <<pydantic BaseModel>>
-        +api_key : str
-        +from_provider(provider)$ Settings
-    }
-
     class ConfigError {
         <<RuntimeError>>
     }
 
-    note for DevConfig "process env over the .env file; env wins"
-    note for ProdConfig "secrets blob + SSM; collision -> loud"
-    note for ParameterStoreAdapter "plain String entries only; SecureString -> loud"
-    note for Settings "boot fails on missing or invalid api_key"
-
-    Main ..> ConfigFactory : deployment_flick()
-    ConfigFactory --> DevConfig : dev flick
-    ConfigFactory --> ProdConfig : prod flick
-    ConfigFactory --> AWSClientFactory : from_env
-
-    ConfigProvider <|.. DevConfig
-    ConfigProvider <|.. ProdConfig
+    ConfigFactory --> AWSClientFactory : from_env - region and endpoint decided once
+    ConfigFactory ..> DevConfig : dev flick, the DotEnvAdapter inside
+    ConfigFactory ..> ProdConfig : prod flick, both AWS adapters inside
     DevConfig --> DotEnvAdapter : file parsed once
     ProdConfig --> ParameterStoreAdapter : SSM tree, prefix-stripped
     ProdConfig --> SecretsManagerAdapter : API_KEY blob
-    Main ..> Settings : from_provider
-    Settings --> ConfigProvider : per-field get(NAME)
     DevConfig ..> ConfigError : loud failures name the fix
+    ProdConfig ..> ConfigError : loud failures name the fix
+
 ```
 
 One fetch per boot, one plane, pure in-memory lookups. The flatten rule: the
@@ -172,8 +195,8 @@ sequenceDiagram
 
 - **Consume-first Settings**: a field exists only when runtime code reads it.
   Seeded plane keys without a field are ignored, so future fields return with
-  their consumers, not ahead of them (untouched bounds validators return with
-  the extract task).
+  their consumers, not ahead of them (the three numeric bounds landed with
+  theirs).
 - **AWS exact in prod, env-over-file in dev**: no plane can be quietly
   overridden from a competing source; a conflict is a loud boot failure.
 - **One fetch, pure memory**: both AWS planes read once at construction;
