@@ -26,7 +26,7 @@ sequenceDiagram
     participant P as Worker thread
     participant X as Parser
 
-    C->>E: POST /api/v1/extract (multipart file, x-api-key / Bearer)
+    C->>E: POST /api/v1/extract (multipart file, x-api-key)
     E-->>C: 401 if key missing or invalid
     E-->>C: 413 if body exceeds 10 MiB + 1
     E-->>C: 415 if sniffed MIME not in allow-list
@@ -75,7 +75,7 @@ sequenceDiagram
 | Code | When | Body detail |
 |------|------|-------------|
 | 200 | Extraction succeeded | — |
-| 401 | API key missing or invalid (generic message; the two cases are indistinguishable) | generic |
+| 401 | API key missing or invalid (generic message; the two cases are indistinguishable); the credential travels as the `x-api-key` header only, so no `WWW-Authenticate` challenge is sent | generic |
 | 413 | Body larger than 10 MiB | includes the limit |
 | 415 | Sniffed MIME not in the allow-list | names the MIME |
 | 422 | Corrupt or undecodable document — including FastAPI's default malformed-multipart rejection | generic (a corrupt file cannot be branded) |
@@ -100,4 +100,5 @@ Readiness sheds traffic by reflecting worker pool saturation (NFR-6 in [requirem
 2. **`text_length` is characters** — code points, matching `len(text)`; byte counts belong to metrics, not the contract.
 3. **One `truncated` rule** — any lost text (cap or partial pages) means `true`; "partial PDF" and "cap-clipped" are not distinguishable to callers and need not be.
 4. **Sniffed MIME over declared type** — the client cannot be trusted to declare content; the magic-byte sniff is the single source of truth (also the basis of the 415 path).
-5. **Output cap is uniform and never an error** — 1,000,000 characters, enforced once in the pipeline after cleaning, for all three types. The old service enforced it as a per-parser early-exit in PDF and DOCX loops only — **TXT bypassed it entirely** (a 10 MiB upload could return ~10M chars with `truncated: false`). The rebuild makes the guarantee single-owner; parsers may still early-exit where cheap, but the contract lives in one place. Cap-clip sets `truncated: true` alongside partial PDF pages per the unified flag rule above; `text_length` remains characters. Like the other caps it is env-configurable and fails closed.
+5. **One carrier for the credential** — `x-api-key` only. `Authorization: Bearer` processing existed to match another service; for this one it is the same credential in a second envelope with a second comparison path to test. The [requirements.md](requirements.md) authentication table carries the full decision.
+6. **Output cap is uniform and never an error** — 1,000,000 characters, enforced once in the pipeline after cleaning, for all three types. The old service enforced it as a per-parser early-exit in PDF and DOCX loops only — **TXT bypassed it entirely** (a 10 MiB upload could return ~10M chars with `truncated: false`). The rebuild makes the guarantee single-owner; parsers may still early-exit where cheap, but the contract lives in one place. Cap-clip sets `truncated: true` alongside partial PDF pages per the unified flag rule above; `text_length` remains characters. Like the other caps it is env-configurable and fails closed.

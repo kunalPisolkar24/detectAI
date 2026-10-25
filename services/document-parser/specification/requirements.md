@@ -23,9 +23,10 @@ Detailed designs: [spec index](README.md) · [HTTP contract](http.md) · [observ
 |-------|----------|
 | Credential | Shared secret `API_KEY` — mandatory in every environment (dev, load rig, prod); in prod it is delivered via Secrets Manager, elsewhere via env |
 | Validation at boot | Non-empty and at least 16 characters |
-| Headers | `x-api-key` or `Authorization: Bearer` (both accepted, matching the inference service) |
-| Comparison | Constant-time (`secrets.compare_digest`) |
+| Headers | `x-api-key` only — no `Authorization`/`Bearer` processing; the credential has one carrier and one comparison path |
+| Comparison | Constant-time (`secrets.compare_digest`) over UTF-8 bytes |
 | Failure | 401 with a generic message; missing and invalid credentials are indistinguishable in the response |
+| Logging | Rejections are logged (NFR-8) at warning level without echoing the attempted key; the rejected-request counter lands with the metrics build |
 
 ## Non-functional requirements
 
