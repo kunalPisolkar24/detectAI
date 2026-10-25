@@ -6,14 +6,15 @@ Specifications for the document-parser service. This file is the hub — every d
 
 | Doc | Covers |
 |-----|--------|
-| [requirements.md](requirements.md) | Functional and non-functional requirements, bounds, out-of-scope |
+| [requirements.md](requirements.md) | Functional and non-functional requirements, bounds, out-of-scope, deployment target |
 | [http.md](http.md) | The HTTP wire contract — endpoints, JSON shapes, status codes, semantics |
 | [cleaning.md](cleaning.md) | Text fidelity — per-format suppression rules, shared normalizer, knobs, gaps |
 | [observability.md](observability.md) | OTel pipeline (push, no pull endpoint) and the metric inventory |
+| [design.md](design.md) | Module layout, runtime model, PDF library choice, Lambda packaging, testing strategy |
 
 ## Planned docs
 
-- `design.md` — module layout, worker pool model, testing strategy (starts once HTTP/observability are stable)
+None. `design.md` was the last planned doc and is drafted above.
 
 ## References
 

@@ -221,6 +221,12 @@ non-positive seed falls back to the safe default — **only the credential may
 fail the boot**; a bad bound cannot stop the service, and a zero or negative
 bound can never stand in.
 
+> Bounds note (Lambda target decision): the upload and DOCX-uncompressed
+> defaults below have since moved to 3 MiB / 30 MiB — the deployment survey
+> and the why live in [../requirements.md](../requirements.md) (Numeric
+> bounds, "Why the numbers moved"). The ratios and enforcement points in this
+> LLD are unchanged; only the default values it records are stale.
+
 | Bound | Default | Checked | Enforced by |
 |-------|---------|---------|-------------|
 | Upload size | 10 MiB | at cap+1, bulk abandoned | transport (`_read_bounded`, multipart `max_part_size`) |
