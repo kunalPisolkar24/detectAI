@@ -14,6 +14,7 @@ python-dotenv = "^1.2.4"
 boto3 = "^1.43.118"
 python-multipart = "^0.0.32"
 pypdf = "^6.21.2"
+pymupdf = "^2.0"
 
 [build-system]
 requires = ["poetry-core"]
