@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logger.info("config plane: %s", flick)
 
     yield
-    # NFR-9: the extract task adds its bounded worker-pool drain here.
+    # No drain to run: the sync runtime owns no worker pool (extraction.md).
     logger.info("document parser shutdown complete")
 
 
