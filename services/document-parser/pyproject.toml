@@ -22,5 +22,8 @@ dev = [
     "ruff (>=0.17.2,<0.18.0)"
 ]
 
+[tool.ruff]
+extend-exclude = ["slop"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]

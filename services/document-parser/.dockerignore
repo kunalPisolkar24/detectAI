@@ -10,3 +10,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
+infra/
+tests/
+tools/
+mk/
+Makefile
+.env*
