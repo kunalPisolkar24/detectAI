@@ -20,3 +20,4 @@ Specifications for the document-parser service. This file is the hub — every d
 Review artifacts kept outside the hub list:
 
 - [references/config.md](references/config.md) — LLD for per-plane config resolution: ENV_TYPE flick, provider planes (dev env-over-file, prod AWS-exact), factory composition, and the fail-fast contract
+- [references/validation.md](references/validation.md) — LLD for upload validation: the layered admission model (transport → magic sniff → container open → per-type bounds), the typed error vocabulary and its HTTP mapping, and the fail-closed bounds contract
