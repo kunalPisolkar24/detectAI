@@ -9,6 +9,8 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
+from ..errors import ConfigError
+
 # Resolved against the process working directory, matching how Settings'
 # env_file="infra/.env" behaves today.
 INFRA_ENV_PATH = Path("infra/.env")
@@ -16,7 +18,7 @@ INFRA_ENV_PATH = Path("infra/.env")
 _FETCH_FIX = "create it with make env (copies infra/.env.example) or point the path at the right plane"
 
 
-class DotEnvError(RuntimeError):
+class DotEnvError(ConfigError):
     """The .env plane could not be read; the message names the path and the fix."""
 
 
