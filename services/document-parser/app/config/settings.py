@@ -1,11 +1,37 @@
 import logging
 import math
-from typing import Literal
+import os
+from typing import Any, Literal
 
 from pydantic import Field, ValidationInfo, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic.fields import FieldInfo
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def deployment_flick() -> Literal["dev", "prod"]:
+    """The single plane flick: prod only when ENV_TYPE is exactly prod
+    (trimmed, casefolded); anything else is dev — the same fail-closed rule
+    the env_type validator applies. It is a deployment variable read from the
+    process environment, never from a file or AWS."""
+    return "prod" if os.environ.get("ENV_TYPE", "").strip().lower() == "prod" else "dev"
+
+
+class DeploymentFlagSource(PydanticBaseSettingsSource):
+    """Injects the flick itself: ENV_TYPE is deliberately unseeded, so the
+    prod chain resolves its one field value from the bootstrap variable."""
+
+    # Wholesale dict source (as AwsConfigSource): the per-field hook never fires.
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        raise AssertionError("DeploymentFlagSource provides values as one wholesale dict")
+
+    def __call__(self) -> dict[str, Any]:
+        return {"env_type": deployment_flick()}
 
 
 class Settings(BaseSettings):
@@ -121,3 +147,31 @@ class Settings(BaseSettings):
             "dev",
         )
         return "dev"
+
+    # Plane selection (specification/references/config.md): ENV_TYPE decides
+    # where values come from, once, at construction. dev keeps pydantic's
+    # default chain (init, env, dotenv reading infra/.env) — today's behavior,
+    # unchanged. prod composes the AWS reader exactly: process env and dotenv
+    # are dropped, so a stray container variable can never take over an
+    # unseeded key, and an unresolvable api_key fails the boot. Pydantic
+    # appends its own default source after the returned tuple, so unset
+    # numeric fields still fall back to their safe defaults.
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        if deployment_flick() == "prod":
+            # Lazy: prod boots pay the boto3 import once; dev boots never do.
+            from ..config_source import AwsConfigSource
+
+            return (
+                init_settings,
+                AwsConfigSource.from_env(settings_cls),
+                DeploymentFlagSource(settings_cls),
+            )
+        return (init_settings, env_settings, dotenv_settings, file_secret_settings)

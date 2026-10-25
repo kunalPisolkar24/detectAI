@@ -10,6 +10,7 @@ python = "^3.14"
 fastapi = "0.161.1"
 uvicorn = "0.54.0"
 pydantic-settings = "^2.16.1"
+boto3 = "^1.43.118"
 
 [build-system]
 requires = ["poetry-core"]
@@ -20,3 +21,6 @@ dev = [
     "pytest (>=9.0,<10.0)",
     "ruff (>=0.17.2,<0.18.0)"
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
