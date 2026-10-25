@@ -6,7 +6,9 @@ registry order is part of the contract (http.md decision 4: sniffed MIME
 over declared content), and TextValidationStrategy must register last:
 any decodable body would otherwise claim the upload before the
 magic-prefixed types get their turn. Supporting a new format is one
-strategy module here plus one registry entry in service.py (FR-2).
+strategy module here plus one registry entry in service.py (FR-2), and
+per-type work stays inside the strategy: container checks and the numeric
+bounds of requirements.md are enforced by the type that knows them.
 """
 
 from abc import ABC, abstractmethod

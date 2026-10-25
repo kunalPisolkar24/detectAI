@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from starlette.datastructures import FormData, UploadFile
 from starlette.formparsers import MultiPartException, MultiPartParser
 
-from ..validation import UnsupportedTypeError, build_default_service
+from ..validation import CorruptDocumentError, TooLargeError, UnsupportedTypeError
 from .auth import api_key_auth
 
 router = APIRouter()
@@ -25,8 +25,6 @@ router = APIRouter()
 _INTERIM_DETAIL = "extraction pipeline not implemented yet"
 _CORRUPT_DETAIL = "corrupt or unsupported upload"
 _FILE_FIELD = "file"
-
-_validation_service = build_default_service()
 
 
 @router.post("/api/v1/extract", dependencies=[Depends(api_key_auth)], response_model=None)
@@ -42,11 +40,17 @@ async def extract(request: Request) -> None:
 
     document = await _file_part_bytes(request, body, bound)
     try:
-        _validation_service.validate(document)
+        request.app.state.validation_service.validate(document)
     except UnsupportedTypeError as verdict:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(verdict)
         ) from verdict
+    except TooLargeError as verdict:
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(verdict)) from verdict
+    except CorruptDocumentError as unrecognized:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_CORRUPT_DETAIL
+        ) from unrecognized
 
     raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=_INTERIM_DETAIL)
 

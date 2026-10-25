@@ -35,3 +35,14 @@ class ValidationOutcome:
 
 class UnsupportedTypeError(Exception):
     """No strategy claimed the body; the detail names the sniffed MIME."""
+
+
+class TooLargeError(Exception):
+    """An admitted type overstepped one of its numeric bounds; the
+    message names the limit so the 413 detail can pass it on (http.md)."""
+
+
+class CorruptDocumentError(Exception):
+    """The bytes carried a recognized container that will not open as a
+    document; the 422 stays generic because a corrupt file cannot be
+    branded (http.md)."""

@@ -10,7 +10,10 @@ shape stays abstract — a strategy without a validate is not instantiable.
 import pytest
 
 from app.validation import (
+    DEFAULT_MAX_PDF_PAGES,
+    CorruptDocumentError,
     DocumentValidationService,
+    TooLargeError,
     UnsupportedTypeError,
     ValidationOutcome,
     build_default_service,
@@ -21,6 +24,7 @@ from app.validation.strategies import (
     PdfValidationStrategy,
     TextValidationStrategy,
 )
+from tests.support.documents import minimal_docx_bytes, minimal_pdf_bytes
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -36,7 +40,7 @@ def test_default_registry_composes_the_three_types_in_contract_order() -> None:
 
 
 def test_a_service_runs_whatever_registry_it_is_handed() -> None:
-    registry: tuple[DocumentValidationStrategy, ...] = (PdfValidationStrategy(),)
+    registry: tuple[DocumentValidationStrategy, ...] = (PdfValidationStrategy(max_pages=DEFAULT_MAX_PDF_PAGES),)
 
     service = DocumentValidationService(registry)
 
@@ -51,8 +55,8 @@ def test_the_strategy_contract_cannot_be_skipped() -> None:
 def test_the_default_registry_admits_every_supported_type() -> None:
     service = build_default_service()
 
-    assert service.validate(b"%PDF-1.7\n body").mime == "application/pdf"
-    assert service.validate(b"PK\x03\x04 body").mime == DOCX_MIME
+    assert service.validate(minimal_pdf_bytes(1)).mime == "application/pdf"
+    assert service.validate(minimal_docx_bytes()).mime == DOCX_MIME
     assert service.validate(b"body\n").mime == "text/plain"
     assert service.validate(b"").mime == "text/plain"
 
@@ -86,6 +90,34 @@ def test_a_full_registry_decline_raises_unsupported_type_naming_the_junk() -> No
         service.validate(b"\x89PNG\r\n\x1a\n\r\n pixel body")
 
     assert "unsupported document type" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "rejection",
+    [
+        TooLargeError("the pdf exceeds the 2-page limit"),
+        CorruptDocumentError("the docx container did not open"),
+        UnsupportedTypeError("unsupported document type: image/png"),
+    ],
+)
+def test_a_typed_rejection_rides_the_registry_and_halts_the_pass(rejection: Exception) -> None:
+    following = AcknowledgingStrategy()
+    service = DocumentValidationService(strategies=(RejectingStrategy(rejection), following))
+
+    with pytest.raises(type(rejection)):
+        service.validate(b"body")
+
+    assert following.seen is None
+
+
+class RejectingStrategy(DocumentValidationStrategy):
+    """Raises the typed rejection it was constructed with, every time."""
+
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    def validate(self, data: bytes) -> ValidationOutcome | None:
+        raise self._error
 
 
 class ClaimingStrategy(DocumentValidationStrategy):

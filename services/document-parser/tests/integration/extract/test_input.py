@@ -12,17 +12,22 @@ pin the registry, this suite pins what a caller actually gets.
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.support.documents import minimal_docx_bytes, minimal_pdf_bytes
+
 from .conftest import KEY
 
 _INTERIM = {"detail": "extraction pipeline not implemented yet"}
 _GENERIC_422 = {"detail": "corrupt or unsupported upload"}
 
+_PDF = minimal_pdf_bytes(1)
+_DOCX = minimal_docx_bytes()
+
 
 @pytest.mark.parametrize(
     ("filename", "body", "declared"),
     [
-        ("a.pdf", b"%PDF-1.7\n body", "application/pdf"),
-        ("a.docx", b"PK\x03\x04 body", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        ("a.pdf", _PDF, "application/pdf"),
+        ("a.docx", _DOCX, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         ("a.txt", b"\nbody", "text/plain"),
     ],
 )
@@ -44,7 +49,7 @@ def test_the_declared_type_never_wins_over_the_sniff(client: TestClient) -> None
     guest = client.post(
         "/api/v1/extract",
         headers={"x-api-key": KEY},
-        files={"file": ("fake.txt", b"%PDF-1.7\n body", "text/plain")},
+        files={"file": ("fake.txt", _PDF, "text/plain")},
     )
 
     assert impostor.status_code == 415

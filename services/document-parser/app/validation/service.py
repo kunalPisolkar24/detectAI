@@ -8,7 +8,12 @@ turns into UnsupportedTypeError carrying the diagnosed MIME for the 415.
 """
 
 from .diagnosis import classify_unknown
-from .models import UnsupportedTypeError, ValidationOutcome
+from .models import (
+    DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES,
+    DEFAULT_MAX_PDF_PAGES,
+    UnsupportedTypeError,
+    ValidationOutcome,
+)
 from .strategies import (
     DocumentValidationStrategy,
     DocxValidationStrategy,
@@ -37,8 +42,16 @@ class DocumentValidationService:
         raise UnsupportedTypeError(f"unsupported document type: {classify_unknown(data)}")
 
 
-def build_default_service() -> DocumentValidationService:
-    """The production registry: PDF, then DOCX, then TXT — text last by contract."""
+def build_default_service(
+    *, max_pdf_pages: int = DEFAULT_MAX_PDF_PAGES, docx_max_uncompressed_bytes: int = DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES
+) -> DocumentValidationService:
+    """The production registry: PDF, then DOCX, then TXT — text last by
+    contract, each strategy carrying its spec-default bound unless the
+    composition root passes resolved settings values."""
     return DocumentValidationService(
-        strategies=(PdfValidationStrategy(), DocxValidationStrategy(), TextValidationStrategy())
+        strategies=(
+            PdfValidationStrategy(max_pages=max_pdf_pages),
+            DocxValidationStrategy(max_uncompressed_bytes=docx_max_uncompressed_bytes),
+            TextValidationStrategy(),
+        )
     )
