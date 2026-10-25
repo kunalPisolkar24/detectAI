@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-SERVICE_DIR = Path(__file__).resolve().parents[2]
+SERVICE_DIR = Path(__file__).resolve().parents[3]
 SCRIPT = SERVICE_DIR / "tools" / "secrets.py"
 
 

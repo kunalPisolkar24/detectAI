@@ -1,18 +1,18 @@
-"""Factory wiring: the flick composes the right plane, the prod build fetches
-over the bootstrap environment, and the emulator's seeded plane ends-to-end
-through the same path (integration, skipped when Floci is unreachable).
+"""Factory wiring against fakes only: the flick composes the right plane,
+prod wiring builds the secret plane before SSM is even constructed, and
+the bootstrap environment read decides region and the emulator override.
+No network, no boot — the real-plane equivalent lives beside its kin in
+tests/integration/config (FLoCI).
 """
 
 import json
-import socket
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-from app.config import ConfigFactory, ProdConfig, Settings, deployment_flick
+from app.config import ConfigFactory, ProdConfig
 from app.config.errors import ConfigFetchError
 from app.config.factories.aws_client_factory import AWSClientFactory
 from app.config.provider import DevConfig
@@ -98,41 +98,3 @@ def test_create_client_shares_region_and_endpoint(monkeypatch: pytest.MonkeyPatc
         ("ssm", {"region_name": "ap-southeast-2", "endpoint_url": "http://localhost:4566"}),
         ("secretsmanager", {"region_name": "ap-southeast-2", "endpoint_url": "http://localhost:4566"}),
     ]
-
-
-def _floci_reachable() -> bool:
-    try:
-        with socket.create_connection(("127.0.0.1", 4566), timeout=1.0):
-            return True
-    except OSError:
-        return False
-
-
-def _env_values() -> dict[str, str]:
-    values: dict[str, str] = {}
-    text = (Path(__file__).resolve().parents[2] / "infra" / ".env").read_text()
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, raw = line.partition("=")
-        values[key.strip()] = raw.split("#")[0].strip()
-    return values
-
-
-requires_floci = pytest.mark.skipif(not _floci_reachable(), reason="Floci not reachable on :4566")
-
-
-@requires_floci
-def test_prod_flick_boots_off_the_seeded_floci_plane(monkeypatch: pytest.MonkeyPatch) -> None:
-    env = _env_values()
-    monkeypatch.setenv("ENV_TYPE", "prod")
-    monkeypatch.setenv("AWS_REGION", env["AWS_REGION"])
-    monkeypatch.setenv("EMULATOR_ENDPOINT", "http://localhost:4566")
-    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
-    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
-
-    provider = ConfigFactory.create(deployment_flick())
-    settings = Settings.from_provider(provider)
-
-    assert settings.api_key == env["API_KEY"]

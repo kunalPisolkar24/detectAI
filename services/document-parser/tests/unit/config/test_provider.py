@@ -1,6 +1,6 @@
 """The ConfigProvider planes: dev answers from the process environment over
 the dotenv file, prod from the two AWS planes with the disjointness
-contract, and require() names key and plane on a missing mandatory value.
+contract — lookups after construction never touch network or disk.
 """
 
 from pathlib import Path
