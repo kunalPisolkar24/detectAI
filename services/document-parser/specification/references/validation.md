@@ -42,6 +42,12 @@ Four stages, in order:
 
 ## Components
 
+The components split cleanly in two: the composition shell — boot and state,
+who builds what and who reads it — and the validation core, the strategy
+machinery that runs one ordered pass.
+
+### The composition shell
+
 ```mermaid
 classDiagram
     direction LR
@@ -61,13 +67,28 @@ classDiagram
     class ExtractRoute {
         <<api/extract.py>>
         +POST /api/v1/extract
-        -_read_bounded(cap) bytes
-        -_file_part_bytes(body, bound) bytes
     }
 
     class DocumentValidationService {
         <<registry runner>>
-        -strategies : tuple
+        +validate(data) ValidationOutcome
+    }
+
+    Main ..> Settings : boots once
+    Main ..> DocumentValidationService : build_default_service(bounds)
+    ExtractRoute ..> Settings : bound reads via app.state
+    ExtractRoute ..> DocumentValidationService : validate(bytes) via app.state
+
+```
+
+### The validation core
+
+```mermaid
+classDiagram
+    direction LR
+
+    class DocumentValidationService {
+        <<registry runner>>
         +validate(data) ValidationOutcome
     }
 
@@ -78,16 +99,13 @@ classDiagram
 
     class PdfValidationStrategy {
         +max_pages : int
-        +validate(data) Outcome or None
     }
 
     class DocxValidationStrategy {
         +max_uncompressed_bytes : int
-        +validate(data) Outcome or None
     }
 
     class TextValidationStrategy {
-        +validate(data) Outcome or None
     }
 
     class Diagnosis {
@@ -101,30 +119,21 @@ classDiagram
     }
 
     class UnsupportedTypeError {
-        <<415 — names the MIME>>
+        <<415, names the MIME>>
     }
 
     class TooLargeError {
-        <<413 — names the limit>>
+        <<413, names the limit>>
     }
 
     class CorruptDocumentError {
-        <<422 — generic detail>>
+        <<422, generic detail>>
     }
 
-    note for Settings "bounds fail closed: unset/invalid seeds land on the safe defaults"
-    note for DocumentValidationService "first claim wins; a full decline carries the diagnosed MIME"
-    note for Diagnosis "decline-only naming — a guess for the error body, never admission"
-
-    Main ..> Settings : boots once
-    Main ..> DocumentValidationService : build_default_service(bounds)
-    ExtractRoute ..> Settings : app.state
-    ExtractRoute ..> DocumentValidationService : app.state, validate(bytes)
-
-    DocumentValidationService o-- DocumentValidationStrategy : ordered registry
+    DocumentValidationService o-- DocumentValidationStrategy : ordered registry, first claim wins
     DocumentValidationService ..> Diagnosis : only when nothing claims
     DocumentValidationService --> ValidationOutcome : admitted
-    DocumentValidationService ..> UnsupportedTypeError : registry declined
+    DocumentValidationService ..> UnsupportedTypeError : full decline
 
     DocumentValidationStrategy <|.. PdfValidationStrategy
     DocumentValidationStrategy <|.. DocxValidationStrategy
@@ -133,7 +142,7 @@ classDiagram
     PdfValidationStrategy ..> TooLargeError : page bound
     PdfValidationStrategy ..> CorruptDocumentError : dead container
     DocxValidationStrategy ..> TooLargeError : uncompressed sum
-    DocxValidationStrategy ..> CorruptDocumentError : dead container / body-less / masquerade
+    DocxValidationStrategy ..> CorruptDocumentError : dead container, body-less, masquerade
 
 ```
 
@@ -166,7 +175,7 @@ sequenceDiagram
         G-->>S: ValidationOutcome (the sniffed MIME)
         S-->>R: admitted
         R--xC: 501 interim — extracted work unbuilt (http.md: 200 once it lands)
-    else branded bytes that will not open (dead pdf container; zip without word/document.xml)
+    else branded bytes that will not open (dead pdf container / zip with no word/document.xml)
         G--xS: CorruptDocumentError
         R--xC: 422 "corrupt or unsupported upload"
     else recognized type with a numeric bound overstepped
