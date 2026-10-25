@@ -12,6 +12,7 @@ pin the registry, this suite pins what a caller actually gets.
 import pytest
 from fastapi.testclient import TestClient
 
+from app.validation.models import DEFAULT_UPLOAD_LIMIT_BYTES
 from tests.support.documents import minimal_docx_bytes, minimal_pdf_bytes
 
 from .conftest import KEY
@@ -58,14 +59,14 @@ def test_the_declared_type_never_wins_over_the_sniff(client: TestClient) -> None
 
 
 def test_an_oversized_body_rejects_with_the_bound_named(client: TestClient) -> None:
-    body = b"x" * (10 * 1024 * 1024 + 1)
+    body = b"x" * (DEFAULT_UPLOAD_LIMIT_BYTES + 1)
 
     response = client.post(
         "/api/v1/extract", headers={"x-api-key": KEY}, files={"file": ("big.bin", body, "application/octet-stream")}
     )
 
     assert response.status_code == 413
-    assert response.json() == {"detail": "the request body exceeds the 10485760-byte upload limit"}
+    assert response.json() == {"detail": f"the request body exceeds the {DEFAULT_UPLOAD_LIMIT_BYTES}-byte upload limit"}
 
 
 def test_a_missing_file_field_shares_the_generic_422(client: TestClient) -> None:

@@ -13,10 +13,11 @@ fields that resolve them and the strategies that enforce them.
 from dataclasses import dataclass
 
 # requirements.md numeric bounds: the safe defaults, consumed by both the
-# settings contract and the strategies.
-DEFAULT_UPLOAD_LIMIT_BYTES = 10 * 1024 * 1024
+# settings contract and the strategies. The values' why lives in
+# requirements.md — Numeric bounds, "Why the numbers moved" (Lambda-sized).
+DEFAULT_UPLOAD_LIMIT_BYTES = 3 * 1024 * 1024
 DEFAULT_MAX_PDF_PAGES = 1_000
-DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
+DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES = 30 * 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)

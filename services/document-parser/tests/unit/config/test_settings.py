@@ -93,6 +93,13 @@ def test_an_invalid_bound_falls_back_to_its_safe_default(seeded: str) -> None:
         assert getattr(settings, field) == default
 
 
+def test_the_moved_bounds_pin_their_spec_values() -> None:
+    # Wire contract (the 413 detail names the bound): the two Lambda-era
+    # defaults are pinned exact, which the constant-keyed test cannot do.
+    assert DEFAULT_UPLOAD_LIMIT_BYTES == 3_145_728
+    assert DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES == 31_457_280
+
+
 def test_undeclared_plane_keys_ride_and_drop() -> None:
     settings = Settings.from_provider(
         StubProvider({
