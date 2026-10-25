@@ -110,7 +110,7 @@ def _floci_reachable() -> bool:
 
 def _env_values() -> dict[str, str]:
     values: dict[str, str] = {}
-    text = (Path(__file__).resolve().parents[1] / "infra" / ".env").read_text()
+    text = (Path(__file__).resolve().parents[2] / "infra" / ".env").read_text()
     for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
