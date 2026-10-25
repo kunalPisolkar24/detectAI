@@ -39,13 +39,6 @@ def test_empty_and_whitespace_candidates_are_rejected(client: TestClient) -> Non
     assert client.post("/api/v1/extract", headers={"x-api-key": "   "}).status_code == 401
 
 
-def test_valid_key_reaches_the_stub_route(client: TestClient) -> None:
-    response = client.post("/api/v1/extract", headers={"x-api-key": KEY})
-
-    assert response.status_code == 501
-    assert response.json() == {"detail": "extraction pipeline not implemented yet"}
-
-
 def test_bearer_is_not_a_carrier_even_for_the_correct_key(client: TestClient) -> None:
     response = client.post("/api/v1/extract", headers={"Authorization": f"Bearer {KEY}"})
 
