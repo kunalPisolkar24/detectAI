@@ -12,6 +12,7 @@ uvicorn = "0.54.0"
 pydantic = "^2.14.1"
 python-dotenv = "^1.2.4"
 boto3 = "^1.43.118"
+python-multipart = "^0.0.32"
 
 [build-system]
 requires = ["poetry-core"]

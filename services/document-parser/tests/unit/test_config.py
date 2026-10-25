@@ -57,6 +57,25 @@ def test_a_short_required_key_fails_the_boot() -> None:
         Settings.from_provider(StubProvider({"API_KEY": "short"}))
 
 
+def test_the_upload_bound_lands_on_the_safe_default_without_a_seed() -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
+
+    assert settings.upload_limit_bytes == 10 * 1024 * 1024
+
+
+def test_the_upload_bound_reads_a_plain_numeric_seed() -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20, "UPLOAD_LIMIT_BYTES": "5242880"}))
+
+    assert settings.upload_limit_bytes == 5 * 1024 * 1024
+
+
+@pytest.mark.parametrize("seeded", ["not a number", "-1", "0", "1.5", " "])
+def test_an_invalid_upload_bound_falls_back_to_the_safe_default(seeded: str) -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20, "UPLOAD_LIMIT_BYTES": seeded}))
+
+    assert settings.upload_limit_bytes == 10 * 1024 * 1024
+
+
 def test_undeclared_plane_keys_ride_and_drop() -> None:
     settings = Settings.from_provider(
         StubProvider({
