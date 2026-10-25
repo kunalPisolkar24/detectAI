@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from .api.extract import router as extract_router
 from .config import ConfigFactory, Settings, deployment_flick
 
 # App-side logs have no handlers until OTel lands (observability.md); INFO keeps
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 
 app = FastAPI(title="Document Parser", lifespan=lifespan)
+app.include_router(extract_router)
 
 
 @app.get("/api/v1/health")
