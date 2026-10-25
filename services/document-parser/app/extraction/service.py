@@ -11,10 +11,13 @@ remaining TooLargeError shapes.
 
 from collections.abc import Mapping
 
+from .cleaning import normalize
 from .models import (
     DEFAULT_OUTPUT_CHAR_LIMIT,
     DEFAULT_PROCESSING_BUDGET_SECONDS,
+    Deadline,
     ExtractionResult,
+    UnreadableDocumentError,
 )
 from .strategies import (
     DocumentExtractionStrategy,
@@ -53,7 +56,14 @@ class DocumentExtractionService:
         """Budget, format, cleaning, cap — each run once (extraction.md).
         A mime the registry does not key is UnreadableDocumentError: the
         gate and the registry disagreeing leaves content no strategy owns."""
-        raise NotImplementedError("the extract pipeline is not built yet")
+        deadline = Deadline.from_budget(self._processing_budget_seconds)
+        strategy = self._strategies.get(mime)
+        if strategy is None:
+            raise UnreadableDocumentError(f"no extraction strategy claims {mime}")
+        text = normalize(strategy.extract(data, deadline))
+        if len(text) > self._output_char_limit:
+            return ExtractionResult(text=text[: self._output_char_limit], truncated=True)
+        return ExtractionResult(text=text, truncated=False)
 
 
 def build_default_extraction_service(
