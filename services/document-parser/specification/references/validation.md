@@ -221,17 +221,15 @@ non-positive seed falls back to the safe default — **only the credential may
 fail the boot**; a bad bound cannot stop the service, and a zero or negative
 bound can never stand in.
 
-> Bounds note (Lambda target decision): the upload and DOCX-uncompressed
-> defaults below have since moved to 3 MiB / 30 MiB — the deployment survey
-> and the why live in [../requirements.md](../requirements.md) (Numeric
-> bounds, "Why the numbers moved"). The ratios and enforcement points in this
-> LLD are unchanged; only the default values it records are stale.
+The defaults moved with the Lambda deployment decision — the why lives in
+[../requirements.md](../requirements.md) (Numeric bounds, "Why the numbers
+moved"); the enforcement points in this LLD are unchanged.
 
 | Bound | Default | Checked | Enforced by |
 |-------|---------|---------|-------------|
-| Upload size | 10 MiB | at cap+1, bulk abandoned | transport (`_read_bounded`, multipart `max_part_size`) |
+| Upload size | 3 MiB | at cap+1, bulk abandoned | transport (`_read_bounded`, multipart `max_part_size`) |
 | PDF pages | 1,000 | page count | pdf strategy, before any page work |
-| DOCX uncompressed size | 100 MiB | summed member `file_size` | docx strategy, zip metadata only |
+| DOCX uncompressed size | 30 MiB | summed member `file_size` | docx strategy, zip metadata only |
 
 The at-the-line admit is part of the contract each strategy tests: a document
 exactly at a bound is admitted, one page or byte over is rejected.

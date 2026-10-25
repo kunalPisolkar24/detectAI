@@ -1,7 +1,7 @@
 """The registry runner: one ordered pass, one deterministic winner.
 
 The service owns admission: it walks the strategies with the raw body and
-stops at the first classification. Size never reaches here — the 10 MiB
+stops at the first classification. Size never reaches here — the 3 MiB
 body cap is a transport concern, enforced by the bounded read in the
 extract endpoint (NFR-4). When no strategy claims the bytes, the decline
 turns into UnsupportedTypeError carrying the diagnosed MIME for the 415.
