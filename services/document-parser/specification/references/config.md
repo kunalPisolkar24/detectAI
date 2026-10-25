@@ -51,7 +51,6 @@ classDiagram
     class ConfigProvider {
         <<interface>>
         +get(key, default) string or None
-        +require(key) string
     }
 
     class DevConfig {

@@ -10,7 +10,7 @@ import pytest
 from app.config.adapters import dotenv as dotenv_module
 from app.config.adapters.dotenv import DotEnvAdapter
 from app.config.errors import ConfigError
-from app.config.provider import DevConfig, MissingKeyError, ProdConfig
+from app.config.provider import DevConfig, ProdConfig
 
 
 class FakeAdapter:
@@ -54,15 +54,6 @@ def test_dev_plane_get_answers_none_when_the_key_is_seeded_nowhere(tmp_path: Pat
 
     assert provider.get("MISSING") is None
     assert provider.get("MISSING", "fallback") == "fallback"
-
-
-def test_require_raises_missing_key_error_naming_key_and_plane(tmp_path: Path) -> None:
-    provider = DevConfig(DotEnvAdapter(_plane(tmp_path, [])))
-
-    with pytest.raises(MissingKeyError) as excinfo:
-        provider.require("API_KEY")
-    assert "API_KEY" in str(excinfo.value)
-    assert "dev" in str(excinfo.value)
 
 
 def test_prod_plane_answers_from_both_aws_planes() -> None:

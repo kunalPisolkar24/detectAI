@@ -1,4 +1,4 @@
-"""The config plane contract: one interface, two planes, one lookup behavior.
+"""The config plane contract: one interface, two planes, optional lookups.
 
 ConfigProvider is what callers depend on. DevConfig answers from the merged
 dotenv file and process environment (env wins: containers ship no file and
@@ -19,20 +19,12 @@ from .adapters.secrets_manager import SecretsManagerAdapter
 from .errors import ConfigError
 
 
-class MissingKeyError(ConfigError):
-    """A required key did not resolve on its plane; the message names both."""
-
-
 class ConfigProvider(ABC):
-    """Contract every config plane answers: optional and mandatory lookups."""
+    """Contract every config plane answers; absence is a normal answer."""
 
     @abstractmethod
     def get(self, key: str, default: str | None = None) -> str | None:
         """Optional key: absence is a normal answer (None), never an error."""
-
-    @abstractmethod
-    def require(self, key: str) -> str:
-        """Mandatory key: absence raises MissingKeyError naming key and plane."""
 
 
 class _DictConfig(ConfigProvider):
@@ -44,12 +36,6 @@ class _DictConfig(ConfigProvider):
 
     def get(self, key: str, default: str | None = None) -> str | None:
         return self._values.get(key, default)
-
-    def require(self, key: str) -> str:
-        value = self._values.get(key)
-        if value is None:
-            raise MissingKeyError(f'required key "{key}" is missing on the {self._plane} plane')
-        return value
 
 
 class DevConfig(_DictConfig):

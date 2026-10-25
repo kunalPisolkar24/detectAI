@@ -6,7 +6,7 @@ from .adapters.secrets_manager import SecretsManagerAdapter
 from .errors import ConfigError, ConfigFetchError
 from .factories.aws_client_factory import AWSClientFactory
 from .factories.config_factory import ConfigFactory
-from .provider import ConfigProvider, DevConfig, MissingKeyError, ProdConfig
+from .provider import ConfigProvider, DevConfig, ProdConfig
 from .settings import Settings, deployment_flick
 
 __all__ = [
@@ -18,7 +18,6 @@ __all__ = [
     "DevConfig",
     "DotEnvAdapter",
     "DotEnvError",
-    "MissingKeyError",
     "ParameterStoreAdapter",
     "ProdConfig",
     "SecretsManagerAdapter",
