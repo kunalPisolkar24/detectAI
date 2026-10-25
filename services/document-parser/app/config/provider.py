@@ -12,10 +12,9 @@ Dependencies point one way: provider -> adapters, never factories -> back.
 
 import os
 from abc import ABC, abstractmethod
+from typing import Protocol
 
 from .adapters.dotenv import DotEnvAdapter
-from .adapters.parameters import ParameterStoreAdapter
-from .adapters.secrets_manager import SecretsManagerAdapter
 from .errors import ConfigError
 
 
@@ -25,6 +24,14 @@ class ConfigProvider(ABC):
     @abstractmethod
     def get(self, key: str, default: str | None = None) -> str | None:
         """Optional key: absence is a normal answer (None), never an error."""
+
+
+class AwsPlane(Protocol):
+    """The one operation the prod plane needs from a constructed AWS
+    adapter: its seeded keys, fetched exactly once at the adapter's own
+    construction. The concrete adapters satisfy this structurally."""
+
+    def fetch(self) -> dict[str, str]: ...
 
 
 class _DictConfig(ConfigProvider):
@@ -63,9 +70,7 @@ class ProdConfig(_DictConfig):
     until a restart.
     """
 
-    def __init__(
-        self, parameters: ParameterStoreAdapter, secrets: SecretsManagerAdapter
-    ) -> None:
+    def __init__(self, parameters: AwsPlane, secrets: AwsPlane) -> None:
         blob = secrets.fetch()
         ssm = parameters.fetch()
         overlap = {key.lower() for key in blob} & {key.lower() for key in ssm}

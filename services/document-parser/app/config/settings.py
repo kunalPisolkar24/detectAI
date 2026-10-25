@@ -70,7 +70,12 @@ class Settings(BaseModel):
     )
     @classmethod
     def _fail_closed_bound(cls, value: object, info: ValidationInfo) -> int:
-        return _positive_int_or_default(value, default=cls.model_fields[info.field_name].default)
+        # The name is always present for a field validator; None only means
+        # the validator was bound to nothing, which is a wiring bug.
+        field_name = info.field_name
+        if field_name is None:
+            raise ValueError("the fail-closed bound validator requires a field name")
+        return _positive_int_or_default(value, default=cls.model_fields[field_name].default)
 
     @classmethod
     def from_provider(cls, provider: ConfigProvider) -> "Settings":
@@ -86,4 +91,8 @@ class Settings(BaseModel):
             value = provider.get(name.upper())
             if value is not None:
                 values[name] = value
-        return cls(**values)
+        # model_validate, not __init__: the plane carries the field names as
+        # a typed dict of strings and the field contracts own the coercion,
+        # so the values enter through the validation path (the bounds ride
+        # in as strings and the before-validator is their sole guard).
+        return cls.model_validate(values)

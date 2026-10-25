@@ -48,8 +48,12 @@ def test_a_service_runs_whatever_registry_it_is_handed() -> None:
 
 
 def test_the_strategy_contract_cannot_be_skipped() -> None:
+    # The contract is enforced at construction; routing through a plain
+    # type keeps that check runtime-only (an abstract class cannot be
+    # constructed directly).
+    contract: type = DocumentValidationStrategy
     with pytest.raises(TypeError):
-        DocumentValidationStrategy()
+        contract()
 
 
 def test_the_default_registry_admits_every_supported_type() -> None:

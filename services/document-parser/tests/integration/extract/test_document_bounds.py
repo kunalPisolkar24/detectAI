@@ -6,6 +6,8 @@ as http.md draws them — too-large names its limit, corrupt keeps the
 generic detail — and admitted rows still answer the interim 501.
 """
 
+from collections.abc import Iterator
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -22,7 +24,7 @@ _SIZE_LIMIT = "500"
 
 
 @pytest.fixture(scope="module")
-def bounded_client() -> TestClient:
+def bounded_client() -> Iterator[TestClient]:
     patch = pytest.MonkeyPatch()
     patch.setenv("ENV_TYPE", "dev")
     patch.setenv("API_KEY", KEY)

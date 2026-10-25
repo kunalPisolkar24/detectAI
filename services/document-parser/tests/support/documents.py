@@ -42,7 +42,7 @@ def surrogate_zip_bytes(names: list[str], payload: bytes = b"x") -> bytes:
     return _zip_of({name: payload for name in names})
 
 
-def _zip_of(members: dict[str, bytes]) -> bytes:
+def _zip_of(members: dict[str, str | bytes]) -> bytes:
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w") as container:
         for name, content in members.items():
