@@ -32,6 +32,9 @@ infra/terraform/backend.prod.hcl
 infra/observability/backend.prod.hcl
 services/document-parser/infra/terraform/backend.prod.hcl
 
+# Editor
+.vscode/
+
 # Local working docs (not for review)
 services/document-parser/diagrams/
 infra/terraform/.env.pg.floci
