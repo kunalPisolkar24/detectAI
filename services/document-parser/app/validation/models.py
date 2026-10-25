@@ -1,12 +1,22 @@
 """The admission vocabulary shared by every layer.
 
-ValidationOutcome and UnsupportedTypeError are the types the strategies
-return, the service routes, and the extract endpoint maps onto HTTP. They
-live in a leaf module so the dependency direction stays one-way:
-strategies, the service, and api/ all import models, nothing imports back.
+ValidationOutcome and the typed rejections are the types the strategies
+return, the service routes, and the extract endpoint maps onto HTTP.
+models.py is a leaf on purpose: strategies, the service, the settings
+contract, and api/ all import it, nothing imports back — the dependency
+direction stays one-way (outer to inner, never the reverse).
+
+The numeric bound defaults live here too, one source for the settings
+fields that resolve them and the strategies that enforce them.
 """
 
 from dataclasses import dataclass
+
+# requirements.md numeric bounds: the safe defaults, consumed by both the
+# settings contract and the strategies.
+DEFAULT_UPLOAD_LIMIT_BYTES = 10 * 1024 * 1024
+DEFAULT_MAX_PDF_PAGES = 1_000
+DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)

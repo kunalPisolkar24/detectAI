@@ -13,6 +13,11 @@ from app.config import ConfigProvider, Settings, deployment_flick
 from app.config.adapters import dotenv as dotenv_module
 from app.config.adapters.dotenv import DotEnvAdapter
 from app.config.provider import DevConfig
+from app.validation.models import (
+    DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES,
+    DEFAULT_MAX_PDF_PAGES,
+    DEFAULT_UPLOAD_LIMIT_BYTES,
+)
 
 
 class StubProvider(ConfigProvider):
@@ -57,30 +62,41 @@ def test_a_short_required_key_fails_the_boot() -> None:
         Settings.from_provider(StubProvider({"API_KEY": "short"}))
 
 
-def test_the_upload_bound_lands_on_the_safe_default_without_a_seed() -> None:
+_BOUNDS: tuple[tuple[str, int], ...] = (
+    ("upload_limit_bytes", DEFAULT_UPLOAD_LIMIT_BYTES),
+    ("max_pdf_pages", DEFAULT_MAX_PDF_PAGES),
+    ("docx_max_uncompressed_bytes", DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES),
+)
+
+
+def test_the_bounds_land_on_their_safe_defaults_without_seeds() -> None:
     settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
 
-    assert settings.upload_limit_bytes == 10 * 1024 * 1024
+    for field, default in _BOUNDS:
+        assert getattr(settings, field) == default
 
 
-def test_the_upload_bound_reads_a_plain_numeric_seed() -> None:
-    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20, "UPLOAD_LIMIT_BYTES": "5242880"}))
+def test_the_bounds_read_plain_numeric_seeds_from_the_string_plane() -> None:
+    settings = Settings.from_provider(
+        StubProvider({"API_KEY": "a" * 20, **{name.upper(): str(default * 2) for name, default in _BOUNDS}})
+    )
 
-    assert settings.upload_limit_bytes == 5 * 1024 * 1024
+    for field, default in _BOUNDS:
+        assert getattr(settings, field) == default * 2
 
 
 @pytest.mark.parametrize("seeded", ["not a number", "-1", "0", "1.5", " "])
-def test_an_invalid_upload_bound_falls_back_to_the_safe_default(seeded: str) -> None:
-    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20, "UPLOAD_LIMIT_BYTES": seeded}))
+def test_an_invalid_bound_falls_back_to_its_safe_default(seeded: str) -> None:
+    for field, default in _BOUNDS:
+        settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20, field.upper(): seeded}))
 
-    assert settings.upload_limit_bytes == 10 * 1024 * 1024
+        assert getattr(settings, field) == default
 
 
 def test_undeclared_plane_keys_ride_and_drop() -> None:
     settings = Settings.from_provider(
         StubProvider({
             "API_KEY": "a" * 20,
-            "MAX_PDF_PAGES": "9999",
             "WORKER_THREADS": "4",
             "ENV_TYPE": "prod",  # the flick stays off the model
         })
@@ -88,6 +104,7 @@ def test_undeclared_plane_keys_ride_and_drop() -> None:
 
     assert settings.api_key == "a" * 20
     assert not hasattr(settings, "env_type")
+    assert not hasattr(settings, "worker_threads")
 
 
 @pytest.mark.parametrize(

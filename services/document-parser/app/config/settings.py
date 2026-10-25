@@ -10,8 +10,13 @@ deployment flick picks the plane, the plane feeds the model.
 import os
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
+from ..validation.models import (
+    DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES,
+    DEFAULT_MAX_PDF_PAGES,
+    DEFAULT_UPLOAD_LIMIT_BYTES,
+)
 from .provider import ConfigProvider
 
 
@@ -21,9 +26,6 @@ def deployment_flick() -> Literal["dev", "prod"]:
     deployment variable read from the process environment, never from a
     file or AWS."""
     return "prod" if os.environ.get("ENV_TYPE", "").strip().lower() == "prod" else "dev"
-
-
-_DEFAULT_UPLOAD_LIMIT_BYTES = 10 * 1024 * 1024
 
 
 def _positive_int_or_default(value: object, default: int) -> int:
@@ -54,16 +56,21 @@ class Settings(BaseModel):
     api_key: str = Field(default="", min_length=16)
 
     # requirements.md numeric bounds fail closed: an unset, non-numeric, or
-    # non-positive UPLOAD_LIMIT_BYTES lands on the 10 MiB default instead
-    # of stopping the boot — only the credential may do that. The bound
-    # rides the plane as a string (string parameters only), so this
-    # before-validator is its sole guard.
-    upload_limit_bytes: int = _DEFAULT_UPLOAD_LIMIT_BYTES
+    # non-positive bound lands on its safe default instead of stopping the
+    # boot — only the credential may do that. Bounds ride the plane as
+    # strings (string parameters only), so the before-validator is their
+    # sole guard. The defaults are single-sourced in the validation
+    # package, which also enforces them.
+    upload_limit_bytes: int = DEFAULT_UPLOAD_LIMIT_BYTES
+    max_pdf_pages: int = DEFAULT_MAX_PDF_PAGES
+    docx_max_uncompressed_bytes: int = DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES
 
-    @field_validator("upload_limit_bytes", mode="before")
+    @field_validator(
+        "upload_limit_bytes", "max_pdf_pages", "docx_max_uncompressed_bytes", mode="before"
+    )
     @classmethod
-    def _read_bound_fail_closed(cls, value: object) -> int:
-        return _positive_int_or_default(value, default=_DEFAULT_UPLOAD_LIMIT_BYTES)
+    def _fail_closed_bound(cls, value: object, info: ValidationInfo) -> int:
+        return _positive_int_or_default(value, default=cls.model_fields[info.field_name].default)
 
     @classmethod
     def from_provider(cls, provider: ConfigProvider) -> "Settings":
