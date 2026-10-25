@@ -1,83 +1,80 @@
-"""Settings source-chain behavior: the dev flick keeps pydantic's default
-chain (and never builds the AWS source), the prod flick composes AWS exactly
-— no process env, no dotenv — with field defaults still falling through.
+"""Settings through a config plane: provider values win over the process
+environment, a missing or invalid required key fails the boot on the field's
+own contract, undeclared plane keys are ignored, and the flick stays
+fail-closed.
 """
 
-from typing import Any
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from app import config_source
-from app.config import Settings, deployment_flick
+from app.config import ConfigProvider, Settings, deployment_flick
+from app.config.adapters import dotenv as dotenv_module
+from app.config.adapters.dotenv import DotEnvAdapter
+from app.config.provider import DevConfig
 
 
-class StubAwsSource:
-    """Stands in for AwsConfigSource in the composed chain; the runtime only
-    needs a zero-arg callable returning a mapping keyed by field name."""
+class StubProvider(ConfigProvider):
+    """Stands in for a plane in the composed chain: a plain dict lookup."""
 
     def __init__(self, values: dict[str, str]) -> None:
         self._values = values
 
-    def __call__(self) -> dict[str, Any]:
-        return self._values
+    def get(self, key: str, default: str | None = None) -> str | None:
+        return self._values.get(key, default)
+
+    def require(self, key: str) -> str:
+        value = self._values.get(key)
+        if value is None:
+            raise AssertionError(f"stub was asked for unseeded {key}")
+        return value
 
 
-def _stub_prod_fetch(monkeypatch: pytest.MonkeyPatch, values: dict[str, str]) -> None:
-    monkeypatch.setattr(
-        config_source.AwsConfigSource,
-        "from_env",
-        classmethod(lambda cls, settings_cls: StubAwsSource(values)),
+def test_provider_values_win_over_a_poisoned_process_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("API_KEY", "a" * 20)
+
+    settings = Settings.from_provider(StubProvider({"API_KEY": "b" * 20}))
+
+    assert settings.api_key == "b" * 20
+
+
+def test_a_dev_plane_off_the_process_env_fills_the_required_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The fileless container shape: the dotenv default is absent, composition
+    # injected the values as env vars, and they flow provider -> Settings.
+    monkeypatch.delenv(dotenv_module.DOTENV_PATH_VAR, raising=False)
+    monkeypatch.setattr(dotenv_module, "_DEFAULT_DOTENV_PATH", tmp_path / "absent" / ".env")
+    monkeypatch.setenv("API_KEY", "a" * 20)
+
+    settings = Settings.from_provider(DevConfig(DotEnvAdapter()))
+
+    assert settings.api_key == "a" * 20
+
+
+def test_an_unseeded_required_key_fails_the_boot() -> None:
+    with pytest.raises(ValidationError):
+        Settings.from_provider(StubProvider({}))
+
+
+def test_a_short_required_key_fails_the_boot() -> None:
+    with pytest.raises(ValidationError):
+        Settings.from_provider(StubProvider({"API_KEY": "short"}))
+
+
+def test_undeclared_plane_keys_ride_and_drop() -> None:
+    settings = Settings.from_provider(
+        StubProvider({
+            "API_KEY": "a" * 20,
+            "MAX_PDF_PAGES": "9999",
+            "WORKER_THREADS": "4",
+            "ENV_TYPE": "prod",  # the flick stays off the model
+        })
     )
 
-
-def test_dev_flick_keeps_the_default_chain_and_never_fetches(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("API_KEY", "a" * 20)
-    monkeypatch.setenv("ENV_TYPE", "dev")
-
-    def not_built(*args: object, **kwargs: object) -> None:
-        raise AssertionError("aws source built on the dev plane")
-
-    monkeypatch.setattr(config_source.AwsConfigSource, "from_env", classmethod(not_built))
-    assert Settings().api_key == "a" * 20  # process env beats dotenv, as today
-
-
-def test_prod_flick_is_aws_exact(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ENV_TYPE", "prod")
-    monkeypatch.setenv("API_KEY", "a" * 20)  # poisoned container env
-    monkeypatch.setenv("MAX_PDF_PAGES", "9999")  # poisoned container env
-    _stub_prod_fetch(monkeypatch, {"api_key": "b" * 22, "max_pdf_pages": "1000"})
-
-    settings = Settings()
-    assert settings.api_key == "b" * 22
-    assert settings.max_pdf_pages == 1000
-    assert settings.env_type == "prod"
-
-
-def test_prod_flick_unseeded_key_falls_to_the_field_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ENV_TYPE", "prod")
-    monkeypatch.setenv("PROCESS_BUDGET_SECONDS", "3.5")
-    _stub_prod_fetch(monkeypatch, {"api_key": "b" * 22})
-
-    # The key is absent from AWS and container env is out of the chain, so
-    # only the field's safe default can answer — 3.5 may not leak in.
-    assert Settings().process_budget_seconds == 10.0
-
-
-def test_prod_flick_loses_the_boot_without_a_valid_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ENV_TYPE", "prod")
-    _stub_prod_fetch(monkeypatch, {})
-
-    with pytest.raises(ValidationError):
-        Settings()
-
-
-def test_prod_flick_needs_the_region(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ENV_TYPE", "prod")
-    monkeypatch.delenv("AWS_REGION", raising=False)
-
-    with pytest.raises(config_source.ConfigSourceError, match="AWS_REGION"):
-        Settings()
+    assert settings.api_key == "a" * 20
+    assert not hasattr(settings, "env_type")
 
 
 @pytest.mark.parametrize(

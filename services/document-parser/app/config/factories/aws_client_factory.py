@@ -1,11 +1,14 @@
 """Shared boto3 plumbing for the prod config plane: decided once, reused.
 
 Region and endpoint are read exactly once (from_env) and shared by every
-client built here, so all plane clients target one account and the same
+client built here, so all plane clients target one region and the same
 emulator override. boto3 stays method-local: dev boots never import it.
 """
 
+import os
 from typing import Any
+
+from ..errors import ConfigFetchError
 
 
 class AWSClientFactory:
@@ -27,9 +30,17 @@ class AWSClientFactory:
         naming the var (compose injects it from infra/.env); EMULATOR_ENDPOINT
         optional, whitespace-trimmed, None when unset.
         """
-        raise NotImplementedError
+        region = os.environ.get("AWS_REGION", "").strip()
+        if not region:
+            raise ConfigFetchError(
+                "the prod plane needs AWS_REGION in the environment; compose injects it from infra/.env"
+            )
+        endpoint = os.environ.get("EMULATOR_ENDPOINT", "").strip()
+        return cls(region, endpoint_url=endpoint or None)
 
     def create_client(self, service: str) -> Any:
         """One boto3 client per service (ssm, secretsmanager) with shared
         region and endpoint kwargs."""
-        raise NotImplementedError
+        import boto3  # method-local: only a prod-plane boot pays for the import
+
+        return boto3.client(service, region_name=self._region, endpoint_url=self._endpoint_url)

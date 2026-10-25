@@ -1,6 +1,8 @@
 """The config plane: typed contract plus adapters, split across submodules."""
 
 from .adapters.dotenv import DotEnvAdapter, DotEnvError
+from .adapters.parameters import ParameterStoreAdapter
+from .adapters.secrets_manager import SecretsManagerAdapter
 from .errors import ConfigError, ConfigFetchError
 from .factories.aws_client_factory import AWSClientFactory
 from .factories.config_factory import ConfigFactory
@@ -17,7 +19,9 @@ __all__ = [
     "DotEnvAdapter",
     "DotEnvError",
     "MissingKeyError",
+    "ParameterStoreAdapter",
     "ProdConfig",
+    "SecretsManagerAdapter",
     "Settings",
     "deployment_flick",
 ]

@@ -1,12 +1,16 @@
 """The config plane contract: one interface, two planes, one lookup behavior.
 
-ConfigProvider is what callers depend on. DevConfig answers from the parsed
-dotenv plane; ProdConfig from the merged AWS planes (SSM wins collisions,
-the secrets blob fills the gaps). Both planes are read once at construction;
-lookups afterwards never touch the network or disk. Dependencies point one
-way: provider -> adapters, never factories -> back.
+ConfigProvider is what callers depend on. DevConfig answers from the merged
+dotenv file and process environment (env wins: containers ship no file and
+receive their values injected as env vars). ProdConfig answers from the
+merged AWS planes — the secrets blob first, then SSM; the two are disjoint
+by seeding contract, so an overlapping key fails the boot loudly instead of
+silently picking a winner. Both planes are read exactly once at
+construction; lookups afterwards never touch the network or disk.
+Dependencies point one way: provider -> adapters, never factories -> back.
 """
 
+import os
 from abc import ABC, abstractmethod
 
 from .adapters.dotenv import DotEnvAdapter
@@ -32,43 +36,57 @@ class ConfigProvider(ABC):
 
 
 class _DictConfig(ConfigProvider):
-    """Shared mechanics: lookup behavior over one in-memory dict per plane."""
+    """Shared mechanics: lookups over one in-memory dict built per plane."""
 
-    def __init__(self, plane: str) -> None:
+    def __init__(self, plane: str, values: dict[str, str]) -> None:
         self._plane = plane
+        self._values = values
 
     def get(self, key: str, default: str | None = None) -> str | None:
-        raise NotImplementedError
+        return self._values.get(key, default)
 
     def require(self, key: str) -> str:
-        raise NotImplementedError
+        value = self._values.get(key)
+        if value is None:
+            raise MissingKeyError(f'required key "{key}" is missing on the {self._plane} plane')
+        return value
 
 
 class DevConfig(_DictConfig):
-    """The dev plane: keys as written in the .env file the adapter parsed.
+    """The dev plane: process environment over the parsed .env file.
 
-    Constructed with one DotEnvAdapter, which parses eagerly and raises a
-    loud DotEnvError for an unreadable plane; construction then hands the
-    pairs to the dict, so get/require below are pure memory.
+    Env wins because a container has no file at all — compose injects the
+    values as environment variables — while locally the file is the baseline
+    and an export still override it, as it always has. The file is parsed
+    once by the adapter; this merge is the only work done at construction.
     """
 
     def __init__(self, dotenv: DotEnvAdapter) -> None:
-        super().__init__("dev")
-        self._dotenv = dotenv
+        super().__init__("dev", {**dotenv.fetch(), **os.environ})
 
 
 class ProdConfig(_DictConfig):
-    """The prod plane: SSM parameters first on collision, then the blob fill.
+    """The prod plane: the secrets blob fills first, SSM parameters complete.
 
-    Constructed with both AWS adapters, which fetch their planes exactly
-    once at their construction; this class merges them eagerly for the same
-    rule — lookups never touch the network. Keys seeded after boot stay
-    invisible until a restart.
+    Constructed with both AWS adapters, which fetched their planes exactly
+    once at their own construction; this merge is pure memory. The seeding
+    contract keeps the two planes disjoint (tools/secrets.py: the blob
+    carries API_KEY, only allowlisted non-secret keys land in SSM), so a
+    collision — checked case-insensitively — is operator error and fails the
+    boot naming the key and the fix. Keys seeded after boot stay invisible
+    until a restart.
     """
 
     def __init__(
         self, parameters: ParameterStoreAdapter, secrets: SecretsManagerAdapter
     ) -> None:
-        super().__init__("prod")
-        self._parameters = parameters
-        self._secrets = secrets
+        blob = secrets.fetch()
+        ssm = parameters.fetch()
+        overlap = {key.lower() for key in blob} & {key.lower() for key in ssm}
+        if overlap:
+            names = ", ".join(sorted(overlap))
+            raise ConfigError(
+                f'key(s) seeded on both planes: {names}; the secrets blob and the SSM prefix '
+                "are disjoint by contract — remove the duplicates and re-apply (make secrets-apply)"
+            )
+        super().__init__("prod", {**blob, **ssm})

@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from .config import Settings
+from .config import ConfigFactory, Settings, deployment_flick
 
 # App-side logs have no handlers until OTel lands (observability.md); INFO keeps
 # the startup/shutdown phases and config fallbacks visible meanwhile.
@@ -14,8 +14,14 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    # Fails the boot on an invalid API key, per requirements.md.
-    app.state.settings = Settings()
+    # The composition root: the flick selects the plane, the plane feeds the
+    # typed contract. A misconfigured plane or an invalid API key fails the
+    # boot here, before serving, per requirements.md.
+    flick = deployment_flick()
+    provider = ConfigFactory.create(flick)
+    app.state.settings = Settings.from_provider(provider)
+    logger.info("config plane: %s", flick)
+
     yield
     # NFR-9: the extract task adds its bounded worker-pool drain here.
     logger.info("document parser shutdown complete")

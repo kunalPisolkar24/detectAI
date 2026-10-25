@@ -19,4 +19,4 @@ Specifications for the document-parser service. This file is the hub — every d
 
 Review artifacts kept outside the hub list:
 
-- [references/config.md](references/config.md) — LLD for per-plane config resolution: ENV_TYPE flick, AWS-exact prod source, class + boot-sequence diagrams, fail-fast contract
+- [references/config.md](references/config.md) — LLD for per-plane config resolution: ENV_TYPE flick, provider planes (dev env-over-file, prod AWS-exact), factory composition, and the fail-fast contract
