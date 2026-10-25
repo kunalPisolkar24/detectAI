@@ -7,7 +7,8 @@ extract endpoint (NFR-4). When no strategy claims the bytes, the decline
 turns into UnsupportedTypeError carrying the diagnosed MIME for the 415.
 """
 
-from .models import ValidationOutcome
+from .diagnosis import classify_unknown
+from .models import UnsupportedTypeError, ValidationOutcome
 from .strategies import (
     DocumentValidationStrategy,
     DocxValidationStrategy,
@@ -28,8 +29,12 @@ class DocumentValidationService:
         return self._strategies
 
     def validate(self, data: bytes) -> ValidationOutcome:
-        """TODO: first strategy outcome wins; a full registry decline raises UnsupportedTypeError."""
-        raise NotImplementedError
+        """First strategy outcome wins; a full registry decline names the junk."""
+        for strategy in self._strategies:
+            outcome = strategy.validate(data)
+            if outcome is not None:
+                return outcome
+        raise UnsupportedTypeError(f"unsupported document type: {classify_unknown(data)}")
 
 
 def build_default_service() -> DocumentValidationService:

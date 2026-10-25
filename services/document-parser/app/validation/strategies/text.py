@@ -3,10 +3,15 @@
 from ..models import ValidationOutcome
 from .base import DocumentValidationStrategy
 
+_TEXT_MIME = "text/plain"
+
 
 class TextValidationStrategy(DocumentValidationStrategy):
     """Admits plain-text uploads, including the empty body."""
 
     def validate(self, data: bytes) -> ValidationOutcome | None:
-        """TODO: outcome for utf-8-decodable bytes (empty included), None otherwise."""
-        raise NotImplementedError
+        try:
+            data.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        return ValidationOutcome(mime=_TEXT_MIME)

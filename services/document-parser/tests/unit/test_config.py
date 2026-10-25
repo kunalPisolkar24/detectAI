@@ -24,12 +24,6 @@ class StubProvider(ConfigProvider):
     def get(self, key: str, default: str | None = None) -> str | None:
         return self._values.get(key, default)
 
-    def require(self, key: str) -> str:
-        value = self._values.get(key)
-        if value is None:
-            raise AssertionError(f"stub was asked for unseeded {key}")
-        return value
-
 
 def test_provider_values_win_over_a_poisoned_process_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("API_KEY", "a" * 20)
