@@ -19,7 +19,7 @@ help-secrets:
 	@echo ""
 
 secrets-test:
-	poetry run pytest tests/unit/test_secrets.py -q
+	poetry run pytest tests/unit/config/test_secrets_tool.py -q
 
 secrets-check:
 	poetry run python tools/secrets.py plan --dry-run

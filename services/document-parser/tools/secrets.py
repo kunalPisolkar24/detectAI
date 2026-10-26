@@ -80,10 +80,10 @@ SSM_SEED_KEYS = (
     "EDGE_ZONE_RATIO",
     "EDGE_TOLERANCE_RATIO",
     "FOLIO_MONOTONIC_RATIO",
-    "LOG_LEVEL",
     "OTEL_EXPORTER_OTLP_ENDPOINT",
     "OTEL_SERVICE_NAME",
     "OTEL_SERVICE_VERSION",
+    "OTEL_TRACE_SAMPLE_RATIO",
 )
 
 # Out-of-stack deploy identity: the role terraform runs under on real AWS.

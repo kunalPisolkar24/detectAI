@@ -469,14 +469,17 @@ def test_apply_self_heals_the_emulator_bucket(monkeypatch, tmp_path):
 
 
 def test_build_tf_vars_seeds_present_config_keys():
-    values = {**EMULATOR_VALUE, "LOG_LEVEL": "DEBUG", "MAX_PDF_PAGES": "1200"}
+    values = {**EMULATOR_VALUE, "OTEL_TRACE_SAMPLE_RATIO": "0.5", "MAX_PDF_PAGES": "1200"}
     mapped = dp_secrets.build_tf_vars(values)
-    assert json.loads(mapped["TF_VAR_ssm_parameters"]) == {"LOG_LEVEL": "DEBUG", "MAX_PDF_PAGES": "1200"}
+    assert json.loads(mapped["TF_VAR_ssm_parameters"]) == {
+        "OTEL_TRACE_SAMPLE_RATIO": "0.5",
+        "MAX_PDF_PAGES": "1200",
+    }
 
 
 def test_build_tf_vars_skips_absent_and_empty_config_keys():
     assert "TF_VAR_ssm_parameters" not in dp_secrets.build_tf_vars(EMULATOR_VALUE)
-    assert "TF_VAR_ssm_parameters" not in dp_secrets.build_tf_vars({**EMULATOR_VALUE, "LOG_LEVEL": ""})
+    assert "TF_VAR_ssm_parameters" not in dp_secrets.build_tf_vars({**EMULATOR_VALUE, "OTEL_TRACE_SAMPLE_RATIO": ""})
 
 
 def test_build_tf_vars_ignores_unlisted_keys():
