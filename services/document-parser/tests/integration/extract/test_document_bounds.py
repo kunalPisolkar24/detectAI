@@ -3,7 +3,7 @@
 A module-scoped client booted with tiny env bounds makes the 413 paths
 reachable with crafted bytes; the typed strategy rejections route exactly
 as http.md draws them — too-large names its limit, corrupt keeps the
-generic detail — and admitted rows still answer the interim 501.
+generic detail — and admitted rows extract through the same boot.
 """
 
 from collections.abc import Iterator
@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from tests.support.documents import (
     minimal_docx_bytes,
     minimal_pdf_bytes,
+    positioned_pdf_bytes,
     surrogate_zip_bytes,
 )
 
@@ -98,11 +99,12 @@ def test_an_impersonating_zip_stays_the_generic_422(bounded_client: TestClient) 
     assert response.json() == {"detail": "corrupt or unsupported upload"}
 
 
-def test_admitted_rows_still_answer_the_interim_501(bounded_client: TestClient) -> None:
+def test_admitted_rows_extract_through_the_pipeline(bounded_client: TestClient) -> None:
+    pdf_text = "doc parser probe pdf line"
     pdf_at_the_bound = bounded_client.post(
         "/api/v1/extract",
         headers={"x-api-key": KEY},
-        files={"file": ("ok.pdf", minimal_pdf_bytes(1), "application/pdf")},
+        files={"file": ("ok.pdf", positioned_pdf_bytes([[(400.0, pdf_text)]]), "application/pdf")},
     )
     plain_text = bounded_client.post(
         "/api/v1/extract",
@@ -110,7 +112,19 @@ def test_admitted_rows_still_answer_the_interim_501(bounded_client: TestClient) 
         files={"file": ("ok.txt", b"body", "text/plain")},
     )
 
-    interim = {"detail": "extraction pipeline not implemented yet"}
-    assert pdf_at_the_bound.status_code == 501
-    assert pdf_at_the_bound.json() == interim
-    assert plain_text.status_code == 501
+    assert pdf_at_the_bound.status_code == 200
+    assert pdf_at_the_bound.json() == {
+        "filename": "ok.pdf",
+        "content_type": "application/pdf",
+        "text_length": len(pdf_text),
+        "text": pdf_text,
+        "truncated": False,
+    }
+    assert plain_text.status_code == 200
+    assert plain_text.json() == {
+        "filename": "ok.txt",
+        "content_type": "text/plain",
+        "text_length": 4,
+        "text": "body",
+        "truncated": False,
+    }

@@ -1,14 +1,18 @@
-"""The authenticated extraction route: transport over the admission gate.
+"""The authenticated extraction route: transport, admission, then extraction.
 
 The route owns transport-shaped rules and nothing else: the 401 guard
 runs first (a body is never read without a key), the bounded read proves
 a size breach at limit+1 while abandoning the bulk (NFR-4), starlette's
 multipart parser turns the capped body into the single `file` field, and
-the strategy registry classifies the raw bytes. A validated upload still
-answers 501 — the honest interim per http.md until the extract pipeline
-lands. 413 names the limit, 415 names the sniffed MIME, and a malformed
-body or a missing `file` field shares the generic 422 because a corrupt
-upload cannot be branded (http.md).
+the strategy registry classifies the raw bytes. An admitted upload runs
+the extraction pipeline on the request task (extraction.md sits under the
+10-second budget). Its typed failures map onto the wire: the budget's
+504 is generic, and everything failing after admission — scanned pdfs,
+malformed body XML, a dead decode — shares the generic 422 admission
+already answers with. 413 names the bound, 415 names the sniffed MIME
+while the declared Content-Type is metadata only, and a malformed
+multipart body or a missing `file` field takes the same generic 422
+because a corrupt upload cannot be branded (http.md).
 """
 
 from collections.abc import AsyncGenerator
@@ -17,19 +21,20 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from starlette.datastructures import FormData, UploadFile
 from starlette.formparsers import MultiPartException, MultiPartParser
 
+from ..extraction import BudgetExhaustedError, UnreadableDocumentError
 from ..validation import CorruptDocumentError, TooLargeError, UnsupportedTypeError
 from .auth import api_key_auth
 
 router = APIRouter()
 
-_INTERIM_DETAIL = "extraction pipeline not implemented yet"
+_BUDGET_DETAIL = "the processing budget was exceeded"
 _CORRUPT_DETAIL = "corrupt or unsupported upload"
 _FILE_FIELD = "file"
 
 
 @router.post("/api/v1/extract", dependencies=[Depends(api_key_auth)], response_model=None)
-async def extract(request: Request) -> None:
-    """The validation boundary; the 200 body arrives with the extract chunk."""
+async def extract(request: Request) -> dict[str, object]:
+    """Bounded read, admission, pipeline; each failure carries its verdict."""
     bound = request.app.state.settings.upload_limit_bytes
     body = await _read_bounded(request, cap=bound)
     if len(body) > bound:
@@ -38,9 +43,9 @@ async def extract(request: Request) -> None:
             detail=f"the request body exceeds the {bound}-byte upload limit",
         )
 
-    document = await _file_part_bytes(request, body, bound)
+    document, filename = await _file_part_bytes(request, body, bound)
     try:
-        request.app.state.validation_service.validate(document)
+        outcome = request.app.state.validation_service.validate(document)
     except UnsupportedTypeError as verdict:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(verdict)
@@ -52,7 +57,26 @@ async def extract(request: Request) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_CORRUPT_DETAIL
         ) from unrecognized
 
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=_INTERIM_DETAIL)
+    try:
+        result = request.app.state.extraction_service.extract(document, outcome.mime)
+    except BudgetExhaustedError as spent:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=_BUDGET_DETAIL
+        ) from spent
+    except UnreadableDocumentError as unreadable:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_CORRUPT_DETAIL
+        ) from unreadable
+
+    # filename is metadata echoed verbatim (http.md), defaulted when the part
+    # carried none; content_type is the sniffed mime, never the declared one.
+    return {
+        "filename": filename or "unknown",
+        "content_type": outcome.mime,
+        "text_length": len(result.text),
+        "text": result.text,
+        "truncated": result.truncated,
+    }
 
 
 async def _read_bounded(request: Request, cap: int) -> bytes:
@@ -68,10 +92,11 @@ async def _read_bounded(request: Request, cap: int) -> bytes:
     return bytes(buffer)
 
 
-async def _file_part_bytes(request: Request, body: bytes, bound: int) -> bytes:
-    """The raw bytes of the single `file` field, parsed once from the
-    capped body; malformed multipart and a missing field share the
-    generic 422."""
+async def _file_part_bytes(request: Request, body: bytes, bound: int) -> tuple[bytes, str]:
+    """The raw bytes and the filename of the single `file` field, parsed
+    once from the capped body; malformed multipart and a missing field
+    share the generic 422. The filename is metadata, passed through as
+    the part carried it (empty included) — the response defaults it."""
     async def _stream() -> AsyncGenerator[bytes, None]:
         yield body
 
@@ -92,7 +117,7 @@ async def _file_part_bytes(request: Request, body: bytes, bound: int) -> bytes:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_CORRUPT_DETAIL)
     raw = await upload.read()
     await _close_parts(form)
-    return raw
+    return raw, upload.filename or ""
 
 
 async def _close_parts(form: FormData) -> None:

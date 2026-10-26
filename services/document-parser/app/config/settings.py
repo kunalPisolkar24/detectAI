@@ -7,6 +7,7 @@ the model does not declare). Config selection lives in the factories: the
 deployment flick picks the plane, the plane feeds the model.
 """
 
+import math
 import os
 from typing import Literal
 
@@ -18,6 +19,8 @@ from ..extraction.models import (
     DEFAULT_FOLIO_MONOTONIC_RATIO,
     DEFAULT_HEADER_EDGE_ZONE_RATIO,
     DEFAULT_HEADER_REPETITION_RATIO,
+    DEFAULT_OUTPUT_CHAR_LIMIT,
+    DEFAULT_PROCESSING_BUDGET_SECONDS,
     DEFAULT_REPETITION_MIN_PAGES,
 )
 from ..validation.models import (
@@ -53,6 +56,24 @@ def _positive_int_or_default(value: object, default: int) -> int:
     return default
 
 
+def _positive_float_or_default(value: object, default: float) -> float:
+    """The budget's fail-closed read (extraction.md): float-like values pass
+    through when positive — an int seed rides too (10 means 10.0) — anything
+    unreadable, non-positive, or non-finite lands on the safe default."""
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, str):
+        try:
+            parsed = float(value.strip())
+        except ValueError:
+            return default
+    elif isinstance(value, (int, float)):
+        parsed = float(value)
+    else:
+        return default
+    return parsed if math.isfinite(parsed) and parsed > 0 else default
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(validate_default=True)
 
@@ -63,15 +84,18 @@ class Settings(BaseModel):
     # constructor error.
     api_key: str = Field(default="", min_length=16)
 
-    # requirements.md numeric bounds fail closed: an unset, non-numeric, or
-    # non-positive bound lands on its safe default instead of stopping the
-    # boot — only the credential may do that. Bounds ride the plane as
-    # strings (string parameters only), so the before-validator is their
-    # sole guard. The defaults are single-sourced in the validation
-    # package, which also enforces them.
+    # requirements.md numeric bounds and extraction.md's consumption knobs
+    # fail closed the same way: an unset, non-numeric, or non-positive value
+    # lands on its safe default instead of stopping the boot — only the
+    # credential may do that. Values ride the plane as strings (string
+    # parameters only), so the before-validators are their sole guard. The
+    # defaults are single-sourced in the validation and extraction packages,
+    # which also enforce (or spend) them at runtime.
     upload_limit_bytes: int = DEFAULT_UPLOAD_LIMIT_BYTES
     max_pdf_pages: int = DEFAULT_MAX_PDF_PAGES
     docx_max_uncompressed_bytes: int = DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES
+    processing_budget_seconds: float = DEFAULT_PROCESSING_BUDGET_SECONDS
+    output_char_limit: int = DEFAULT_OUTPUT_CHAR_LIMIT
 
     # cleaning.md's phase-1 knobs are deliberately harsher than the bounds
     # above: an out-of-range or non-numeric value fails the boot — a
@@ -87,7 +111,11 @@ class Settings(BaseModel):
     folio_monotonic_ratio: float = DEFAULT_FOLIO_MONOTONIC_RATIO
 
     @field_validator(
-        "upload_limit_bytes", "max_pdf_pages", "docx_max_uncompressed_bytes", mode="before"
+        "upload_limit_bytes",
+        "max_pdf_pages",
+        "docx_max_uncompressed_bytes",
+        "output_char_limit",
+        mode="before",
     )
     @classmethod
     def _fail_closed_bound(cls, value: object, info: ValidationInfo) -> int:
@@ -97,6 +125,14 @@ class Settings(BaseModel):
         if field_name is None:
             raise ValueError("the fail-closed bound validator requires a field name")
         return _positive_int_or_default(value, default=cls.model_fields[field_name].default)
+
+    @field_validator("processing_budget_seconds", mode="before")
+    @classmethod
+    def _fail_closed_budget(cls, value: object, info: ValidationInfo) -> float:
+        field_name = info.field_name
+        if field_name is None:
+            raise ValueError("the fail-closed budget validator requires a field name")
+        return _positive_float_or_default(value, default=cls.model_fields[field_name].default)
 
     @field_validator(
         "header_repetition_ratio", "edge_tolerance_ratio", "folio_monotonic_ratio"

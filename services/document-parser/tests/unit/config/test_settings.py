@@ -19,6 +19,8 @@ from app.extraction import (
     DEFAULT_FOLIO_MONOTONIC_RATIO,
     DEFAULT_HEADER_EDGE_ZONE_RATIO,
     DEFAULT_HEADER_REPETITION_RATIO,
+    DEFAULT_OUTPUT_CHAR_LIMIT,
+    DEFAULT_PROCESSING_BUDGET_SECONDS,
     DEFAULT_REPETITION_MIN_PAGES,
 )
 from app.validation.models import (
@@ -106,6 +108,55 @@ def test_the_moved_bounds_pin_their_spec_values() -> None:
     # defaults are pinned exact, which the constant-keyed test cannot do.
     assert DEFAULT_UPLOAD_LIMIT_BYTES == 3_145_728
     assert DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES == 31_457_280
+
+
+# extraction.md's consumption knobs: fail-closed like the bounds — garbage
+# and non-positive values land on the default, the boot lives.
+_EXTRACTION_KNOB_DEFAULTS: dict[str, float] = {
+    "processing_budget_seconds": DEFAULT_PROCESSING_BUDGET_SECONDS,
+    "output_char_limit": DEFAULT_OUTPUT_CHAR_LIMIT,
+}
+
+
+def test_the_extraction_knobs_hold_their_spec_defaults() -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
+
+    for field, default in _EXTRACTION_KNOB_DEFAULTS.items():
+        assert getattr(settings, field) == default
+
+
+def test_the_extraction_knobs_read_plain_numeric_seeds_from_the_string_plane() -> None:
+    settings = Settings.from_provider(
+        StubProvider({
+            "API_KEY": "a" * 20,
+            "PROCESSING_BUDGET_SECONDS": "2.5",  # a float budget reads decimals
+            "OUTPUT_CHAR_LIMIT": "500000",
+        })
+    )
+
+    assert settings.processing_budget_seconds == 2.5
+    assert settings.output_char_limit == 500_000
+
+
+@pytest.mark.parametrize(
+    ("field", "seeded"),
+    [
+        ("processing_budget_seconds", "not a number"),
+        ("processing_budget_seconds", "-1"),
+        ("processing_budget_seconds", "0"),
+        ("processing_budget_seconds", "inf"),  # the deadline can never expire
+        ("processing_budget_seconds", "nan"),
+        ("processing_budget_seconds", "1e999"),  # parses, overflows to inf
+        ("output_char_limit", "not a number"),
+        ("output_char_limit", "-1"),
+        ("output_char_limit", "0"),
+        ("output_char_limit", "1.5"),  # an int cap reads whole numbers only
+    ],
+)
+def test_an_invalid_extraction_knob_falls_back_to_its_safe_default(field: str, seeded: str) -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20, field.upper(): seeded}))
+
+    assert getattr(settings, field) == _EXTRACTION_KNOB_DEFAULTS[field]
 
 
 # cleaning.md knobs: strict on purpose — no fallback, the boot dies.
