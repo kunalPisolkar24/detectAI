@@ -206,15 +206,15 @@ sequenceDiagram
     participant A as FastAPI app
 
     L->>L: Settings.from_provider(plane)
-    L->>B: (settings, app)
-    Note over B: OTEL_EXPORTER_OTLP_ENDPOINT set — the wired build
-    B->>B: resource = build_resource(settings) — once
+    L->>B: build(settings, app)
+    Note over B: OTEL_EXPORTER_OTLP_ENDPOINT set - the wired build
+    B->>B: resource = build_resource(settings), once
     B->>T: start(resource)
-    Note over T: TracerProvider + BatchSpanProcessor<br/>ParentBased(ratio); set_tracer_provider once
+    Note over T: TracerProvider + BatchSpanProcessor + ParentBased sampler, set once
     B->>M: start(resource)
-    Note over M: MeterProvider + PeriodicExportingMetricReader<br/>15 s interval, delta temporality
+    Note over M: MeterProvider + PeriodicExportingMetricReader, 15 s interval, delta
     B->>G: start(resource)
-    Note over G: LoggerProvider + batch processor<br/>LoggingHandler onto the root logger
+    Note over G: LoggerProvider + batch processor, LoggingHandler onto the root logger
     B->>A: FastAPIInstrumentor.instrument_app(app, tracer_provider)
     B->>B: build instruments from the tracer and meter
     B-->>L: ObservabilityService
@@ -247,8 +247,8 @@ sequenceDiagram
     participant B as build_observability_service
     participant R as extract route
 
-    L->>B: (settings, app)
-    Note over B: OTEL_EXPORTER_OTLP_ENDPOINT unset —<br/>NullObservability, nothing installed
+    L->>B: build(settings, app)
+    Note over B: OTEL_EXPORTER_OTLP_ENDPOINT unset - NullObservability, nothing installed
     B-->>L: NullObservability
     L->>L: app.state.observability = null object
     Note over R: every recording call is a no-op
@@ -272,9 +272,9 @@ sequenceDiagram
     R->>O: track_request()
     O->>I: begin()
     Note over R: bounded read, then the admission verdicts
-    opt rejected upload (413 / 415 / 422)
+    opt a rejected upload
         R->>O: record_rejection(reason)
-        O->>S: rejected_uploads_total + 1{reason}
+        O->>S: rejected_uploads_total add 1, reason attribute
     end
     R->>O: track_extraction(mime_type)
     O->>S: start span extraction
@@ -283,7 +283,7 @@ sequenceDiagram
     O->>S: histogram record + the outcome counter
     O->>S: end span
     O->>I: end()
-    Note over S,NR: metrics export every 15 s, delta; spans export on the batch cadence
+    Note over S,NR: metrics export every 15 s in delta, spans export on the batch cadence
     S-->>NR: OTLP/HTTP push, api-key header
 ```
 
@@ -307,17 +307,17 @@ sequenceDiagram
     participant G as LogsAdapter
     participant NR as New Relic
 
-    Note over L: the drain begins (uvicorn, 12 s graceful)
-    L->>L: logger.info("document parser shutdown complete")
+    Note over L: the drain begins, uvicorn 12 s graceful
+    L->>L: log the final shutdown line
     L->>O: shutdown()
     O->>T: shutdown()
     T-->>NR: force-flush queued spans
     O->>M: shutdown()
     M-->>NR: final metrics export
     O->>G: shutdown()
-    Note over G: handler detached first, then the flush — the final boot log line rides out
+    Note over G: handler detached first, then the flush - the final boot log line rides out
     G-->>NR: force-flush queued records
-    Note over O: per-adapter try/except; idempotent
+    Note over O: per-adapter try and except, idempotent
 ```
 
 - The flush order is spans → metrics → logs, and the final boot log line is
