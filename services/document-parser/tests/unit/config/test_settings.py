@@ -13,6 +13,14 @@ from app.config import ConfigProvider, Settings, deployment_flick
 from app.config.adapters import dotenv as dotenv_module
 from app.config.adapters.dotenv import DotEnvAdapter
 from app.config.provider import DevConfig
+from app.extraction import (
+    DEFAULT_EDGE_TOLERANCE_RATIO,
+    DEFAULT_EDGE_ZONE_RATIO,
+    DEFAULT_FOLIO_MONOTONIC_RATIO,
+    DEFAULT_HEADER_EDGE_ZONE_RATIO,
+    DEFAULT_HEADER_REPETITION_RATIO,
+    DEFAULT_REPETITION_MIN_PAGES,
+)
 from app.validation.models import (
     DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES,
     DEFAULT_MAX_PDF_PAGES,
@@ -98,6 +106,55 @@ def test_the_moved_bounds_pin_their_spec_values() -> None:
     # defaults are pinned exact, which the constant-keyed test cannot do.
     assert DEFAULT_UPLOAD_LIMIT_BYTES == 3_145_728
     assert DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES == 31_457_280
+
+
+# cleaning.md knobs: strict on purpose — no fallback, the boot dies.
+_RATIO_FIELDS = ("header_repetition_ratio", "edge_tolerance_ratio", "folio_monotonic_ratio")
+_ZONE_FIELDS = ("header_edge_zone_ratio", "edge_zone_ratio")
+_KNOB_DEFAULTS: tuple[tuple[str, float], ...] = (
+    ("header_repetition_ratio", DEFAULT_HEADER_REPETITION_RATIO),
+    ("repetition_min_pages", DEFAULT_REPETITION_MIN_PAGES),
+    ("header_edge_zone_ratio", DEFAULT_HEADER_EDGE_ZONE_RATIO),
+    ("edge_zone_ratio", DEFAULT_EDGE_ZONE_RATIO),
+    ("edge_tolerance_ratio", DEFAULT_EDGE_TOLERANCE_RATIO),
+    ("folio_monotonic_ratio", DEFAULT_FOLIO_MONOTONIC_RATIO),
+)
+
+
+def test_the_cleaning_knobs_hold_their_spec_defaults() -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
+
+    for field, default in _KNOB_DEFAULTS:
+        assert getattr(settings, field) == default
+
+
+def test_the_cleaning_knobs_coerce_the_string_plane() -> None:
+    seeds = {"API_KEY": "a" * 20, "REPETITION_MIN_PAGES": "6"}
+    seeds.update({field.upper(): "0.45" for field in (*_RATIO_FIELDS, *_ZONE_FIELDS)})
+
+    settings = Settings.from_provider(StubProvider(seeds))
+
+    assert settings.repetition_min_pages == 6
+    for field in (*_RATIO_FIELDS, *_ZONE_FIELDS):
+        assert getattr(settings, field) == 0.45
+
+
+@pytest.mark.parametrize(
+    ("field", "seeded"),
+    [
+        ("header_repetition_ratio", "1.0"),  # unit interval is exclusive
+        ("header_repetition_ratio", "not a ratio"),
+        ("folio_monotonic_ratio", "0"),  # exclusive at the low end too
+        ("edge_zone_ratio", "0.5"),  # zones cap out below half the page
+        ("edge_zone_ratio", "-0.1"),
+        ("edge_tolerance_ratio", "two percent"),
+        ("repetition_min_pages", "1"),
+        ("repetition_min_pages", "4.5"),
+    ],
+)
+def test_an_invalid_cleaning_knob_fails_the_boot(field: str, seeded: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings.from_provider(StubProvider({"API_KEY": "a" * 20, field.upper(): seeded}))
 
 
 def test_undeclared_plane_keys_ride_and_drop() -> None:

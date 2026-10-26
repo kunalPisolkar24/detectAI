@@ -1,11 +1,13 @@
 """In-memory document builders for both test trees.
 
 The strategies now open containers, so tests need *real* documents, not
-magic-prefix bytes: one blank-page pdf via pypdf's writer, zip-assembled
-docx bodies (bare, paragraphed, or raw-XML crafted), and a zip impostor
-that deliberately does not. Sizes stay tiny on purpose — the strategies
-accept bounds as parameters, so oversized behavior is tested through
-injected small limits rather than materialized gigabytes.
+magic-prefix bytes: one blank-page pdf via pypdf's writer, hand-built
+positioned-text pdfs for the coordinate rules (singletons and merged
+multi-line blocks deliberately), zip-assembled docx bodies (bare,
+paragraphed, or raw-XML crafted), and a zip impostor that deliberately
+does not. Sizes stay tiny on purpose — the strategies accept bounds as
+parameters, so oversized behavior is tested through injected small
+limits rather than materialized gigabytes.
 """
 
 import io
@@ -23,13 +25,65 @@ _DOCUMENT_XML = (
 
 
 def minimal_pdf_bytes(pages: int = 1) -> bytes:
-    """A structurally valid pdf of `pages` blank pages."""
+    """A structurally valid pdf of `pages` blank pages — the shape whose
+    extraction verdict is the scanned-422 case. The 612x792 canvas
+    matches positioned-pdf pages, so the rel-zone maths read the same.
+    """
     writer = PdfWriter()
     for _ in range(pages):
-        writer.add_blank_page(width=72, height=72)
+        writer.add_blank_page(width=612, height=792)
     stream = io.BytesIO()
     writer.write(stream)
     return stream.getvalue()
+
+
+def positioned_pdf_bytes(pages: Sequence[Sequence[tuple[float, str]]]) -> bytes:
+    """A structurally valid pdf with positioned text: one drawn line per
+    (baseline, text) pair, the baseline measured from the page's bottom
+    edge (PDF coordinates, a 612x792 page). Each `BT...ET` op becomes
+    its own drawn block unless two ops sit within one line height of
+    each other — the merger is deliberate: it exercises the strategy's
+    single-line gate. Zero dependencies: containers and xref offsets
+    are computed by hand, so the fixtures double as byte-stable probes
+    of pymupdf's block grouping.
+    """
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        f"<< /Type /Pages /Kids [{' '.join(f'{3 + 2 * item} 0 R' for item in range(len(pages)))}] "
+        f"/Count {len(pages)} >>".encode(),
+    ]
+    for index, page_ops in enumerate(pages):
+        content = "\n".join(
+            f"BT /F1 12 Tf 72 {float(baseline):.2f} Td ({_pdf_literal(text)}) Tj ET"
+            for baseline, text in page_ops
+        ).encode()
+        objects.append(
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents "
+            f"{4 + 2 * index} 0 R /Resources << /Font << /F1 {3 + 2 * len(pages)} 0 R >> >> >>".encode()
+        )
+        objects.append(
+            f"<< /Length {len(content)} >>\nstream\n{content.decode()}\nendstream".encode()
+        )
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    out = bytearray(b"%PDF-1.4\n")
+    offsets: list[int] = []
+    for index, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{index} 0 obj\n".encode() + body + b"\nendobj\n"
+    xref_at = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n".encode() + b"0000000000 65535 f \n"
+    out += "".join(f"{offset:010d} 00000 n \n" for offset in offsets).encode()
+    out += (
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_at}\n%%EOF".encode()
+    )
+    return bytes(out)
+
+
+def _pdf_literal(text: str) -> str:
+    """Escape a fixture string for a pdf literal: the backslash and the
+    parentheses are the Tj string's metacharacters."""
+    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
 def minimal_docx_bytes(parts: dict[str, bytes] | None = None) -> bytes:

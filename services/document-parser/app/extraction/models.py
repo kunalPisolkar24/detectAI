@@ -21,6 +21,17 @@ from time import perf_counter
 DEFAULT_PROCESSING_BUDGET_SECONDS = 10.0
 DEFAULT_OUTPUT_CHAR_LIMIT = 1_000_000
 
+# The six phase-1 cleaning knobs (cleaning.md): the thresholds rule (a)
+# and rule (b) delete on, single-sourced here so the settings contract
+# and the pdf strategy read one truth. The settings validators enforce
+# their ranges — fail-boot, never a silent fallback.
+DEFAULT_HEADER_REPETITION_RATIO = 0.8
+DEFAULT_REPETITION_MIN_PAGES = 4
+DEFAULT_HEADER_EDGE_ZONE_RATIO = 0.20
+DEFAULT_EDGE_ZONE_RATIO = 0.10
+DEFAULT_EDGE_TOLERANCE_RATIO = 0.02
+DEFAULT_FOLIO_MONOTONIC_RATIO = 0.70
+
 
 @dataclass(frozen=True, slots=True)
 class Deadline:
@@ -71,6 +82,24 @@ class RawLines:
 
     lines: list[str]
     partial: bool
+
+
+@dataclass(frozen=True, slots=True)
+class CleaningKnobs:
+    """The six phase-1 cleaning thresholds (cleaning.md).
+
+    A frozen carrier: the pdf strategy reads them, tests build them
+    explicitly, and the boot validated every range before one exists —
+    an out-of-range value kills the boot instead of loosening a
+    deletion rule (cleaning.md's deliberate strictness).
+    """
+
+    header_repetition_ratio: float = DEFAULT_HEADER_REPETITION_RATIO
+    repetition_min_pages: int = DEFAULT_REPETITION_MIN_PAGES
+    header_edge_zone_ratio: float = DEFAULT_HEADER_EDGE_ZONE_RATIO
+    edge_zone_ratio: float = DEFAULT_EDGE_ZONE_RATIO
+    edge_tolerance_ratio: float = DEFAULT_EDGE_TOLERANCE_RATIO
+    folio_monotonic_ratio: float = DEFAULT_FOLIO_MONOTONIC_RATIO
 
 
 class ExtractionError(Exception):

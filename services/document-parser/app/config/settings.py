@@ -12,6 +12,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
+from ..extraction.models import (
+    DEFAULT_EDGE_TOLERANCE_RATIO,
+    DEFAULT_EDGE_ZONE_RATIO,
+    DEFAULT_FOLIO_MONOTONIC_RATIO,
+    DEFAULT_HEADER_EDGE_ZONE_RATIO,
+    DEFAULT_HEADER_REPETITION_RATIO,
+    DEFAULT_REPETITION_MIN_PAGES,
+)
 from ..validation.models import (
     DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES,
     DEFAULT_MAX_PDF_PAGES,
@@ -65,6 +73,19 @@ class Settings(BaseModel):
     max_pdf_pages: int = DEFAULT_MAX_PDF_PAGES
     docx_max_uncompressed_bytes: int = DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES
 
+    # cleaning.md's phase-1 knobs are deliberately harsher than the bounds
+    # above: an out-of-range or non-numeric value fails the boot — a
+    # deletion rule is never silently loosened by a fallback default. The
+    # planes carry strings, pydantic coerces them natively, and the range
+    # checks below raise; the defaults are single-sourced in the
+    # extraction package, which also reads them back through CleaningKnobs.
+    header_repetition_ratio: float = DEFAULT_HEADER_REPETITION_RATIO
+    repetition_min_pages: int = DEFAULT_REPETITION_MIN_PAGES
+    header_edge_zone_ratio: float = DEFAULT_HEADER_EDGE_ZONE_RATIO
+    edge_zone_ratio: float = DEFAULT_EDGE_ZONE_RATIO
+    edge_tolerance_ratio: float = DEFAULT_EDGE_TOLERANCE_RATIO
+    folio_monotonic_ratio: float = DEFAULT_FOLIO_MONOTONIC_RATIO
+
     @field_validator(
         "upload_limit_bytes", "max_pdf_pages", "docx_max_uncompressed_bytes", mode="before"
     )
@@ -76,6 +97,29 @@ class Settings(BaseModel):
         if field_name is None:
             raise ValueError("the fail-closed bound validator requires a field name")
         return _positive_int_or_default(value, default=cls.model_fields[field_name].default)
+
+    @field_validator(
+        "header_repetition_ratio", "edge_tolerance_ratio", "folio_monotonic_ratio"
+    )
+    @classmethod
+    def _ratio_inside_the_unit_interval(cls, value: float) -> float:
+        if not 0.0 < value < 1.0:
+            raise ValueError("the ratio must be strictly between 0 and 1 (cleaning.md)")
+        return value
+
+    @field_validator("header_edge_zone_ratio", "edge_zone_ratio")
+    @classmethod
+    def _zone_stays_off_half_the_page(cls, value: float) -> float:
+        if not 0.0 < value < 0.5:
+            raise ValueError("the edge zone must be strictly between 0 and 1/2 (cleaning.md)")
+        return value
+
+    @field_validator("repetition_min_pages")
+    @classmethod
+    def _repetition_needs_a_few_pages(cls, value: int) -> int:
+        if value < 2:
+            raise ValueError("the repetition floor must be at least 2 pages (cleaning.md)")
+        return value
 
     @classmethod
     def from_provider(cls, provider: ConfigProvider) -> "Settings":

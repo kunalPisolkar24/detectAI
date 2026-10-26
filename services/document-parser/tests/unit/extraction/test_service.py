@@ -6,6 +6,7 @@ import pytest
 
 from app.extraction import (
     BudgetExhaustedError,
+    CleaningKnobs,
     Deadline,
     ExtractionResult,
     RawLines,
@@ -33,6 +34,20 @@ def test_the_factory_registers_one_strategy_per_sniffed_mime() -> None:
         DocxExtractionStrategy,
         TextExtractionStrategy,
     ]
+
+
+def test_the_default_pdf_strategy_carries_the_resolved_cleaning_knobs() -> None:
+    service = build_default_extraction_service(
+        cleaning_knobs=CleaningKnobs(edge_zone_ratio=0.3),
+    )
+
+    pdf_strategy = next(
+        strategy
+        for strategy in service.strategies.values()
+        if isinstance(strategy, PdfExtractionStrategy)
+    )
+
+    assert pdf_strategy.knobs.edge_zone_ratio == 0.3
 
 
 def test_the_registry_keys_exactly_what_the_gate_sniffs() -> None:
@@ -137,7 +152,7 @@ class YieldingStrategy(DocumentExtractionStrategy):
 class BusyUntilExpiredStrategy(DocumentExtractionStrategy):
     """Spins on the deadline, then abandons; proves the budget travels."""
 
-    def extract(self, data: bytes, deadline: Deadline) -> list[str]:
+    def extract(self, data: bytes, deadline: Deadline) -> RawLines:
         while not deadline.expired():
             pass
         raise BudgetExhaustedError("the budget was spent between steps")

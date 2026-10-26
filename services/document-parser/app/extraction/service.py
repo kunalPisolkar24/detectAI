@@ -15,6 +15,7 @@ from .cleaning import normalize
 from .models import (
     DEFAULT_OUTPUT_CHAR_LIMIT,
     DEFAULT_PROCESSING_BUDGET_SECONDS,
+    CleaningKnobs,
     Deadline,
     ExtractionResult,
     UnreadableDocumentError,
@@ -71,13 +72,14 @@ def build_default_extraction_service(
     *,
     processing_budget_seconds: float = DEFAULT_PROCESSING_BUDGET_SECONDS,
     output_char_limit: int = DEFAULT_OUTPUT_CHAR_LIMIT,
+    cleaning_knobs: CleaningKnobs | None = None,
 ) -> DocumentExtractionService:
     """The production registry, keyed on what the gate sniffs: PDF, DOCX,
     then TXT — all three sniffs of the build — carrying the spec-default
     knobs unless the composition root passes resolved settings values."""
     return DocumentExtractionService(
         strategies={
-            _PDF_MIME: PdfExtractionStrategy(),
+            _PDF_MIME: PdfExtractionStrategy(cleaning_knobs or CleaningKnobs()),
             _DOCX_MIME: DocxExtractionStrategy(),
             _TEXT_MIME: TextExtractionStrategy(),
         },
