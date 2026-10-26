@@ -1,10 +1,11 @@
 """The admission vocabulary shared by every layer.
 
-ValidationOutcome and the typed rejections are the types the strategies
-return, the service routes, and the extract endpoint maps onto HTTP.
-models.py is a leaf on purpose: strategies, the service, the settings
-contract, and api/ all import it, nothing imports back — the dependency
-direction stays one-way (outer to inner, never the reverse).
+ValidationOutcome, the canonical sniffs, and the typed rejections are the
+vocabulary the strategies return, the service routes, and the extract
+endpoint maps onto HTTP. models.py is a leaf on purpose: strategies, the
+service, the settings contract, api/, and the extraction registry all
+import it, nothing imports back — the dependency direction stays one-way
+(outer to inner, never the reverse).
 
 The numeric bound defaults live here too, one source for the settings
 fields that resolve them and the strategies that enforce them.
@@ -18,6 +19,14 @@ from dataclasses import dataclass
 DEFAULT_UPLOAD_LIMIT_BYTES = 3 * 1024 * 1024
 DEFAULT_MAX_PDF_PAGES = 1_000
 DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES = 30 * 1024 * 1024
+
+# The canonical MIME vocabulary admission answers (http.md decision 4: the
+# sniff wins over the declared type): the strategies return it, the wire
+# names it, and the extraction registry keys on it verbatim — one named
+# contract instead of copies held in sync by comment.
+PDF_MIME = "application/pdf"
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+TEXT_MIME = "text/plain"
 
 
 @dataclass(frozen=True, slots=True)

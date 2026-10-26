@@ -27,6 +27,9 @@ from app.validation import build_default_service
 from app.validation.models import (
     DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES,
     DEFAULT_UPLOAD_LIMIT_BYTES,
+    DOCX_MIME,
+    PDF_MIME,
+    TEXT_MIME,
 )
 from tests.support.documents import (
     docx_body_bytes,
@@ -37,11 +40,8 @@ from tests.support.documents import (
 
 ASSETS = Path(__file__).resolve().parent / "assets"
 
-# Canonical sniff mimes; must stay verbatim to the validation strategies.
-_TXT_MIME = "text/plain"
-_PDF_MIME = "application/pdf"
-_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-_MIMES = {"txt": _TXT_MIME, "docx": _DOCX_MIME, "pdf": _PDF_MIME}
+# Format to the canonical sniffs, named once by the validation models.
+_MIMES = {"txt": TEXT_MIME, "docx": DOCX_MIME, "pdf": PDF_MIME}
 
 # Tier byte targets (README.md). long stays 2 KiB under the wire bound so
 # the multipart framing never pushes the body past 3 MiB.
@@ -191,14 +191,14 @@ def _scanned_pdf() -> bytes:
 # name → (declared multipart type, bytes, expected wire status).
 _INVALID_CASES: dict[str, tuple[str, bytes, int]] = {
     "unknown.bin": ("application/octet-stream", _unknown_bin(), 415),
-    "imposter.pdf": ("application/pdf", _imposter_pdf(), 415),
-    "latin1.txt": ("text/plain", _latin1_txt(), 415),
-    "empty-zip.docx": (_DOCX_MIME, _EMPTY_EOCD, 415),
-    "dead.pdf": ("application/pdf", _dead_pdf(), 422),
-    "surrogate.docx": (_DOCX_MIME, _surrogate_docx(), 422),
-    "truncated.docx": (_DOCX_MIME, _truncated_docx(), 422),
-    "broken-xml.docx": (_DOCX_MIME, _broken_xml_docx(), 422),
-    "scanned.pdf": ("application/pdf", _scanned_pdf(), 422),
+    "imposter.pdf": (PDF_MIME, _imposter_pdf(), 415),
+    "latin1.txt": (TEXT_MIME, _latin1_txt(), 415),
+    "empty-zip.docx": (DOCX_MIME, _EMPTY_EOCD, 415),
+    "dead.pdf": (PDF_MIME, _dead_pdf(), 422),
+    "surrogate.docx": (DOCX_MIME, _surrogate_docx(), 422),
+    "truncated.docx": (DOCX_MIME, _truncated_docx(), 422),
+    "broken-xml.docx": (DOCX_MIME, _broken_xml_docx(), 422),
+    "scanned.pdf": (PDF_MIME, _scanned_pdf(), 422),
 }
 
 # --- pdf -------------------------------------------------------------------

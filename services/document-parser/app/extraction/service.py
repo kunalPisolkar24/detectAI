@@ -11,6 +11,7 @@ remaining TooLargeError shapes.
 
 from collections.abc import Mapping
 
+from ..validation.models import DOCX_MIME, PDF_MIME, TEXT_MIME
 from .cleaning import normalize
 from .models import (
     DEFAULT_OUTPUT_CHAR_LIMIT,
@@ -26,12 +27,6 @@ from .strategies import (
     PdfExtractionStrategy,
     TextExtractionStrategy,
 )
-
-# The canonical MIME strings the admission gate sniffs (the validation
-# strategies); the keys below must stay verbatim to them.
-_PDF_MIME = "application/pdf"
-_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-_TEXT_MIME = "text/plain"
 
 
 class DocumentExtractionService:
@@ -79,9 +74,9 @@ def build_default_extraction_service(
     knobs unless the composition root passes resolved settings values."""
     return DocumentExtractionService(
         strategies={
-            _PDF_MIME: PdfExtractionStrategy(cleaning_knobs or CleaningKnobs()),
-            _DOCX_MIME: DocxExtractionStrategy(),
-            _TEXT_MIME: TextExtractionStrategy(),
+            PDF_MIME: PdfExtractionStrategy(cleaning_knobs or CleaningKnobs()),
+            DOCX_MIME: DocxExtractionStrategy(),
+            TEXT_MIME: TextExtractionStrategy(),
         },
         processing_budget_seconds=processing_budget_seconds,
         output_char_limit=output_char_limit,

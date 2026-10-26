@@ -5,10 +5,9 @@ import io
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
-from ..models import CorruptDocumentError, TooLargeError, ValidationOutcome
+from ..models import PDF_MIME, CorruptDocumentError, TooLargeError, ValidationOutcome
 from .base import DocumentValidationStrategy
 
-_PDF_MIME = "application/pdf"
 _PDF_SIGNATURE = b"%PDF-"
 
 
@@ -29,4 +28,4 @@ class PdfValidationStrategy(DocumentValidationStrategy):
             raise CorruptDocumentError("the pdf container did not open") from error
         if page_count > self._max_pages:
             raise TooLargeError(f"the pdf exceeds the {self._max_pages}-page limit")
-        return ValidationOutcome(mime=_PDF_MIME)
+        return ValidationOutcome(mime=PDF_MIME)

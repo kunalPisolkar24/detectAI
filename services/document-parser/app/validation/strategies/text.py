@@ -1,9 +1,7 @@
 """TXT admission: decodability is the only credential."""
 
-from ..models import ValidationOutcome
+from ..models import TEXT_MIME, ValidationOutcome
 from .base import DocumentValidationStrategy
-
-_TEXT_MIME = "text/plain"
 
 
 class TextValidationStrategy(DocumentValidationStrategy):
@@ -14,4 +12,4 @@ class TextValidationStrategy(DocumentValidationStrategy):
             data.decode("utf-8")
         except UnicodeDecodeError:
             return None
-        return ValidationOutcome(mime=_TEXT_MIME)
+        return ValidationOutcome(mime=TEXT_MIME)

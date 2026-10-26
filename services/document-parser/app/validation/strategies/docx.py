@@ -4,10 +4,9 @@ uncompressed size to bound."""
 import io
 import zipfile
 
-from ..models import CorruptDocumentError, TooLargeError, ValidationOutcome
+from ..models import DOCX_MIME, CorruptDocumentError, TooLargeError, ValidationOutcome
 from .base import DocumentValidationStrategy
 
-_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _ZIP_LOCAL_FILE_HEADER = b"PK\x03\x04"
 _DOCUMENT_PART = "word/document.xml"
 
@@ -35,4 +34,4 @@ class DocxValidationStrategy(DocumentValidationStrategy):
             raise TooLargeError(
                 f"the docx exceeds the {self._max_uncompressed_bytes}-byte uncompressed limit"
             )
-        return ValidationOutcome(mime=_DOCX_MIME)
+        return ValidationOutcome(mime=DOCX_MIME)
