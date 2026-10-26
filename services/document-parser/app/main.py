@@ -7,10 +7,13 @@ from fastapi import FastAPI
 from .api.extract import router as extract_router
 from .config import ConfigFactory, Settings, deployment_flick
 from .extraction import CleaningKnobs, build_default_extraction_service
+from .observability import build_observability_service
 from .validation import build_default_service
 
-# App-side logs have no handlers until OTel lands (observability.md); INFO keeps
-# the startup/shutdown phases and config fallbacks visible meanwhile.
+# The stdout handler is the baseline copy of every app log; a wired
+# observability build adds its OTel destination alongside it
+# (observability.md's logs view). INFO keeps the startup/shutdown phases
+# and config fallbacks visible on both paths.
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -45,11 +48,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             folio_monotonic_ratio=settings.folio_monotonic_ratio,
         ),
     )
+    # The gate flips on the endpoint: unset builds the null object and
+    # installs nothing, set builds the wired pipeline (NFR-5).
+    app.state.observability = build_observability_service(settings, app)
     logger.info("config plane: %s", flick)
+    logger.info("observability: %s", type(app.state.observability).__name__)
 
     yield
     # No drain to run: the sync runtime owns no worker pool (extraction.md).
+    # The final line is queued before the observability drain so it rides
+    # the logs flush out to New Relic with the rest (observability.md).
     logger.info("document parser shutdown complete")
+    app.state.observability.shutdown()
 
 
 app = FastAPI(title="Document Parser", lifespan=lifespan)

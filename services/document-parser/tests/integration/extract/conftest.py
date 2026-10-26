@@ -20,6 +20,10 @@ def _boot_env() -> Iterator[None]:
     patch = pytest.MonkeyPatch()
     patch.setenv("ENV_TYPE", "dev")
     patch.setenv("API_KEY", KEY)
+    # the extract matrix tests the disabled observability boot: the dev host's
+    # infra/.env carries an OTLP endpoint, and the pin keeps these boots on
+    # the null object exactly as a fileless container without the endpoint
+    patch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
     yield
     patch.undo()
 

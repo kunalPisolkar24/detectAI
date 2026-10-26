@@ -238,3 +238,86 @@ def test_deployment_flick_is_fail_closed(
 ) -> None:
     monkeypatch.setenv("ENV_TYPE", raw)
     assert deployment_flick() == expected
+
+
+# observability.md's NFR-5 gate: the flipped pair (endpoint + ingest license
+# key) or the legitimate disabled boot — never a half-configured push.
+
+
+def test_an_endpoint_without_a_license_key_fails_the_boot() -> None:
+    with pytest.raises(ValidationError):
+        Settings.from_provider(
+            StubProvider({
+                "API_KEY": "a" * 20,
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+            })
+        )
+
+
+def test_an_endpoint_with_a_short_license_key_fails_the_boot() -> None:
+    with pytest.raises(ValidationError):
+        Settings.from_provider(
+            StubProvider({
+                "API_KEY": "a" * 20,
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+                "NEW_RELIC_LICENSE_KEY": "d" * 8,  # the floor is 16
+            })
+        )
+
+
+def test_an_endpoint_with_a_key_over_the_floor_passes() -> None:
+    settings = Settings.from_provider(
+        StubProvider({
+            "API_KEY": "a" * 20,
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+            "NEW_RELIC_LICENSE_KEY": "d" * 16,
+        })
+    )
+
+    assert settings.otel_exporter_otlp_endpoint == "http://localhost:4318"
+    assert settings.new_relic_license_key == "d" * 16
+
+
+def test_the_endpoint_planes_trim_their_whitespace() -> None:
+    settings = Settings.from_provider(
+        StubProvider({
+            "API_KEY": "a" * 20,
+            "OTEL_EXPORTER_OTLP_ENDPOINT": " http://localhost:4318 ",
+            "NEW_RELIC_LICENSE_KEY": "d" * 16,
+        })
+    )
+
+    assert settings.otel_exporter_otlp_endpoint == "http://localhost:4318"
+
+
+def test_a_blank_endpoint_is_a_legitimate_disabled_boot() -> None:
+    # a blank line in a plane file is an unset one: the gate normalizes it
+    settings = Settings.from_provider(
+        StubProvider({"API_KEY": "a" * 20, "OTEL_EXPORTER_OTLP_ENDPOINT": " "})
+    )
+
+    assert settings.otel_exporter_otlp_endpoint is None
+    assert settings.new_relic_license_key is None
+
+
+def test_an_unset_endpoint_needs_no_license_key() -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
+
+    assert settings.otel_exporter_otlp_endpoint is None
+    assert settings.new_relic_license_key is None
+
+
+@pytest.mark.parametrize("seeded", ["0", "-0.5", "1.5", "2", "not a ratio"])
+def test_a_sample_ratio_outside_its_unit_interval_fails_the_boot(seeded: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings.from_provider(
+            StubProvider({"API_KEY": "a" * 20, "OTEL_TRACE_SAMPLE_RATIO": seeded})
+        )
+
+
+def test_the_sample_ratio_dials_a_partial_push() -> None:
+    settings = Settings.from_provider(
+        StubProvider({"API_KEY": "a" * 20, "OTEL_TRACE_SAMPLE_RATIO": "0.25"})
+    )
+
+    assert settings.otel_trace_sample_ratio == 0.25

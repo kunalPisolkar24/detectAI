@@ -37,6 +37,10 @@ from ..validation.models import (
 )
 from .provider import ConfigProvider
 
+# The ingest license key's floor; mirrors tools/secrets.py's gate so the
+# boot and the seeding tool demand the same pair (endpoint + key) or none.
+NEW_RELIC_LICENSE_KEY_MIN_LENGTH = 16
+
 
 def deployment_flick() -> Literal["dev", "prod"]:
     """The plane selector: prod only when ENV_TYPE is exactly prod
@@ -117,14 +121,14 @@ class Settings(BaseModel):
     edge_tolerance_ratio: float = DEFAULT_EDGE_TOLERANCE_RATIO
     folio_monotonic_ratio: float = DEFAULT_FOLIO_MONOTONIC_RATIO
 
-    # observability.md's NFR-5 gate and resource identity. The endpoint is the
-    # gate itself: its presence flips the observability factory to the wired
-    # build, and its absence is a legitimate disabled boot in every plane,
-    # which is exactly why these fields ride the plain contract — an unset
-    # plane must never trip a credential-style min_length here. The license
-    # key is the ingest key carried in the secrets blob (not SSM); the ratio
-    # fails the boot off its unit interval like the cleaning ratios do.
-    # Enforcement lands with the wired build — TODO(observability build).
+    # observability.md's NFR-5 gate and resource identity. The endpoint is
+    # the gate itself: its presence flips the observability factory to the
+    # wired build, and its absence is a legitimate disabled boot in every
+    # plane, which is exactly why these fields ride the plain contract — an
+    # unset plane must never trip a credential-style min_length here. The
+    # license key is the ingest key carried in the secrets blob (not SSM);
+    # its floor rides the gate validator below. The ratio fails the boot off
+    # its unit interval like the cleaning ratios do.
     otel_exporter_otlp_endpoint: str | None = None
     new_relic_license_key: str | None = None
     otel_service_name: str = "document-parser"
@@ -179,21 +183,36 @@ class Settings(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def _gate_without_a_key_does_not_trip_yet(self) -> "Settings":
-        """TODO(observability build): THE gate — an endpoint without a
-        license key fails the boot on the same path as API_KEY's minimum
-        length, while an unset (or blank) endpoint stays a legitimate
-        disabled boot in every plane. Deferred with the wired build so the
-        skeleton cannot fail a boot the wired build could not have served
-        anyway; until then these two fields ride inert."""
+    def _gate_observability(self) -> "Settings":
+        """The NFR-5 gate: a set endpoint demands its ingest license key.
+
+        An endpoint without a key fails the boot on the same path as API_KEY's
+        minimum length; an unset endpoint is a legitimate disabled boot in
+        every plane. A blank endpoint is an unset one — normalized here, so
+        `otel_exporter_otlp_endpoint` alone stays the disabled/enabled flick.
+        """
+        endpoint = (self.otel_exporter_otlp_endpoint or "").strip()
+        if not endpoint:
+            self.otel_exporter_otlp_endpoint = None
+            return self
+        self.otel_exporter_otlp_endpoint = endpoint
+        key = self.new_relic_license_key
+        if key is None or len(key) < NEW_RELIC_LICENSE_KEY_MIN_LENGTH:
+            raise ValueError(
+                "OTEL_EXPORTER_OTLP_ENDPOINT is set, so NEW_RELIC_LICENSE_KEY must "
+                f"be at least {NEW_RELIC_LICENSE_KEY_MIN_LENGTH} characters "
+                "(the ingest license key, tools/secrets.py's floor)"
+            )
         return self
 
     @field_validator("otel_trace_sample_ratio")
     @classmethod
-    def _sample_stays_inside_the_unit_interval_deferred(cls, value: float) -> float:
-        """TODO(observability build): 0 < ratio ≤ 1, failing the boot like the
-        cleaning ratios do. Deferred with the wired build — the enforcement
-        lands beside the sampler that consumes it (and its tests)."""
+    def _sample_stays_inside_its_unit_interval(cls, value: float) -> float:
+        """0 < ratio ≤ 1 — the sampler the factory feeds demands a dial."""
+        if not 0.0 < value <= 1.0:
+            raise ValueError(
+                "otel_trace_sample_ratio must lie in the interval (0, 1] (observability.md)"
+            )
         return value
 
     @classmethod

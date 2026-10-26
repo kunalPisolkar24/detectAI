@@ -5,8 +5,9 @@ What document-parser monitors and exports. Requirements live in
 [http.md](http.md); the class-level build is the LLD in
 [references/observability.md](references/observability.md).
 
-**Status: settled design — the OTel SDK pushes straight to New Relic, no
-collector on this service's path; the build lands against the LLD.**
+**Status: the pipeline build landed against the LLD — resource, adapters,
+factory, and boot wiring; the extract route's verdict sites are deferred to
+a follow-up change and remain unwired in the meantime.**
 
 ## Pipeline
 
