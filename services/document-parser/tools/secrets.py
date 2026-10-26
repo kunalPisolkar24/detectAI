@@ -68,8 +68,10 @@ STATE_PREFIX = "document-parser"
 
 # Non-secret runtime config: .env keys terraform writes to SSM
 # (SSM_SEED_PREFIX + KEY) on apply. Absent, empty or commented .env lines
-# seed nothing; API_KEY and pipeline keys (EMULATOR_ENDPOINT, AWS_REGION,
-# ENV_TYPE, TF_STATE_BUCKET, PORT) are deliberately not seedable here.
+# seed nothing; API_KEY and NEW_RELIC_LICENSE_KEY ride the secrets blob
+# instead (TF_VAR_api_key / TF_VAR_new_relic_license_key), and pipeline keys
+# (EMULATOR_ENDPOINT, AWS_REGION, ENV_TYPE, TF_STATE_BUCKET, PORT) are
+# deliberately not seedable here.
 SSM_SEED_PREFIX = "/detectai/document-parser/"
 SSM_SEED_KEYS = (
     "UPLOAD_LIMIT_BYTES",
@@ -251,6 +253,10 @@ def build_tf_vars(values: dict[str, str]) -> dict[str, str]:
             EMULATOR_RECOVERY_WINDOW if is_emulator else PROD_RECOVERY_WINDOW
         ),
     }
+    # The license key rides the secrets blob like the API key: non-empty seeds,
+    # absent or empty skips (the same map rule the SSM config keys follow).
+    if (license_key := values.get("NEW_RELIC_LICENSE_KEY", "")) != "":
+        tf_vars["TF_VAR_new_relic_license_key"] = license_key
     if is_emulator:
         tf_vars["TF_VAR_emulator_endpoint"] = values["EMULATOR_ENDPOINT"]
     # Non-secret config rides along to SSM; absent or empty keys seed nothing

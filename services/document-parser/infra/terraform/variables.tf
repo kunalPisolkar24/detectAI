@@ -43,6 +43,18 @@ variable "api_key" {
   }
 }
 
+variable "new_relic_license_key" {
+  description = "New Relic ingest license key stored as {\"NEW_RELIC_LICENSE_KEY\": ...}. Null skips adding the blob key."
+  type        = string
+  default     = null
+  sensitive   = true
+
+  validation {
+    condition     = var.new_relic_license_key == null || length(var.new_relic_license_key) >= 16
+    error_message = "new_relic_license_key must be at least 16 characters (or null to skip adding the blob key)."
+  }
+}
+
 variable "secret_recovery_window" {
   description = "Recovery window: 0 for emulator/dev cycles (destroy and reseed freely), 7-30 prod safety."
   type        = number

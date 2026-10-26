@@ -4,12 +4,27 @@ run "contract_name_becomes_the_output" {
   command = plan
 
   variables {
-    api_key = "test-api-key-0123456789"
+    api_key               = "test-api-key-0123456789"
+    new_relic_license_key = "test-license-key-0123456789"
   }
 
   assert {
     condition     = output.secrets_name == "detectai/document-parser/secrets"
     error_message = "the consumer-facing secret name is the fixed contract"
+  }
+}
+
+run "a_license_key_alone_still_versions_the_blob" {
+  command = plan
+
+  variables {
+    api_key               = null
+    new_relic_license_key = "test-license-key-0123456789"
+  }
+
+  assert {
+    condition     = output.secrets_name != null
+    error_message = "a license-key-only blob still provisions the contract name"
   }
 }
 
@@ -54,15 +69,15 @@ run "config_params_land_on_the_service_prefix" {
 
   variables {
     ssm_parameters = {
-      LOG_LEVEL      = "INFO"
-      WORKER_THREADS = "4"
+      OTEL_SERVICE_NAME = "document-parser"
+      WORKER_THREADS    = "4"
     }
   }
 
   assert {
     condition = contains(
       output.ssm_parameter_names,
-      "/detectai/document-parser/LOG_LEVEL",
+      "/detectai/document-parser/OTEL_SERVICE_NAME",
     ) && contains(output.ssm_parameter_names, "/detectai/document-parser/WORKER_THREADS")
     error_message = "seeded config parameters follow the fixed service prefix"
   }

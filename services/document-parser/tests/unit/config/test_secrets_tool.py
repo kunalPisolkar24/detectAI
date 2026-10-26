@@ -648,6 +648,14 @@ def test_build_tf_vars_json_escapes_seed_values():
     assert payload["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://host:4318/?trailing=a=b"
 
 
+def test_build_tf_vars_maps_the_license_key_to_the_blob():
+    values = {**VALID, "NEW_RELIC_LICENSE_KEY": "d" * 20}
+    assert dp_secrets.build_tf_vars(values)["TF_VAR_new_relic_license_key"] == "d" * 20
+    # Absent or empty: the blob key is not seeded, matching the SSM map rule.
+    assert "TF_VAR_new_relic_license_key" not in dp_secrets.build_tf_vars(VALID)
+    assert "TF_VAR_new_relic_license_key" not in dp_secrets.build_tf_vars({**VALID, "NEW_RELIC_LICENSE_KEY": ""})
+
+
 def test_validate_iam_bootstrap_real_plane_requires_state_bucket():
     values = {**VALID, "DEPLOY_TRUST_USER_ARN": "arn:aws:iam::123456789012:user/kunalpisolkar"}
     errors = "\n".join(dp_secrets.validate_iam_bootstrap(False, values))
