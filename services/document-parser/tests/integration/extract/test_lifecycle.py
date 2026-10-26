@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from app.api.extract import router as extract_router
 from app.config import Settings
 from app.extraction import DocumentExtractionService, build_default_extraction_service
+from app.observability import NullObservability
 from app.validation import build_default_service
 from tests.support.documents import positioned_pdf_bytes
 
@@ -31,6 +32,7 @@ def _client_with(service: DocumentExtractionService) -> TestClient:
     throwaway.state.settings = Settings(api_key=KEY)
     throwaway.state.validation_service = build_default_service()
     throwaway.state.extraction_service = service
+    throwaway.state.observability = NullObservability()
     return TestClient(throwaway)
 
 

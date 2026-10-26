@@ -5,9 +5,9 @@ What document-parser monitors and exports. Requirements live in
 [http.md](http.md); the class-level build is the LLD in
 [references/observability.md](references/observability.md).
 
-**Status: the pipeline build landed against the LLD — resource, adapters,
-factory, and boot wiring; the extract route's verdict sites are deferred to
-a follow-up change and remain unwired in the meantime.**
+**Status: complete — the pipeline and the route's verdict sites both landed
+against the LLD, verified end-to-end against a local OTLP/HTTP receiver
+(dev and prod planes).**
 
 ## Pipeline
 

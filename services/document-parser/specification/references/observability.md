@@ -5,7 +5,9 @@ monitored — the instruments, their names and attribute vocabularies — is the
 contract in [../observability.md](../observability.md); requirements live in
 [../requirements.md](../requirements.md) (NFR-5).
 
-**Status: designed — the observability build lands against this doc.**
+**Status: landed — the resource, adapters, factory, boot wiring, and the
+route's verdict sites are built and verified (unit seam and live push at a
+local receiver, both planes).**
 
 ## Package layout
 
