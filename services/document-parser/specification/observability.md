@@ -102,9 +102,12 @@ OTEL_TRACE_SAMPLE_RATIO=1.0         # 0 < ratio ≤ 1
 - Fail-closed: an endpoint without a license key fails the boot on the same
   path as `API_KEY`'s minimum length; an unset endpoint is a legitimate
   disabled boot in every plane.
-- The SSM allowlist in `tools/secrets.py` already carries the `OTEL_*` keys —
-  only `NEW_RELIC_LICENSE_KEY` joins the secrets blob (the blob, the terraform
-  variable, and the tool's validation, in the same PR).
+- A set endpoint demands the key in every plane — the local collector on
+  4318 included; a throwaway value is legitimate there, and the destination
+  knob stays `OTEL_EXPORTER_OTLP_ENDPOINT` alone (no enable/disable switch).
+- The SSM allowlist in `tools/secrets.py` carries the `OTEL_*` keys, the
+  sample ratio included; `NEW_RELIC_LICENSE_KEY` joins the secrets blob (the
+  blob, the terraform variable, and the tool's validation, in the same PR).
 
 ## Export shape
 

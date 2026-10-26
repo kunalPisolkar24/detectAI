@@ -81,6 +81,35 @@ def test_validate_emulator_plane_rejects_bad_endpoint():
     assert "EMULATOR_ENDPOINT" in errors
 
 
+def test_validate_rejects_an_endpoint_without_a_url_shape():
+    errors = dp_secrets.validate(True, {**EMULATOR_VALUE, "OTEL_EXPORTER_OTLP_ENDPOINT": "localhost:4318"})
+    text = "\n".join(errors)
+    assert "OTEL_EXPORTER_OTLP_ENDPOINT" in text and "http(s)" in text and "fix:" in text
+
+
+def test_validate_rejects_an_endpoint_without_a_license_key():
+    errors = dp_secrets.validate(
+        True, {**EMULATOR_VALUE, "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"}
+    )
+    text = "\n".join(errors)
+    assert "NEW_RELIC_LICENSE_KEY" in text and "16" in text and "fix:" in text
+    # The unset endpoint is the legitimate disabled stack: no key is demanded.
+    assert dp_secrets.validate(True, EMULATOR_VALUE) == []
+
+
+def test_validate_accepts_a_set_endpoint_with_a_key_over_the_floor():
+    values = {
+        **REAL_VALUE,
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp.nr-data.net",
+        "NEW_RELIC_LICENSE_KEY": "d" * 20,
+    }
+    assert dp_secrets.validate(False, values) == []
+    assert dp_secrets.validate(True, {**values, "EMULATOR_ENDPOINT": "http://localhost:4566"}) == []
+
+    short = {**values, "NEW_RELIC_LICENSE_KEY": "d" * 8}
+    assert "NEW_RELIC_LICENSE_KEY" in "\n".join(dp_secrets.validate(False, short))
+
+
 def test_validate_real_plane_requires_bucket():
     errors = "\n".join(dp_secrets.validate(False, {**VALID, "TF_STATE_BUCKET": ""}))
     assert "TF_STATE_BUCKET" in errors and "make secrets-bootstrap-state" in errors

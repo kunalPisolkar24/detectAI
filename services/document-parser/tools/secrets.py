@@ -58,6 +58,9 @@ URL_RE = re.compile(r"^https?://\S+$")
 # S3 naming minus dots: exactly 3-63 lowercase/digits/hyphens, alnum boundaries.
 BUCKET_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
 API_KEY_MIN_LENGTH = 16
+# The New Relic ingest key's floor: NR keys are longer, the floor just catches
+# an endpoint paired with nothing at all (the runtime gate demands the same).
+LICENSE_KEY_MIN_LENGTH = 16
 ENV_TYPES = ("dev", "prod")
 EMULATOR_RECOVERY_WINDOW = 0
 PROD_RECOVERY_WINDOW = 30
@@ -187,6 +190,23 @@ def validate(is_emulator: bool, values: dict[str, str]) -> list[str]:
             f"ENV_TYPE must be one of {' or '.join(ENV_TYPES)}, got {env_type!r}",
             "set ENV_TYPE=dev or ENV_TYPE=prod",
         )
+    if (otel_endpoint := values.get("OTEL_EXPORTER_OTLP_ENDPOINT", "")):
+        if not URL_RE.fullmatch(otel_endpoint):
+            fail(
+                f"OTEL_EXPORTER_OTLP_ENDPOINT is not a valid http(s) URL: {otel_endpoint!r}",
+                "use an http(s) OTLP endpoint, e.g. http://localhost:4318 (a local receiver) "
+                "or https://otlp.nr-data.net (New Relic)",
+            )
+        # The NFR-5 gate's seed twin: a set endpoint always demands a license
+        # key at runtime, so seeding one without the other would land the
+        # container on a boot it cannot survive; throwaway values are fine.
+        if len(values.get("NEW_RELIC_LICENSE_KEY", "")) < LICENSE_KEY_MIN_LENGTH:
+            fail(
+                f"NEW_RELIC_LICENSE_KEY missing or shorter than {LICENSE_KEY_MIN_LENGTH} chars "
+                "while OTEL_EXPORTER_OTLP_ENDPOINT is set",
+                "set the ingest license key (a throwaway value is legitimate when the "
+                "endpoint is a local collector)",
+            )
     if is_emulator:
         endpoint = values["EMULATOR_ENDPOINT"]
         if not URL_RE.fullmatch(endpoint):
