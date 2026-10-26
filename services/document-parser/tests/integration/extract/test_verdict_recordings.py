@@ -85,7 +85,7 @@ def test_an_ok_attempt_folds_onto_the_seam() -> None:
     assert fold.outcome == "ok"
     assert 0 < fold.duration_seconds < 5
     assert recorder.request_brackets == 1
-    assert recorder.extraction_brackets == ["application/pdf"]
+    assert recorder.extraction_brackets == [("application/pdf", len(_PDF))]
     assert recorder.open_brackets == 0
 
 
@@ -104,6 +104,7 @@ def test_a_pinched_cap_folds_the_truncated_verdict() -> None:
     assert response.status_code == 200
     (fold,) = recorder.extractions
     assert (fold.mime_type, fold.outcome) == ("text/plain", "truncated")
+    assert recorder.extraction_brackets == [("text/plain", 5)]
 
 
 def test_a_spent_budget_folds_the_timeout_verdict() -> None:
@@ -122,6 +123,9 @@ def test_a_spent_budget_folds_the_timeout_verdict() -> None:
     assert response.status_code == 504
     (fold,) = recorder.extractions
     assert (fold.mime_type, fold.outcome) == ("application/pdf", "timeout")
+    assert recorder.extraction_brackets == [
+        ("application/pdf", len(_THREE_PAGE_PDF))
+    ]
     assert recorder.rejections == []
 
 
@@ -144,6 +148,7 @@ def test_content_that_dies_after_admission_folds_unreadable() -> None:
         assert response.json() == _GENERIC_422
         (fold,) = recorder.extractions
         assert (fold.mime_type, fold.outcome) == (mime, "unreadable")
+        assert recorder.extraction_brackets == [(mime, len(body))]
 
 
 def test_a_body_over_the_pinched_bound_rejects_too_large() -> None:

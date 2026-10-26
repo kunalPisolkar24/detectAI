@@ -68,7 +68,7 @@ async def extract(request: Request) -> dict[str, object]:
 
         mime = outcome.mime
         started = time.perf_counter()
-        with observability.track_extraction(mime):
+        with observability.track_extraction(mime, len(document)):
             try:
                 result = request.app.state.extraction_service.extract(document, mime)
             except BudgetExhaustedError as spent:

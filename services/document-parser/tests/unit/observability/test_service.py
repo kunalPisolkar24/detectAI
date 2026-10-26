@@ -139,28 +139,35 @@ def test_the_request_bracket_feeds_the_gauge_while_open(pipeline) -> None:
     assert gauge[0][1].value == 2
 
 
-def test_track_extraction_carries_the_mime_under_the_span(pipeline) -> None:
+def test_the_extraction_span_carries_the_mime_and_size(pipeline) -> None:
     service, (span_exporter, _, _) = pipeline
 
-    with service.track_extraction("application/pdf"):
+    with service.track_extraction("application/pdf", 1_048_576):
         pass
     service.shutdown()
 
     assert [span.name for span in span_exporter.finished_spans] == ["extraction"]
-    assert span_exporter.finished_spans[0].attributes["mime_type"] == "application/pdf"
+    assert span_exporter.finished_spans[0].attributes == {
+        "mime_type": "application/pdf",
+        "document_size_bytes": 1_048_576,
+    }
 
 
 def test_the_extraction_span_still_closes_on_a_raise(pipeline) -> None:
     service, (span_exporter, _, _) = pipeline
 
-    with pytest.raises(RuntimeError, match="the parse died"), service.track_extraction(
-        "text/plain"
+    with (
+        pytest.raises(RuntimeError, match="the parse died"),
+        service.track_extraction("text/plain", 37),
     ):
         raise RuntimeError("the parse died")
     service.shutdown()
 
     (span,) = span_exporter.finished_spans
-    assert span.attributes["mime_type"] == "text/plain"
+    assert span.attributes == {
+        "mime_type": "text/plain",
+        "document_size_bytes": 37,
+    }
     assert span.status.status_code.name == "ERROR"
 
 

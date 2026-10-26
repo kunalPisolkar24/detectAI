@@ -29,9 +29,11 @@ class Observability(Protocol):
         requests in flight, not successes."""
         ...
 
-    def track_extraction(self, mime_type: str) -> AbstractContextManager[None]:
-        """Carry the extraction span with the mime attribute under its span;
-        still closes on a raise."""
+    def track_extraction(
+        self, mime_type: str, document_size_bytes: int
+    ) -> AbstractContextManager[None]:
+        """Carry the extraction span with the mime and document-size
+        attributes under its span; still closes on a raise."""
         ...
 
     def record_rejection(self, reason: RejectionReason) -> None:
@@ -63,7 +65,9 @@ class NullObservability:
         yield
 
     @contextmanager
-    def track_extraction(self, mime_type: str) -> Iterator[None]:
+    def track_extraction(
+        self, mime_type: str, document_size_bytes: int
+    ) -> Iterator[None]:
         yield  # no span exists to open when nothing is installed
 
     def record_rejection(self, reason: RejectionReason) -> None:

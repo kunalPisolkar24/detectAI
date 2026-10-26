@@ -82,7 +82,9 @@ Every recording site on the extract route, and what each call touches:
 Plus the two brackets, which carry no instruments of their own:
 `track_request` → `in_flight_requests` (it brackets the whole handler,
 rejections included — the gauge counts requests in flight, not successes),
-and `track_extraction` → the `extraction` span, carrying the `mime_type`.
+and `track_extraction` → the `extraction` span, carrying the `mime_type`
+and the `document_size_bytes` (the admitted document's byte length, the
+basis for per-mime size charts).
 
 The counters partition outcomes — a timeout is **not** also a failure, so
 dashboards sum `extraction_failures_total + extraction_timeouts_total`

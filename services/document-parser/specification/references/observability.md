@@ -65,7 +65,7 @@ classDiagram
     class Observability {
         <<Protocol>>
         +track_request()
-        +track_extraction(mime_type)
+        +track_extraction(mime_type, document_size_bytes)
         +record_rejection(reason)
         +record_extraction(mime_type, outcome, duration_seconds)
         +shutdown()
@@ -278,8 +278,8 @@ sequenceDiagram
         R->>O: record_rejection(reason)
         O->>S: rejected_uploads_total add 1, reason attribute
     end
-    R->>O: track_extraction(mime_type)
-    O->>S: start span extraction
+    R->>O: track_extraction(mime_type, size)
+    O->>S: start span extraction (mime_type, document_size_bytes)
     Note over R: the pipeline runs under its cooperative budget
     R->>O: record_extraction(mime, outcome, duration)
     O->>S: histogram record + the outcome counter
@@ -294,7 +294,9 @@ sequenceDiagram
 - Durations are wall time around the extract call (`perf_counter`): a doomed
   parse lands ≈ budget + one page, and the histogram shows exactly that shape.
 - `mime_type` is the sniffed MIME the admission gate returned, never the
-  declared Content-Type; the `reason` / `status` / `error_type` vocabularies
+  declared Content-Type; `document_size_bytes` is the post-multipart
+  document length, recorded on the same attempt span for per-mime size
+  charts; the `reason` / `status` / `error_type` vocabularies
   are the contract's [outcome mapping](../observability.md#what-each-verdict-records).
 
 ## Shutdown — the drain

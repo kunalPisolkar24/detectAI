@@ -26,7 +26,7 @@ class RecordingObservability:
         self.rejections: list[RejectionReason] = []
         self.extractions: list[ExtractionCall] = []
         self.request_brackets = 0
-        self.extraction_brackets: list[str] = []
+        self.extraction_brackets: list[tuple[str, int]] = []
         self.open_brackets = 0
 
     @contextmanager
@@ -39,8 +39,10 @@ class RecordingObservability:
             self.open_brackets -= 1
 
     @contextmanager
-    def track_extraction(self, mime_type: str) -> Iterator[None]:
-        self.extraction_brackets.append(mime_type)
+    def track_extraction(
+        self, mime_type: str, document_size_bytes: int
+    ) -> Iterator[None]:
+        self.extraction_brackets.append((mime_type, document_size_bytes))
         self.open_brackets += 1
         try:
             yield

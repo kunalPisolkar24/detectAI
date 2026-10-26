@@ -127,11 +127,18 @@ class ObservabilityService:
             self._in_flight.end()
 
     @contextmanager
-    def track_extraction(self, mime_type: str) -> Iterator[None]:
-        """Carries the extraction span with the mime attribute under its
-        span; a raise exits the bracket with the span still closed."""
+    def track_extraction(
+        self, mime_type: str, document_size_bytes: int
+    ) -> Iterator[None]:
+        """Carries the extraction span under its bracket with the mime and
+        document-size attributes; a raise exits the bracket with the span
+        still closed."""
         with self._tracer.start_as_current_span(
-            "extraction", attributes={"mime_type": mime_type}
+            "extraction",
+            attributes={
+                "mime_type": mime_type,
+                "document_size_bytes": document_size_bytes,
+            },
         ):
             yield
 
