@@ -11,7 +11,14 @@ import math
 import os
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from ..extraction.models import (
     DEFAULT_EDGE_TOLERANCE_RATIO,
@@ -110,6 +117,20 @@ class Settings(BaseModel):
     edge_tolerance_ratio: float = DEFAULT_EDGE_TOLERANCE_RATIO
     folio_monotonic_ratio: float = DEFAULT_FOLIO_MONOTONIC_RATIO
 
+    # observability.md's NFR-5 gate and resource identity. The endpoint is the
+    # gate itself: its presence flips the observability factory to the wired
+    # build, and its absence is a legitimate disabled boot in every plane,
+    # which is exactly why these fields ride the plain contract — an unset
+    # plane must never trip a credential-style min_length here. The license
+    # key is the ingest key carried in the secrets blob (not SSM); the ratio
+    # fails the boot off its unit interval like the cleaning ratios do.
+    # Enforcement lands with the wired build — TODO(observability build).
+    otel_exporter_otlp_endpoint: str | None = None
+    new_relic_license_key: str | None = None
+    otel_service_name: str = "document-parser"
+    otel_service_version: str | None = None
+    otel_trace_sample_ratio: float = 1.0
+
     @field_validator(
         "upload_limit_bytes",
         "max_pdf_pages",
@@ -155,6 +176,24 @@ class Settings(BaseModel):
     def _repetition_needs_a_few_pages(cls, value: int) -> int:
         if value < 2:
             raise ValueError("the repetition floor must be at least 2 pages (cleaning.md)")
+        return value
+
+    @model_validator(mode="after")
+    def _gate_without_a_key_does_not_trip_yet(self) -> "Settings":
+        """TODO(observability build): THE gate — an endpoint without a
+        license key fails the boot on the same path as API_KEY's minimum
+        length, while an unset (or blank) endpoint stays a legitimate
+        disabled boot in every plane. Deferred with the wired build so the
+        skeleton cannot fail a boot the wired build could not have served
+        anyway; until then these two fields ride inert."""
+        return self
+
+    @field_validator("otel_trace_sample_ratio")
+    @classmethod
+    def _sample_stays_inside_the_unit_interval_deferred(cls, value: float) -> float:
+        """TODO(observability build): 0 < ratio ≤ 1, failing the boot like the
+        cleaning ratios do. Deferred with the wired build — the enforcement
+        lands beside the sampler that consumes it (and its tests)."""
         return value
 
     @classmethod
