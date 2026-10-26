@@ -71,6 +71,10 @@ def test_the_wired_build_is_ready_and_instruments_the_app(receiver: str) -> None
         # the instrumentation wraps the middleware-stack builder, explicitly
         assert app._is_instrumented_by_opentelemetry is True
         assert hasattr(app, "_original_build_middleware_stack")
+        # Starlette 1.9 builds the stack lazily on the first app call — the
+        # factory's own rebuild is what puts the span middleware on the
+        # serving path, so the stack must be built, not deferred
+        assert app.middleware_stack is not None
         # one resource feeds every provider; the flick names the environment
         attributes = wired._traces.provider().resource.attributes
         assert attributes["deployment.environment.name"] == "dev"

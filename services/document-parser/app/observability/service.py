@@ -227,4 +227,10 @@ def build_observability_service(settings: Settings, app: "FastAPI") -> Observabi
     metrics.start(resource)
     logs.start(resource)
     FastAPIInstrumentor.instrument_app(app, tracer_provider=traces.provider())
+    # Uvicorn's first app call is the lifespan probe, and Starlette builds
+    # the middleware stack lazily inside that call — before this lifespan
+    # body runs, so the served stack was built without the span middleware.
+    # The wrapper captured the original plain builder at instrument time, so
+    # rebuilding here puts the ASGI spans on the serving path exactly once.
+    app.middleware_stack = app.build_middleware_stack()
     return ObservabilityService(traces=traces, metrics=metrics, logs=logs)
