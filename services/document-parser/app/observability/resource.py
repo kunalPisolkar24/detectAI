@@ -8,11 +8,7 @@ resolved by the factory before this runs, never inside.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    # The OTel SDK import moves to runtime when the deps land (build phase).
-    from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.resources import Resource
 
 
 def build_resource(
@@ -23,6 +19,10 @@ def build_resource(
     The flick (dev/prod) is the deployment.environment.name vocabulary New
     Relic dashboards split on; the factory passes it through from settings.
     """
-    raise NotImplementedError(
-        "TODO(observability build): Resource.create with the three attributes"
+    return Resource.create(
+        {
+            "service.name": service_name,
+            "service.version": service_version,
+            "deployment.environment.name": environment,
+        }
     )

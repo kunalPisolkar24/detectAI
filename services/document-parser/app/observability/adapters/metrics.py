@@ -1,20 +1,21 @@
 """MetricsAdapter: one MeterProvider, started against the shared Resource.
 
 Delta temporality for counters and histograms is the New Relic OTLP best fit
-for pushed data, and the reader keeps the 15 s cadence the old scrape interval
-established so dashboards see the same rhythm the pull model used to give
-them (observability.md's export shape).
+for pushed data, and the periodic reader keeps the 15 s cadence the old
+scrape interval established so dashboards see the same rhythm the pull model
+used to give them (observability.md's export shape).
 """
 
-from __future__ import annotations
+from opentelemetry.metrics import Meter
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import (
+    MetricExporter,
+    PeriodicExportingMetricReader,
+)
+from opentelemetry.sdk.resources import Resource
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    # The OTel SDK imports move to runtime when the deps land (build phase).
-    from opentelemetry.metrics import Meter
-    from opentelemetry.sdk.metrics.export import MetricExporter
-    from opentelemetry.sdk.resources import Resource
+# Per-flush cap: the three drain flushes must fit the 12 s graceful window.
+_FLUSH_TIMEOUT_MILLIS = 5_000
 
 
 class MetricsAdapter:
@@ -30,24 +31,31 @@ class MetricsAdapter:
     ) -> None:
         self._metric_exporter = metric_exporter
         self._export_interval_millis = export_interval_millis
-        self._provider = None  # MeterProvider, built in start()
+        self._provider: MeterProvider | None = None
 
     def start(self, resource: Resource) -> None:
-        """MeterProvider(resource) over a PeriodicExportingMetricReader with
-        delta temporality and the injected interval, set once."""
-        raise NotImplementedError(
-            "TODO(observability build): build the reader (delta) and the provider, install it"
+        """MeterProvider over a periodic reader, set once — the reader's
+        final collection fires at shutdown, whatever the interval awaits."""
+        if self._provider is not None:
+            raise RuntimeError("MetricsAdapter already started")
+        reader = PeriodicExportingMetricReader(
+            self._metric_exporter,
+            export_interval_millis=self._export_interval_millis,
+            export_timeout_millis=_FLUSH_TIMEOUT_MILLIS,
         )
+        self._provider = MeterProvider(resource=resource, metric_readers=[reader])
 
     def meter(self) -> Meter:
         """The started provider's meter — the facade builds its instruments
         through this, never through the opentelemetry module globals."""
-        raise NotImplementedError(
-            "TODO(observability build): return the started meter"
-        )
+        if self._provider is None:
+            raise RuntimeError("MetricsAdapter has no meter; start() first")
+        return self._provider.get_meter(__name__)
 
     def shutdown(self) -> None:
         """Final metrics export; idempotent."""
-        raise NotImplementedError(
-            "TODO(observability build): idempotent final export"
-        )
+        if self._provider is None:
+            return
+        provider = self._provider
+        self._provider = None
+        provider.shutdown()

@@ -17,10 +17,7 @@ _LOGS_PATH = "/v1/logs"
 
 
 def _url(endpoint: str, signal_path: str) -> str:
-    raise NotImplementedError(
-        "TODO(observability build): join the endpoint to the signal path, "
-        "tolerating a trailing slash on the base endpoint"
-    )
+    return f"{endpoint.rstrip('/')}{signal_path}"
 
 
 def traces_url(endpoint: str) -> str:
@@ -42,6 +39,4 @@ def headers(license_key: str) -> dict[str, str]:
     """The api-key header carrying the ingest license key — never a user
     API key, and the SDK's default authorization header is deliberately not
     set (New Relic's OTLP shape, observability.md)."""
-    raise NotImplementedError(
-        "TODO(observability build): {'api-key': license_key}"
-    )
+    return {"api-key": license_key}
