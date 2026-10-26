@@ -14,6 +14,7 @@ from .models import (
     Deadline,
     ExtractionError,
     ExtractionResult,
+    RawLines,
     UnreadableDocumentError,
 )
 from .service import DocumentExtractionService, build_default_extraction_service
@@ -26,6 +27,7 @@ __all__ = [
     "DocumentExtractionService",
     "ExtractionError",
     "ExtractionResult",
+    "RawLines",
     "UnreadableDocumentError",
     "build_default_extraction_service",
 ]

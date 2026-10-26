@@ -30,8 +30,9 @@ because there is nothing to decline. After admission, four stages, in order:
    PyMuPDF's ordered blocks with coordinates (and rules (a)/(b) inside the
    block walk), the DOCX body-paragraph walk, the TXT decode. Phase-1
    suppression lives *here*, per [cleaning.md](../cleaning.md) — it needs the
-   structure only the parser knows. Strategies return raw ordered lines and
-   nothing else.
+   structure only the parser knows. Strategies return `RawLines` — the
+   ordered lines and the partial flag for any page the walk could not read
+   — and nothing else.
 3. **Cleaning** (`cleaning.py`) — one pure, shared normalizer pass, all types
    ([cleaning.md](../cleaning.md) §Phase 2, the ordered rules). It runs exactly
    once, after format work, owned by the pipeline — never by a strategy.
@@ -138,7 +139,7 @@ classDiagram
 
     class DocumentExtractionStrategy {
         <<interface>>
-        +extract(data, budget) list of lines
+        +extract(data, budget) RawLines
     }
 
     class PdfExtractionStrategy {
@@ -171,6 +172,12 @@ classDiagram
         +truncated : bool
     }
 
+    class RawLines {
+        <<frozen dataclass>>
+        +lines : list of strings
+        +partial : bool
+    }
+
     class ExtractionError {
         <<base>>
     }
@@ -186,9 +193,10 @@ classDiagram
     DocumentExtractionService o-- DocumentExtractionStrategy : keyed by the sniffed mime
     DocumentExtractionService ..> Deadline : computed once in extract()
     DocumentExtractionService ..> Cleaning : once, after format work
-    DocumentExtractionService --> ExtractionResult : cap + truncated in one place
+    DocumentExtractionService --> ExtractionResult : partial folded, cap + truncated in one place
     DocumentExtractionService ..> BudgetExhaustedError : deadline verdict
     DocumentExtractionService ..> UnreadableDocumentError : content verdict
+    DocumentExtractionStrategy ..> RawLines : returned by every walk
 
     DocumentExtractionStrategy <|.. PdfExtractionStrategy
     DocumentExtractionStrategy <|.. DocxExtractionStrategy
@@ -243,7 +251,7 @@ sequenceDiagram
 | PDF with zero extractable text (scanned / OCR-only) | corrupt | 422 — per [cleaning.md](../cleaning.md)'s scanned rule | pdf strategy |
 | Empty TXT, or a DOCX body part with no paragraphs | valid empty | 200, `text_length` 0 (TXT is explicit in validation.md; DOCX follows) | txt / docx strategy |
 | Output cap crossed | success, flagged | 200 with `truncated: true` — never an error ([http.md](../http.md) decision 6) | the service, after cleaning |
-| PDF pages yielding no content inside an otherwise extractable document | success, flagged | 200 with `truncated: true` — the unified flag rule | the service |
+| PDF pages yielding no content inside an otherwise extractable document | success, flagged | 200 with `truncated: true` — the strategy reports `partial`, the service owns the flag | pdf strategy + the service |
 
 At-the-line semantics mirror the admission gate: text exactly at the char
 limit is kept whole; the first character beyond sets `truncated`. The budget
@@ -279,7 +287,7 @@ thousand-page document is ever materialized in a test.
 | `app/extraction/models.py` | the vocabulary leaf: the `Deadline` value, `ExtractionResult` (frozen, two fields), the typed verdicts behind `ExtractionError`, and the budget/cap defaults |
 | `app/extraction/cleaning.py` | the pure phase-2 normalizer, exactly [cleaning.md](../cleaning.md) §Phase 2 |
 | `app/extraction/service.py` | mime-keyed registry + the cleaning/cap pipeline; computes the `Deadline` in `extract()`; `build_default_extraction_service` composing the production strategies |
-| `app/extraction/strategies/base.py` | the strategy seam: raw ordered lines out, typed errors out, the budget travels in |
+| `app/extraction/strategies/base.py` | the strategy seam: `RawLines` (raw ordered lines plus the partial flag) out, typed errors out, the budget travels in |
 | `app/extraction/strategies/pdf.py` | PyMuPDF open over the bounded stream, ordered block walk with coordinates, rules (a)/(b) inside the walk, context-managed close |
 | `app/extraction/strategies/docx.py` | `zipfile` + `iterparse` streaming the body part; body paragraphs only; field-char remnants stripped in the walk |
 | `app/extraction/strategies/text.py` | strict UTF-8 decode — the second decode is the cost of owning the input instead of trusting another layer's verdict |
@@ -293,7 +301,8 @@ DOCX behavior ports the slop reference's body-only and field-char cases.
 
 ## Settled decisions
 
-- **Strategies return raw lines, the pipeline finishes** — cleaning and the
+- **Strategies return RawLines, the pipeline finishes** — the raw lines
+  plus the partial flag for pages the walk could not read; cleaning and the
   cap run exactly once, owned by the service; per-parser rule lists and
   per-parser cap skips cannot return because there is nowhere to put them.
 - **The budget travels with the work** — a frozen `Deadline` from the models

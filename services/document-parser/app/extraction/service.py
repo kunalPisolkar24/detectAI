@@ -60,10 +60,11 @@ class DocumentExtractionService:
         strategy = self._strategies.get(mime)
         if strategy is None:
             raise UnreadableDocumentError(f"no extraction strategy claims {mime}")
-        text = normalize(strategy.extract(data, deadline))
+        outcome = strategy.extract(data, deadline)
+        text = normalize(outcome.lines)
         if len(text) > self._output_char_limit:
             return ExtractionResult(text=text[: self._output_char_limit], truncated=True)
-        return ExtractionResult(text=text, truncated=False)
+        return ExtractionResult(text=text, truncated=outcome.partial)
 
 
 def build_default_extraction_service(

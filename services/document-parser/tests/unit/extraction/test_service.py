@@ -8,6 +8,7 @@ from app.extraction import (
     BudgetExhaustedError,
     Deadline,
     ExtractionResult,
+    RawLines,
     UnreadableDocumentError,
     build_default_extraction_service,
 )
@@ -123,13 +124,14 @@ def test_a_spent_budget_abandons_as_exhausted() -> None:
 
 
 class YieldingStrategy(DocumentExtractionStrategy):
-    """Returns the lines it was built with, feeding the pipeline's back half."""
+    """Returns the raw lines it was built with, feeding the pipeline's
+    back half."""
 
     def __init__(self, lines: list[str]) -> None:
         self._lines = lines
 
-    def extract(self, data: bytes, deadline: Deadline) -> list[str]:
-        return self._lines
+    def extract(self, data: bytes, deadline: Deadline) -> RawLines:
+        return RawLines(self._lines, partial=False)
 
 
 class BusyUntilExpiredStrategy(DocumentExtractionStrategy):

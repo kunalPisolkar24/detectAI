@@ -58,6 +58,21 @@ class ExtractionResult:
     truncated: bool
 
 
+@dataclass(frozen=True, slots=True)
+class RawLines:
+    """A strategy's raw ordered lines, plus its one honesty fact.
+
+    partial says some of the document was skipped as unreadable — the
+    fact the pipeline folds into truncated (http.md decision 6: "not
+    the complete extractable text"). Pages that read cleanly and simply
+    hold no text are not partial: they carry no extractable text to
+    lose, so an empty-but-readable page never flags.
+    """
+
+    lines: list[str]
+    partial: bool
+
+
 class ExtractionError(Exception):
     """The typed failure vocabulary; the route maps it onto HTTP."""
 

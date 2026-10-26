@@ -1,8 +1,8 @@
 """In-memory document builders for both test trees.
 
 The strategies now open containers, so tests need *real* documents, not
-magic-prefix bytes: one blank-page pdf via pypdf's writer, a small
-zip-assembled docx that always carries its body part, and a zip impostor
+magic-prefix bytes: one blank-page pdf via pypdf's writer, zip-assembled
+docx bodies (bare, paragraphed, or raw-XML crafted), and a zip impostor
 that deliberately does not. Sizes stay tiny on purpose — the strategies
 accept bounds as parameters, so oversized behavior is tested through
 injected small limits rather than materialized gigabytes.
@@ -10,6 +10,7 @@ injected small limits rather than materialized gigabytes.
 
 import io
 import zipfile
+from collections.abc import Sequence
 
 from pypdf import PdfWriter
 
@@ -34,6 +35,20 @@ def minimal_pdf_bytes(pages: int = 1) -> bytes:
 def minimal_docx_bytes(parts: dict[str, bytes] | None = None) -> bytes:
     """A structurally valid docx: its body part, plus any extra members."""
     return _zip_of({"word/document.xml": _DOCUMENT_XML, **(parts or {})})
+
+
+def docx_body_bytes(inner: str) -> bytes:
+    """A docx whose body part carries `inner` as the body's children —
+    raw XML, so tests can craft paragraphs, tabs, breaks, and fields
+    exactly, including malformed input."""
+    body = _DOCUMENT_XML.replace("<w:body/>", f"<w:body>{inner}</w:body>")
+    return _zip_of({"word/document.xml": body})
+
+
+def paragraphed_docx_bytes(paragraphs: Sequence[str]) -> bytes:
+    """A docx with one plain-text paragraph per given string."""
+    runs = "".join(f"<w:p><w:r><w:t>{text}</w:t></w:r></w:p>" for text in paragraphs)
+    return docx_body_bytes(runs)
 
 
 def surrogate_zip_bytes(names: list[str], payload: bytes = b"x") -> bytes:
