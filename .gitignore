@@ -37,4 +37,5 @@ services/document-parser/infra/terraform/backend.prod.hcl
 
 # Local working docs (not for review)
 services/document-parser/diagrams/
+services/document-parser/tests/load/assets/
 infra/terraform/.env.pg.floci

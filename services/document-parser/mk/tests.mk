@@ -3,13 +3,14 @@
 # real lifespan-config boot. The pytest targets always scope to tests/ so the
 # legacy slop/ tree can never enter collection.
 
-.PHONY: test test-unit test-integration help-tests
+.PHONY: test test-unit test-integration load-fixtures help-tests
 
 help-tests:
 	@echo "  Tests (mk/tests.mk):"
 	@echo "    test              full suite: unit + integration"
 	@echo "    test-unit         pure logic only, no boot (tests/unit)"
 	@echo "    test-integration  the production app, real lifespan boot (tests/integration)"
+	@echo "    load-fixtures     regenerate the load corpus under tests/load/assets (gitignored)"
 	@echo ""
 
 test:
@@ -20,3 +21,6 @@ test-unit:
 
 test-integration:
 	poetry run pytest tests/integration -q
+
+load-fixtures:
+	poetry run python -m tests.load.generate
