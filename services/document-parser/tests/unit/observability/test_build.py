@@ -8,6 +8,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 from fastapi import FastAPI
+from opentelemetry.sdk.metrics import Counter, Histogram
+from opentelemetry.sdk.metrics.export import AggregationTemporality
 
 from app.config import Settings
 from app.observability import (
@@ -79,6 +81,20 @@ def test_the_wired_build_is_ready_and_instruments_the_app(receiver: str) -> None
         attributes = wired._traces.provider().resource.attributes
         assert attributes["deployment.environment.name"] == "dev"
         assert attributes["service.name"] == "document-parser"
+    finally:
+        wired.shutdown()
+
+
+def test_the_wired_exporter_declares_delta_temporality(receiver: str) -> None:
+    """Delta for counted and histogrammed instruments is the wire position
+    (observability.md's export shape). The periodic reader defers to the
+    exporter's preferred temporality — this pins that linkage where an SDK
+    upgrade could silently regenerate CUMULATIVE counters."""
+    wired = build_observability_service(_settings(otel_exporter_otlp_endpoint=receiver), FastAPI())
+    try:
+        binding = wired._metrics._metric_exporter._preferred_temporality
+        assert binding[Counter] == AggregationTemporality.DELTA
+        assert binding[Histogram] == AggregationTemporality.DELTA
     finally:
         wired.shutdown()
 
