@@ -1,6 +1,5 @@
 # Workers: cross-worker error share, cron sweeper lag, dead-letter growth and
-# broker connectivity. The gauge-driven conditions cover the scrape-fed
-# counters the FROM Metric panels chart.
+# broker connectivity (the scrape-fed counters the FROM Metric panels chart).
 module "workers_error_rate" {
   source = "../modules/alert-condition"
 
@@ -18,10 +17,9 @@ module "workers_error_rate" {
   }
 }
 
-# Sweeps run every CRON_CHECK_INTERVAL_MS (default 900000 = 15m) with jitter, so a
-# lag above 2x the interval means the sweeper is not keeping up, whether or not a
-# tick was logged. Uses the gauge rather than tick counts so it fires on a stalled
-# loop even when log delivery is the thing that broke. Keeps violations 24h.
+# Sweeps run every CRON_CHECK_INTERVAL_MS (15m default) with jitter, so a lag
+# above 2x the interval means a stalled sweeper. Read as a gauge, not tick
+# counts, so it still fires when log delivery is what broke. Keeps 24h.
 module "cron_expiry_lag" {
   source = "../modules/alert-condition"
 

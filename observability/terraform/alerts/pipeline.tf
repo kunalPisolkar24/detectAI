@@ -1,5 +1,5 @@
-# Pipeline: collector export failures to EU. Covers the OTLP relay path the
-# prod stack still routes through.
+# Pipeline: collector export failures to EU along the OTLP relay path the
+# prod stack routes through.
 module "collector_export_failed" {
   source = "../modules/alert-condition"
 

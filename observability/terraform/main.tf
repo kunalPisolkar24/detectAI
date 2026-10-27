@@ -1,5 +1,4 @@
-# Wiring only. The board and alert layers live in their own modules; this
-# root selects the account, the workspace environment label and the alert email.
+# Wiring only: the board and alert layers live in their own modules.
 module "dashboards" {
   source = "./dashboards"
 

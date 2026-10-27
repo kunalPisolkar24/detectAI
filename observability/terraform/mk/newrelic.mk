@@ -1,8 +1,6 @@
 # The New Relic flow. tools/newrelic.py is the only brain: it validates
-# envs/.env, resolves the state plane (Floci emulator via EMULATOR_ENDPOINT,
-# real AWS otherwise, same contract as document-parser) and drives terraform.
-# bootstrap is the one direct aws-CLI step beside terraform itself (create
-# the plane's state bucket).
+# envs/.env, resolves the state plane (Floci via EMULATOR_ENDPOINT, real
+# AWS otherwise — same contract as document-parser) and drives terraform.
 
 .PHONY: check bootstrap plan apply help-newrelic
 

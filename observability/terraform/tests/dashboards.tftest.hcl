@@ -49,9 +49,8 @@ run "boards_render" {
     error_message = "Every dev twin page must keep the prod panel count."
   }
 
-  # Twin contract part 3: same panel coverage, tolerant of layout order — a
-  # twin may reorder panels but never drop one. document-parser's twin is
-  # reordered by design; the other four must match exactly.
+  # Twin contract part 3: same panel coverage, layout order tolerated —
+  # document-parser's twin reorders by design; the other four match exactly.
   assert {
     condition = alltrue([
       for base in ["web", "payment-gateway", "document-parser", "chats"] :

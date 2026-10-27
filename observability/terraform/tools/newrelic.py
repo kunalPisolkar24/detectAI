@@ -1,45 +1,19 @@
 #!/usr/bin/env python3
-"""The credentials brain for the observability Terraform root.
+"""Credentials brain for the observability Terraform root.
 
-Parses envs/.env (gitignored, created by `make env`), validates the New
-Relic credential triple and drives terraform for the dashboards/alerts
-stack. Only check/plan/apply/bootstrap live here:
-offline tasks (fmt/validate/test) run through mk/tests.mk without
-credentials and never touch this script.
+Parses envs/.env (gitignored, created by `make env`), validates the New Relic
+credential triple and drives terraform: check/plan/apply/bootstrap. The
+offline tasks (fmt/validate/test in mk/tests.mk) never touch this script.
+State plane — the same contract as document-parser — is decided by
+EMULATOR_ENDPOINT: set to a URL -> Floci S3 (default bucket, self-heal,
+auto-approve), unset -> real AWS (required versioned bucket, interactive
+confirm).
 
-Validation rules, loud by design:
-  - NEW_RELIC_API_KEY must be a User API key (NRAK-...). The ingest license
-    key (eu01...) that apps use for OTLP does not work for the management
-    API, so a license-shaped value is rejected with that explanation.
-  - NEW_RELIC_ACCOUNT_ID is numeric; NEW_RELIC_REGION is US, EU or JP.
-  - check resolves the account name over GraphQL to catch a
-    valid-looking key pointed at the wrong account before any plan runs.
-
-Credentials and state keys resolve opposite ways, on purpose:
-  - NEW_RELIC_* values: the real shell env wins per key (single-run
-    overrides stay convenient).
-  - TF_STATE_BUCKET / EMULATOR_ENDPOINT / AWS_REGION: envs/.env wins; a
-    conflicting shell export warns and is ignored — the state plane must
-    be reproducible, not per-invocation.
-
-State plane (the same single-flick contract as document-parser) is decided by
-EMULATOR_ENDPOINT in .env:
-  http(s) URL    -> Floci emulator; TF_STATE_BUCKET may stay unset (defaults
-                    to detectai-observability-tfstate), a health probe (2s)
-                    runs before any aws call and a missing bucket self-heals;
-                    apply auto-approves.
-  unset or empty -> real AWS; TF_STATE_BUCKET required, no guessing. A
-                    missing bucket is created + versioned (S3-native state
-                    locking needs it); apply keeps the interactive confirm.
-
-There is no bare ./terraform.tfstate mode: every plan/apply goes through an
-initialized backend, which is what keeps the plane explicit. (mk/tests.mk's
-`init -backend=false` stays offline-only, for validate/test.)
-
-The script's only direct AWS-API steps run through the `aws` CLI: creating
-(and versioning) the state bucket, implicitly before every S3-plane
-terraform call and explicitly via the `bootstrap` verb. Terraform alone
-touches New Relic.
+Credentials and state keys resolve opposite ways, on purpose: NEW_RELIC_*
+shell exports win per key (single-run overrides stay convenient), while
+TF_STATE_BUCKET / EMULATOR_ENDPOINT / AWS_REGION come from envs/.env — a
+conflicting shell export warns and loses, because the state plane must stay
+reproducible, not per-invocation.
 """
 
 from __future__ import annotations
