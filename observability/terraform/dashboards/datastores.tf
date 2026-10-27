@@ -3,7 +3,7 @@ module "datastores" {
   source = "../modules/dashboard"
 
   account_id = var.account_id
-  json = templatefile("${path.module}/prod/datastores.json", {
+  json = templatefile("${path.module}/datastores/prod.json", {
     account_id  = var.account_id
     environment = var.environment
   })

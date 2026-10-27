@@ -3,7 +3,7 @@ module "inference" {
   source = "../modules/dashboard"
 
   account_id = var.account_id
-  json = templatefile("${path.module}/prod/inference.json", {
+  json = templatefile("${path.module}/inference/prod.json", {
     account_id  = var.account_id
     environment = var.environment
   })

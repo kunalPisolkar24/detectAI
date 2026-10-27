@@ -3,7 +3,8 @@
 Publishes **New Relic dashboards + email alerts** as code. EU region (`one.eu.newrelic.com`,
 OTLP `https://otlp.eu01.nr-data.net:443`). Separate Terraform root from
 `infra/terraform` on purpose: dashboards must survive datastore `destroy`, and this
-root is pure New Relic — no `aws` provider, no emulator endpoints.
+root is pure New Relic — no `aws` provider (the only AWS touchpoint is the state
+bucket bootstrap through the `aws` CLI).
 
 ## Layout
 
@@ -14,8 +15,11 @@ observability/
     ├── main.tf           wiring: module "dashboards" + module "alerts"
     ├── variables.tf      account, api key, region, alert email, environment
     ├── outputs.tf        dashboards + alerts passthrough
-    ├── versions.tf       required_providers + backend "local" {}. providers.tf is newrelic only.
-    ├── envs/, backend.*.hcl     tfvars and the backend selection files
+    ├── versions.tf       required_providers + backend "s3" {}. providers.tf is newrelic only.
+    ├── envs/             tfvars + .env.example template (.env gitignored)
+    ├── tools/newrelic.py envs/.env validator + terraform driver (see Usage)
+    ├── mk/               make fragments: local.mk (offline) + newrelic.mk (plane flows)
+    ├── Makefile          aggregates both fragments
     ├── dashboards/       the boards module (see below)
     ├── alerts/           the alerting module (see below)
     ├── modules/dashboard/        one board + its grouping tags
@@ -27,23 +31,25 @@ observability/
   (`newrelic_one_dashboard_json` + `newrelic_entity_tags`), one module call per
   board in per-service files: `web.tf`, `payment-gateway.tf`, `workers.tf`,
   `inference.tf`, `document-parser.tf`, `chats.tf`, plus the platform pair
-  `overview.tf` / `datastores.tf`. The JSON lives in `dashboards/prod/` (8
-  boards) and `dashboards/dev/` (5 twins); prod JSON templates take
-  `account_id` + `environment`, dev JSON hardcodes `dev`.
-- `dashboards/prod/web.json` — one board for the Next.js frontend and BFF
+  `overview.tf` / `datastores.tf`. Each board's JSON sits in a per-service dir
+  next to its wiring file (`web.tf` reads `web/prod.json` + `web/dev.json`):
+  8 prod boards + 5 dev twins (`inference`, `overview`, `datastores` are
+  prod-only by design); prod templates take `account_id` + `environment`,
+  dev JSON hardcodes `dev`.
+- `dashboards/web/prod.json` — one board for the Next.js frontend and BFF
   (`service.name = web`). Pages: `Overview` (request rate, error share, p95,
   Apdex, container CPU/heap), `Service` (RED per route, status split,
   downstream dependency latency and errors, auth failures, AI inference
   latency, rate-limit and cache counters), `Service Logs` (error stream, log
   volume by level, errors by message, recent errors, slow requests) and
   `Infra` (DB query percentiles, cache behaviour, Node runtime, and the
-  Postgres / Redis / RabbitMQ exporter panels). `dev/web.json` is
+  Postgres / Redis / RabbitMQ exporter panels). `web/dev.json` is
   page-for-page identical with `'dev'` hardcoded and ` (dev)` appended to the
   panel titles, like the chats pair.
 - Log pages share one layout across every board: the tables are full width
   (a log message needs the columns) and the two chart panels sit side by side
   at half width.
-- `dashboards/prod/workers.json` — one board for all three worker deployables
+- `dashboards/workers/prod.json` — one board for all three worker deployables
   (`worker-analytics`, `worker-cron`, `worker-payments`), each its own binary,
   container and `service.name`. Pages: `Overview` (cross-worker rollup: throughput,
   errors, broker/cache connectivity, DLQ, cron expiry lag), `Analytics`,
@@ -64,7 +70,7 @@ observability/
   consumers). Worker-side widgets filter `service LIKE 'worker-%'`, so the
   `payment-gateway` copy of `rabbitmq_connection_status` never leaks in;
   exporter widgets facet on `service.name` (`redis-users`, `redis-events`).
-  `dev/workers.json` is page-for-page identical with `'dev'` hardcoded, except
+  `workers/dev.json` is page-for-page identical with `'dev'` hardcoded, except
   for the one panel that only one environment can fill: `Paddle API latency
   and cancels` needs a real call to Paddle's API, which only a user-initiated
   cancellation makes, so the prod board keeps it and the dev board shows
@@ -89,36 +95,57 @@ observability/
 
 ```bash
 cd observability/terraform
-export NEW_RELIC_API_KEY="NRAK-..."   # user key, never commit
-
-terraform init -reconfigure -backend-config=backend.local.hcl
-terraform fmt -check -recursive -diff
-terraform validate
-terraform test                        # mocked, no network
-terraform plan -var-file=envs/prod.tfvars
-terraform apply -var-file=envs/prod.tfvars
+make env            # create envs/.env from envs/.env.example (never overwrites)
+make fmt validate test   # offline — no key needed
+make check          # validate envs/.env + preview the resolved plane (LIVE=1 also resolves the account name)
+make bootstrap      # create the .env plane's state bucket (idempotent, no key needed)
+make plan           # terraform plan against the plane envs/.env selects
+make apply          # terraform apply (auto on Floci, interactive confirm on real AWS)
 ```
 
-(Upgrade path, when applies leave this workstation — see State below.)
+### Credentials
+
+`envs/.env` (gitignored) carries the credential triple the terraform root
+needs; only the key is a real secret:
+
+| `.env` key | Required | Feeds |
+|---|---|---|
+| `NEW_RELIC_API_KEY` | yes — User API key (`NRAK-...`), **not** the ingest license key | `TF_VAR_newrelic_api_key` |
+| `NEW_RELIC_ACCOUNT_ID` | no (default `6428768`) | `TF_VAR_newrelic_account_id` |
+| `NEW_RELIC_REGION` | no (default `EU`) | `TF_VAR_newrelic_region` |
+
+`tools/newrelic.py` is the only brain: it parses the file, rejects an
+ingest-license-key-shaped value, and drives terraform. Exporting
+`NEW_RELIC_API_KEY` in the shell overrides the file for one invocation.
+`LIVE=1 make check` additionally resolves the account name over GraphQL
+(writes nothing) to catch a valid-looking key on the wrong account.
 
 The root `Makefile`'s `obs-*` targets still point at the old `infra/observability`
-path; until they are re-pointed, drive terraform directly with `-chdir=` or
-`cd`. The CI workflow in `ci-workflow/` already runs fmt/validate/test from the
-new directory.
+path; until they are re-pointed, use this component Makefile (`make plan`) or
+drive terraform directly with `-chdir=`. The CI workflow in `ci-workflow/`
+already runs fmt/validate/test from the new directory.
 
 ### State
 
-`backend.local.hcl` selects a plain gitignored file (`terraform.tfstate`);
-`versions.tf` declares `backend "local" {}` for the same default, so a bare
-`init` and the `backend.local.hcl` init converge on one file. `init -reconfigure
--backend-config=backend.local.hcl` is still the explicit door, matching every
-other root in this repo. Real S3 stays the upgrade path, documented in
-`backend.prod.hcl.example`:
+One backend declaration (`backend "s3" {}` in `versions.tf`), one plane per
+run, resolved from `envs/.env` — the same single-flick contract as
+`document-parser/tools/secrets.py` (plane selection, bucket default and
+self-heal). No `backend.*.hcl` files, nothing copied, no extra config — and
+no bare `./terraform.tfstate` mode: a run without an initialized backend
+cannot plan/apply on a declared `s3` backend, so `make init`
+(`-backend=false`) stays offline-only, for validate/test.
 
-```bash
-cp backend.prod.hcl.example backend.prod.hcl    # fill bucket, never commit
-terraform init -migrate-state -backend-config=backend.prod.hcl
-```
+| `.env` keys | Plane | Rules |
+|---|---|---|
+| `EMULATOR_ENDPOINT` set (http(s) URL) | **Floci** | `TF_STATE_BUCKET` may stay empty — defaults to `detectai-observability-tfstate`; a health probe (`/_localstack/health`, 2s) runs before any aws call, so a dead emulator fails with a `make floci-up` hint instead of inside `init`; a missing bucket self-heals (`aws s3 mb` — the emulator's in-memory S3 loses buckets on restart); apply auto-approves. State key `observability/floci/terraform.tfstate` |
+| `EMULATOR_ENDPOINT` empty | **real AWS** | `TF_STATE_BUCKET` required — no default, no guessing on a prod account; a .env-named bucket that is missing is created *and versioned* (S3-native state locking needs it); apply keeps the interactive confirm. State key `observability/terraform.tfstate` |
+
+`AWS_REGION` (default `ap-south-1`) is the state bucket's region;
+`NEW_RELIC_REGION` is the New Relic datacenter — different things, different
+prefixes. `envs/.env` wins over the shell for the three state keys (a
+conflicting shell export warns and is ignored — the state plane must be
+reproducible); `NEW_RELIC_*` credentials work the other way (shell wins per
+key).
 
 **Recovering ownership**: the previous state lived in the Floci emulator's S3
 bucket and did not survive an emulator restart (the bucket was not persisted).
@@ -147,7 +174,7 @@ Apps (`OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`) ->
 OTLP/HTTP to EU with `NEW_RELIC_LICENSE_KEY` (ingest key, from gitignored
 `infra/docker/prod/.env`, never committed). Floci infra panels use exporter
 sidecars (`profiles: [floci]`); prod infra panels use CloudWatch after the AWS
-account link (see `dashboards/prod/datastores.json` note).
+account link (see `dashboards/datastores/prod.json` note).
 
 The workers push only OTLP traces and logs, so their Prometheus metrics need a
 Prometheus scrape: `infra/docker/prod/otel-collector-config.yaml` scrapes
@@ -336,7 +363,7 @@ logs of the same run are unaffected — those are pushed, not scraped.
 
 ## Prod vs dev
 
-| | Prod (`dashboards/prod/`, 8 boards) | Dev twins (`dashboards/dev/`, 5 boards) |
+| | Prod (`<service>/prod.json`, 8 boards) | Dev twins (`<service>/dev.json`, 5 boards) |
 |---|---|---|
 | Board JSON | `${account_id}` + `${environment}` templates | only `${account_id}`; `dev` hardcoded in NRQL and titles |
 | Data source | the prod stack labels `deployment.environment = 'prod'` | pending — the load rigs still stamp `loadtest`, so the twins stay empty until the rig label switches to `dev` (follow-up) |
@@ -353,12 +380,14 @@ logs of the same run are unaffected — those are pushed, not scraped.
   query-shaped panels, which wait for each service's push migration.
 - Switch the load rigs' emission label `deployment.environment = loadtest` ->
   `dev` (rig Makefiles/compose env), which is what feeds the dev twins.
-- Point the root `Makefile`'s `obs-*` targets at `observability/terraform` and
-  add `observability/terraform/backend.prod.hcl` to `.gitignore`.
+- Point the root `Makefile`'s `obs-*` targets at `observability/terraform`.
+- When applies leave this workstation (a CI round): an IAM deploy role scoped
+  to tfstate handling only — the S3 bucket's create/version plus object
+  get/put/delete — and nothing else; until then real-AWS applies stay manual.
 - Service SDK gaps: `chat-service`/`chat-worker` emit no traces yet (metrics/logs only); gateway log records carry `trace.id` only once handlers pass a span-bearing context (stdout + OTLP export already wired).
 - Workers load rigs need `make load-test WORKER=<name> WITH_OBSERVABILITY=1` plus
-  `NEW_RELIC_LICENSE_KEY` in the shell before `dev/workers.json` shows data; the
+  `NEW_RELIC_LICENSE_KEY` in the shell before `workers/dev.json` shows data; the
   default `WITH_OBSERVABILITY=0` stays offline.
 - The web load rig works the same way: `make load-test WITH_OBSERVABILITY=1`
-  in `apps/web` before `dev/web.json` shows data.
+  in `apps/web` before `web/dev.json` shows data.
 - Browser RUM, Synthetics, SLO objects.

@@ -3,7 +3,7 @@ module "document_parser" {
   source = "../modules/dashboard"
 
   account_id = var.account_id
-  json = templatefile("${path.module}/prod/document-parser.json", {
+  json = templatefile("${path.module}/document-parser/prod.json", {
     account_id  = var.account_id
     environment = var.environment
   })
@@ -16,7 +16,7 @@ module "document_parser_dev" {
   source = "../modules/dashboard"
 
   account_id = var.account_id
-  json = templatefile("${path.module}/dev/document-parser.json", {
+  json = templatefile("${path.module}/document-parser/dev.json", {
     account_id = var.account_id
   })
   scope = "document-parser"

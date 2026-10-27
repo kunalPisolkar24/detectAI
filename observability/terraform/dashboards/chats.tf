@@ -3,7 +3,7 @@ module "chats" {
   source = "../modules/dashboard"
 
   account_id = var.account_id
-  json = templatefile("${path.module}/prod/chats.json", {
+  json = templatefile("${path.module}/chats/prod.json", {
     account_id  = var.account_id
     environment = var.environment
   })
@@ -16,7 +16,7 @@ module "chats_dev" {
   source = "../modules/dashboard"
 
   account_id = var.account_id
-  json = templatefile("${path.module}/dev/chats.json", {
+  json = templatefile("${path.module}/chats/dev.json", {
     account_id = var.account_id
   })
   scope = "chats"

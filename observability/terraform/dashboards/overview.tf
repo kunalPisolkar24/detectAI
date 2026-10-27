@@ -3,7 +3,7 @@ module "overview" {
   source = "../modules/dashboard"
 
   account_id = var.account_id
-  json = templatefile("${path.module}/prod/overview.json", {
+  json = templatefile("${path.module}/overview/prod.json", {
     account_id  = var.account_id
     environment = var.environment
   })

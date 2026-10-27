@@ -3,7 +3,7 @@ module "payment_gateway" {
   source = "../modules/dashboard"
 
   account_id = var.account_id
-  json = templatefile("${path.module}/prod/payment-gateway.json", {
+  json = templatefile("${path.module}/payment-gateway/prod.json", {
     account_id  = var.account_id
     environment = var.environment
   })
@@ -16,7 +16,7 @@ module "payment_gateway_dev" {
   source = "../modules/dashboard"
 
   account_id = var.account_id
-  json = templatefile("${path.module}/dev/payment-gateway.json", {
+  json = templatefile("${path.module}/payment-gateway/dev.json", {
     account_id = var.account_id
   })
   scope = "payment-gateway"
