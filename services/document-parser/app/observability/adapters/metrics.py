@@ -53,9 +53,14 @@ class MetricsAdapter:
         return self._provider.get_meter(__name__)
 
     def shutdown(self) -> None:
-        """Final metrics export; idempotent."""
+        """Final metrics export inside the flush cap, then reader stop; idempotent.
+
+        The bound matters: the reader's own default shutdown budget is 30 s,
+        several of which the worker can spend mid-retry schedule at a dead
+        endpoint — the flush cap keeps the drain inside the graceful window.
+        """
         if self._provider is None:
             return
         provider = self._provider
         self._provider = None
-        provider.shutdown()
+        provider.shutdown(timeout_millis=_FLUSH_TIMEOUT_MILLIS)

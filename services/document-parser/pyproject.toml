@@ -35,3 +35,4 @@ extend-exclude = ["slop"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+testpaths = ["tests"]

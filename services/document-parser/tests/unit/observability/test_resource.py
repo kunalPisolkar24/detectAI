@@ -9,3 +9,6 @@ def test_resource_carries_the_three_dashboard_facets() -> None:
     assert resource.attributes["service.name"] == "document-parser"
     assert resource.attributes["service.version"] == "0.1.0"
     assert resource.attributes["deployment.environment.name"] == "prod"
+    # The legacy key rides too: without a collector to upsert it, direct
+    # pushes would be invisible to the boards' legacy-key NRQL filters.
+    assert resource.attributes["deployment.environment"] == "prod"

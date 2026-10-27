@@ -30,6 +30,7 @@ class LogsAdapter:
         self._log_exporter = log_exporter
         self._provider: LoggerProvider | None = None
         self._handler: LoggingHandler | None = None
+        self._processor: BatchLogRecordProcessor | None = None
 
     def start(self, resource: Resource) -> None:
         """A batch-processed provider whose handler rides the root logger —
@@ -37,25 +38,33 @@ class LogsAdapter:
         if self._provider is not None:
             raise RuntimeError("LogsAdapter already started")
         provider = LoggerProvider(resource=resource)
-        provider.add_log_record_processor(
-            BatchLogRecordProcessor(
-                self._log_exporter, export_timeout_millis=_FLUSH_TIMEOUT_MILLIS
-            )
+        processor = BatchLogRecordProcessor(
+            self._log_exporter, export_timeout_millis=_FLUSH_TIMEOUT_MILLIS
         )
+        provider.add_log_record_processor(processor)
         handler = LoggingHandler(logger_provider=provider)
         logging.getLogger().addHandler(handler)
         for name in _UVICORN_LOGGERS:
             logging.getLogger(name).propagate = False
+        self._processor = processor
         self._provider = provider
         self._handler = handler
 
     def shutdown(self) -> None:
-        """Detach the handler first, then flush — the final boot log line,
-        queued before this runs, rides out with the records; idempotent."""
+        """Detach the handler first, then flush and stop the batch worker —
+        the final boot log line, queued before this runs, rides out with the
+        records; and like the traces adapter the worker stop is the point:
+        left running it keeps grinding the exporter's retry schedule past the
+        drain, stretching the exit at a dead endpoint. Idempotent."""
         if self._provider is None:
             return
         logging.getLogger().removeHandler(self._handler)
         provider = self._provider
+        processor = self._processor
         self._provider = None
+        self._processor = None
         self._handler = None
-        provider.force_flush(timeout_millis=_FLUSH_TIMEOUT_MILLIS)
+        try:
+            provider.force_flush(timeout_millis=_FLUSH_TIMEOUT_MILLIS)
+        finally:
+            processor.shutdown()

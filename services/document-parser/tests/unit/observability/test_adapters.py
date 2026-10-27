@@ -20,6 +20,35 @@ from tests.unit.observability.memory import (
 )
 
 
+class CountingSpanExporter(MemorySpanExporter):
+    """The memory exporter plus a shutdown counter — the teardown's receipt."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.shutdowns = 0
+
+    def shutdown(self) -> None:
+        self.shutdowns += 1
+
+
+class CountingMetricExporter(MemoryMetricExporter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.shutdowns = 0
+
+    def shutdown(self, timeout: float = 30_000, **kwargs) -> None:
+        self.shutdowns += 1
+
+
+class CountingLogExporter(MemoryLogExporter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.shutdowns = 0
+
+    def shutdown(self) -> None:
+        self.shutdowns += 1
+
+
 @pytest.fixture(name="resource")
 def _resource() -> Resource:
     return Resource.create({"service.name": "document-parser"})
@@ -46,6 +75,22 @@ def test_traces_adapter_flushes_its_spans_on_shutdown(resource: Resource) -> Non
 
     assert [span.name for span in exporter.finished_spans] == ["one"]
     assert exporter.finished_spans[0].attributes["mime_type"] == "application/pdf"
+
+
+def test_traces_adapter_stops_its_batch_worker_on_shutdown(
+    resource: Resource,
+) -> None:
+    exporter = CountingSpanExporter()
+    adapter = TracesAdapter(exporter, sample_ratio=1.0)
+
+    adapter.start(resource)
+    with adapter.provider().get_tracer("test").start_span("one"):
+        pass
+    adapter.shutdown()
+
+    assert exporter.shutdowns == 1
+    adapter.shutdown()
+    assert exporter.shutdowns == 1
 
 
 def test_traces_adapter_rejects_a_double_start(resource: Resource) -> None:
@@ -85,6 +130,18 @@ def test_metrics_adapter_exports_a_final_batch_on_shutdown(
             for metric in scope_batch.metrics] == [
         ("tally", [{"mime_type": "application/pdf"}]),
     ]
+
+
+def test_metrics_adapter_stops_its_exporter_on_shutdown(resource: Resource) -> None:
+    exporter = CountingMetricExporter()
+    adapter = MetricsAdapter(exporter, export_interval_millis=3600_000)
+
+    adapter.start(resource)
+    adapter.shutdown()
+
+    assert exporter.shutdowns == 1
+    adapter.shutdown()
+    assert exporter.shutdowns == 1
 
 
 def test_metrics_adapter_rejects_a_double_start(resource: Resource) -> None:
@@ -132,6 +189,21 @@ def test_logs_adapter_detaches_its_handler_from_the_root_logger(
 
     app_log.info("after the drain")
     assert len(exporter.finished_records) == flushed
+
+
+def test_logs_adapter_stops_its_batch_worker_on_shutdown(
+    resource: Resource, app_log: logging.Logger
+) -> None:
+    exporter = CountingLogExporter()
+    adapter = LogsAdapter(exporter)
+
+    adapter.start(resource)
+    app_log.info("payload ready")
+    adapter.shutdown()
+
+    assert exporter.shutdowns == 1
+    adapter.shutdown()
+    assert exporter.shutdowns == 1
 
 
 def test_logs_adapter_rejects_a_double_start(resource: Resource) -> None:

@@ -14,15 +14,20 @@ from opentelemetry.sdk.resources import Resource
 def build_resource(
     service_name: str, service_version: str, environment: str
 ) -> Resource:
-    """service.name, service.version, deployment.environment.name = the flick.
+    """service.name, service.version, and both deployment labels = the flick.
 
-    The flick (dev/prod) is the deployment.environment.name vocabulary New
-    Relic dashboards split on; the factory passes it through from settings.
+    The flick (dev/prod) lands on deployment.environment.name — the vocabulary
+    the app and the docs ship — and on the legacy deployment.environment key
+    the New Relic dashboards and alerts filter on. The stamping is done twice
+    on purpose: without a collector in the path to upsert the label, direct
+    pushes would otherwise be invisible to every board whose NRQL filters the
+    legacy key.
     """
     return Resource.create(
         {
             "service.name": service_name,
             "service.version": service_version,
+            "deployment.environment": environment,
             "deployment.environment.name": environment,
         }
     )

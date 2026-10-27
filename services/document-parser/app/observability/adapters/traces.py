@@ -23,6 +23,7 @@ class TracesAdapter:
         self._span_exporter = span_exporter
         self._sample_ratio = sample_ratio
         self._provider: TracerProvider | None = None
+        self._processor: BatchSpanProcessor | None = None
 
     def start(self, resource: Resource) -> None:
         """A ratio-sampled provider over a batch processor, set once."""
@@ -32,11 +33,11 @@ class TracesAdapter:
             resource=resource,
             sampler=ParentBased(TraceIdRatioBased(self._sample_ratio)),
         )
-        provider.add_span_processor(
-            BatchSpanProcessor(
-                self._span_exporter, export_timeout_millis=_FLUSH_TIMEOUT_MILLIS
-            )
+        processor = BatchSpanProcessor(
+            self._span_exporter, export_timeout_millis=_FLUSH_TIMEOUT_MILLIS
         )
+        provider.add_span_processor(processor)
+        self._processor = processor
         self._provider = provider
 
     def provider(self) -> TracerProvider:
@@ -48,9 +49,22 @@ class TracesAdapter:
         return self._provider
 
     def shutdown(self) -> None:
-        """Force-flush the queued spans; idempotent."""
+        """Force-flush the queued spans, then stop the batch worker; idempotent.
+
+        Stopping is not an optional polish: flush only leaves the daemon worker
+        busy on the exporter's retry schedule, so the process would linger past
+        the drain spewing transient errors — exactly the Ctrl+C the service
+        never seemed to survive at a dead endpoint.
+        """
         if self._provider is None:
             return
         provider = self._provider
+        processor = self._processor
         self._provider = None
-        provider.force_flush(timeout_millis=_FLUSH_TIMEOUT_MILLIS)
+        self._processor = None
+        try:
+            provider.force_flush(timeout_millis=_FLUSH_TIMEOUT_MILLIS)
+        finally:
+            # A flush failure must not skip the stop — the worker would keep
+            # retrying schedules the queue no longer receives.
+            processor.shutdown()
