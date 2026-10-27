@@ -18,7 +18,7 @@ observability/
     ├── versions.tf       required_providers + backend "s3" {}. providers.tf is newrelic only.
     ├── envs/             tfvars + .env.example template (.env gitignored)
     ├── tools/newrelic.py envs/.env validator + terraform driver (see Usage)
-    ├── mk/               make fragments: local.mk (offline) + newrelic.mk (plane flows)
+    ├── mk/               make fragments: tests.mk (offline) + newrelic.mk (plane flows)
     ├── Makefile          aggregates both fragments
     ├── dashboards/       the boards module (see below)
     ├── alerts/           the alerting module (see below)
@@ -97,7 +97,7 @@ observability/
 cd observability/terraform
 make env            # create envs/.env from envs/.env.example (never overwrites)
 make fmt validate test   # offline — no key needed
-make check          # validate envs/.env + preview the resolved plane (LIVE=1 also resolves the account name)
+make check          # validate envs/.env, preview the plane and resolve the account live
 make bootstrap      # create the .env plane's state bucket (idempotent, no key needed)
 make plan           # terraform plan against the plane envs/.env selects
 make apply          # terraform apply (auto on Floci, interactive confirm on real AWS)
@@ -117,7 +117,7 @@ needs; only the key is a real secret:
 `tools/newrelic.py` is the only brain: it parses the file, rejects an
 ingest-license-key-shaped value, and drives terraform. Exporting
 `NEW_RELIC_API_KEY` in the shell overrides the file for one invocation.
-`LIVE=1 make check` additionally resolves the account name over GraphQL
+`make check` also resolves the account name over GraphQL
 (writes nothing) to catch a valid-looking key on the wrong account.
 
 The root `Makefile`'s `obs-*` targets still point at the old `infra/observability`

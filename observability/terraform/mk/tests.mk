@@ -1,11 +1,11 @@
-# Offline terraform tasks; nothing here needs a New Relic key. init clears
+# Offline terraform checks; nothing here needs a New Relic key. init clears
 # the recorded backend first: a plane run (Floci or real AWS) leaves an S3
 # record in .terraform/ that -backend=false init would still consult.
 
-.PHONY: env fmt init validate test help-local
+.PHONY: env fmt init validate test help-tests
 
-help-local:
-	@echo "  Local (mk/local.mk):"
+help-tests:
+	@echo "  Tests (mk/tests.mk):"
 	@echo "    env        create envs/.env from envs/.env.example if missing"
 	@echo "    fmt        terraform fmt -check -recursive -diff"
 	@echo "    init       terraform init -backend=false (offline, for validate/test)"

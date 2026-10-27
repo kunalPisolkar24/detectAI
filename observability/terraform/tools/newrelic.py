@@ -3,8 +3,8 @@
 
 Parses envs/.env (gitignored, created by `make env`), validates the New
 Relic credential triple and drives terraform for the dashboards/alerts
-stack. Only check/plan/apply/plan-local/apply-local/bootstrap live here:
-offline tasks (fmt/validate/test) run through mk/local.mk without
+stack. Only check/plan/apply/bootstrap live here:
+offline tasks (fmt/validate/test) run through mk/tests.mk without
 credentials and never touch this script.
 
 Validation rules, loud by design:
@@ -12,7 +12,7 @@ Validation rules, loud by design:
     key (eu01...) that apps use for OTLP does not work for the management
     API, so a license-shaped value is rejected with that explanation.
   - NEW_RELIC_ACCOUNT_ID is numeric; NEW_RELIC_REGION is US, EU or JP.
-  - check --live resolves the account name over GraphQL to catch a
+  - check resolves the account name over GraphQL to catch a
     valid-looking key pointed at the wrong account before any plan runs.
 
 Credentials and state keys resolve opposite ways, on purpose:
@@ -33,7 +33,7 @@ EMULATOR_ENDPOINT in .env:
                     locking needs it); apply keeps the interactive confirm.
 
 There is no bare ./terraform.tfstate mode: every plan/apply goes through an
-initialized backend, which is what keeps the plane explicit. (mk/local.mk's
+initialized backend, which is what keeps the plane explicit. (mk/tests.mk's
 `init -backend=false` stays offline-only, for validate/test.)
 
 The script's only direct AWS-API steps run through the `aws` CLI: creating
@@ -195,7 +195,7 @@ def live_check(config: dict[str, str | None]) -> None:
         die(f"New Relic API answered {err.code} ({err.reason})", fix)
     except urllib.error.URLError as err:
         die(f"cannot reach {GRAPHQL_HOSTS[region]}: {err.reason}",
-            "check the network, then retry make check LIVE=1")
+            "check the network, then retry make check")
 
     account = (body.get("data") or {}).get("actor", {}).get("account")
     if account is None:
@@ -511,10 +511,8 @@ def main() -> int:
     verbs = parser.add_subparsers(dest="command", required=True)
     check = verbs.add_parser(
         "check",
-        help="validate envs/.env and preview the resolved plane; --live also resolves the account name",
+        help="validate envs/.env, preview the resolved plane and resolve the account name live",
     )
-    check.add_argument("--live", action="store_true",
-                       help="one GraphQL call to api.<region>.newrelic.com (writes nothing)")
     verbs.add_parser("plan", help="terraform plan against the plane envs/.env selects (Floci or real AWS)")
     verbs.add_parser("apply", help="terraform apply (auto on Floci, interactive confirm on real AWS)")
     verbs.add_parser("bootstrap", help="create the .env plane's state bucket via the aws CLI (idempotent, no key needed)")
@@ -550,8 +548,7 @@ def main() -> int:
             return 1
         describe(config)
         describe_plane(file_values)
-        if args.live:
-            live_check(config)
+        live_check(config)
         return 0
 
     errors = validate_config(config) + state_errors
