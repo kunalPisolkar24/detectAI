@@ -37,14 +37,5 @@ jobs:
         with:
           terraform_version: "1.9.8"
 
-      - name: Check formatting
-        run: terraform fmt -check -recursive -diff
-
-      - name: Init (no backend)
-        run: terraform init -backend=false
-
-      - name: Validate
-        run: terraform validate
-
-      - name: Unit tests (mocked)
-        run: terraform test
+      - name: Offline checks (fmt / init / validate / test)
+        run: make fmt init validate test

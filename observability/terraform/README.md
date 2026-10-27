@@ -10,7 +10,6 @@ bucket bootstrap through the `aws` CLI).
 
 ```
 observability/
-├── ci-workflow/          CI workflow source (fmt / validate / test)
 └── terraform/            the root
     ├── main.tf           wiring: module "dashboards" + module "alerts"
     ├── variables.tf      account, api key, region, alert email, environment
@@ -122,8 +121,8 @@ ingest-license-key-shaped value, and drives terraform. Exporting
 
 The root `Makefile`'s `obs-*` targets still point at the old `infra/observability`
 path; until they are re-pointed, use this component Makefile (`make plan`) or
-drive terraform directly with `-chdir=`. The CI workflow in `ci-workflow/`
-already runs fmt/validate/test from the new directory.
+drive terraform directly with `-chdir=`. CI (`.github/workflows/observability.yaml`)
+runs the same offline gate (`make fmt init validate test`).
 
 ### State
 
