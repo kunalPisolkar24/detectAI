@@ -1,7 +1,7 @@
 variable "newrelic_account_id" {
   description = "New Relic account ID. Prefer NEW_RELIC_ACCOUNT_ID env; this var is the explicit fallback."
   type        = number
-  default     = 6428768
+  default     = 123456
 
   validation {
     condition     = var.newrelic_account_id > 0

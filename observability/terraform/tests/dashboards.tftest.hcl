@@ -1,7 +1,7 @@
 mock_provider "newrelic" {}
 
 variables {
-  newrelic_account_id = 6428768
+  newrelic_account_id = 123456
   newrelic_api_key    = "NRAK-TEST-KEY-DO-NOT-USE"
   newrelic_region     = "EU"
   alert_email         = "kpisolkar24@gmail.com"

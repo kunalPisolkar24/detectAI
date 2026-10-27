@@ -35,6 +35,7 @@ ENV_FILE = TF_DIR / "envs" / ".env"
 
 REGION_DEFAULT = "ap-south-1"
 DEFAULT_STATE_BUCKET = "detectai-observability-tfstate"
+MOCK_ACCOUNT_ID = 123456
 FLOCI_STATE_KEY = "observability/floci/terraform.tfstate"
 PROD_STATE_KEY = "observability/terraform.tfstate"
 
@@ -143,14 +144,14 @@ def describe(config: dict[str, str | None]) -> None:
     source = "shell" if os.environ.get("NEW_RELIC_API_KEY") else "envs/.env"
     print(f"{ENV_FILE}:")
     print(f"  NEW_RELIC_API_KEY     {masked(config['api_key'])} (from {source})")
-    print(f"  NEW_RELIC_ACCOUNT_ID  {config['account_id'] or '(default 6428768)'}")
+    print(f"  NEW_RELIC_ACCOUNT_ID  {config['account_id'] or MOCK_ACCOUNT_ID} (mock — set a real account ID)")
     print(f"  NEW_RELIC_REGION      {region}")
 
 
 def live_check(config: dict[str, str | None]) -> None:
     """One GraphQL round-trip proving the key and the account fit together."""
     region = (config["region"] or "EU").upper()
-    account_id = int(config["account_id"] or 6428768)
+    account_id = int(config["account_id"] or MOCK_ACCOUNT_ID)
     payload = json.dumps({
         "query": "query($id: Int!) { actor { account(id: $id) { name } } }",
         "variables": {"id": account_id},
