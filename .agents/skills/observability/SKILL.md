@@ -1,5 +1,5 @@
 ---
-name: Observability
+name: observability
 description: DetectAI's New Relic observability — how telemetry flows to New Relic EU and how dashboards and alerts are authored and published as Terraform in observability/terraform. Use when adding or changing boards, panels, NRQL widgets or alerts, wiring or checking service telemetry, streaming load tests to New Relic, or discussing observability.
 ---
 
