@@ -32,24 +32,24 @@ observability/
   board in per-service files: `web.tf`, `payment-gateway.tf`, `workers.tf`,
   `inference.tf`, `document-parser.tf`, `chats.tf`, plus the platform pair
   `overview.tf` / `datastores.tf`. Each board's JSON sits in a per-service dir
-  next to its wiring file (`web.tf` reads `web/prod.json` + `web/dev.json`):
+  next to its wiring file (`web.tf` reads `web/prod.tftpl` + `web/dev.tftpl`):
   8 prod boards + 5 dev twins (`inference`, `overview`, `datastores` are
   prod-only by design); prod templates take `account_id` + `environment`,
   dev JSON hardcodes `dev`.
-- `dashboards/web/prod.json` — one board for the Next.js frontend and BFF
+- `dashboards/web/prod.tftpl` — one board for the Next.js frontend and BFF
   (`service.name = web`). Pages: `Overview` (request rate, error share, p95,
   Apdex, container CPU/heap), `Service` (RED per route, status split,
   downstream dependency latency and errors, auth failures, AI inference
   latency, rate-limit and cache counters), `Service Logs` (error stream, log
   volume by level, errors by message, recent errors, slow requests) and
   `Infra` (DB query percentiles, cache behaviour, Node runtime, and the
-  Postgres / Redis / RabbitMQ exporter panels). `web/dev.json` is
+  Postgres / Redis / RabbitMQ exporter panels). `web/dev.tftpl` is
   page-for-page identical with `'dev'` hardcoded and ` (dev)` appended to the
   panel titles, like the chats pair.
 - Log pages share one layout across every board: the tables are full width
   (a log message needs the columns) and the two chart panels sit side by side
   at half width.
-- `dashboards/workers/prod.json` — one board for all three worker deployables
+- `dashboards/workers/prod.tftpl` — one board for all three worker deployables
   (`worker-analytics`, `worker-cron`, `worker-payments`), each its own binary,
   container and `service.name`. Pages: `Overview` (cross-worker rollup: throughput,
   errors, broker/cache connectivity, DLQ, cron expiry lag), `Analytics`,
@@ -70,7 +70,7 @@ observability/
   consumers). Worker-side widgets filter `service LIKE 'worker-%'`, so the
   `payment-gateway` copy of `rabbitmq_connection_status` never leaks in;
   exporter widgets facet on `service.name` (`redis-users`, `redis-events`).
-  `workers/dev.json` is page-for-page identical with `'dev'` hardcoded, except
+  `workers/dev.tftpl` is page-for-page identical with `'dev'` hardcoded, except
   for the one panel that only one environment can fill: `Paddle API latency
   and cancels` needs a real call to Paddle's API, which only a user-initiated
   cancellation makes, so the prod board keeps it and the dev board shows
@@ -174,7 +174,7 @@ Apps (`OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`) ->
 OTLP/HTTP to EU with `NEW_RELIC_LICENSE_KEY` (ingest key, from gitignored
 `infra/docker/prod/.env`, never committed). Floci infra panels use exporter
 sidecars (`profiles: [floci]`); prod infra panels use CloudWatch after the AWS
-account link (see `dashboards/datastores/prod.json` note).
+account link (see `dashboards/datastores/prod.tftpl` note).
 
 The workers push only OTLP traces and logs, so their Prometheus metrics need a
 Prometheus scrape: `infra/docker/prod/otel-collector-config.yaml` scrapes
@@ -363,7 +363,7 @@ logs of the same run are unaffected — those are pushed, not scraped.
 
 ## Prod vs dev
 
-| | Prod (`<service>/prod.json`, 8 boards) | Dev twins (`<service>/dev.json`, 5 boards) |
+| | Prod (`<service>/prod.tftpl`, 8 boards) | Dev twins (`<service>/dev.tftpl`, 5 boards) |
 |---|---|---|
 | Board JSON | `${account_id}` + `${environment}` templates | only `${account_id}`; `dev` hardcoded in NRQL and titles |
 | Data source | the prod stack labels `deployment.environment = 'prod'` | pending — the load rigs still stamp `loadtest`, so the twins stay empty until the rig label switches to `dev` (follow-up) |
@@ -373,7 +373,7 @@ logs of the same run are unaffected — those are pushed, not scraped.
 
 ## Follow-ups (not in v1)
 
-- Link AWS account (`newrelic_cloud_aws_link_account`) + enable RDS/DocDB/ElastiCache/MQ integrations, then fill CloudWatch panels in `datastores.json`.
+- Link AWS account (`newrelic_cloud_aws_link_account`) + enable RDS/DocDB/ElastiCache/MQ integrations, then fill CloudWatch panels in `datastores/prod.tftpl`.
 - Drop the OTLP collector: services push to New Relic directly
   (`document-parser` is the in-repo reference), and the `pipeline` policy +
   `collector_export_failed` condition lose their data source; boards keep their
@@ -386,8 +386,8 @@ logs of the same run are unaffected — those are pushed, not scraped.
   get/put/delete — and nothing else; until then real-AWS applies stay manual.
 - Service SDK gaps: `chat-service`/`chat-worker` emit no traces yet (metrics/logs only); gateway log records carry `trace.id` only once handlers pass a span-bearing context (stdout + OTLP export already wired).
 - Workers load rigs need `make load-test WORKER=<name> WITH_OBSERVABILITY=1` plus
-  `NEW_RELIC_LICENSE_KEY` in the shell before `workers/dev.json` shows data; the
+  `NEW_RELIC_LICENSE_KEY` in the shell before `workers/dev.tftpl` shows data; the
   default `WITH_OBSERVABILITY=0` stays offline.
 - The web load rig works the same way: `make load-test WITH_OBSERVABILITY=1`
-  in `apps/web` before `web/dev.json` shows data.
+  in `apps/web` before `web/dev.tftpl` shows data.
 - Browser RUM, Synthetics, SLO objects.

@@ -4,7 +4,7 @@ module "workers" {
   source = "../modules/dashboard"
 
   account_id = var.account_id
-  json = templatefile("${path.module}/workers/prod.json", {
+  json = templatefile("${path.module}/workers/prod.tftpl", {
     account_id  = var.account_id
     environment = var.environment
   })
@@ -17,7 +17,7 @@ module "workers_dev" {
   source = "../modules/dashboard"
 
   account_id = var.account_id
-  json = templatefile("${path.module}/workers/dev.json", {
+  json = templatefile("${path.module}/workers/dev.tftpl", {
     account_id = var.account_id
   })
   scope = "workers"

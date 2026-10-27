@@ -4,7 +4,7 @@ module "web" {
   source = "../modules/dashboard"
 
   account_id = var.account_id
-  json = templatefile("${path.module}/web/prod.json", {
+  json = templatefile("${path.module}/web/prod.tftpl", {
     account_id  = var.account_id
     environment = var.environment
   })
@@ -17,7 +17,7 @@ module "web_dev" {
   source = "../modules/dashboard"
 
   account_id = var.account_id
-  json = templatefile("${path.module}/web/dev.json", {
+  json = templatefile("${path.module}/web/dev.tftpl", {
     account_id = var.account_id
   })
   scope = "web"
