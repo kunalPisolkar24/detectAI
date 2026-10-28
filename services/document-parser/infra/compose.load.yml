@@ -1,8 +1,9 @@
 # Load rig: document-parser + k6 on an isolated network. Nothing is published
 # to the host: k6 reaches the parser over the rig network, and `make load-e2e`
 # reuses this file with --no-deps to run the k6 container alone against any
-# deployment. Driven by .env.load (--env-file, see .env.load.example): the
-# Makefile resolves SCENARIO -> K6_SCRIPT, the scripts read the rest.
+# deployment. Driven by infra/.env.load (compose --env-file, see
+# infra/.env.load.example for the template): the Makefile resolves SCENARIO ->
+# K6_SCRIPT, the scripts read the rest.
 name: document-parser-load
 
 services:
@@ -14,7 +15,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - ENV_TYPE=dev
-      # One shared key from .env.load arms the parser's guard and feeds the
+      # One shared key from infra/.env.load arms the parser's guard and feeds the
       # k6 header, so the negative scenario's 401 cases are real here.
       - API_KEY=${PARSE_API_KEY:-}
     healthcheck:

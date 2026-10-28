@@ -31,14 +31,14 @@ PORT=8000 make up
 
 ## Load + e2e
 
-One `.env.load` (copy `.env.load.example`) drives both commands; the tests
-only send traffic and assert responses. See [load/README.md](load/README.md)
-for the scenario set.
+One `infra/.env.load` (copy `infra/.env.load.example`) drives both commands;
+the tests only send traffic and assert responses. See
+[load/README.md](load/README.md) for the scenario set.
 
 ```sh
-make load-env             # creates .env.load from .env.load.example if missing
+make load-env             # creates infra/.env.load from the example if missing
 make load-test            # container rig: parser + k6 on an isolated network
-make load-e2e             # k6 only, against whatever .env.load's API_URL names
+make load-e2e             # k6 only, against whatever infra/.env.load's API_URL names
                           # (make run, a docker stack, a Lambda URL, prod)
 make load-down
 ```

@@ -1,20 +1,21 @@
 # Load + e2e testing
 
-k6 suites for the document parser. One `.env.load` (copy `.env.load.example`)
-drives both commands; the tests only send traffic and assert responses — the
-service under test is responsible for its own observability.
+k6 suites for the document parser. One `infra/.env.load` (copy the template
+`infra/.env.load.example`) drives both commands; the tests only send traffic
+and assert responses — the service under test is responsible for its own
+observability.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `make load-test` | Provisions the container rig (`infra/compose.load.yml`: parser + k6 on an isolated network, no host ports) and runs the scenario against it |
-| `make load-e2e` | Runs the k6 container only (`run --rm --no-deps`) against whatever `.env.load`'s `API_URL` names — `make run`, a docker stack, a Lambda function URL, prod |
+| `make load-e2e` | Runs the k6 container only (`run --rm --no-deps`) against whatever `infra/.env.load`'s `API_URL` names — `make run`, a docker stack, a Lambda function URL, prod |
 | `make load-down` | Removes the rig and any e2e-run leftovers |
 
-`SCENARIO` picks the script: the CLI value wins, then the `.env.load` value,
-then `smoke`. Every other knob lives in `.env.load`; a CLI shape key
-(`VUS=`, `ITERATIONS=`...) stays as an escape hatch and wins over the file.
+`SCENARIO` picks the script: the CLI value wins, then the `infra/.env.load`
+value, then `smoke`. Every other knob lives in `infra/.env.load`; a CLI shape
+key (`VUS=`, `ITERATIONS=`...) stays as an escape hatch and wins over the file.
 
 ## Scenarios
 
@@ -36,10 +37,10 @@ the 401 guard itself.
 ## Knobs
 
 Scripts resolve each knob in three steps (`load/lib/config.js`): the
-scenario-specific `DOCPARSER_LOAD_*` key first, then the `.env.load` generic
+scenario-specific `DOCPARSER_LOAD_*` key first, then the `infra/.env.load` generic
 (`STAGES`, `ITERATIONS`, `DURATION`, `VUS`, `RPS`, `MAX_VUS`), then the
 built-in default. Target and budget keys are always their explicit
-`DOCPARSER_LOAD_*` names. See `.env.load.example` for the full list.
+`DOCPARSER_LOAD_*` names. See `infra/.env.load.example` for the full list.
 
 Threshold breaches make k6 exit non-zero, and both `load-test`
 (`--exit-code-from k6`) and `load-e2e` (exit of `run`) propagate that to the
