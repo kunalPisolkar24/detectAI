@@ -122,7 +122,7 @@ export function getRuntimeConfig() {
       baseUrl: (__ENV.API_URL || "http://document-parser:8000").replace(/\/$/, ""),
       // The shared key as x-api-key; empty means the header is not sent and
       // every guarded route answers 401 (the harness fails loud).
-      apiKey: (__ENV.PARSE_API_KEY || "").trim(),
+      apiKey: (__ENV.API_KEY || "").trim(),
       profiles: readList("DOCPARSER_LOAD_PROFILES", DEFAULT_PROFILES),
       requestTimeout,
       requestTimeoutMs: parseDurationMs(requestTimeout, "DOCPARSER_LOAD_REQUEST_TIMEOUT"),

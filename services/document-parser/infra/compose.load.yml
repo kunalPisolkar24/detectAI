@@ -1,10 +1,13 @@
 # Load rig: document-parser + k6 on an isolated network. Nothing is published
-# to the host: k6 reaches the parser over the rig network, and `make load-e2e`
-# reuses this file with --no-deps to run the k6 container alone against any
-# deployment. Driven by infra/.env.load (compose --env-file, see
-# infra/.env.load.example for the template): the Makefile resolves SCENARIO ->
-# K6_SCRIPT, the scripts read the rest.
+# to the host: k6 reaches the parser over the rig network. Both services take
+# the whole env plane from infra/.env.load (env_file), so every knob — target,
+# key, shape, budgets, limits — lives in that file and nothing is hardcoded
+# here. `make load-e2e` runs the k6 template alone (compose.k6.yml) against an
+# external target instead.
 name: document-parser-load
+
+include:
+  - compose.k6.yml
 
 services:
   document-parser:
@@ -12,12 +15,8 @@ services:
       context: ..
       dockerfile: Dockerfile
     stop_grace_period: 15s
-    environment:
-      - PYTHONUNBUFFERED=1
-      - ENV_TYPE=dev
-      # One shared key from infra/.env.load arms the parser's guard and feeds the
-      # k6 header, so the negative scenario's 401 cases are real here.
-      - API_KEY=${PARSE_API_KEY:-}
+    env_file:
+      - .env.load
     healthcheck:
       # python-slim ships no curl; the same probe the Dockerfile uses.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
@@ -28,62 +27,11 @@ services:
     networks:
       - loadnet
 
+  # The rig's only override: k6 waits for the parser to answer its probe.
   k6:
-    image: grafana/k6
-    command: run /load/${K6_SCRIPT:-scenarios/smoke.js}
-    volumes:
-      - ../tests/load:/load:ro
-    # Lets the k6 container reach a service published on the Docker host.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      # Target: the rig default is the parser on this network; an env-file
-      # API_URL wins for pointing at a host-published or remote deployment.
-      - API_URL=${API_URL:-http://document-parser:8000}
-      - PARSE_API_KEY=${PARSE_API_KEY:-}
-      # Generic shape keys (MODE/RAMP_TIME are the legacy script's).
-      - MODE=${MODE:-vus}
-      - VUS=${VUS:-}
-      - ITERATIONS=${ITERATIONS:-}
-      - DURATION=${DURATION:-}
-      - RAMP_TIME=${RAMP_TIME:-}
-      - RPS=${RPS:-}
-      - STAGES=${STAGES:-}
-      - MAX_VUS=${MAX_VUS:-}
-      # Fine-grained overrides; empty means the script's built-in default.
-      - DOCPARSER_LOAD_PROFILES=${DOCPARSER_LOAD_PROFILES:-}
-      - DOCPARSER_LOAD_REQUEST_TIMEOUT=${DOCPARSER_LOAD_REQUEST_TIMEOUT:-}
-      - DOCPARSER_LOAD_OVERSIZE_BYTES=${DOCPARSER_LOAD_OVERSIZE_BYTES:-}
-      - DOCPARSER_LOAD_STAGES=${DOCPARSER_LOAD_STAGES:-}
-      - DOCPARSER_LOAD_GRACEFUL_STOP=${DOCPARSER_LOAD_GRACEFUL_STOP:-}
-      - DOCPARSER_LOAD_SMOKE_VUS=${DOCPARSER_LOAD_SMOKE_VUS:-}
-      - DOCPARSER_LOAD_SMOKE_ITERATIONS=${DOCPARSER_LOAD_SMOKE_ITERATIONS:-}
-      - DOCPARSER_LOAD_P95_MS=${DOCPARSER_LOAD_P95_MS:-}
-      - DOCPARSER_LOAD_P99_MS=${DOCPARSER_LOAD_P99_MS:-}
-      - DOCPARSER_LOAD_TXT_P95_MS=${DOCPARSER_LOAD_TXT_P95_MS:-}
-      - DOCPARSER_LOAD_MIN_SUCCESS_RATE=${DOCPARSER_LOAD_MIN_SUCCESS_RATE:-}
-      - DOCPARSER_LOAD_STRESS_START_RATE=${DOCPARSER_LOAD_STRESS_START_RATE:-}
-      - DOCPARSER_LOAD_STRESS_PREALLOCATED_VUS=${DOCPARSER_LOAD_STRESS_PREALLOCATED_VUS:-}
-      - DOCPARSER_LOAD_STRESS_MAX_VUS=${DOCPARSER_LOAD_STRESS_MAX_VUS:-}
-      - DOCPARSER_LOAD_STRESS_STAGES=${DOCPARSER_LOAD_STRESS_STAGES:-}
-      - DOCPARSER_LOAD_STRESS_GRACEFUL_STOP=${DOCPARSER_LOAD_STRESS_GRACEFUL_STOP:-}
-      - DOCPARSER_LOAD_STRESS_P95_MS=${DOCPARSER_LOAD_STRESS_P95_MS:-}
-      - DOCPARSER_LOAD_STRESS_P99_MS=${DOCPARSER_LOAD_STRESS_P99_MS:-}
-      - DOCPARSER_LOAD_STRESS_MIN_SUCCESS_RATE=${DOCPARSER_LOAD_STRESS_MIN_SUCCESS_RATE:-}
-      - DOCPARSER_LOAD_SOAK_VUS=${DOCPARSER_LOAD_SOAK_VUS:-}
-      - DOCPARSER_LOAD_SOAK_DURATION=${DOCPARSER_LOAD_SOAK_DURATION:-}
-      - DOCPARSER_LOAD_SOAK_GRACEFUL_STOP=${DOCPARSER_LOAD_SOAK_GRACEFUL_STOP:-}
-      - DOCPARSER_LOAD_SOAK_P95_MS=${DOCPARSER_LOAD_SOAK_P95_MS:-}
-      - DOCPARSER_LOAD_SOAK_P99_MS=${DOCPARSER_LOAD_SOAK_P99_MS:-}
-      - DOCPARSER_LOAD_SOAK_MIN_SUCCESS_RATE=${DOCPARSER_LOAD_SOAK_MIN_SUCCESS_RATE:-}
-      - DOCPARSER_LOAD_NEGATIVE_VUS=${DOCPARSER_LOAD_NEGATIVE_VUS:-}
-      - DOCPARSER_LOAD_NEGATIVE_ITERATIONS=${DOCPARSER_LOAD_NEGATIVE_ITERATIONS:-}
-      - DOCPARSER_LOAD_NEGATIVE_MIN_SUCCESS_RATE=${DOCPARSER_LOAD_NEGATIVE_MIN_SUCCESS_RATE:-}
     depends_on:
       document-parser:
         condition: service_healthy
-    networks:
-      - loadnet
 
 networks:
   loadnet:

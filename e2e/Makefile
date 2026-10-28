@@ -41,20 +41,16 @@ $(foreach pair,$(TARGET_ENV),$(eval $(pair)))
 export $(foreach pair,$(TARGET_ENV),$(firstword $(subst =, ,$(pair))))
 endif
 
-# Services wired into the harness so far.
-WIRED_SERVICES := document-parser payment-gateway chats web
+# Services wired into the harness so far. document-parser tests remotely via
+# its own service-level e2e flow instead: edit its infra/.env.load API_URL and
+# run `make -C services/document-parser load-e2e`.
+WIRED_SERVICES := payment-gateway chats web
 
 # The services a run covers. SERVICE narrows it to one.
 RUN_SERVICES := $(if $(SERVICE),$(SERVICE),$(WIRED_SERVICES))
 
 # Tier -> k6 scenario, per service. A service with no entry for a tier runs
 # the scenario named after the tier.
-TIER_SCENARIO_document-parser_smoke    := smoke
-TIER_SCENARIO_document-parser_contract := negative
-TIER_SCENARIO_document-parser_load     := load
-TIER_SCENARIO_document-parser_stress   := stress
-TIER_SCENARIO_document-parser_soak     := soak
-
 TIER_SCENARIO_payment-gateway_smoke    := smoke
 TIER_SCENARIO_payment-gateway_contract := negative
 TIER_SCENARIO_payment-gateway_load     := spike
@@ -150,15 +146,6 @@ load:
 		echo "Result: FAIL (tier=$(TIER) target=$(TARGET))"; \
 	fi; \
 	exit $$status
-
-load-document-parser:
-	@echo ""
-	@echo "=== document-parser (tier=$(TIER), scenario=$(or $(SCRIPT),$(call tier_scenario,document-parser))) ==="
-	@$(MAKE) --no-print-directory -C $(SERVICE_DIR_document-parser) load-test \
-		REMOTE=1 \
-		TARGET_ENV_FILE=$(TARGET_FILE) \
-		SCENARIO=$(or $(SCRIPT),$(call tier_scenario,document-parser)) \
-		VUS=$(VUS) DURATION=$(DURATION) RPS=$(RPS) STAGES=$(STAGES) MAX_VUS=$(MAX_VUS) ITERATIONS=$(ITERATIONS)
 
 load-payment-gateway:
 	@echo ""

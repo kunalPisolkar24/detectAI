@@ -20,9 +20,12 @@ in the error text.
 | `make load-down` | Removes the rig and any e2e-run leftovers |
 | `make load-fixtures` | Builds the corpus under `assets/` once per tree (`mk/tests.mk`) |
 
-`SCENARIO` picks the script: the CLI value wins, then the `infra/.env.load`
-value, then `smoke`. Every other knob lives in `infra/.env.load`; a CLI shape
-key (`VUS=`, `ITERATIONS=`...) stays as an escape hatch and wins over the file.
+Everything is configured in `infra/.env.load` — `SCENARIO` included: edit the
+file's `SCENARIO` line to pick the script, edit its other lines to change any
+knob, then rerun. There are no CLI or shell overrides; compose injects the
+file wholesale into both containers, so one edit re-arms the parser and k6
+together (raise `UPLOAD_LIMIT_BYTES` and both the parser cap and the 413
+negative case move with it).
 
 ## Scenarios
 
@@ -54,9 +57,9 @@ scenario-specific `DOCPARSER_LOAD_*` key first, then the `infra/.env.load` gener
 built-in default. Target and budget keys are always their explicit
 `DOCPARSER_LOAD_*` names. See `infra/.env.load.example` for the full list.
 
-Threshold breaches make k6 exit non-zero, and both `load-test`
-(`--exit-code-from k6`) and `load-e2e` (exit of `run`) propagate that to the
-shell — a green run is exit 0.
+Threshold breaches make k6 exit non-zero, and both commands propagate that to
+the shell (`docker compose run` returns the k6 container's exit code) — a
+green run is exit 0.
 
 # The generated corpus
 

@@ -82,10 +82,14 @@ hostname.
 
 ## How it works
 
-The per-service load rigs under `services/*/load/` stay exactly where they are
-and keep working standalone (`make -C services/document-parser load-test`).
-This harness runs those same scripts against an existing deployment instead of
-starting a rig:
+The per-service load rigs under `services/*/tests/load/` (compose templates
+under `services/*/infra/`) keep working standalone
+(`make -C services/document-parser load-test`). This harness runs those same
+scripts against an existing deployment instead of starting a rig — for the
+services wired above; document-parser is not wired for remote runs here, its
+remote flow is the service-level one (set `API_URL` in its
+`services/document-parser/infra/.env.load`, run
+`make -C services/document-parser load-e2e`):
 
 ```
 docker compose --env-file targets/.env.<target> -p e2e-<service> \
