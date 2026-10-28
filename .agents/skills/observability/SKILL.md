@@ -9,7 +9,7 @@ Boards and alerts are Terraform in `observability/terraform/`, a root kept
 separate from `infra/terraform` on purpose: destroying a datastore must not
 take the boards with it. Everything publishes to the New Relic **EU**
 datacenter (`one.eu.newrelic.com`). Current shape: 13 boards (8 prod + 5 dev
-twins), 7 alert policies with 17 conditions, one email workflow.
+twins), 7 alert policies with 16 conditions, one email workflow.
 
 ## Map
 

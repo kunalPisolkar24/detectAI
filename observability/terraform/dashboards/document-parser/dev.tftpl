@@ -1,11 +1,11 @@
 {
   "name": "detectai-document-parser (dev)",
-  "description": "Dev view for document-parser (deployment.environment = dev): k6-driven throughput/latency plus host and collector infra. service.name = document-parser.",
+  "description": "Dev view for document-parser (deployment.environment = dev): k6-driven throughput/latency. service.name = document-parser.",
   "permissions": "PUBLIC_READ_WRITE",
   "pages": [
     {
       "name": "Document parser",
-      "description": "App RED under load plus host/collector saturation",
+      "description": "App RED under load",
       "widgets": [
         {
           "title": "Uploads/min (dev)",
@@ -72,7 +72,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'dev' AND name = 'extraction' AND `mime.type` = 'application/pdf' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'dev' AND name = 'extraction' AND mime_type = 'application/pdf' TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
@@ -85,7 +85,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'dev' AND name = 'extraction' AND `mime.type` = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'dev' AND name = 'extraction' AND mime_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
@@ -98,33 +98,20 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'dev' AND name = 'extraction' AND `mime.type` = 'text/plain' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'document-parser' AND deployment.environment = 'dev' AND name = 'extraction' AND mime_type = 'text/plain' TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
-          "title": "Worker pool utilization % (dev)",
-          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
+          "title": "In-flight + readiness 503s (dev)",
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(parsed_documents_total), 1 minute)*average(extraction_duration_seconds)/max(extraction_pool_max_workers)*100 AS `pool utilization %` WHERE deployment.environment = 'dev' TIMESERIES 1 minute" }
-            ],
-            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
-          }
-        },
-        {
-          "title": "Queue depth + in-flight (dev)",
-          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
-          "rawConfiguration": {
-            "legend": { "enabled": true },
-            "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(extraction_pool_queue_depth) AS `queue depth`, average(in_flight_requests) AS `in-flight` WHERE deployment.environment = 'dev' TIMESERIES 1 minute" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(in_flight_requests) AS `in-flight` WHERE deployment.environment = 'dev' TIMESERIES 1 minute" },
               { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS `readiness 503s` WHERE service.name = 'document-parser' AND deployment.environment = 'dev' AND span.kind = 'server' AND `http.status_code` = '503' AND (http.route = '/api/v1/ready' OR http.route = '/api/v1/health') TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true, "min": 0 },
@@ -132,21 +119,8 @@
           }
         },
         {
-          "title": "Queue wait avg by mime (dev)",
-          "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
-          "rawConfiguration": {
-            "legend": { "enabled": true },
-            "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(extraction_queue_wait_seconds) AS `wait s` WHERE deployment.environment = 'dev' FACET cases(WHERE mime_type = 'text/plain' AS 'txt', WHERE mime_type = 'application/pdf' AS 'pdf', WHERE mime_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' AS 'docx') TIMESERIES 1 minute" }
-            ],
-            "yAxisLeft": { "zero": true, "min": 0 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
-          }
-        },
-        {
           "title": "Extraction failures by type (dev)",
-          "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
           "visualization": { "id": "viz.stacked-bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -159,7 +133,7 @@
         },
         {
           "title": "Rejections and timeouts (dev)",
-          "layout": { "column": 1, "row": 11, "height": 3, "width": 12 },
+          "layout": { "column": 1, "row": 8, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -173,7 +147,7 @@
         },
         {
           "title": "Status codes (dev)",
-          "layout": { "column": 1, "row": 10, "height": 3, "width": 6 },
+          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
           "visualization": { "id": "viz.stacked-bar" },
           "rawConfiguration": {
             "legend": { "enabled": true },
@@ -186,7 +160,7 @@
         },
         {
           "title": "Timeouts (dev)",
-          "layout": { "column": 1, "row": 3, "height": 3, "width": 4 },
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
@@ -197,95 +171,29 @@
           }
         },
         {
-          "title": "Current CPU % (dev)",
-          "layout": { "column": 5, "row": 3, "height": 3, "width": 4 },
-          "visualization": { "id": "viz.gauge" },
-          "rawConfiguration": {
-            "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(`container.cpu.utilization`) AS `cpu %` WHERE deployment.environment = 'dev' AND `container.name` LIKE '%document-parser%'" }
-            ],
-            "thresholds": { "alert": { "value": 85 }, "warning": { "value": 70 } },
-            "limit": 100
-          }
-        },
-        {
-          "title": "Current memory % (dev)",
-          "layout": { "column": 9, "row": 3, "height": 3, "width": 4 },
-          "visualization": { "id": "viz.gauge" },
-          "rawConfiguration": {
-            "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(`container.memory.percent`) AS `mem %` WHERE deployment.environment = 'dev' AND `container.name` LIKE '%document-parser%'" }
-            ],
-            "thresholds": { "alert": { "value": 85 }, "warning": { "value": 70 } },
-            "limit": 100
-          }
-        },
-        {
-          "title": "Parser container CPU %",
-          "layout": { "column": 1, "row": 8, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
-          "rawConfiguration": {
-            "legend": { "enabled": true },
-            "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = 'dev' AND `container.name` LIKE '%document-parser%' TIMESERIES 1 minute" }
-            ],
-            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
-          }
-        },
-        {
-          "title": "Parser container memory %",
-          "layout": { "column": 7, "row": 8, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
-          "rawConfiguration": {
-            "legend": { "enabled": true },
-            "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = 'dev' AND `container.name` LIKE '%document-parser%' TIMESERIES 1 minute" }
-            ],
-            "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
-          }
-        },
-        {
-          "title": "Parser container network rx/tx",
-          "layout": { "column": 1, "row": 9, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
-          "rawConfiguration": {
-            "legend": { "enabled": true },
-            "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = 'dev' AND `container.name` LIKE '%document-parser%' TIMESERIES 1 minute" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = 'dev' AND `container.name` LIKE '%document-parser%' TIMESERIES 1 minute" }
-            ],
-            "yAxisLeft": { "zero": true, "min": 0 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
-          }
-        },
-        {
-          "title": "Parser container CPU throttled",
-          "layout": { "column": 7, "row": 9, "height": 3, "width": 6 },
-          "visualization": { "id": "viz.area" },
-          "rawConfiguration": {
-            "legend": { "enabled": true },
-            "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = 'dev' AND `container.name` LIKE '%document-parser%' TIMESERIES AUTO" }
-            ],
-            "yAxisLeft": { "zero": true, "min": 0 },
-            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
-          }
-        },
-        {
           "title": "Slowest extractions (dev)",
-          "layout": { "column": 7, "row": 10, "height": 3, "width": 6 },
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'dev' AND name = 'extraction' FACET cases(WHERE `mime.type` LIKE '%pdf%' AS 'pdf', WHERE `mime.type` LIKE '%officedocument%' AS 'docx', WHERE `mime.type` LIKE '%plain%' AS 'txt') LIMIT 20" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'document-parser' AND deployment.environment = 'dev' AND name = 'extraction' FACET cases(WHERE mime_type LIKE '%pdf%' AS 'pdf', WHERE mime_type LIKE '%officedocument%' AS 'docx', WHERE mime_type LIKE '%plain%' AS 'txt') LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Average request size by mime (dev)",
+          "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT average(document_size_bytes) AS `avg bytes` WHERE service.name = 'document-parser' AND deployment.environment = 'dev' AND name = 'extraction' FACET cases(WHERE mime_type = 'application/pdf' AS 'pdf', WHERE mime_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' AS 'docx', WHERE mime_type = 'text/plain' AS 'txt') LIMIT 20" }
             ]
           }
         },
         {
           "title": "Service versions reporting (dev)",
-          "layout": { "column": 1, "row": 12, "height": 3, "width": 12 },
+          "layout": { "column": 7, "row": 8, "height": 3, "width": 6 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [

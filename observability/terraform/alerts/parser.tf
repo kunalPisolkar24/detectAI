@@ -1,5 +1,5 @@
-# Document parser: server-span error share, extract p95, failed extractions,
-# queue saturation and upload rejections.
+# Document parser: server-span error share, extract p95, failed extractions
+# and upload rejections.
 module "parser_error_rate" {
   source = "../modules/alert-condition"
 
@@ -53,23 +53,6 @@ module "parser_extraction_errors" {
   critical = {
     operator    = "above"
     threshold   = 5
-    duration    = 300
-    occurrences = "ALL"
-  }
-}
-
-module "parser_queue_saturated" {
-  source = "../modules/alert-condition"
-
-  account_id  = var.account_id
-  policy_id   = newrelic_alert_policy.area["document_parser"].id
-  name        = "Parser queue saturated"
-  description = "Extraction pool queue depth near READINESS_MAX_QUEUE_DEPTH (default 50)."
-  query       = "FROM Metric SELECT average(extraction_pool_queue_depth) AS `queue depth` WHERE deployment.environment = '${var.environment}'"
-
-  warning = {
-    operator    = "above"
-    threshold   = 40
     duration    = 300
     occurrences = "ALL"
   }

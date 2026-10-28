@@ -1,7 +1,7 @@
 # observability — New Relic monitoring as code
 
 This directory publishes DetectAI's New Relic **dashboards + email alerts** from Terraform:
-13 boards, 7 alert policies with 17 conditions, and one email workflow, all in the EU datacenter
+13 boards, 7 alert policies with 16 conditions, and one email workflow, all in the EU datacenter
 (`one.eu.newrelic.com`). It is a separate Terraform root from `infra/terraform` on purpose: a
 datastore `destroy` must not take the dashboards with it, and this root stays pure New Relic —
 AWS appears only through the state bucket.
