@@ -1,16 +1,78 @@
-# Load-test fixture corpus
+# Load + e2e testing
+
+k6 suites for the document parser. One `infra/.env.load` (copy the template
+`infra/.env.load.example`) drives both commands; the tests only send traffic
+and assert responses — the service under test is responsible for its own
+observability.
+
+Every document the suites post comes from the generated corpus under
+`assets/` (below): nothing is handwritten, so the machines' uploads are
+always exactly reproducible. A fresh tree carries no corpus until the
+generator ran once — `make load-test` and `make load-e2e` fail with the fix
+in the error text.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `make load-test` | Provisions the container rig (`infra/compose.load.yml`: parser + k6 on an isolated network, no host ports) and runs the scenario against it |
+| `make load-e2e` | Runs the k6 container only (`run --rm --no-deps`) against whatever `infra/.env.load`'s `API_URL` names — `make run`, a docker stack, a Lambda function URL, prod |
+| `make load-down` | Removes the rig and any e2e-run leftovers |
+| `make load-fixtures` | Builds the corpus under `assets/` once per tree (`mk/tests.mk`) |
+
+`SCENARIO` picks the script: the CLI value wins, then the `infra/.env.load`
+value, then `smoke`. Every other knob lives in `infra/.env.load`; a CLI shape
+key (`VUS=`, `ITERATIONS=`...) stays as an escape hatch and wins over the file.
+
+## Scenarios
+
+| Scenario | File | Executor | Default profile | Key assertions |
+|---|---|---|---|---|
+| `smoke` | `scenarios/smoke.js` | `vus: 1`, `iterations: 1` | health + one extract per `short.txt/pdf/docx` | all checks must pass |
+| `negative` | `scenarios/negative.js` | `shared-iterations` | one pass over the rejection matrix (13 cases) | exact `401/413/415/422`, no 500s |
+| `load` | `scenarios/load.js` | `ramping-vus` | stages `5s:5,10s:5,5s:0`, 1-3s think time | `p95 < 1500ms`, `p99 < 3000ms`, txt `p95 < 500ms`, success `>= 99%` |
+| `stress` | `scenarios/stress.js` | `ramping-arrival-rate` | stages `10s:5,30s:10,10s:0`, preallocated 20 / max 100 VUs | `p95 < 3000ms`, `p99 < 6000ms`, success `>= 95%`; readiness `503`s counted, not failed |
+| `soak` | `scenarios/soak.js` | `constant-vus` | 2 VUs for 5m | `p95 < 3000ms`, `p99 < 5000ms`, success `>= 99%` |
+| `legacy` | `script.js` | `MODE=vus|rps` | ramp to `VUS` for `DURATION` (or arrival-rate at `RPS`) | scenario-scoped thresholds |
+
+The negative matrix maps the current route's guards one to one: a missing and
+a wrong `x-api-key` (401), an oversized raw body past the upload limit (413),
+a multipart body with no `file` field (422), and then every generated file
+under `assets/invalid/` with the status the generator pinned for it —
+admission-declined uploads answer 415 with the sniffed truth, anything
+admitted but unextractable answers 422 generically. The two key cases carry
+valid `short.txt` bytes; there is no file-shaped 413 case on purpose, since
+the bounded read rejects raw size alone. Every case carries the configured
+key unless it tests the 401 guard itself. The negative scenario's iterations
+default to one full pass, derived from the matrix in `lib/files.js`.
+
+## Knobs
+
+Scripts resolve each knob in three steps (`lib/config.js`): the
+scenario-specific `DOCPARSER_LOAD_*` key first, then the `infra/.env.load` generic
+(`STAGES`, `ITERATIONS`, `DURATION`, `VUS`, `RPS`, `MAX_VUS`), then the
+built-in default. Target and budget keys are always their explicit
+`DOCPARSER_LOAD_*` names. See `infra/.env.load.example` for the full list.
+
+Threshold breaches make k6 exit non-zero, and both `load-test`
+(`--exit-code-from k6`) and `load-e2e` (exit of `run`) propagate that to the
+shell — a green run is exit 0.
+
+# The generated corpus
 
 Deterministic fixture builders plus self-checks for the extraction endpoint.
 Generation runs the real pipeline over every valid asset and the real route
-over every invalid one, writes observations into `assets/manifest.json`, and
-fails loudly on any mismatch — the corpus always describes what the service
-actually does.
+over every invalid one — in-process, through a `TestClient` boot pinned the
+same way as the integration tests, so no running service is needed — and
+writes observations into `assets/manifest.json`, failing loudly on any
+mismatch: the corpus always describes what the service actually does.
 
 Everything under `assets/` is generated on demand and gitignored; never
 commit the binaries. Regenerate whenever the fixture design or the service
 knobs change, and take exact numbers from that run's manifest (deflate byte
 count bookkeeping can wobble a little between zlib builds; each manifest
-matches its own run).
+matches its own run). k6 opens these files by name, so regenerating changes
+what the suites upload, tier labels included.
 
 ## Generate
 
@@ -23,6 +85,12 @@ poetry run python -m tests.load.generate --bytes 3145700   # boundary experiment
 `--tier` filters short/mid/long/oversize/invalid (default all), `--format`
 filters txt/docx/pdf (default all), `--bytes` overrides the byte target of
 size tiers (minimum 1024; the oversize and invalid tiers ignore it).
+
+k6 profile keys are the corpus file names verbatim (`short.txt`,
+`mid.pdf`, `oversize.docx`, ...); the default mix in `lib/config.js` is the
+three non-text smalls plus short/mid/long txt. The oversize rows stand above
+the default 3 MiB cap — they answer 413 as-is and become 200 rows on a rig
+booted with a raised limit.
 
 ## Size tiers
 
@@ -65,7 +133,9 @@ field `file` with the declared content type shown:
 Admission-declined uploads answer 415 with the sniffed truth
 (`unsupported document type: <mime>`); anything admitted but unextractable
 answers 422 with the one generic `corrupt or unsupported upload` detail.
-The generator posts all nine through the route and pins their statuses.
+The generator posts all nine through the route and pins their statuses; k6
+mirrors those pins in `lib/files.js` (k6 cannot read `manifest.json`, which
+rides the gitignored corpus).
 
 ## Different-limit boots
 

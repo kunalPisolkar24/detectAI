@@ -8,7 +8,7 @@ import { checkHealth, checkReadiness, postExtract } from "./lib/requests.js";
 
 // Legacy entrypoint preserved for `MODE=vus|rps` callers.
 // New runs should use `SCENARIO=smoke|load|stress|soak|negative`
-// (see load/scenarios/*). This file now shares the same lib helpers:
+// (see scenarios/*). This file now shares the same lib helpers:
 // deterministic round-robin fixtures, tagged metrics, explicit timeouts,
 // and scenario-scoped thresholds so the background health probe no longer
 // pollutes extract latency.

@@ -33,7 +33,7 @@ PORT=8000 make up
 
 One `infra/.env.load` (copy `infra/.env.load.example`) drives both commands;
 the tests only send traffic and assert responses. See
-[load/README.md](load/README.md) for the scenario set.
+[tests/load/README.md](tests/load/README.md) for the scenario set.
 
 ```sh
 make load-env             # creates infra/.env.load from the example if missing

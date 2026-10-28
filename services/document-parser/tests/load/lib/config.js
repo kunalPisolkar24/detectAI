@@ -108,7 +108,10 @@ export function parseDurationMs(value, name = "duration") {
   return Math.round(totalMs);
 }
 
-const DEFAULT_PROFILES = ["txt-small", "txt-medium", "txt-large", "pdf-small", "docx-small"];
+// The default mix: both small non-text formats plus the text spread over the
+// tiers (short serves, mid sustains load, long stresses the cap and output
+// limit). Oversize rows stay opt-in — they answer 413 at the default limits.
+const DEFAULT_PROFILES = ["short.txt", "mid.txt", "long.txt", "short.pdf", "short.docx"];
 
 let cachedRuntimeConfig;
 

@@ -32,7 +32,7 @@ services:
     image: grafana/k6
     command: run /load/${K6_SCRIPT:-scenarios/smoke.js}
     volumes:
-      - ../load:/load:ro
+      - ../tests/load:/load:ro
     # Lets the k6 container reach a service published on the Docker host.
     extra_hosts:
       - "host.docker.internal:host-gateway"

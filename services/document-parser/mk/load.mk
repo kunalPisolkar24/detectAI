@@ -1,8 +1,11 @@
-# Load + e2e harness (load/): one infra/.env.load drives both commands.
+# Load + e2e harness (tests/load/): one infra/.env.load drives both commands.
 #
 #   make load-test   provision the container rig (parser + k6) and load it
 #   make load-e2e    k6 only, against whatever the target file's API_URL names
 #   make load-down   remove the rig and any e2e-run leftovers
+#
+# k6 opens every document from the generated corpus (tests/load/assets); a
+# fresh tree carries none until the generator ran once: make load-fixtures.
 #
 # SCENARIO resolves CLI > infra/.env.load > smoke. Every other knob lives in
 # infra/.env.load (see infra/.env.load.example); a CLI shape key
@@ -11,6 +14,9 @@
 
 LOAD_ENV_FILE ?= infra/.env.load
 LOAD_ENV_EXAMPLE := infra/.env.load.example
+
+# The corpus's smallest row; its presence means a generator run happened.
+CORPUS_PROBE := tests/load/assets/short.txt
 COMPOSE_LOAD := docker compose -f infra/compose.load.yml
 LOAD_PROJECT := document-parser-load
 LOAD_E2E_PROJECT := e2e-document-parser
@@ -43,10 +49,20 @@ if [ -n "$(MODE)" ]; then export MODE="$(MODE)"; fi;
 endef
 
 .PHONY: load-env load-test load-e2e load-down load-down-remote help-load
+.PHONY: check-load-corpus
+
+# k6's open() demands the corpus on disk; fail before compose with the fix.
+check-load-corpus:
+	@test -f $(CORPUS_PROBE) || { \
+		echo "no generated load corpus (tests/load/assets is empty)"; \
+		echo "  generate it once - no running service needed: make load-fixtures"; \
+		exit 1; \
+	}
 
 help-load:
 	@echo "Load + e2e (mk/load.mk):"
 	@echo "  load-env     create infra/.env.load from infra/.env.load.example if missing"
+	@echo "  load-fixtures (mk/tests.mk) builds tests/load/assets; k6 needs it once"
 	@echo "  load-test    container rig: parser + k6 on an isolated network"
 	@echo "  load-e2e     k6 only, against whatever the target file's API_URL names"
 	@echo "  load-down    remove the rig and the e2e-run leftovers"
@@ -59,7 +75,7 @@ load-env:
 	@echo "$(LOAD_ENV_FILE) ready (edit it to configure load + e2e runs)"
 
 # Provisions the rig and loads it.
-load-test:
+load-test: | check-load-corpus
 	@if [ "$(REMOTE)" = "1" ]; then \
 		$(MAKE) --no-print-directory load-e2e \
 			SCENARIO="$(SCENARIO)" TARGET_ENV_FILE="$(TARGET_ENV_FILE)" \
@@ -81,7 +97,7 @@ load-test:
 # Nothing provisioned: the k6 container runs alone (--rm --no-deps, its own
 # compose project) and sends traffic to whatever the target file's API_URL
 # names — make run, a docker stack, a Lambda function URL, prod.
-load-e2e:
+load-e2e: | check-load-corpus
 	@if [ "$(TARGET_ENV_FILE)" = "$(LOAD_ENV_FILE)" ]; then \
 		test -f $(LOAD_ENV_FILE) || cp $(LOAD_ENV_EXAMPLE) $(LOAD_ENV_FILE); \
 	fi; \

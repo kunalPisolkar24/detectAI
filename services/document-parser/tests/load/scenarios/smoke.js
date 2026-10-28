@@ -19,7 +19,7 @@ export const options = {
   },
 };
 
-const SMOKE_PROFILES = ["txt-small", "pdf-small", "docx-small"];
+const SMOKE_PROFILES = ["short.txt", "short.pdf", "short.docx"];
 
 export default function () {
   const config = getRuntimeConfig();
