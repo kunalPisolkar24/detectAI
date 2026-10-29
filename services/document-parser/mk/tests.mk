@@ -1,7 +1,6 @@
 # Test suites. The two trees are a hard boundary: tests/unit holds pure logic
 # with fakes and no boot, tests/integration drives the production app with the
-# real lifespan-config boot. The pytest targets always scope to tests/ so the
-# legacy slop/ tree can never enter collection.
+# real lifespan-config boot. The pytest targets always scope to tests/.
 
 .PHONY: test test-unit test-integration load-fixtures help-tests
 

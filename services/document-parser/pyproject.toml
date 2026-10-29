@@ -30,9 +30,6 @@ dev = [
     "httpx2 (>=2.16.0,<3.0.0)"
 ]
 
-[tool.ruff]
-extend-exclude = ["slop"]
-
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]

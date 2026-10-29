@@ -5,7 +5,7 @@ help-local:
 	@echo "  install   install dependencies (poetry)"
 	@echo "  lock      resolve and update poetry.lock"
 	@echo "  env       create infra/.env from infra/.env.example if missing"
-	@echo "  clean     remove caches and bytecode (app only, leaves slop/)"
+	@echo "  clean     remove caches and bytecode (app only)"
 	@echo "  run       run the API locally (uvicorn --reload)"
 	@echo ""
 

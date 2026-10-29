@@ -381,7 +381,8 @@ the environment itself.
   domain never imports OTel.
 - **The pull model's machinery does not return**: the `/api/v1/metrics` route,
   `prometheus-client`, the multiprocess registry, and the gunicorn
-  `child_exit` hook exist only in `slop/` reference material.
+  `child_exit` hook were dropped with the old build-out and survive only in
+  git history.
 
 ## Testing
 

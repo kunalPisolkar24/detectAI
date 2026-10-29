@@ -60,6 +60,8 @@ Rule (b)'s "single-line block" test needs lines grouped into blocks by y-proximi
 - **Integration**: the extract endpoint's full path matrix (401/413/415/422/200/504).
 - **Deferred**: load rig port and e2e updates (container-runtime concern; user decision).
 
-## Kept as reference
+## Removed reference material
 
-`slop/` stays — the previous build-out is reference material for this one; it is excluded from linting and is not part of the build.
+The previous build-out (`slop/`) was kept as reference material while this one
+was built; it is now removed. The complete copy is recoverable from git
+history.

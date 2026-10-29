@@ -297,7 +297,8 @@ thousand-page document is ever materialized in a test.
 Supporting a new format is one strategy module plus one registry entry (FR-2)
 — with the strategy key coming from admission, never from the file. Fixtures
 stay dependency-free: positioned-text PDFs are hand-crafted content streams;
-DOCX behavior ports the slop reference's body-only and field-char cases.
+DOCX behavior ports the body-only and field-char cases from the earlier
+build-out (git history).
 
 ## Settled decisions
 

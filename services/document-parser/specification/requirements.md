@@ -99,7 +99,7 @@ All bounds are configurable at boot via environment variables with these default
 
 ## Deferred
 
-- **Load rig port (`slop/load` → `tests/load/`) and e2e harness updates** — deliberately postponed: load/stress/soak profiles are container-runtime concerns, and the deployed target adds platform latency (API Gateway, cold starts) that container-tuned assertions do not measure meaningfully. The cheap deployed-target checks (preflight/smoke/contract tiers) return with the e2e effort.
+- **Load rig port and e2e harness updates** — deliberately postponed: load/stress/soak profiles are container-runtime concerns, and the deployed target adds platform latency (API Gateway, cold starts) that container-tuned assertions do not measure meaningfully. The cheap deployed-target checks (preflight/smoke/contract tiers) return with the e2e effort.
 - **Observability build** (OTel pipeline + the revised metric inventory) — separate chunk, pending sign-off per [observability.md](observability.md).
 
 ## Open decisions (to be cleared before build starts)
