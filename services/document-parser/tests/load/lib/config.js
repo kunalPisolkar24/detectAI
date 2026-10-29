@@ -1,8 +1,7 @@
-// Environment knobs with a two-level fallback: each reader names its keys in
-// precedence order — a scenario-specific DOCPARSER_LOAD_* override first, then
-// the .env.load generic (STAGES, VUS, ...), then the built-in default — so a
-// scenario runs with no configuration at all while .env.load retunes it.
-// Empty values count as unset: compose interpolates ${VAR:-} into empty
+// Environment knobs with a single resolution step: each reader names its
+// env key and its built-in default — a scenario runs with no configuration
+// at all while .env.load retunes it. The file is the only override path;
+// empty values count as unset: compose interpolates ${VAR:-} into empty
 // entries rather than dropping them.
 
 const DURATION_UNITS_MS = {

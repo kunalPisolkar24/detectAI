@@ -174,7 +174,3 @@ export function negativePayloads() {
   ];
 }
 
-export function pickNegativePayload() {
-  const cases = negativePayloads();
-  return cases[exec.scenario.iterationInTest % cases.length];
-}

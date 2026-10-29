@@ -17,7 +17,7 @@ SCENARIO := $(if $(LOAD_FILE_SCENARIO),$(LOAD_FILE_SCENARIO),smoke)
 
 # Scenario -> k6 script path; empty when the name is unknown, which
 # load-check rejects with the valid list.
-K6_SCRIPT := $(if $(filter legacy,$(SCENARIO)),script.js,$(if $(filter $(SCENARIO),smoke negative load stress soak),scenarios/$(SCENARIO).js,))
+K6_SCRIPT := $(if $(filter $(SCENARIO),smoke load),scenarios/$(SCENARIO).js,)
 
 .PHONY: load-env load-test load-e2e load-down load-down-remote help-load
 .PHONY: load-check
@@ -25,7 +25,7 @@ K6_SCRIPT := $(if $(filter legacy,$(SCENARIO)),script.js,$(if $(filter $(SCENARI
 # Prereq for both run targets: reject an unknown SCENARIO, and fail before
 # compose when the generated corpus is missing (k6's open() needs it).
 load-check:
-	@test -n "$(K6_SCRIPT)" || { echo "Invalid SCENARIO '$(SCENARIO)' in $(LOAD_ENV_FILE). Use: smoke|negative|load|stress|soak|legacy"; exit 1; }
+	@test -n "$(K6_SCRIPT)" || { echo "Invalid SCENARIO '$(SCENARIO)' in $(LOAD_ENV_FILE). Use: smoke|load"; exit 1; }
 	@test -f $(CORPUS_PROBE) || { echo "no generated load corpus - generate it once: make load-fixtures"; exit 1; }
 
 help-load:

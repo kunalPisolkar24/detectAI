@@ -24,38 +24,38 @@ Everything is configured in `infra/.env.load` — `SCENARIO` included: edit the
 file's `SCENARIO` line to pick the script, edit its other lines to change any
 knob, then rerun. There are no CLI or shell overrides; compose injects the
 file wholesale into both containers, so one edit re-arms the parser and k6
-together (raise `UPLOAD_LIMIT_BYTES` and both the parser cap and the 413
-negative case move with it).
+together (raise `UPLOAD_LIMIT_BYTES` and both the parser cap and the smoke
+matrix's 413 case move with it).
 
 ## Scenarios
 
-| Scenario | File | Executor | Default profile | Key assertions |
-|---|---|---|---|---|
-| `smoke` | `scenarios/smoke.js` | `vus: 1`, `iterations: 1` | health + one extract per `short.txt/pdf/docx` | all checks must pass |
-| `negative` | `scenarios/negative.js` | `shared-iterations` | one pass over the rejection matrix (13 cases) | exact `401/413/415/422`, no 500s |
-| `load` | `scenarios/load.js` | `ramping-vus` | stages `5s:5,10s:5,5s:0`, 1-3s think time | `p95 < 1500ms`, `p99 < 3000ms`, txt `p95 < 500ms`, success `>= 99%` |
-| `stress` | `scenarios/stress.js` | `ramping-arrival-rate` | stages `10s:5,30s:10,10s:0`, preallocated 20 / max 100 VUs | `p95 < 3000ms`, `p99 < 6000ms`, success `>= 95%`; readiness `503`s counted, not failed |
-| `soak` | `scenarios/soak.js` | `constant-vus` | 2 VUs for 5m | `p95 < 3000ms`, `p99 < 5000ms`, success `>= 99%` |
-| `legacy` | `script.js` | `MODE=vus|rps` | ramp to `VUS` for `DURATION` (or arrival-rate at `RPS`) | scenario-scoped thresholds |
+| Scenario | File | What it is | Pass criteria |
+|---|---|---|---|
+| `smoke` | `scenarios/smoke.js` | 1 VU, 1 iteration: health, one 200 extract per format (`short.txt/pdf/docx`), then the full rejection matrix | every request asserts its exact answer |
+| `load` | `scenarios/load.js` | `ramping-arrival-rate`, shaped by the file's `STAGES`: a light ramp (`5s:1,10s:2,5s:0`), a spike (`10s:10,30s:20,10s:0`), or a flat marathon (`4h:2`) | `p95 < 1500ms`, `p99 < 3000ms`, success `>= 99%` |
 
-The negative matrix maps the current route's guards one to one: a missing and
-a wrong `x-api-key` (401), an oversized raw body past the upload limit (413),
-a multipart body with no `file` field (422), and then every generated file
-under `assets/invalid/` with the status the generator pinned for it —
-admission-declined uploads answer 415 with the sniffed truth, anything
-admitted but unextractable answers 422 generically. The two key cases carry
-valid `short.txt` bytes; there is no file-shaped 413 case on purpose, since
-the bounded read rejects raw size alone. Every case carries the configured
-key unless it tests the 401 guard itself. The negative scenario's iterations
-default to one full pass, derived from the matrix in `lib/files.js`.
+The smoke's rejection matrix maps the current route's guards one to one: a
+missing and a wrong `x-api-key` (401), an oversized raw body past the upload
+limit (413), a multipart body with no `file` field (422), and then every
+generated file under `assets/invalid/` with the status the generator pinned
+for it — admission-declined uploads answer 415 with the sniffed truth,
+anything admitted but unextractable answers 422 generically. The two key
+cases carry valid `short.txt` bytes; there is no file-shaped 413 case on
+purpose, since the bounded read rejects raw size alone. Every case carries
+the configured key unless it tests the 401 guard itself.
+
+The load run's shape is data, not a script: edit `STAGES` to go from a short
+ramp to a spike to an overnight soak, and loosen the budget trio for heavier
+shapes, then put the values back. Readiness is sampled every 10th arrival;
+a `503` is recorded as backpressure, not a failure.
 
 ## Knobs
 
-Scripts resolve each knob in three steps (`lib/config.js`): the
-scenario-specific `DOCPARSER_LOAD_*` key first, then the `infra/.env.load` generic
-(`STAGES`, `ITERATIONS`, `DURATION`, `VUS`, `RPS`, `MAX_VUS`), then the
-built-in default. Target and budget keys are always their explicit
-`DOCPARSER_LOAD_*` names. See `infra/.env.load.example` for the full list.
+Each knob is one env key read by its consumer with a built-in default
+(`lib/config.js`): `STAGES` and `MAX_VUS` shape the load run, the
+`DOCPARSER_LOAD_*` keys cover the HTTP budget, the corpus mix, and the smoke
+matrix's oversized body, `API_URL`/`API_KEY` aim and arm both containers.
+See `infra/.env.load.example` for the full list.
 
 Threshold breaches make k6 exit non-zero, and both commands propagate that to
 the shell (`docker compose run` returns the k6 container's exit code) — a
