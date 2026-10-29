@@ -2,7 +2,7 @@ ENV_FILE := $(if $(wildcard infra/.env),infra/.env,infra/.env.example)
 COMPOSE := docker compose --env-file $(ENV_FILE) -f infra/compose.yml
 PROJECT := detectai-document-parser
 
-.PHONY: build up down logs ps parser-build parser-up parser-down help-docker
+.PHONY: build up down logs ps help-docker
 
 help-docker:
 	@echo "Docker commands (mk/docker.mk):"
@@ -28,14 +28,3 @@ logs:
 
 ps:
 	$(COMPOSE) ps
-
-# Aliases the root e2e harness calls by name (e2e/Makefile SERVICE_UP_*
-# and SERVICE_DOWN_*); they are the same commands as build/up/down.
-parser-build:
-	docker build -t $(PROJECT) .
-
-parser-up:
-	$(COMPOSE) up --build -d
-
-parser-down:
-	$(COMPOSE) down --remove-orphans

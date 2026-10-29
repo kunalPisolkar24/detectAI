@@ -59,7 +59,7 @@ load-e2e: | load-check
 load-down: load-down-remote
 	$(COMPOSE_LOAD) -p $(LOAD_PROJECT) down -v --remove-orphans
 
-# The root e2e harness' teardown entry: only the remote project, so tearing
-# down an e2e run never touches the rig.
+# Teardown for a remote run: only the remote project, so it never touches
+# the local rig. load-down delegates to it before tearing the rig down.
 load-down-remote:
 	$(COMPOSE_LOAD) -p $(LOAD_E2E_PROJECT) down -v --remove-orphans
