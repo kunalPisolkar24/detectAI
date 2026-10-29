@@ -1,12 +1,4 @@
-"""Upload admission: the boundary between transport and content judgment.
-
-api/extract.py consumes DocumentValidationService; strategies/ owns
-per-type recognition, container checks, and numeric bounds; models.py is
-the shared vocabulary and the single source of the bound defaults. The
-package imports only its document formats (pypdf for the pdf type) — no
-framework, no boto3 — so the unit suite pins it without booting the app
-(mk/tests.mk keeps that boundary hard).
-"""
+"""Upload admission: strategies, shared vocabulary, bound defaults; a leaf package."""
 
 from .models import (
     DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES,

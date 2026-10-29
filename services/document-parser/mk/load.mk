@@ -1,6 +1,4 @@
-# Load + e2e harness (tests/load/). infra/.env.load is the single lever:
-# compose injects it wholesale into the rig's parser and k6, SCENARIO comes
-# from the file, and there are no CLI or shell overrides.
+# Load rig: infra/.env.load is the single lever; its SCENARIO line picks the script.
 
 LOAD_ENV_FILE := infra/.env.load
 LOAD_ENV_EXAMPLE := infra/.env.load.example
@@ -10,20 +8,17 @@ COMPOSE_K6 := docker compose -f infra/compose.k6.yml
 LOAD_PROJECT := document-parser-load
 LOAD_E2E_PROJECT := e2e-document-parser
 
-# SCENARIO comes only from the file (the sed reads its one SCENARIO= line; tr
-# strips stray spaces and CRs). Missing file or bare line -> smoke default.
+# SCENARIO comes only from the file; missing or bare -> smoke.
 LOAD_FILE_SCENARIO := $(shell test -f $(LOAD_ENV_FILE) && sed -n 's/^SCENARIO=[[:space:]]*//p' $(LOAD_ENV_FILE) | head -n1 | tr -d ' \r')
 SCENARIO := $(if $(LOAD_FILE_SCENARIO),$(LOAD_FILE_SCENARIO),smoke)
 
-# Scenario -> k6 script path; empty when the name is unknown, which
-# load-check rejects with the valid list.
+# Unknown scenario -> empty; load-check rejects with the valid list.
 K6_SCRIPT := $(if $(filter $(SCENARIO),smoke load),scenarios/$(SCENARIO).js,)
 
 .PHONY: load-env load-test load-e2e load-down load-down-remote help-load
 .PHONY: load-check
 
-# Prereq for both run targets: reject an unknown SCENARIO, and fail before
-# compose when the generated corpus is missing (k6's open() needs it).
+# Reject an unknown scenario and a missing corpus before compose runs.
 load-check:
 	@test -n "$(K6_SCRIPT)" || { echo "Invalid SCENARIO '$(SCENARIO)' in $(LOAD_ENV_FILE). Use: smoke|load"; exit 1; }
 	@test -f $(CORPUS_PROBE) || { echo "no generated load corpus - generate it once: make load-fixtures"; exit 1; }
@@ -41,8 +36,7 @@ load-env:
 	@test -f $(LOAD_ENV_FILE) || cp $(LOAD_ENV_EXAMPLE) $(LOAD_ENV_FILE)
 	@echo "$(LOAD_ENV_FILE) ready (edit it to configure load + e2e runs)"
 
-# `run` boots the parser behind its health gate and runs k6; the trailing down
-# removes the parser run leaves behind, and the k6 exit code survives it.
+# Boots the parser behind its health gate; k6's exit code survives the teardown.
 load-test: | load-check
 	@echo "Load test SCENARIO=$(SCENARIO) script=$(K6_SCRIPT) rig=$(LOAD_PROJECT)"; \
 	$(COMPOSE_LOAD) run --build --rm k6 run /load/$(K6_SCRIPT); \
@@ -50,8 +44,7 @@ load-test: | load-check
 	$(COMPOSE_LOAD) down -v --remove-orphans || true; \
 	exit $$rc
 
-# The k6 container runs alone against whatever the file's API_URL names —
-# make run, a docker stack, a Lambda function URL, prod.
+# k6 alone, against whatever the file's API_URL names.
 load-e2e: | load-check
 	@echo "Load e2e SCENARIO=$(SCENARIO) script=$(K6_SCRIPT) target=$(LOAD_ENV_FILE)"; \
 	$(COMPOSE_K6) -p $(LOAD_E2E_PROJECT) run --rm --no-deps k6 run /load/$(K6_SCRIPT)
@@ -59,7 +52,6 @@ load-e2e: | load-check
 load-down: load-down-remote
 	$(COMPOSE_LOAD) -p $(LOAD_PROJECT) down -v --remove-orphans
 
-# Teardown for a remote run: only the remote project, so it never touches
-# the local rig. load-down delegates to it before tearing the rig down.
+# Only the remote project; load-down delegates before tearing the rig down.
 load-down-remote:
 	$(COMPOSE_LOAD) -p $(LOAD_E2E_PROJECT) down -v --remove-orphans

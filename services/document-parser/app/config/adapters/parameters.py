@@ -1,13 +1,4 @@
-"""ParameterStoreAdapter: the SSM config tree as one in-memory dict per boot.
-
-Plane contract: keys are tree names minus the prefix, upper snake as seeded,
-String parameters only (a SecureString is operator error, not config — it
-fails loud instead of handing the model encrypted ciphertext). Construction
-performs the single fetch — paginated get_parameters_by_path over the prefix
-(Recursive=True, no WithDecryption); a path with zero parameters is an empty
-plane, not an error. Amazon-side failures raise ConfigFetchError naming the
-path and the fix.
-"""
+"""The SSM plane: one paginated path fetch at construction, plain String entries only."""
 
 from typing import Any
 
@@ -19,12 +10,7 @@ _FETCH_FIX = "apply the plane it reads (make secrets-apply) and check the runtim
 
 
 class ParameterStoreAdapter:
-    """Reads the SSM parameter tree once, then answers from memory.
-
-    The boto3 client is injected (built by AWSClientFactory or faked in
-    tests). Secrets are out of scope: SecretsManagerAdapter owns them; SSM
-    holds only plain parameters on this plane.
-    """
+    """One fetch at construction (injected client); plain non-secret parameters only."""
 
     def __init__(self, client: Any, *, ssm_prefix: str = SSM_PREFIX) -> None:
         self._client = client
@@ -32,17 +18,13 @@ class ParameterStoreAdapter:
         self._values = self._fetch()
 
     def fetch(self) -> dict[str, str]:
-        """Every seeded key, prefix-stripped; a copy, so callers cannot
-        mutate the cache."""
         return dict(self._values)
 
     def get(self, key: str, default: str | None = None) -> str | None:
-        """Dict-style lookup over the cached plane; never touches network."""
         return self._values.get(key, default)
 
     def _fetch(self) -> dict[str, str]:
-        # botocore stays import-local like boto3 in the client factory: only
-        # a boot that actually reads this plane pays for the import.
+        # Import-local: only a boot that actually reads this plane pays for botocore.
         from botocore.exceptions import BotoCoreError, ClientError
 
         try:

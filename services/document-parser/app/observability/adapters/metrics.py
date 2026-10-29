@@ -1,10 +1,4 @@
-"""MetricsAdapter: one MeterProvider, started against the shared Resource.
-
-Delta temporality for counters and histograms is the New Relic OTLP best fit
-for pushed data, and the periodic reader keeps the 15 s cadence the old
-scrape interval established so dashboards see the same rhythm the pull model
-used to give them (observability.md's export shape).
-"""
+"""Metrics adapter: one MeterProvider against the shared Resource; delta temporality, 15 s cadence."""
 
 from opentelemetry.metrics import Meter
 from opentelemetry.sdk.metrics import MeterProvider
@@ -34,8 +28,6 @@ class MetricsAdapter:
         self._provider: MeterProvider | None = None
 
     def start(self, resource: Resource) -> None:
-        """MeterProvider over a periodic reader, set once — the reader's
-        final collection fires at shutdown, whatever the interval awaits."""
         if self._provider is not None:
             raise RuntimeError("MetricsAdapter already started")
         reader = PeriodicExportingMetricReader(
@@ -46,19 +38,13 @@ class MetricsAdapter:
         self._provider = MeterProvider(resource=resource, metric_readers=[reader])
 
     def meter(self) -> Meter:
-        """The started provider's meter — the facade builds its instruments
-        through this, never through the opentelemetry module globals."""
+        """The facade builds instruments through this, never OTel module globals."""
         if self._provider is None:
             raise RuntimeError("MetricsAdapter has no meter; start() first")
         return self._provider.get_meter(__name__)
 
     def shutdown(self) -> None:
-        """Final metrics export inside the flush cap, then reader stop; idempotent.
-
-        The bound matters: the reader's own default shutdown budget is 30 s,
-        several of which the worker can spend mid-retry schedule at a dead
-        endpoint — the flush cap keeps the drain inside the graceful window.
-        """
+        """The 5 s cap clamps the reader's 30 s default budget at a dead endpoint."""
         if self._provider is None:
             return
         provider = self._provider

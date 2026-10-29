@@ -18,8 +18,8 @@ from .base import DocumentExtractionStrategy
 _TEXT_BLOCK = 0
 _FOLIO_MIN_CANDIDATES = 3  # fewer folios give rule (b) no aggregate evidence
 
-# The folio shapes rule (b) deletes on: a bare integer, a roman numeral,
-# `Page N of M` (its value is the page's own numeral), or `- N -`.
+# Folio shapes rule (b) deletes on: `- N -`, bare integer, roman numeral,
+# `Page N of M` (value = own numeral).
 _ARABIC = re.compile(r"^\d+$")
 _ROMAN = re.compile(r"^[ivxlcdm]+$", re.IGNORECASE)
 _PAGE_OF = re.compile(r"^page\s+(\d+)\s+of\s+\d+$", re.IGNORECASE)
@@ -31,14 +31,7 @@ _PLACEHOLDER = "#"
 
 @dataclass(frozen=True, slots=True)
 class _Line:
-    """One drawn text line: its raw text and where it sits on the page.
-
-    Positions are fractions of the page height (0 at the top edge), so
-    the deletion zones never care about page size or margin conventions
-    (cleaning.md). alone_in_block is rule (b)'s single-line check: a
-    block of one drawn line is folio territory, a block of several is
-    usually real content.
-    """
+    """y positions are fractions of page height; alone_in_block feeds rule (b)."""
 
     text: str
     y_top: float
@@ -48,8 +41,6 @@ class _Line:
 
 @dataclass(frozen=True, slots=True)
 class _FolioCandidate:
-    """A folio-shaped line in the narrow edge zone: identity plus the
-    number its shape carries, ordered for the monotonic pairing."""
 
     page_index: int
     line_index: int
@@ -57,33 +48,14 @@ class _FolioCandidate:
 
 
 class PdfExtractionStrategy(DocumentExtractionStrategy):
-    """Extracts the ordered text of an admitted pdf.
-
-    pymupdf v2 — imported as pymupdf, never the legacy fitz alias —
-    opens the bounded bytes in a context manager (MuPDF holds C-land
-    buffers the GC does not manage) and yields each page's drawn lines
-    with coordinates. Phase-1 rules (a) and (b) run in this walk
-    (cleaning.md); only the parser owns the structure both rules need.
-    A page that fails to read is skipped and reported as partial — the
-    remaining pages still extract — while a document that yields no
-    text at all is UnreadableDocumentError, a scanned pdf reading like
-    a corrupt one. expired() is checked before each page, so the budget
-    overshoots by at most one page. Admission stays pypdf's job: no
-    container sniffing and no page-count bound lives here
-    (validation.md).
-    """
-
     def __init__(self, knobs: CleaningKnobs) -> None:
         self._knobs = knobs
 
     @property
     def knobs(self) -> CleaningKnobs:
-        """The thresholds this strategy's deletion rules run on."""
         return self._knobs
 
     def extract(self, data: bytes, deadline: Deadline) -> RawLines:
-        """Raw ordered lines from the pdf's text blocks, running headers
-        and page folios suppressed where the rules can afford it."""
         try:
             document = pymupdf.open(stream=data, filetype="pdf")
         except pymupdf.FileDataError as error:
@@ -97,11 +69,7 @@ class PdfExtractionStrategy(DocumentExtractionStrategy):
                 try:
                     pages.append(self._page_lines(page))
                 except Exception:  # noqa: BLE001 - unreadability is MuPDF- and proof-shaped
-                    # A page the library cannot shape stays skipped (cleaning.md's
-                    # "unreadable page"); the callers see it as partial. Raised
-                    # shapes span the FzError family, python-assert failures,
-                    # closed documents, and degenerate geometry — every one a
-                    # discovered case, not a guessed one.
+                    # Skipped page = partial; zero text overall = UnreadableDocumentError.
                     partial = True
                     pages.append([])
             if not any(lines for lines in pages):
@@ -118,8 +86,6 @@ class PdfExtractionStrategy(DocumentExtractionStrategy):
             )
 
     def _page_lines(self, page: pymupdf.Page) -> list[_Line]:
-        """The page's drawn text lines in block order, vertical placement
-        measured against the page's own height."""
         height = page.rect.height
         lines: list[_Line] = []
         drawn = page.get_text("dict")
@@ -140,11 +106,7 @@ class PdfExtractionStrategy(DocumentExtractionStrategy):
         return lines
 
     def _repeated_zone_lines(self, pages: list[list[_Line]]) -> set[tuple[int, int]]:
-        """Rule (a) deletions: lines inside the wide header edge zone
-        that share one normalized key on enough pages and hold one
-        consistent y band — all four cleaning.md conditions, with the
-        placeholder-only keys of the exclusion routed to rule (b) never
-        deleted here."""
+        """Rule (a): all four cleaning.md conditions; placeholder-only keys go to rule (b)."""
         page_count = len(pages)
         if page_count < self._knobs.repetition_min_pages:
             return set()
@@ -172,10 +134,7 @@ class PdfExtractionStrategy(DocumentExtractionStrategy):
         return deletions
 
     def _folio_zone_lines(self, pages: list[list[_Line]]) -> set[tuple[int, int]]:
-        """Rule (b) deletions: folio-shaped single-line blocks inside the
-        narrow edge zone whose numerals track the page index on the
-        whole — position, shape, and ordering must all agree, so
-        position alone never deletes (cleaning.md)."""
+        """Rule (b): shape, position, and ordering must all agree; position alone never deletes."""
         zone = self._knobs.edge_zone_ratio
         candidates = [
             _FolioCandidate(page_index, position, value)
@@ -191,19 +150,7 @@ class PdfExtractionStrategy(DocumentExtractionStrategy):
 def _monotonic_folios(
     candidates: list[_FolioCandidate], folio_monotonic_ratio: float
 ) -> set[tuple[int, int]]:
-    """The candidates that rule (b) may delete: all of them when the
-    population agrees, none of it when the ordering disagrees — a
-    partial delete is never an answer (cleaning.md keeps every
-    unqualified candidate).
-
-    Fewer than three folios give no aggregate evidence: kept. The
-    majority direction over the consecutive pairs decides orientation —
-    only ties leave none — and the compliance score runs per numbering
-    run, where a value dropping below half its predecessor is a
-    restarted sequence rather than a violation. Unparseable shapes were
-    never candidates, so "no candidate parses" short-circuits there:
-    nothing to pair, everything kept.
-    """
+    """All-or-none delete: orientation from the pair majority, compliance per run, restart at half."""
     if len(candidates) < _FOLIO_MIN_CANDIDATES:
         return set()
     values = [candidate.value for candidate in candidates]
@@ -231,29 +178,21 @@ def _monotonic_folios(
 
 
 def _inside_edge_zone(line: _Line, zone: float) -> bool:
-    """Whether the whole line sits inside the outer `zone` share of the
-    page height, at the top or the bottom edge."""
     return line.y_bottom <= zone or line.y_top >= 1.0 - zone
 
 
 def _comparison_key(text: str) -> str:
-    """The whitespace- and digit-normalized matching key of rule (a):
-    case folded, every digit a placeholder, whitespace runs collapsed.
-    Used for matching only — the output line is untouched."""
+    """Matching only — the original line text is never touched."""
     return re.sub(r"\s+", " ", re.sub(r"\d", _PLACEHOLDER, text.casefold())).strip()
 
 
 def _placeholder_only(key: str) -> bool:
-    """The rule (a) exclusion: a key that reduces to placeholders alone
-    (a bare `12` is `#`, `Page # of #` is not) never deletes here, so
-    folio-shaped numerals cannot bypass rule (b)'s monotonic check."""
+    """Rule (a)'s exclusion: folios cannot bypass rule (b)'s monotonic check."""
     return bool(key) and set(key) == {_PLACEHOLDER}
 
 
 def _folio_value(text: str) -> int | None:
-    """The numeral a folio-shaped line carries, None when the text is
-    none of the shapes: candidacy belongs only to shaped lines, so an
-    unparseable shape is simply kept rather than judged."""
+    """None for unparseable shapes: only shaped lines are judged."""
     trimmed = text.strip()
     if match := _DASHED.match(trimmed):
         return int(match.group(1))
@@ -267,8 +206,6 @@ def _folio_value(text: str) -> int | None:
 
 
 def _roman_value(text: str) -> int:
-    """The subtractive parse of a roman numeral; the shape regex has
-    already admitted every letter."""
     values = [_ROMAN_VALUES[letter] for letter in text.casefold()]
     total = 0
     for position, value in enumerate(values):

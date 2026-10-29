@@ -1,12 +1,4 @@
-"""SecretsManagerAdapter: the secrets blob as one in-memory dict per boot.
-
-Plane contract: the blob is a JSON object of env-named keys
-({"API_KEY": ...}). Construction performs the single fetch —
-get_secret_value, SecretString present, parsed into dict[str, str].
-Missing secret, missing SecretString (binary or empty), non-JSON, or a
-non-object blob all raise ConfigFetchError naming the secret and the fix;
-the contract is fail-closed in every plane.
-"""
+"""The secrets blob plane: one fetch at construction, a JSON object of env-named keys."""
 
 import json
 from typing import Any
@@ -19,12 +11,7 @@ _FETCH_FIX = "apply the plane it reads (make secrets-apply) and check the runtim
 
 
 class SecretsManagerAdapter:
-    """Reads the secrets blob once, then answers from memory.
-
-    The boto3 client is injected (built by AWSClientFactory or faked in
-    tests). ParameterStoreAdapter owns the non-secret tree; this adapter is
-    for secrets only.
-    """
+    """One fetch at construction (injected client); secrets only, never the parameter tree."""
 
     def __init__(self, client: Any, *, secret_name: str = SECRET_NAME) -> None:
         self._client = client
@@ -32,17 +19,13 @@ class SecretsManagerAdapter:
         self._values = self._fetch()
 
     def fetch(self) -> dict[str, str]:
-        """Every blob key, as written in the secret; a copy, so callers
-        cannot mutate the cache."""
         return dict(self._values)
 
     def get(self, key: str, default: str | None = None) -> str | None:
-        """Dict-style lookup over the cached blob; never touches network."""
         return self._values.get(key, default)
 
     def _fetch(self) -> dict[str, str]:
-        # botocore stays import-local like boto3 in the client factory: only
-        # a boot that actually reads this plane pays for the import.
+        # Import-local: only a boot that actually reads this plane pays for botocore.
         from botocore.exceptions import BotoCoreError, ClientError
 
         try:

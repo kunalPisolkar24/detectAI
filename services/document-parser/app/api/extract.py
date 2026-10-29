@@ -1,21 +1,4 @@
-"""The authenticated extraction route: transport, admission, then extraction.
-
-The route owns transport-shaped rules and nothing else: the 401 guard
-runs first (a body is never read without a key), the bounded read proves
-a size breach at limit+1 while abandoning the bulk (NFR-4), starlette's
-multipart parser turns the capped body into the single `file` field, and
-the strategy registry classifies the raw bytes. An admitted upload runs
-the extraction pipeline on the request task (extraction.md sits under the
-10-second budget). Its typed failures map onto the wire: the budget's
-504 is generic, and everything failing after admission — scanned pdfs,
-malformed body XML, a dead decode — shares the generic 422 admission
-already answers with. 413 names the bound, 415 names the sniffed MIME
-while the declared Content-Type is metadata only, and a malformed
-multipart body or a missing `file` field takes the same generic 422
-because a corrupt upload cannot be branded (http.md). Every verdict
-records onto the observability seam on app.state — admission as
-rejections, the pipeline as attempts (observability.md's verdict table).
-"""
+"""The authenticated extraction route."""
 
 import time
 from collections.abc import AsyncGenerator
@@ -87,8 +70,8 @@ async def extract(request: Request) -> dict[str, object]:
                 time.perf_counter() - started,
             )
 
-        # filename is metadata echoed verbatim (http.md), defaulted when the part
-        # carried none; content_type is the sniffed mime, never the declared one.
+        # content_type is always the sniffed MIME; the filename is echoed
+        # metadata, defaulted when the part carried none.
         return {
             "filename": filename or "unknown",
             "content_type": mime,
@@ -99,10 +82,7 @@ async def extract(request: Request) -> dict[str, object]:
 
 
 async def _read_bounded(request: Request, cap: int) -> bytes:
-    """The body read up to cap+1 bytes: the first byte beyond cap proves
-    the breach while the rest of the stream is abandoned — the bulk is
-    never buffered (http.md).
-    """
+    """Reads cap+1 bytes: one past the bound proves the breach, the rest is abandoned."""
     buffer = bytearray()
     async for chunk in request.stream():
         buffer += chunk
@@ -112,16 +92,11 @@ async def _read_bounded(request: Request, cap: int) -> bytes:
 
 
 async def _file_part_bytes(request: Request, body: bytes, bound: int) -> tuple[bytes, str]:
-    """The raw bytes and the filename of the single `file` field, parsed
-    once from the capped body; malformed multipart and a missing field
-    share the generic 422. The filename is metadata, passed through as
-    the part carried it (empty included) — the response defaults it."""
+    """Single `file` field, parsed once from the capped body; malformed and missing share the generic 422."""
     async def _stream() -> AsyncGenerator[bytes, None]:
         yield body
 
-    # starlette indexes the header directly (headers["Content-Type"]), so
-    # its absence is a bare KeyError rather than MultiPartException — the
-    # generic 422 has to claim it first.
+    # Starlette raises a bare KeyError on a missing Content-Type, not MultiPartException.
     if request.headers.get("content-type") is None:
         request.app.state.observability.record_rejection("malformed")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_CORRUPT_DETAIL)
@@ -143,7 +118,6 @@ async def _file_part_bytes(request: Request, body: bytes, bound: int) -> tuple[b
 
 
 async def _close_parts(form: FormData) -> None:
-    """Every parsed file part closes its spooled temp file, not just ours."""
     for _name, value in form.multi_items():
         if isinstance(value, UploadFile):
             await value.close()

@@ -1,8 +1,5 @@
-# Secrets pipeline. tools/secrets.py is the only brain here: it validates
-# infra/.env, maps it onto TF_VAR_* variables and drives the service terraform
-# stack (infra/terraform). Its `bootstrap` verb creates the plane's state
-# bucket, and `destroy --purge-state` deletes it again — the steps that touch
-# AWS directly beside terraform itself.
+# tools/secrets.py: validates infra/.env, drives the terraform stack, and
+# its bootstrap/destroy verbs are the steps that touch AWS directly.
 
 .PHONY: secrets-check secrets-plan secrets-apply secrets-clean secrets-destroy secrets-bootstrap-state secrets-iam-bootstrap secrets-test help-secrets
 

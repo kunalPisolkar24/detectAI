@@ -1,7 +1,4 @@
-"""The observability build: the seam outside callers depend on, and the
-factory the composition root drives. Nothing outside the package imports it
-except through these exports (observability.md's dependency view).
-"""
+"""The observability seam and its factory."""
 
 from .contract import (
     ExtractionOutcome,

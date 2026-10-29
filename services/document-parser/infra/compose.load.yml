@@ -1,9 +1,5 @@
-# Load rig: document-parser + k6 on an isolated network. Nothing is published
-# to the host: k6 reaches the parser over the rig network. Both services take
-# the whole env plane from infra/.env.load (env_file), so every knob — target,
-# key, shape, budgets, limits — lives in that file and nothing is hardcoded
-# here. `make load-e2e` runs the k6 template alone (compose.k6.yml) against an
-# external target instead.
+# Load rig: parser + k6 on an isolated network, nothing published to the
+# host. Every knob lives in infra/.env.load.
 name: document-parser-load
 
 include:

@@ -1,8 +1,5 @@
-# The single k6 runner definition. compose.load.yml includes it (the rig) and
-# `make load-e2e` drives it alone (k6 against an external target). Compose
-# injects infra/.env.load wholesale, so every knob — target, key, shape,
-# budgets — lives in that file; nothing is hardcoded here. K6_SCRIPT is the
-# one interpolation: the Makefile derives it from the file's SCENARIO.
+# The single k6 runner: the rig includes it, `make load-e2e` drives it alone.
+# Every knob lives in infra/.env.load; K6_SCRIPT comes from the Makefile.
 services:
   k6:
     image: grafana/k6
@@ -11,8 +8,7 @@ services:
       - .env.load
     volumes:
       - ../tests/load:/load:ro
-    # Lets the k6 container reach a service published on the Docker host
-    # (the file's API_URL points there for e2e targets).
+    # Lets k6 reach a service published on the Docker host (e2e targets).
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

@@ -1,10 +1,4 @@
-"""TracesAdapter: one TracerProvider, started against the shared Resource.
-
-The exporter arrives injected so tests ride in-memory spans with no network;
-sampling rides the dialable ratio and the batch's flush bound is whatever the
-shutdown drain can afford inside the 12 s graceful window the Dockerfile
-bounds (observability.md's shutdown view).
-"""
+"""Traces adapter: one TracerProvider started against the shared Resource; the exporter arrives injected."""
 
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
@@ -26,7 +20,6 @@ class TracesAdapter:
         self._processor: BatchSpanProcessor | None = None
 
     def start(self, resource: Resource) -> None:
-        """A ratio-sampled provider over a batch processor, set once."""
         if self._provider is not None:
             raise RuntimeError("TracesAdapter already started")
         provider = TracerProvider(
@@ -41,21 +34,13 @@ class TracesAdapter:
         self._provider = provider
 
     def provider(self) -> TracerProvider:
-        """The started provider — consumers take it explicitly, the OTel
-        global registry stays untouched (instrument_app, the service, tests
-        all receive it by injection)."""
+        """Consumers receive it by injection — the OTel global registry stays untouched."""
         if self._provider is None:
             raise RuntimeError("TracesAdapter has no provider; start() first")
         return self._provider
 
     def shutdown(self) -> None:
-        """Force-flush the queued spans, then stop the batch worker; idempotent.
-
-        Stopping is not an optional polish: flush only leaves the daemon worker
-        busy on the exporter's retry schedule, so the process would linger past
-        the drain spewing transient errors — exactly the Ctrl+C the service
-        never seemed to survive at a dead endpoint.
-        """
+        """Force-flush then stop; the stop is what kills the retrying worker."""
         if self._provider is None:
             return
         provider = self._provider
@@ -65,6 +50,5 @@ class TracesAdapter:
         try:
             provider.force_flush(timeout_millis=_FLUSH_TIMEOUT_MILLIS)
         finally:
-            # A flush failure must not skip the stop — the worker would keep
-            # retrying schedules the queue no longer receives.
+            # A flush failure must not skip the stop — the worker would keep retrying.
             processor.shutdown()

@@ -14,20 +14,7 @@ _FIELD_RESULT = "result"
 
 
 class DocxExtractionStrategy(DocumentExtractionStrategy):
-    """Extracts the body paragraphs of an admitted docx.
-
-    zipfile opens the bounded bytes and ElementTree.iterparse streams
-    the body member — no python-docx — emitting one raw line per
-    paragraph in document order. Only the body part is ever read:
-    headers, footers, and footnotes live in other members. Legacy field
-    runs are the walk's one phase-1 job (cleaning.md): the instruction
-    between a field's begin and its separator is dropped, the rendered
-    result after the separator survives, and the markers themselves
-    never emit. Table-nested paragraphs are body content and come out
-    in reading order. expired() is checked between member elements,
-    a body part with no text paragraphs is a valid empty result, and
-    every failure after admission is UnreadableDocumentError.
-    """
+    """Only the body part is ever read; legacy field runs drop instructions, keep results."""
 
     def extract(self, data: bytes, deadline: Deadline) -> RawLines:
         try:
@@ -41,9 +28,7 @@ class DocxExtractionStrategy(DocumentExtractionStrategy):
         return RawLines(lines, partial=False)
 
     def _body_lines(self, body: object, deadline: Deadline) -> Iterator[str]:
-        """The body's text paragraphs as raw lines: the parsed tree is
-        only ever held one paragraph deep, and each paragraph is
-        cleared so its memory leaves with the label."""
+        """The tree is held one paragraph deep; clear() frees each as it leaves."""
         for _, paragraph in ElementTree.iterparse(body, events=("end",)):
             if _localname(paragraph) != "p":
                 continue
@@ -56,8 +41,6 @@ class DocxExtractionStrategy(DocumentExtractionStrategy):
 
 
 def _paragraph_text(paragraph: ElementTree.Element) -> str:
-    """One paragraph's raw text: run text, tabs, and breaks verbatim;
-    field instructions dropped, field results kept."""
     parts: list[str] = []
     field_state: str | None = None
     for node in paragraph.iter():
@@ -72,9 +55,7 @@ def _paragraph_text(paragraph: ElementTree.Element) -> str:
 
 
 def _after_field_char(node: ElementTree.Element) -> str | None:
-    """The walk state a field-char element leaves behind: instruction
-    after a begin (or any unrecognized kind — a safe fail into silence),
-    result after a separator, None after the end."""
+    """Unrecognized kinds fall into instruction state — safe silence."""
     kind = _attr(node, "fldCharType")
     if kind == "separate":
         return _FIELD_RESULT
@@ -84,14 +65,10 @@ def _after_field_char(node: ElementTree.Element) -> str | None:
 
 
 def _localname(element: ElementTree.Element) -> str:
-    """The tag after the namespace URI: namespaced documents, renamed
-    prefixes, and bare local names all reduce to the same key."""
     return element.tag.rpartition("}")[2]
 
 
 def _attr(element: ElementTree.Element, name: str) -> str:
-    """The first attribute whose localname matches `name`; attributes
-    ride the wordprocessingml namespace like elements do."""
     for key, value in element.attrib.items():
         if key.rpartition("}")[2] == name:
             return value

@@ -10,32 +10,22 @@ from .extraction import CleaningKnobs, build_default_extraction_service
 from .observability import build_observability_service
 from .validation import build_default_service
 
-# The stdout handler is the baseline copy of every app log; a wired
-# observability build adds its OTel destination alongside it
-# (observability.md's logs view). INFO keeps the startup/shutdown phases
-# and config fallbacks visible on both paths.
+# Stdout is the baseline destination; a wired build adds its OTel ride-along.
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    # The composition root: the flick selects the plane, the plane feeds the
-    # typed contract. A misconfigured plane or an invalid API key fails the
-    # boot here, before serving, per requirements.md.
+    # Fail the boot before serving: a bad plane or key dies here.
     flick = deployment_flick()
     provider = ConfigFactory.create(flick)
     settings = Settings.from_provider(provider)
     app.state.settings = settings
-    # The composition root builds the registry once, from the same resolved
-    # settings the guard reads: strategies carry the boot's numeric bounds.
     app.state.validation_service = build_default_service(
         max_pdf_pages=settings.max_pdf_pages,
         docx_max_uncompressed_bytes=settings.docx_max_uncompressed_bytes,
     )
-    # The extraction pipeline inherits the same settings: the budget and the
-    # output cap it enforces, plus the six cleaning knobs the pdf strategy
-    # runs phase-1 rules on.
     app.state.extraction_service = build_default_extraction_service(
         processing_budget_seconds=settings.processing_budget_seconds,
         output_char_limit=settings.output_char_limit,
@@ -48,16 +38,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             folio_monotonic_ratio=settings.folio_monotonic_ratio,
         ),
     )
-    # The gate flips on the endpoint: unset builds the null object and
-    # installs nothing, set builds the wired pipeline (NFR-5).
+    # The gate flips on the endpoint: unset installs nothing, set wires the OTel ride-along.
     app.state.observability = build_observability_service(settings, app)
     logger.info("config plane: %s", flick)
     logger.info("observability: %s", type(app.state.observability).__name__)
 
     yield
-    # No drain to run: the sync runtime owns no worker pool (extraction.md).
-    # The final line is queued before the observability drain so it rides
-    # the logs flush out to New Relic with the rest (observability.md).
+    # The sync runtime owns no worker pool; the final log is queued before the
+    # drain so it rides the flush out with the rest.
     logger.info("document parser shutdown complete")
     app.state.observability.shutdown()
 

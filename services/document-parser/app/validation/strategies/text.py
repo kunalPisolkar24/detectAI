@@ -5,8 +5,6 @@ from .base import DocumentValidationStrategy
 
 
 class TextValidationStrategy(DocumentValidationStrategy):
-    """Admits plain-text uploads, including the empty body."""
-
     def validate(self, data: bytes) -> ValidationOutcome | None:
         try:
             data.decode("utf-8")

@@ -1,30 +1,12 @@
 #!/usr/bin/env python3
 """Seed the document-parser secrets blob and config parameters from the service .env.
 
-Input compiler only: parse and validate infra/.env, map the values onto
-TF_VAR_* environment variables and a generated backend config, then drive
-`terraform plan/apply` for the service-scoped stack (infra/terraform).
-Non-secret runtime config rides along: an allowlist of .env keys becomes
-TF_VAR_ssm_parameters, which terraform writes to SSM under
-/detectai/document-parser/ — every .env key the stack knows about lands in
-AWS/Floci on apply, and absent keys seed nothing.
-Terraform alone touches AWS on the resource path; the script's direct AWS-API
-steps are the opt-in `bootstrap` verb (create the plane's state bucket), the
-`destroy --purge-state` object wipe and bucket delete, the opt-in
-`--force-delete` secret delete, and the opt-in `iam-bootstrap` verb (create or
-update the out-of-stack deploy role) — all via the `aws` CLI.
-
-Plane selection (single flick, from EMULATOR_ENDPOINT in .env):
-  - http(s) URL     -> Floci/LocalStack; state in the emulator's S3; auto-approved
-  - unset or empty  -> real AWS; state in the TF_STATE_BUCKET bucket; confirm prompt
-
-State bucket comes from TF_STATE_BUCKET in .env on both planes: on the emulator
-an unset value falls back to the service default (detectai-docparser-tfstate)
-and a missing bucket self-heals before terraform runs; real AWS requires it. `bootstrap` is the one direct AWS-API step the script performs (via the
-`aws` CLI, opt-in): it creates the resolved bucket on the armed plane —
-everything resource-side still goes through terraform alone. There are no
-backend.*.hcl files: backend.example.hcl documents the shapes for scriptless
-runs.
+Compiles infra/.env into TF_VAR_* variables and a generated backend config,
+then drives `terraform plan/apply` for the service-scoped stack. The plane
+comes from EMULATOR_ENDPOINT: an http(s) URL -> Floci/LocalStack
+(auto-approved), unset -> real AWS (confirm prompt). Terraform alone touches
+AWS on the resource path; the opt-in direct-AWS verbs are `bootstrap`
+(state bucket), `destroy --purge-state` / `--force-delete`, `iam-bootstrap`.
 """
 
 from __future__ import annotations
@@ -45,8 +27,7 @@ SERVICE_DIR = Path(__file__).resolve().parents[1]
 TF_DIR = SERVICE_DIR / "infra" / "terraform"
 ENV_FILE = SERVICE_DIR / "infra" / ".env"
 
-# The fixed service contract: seeding, runtime pull, and teardown all expect
-# this exact name; Terraform's variables.tf keeps enforcing it.
+# Fixed contract name: seeding, runtime pull, and teardown all expect it.
 SECRETS_NAME = "detectai/document-parser/secrets"
 REGION_DEFAULT = "ap-southeast-2"
 DEFAULT_STATE_BUCKET = "detectai-docparser-tfstate"
@@ -58,19 +39,16 @@ URL_RE = re.compile(r"^https?://\S+$")
 # S3 naming minus dots: exactly 3-63 lowercase/digits/hyphens, alnum boundaries.
 BUCKET_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
 API_KEY_MIN_LENGTH = 16
-# The New Relic ingest key's floor: NR keys are longer, the floor just catches
-# an endpoint paired with nothing at all (the runtime gate demands the same).
+# The runtime gate's floor twin; catches an endpoint paired with nothing at all.
 LICENSE_KEY_MIN_LENGTH = 16
 ENV_TYPES = ("dev", "prod")
 EMULATOR_RECOVERY_WINDOW = 0
 PROD_RECOVERY_WINDOW = 30
 STATE_PREFIX = "document-parser"
 
-# Non-secret runtime config: .env keys terraform writes to SSM
-# (SSM_SEED_PREFIX + KEY) on apply. Absent, empty or commented .env lines
-# seed nothing; API_KEY and NEW_RELIC_LICENSE_KEY ride the secrets blob
-# instead (TF_VAR_api_key / TF_VAR_new_relic_license_key), and pipeline keys
-# (EMULATOR_ENDPOINT, AWS_REGION, ENV_TYPE, TF_STATE_BUCKET, PORT) are
+# Non-secret runtime config terraform writes to SSM (SSM_SEED_PREFIX + KEY) on
+# apply. Absent or empty .env keys seed nothing; API_KEY and
+# NEW_RELIC_LICENSE_KEY ride the secrets blob instead, and pipeline keys are
 # deliberately not seedable here.
 SSM_SEED_PREFIX = "/detectai/document-parser/"
 SSM_SEED_KEYS = (
@@ -91,11 +69,8 @@ SSM_SEED_KEYS = (
     "OTEL_TRACE_SAMPLE_RATIO",
 )
 
-# Out-of-stack deploy identity: the role terraform runs under on real AWS.
-# Created once with `iam-bootstrap` (never by terraform, so the role never has
-# to manage itself). Trust: the caller's own IAM user + MFA. On the emulator
-# the role is structural — nothing enforces IAM there — and a placeholder user
-# keeps the document shape identical.
+# Out-of-stack deploy identity terraform never manages. Real AWS trusts the
+# caller's own user + MFA; the emulator uses a structural placeholder.
 DEPLOY_ROLE_NAME = "detectai-document-parser-deploy"
 DEPLOY_POLICY_NAME = "deploy-policy"
 DEFAULT_ACCOUNT_ID = "000000000000"
@@ -140,8 +115,7 @@ def resolve_region(values: dict[str, str]) -> str:
 
 
 def resolve_state_bucket(is_emulator: bool, values: dict[str, str]) -> str | None:
-    """State bucket for the plane: .env value if set; Floci falls back to the
-    fixed local default; real AWS stays required (no guessing)."""
+    """The .env value, or the Floci default; real AWS stays explicit."""
     bucket = values.get("TF_STATE_BUCKET", "")
     if bucket:
         return bucket
@@ -199,9 +173,7 @@ def validate(is_emulator: bool, values: dict[str, str]) -> list[str]:
                 "use an http(s) OTLP endpoint, e.g. http://localhost:4318 (a local receiver) "
                 "or https://otlp.nr-data.net (New Relic)",
             )
-        # The NFR-5 gate's seed twin: a set endpoint always demands a license
-        # key at runtime, so seeding one without the other would land the
-        # container on a boot it cannot survive; throwaway values are fine.
+        # Seed twin of the runtime gate: a keyless endpoint would boot unfixably.
         if len(values.get("NEW_RELIC_LICENSE_KEY", "")) < LICENSE_KEY_MIN_LENGTH:
             fail(
                 f"NEW_RELIC_LICENSE_KEY missing or shorter than {LICENSE_KEY_MIN_LENGTH} chars "
@@ -221,8 +193,7 @@ def validate(is_emulator: bool, values: dict[str, str]) -> list[str]:
 
 
 def validate_bootstrap(is_emulator: bool, values: dict[str, str]) -> list[str]:
-    """Narrow checks for the state-bucket bootstrap: only what bucket creation
-    consumes. In particular it does not demand API_KEY or ENV_TYPE."""
+    """Only what bucket creation consumes; no API_KEY or ENV_TYPE demands."""
     errors: list[str] = []
 
     def fail(message: str, fix: str) -> None:
@@ -253,14 +224,12 @@ def build_tf_vars(values: dict[str, str]) -> dict[str, str]:
             EMULATOR_RECOVERY_WINDOW if is_emulator else PROD_RECOVERY_WINDOW
         ),
     }
-    # The license key rides the secrets blob like the API key: non-empty seeds,
-    # absent or empty skips (the same map rule the SSM config keys follow).
+    # License key rides the secrets blob: non-empty seeds, empty skips.
     if (license_key := values.get("NEW_RELIC_LICENSE_KEY", "")) != "":
         tf_vars["TF_VAR_new_relic_license_key"] = license_key
     if is_emulator:
         tf_vars["TF_VAR_emulator_endpoint"] = values["EMULATOR_ENDPOINT"]
-    # Non-secret config rides along to SSM; absent or empty keys seed nothing
-    # (an empty map is terraform's own default, seeding zero parameters).
+    # Non-secret config rides the SSM map; absent or empty seeds nothing.
     config = {key: values[key] for key in SSM_SEED_KEYS if values.get(key, "") != ""}
     if config:
         tf_vars["TF_VAR_ssm_parameters"] = json.dumps(config)
@@ -395,10 +364,8 @@ def bootstrap_state(is_emulator: bool, values: dict[str, str], dry_run: bool) ->
 
 
 def ensure_state_bucket(is_emulator: bool, values: dict[str, str]) -> int:
-    """Emulator-only self-heal: the local emulator loses its S3 data on restart,
-    so any terraform verb may start against a missing bucket — recreate it with
-    the default name instead of failing. Real AWS keeps its explicit, required
-    bucket; auto-creating one on a prod account is never the script's call."""
+    """Emulator-only self-heal: the emulator loses its S3 data on restart, so
+    any verb may start against a missing bucket."""
     if not is_emulator:
         return 0
     bucket = resolve_state_bucket(True, values)  # the fallback keeps this resolvable
@@ -419,8 +386,7 @@ def force_delete_command(is_emulator: bool, values: dict[str, str]) -> list[str]
 
 
 def resolve_trust_user_arn(is_emulator: bool, values: dict[str, str]) -> str:
-    """Deploy role trust: the caller's own IAM user on real AWS (mandatory), a
-    documented placeholder on the emulator (nothing enforces IAM there)."""
+    """Real AWS: the caller's own user (mandatory); emulator: structural placeholder."""
     if is_emulator:
         user_arn = values.get("DEPLOY_TRUST_USER_ARN", "")
         if user_arn:
@@ -435,8 +401,7 @@ def iam_account_id(user_arn: str) -> str:
 
 
 def validate_iam_bootstrap(is_emulator: bool, values: dict[str, str]) -> list[str]:
-    """Narrow checks for the deploy-role bootstrap: region, emulator endpoint,
-    the state bucket (its ARN is embedded in the policy) and the trust user."""
+    """Only what the bootstrap consumes: region, endpoint, bucket, trust user."""
     errors: list[str] = []
 
     def fail(message: str, fix: str) -> None:
@@ -466,8 +431,7 @@ def validate_iam_bootstrap(is_emulator: bool, values: dict[str, str]) -> list[st
 
 
 def deploy_trust_document(user_arn: str) -> dict[str, Any]:
-    """The deploy setup runs on purpose-built credentials, not personal keys:
-    the caller (or CI later) assumes this role under MFA."""
+    """The deploy runs under this role with MFA, never personal keys."""
     return {
         "Version": "2012-10-17",
         "Statement": [
@@ -482,10 +446,7 @@ def deploy_trust_document(user_arn: str) -> dict[str, Any]:
 
 
 def deploy_policy_document(is_emulator: bool, values: dict[str, str], user_arn: str) -> dict[str, Any]:
-    """Least-privilege deploy scope, service-pinned on every ARN: this
-    service's state bucket, secret blob, SSM config prefix, and the runtime
-    role it administers (the runtime role is in-stack, so terraform under this
-    identity must be able to create and shape it)."""
+    """Least privilege, service-pinned on every ARN."""
     region = resolve_region(values)
     account = iam_account_id(user_arn)
     bucket = resolve_state_bucket(is_emulator, values)
@@ -564,9 +525,7 @@ def confirm_iam_bootstrap(user_arn: str) -> bool:
 
 
 def iam_bootstrap_flow(is_emulator: bool, values: dict[str, str], dry_run: bool) -> int:
-    """Create or update the deploy identity: idempotent (an existing role is
-    kept, the inline policy is always refreshed). The emulator plane runs
-    unattended; real AWS requires a typed barrier first."""
+    """Idempotent create/update; emulator runs unattended, real AWS asks a typed barrier."""
     user_arn = resolve_trust_user_arn(is_emulator, values)
     print(f"plane:  {'emulator (Floci)' if is_emulator else 'real AWS'}")
     print(f"role:   {DEPLOY_ROLE_NAME} (out-of-stack deploy identity)")
@@ -618,10 +577,7 @@ def drop_iam_commands(is_emulator: bool, values: dict[str, str]) -> list[list[st
 
 
 def drop_iam_flow(is_emulator: bool, values: dict[str, str], dry_run: bool) -> int:
-    """Remove the deploy identity: policy first, then the role. A missing role
-    is an already-gone no-op; the untouched shapes make the wipe repeatable.
-    The emulator plane drops unattended; real AWS demands the same typed
-    barrier as the purge wipe."""
+    """Policy first, then role; a missing role is a no-op. Real AWS repeats the purge barrier."""
     commands = drop_iam_commands(is_emulator, values)
     if dry_run:
         for command in commands:
@@ -648,9 +604,8 @@ def drop_iam_flow(is_emulator: bool, values: dict[str, str], dry_run: bool) -> i
 
 
 def list_bucket_versions(is_emulator: bool, values: dict[str, str]) -> list[tuple[str, str]] | None:
-    """Every (key, version id) — object versions and delete markers — in the
-    plane's state bucket, or None when the listing failed. The AWS CLI
-    paginates automatically, so one call spans the whole bucket."""
+    """Every (key, version id) in the plane's state bucket, None when listing failed;
+    the CLI paginates, so one call spans the bucket."""
     bucket = resolve_state_bucket(is_emulator, values)
     assert bucket is not None  # a None bucket is a validation error, not a listing input
     code, stdout, stderr = run_aws_captured(
@@ -676,9 +631,7 @@ def list_bucket_versions(is_emulator: bool, values: dict[str, str]) -> list[tupl
 
 
 def confirm_purge(is_emulator: bool, values: dict[str, str]) -> bool:
-    """Typed barrier against wiping the state bucket — Terraform does not
-    manage it, so its own destroy prompt never covers the wipe. Runs before
-    any destruction so a refusal leaves everything intact."""
+    """Typed barrier — terraform does not manage the bucket; a refusal leaves everything intact."""
     bucket = resolve_state_bucket(is_emulator, values)
     assert bucket is not None  # validation already rejected a missing bucket
     if run_aws(aws_base(is_emulator, values) + ["s3api", "head-bucket", "--bucket", bucket], is_emulator) != 0:
@@ -705,10 +658,7 @@ def confirm_purge(is_emulator: bool, values: dict[str, str]) -> bool:
 
 
 def purge_state(is_emulator: bool, values: dict[str, str]) -> int:
-    """Wipe every object version and delete marker from the plane's state
-    bucket, then delete the bucket. Runs only after a successful terraform
-    destroy — the ledger must not be needed again once this succeeds. Safe to
-    rerun: a missing bucket is reported as a no-op."""
+    """Wipe + delete the state bucket, only after terraform destroy succeeded; rerunnable."""
     bucket = resolve_state_bucket(is_emulator, values)
     assert bucket is not None  # validation already rejected a missing bucket
     base = aws_base(is_emulator, values)
@@ -737,8 +687,7 @@ def run_terraform(args: list[str], tf_vars: dict[str, str], env_overlay: dict[st
     terraform = shutil.which("terraform")
     if terraform is None:
         die("terraform not found on PATH", "install terraform >= 1.9 (pinned ~> 1.9 in versions.tf)")
-    # Backend credentials come from the environment, not the provider block: the
-    # emulator's test creds must travel with it or backend init fails.
+    # Backend creds travel in the env overlay; the provider block stays out of it.
     env = os.environ | tf_vars | ({"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"} if env_overlay else {})
     print()  # separate script output from terraform's own
     try:
@@ -853,22 +802,18 @@ def main() -> int:
         print("(dry run: no terraform, no AWS)")
         return 0
 
-    # The typed barrier gates the whole destroy run: purging removes the bucket
-    # terraform does not manage, and a refusal after destroy would strand the
-    # plane deliberately wiped with no ledger to re-apply from.
+    # The barrier prompts before any destruction: a refusal keeps the ledger re-appliable.
     if args.command == "destroy" and args.purge_state and not confirm_purge(is_emulator, values):
         return 1
 
-    # A dropped emulator bucket (in-memory data, restart-prone) heals itself;
-    # real AWS keeps failing loudly on its missing explicit bucket.
+    # A dropped emulator bucket heals itself; real AWS fails loudly on its missing explicit bucket.
     if ensure_state_bucket(is_emulator, values) != 0:
         return 1
 
     backend_file = write_backend_hcl(backend_hcl)
     try:
         init_args = ["init", "-reconfigure", "-backend-config", str(backend_file)]
-        # -input=false disables ALL prompts, including the apply approval; real AWS
-        # must keep its confirm prompt, so it applies without the flag.
+        # -input=false kills every prompt incl. apply approval; real AWS keeps its confirm.
         verb_args = [args.command]
         if args.command == "plan" or is_emulator:
             verb_args.append("-input=false")
@@ -899,9 +844,7 @@ def main() -> int:
                 print("note: --force-delete has no effect on the emulator (0-day recovery window)")
             else:
                 run_aws(force_delete_command(is_emulator, values), is_emulator)
-        # The wipe chain runs only after terraform succeeded: bucket purge, then
-        # the deploy role — a destroyed ledger and a surviving identity would
-        # strand the plane half-clean on purpose, otherwise.
+        # Wipe chain runs only after terraform succeeded: purge, then the deploy role.
         if args.purge_state and purge_state(is_emulator, values) != 0:
             return 1
         if args.drop_iam:

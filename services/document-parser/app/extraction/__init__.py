@@ -1,11 +1,4 @@
-"""Admitted bytes to cleaned, capped text (extraction.md).
-
-strategies/ owns per-format extraction, cleaning.py is the shared
-normalizer, models.py is the shared vocabulary and the single source of
-the extraction defaults. The package imports no framework and no AWS
-client, so the unit suite pins it without booting the app (mk/tests.mk
-keeps that boundary hard).
-"""
+"""Admitted bytes to cleaned, capped text; a framework-free leaf package."""
 
 from .models import (
     DEFAULT_EDGE_TOLERANCE_RATIO,

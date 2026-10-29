@@ -1,10 +1,4 @@
-"""Config plane selection: the boot picks its plane through this factory.
-
-create(env_type) stays fail-closed: prod only when the trimmed, lowercased
-value is exactly prod; anything unexpected warns and boots the dev plane.
-The caller passes the deployment flick (settings.deployment_flick()), so
-the value reaching here is already normalized.
-"""
+"""Config plane selection; anything not exactly prod boots the dev plane."""
 
 import logging
 
@@ -18,15 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class ConfigFactory:
-    """Builds the ConfigProvider for a plane; stateless, call it per boot.
-
-    Prod wiring reads the bootstrap environment through AWSClientFactory
-    (AWS_REGION required — ConfigFetchError names the var; EMULATOR_ENDPOINT
-    optional override for the emulator plane), then composes ProdConfig over
-    the two AWS planes — the secrets adapter first, so a secret-plane failure
-    lands before the SSM client even exists. Dev wiring composes DevConfig
-    over a default-path DotEnvAdapter.
-    """
+    """Secrets adapter wires before SSM: a secrets failure lands before the SSM client exists."""
 
     @classmethod
     def create(cls, env_type: str) -> ConfigProvider:

@@ -1,11 +1,4 @@
-"""LogsAdapter: one LoggerProvider, an OTel handler over the root logger.
-
-The stdout handler main.py's basicConfig keeps stays; this adds a
-destination, and every record riding it carries its trace/span ids so New
-Relic correlates logs with traces with no custom formatter (observability.md's
-logs view). Uvicorn's loggers deliberately stay stdout-only — the request
-spans already carry latency and status.
-"""
+"""Logs adapter: one LoggerProvider over the root logger; uvicorn's loggers stay stdout-only."""
 
 import logging
 
@@ -33,8 +26,6 @@ class LogsAdapter:
         self._processor: BatchLogRecordProcessor | None = None
 
     def start(self, resource: Resource) -> None:
-        """A batch-processed provider whose handler rides the root logger —
-        the root's INFO level stays the gate for what it sees."""
         if self._provider is not None:
             raise RuntimeError("LogsAdapter already started")
         provider = LoggerProvider(resource=resource)
@@ -51,11 +42,7 @@ class LogsAdapter:
         self._handler = handler
 
     def shutdown(self) -> None:
-        """Detach the handler first, then flush and stop the batch worker —
-        the final boot log line, queued before this runs, rides out with the
-        records; and like the traces adapter the worker stop is the point:
-        left running it keeps grinding the exporter's retry schedule past the
-        drain, stretching the exit at a dead endpoint. Idempotent."""
+        """Detach the handler, flush, then stop the worker; idempotent."""
         if self._provider is None:
             return
         logging.getLogger().removeHandler(self._handler)

@@ -1,11 +1,7 @@
-"""Best-effort naming for uploads nobody recognized.
+"""Best-effort MIME naming for unrecognized uploads; diagnostic only, never admission.
 
-Runs only after the whole registry declines: the 415 detail must name the
-MIME (http.md), so this module is narrowly diagnostic — a content-type
-guess for the error body, never admission. Unmatched bytes fall back to
-application/octet-stream. Two-character signatures (BM, MZ) are safe even
-though they share prefixes with prose: decodable bytes are claimed by the
-text strategy before the registry ever declines.
+Two-character signatures are safe: decodable bytes never reach a registry
+decline — the text strategy claims them first.
 """
 
 _UNKNOWN_MIME = "application/octet-stream"

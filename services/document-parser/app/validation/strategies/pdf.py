@@ -12,14 +12,10 @@ _PDF_SIGNATURE = b"%PDF-"
 
 
 class PdfValidationStrategy(DocumentValidationStrategy):
-    """Admits PDFs whose container opens and stays within the page bound."""
-
     def __init__(self, max_pages: int) -> None:
         self._max_pages = max_pages
 
     def validate(self, data: bytes) -> ValidationOutcome | None:
-        """Signature bytes open the container; the page bound is checked
-        before any page could ever be parsed."""
         if not data.startswith(_PDF_SIGNATURE):
             return None
         try:

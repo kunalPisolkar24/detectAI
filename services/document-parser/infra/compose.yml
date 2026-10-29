@@ -1,5 +1,4 @@
-# Standalone stack: default project network; attaches to the shared DetectAI
-# network when the extract endpoint ships.
+# Standalone stack on its default network.
 name: document-parser
 
 services:

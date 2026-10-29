@@ -1,5 +1,4 @@
-"""DOCX admission: the zip container to trust, a body part to require, the
-uncompressed size to bound."""
+"""DOCX admission: a zip container under the uncompressed bound, body part required."""
 
 import io
 import zipfile
@@ -12,15 +11,11 @@ _DOCUMENT_PART = "word/document.xml"
 
 
 class DocxValidationStrategy(DocumentValidationStrategy):
-    """Admits wordprocessingml documents inside a bound-sized zip container."""
-
     def __init__(self, max_uncompressed_bytes: int) -> None:
         self._max_uncompressed_bytes = max_uncompressed_bytes
 
     def validate(self, data: bytes) -> ValidationOutcome | None:
-        """Header bytes open the container; member sizes sum uncompressed,
-        so a zip bomb's reputation is read from metadata before a single
-        content byte is touched."""
+        """Zip-bomb bound read from member metadata before any content byte."""
         if not data.startswith(_ZIP_LOCAL_FILE_HEADER):
             return None
         try:

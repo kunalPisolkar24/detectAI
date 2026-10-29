@@ -1,10 +1,4 @@
-"""Shared config error vocabulary: one catch point for the whole plane.
-
-Organizing policy: the root lives here forever; an error colocates in the
-module of its only raiser and graduates here the moment a second raiser
-appears. Everything the config plane raises is a ConfigError — catching it
-covers file, network, and lookup failures alike.
-"""
+"""Shared config error vocabulary; colocate in its raiser, graduate here with a second."""
 
 
 class ConfigError(RuntimeError):

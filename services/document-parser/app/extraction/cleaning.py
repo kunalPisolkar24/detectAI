@@ -1,23 +1,15 @@
-"""The phase-2 normalizer (cleaning.md): one shared, ordered,
-string-in/string-out pass over the strategies' raw lines — owned by the
-pipeline, never run inside a strategy.
-
-The rules run once in cleaning.md's order and none are skippable.
-"""
+"""The phase-2 normalizer: one ordered string-in/string-out pass (cleaning.md)."""
 
 import re
 from collections.abc import Sequence
 
 # Rule 1: every line-ending convention becomes LF.
 _LINE_ENDING = re.compile(r"\r\n|[\r\u2028\u2029]")
-# Rule 2: the control and invisible drops (cleaning.md); the tab is in
-# no range — it rides to rule 6 as whitespace.
+# Rule 2: control/invisible drops; the tab survives to rule 6 as whitespace.
 _INVISIBLE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\u200b-\u200d\u2060\ufeff\xad]")
-# Rule 4: a hyphen joins across a line break only when word characters
-# flank the joint.
+# Rule 4: a hyphen joins across a break only when word characters flank the joint.
 _HYPHEN_BREAK = re.compile(r"(?<=\w)-\n(?=\w)")
-# Rule 5: the two folio shapes, matched whole-line (trimmed) and
-# case-insensitive for the Page N of M form.
+# Rule 5: the two folio shapes, matched whole-line after trimming.
 _PAGE_LINE = re.compile(r"(?:page\s+\d+\s+of\s+\d+|-\s*\d+\s*-)", re.IGNORECASE)
 # Rule 6: space/tab run collapse, then paragraph-break collapse.
 _SPACE_RUN = re.compile(r"[ \t]+")
@@ -36,5 +28,4 @@ def normalize(lines: Sequence[str]) -> str:
 
 
 def _is_page_line(line: str) -> bool:
-    """Rule 5's whole-line verdict on a trimmed line (cleaning.md)."""
     return _PAGE_LINE.fullmatch(line.strip()) is not None
