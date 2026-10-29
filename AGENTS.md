@@ -49,7 +49,11 @@ Preferred patterns: Dependency Injection, Repository/Adapter, Factory, Strategy,
 
 ## Comments
 
-Write self-explanatory code. Add a comment only when the why is not obvious from the code. Never add commented-out code or restate the signature in a docstring.
+Write self-explanatory code. Add a comment only when the why is not obvious from the code: workarounds, gotchas, tricky intent. Never add commented-out code.
+
+Keep comments sparse — never narrate what the code already shows (`# increment i`), no section-divider banners, no hype wording. Docstrings stay short: one line maximum, or none; never multi-paragraph essays. Never restate the signature in a docstring.
+
+Keep `.env` files (`.env`, `.env.example`, and all `.env.*` variants) clean: bare variables, no explanatory comments per key. At most one short header line when usage is genuinely non-obvious; when in doubt, leave it out.
 
 ## Commits and Pull Requests
 
