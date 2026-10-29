@@ -1,10 +1,8 @@
-# Reference only — the script never reads this file. tools/secrets.py composes
-# the backend config for the plane that EMULATOR_ENDPOINT selects and feeds it
-# to `terraform init -reconfigure -backend-config <generated file>`. Use this
-# shape (edit a copy) only for manual, scriptless terraform runs.
-#
-# Emulator plane (EMULATOR_ENDPOINT set: state lives in the Floci volume).
-# Bucket: TF_STATE_BUCKET from .env when set, else the default below:
+# Reference only — the script never reads this file: tools/secrets.py composes
+# the backend at runtime from the plane EMULATOR_ENDPOINT selects. Use an edited
+# copy of a shape below only for manual, scriptless terraform runs.
+# Emulator state lives in the Floci volume; bucket = TF_STATE_BUCKET from .env
+# when set, else the commented default.
 #
 #   bucket                      = "detectai-docparser-tfstate"
 #   key                         = "document-parser/floci/terraform.tfstate"
@@ -20,9 +18,8 @@
 #     s3 = "http://localhost:4566"
 #   }
 
-# Real-AWS shape: keep a unique per-engineer bucket (the mock below matches the
-# .env default; swap it for your own on a real account —
-# renaming it re-points terraform at a fresh ledger, nothing migrates).
+# Real-AWS shape: swap the mock bucket for a unique per-engineer one —
+# renaming it re-points terraform at a fresh ledger, nothing migrates.
 bucket       = "detectai-docparser-tfstate"
 key          = "document-parser/terraform.tfstate"
 region       = "ap-southeast-2"

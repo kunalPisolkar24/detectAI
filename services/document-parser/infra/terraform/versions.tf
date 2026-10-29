@@ -8,9 +8,6 @@ terraform {
     }
   }
 
-  # Backend for state; the plane decides the mode:
-  # - Emulator (EMULATOR_ENDPOINT set): S3 inside Floci (backend.floci.hcl).
-  # - Real AWS: S3 via partial config (backend.prod.hcl).
-  # tools/secrets.py always passes one of the two, never bare init.
+  # Partial config: tools/secrets.py always passes the plane's backend file, never a bare init.
   backend "s3" {}
 }

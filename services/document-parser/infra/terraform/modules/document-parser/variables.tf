@@ -52,9 +52,7 @@ variable "aws_account_id" {
   type        = string
 
   validation {
-    # Non-empty only: on real AWS the value comes from caller identity and on
-    # the emulator from the root default, so strict digit-shape checks belong
-    # to the root variable (and terraform test's mock feeds placeholder text).
+    # Non-empty only: string-shape checks belong to the root variable and the test mocks.
     condition     = length(var.aws_account_id) > 0
     error_message = "aws_account_id must be a non-empty account id."
   }

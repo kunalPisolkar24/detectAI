@@ -1,6 +1,5 @@
 locals {
-  # Same flick protocol as the shared infra stack: a non-empty endpoint targets
-  # the emulator (test creds, skip flags), empty/null targets real AWS.
+  # Non-empty endpoint = emulator (test creds, skip flags); empty/null = real AWS.
   effective_endpoint = (
     try(trimspace(var.emulator_endpoint), "") != ""
     ? trimspace(var.emulator_endpoint)
@@ -8,10 +7,7 @@ locals {
   )
   is_emulator = local.effective_endpoint != null
 
-  # IAM policy documents need an account id for every ARN: on real AWS it comes
-  # from caller identity; on the emulator the data source is skipped (the
-  # provider is told to skip account-id resolution anyway) and the var pins it,
-  # defaulting to the emulator's own 000000000000. Ignored on real AWS.
+  # Caller identity on real AWS; pinned var on the emulator, where the data source is skipped.
   account_id = local.is_emulator ? coalesce(var.aws_account_id, "000000000000") : data.aws_caller_identity.current[0].account_id
 
   common_tags = {
@@ -20,8 +16,7 @@ locals {
   }
 }
 
-# Real AWS only: the account id lands in every IAM-managed ARN. Counted out on
-# the emulator, where the pinned/defaulted var takes over instead (see locals).
+# Real AWS only (count = 0 on the emulator; the pinned/defaulted var takes over).
 data "aws_caller_identity" "current" {
   count = local.is_emulator ? 0 : 1
 }

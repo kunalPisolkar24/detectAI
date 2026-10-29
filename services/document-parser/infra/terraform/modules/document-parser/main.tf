@@ -13,11 +13,8 @@ resource "aws_ssm_parameter" "config" {
   description = "document-parser runtime config seeded from .env (tools/secrets.py)."
 }
 
-# Blob being the contract: {"API_KEY": ..., "NEW_RELIC_LICENSE_KEY": ...}.
-# Consumers pull the whole blob at boot and pick the named keys, so adding keys
-# later is entirely a terraform change — no consumer-side schema migration.
-# A version materializes whenever any key is non-null; storing none stores no
-# version (the container would not boot on its blob keys anyway).
+# Blob contract: {"API_KEY": ..., "NEW_RELIC_LICENSE_KEY": ...}; consumers pull the whole
+# blob and pick names, so adding keys later is a terraform-only change. Null keys store no version.
 locals {
   blob = merge(
     var.api_key == null ? {} : { "API_KEY" = var.api_key },
