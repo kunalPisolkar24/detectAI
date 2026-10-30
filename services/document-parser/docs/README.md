@@ -36,12 +36,14 @@ Start here:
 |-------|-------------------|--------------|
 | [Testing](guides/testing.md) | Unit, integration, and load testing with k6 | Verifying changes |
 | [Secrets](guides/secrets.md) | How the API key is stored, resolved, and compared | Provisioning or rotating credentials |
+| [Infrastructure](guides/infrastructure.md) | Provisioning AWS secrets, config parameters, and the runtime role — planes, state, teardown | First AWS apply, or something there broke |
 
 ### Reference
 
 | Document | What You'll Learn | When to Read |
 |----------|-------------------|--------------|
 | [HTTP API](reference/http-api.md) | Endpoints, request/response shapes, every status code | Writing or debugging a caller |
+| [Make Commands](reference/make.md) | Every make target with its purpose and deep-dive doc | Any command-line work |
 
 ## The Request Path at a Glance
 
@@ -90,4 +92,4 @@ make test                              # unit + integration
 make load-fixtures && make load-test   # k6 load rig
 ```
 
-`make help` prints the full command index.
+`make help` prints the raw command index; [Make Commands](reference/make.md) is the annotated version.

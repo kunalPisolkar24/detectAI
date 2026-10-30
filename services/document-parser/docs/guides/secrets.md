@@ -64,6 +64,8 @@ make secrets-apply      # apply (auto on the emulator plane, confirm on real AWS
 make secrets-iam-bootstrap    # the out-of-stack deploy role
 ```
 
+Those verbs, the planes behind them, state handling, and teardown are the [infrastructure guide's](infrastructure.md) subject — here we only needed the destination.
+
 The payload seeded by that flow is a JSON object whose keys are the env names — `API_KEY` and `NEW_RELIC_LICENSE_KEY` are simply entries in it. The prod config plane resolves the *whole* blob at once at boot, and (see [configuration](../getting-started/configuration.md)) treats secrets and SSM parameters as disjoint planes: a key seeded into both is an operator error the boot refuses to paper over.
 
 ### Rotation
