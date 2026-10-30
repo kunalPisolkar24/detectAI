@@ -45,6 +45,33 @@ graph TB
 
 Every strategy returns *either* a claim *or* "not mine" — the first one that claims the bytes wins. When no strategy does, the gate refuses to guess which format it saw: `UnsupportedTypeError`, whose detail names the best-effort sniff from a magic table (PNG, GIF, legacy MS Word, gzip, …). That naming is diagnostic only — it never admits anything.
 
+## The walk as a conversation
+
+The same walk, told as ordered calls — this is the simplest way to read "ordered registry, first claim wins": an attempt happens only when every strategy before it passed on the bytes.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant R as route
+    participant S as validation service
+    participant P as pdf strategy
+    participant D as docx strategy
+    participant T as txt strategy
+
+    R->>S: validate(bytes)
+    S->>P: validate(bytes)
+    P-->>S: a claim, a typed verdict, or none-of-mine
+    S->>D: validate(bytes) — only if pdf passed on
+    D-->>S: a claim, a typed verdict, or none-of-mine
+    S->>T: validate(bytes) — only if docx passed on
+    T-->>S: a claim, or none-of-mine
+    alt a claim landed
+        S-->>R: the sniffed mime for this upload
+    else every strategy passed
+        S-->>R: UnsupportedTypeError — the 415
+    end
+```
+
 ## The registry
 
 One ordered tuple behind one interface: validation is "ask each strategy, first claim wins." Both this registry and the extraction registry downstream key off the mime it returns — which is why order and silence rules are behavioral, not cosmetic.

@@ -28,6 +28,40 @@ graph TB
 
 No strategy ever re-sniffs — dispatch keys on the sniffed MIME the admission gate already decided. The "none" branch is defense in depth: if the gate and the registry ever disagree, it fails closed as `UnreadableDocumentError` (422).
 
+### The tail, apart
+
+Everything after a strategy returns reads this small — cleaning and the cap in one picture.
+
+```mermaid
+graph TB
+    START(["start: RawLines from any strategy"]) --> CLEAN["normalize(): one ordered pass —<br/>LF reunify · invisible drop · nbsp to space<br/>hyphen rejoin · page-marker drop · space and blank collapse"] --> CAP{"over the<br/>character cap?"}
+    CAP -->|"yes"| CUT["200: the exact prefix,<br/>truncated: true"] --> END(["end"])
+    CAP -->|"no"| FULL["200: full text,<br/>truncated = the partial flag"] --> END
+```
+
+## One extract call, as a conversation
+
+Who holds the deadline, who owns the cap — in call order.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant R as route
+    participant S as extraction service
+    participant X as the strategy by sniffed mime
+    participant N as normalize()
+
+    R->>S: extract(admitted bytes, mime)
+    S->>S: Deadline.from_budget(budget) — computed once
+    S->>X: extract(data, deadline)
+    X-->>S: RawLines — ordered lines, partial flag
+    S->>N: the ordered lines
+    N-->>S: cleaned text, one pure pass
+    S->>S: enforce the character cap once, set truncated
+    S-->>R: ExtractionResult (text, truncated)
+    note over X: the deadline is checked inside the strategy's loops — between pages or member elements
+```
+
 ## The deadline
 
 Computed **once** per request, on the monotonic clock, from `PROCESSING_BUDGET_SECONDS` (10 s by default) and carried down as a value. Strategies check it in their inner loops — between PDF pages, between DOCX members. TXT never checks (one decode is the whole format).

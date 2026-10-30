@@ -69,6 +69,37 @@ graph LR
     WORK -->|"success"| S200["200 + JSON"] --> END
 ```
 
+### Transport stage, apart
+
+Everything that fires before format has a say.
+
+```mermaid
+graph LR
+    START(["start: the request arrives with a key"]) --> K{"x-api-key valid?"}
+    K -->|"no"| R401["401"] --> END(["end"])
+    K -->|"yes"| B{"body over the upload limit?"}
+    B -->|"yes"| R413["413"] --> END
+    B -->|"no"| F{"well-formed multipart,<br/>a file field present?"}
+    F -->|"no"| R422["422"] --> END
+    F -->|"yes, admitted onward"| END
+```
+
+### Admission and extraction stage, apart
+
+Format's questions, in order — each answered on the spot.
+
+```mermaid
+graph LR
+    START(["start: admitted bytes"]) --> S{"magic sniff"}
+    S -->|"foreign type"| R415["415"] --> END(["end"])
+    S -->|"bound breached"| R413["413"] --> END
+    S -->|"container broken"| R422["422"] --> END
+    S -->|"clean"| WORK{"extract"}
+    WORK -->|"deadline hit"| R504["504"] --> END
+    WORK -->|"unreadable content"| R422B["422"] --> END
+    WORK -->|"success"| R200["200 + JSON"] --> END
+```
+
 ## Status codes
 
 | Code | When | Body detail |

@@ -62,6 +62,57 @@ graph LR
 
 Rejection reasons are exactly `too_large`, `unsupported_type`, `corrupt`, `malformed`; extraction outcomes are exactly `ok`, `truncated`, `timeout`, `unreadable`. Both vocabularies are Literals in the interface, so a new attribution value forces its way into the type system before it can reach a metric. The 401 is the one verdict with no metric: the key guard runs before the recording bracket opens, so denied credentials never enter the pipeline's numbers.
 
+### The two legs, apart
+
+The map above, split at the only seam that matters — before extraction and after it.
+
+```mermaid
+graph LR
+    START(["start: a rule before extraction fires"]) --> CASE{"which rule?"}
+    CASE -->|"body over the limit"| A1["too_large"]
+    CASE -->|"unknown type"| A2["unsupported_type"]
+    CASE -->|"container broken"| A3["corrupt"]
+    CASE -->|"malformed multipart"| A4["malformed"]
+    A1 --> CO["rejected_uploads_total +1,<br/>one reason attribute"] --> END(["end"])
+    A2 --> CO
+    A3 --> CO
+    A4 --> CO
+```
+
+```mermaid
+graph LR
+    START(["start: an admitted document ends"]) --> CASE{"outcome?"}
+    CASE -->|"ok or truncated"| P1["parsed_documents_total +1<br/>one duration sample"]
+    CASE -->|"timeout"| P2["extraction_timeouts_total +1<br/>one duration sample"]
+    CASE -->|"unreadable"| P3["extraction_failures_total +1<br/>one duration sample"]
+    P1 --> END(["end"])
+    P2 --> END
+    P3 --> END
+```
+
+## One request, as signals
+
+The full lifecycle in call order — brackets open, instruments update, and the shutdown drain.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant R as the route handler
+    participant O as ObservabilityService
+    participant T as TracesAdapter
+    participant M as MetricsAdapter
+    participant L as LogsAdapter
+
+    R->>O: track_request() — the bracket opens
+    O-->>M: in_flight_requests +1
+    R->>O: track_extraction(mime, size)
+    O-->>T: the extraction span opens with its attributes
+    R->>O: record_extraction(mime, ok, seconds)
+    O-->>M: parsed_documents_total +1 and one duration sample
+    R-->>O: brackets close on return — gauge -1, span ends
+    note over T,M,L: at shutdown the drain is traces then metrics then logs — each flush guarded, idempotent, 5 s capped
+```
+
 ## The pieces
 
 ### Overview
