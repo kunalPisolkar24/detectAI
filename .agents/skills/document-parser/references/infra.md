@@ -71,6 +71,9 @@ sibling stacks' state too.
   versioned, encrypted, access-restricted.
 - Skipping the 30-day recovery window needs `--force-delete`, which has no
   make wrapper: `poetry run python tools/secrets.py destroy --force-delete`.
+  Or seed without a window at all: `SECRET_RECOVERY_WINDOW=0` in `infra/.env`
+  makes `terraform destroy` delete the blob immediately (opt-in; unset keeps
+  30 days, `7-30` keeps an AWS window; the emulator plane always uses 0).
 
 Full operator guide: `services/document-parser/docs/guides/infrastructure.md`
 · credential handling: `services/document-parser/docs/guides/secrets.md`

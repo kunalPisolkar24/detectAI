@@ -763,3 +763,89 @@ def test_main_rejects_drop_iam_on_other_verbs(monkeypatch, tmp_path):
     with pytest.raises(SystemExit) as excinfo:
         dp_secrets.main()
     assert excinfo.value.code == 1
+
+
+def test_build_tf_vars_recovery_window_per_plane():
+    assert dp_secrets.build_tf_vars(EMULATOR_VALUE)["TF_VAR_secret_recovery_window"] == "0"
+    # The emulator pins 0 whatever the knob says.
+    pinned = dp_secrets.build_tf_vars({**EMULATOR_VALUE, "SECRET_RECOVERY_WINDOW": "30"})
+    assert pinned["TF_VAR_secret_recovery_window"] == "0"
+
+    real = dp_secrets.build_tf_vars(REAL_VALUE)
+    assert real["TF_VAR_secret_recovery_window"] == "30"  # unset keeps the 30-day default
+    zero = dp_secrets.build_tf_vars({**REAL_VALUE, "SECRET_RECOVERY_WINDOW": "0"})
+    assert zero["TF_VAR_secret_recovery_window"] == "0"
+    seven = dp_secrets.build_tf_vars({**REAL_VALUE, "SECRET_RECOVERY_WINDOW": "7"})
+    assert seven["TF_VAR_secret_recovery_window"] == "7"
+
+
+def test_validate_recovery_window_rules():
+    for raw in ("0", "7", "15", "30"):
+        assert dp_secrets.validate(False, {**REAL_VALUE, "SECRET_RECOVERY_WINDOW": raw}) == []
+    for raw in ("3", "31", "abc", "-5", "1.5"):
+        errors = "\n".join(
+            dp_secrets.validate(False, {**REAL_VALUE, "SECRET_RECOVERY_WINDOW": raw})
+        )
+        assert "SECRET_RECOVERY_WINDOW" in errors and "fix:" in errors, raw
+    sentences = "\n".join(
+        dp_secrets.validate(False, {**REAL_VALUE, "SECRET_RECOVERY_WINDOW": "abc"})
+    )
+    assert "not a whole number" in sentences
+    bounds = "\n".join(dp_secrets.validate(False, {**REAL_VALUE, "SECRET_RECOVERY_WINDOW": "31"}))
+    assert "between 7 and 30" in bounds
+    # On the emulator the knob is out of contract: ignored, never rejected.
+    assert dp_secrets.validate(True, {**EMULATOR_VALUE, "SECRET_RECOVERY_WINDOW": "junk"}) == []
+
+
+def test_plane_notes_recovery_window_messaging():
+    ignored = "\n".join(
+        dp_secrets.plane_notes({**EMULATOR_VALUE, "SECRET_RECOVERY_WINDOW": "30"}, "emulator (Floci)")
+    )
+    assert "ignored on the emulator plane" in ignored
+    zero_real = "\n".join(
+        dp_secrets.plane_notes({**REAL_VALUE, "SECRET_RECOVERY_WINDOW": "0"}, "real AWS")
+    )
+    assert "destroy deletes the secret immediately" in zero_real
+    assert all(
+        "SECRET_RECOVERY_WINDOW" not in note
+        for note in dp_secrets.plane_notes({**REAL_VALUE, "SECRET_RECOVERY_WINDOW": "30"}, "real AWS")
+    )
+    assert all(
+        "SECRET_RECOVERY_WINDOW" not in note for note in dp_secrets.plane_notes(REAL_VALUE, "real AWS")
+    )
+
+
+def test_summary_prints_the_recovery_window(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+
+    env.write_text(
+        "API_KEY=" + "a" * 20 + "\nTF_STATE_BUCKET=detectai-tfstate-sandbox\nSECRET_RECOVERY_WINDOW=7\n"
+    )
+    monkeypatch.setattr("sys.argv", ["secrets.py", "plan", "--dry-run"])
+    assert dp_secrets.main() == 0
+    assert "window: 7 day(s)" in capsys.readouterr().out
+
+    env.write_text("API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=http://localhost:4566\n")
+    assert dp_secrets.main() == 0
+    assert "window: 0 day(s)" in capsys.readouterr().out
+
+    env.write_text(
+        "API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=http://localhost:4566\nSECRET_RECOVERY_WINDOW=30\n"
+    )
+    assert dp_secrets.main() == 0
+    out = capsys.readouterr().out
+    assert "window: 0 day(s)" in out and "ignored on the emulator plane" in out
+
+
+def test_dry_run_rejects_the_invalid_recovery_window(monkeypatch, tmp_path, capsys):
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+    env.write_text(
+        "API_KEY=" + "a" * 20
+        + "\nTF_STATE_BUCKET=detectai-tfstate-sandbox\nSECRET_RECOVERY_WINDOW=31\n"
+    )
+    monkeypatch.setattr("sys.argv", ["secrets.py", "plan", "--dry-run"])
+    assert dp_secrets.main() == 1
+    assert "between 7 and 30" in capsys.readouterr().out

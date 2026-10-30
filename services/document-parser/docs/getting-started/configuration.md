@@ -56,6 +56,7 @@ Field names are the env keys, uppercased. Unknown keys are ignored (consume-firs
 | `OTEL_TRACE_SAMPLE_RATIO` | fraction of traces sampled, `(0, 1]` | 1.0 | **boot fails** |
 | `PORT` | host port for docker compose | 8000 | compose-only helper |
 | `DOTENV_PATH` | location of the dev `.env` file | `infra/.env` | adapter-only |
+| `SECRET_RECOVERY_WINDOW` | real-AWS seeding only: days the secret survives a destroy, `0` skips the window | 30 | seeding stops with a named error before terraform (the emulator plane ignores this key) |
 
 The split that matters: **numeric bounds fail closed** (an unreadable value falls back to the safe default, boot continues) — **credentials and cleaning knobs fail the boot** (a deletion-rule threshold must never silently loosen).
 

@@ -44,6 +44,8 @@ LICENSE_KEY_MIN_LENGTH = 16
 ENV_TYPES = ("dev", "prod")
 EMULATOR_RECOVERY_WINDOW = 0
 PROD_RECOVERY_WINDOW = 30
+RECOVERY_WINDOW_MIN = 7
+RECOVERY_WINDOW_MAX = 30
 STATE_PREFIX = "document-parser"
 
 # Non-secret runtime config terraform writes to SSM (SSM_SEED_PREFIX + KEY) on
@@ -122,6 +124,16 @@ def resolve_state_bucket(is_emulator: bool, values: dict[str, str]) -> str | Non
     return DEFAULT_STATE_BUCKET if is_emulator else None
 
 
+def resolve_recovery_window(is_emulator: bool, values: dict[str, str]) -> int:
+    """Emulator plane: always 0. Real AWS: the .env override or the 30-day default."""
+    if is_emulator:
+        return EMULATOR_RECOVERY_WINDOW
+    raw = values.get("SECRET_RECOVERY_WINDOW", "")
+    if not raw:
+        return PROD_RECOVERY_WINDOW
+    return int(raw)
+
+
 BUCKET_MISSING_ERROR = "the real-AWS plane needs a state bucket: TF_STATE_BUCKET is not set in .env"
 BUCKET_MISSING_FIX = (
     "add TF_STATE_BUCKET=<unique 3-63 char lowercase bucket> to .env and create it "
@@ -166,6 +178,20 @@ def validate(is_emulator: bool, values: dict[str, str]) -> list[str]:
             f"ENV_TYPE must be one of {' or '.join(ENV_TYPES)}, got {env_type!r}",
             "set ENV_TYPE=dev or ENV_TYPE=prod",
         )
+    if (raw := values.get("SECRET_RECOVERY_WINDOW", "")) and not is_emulator:
+        # The emulator ignores the key outright, so only the real plane polices it.
+        parsed = int(raw) if raw.isdigit() else None
+        if parsed is None:
+            fail(
+                f"SECRET_RECOVERY_WINDOW is not a whole number of days: {raw!r}",
+                "use 0 (drop the secret at destroy time) or 7-30 (keep the AWS window)",
+            )
+        elif parsed != 0 and not RECOVERY_WINDOW_MIN <= parsed <= RECOVERY_WINDOW_MAX:
+            fail(
+                f"SECRET_RECOVERY_WINDOW must be 0 or between 7 and 30, got {raw}",
+                f"Secrets Manager accepts 0 or {RECOVERY_WINDOW_MIN}-{RECOVERY_WINDOW_MAX}; "
+                "the terraform variable enforces the same rule",
+            )
     if (otel_endpoint := values.get("OTEL_EXPORTER_OTLP_ENDPOINT", "")):
         if not URL_RE.fullmatch(otel_endpoint):
             fail(
@@ -220,9 +246,7 @@ def build_tf_vars(values: dict[str, str]) -> dict[str, str]:
     tf_vars = {
         "TF_VAR_api_key": values["API_KEY"],
         "TF_VAR_aws_region": resolve_region(values),
-        "TF_VAR_secret_recovery_window": str(
-            EMULATOR_RECOVERY_WINDOW if is_emulator else PROD_RECOVERY_WINDOW
-        ),
+        "TF_VAR_secret_recovery_window": str(resolve_recovery_window(is_emulator, values)),
     }
     # License key rides the secrets blob: non-empty seeds, empty skips.
     if (license_key := values.get("NEW_RELIC_LICENSE_KEY", "")) != "":
@@ -280,6 +304,11 @@ def plane_notes(values: dict[str, str], plane: str) -> list[str]:
         notes.append("warning: applying to real AWS while ENV_TYPE=dev (dev runtime reads .env, not SM)")
     if plane == "emulator (Floci)" and not values.get("TF_STATE_BUCKET"):
         notes.append(f"note: TF_STATE_BUCKET unset; the Floci plane defaults to {DEFAULT_STATE_BUCKET}")
+    if values.get("SECRET_RECOVERY_WINDOW"):
+        if plane == "emulator (Floci)":
+            notes.append("note: SECRET_RECOVERY_WINDOW ignored on the emulator plane (always 0)")
+        elif values["SECRET_RECOVERY_WINDOW"] == "0":
+            notes.append("warning: SECRET_RECOVERY_WINDOW=0 on real AWS — destroy deletes the secret immediately")
     return notes
 
 
@@ -778,6 +807,7 @@ def main() -> int:
     print(f"secret: {SECRETS_NAME}")
     print(f"key:    *** ({key_len} chars, hidden)")
     print(f"state:  {state_bucket} / {state_key}")
+    print(f"window: {resolve_recovery_window(is_emulator, values)} day(s)")
     config_keys = [key for key in SSM_SEED_KEYS if values.get(key, "") != ""]
     if config_keys:
         print(f"config: {len(config_keys)} key(s) -> SSM {SSM_SEED_PREFIX}")

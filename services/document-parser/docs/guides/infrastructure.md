@@ -51,7 +51,7 @@ graph LR
 | Selected by | `EMULATOR_ENDPOINT` set | line empty or removed |
 | Credentials | dummy `test`/`test` | real AWS keys |
 | State bucket | `TF_STATE_BUCKET`, or default `detectai-docparser-tfstate` when unset | `TF_STATE_BUCKET` (required) |
-| Secret deletion | instant (0-day recovery window) | 30-day recovery window |
+| Secret deletion | instant (0-day recovery window) | 30-day recovery window (`SECRET_RECOVERY_WINDOW` seeds 0 or 7–30 instead) |
 | Apply | auto-approved | interactive confirm |
 
 The provider block adapts itself (`providers.tf`): the emulator plane gets `test` credentials, `skip_*` flags, and endpoint overrides for `secretsmanager`, `ssm`, `iam`, `sts`; the real-AWS plane leaves all of that unset. IAM policy ARNs need a 12-digit account id — real AWS resolves it from your credentials; the emulator pins `000000000000` (override with `TF_VAR_aws_account_id`).
@@ -103,7 +103,7 @@ Two rules make these safe to reach for:
 - **`terraform destroy` never touches the state bucket** — it is backend storage, not a stack resource. Only `secrets-destroy` deletes it, and only after destroy succeeded.
 - **On real AWS, `secrets-destroy` asks for the typed bucket name** before destroying anything — a refusal cancels the run. It also warns when the bucket holds objects outside `document-parser/`, since wiping a shared sandbox bucket takes sibling stacks' state with it.
 
-After `secrets-clean`, re-applying is just `make secrets-apply` again — init reuses the kept ledger, which now holds empty state. Destroying on real AWS schedules the secret into the 30-day recovery window; skipping it needs `--force-delete`, which has no make wrapper: `poetry run python tools/secrets.py destroy --force-delete`.
+After `secrets-clean`, re-applying is just `make secrets-apply` again — init reuses the kept ledger, which now holds empty state. Destroying on real AWS schedules the secret into the 30-day recovery window; skipping it needs `--force-delete`, which has no make wrapper: `poetry run python tools/secrets.py destroy --force-delete`. `SECRET_RECOVERY_WINDOW` in `infra/.env` takes the other road: `0` seeds the blob without a window, so `terraform destroy` itself deletes immediately and leaves no reservation to wait out; `7–30` keeps an AWS window; unset keeps the 30-day default. The emulator plane always uses 0 and ignores the key.
 
 ## Good to know
 
