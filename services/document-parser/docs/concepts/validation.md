@@ -20,30 +20,66 @@ Notes worth having in your head:
 - **The DOCX bound is a zip-bomb guard** read entirely from member metadata, before a content byte is touched. Real DOCX files deflate ≈ 8–12×, so legitimate documents pass; bombs run 100×+ and die at the metadata read.
 - A recognizable container that will not open is *corrupt* (422), not unsupported (415) — a car that looks like a car but does not open is broken, not another vehicle.
 
-## The walk, once per upload
+## The walk
+
+One ordered loop with three ways to conclude.
 
 ```mermaid
 graph TB
-    START(["start: bytes on the wire"]) --> PDFS{"starts with<br/>%PDF- ?"}
-    PDFS -->|"no"| ZIPS{"zip magic?"}
-    PDFS -->|"yes"| POPEN["container opens<br/>(pypdf)"]
-    POPEN -->|"unreadable"| C422["422: corrupt"]
-    POPEN -->|"over the page bound"| L413["413: too large"]
-    POPEN -->|"within bounds"| ADMITTED["admitted: sniffed mime<br/>pdf / docx / text/plain"]
-    ZIPS -->|"no"| TXTS{"strict UTF-8<br/>decode?"}
-    ZIPS -->|"yes"| ZOPEN["zip opens, body part present,<br/>30 MiB unpack sum from metadata"]
-    ZOPEN -->|"broken or<br/>no body part"| C422
-    ZOPEN -->|"over the unpack bound"| L413
-    ZOPEN -->|"within bounds"| ADMITTED
-    TXTS -->|"no"| DECLINE["415: unsupported type<br/>(detail names the best guess)"]
-    TXTS -->|"yes"| ADMITTED
-    ADMITTED --> EXTRACT["the extraction pipeline<br/>takes over"] --> END(["end"])
-    C422 --> END
-    L413 --> END
-    DECLINE --> END
+    START(["start: bytes on the wire"]) --> W{"the strategy walk, in order"}
+    W -->|"a claim: pdf, docx,<br/>or text/plain"| ADM["admitted — the mime keys<br/>the extraction pipeline"] --> END(["end"])
+    W -->|"a typed verdict inside<br/>an attempt"| V["413 or 422"] --> END
+    W -->|"every attempt passed"| D415["415: unsupported type,<br/>detail names the sniffed guess"] --> END
 ```
 
 Every strategy returns *either* a claim *or* "not mine" — the first one that claims the bytes wins. When no strategy does, the gate refuses to guess which format it saw: `UnsupportedTypeError`, whose detail names the best-effort sniff from a magic table (PNG, GIF, legacy MS Word, gzip, …). That naming is diagnostic only — it never admits anything.
+
+## The walk in components
+
+Each strategy at its own size: one decision, one container check, flat outcomes into one terminus.
+
+### The pdf attempt
+
+```mermaid
+graph TB
+    START(["start: bytes meet the pdf attempt"]) --> SIG{"starts with<br/>%PDF- ?"}
+    SIG -->|"no"| MISS["none of mine —<br/>the docx attempt starts"]
+    SIG -->|"yes"| OPEN["pypdf opens the container"]
+    OPEN -->|"unreadable"| O1["422: corrupt"]
+    OPEN -->|"over the page bound"| O2["413: too large"]
+    OPEN -->|"within the 1,000-page bound"| O3["admitted: application/pdf —<br/>the pipeline takes over"]
+    MISS --> END(["end"])
+    O1 --> END
+    O2 --> END
+    O3 --> END
+```
+
+### The docx attempt
+
+```mermaid
+graph TB
+    START(["start: bytes meet the docx attempt"]) --> SIG{"zip magic?"}
+    SIG -->|"no"| MISS["none of mine —<br/>the txt attempt starts"]
+    SIG -->|"yes"| OPEN["zip opens, the word/document.xml body part required,<br/>the 30 MiB unpack sum read from metadata only"]
+    OPEN -->|"broken or no body part"| O1["422: corrupt"]
+    OPEN -->|"over the unpack bound"| O2["413: too large"]
+    OPEN -->|"within bounds"| O3["admitted: the docx mime —<br/>the pipeline takes over"]
+    MISS --> END(["end"])
+    O1 --> END
+    O2 --> END
+    O3 --> END
+```
+
+### The txt attempt
+
+```mermaid
+graph TB
+    START(["start: bytes meet the txt attempt"]) --> SIG{"strict<br/>UTF-8 decode?"}
+    SIG -->|"not decodable"| O1["415: unsupported type —<br/>every attempt has passed, so the<br/>detail names the sniffed guess"]
+    SIG -->|"decodable"| O2["admitted: text/plain —<br/>the pipeline takes over"]
+    O1 --> END(["end"])
+    O2 --> END
+```
 
 ## The walk as a conversation
 
