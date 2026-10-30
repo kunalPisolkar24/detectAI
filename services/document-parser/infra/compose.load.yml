@@ -1,0 +1,33 @@
+# Load rig: parser + k6 on an isolated network, nothing published to the
+# host. Every knob lives in infra/.env.load.
+name: document-parser-load
+
+include:
+  - compose.k6.yml
+
+services:
+  document-parser:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    stop_grace_period: 15s
+    env_file:
+      - .env.load
+    healthcheck:
+      # python-slim ships no curl; the same probe the Dockerfile uses.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - loadnet
+
+  # The rig's only override: k6 waits for the parser to answer its probe.
+  k6:
+    depends_on:
+      document-parser:
+        condition: service_healthy
+
+networks:
+  loadnet:

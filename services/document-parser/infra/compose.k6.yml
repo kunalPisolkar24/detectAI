@@ -1,0 +1,18 @@
+# The single k6 runner: the rig includes it, `make load-e2e` drives it alone.
+# Every knob lives in infra/.env.load; K6_SCRIPT comes from the Makefile.
+services:
+  k6:
+    image: grafana/k6
+    command: run /load/${K6_SCRIPT:-scenarios/smoke.js}
+    env_file:
+      - .env.load
+    volumes:
+      - ../tests/load:/load:ro
+    # Lets k6 reach a service published on the Docker host (e2e targets).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - loadnet
+
+networks:
+  loadnet:

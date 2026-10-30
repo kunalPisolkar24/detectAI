@@ -1,0 +1,22 @@
+# Standalone stack on its default network.
+name: document-parser
+
+services:
+  document-parser:
+    image: detectai-document-parser:latest
+    container_name: detectai-document-parser
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # Outlasts the 12 s graceful-drain bound in the Dockerfile CMD.
+    stop_grace_period: 15s
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-8000}:8000"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M

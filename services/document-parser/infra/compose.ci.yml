@@ -1,0 +1,7 @@
+# CI-only rig override (.github/workflows/document-parser.yaml): the smoke job
+# builds the image once with buildx and pins this tag, so the rig tests the
+# exact artifact that later gets pushed — compose run never rebuilds it.
+services:
+  document-parser:
+    image: kunalpisolkar/detect-ai-file-processor:ci
+    pull_policy: never

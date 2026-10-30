@@ -1,0 +1,41 @@
+name: Observability
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - staging
+    paths:
+      - "observability/**"
+      - ".github/workflows/observability.yaml"
+  pull_request:
+    branches:
+      - main
+      - staging
+    paths:
+      - "observability/**"
+      - ".github/workflows/observability.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: fmt / validate / test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: observability/terraform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Offline checks (fmt / init / validate / test)
+        run: make fmt init validate test

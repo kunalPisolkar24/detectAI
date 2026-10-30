@@ -30,7 +30,12 @@ override.tf.json
 terraform.rc
 infra/terraform/backend.prod.hcl
 infra/observability/backend.prod.hcl
+services/document-parser/infra/terraform/backend.prod.hcl
+
+# Editor
+.vscode/
 
 # Local working docs (not for review)
 services/document-parser/diagrams/
+services/document-parser/tests/load/assets/
 infra/terraform/.env.pg.floci
