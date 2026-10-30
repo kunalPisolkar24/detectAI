@@ -133,7 +133,7 @@ Each service has its own CI workflow:
 | `service-web.yaml` | Web app | `apps/web/**` |
 | `service-workers.yaml` | Workers | `services/workers/**` |
 | `service-payment-gateway.yaml` | Payment gateway | `services/payments/**` |
-| `service-file-processing.yaml` | Document parser | `services/document-parser/**` |
+| `document-parser.yaml` | Document parser | `services/document-parser/**` |
 
 ### Typical Service Pipeline
 

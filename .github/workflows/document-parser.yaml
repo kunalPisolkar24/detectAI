@@ -1,4 +1,4 @@
-name: Service - File Processing
+name: Document Parser
 
 on:
   workflow_dispatch:
@@ -8,14 +8,14 @@ on:
       - staging
     paths:
       - "services/document-parser/**"
-      - ".github/workflows/service-file-processing.yaml"
+      - ".github/workflows/document-parser.yaml"
   pull_request:
     branches:
       - main
       - staging
     paths:
       - "services/document-parser/**"
-      - ".github/workflows/service-file-processing.yaml"
+      - ".github/workflows/document-parser.yaml"
 
 env:
   DOCKER_IMAGE_NAME: kunalpisolkar/detect-ai-file-processor
@@ -53,9 +53,60 @@ jobs:
       - name: Run Integration Tests
         run: poetry run pytest tests/integration -m integration -v
 
+  load-test-smoke:
+    name: Run Smoke Load Test
+    needs: quality-assurance
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.SERVICE_PATH }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install Dependencies
+        run: poetry install --no-interaction
+
+      - name: Generate the load corpus (gitignored)
+        run: make load-fixtures
+
+      - name: Load rig env file
+        run: make load-env
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image for the smoke rig
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ env.SERVICE_PATH }}
+          file: ${{ env.SERVICE_PATH }}/Dockerfile
+          push: false
+          load: true
+          tags: ${{ env.DOCKER_IMAGE_NAME }}:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run smoke scenario (service + k6 containers)
+        run: |
+          docker compose -f infra/compose.load.yml -f infra/compose.ci.yml run --rm k6 run /load/scenarios/smoke.js
+
+      - name: Tear down the rig
+        if: always()
+        run: docker compose -f infra/compose.load.yml -f infra/compose.ci.yml down -v --remove-orphans
+
   build-and-push:
     name: Build & Push Docker Image
-    needs: quality-assurance
+    needs: [quality-assurance, load-test-smoke]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
