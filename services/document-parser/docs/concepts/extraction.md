@@ -4,33 +4,63 @@ Extraction is the pipeline that turns admitted bytes into cleaned text. It has e
 
 ## The pipeline
 
+One read under one deadline, then the shared tail.
+
 ```mermaid
 graph TB
-    START(["start: admitted bytes + sniffed mime"]) --> DEADLINE["Deadline computed once<br/>from PROCESSING_BUDGET_SECONDS"]
-    DEADLINE --> DISPATCH{"which strategy<br/>claims the mime?"}
-    DISPATCH -->|"pdf"| PDFS["PyMuPDF block walk,<br/>header/footer suppression"]
-    DISPATCH -->|"docx"| DOCXS["streamed body XML,<br/>one paragraph at a time"]
-    DISPATCH -->|"txt"| TXTS["strict decode, lines"]
-    DISPATCH -->|"none"| UNREAD["422: unreadable"] --> END(["end"])
-    PDFS -->|"deadline hit<br/>between pages"| TIMEOUT["504: budget exceeded"] --> END
-    DOCXS -->|"deadline hit<br/>between elements"| TIMEOUT
-    PDFS -->|"nothing readable at all"| UNREAD
-    PDFS --> LINES
-    DOCXS --> LINES
-    TXTS --> LINES
-    LINES["RawLines:<br/>ordered lines + partial flag"] --> CLEAN["normalize():<br/>the shared line cleaner"]
-    CLEAN --> CAP{"over the<br/>character cap?"}
-    CAP -->|"yes"| CUT["200: exact prefix,<br/>truncated: true"]
-    CAP -->|"no"| FULL["200: full text,<br/>truncated = partial flag"]
-    CUT --> END
-    FULL --> END
+    START(["start: admitted bytes + sniffed mime"]) --> D["deadline computed once<br/>from PROCESSING_BUDGET_SECONDS"]
+    D --> W{"which strategy claims<br/>the sniffed mime?"}
+    W -->|"none — gate and registry disagree"| UNREAD["422: unreadable"] --> END(["end"])
+    W -->|"pdf / docx / txt"| S["the strategy reads its format,<br/>deadline in hand"]
+    S -->|"deadline spent mid-read"| T504["504: budget exceeded"] --> END
+    S -->|"nothing readable at all"| UNREAD
+    S -->|"RawLines"| TAIL["normalize() and the cap → 200<br/>(see the tail, apart)"] --> END
 ```
 
 No strategy ever re-sniffs — dispatch keys on the sniffed MIME the admission gate already decided. The "none" branch is defense in depth: if the gate and the registry ever disagree, it fails closed as `UnreadableDocumentError` (422).
 
+## The pipeline in components
+
+Each leg at its own size: how the format is read, where the deadline is checked, and what can still end in a refusal after admission.
+
+### The pdf leg
+
+```mermaid
+graph TB
+    START(["start: admitted pdf bytes, deadline in hand"]) --> OPEN{"pymupdf<br/>opens the stream?"}
+    OPEN -->|"no"| U422["422: unreadable"] --> END(["end"])
+    OPEN -->|"yes"| WALK["walk text blocks page by page —<br/>each line keeps its y position"]
+    WALK -->|"deadline hit between pages"| T504["504: budget exceeded"] --> END
+    WALK -->|"nothing readable at all"| U422
+    WALK -->|"a page unreadable"| SKIP["skip it — partial: true"] -->|"the walk continues"| WALK
+    WALK -->|"all pages walked"| RULES["rules (a)/(b) judge<br/>what to delete"]
+    RULES --> DONE["RawLines: ordered lines<br/>+ the partial flag — to the tail"] --> END
+```
+
+### The docx leg
+
+```mermaid
+graph TB
+    START(["start: admitted docx bytes, deadline in hand"]) --> STREAM["iterparse streams word/document.xml,<br/>one paragraph held at a time"]
+    STREAM -->|"the body part or stream breaks"| U422["422: unreadable"] --> END(["end"])
+    STREAM -->|"deadline hit between member elements"| T504["504: budget exceeded"] --> END
+    STREAM -->|"each paragraph end"| WHICH{"what does the<br/>paragraph hold?"}
+    WHICH -->|"field instruction text"| DROP["dropped —<br/>not a line"] -->|"the stream goes on"| STREAM
+    WHICH -->|"plain text<br/>or a field result"| LINE["a raw line"] --> DONE["RawLines: ordered paragraphs —<br/>to the tail"] --> END
+```
+
+### The txt leg
+
+```mermaid
+graph TB
+    START(["start: admitted txt bytes — the deadline is never checked"]) --> DEC["one strict UTF-8 decode,<br/>split into lines"]
+    DEC -->|"decode fails"| U422["422: unreadable —<br/>defense in depth: the gate only<br/>admits decodable bytes"] --> END(["end"])
+    DEC -->|"decoded"| DONE["RawLines: ordered lines —<br/>to the tail"] --> END
+```
+
 ### The tail, apart
 
-Everything after a strategy returns reads this small — cleaning and the cap in one picture.
+The terminus every leg shares — cleaning and the cap in one picture.
 
 ```mermaid
 graph TB
