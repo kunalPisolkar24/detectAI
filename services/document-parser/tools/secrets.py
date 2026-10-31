@@ -6,7 +6,7 @@ then drives `terraform plan/apply` for the service-scoped stack. The plane
 comes from EMULATOR_ENDPOINT: an http(s) URL -> Floci/LocalStack
 (auto-approved), unset -> real AWS (confirm prompt). Terraform alone touches
 AWS on the resource path; the opt-in direct-AWS verbs are `bootstrap`
-(state bucket), `destroy --purge-state` / `--force-delete`, `iam-bootstrap`.
+(state bucket), `destroy --purge-state` / `--force-delete`, `seeder-bootstrap`.
 """
 
 from __future__ import annotations
@@ -71,12 +71,13 @@ SSM_SEED_KEYS = (
     "OTEL_TRACE_SAMPLE_RATIO",
 )
 
-# Out-of-stack deploy identity terraform never manages. Real AWS trusts the
-# caller's own user + MFA; the emulator uses a structural placeholder.
-DEPLOY_ROLE_NAME = "detectai-document-parser-deploy"
-DEPLOY_POLICY_NAME = "deploy-policy"
+# Out-of-stack seeder identity terraform never manages: the single carrier for
+# state-bucket, Secrets Manager, and SSM writes. Real AWS trusts the caller's
+# own user + MFA; the emulator uses a structural placeholder.
+SEEDER_ROLE_NAME = "detectai-document-parser-seeder"
+SEEDER_POLICY_NAME = "seeder-policy"
 DEFAULT_ACCOUNT_ID = "000000000000"
-DEPLOY_USER_DEFAULT = "detectai-deploy"
+SEEDER_USER_DEFAULT = "detectai-seeder"
 USER_ARN_RE = re.compile(r"^arn:aws:iam::[0-9]{12}:user/[a-zA-Z0-9+=,.@_-]+$")
 
 
@@ -344,7 +345,13 @@ def bootstrap_commands(is_emulator: bool, values: dict[str, str]) -> list[list[s
 
 
 def aws_env(is_emulator: bool) -> dict[str, str]:
-    return os.environ | ({"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"} if is_emulator else {})
+    env = dict(os.environ)
+    if is_emulator:
+        # Emulator creds are injected below; a named carrier profile (the CLI
+        # resolves the profile first) would outrank them otherwise.
+        env.pop("AWS_PROFILE", None)
+        env |= {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}
+    return env
 
 
 def run_aws(command: list[str], is_emulator: bool) -> int:
@@ -417,19 +424,19 @@ def force_delete_command(is_emulator: bool, values: dict[str, str]) -> list[str]
 def resolve_trust_user_arn(is_emulator: bool, values: dict[str, str]) -> str:
     """Real AWS: the caller's own user (mandatory); emulator: structural placeholder."""
     if is_emulator:
-        user_arn = values.get("DEPLOY_TRUST_USER_ARN", "")
+        user_arn = values.get("SEEDER_TRUST_USER_ARN", "")
         if user_arn:
             return user_arn
-        return f"arn:aws:iam::{DEFAULT_ACCOUNT_ID}:user/{DEPLOY_USER_DEFAULT}"
-    return values["DEPLOY_TRUST_USER_ARN"]
+        return f"arn:aws:iam::{DEFAULT_ACCOUNT_ID}:user/{SEEDER_USER_DEFAULT}"
+    return values["SEEDER_TRUST_USER_ARN"]
 
 
 def iam_account_id(user_arn: str) -> str:
-    assert USER_ARN_RE.fullmatch(user_arn) is not None  # validate_iam_bootstrap guards both planes
+    assert USER_ARN_RE.fullmatch(user_arn) is not None  # validate_seeder_bootstrap guards both planes
     return user_arn.split(":")[4]
 
 
-def validate_iam_bootstrap(is_emulator: bool, values: dict[str, str]) -> list[str]:
+def validate_seeder_bootstrap(is_emulator: bool, values: dict[str, str]) -> list[str]:
     """Only what the bootstrap consumes: region, endpoint, bucket, trust user."""
     errors: list[str] = []
 
@@ -449,9 +456,9 @@ def validate_iam_bootstrap(is_emulator: bool, values: dict[str, str]) -> list[st
                 "set it to the Floci URL (http://localhost:4566) or remove the line for real AWS",
             )
     bucket_errors(errors, values.get("TF_STATE_BUCKET", ""), required=not is_emulator)
-    user_arn = values.get("DEPLOY_TRUST_USER_ARN", "")
-    bad_arn = f"DEPLOY_TRUST_USER_ARN is not a plain IAM user ARN: {user_arn!r}"
-    bad_arn_fix = "set DEPLOY_TRUST_USER_ARN=arn:aws:iam::<account-id>:user/<your-user> in .env"
+    user_arn = values.get("SEEDER_TRUST_USER_ARN", "")
+    bad_arn = f"SEEDER_TRUST_USER_ARN is not a plain IAM user ARN: {user_arn!r}"
+    bad_arn_fix = "set SEEDER_TRUST_USER_ARN=arn:aws:iam::<account-id>:user/<your-user> in .env"
     if not is_emulator and not USER_ARN_RE.fullmatch(user_arn):
         fail(bad_arn + " (missing on the real-AWS plane)", bad_arn_fix)
     elif user_arn and not USER_ARN_RE.fullmatch(user_arn):
@@ -459,8 +466,8 @@ def validate_iam_bootstrap(is_emulator: bool, values: dict[str, str]) -> list[st
     return errors
 
 
-def deploy_trust_document(user_arn: str) -> dict[str, Any]:
-    """The deploy runs under this role with MFA, never personal keys."""
+def seeder_trust_document(user_arn: str) -> dict[str, Any]:
+    """The seeding runs under this role with MFA, never personal keys."""
     return {
         "Version": "2012-10-17",
         "Statement": [
@@ -474,8 +481,8 @@ def deploy_trust_document(user_arn: str) -> dict[str, Any]:
     }
 
 
-def deploy_policy_document(is_emulator: bool, values: dict[str, str], user_arn: str) -> dict[str, Any]:
-    """Least privilege, service-pinned on every ARN."""
+def seeder_policy_document(is_emulator: bool, values: dict[str, str], user_arn: str) -> dict[str, Any]:
+    """Least privilege, service-pinned on every ARN: state, blob, and config writes only."""
     region = resolve_region(values)
     account = iam_account_id(user_arn)
     bucket = resolve_state_bucket(is_emulator, values)
@@ -518,61 +525,52 @@ def deploy_policy_document(is_emulator: bool, values: dict[str, str], user_arn: 
                 ],
                 "Resource": [f"arn:aws:ssm:{region}:{account}:parameter{SSM_SEED_PREFIX}*"],
             },
-            {
-                "Sid": "ManageRuntimeRole",
-                "Effect": "Allow",
-                "Action": [
-                    "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:PutRolePolicy",
-                    "iam:GetRolePolicy", "iam:DeleteRolePolicy", "iam:TagRole",
-                ],
-                "Resource": [f"arn:aws:iam::{account}:role/detectai-document-parser"],
-            },
         ],
     }
 
 
-def iam_bootstrap_commands(is_emulator: bool, values: dict[str, str]) -> list[list[str]]:
+def seeder_bootstrap_commands(is_emulator: bool, values: dict[str, str]) -> list[list[str]]:
     user_arn = resolve_trust_user_arn(is_emulator, values)
     base = aws_base(is_emulator, values)
     return [
-        base + ["iam", "create-role", "--role-name", DEPLOY_ROLE_NAME,
-                "--assume-role-policy-document", json.dumps(deploy_trust_document(user_arn))],
-        base + ["iam", "put-role-policy", "--role-name", DEPLOY_ROLE_NAME,
-                "--policy-name", DEPLOY_POLICY_NAME,
-                "--policy-document", json.dumps(deploy_policy_document(is_emulator, values, user_arn))],
+        base + ["iam", "create-role", "--role-name", SEEDER_ROLE_NAME,
+                "--assume-role-policy-document", json.dumps(seeder_trust_document(user_arn))],
+        base + ["iam", "put-role-policy", "--role-name", SEEDER_ROLE_NAME,
+                "--policy-name", SEEDER_POLICY_NAME,
+                "--policy-document", json.dumps(seeder_policy_document(is_emulator, values, user_arn))],
     ]
 
 
-def confirm_iam_bootstrap(user_arn: str) -> bool:
+def confirm_seeder_bootstrap(user_arn: str) -> bool:
     answer = input(
-        f'type "{DEPLOY_ROLE_NAME}" to create or update it (trust: {user_arn}): '
+        f'type "{SEEDER_ROLE_NAME}" to create or update it (trust: {user_arn}): '
     ).strip()
-    if answer != DEPLOY_ROLE_NAME:
-        print("cancelled: the deploy role is untouched")
+    if answer != SEEDER_ROLE_NAME:
+        print("cancelled: the seeder role is untouched")
         return False
     return True
 
 
-def iam_bootstrap_flow(is_emulator: bool, values: dict[str, str], dry_run: bool) -> int:
+def seeder_bootstrap_flow(is_emulator: bool, values: dict[str, str], dry_run: bool) -> int:
     """Idempotent create/update; emulator runs unattended, real AWS asks a typed barrier."""
     user_arn = resolve_trust_user_arn(is_emulator, values)
     print(f"plane:  {'emulator (Floci)' if is_emulator else 'real AWS'}")
-    print(f"role:   {DEPLOY_ROLE_NAME} (out-of-stack deploy identity)")
+    print(f"role:   {SEEDER_ROLE_NAME} (out-of-stack seeder identity)")
     print(f"trust:  {user_arn} (MFA required)")
-    commands = iam_bootstrap_commands(is_emulator, values)
+    commands = seeder_bootstrap_commands(is_emulator, values)
     if dry_run:
         for command in commands:
             print(f"would run: {' '.join(command)}")
         print("(dry run: no AWS)")
         return 0
-    if not is_emulator and not confirm_iam_bootstrap(user_arn):
+    if not is_emulator and not confirm_seeder_bootstrap(user_arn):
         return 1
 
     code, _, stderr = run_aws_captured(commands[0], is_emulator)
     if code == 0:
-        print(f"created: {DEPLOY_ROLE_NAME}")
+        print(f"created: {SEEDER_ROLE_NAME}")
     elif "EntityAlreadyExists" in (stderr or ""):
-        print(f"ok: role {DEPLOY_ROLE_NAME} already exists")
+        print(f"ok: role {SEEDER_ROLE_NAME} already exists")
     else:
         print("error: create-role failed")
         if (stderr or "").strip():
@@ -580,55 +578,55 @@ def iam_bootstrap_flow(is_emulator: bool, values: dict[str, str], dry_run: bool)
         return 1
 
     if run_aws(commands[1], is_emulator) != 0:
-        print(f"fix: inspect the role and attach {DEPLOY_POLICY_NAME} manually, then retry")
+        print(f"fix: inspect the role and attach {SEEDER_POLICY_NAME} manually, then retry")
         return 1
-    scopes = ", ".join(statement["Sid"] for statement in deploy_policy_document(is_emulator, values, user_arn)["Statement"])
-    print(f"policy: {DEPLOY_POLICY_NAME} attached ({scopes})")
-    print("next:   assume this role for real-aws terraform runs instead of personal keys")
+    scopes = ", ".join(statement["Sid"] for statement in seeder_policy_document(is_emulator, values, user_arn)["Statement"])
+    print(f"policy: {SEEDER_POLICY_NAME} attached ({scopes})")
+    print("next:   assume this role for seeding runs instead of personal keys")
     return 0
 
 
-def deploy_role_exists(is_emulator: bool, values: dict[str, str]) -> bool:
+def seeder_role_exists(is_emulator: bool, values: dict[str, str]) -> bool:
     code, _, _ = run_aws_captured(
-        aws_base(is_emulator, values) + ["iam", "get-role", "--role-name", DEPLOY_ROLE_NAME],
+        aws_base(is_emulator, values) + ["iam", "get-role", "--role-name", SEEDER_ROLE_NAME],
         is_emulator,
     )
     return code == 0
 
 
-def drop_iam_commands(is_emulator: bool, values: dict[str, str]) -> list[list[str]]:
+def drop_seeder_commands(is_emulator: bool, values: dict[str, str]) -> list[list[str]]:
     base = aws_base(is_emulator, values)
     return [
-        base + ["iam", "delete-role-policy", "--role-name", DEPLOY_ROLE_NAME,
-                "--policy-name", DEPLOY_POLICY_NAME],
-        base + ["iam", "delete-role", "--role-name", DEPLOY_ROLE_NAME],
+        base + ["iam", "delete-role-policy", "--role-name", SEEDER_ROLE_NAME,
+                "--policy-name", SEEDER_POLICY_NAME],
+        base + ["iam", "delete-role", "--role-name", SEEDER_ROLE_NAME],
     ]
 
 
-def drop_iam_flow(is_emulator: bool, values: dict[str, str], dry_run: bool) -> int:
+def drop_seeder_flow(is_emulator: bool, values: dict[str, str], dry_run: bool) -> int:
     """Policy first, then role; a missing role is a no-op. Real AWS repeats the purge barrier."""
-    commands = drop_iam_commands(is_emulator, values)
+    commands = drop_seeder_commands(is_emulator, values)
     if dry_run:
         for command in commands:
             print(f"would run: {' '.join(command)}")
         print("(dry run: no AWS)")
         return 0
-    if not deploy_role_exists(is_emulator, values):
-        print(f"ok: role {DEPLOY_ROLE_NAME} does not exist; nothing to drop")
+    if not seeder_role_exists(is_emulator, values):
+        print(f"ok: role {SEEDER_ROLE_NAME} does not exist; nothing to drop")
         return 0
     if not is_emulator:
-        answer = input(f'type "{DEPLOY_ROLE_NAME}" to detach its policy and delete the role: ').strip()
-        if answer != DEPLOY_ROLE_NAME:
-            print("cancelled: the deploy role is untouched")
+        answer = input(f'type "{SEEDER_ROLE_NAME}" to detach its policy and delete the role: ').strip()
+        if answer != SEEDER_ROLE_NAME:
+            print("cancelled: the seeder role is untouched")
             return 1
     if run_aws(commands[0], is_emulator) != 0:
-        print(f"fix: detach {DEPLOY_POLICY_NAME} manually, then rerun (an existing policy is overwritten by reruns)")
+        print(f"fix: detach {SEEDER_POLICY_NAME} manually, then rerun (an existing policy is overwritten by reruns)")
         return 1
-    print(f"detached: {DEPLOY_POLICY_NAME}")
+    print(f"detached: {SEEDER_POLICY_NAME}")
     if run_aws(commands[1], is_emulator) != 0:
         print("fix: delete the role manually once its inline policies are gone")
         return 1
-    print(f"deleted: {DEPLOY_ROLE_NAME}")
+    print(f"deleted: {SEEDER_ROLE_NAME}")
     return 0
 
 
@@ -716,8 +714,11 @@ def run_terraform(args: list[str], tf_vars: dict[str, str], env_overlay: dict[st
     terraform = shutil.which("terraform")
     if terraform is None:
         die("terraform not found on PATH", "install terraform >= 1.9 (pinned ~> 1.9 in versions.tf)")
-    # Backend creds travel in the env overlay; the provider block stays out of it.
-    env = os.environ | tf_vars | ({"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"} if env_overlay else {})
+    # Backend creds travel in the env overlay (emulator plane); the provider
+    # block stays out of it. The overlay also strips the carrier profile:
+    # AWS_PROFILE would outrank the fake creds in the subprocess env.
+    base = os.environ if not env_overlay else {key: value for key, value in os.environ.items() if key != "AWS_PROFILE"}
+    env = base | tf_vars | ({"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"} if env_overlay else {})
     print()  # separate script output from terraform's own
     try:
         return subprocess.run([terraform, f"-chdir={TF_DIR}", *args], check=False, env=env).returncode
@@ -733,9 +734,9 @@ def main() -> int:
         description="Validate the service .env and drive the secrets terraform stack.",
     )
     parser.add_argument(
-        "command", choices=("plan", "apply", "bootstrap", "destroy", "iam-bootstrap"),
+        "command", choices=("plan", "apply", "bootstrap", "destroy", "seeder-bootstrap"),
         help="terraform plan/apply/destroy, bootstrap (create the plane's state bucket via the aws CLI), "
-             "or iam-bootstrap (create/update the out-of-stack deploy role via the aws CLI)",
+             "or seeder-bootstrap (create/update the out-of-stack seeder role via the aws CLI)",
     )
     parser.add_argument(
         "--purge-state", action="store_true",
@@ -746,8 +747,8 @@ def main() -> int:
         help="destroy only: delete the secret immediately after destroy, skipping the 30-day recovery window on real AWS",
     )
     parser.add_argument(
-        "--drop-iam", action="store_true",
-        help="destroy only: after terraform destroy, drop the out-of-stack deploy role "
+        "--drop-seeder", action="store_true",
+        help="destroy only: after terraform destroy, drop the out-of-stack seeder role "
              "(detach its inline policy, then delete the role)",
     )
     parser.add_argument(
@@ -762,8 +763,8 @@ def main() -> int:
     if args.force_delete and args.command != "destroy":
         die("--force-delete only applies to the destroy command",
             "run it with destroy (poetry run python tools/secrets.py destroy --force-delete)")
-    if args.drop_iam and args.command != "destroy":
-        die("--drop-iam only applies to the destroy command",
+    if args.drop_seeder and args.command != "destroy":
+        die("--drop-seeder only applies to the destroy command",
             "run it with destroy (make secrets-destroy)")
 
     if not ENV_FILE.exists():
@@ -780,13 +781,13 @@ def main() -> int:
             return 1
         return bootstrap_state(is_emulator, values, args.dry_run)
 
-    if args.command == "iam-bootstrap":
-        errors = validate_iam_bootstrap(is_emulator, values)
+    if args.command == "seeder-bootstrap":
+        errors = validate_seeder_bootstrap(is_emulator, values)
         for error in errors:
             print(error)
         if errors:
             return 1
-        return iam_bootstrap_flow(is_emulator, values, args.dry_run)
+        return seeder_bootstrap_flow(is_emulator, values, args.dry_run)
 
     errors = validate(is_emulator, values)
     for error in errors:
@@ -802,8 +803,10 @@ def main() -> int:
     assert state_bucket is not None  # validation already rejected a missing bucket
     state_key = FLOCI_STATE_KEY if is_emulator else PROD_STATE_KEY
 
-    print(f"plane:  {plane}")
-    print(f"stack:  {TF_DIR}")
+    carrier = os.environ.get("AWS_PROFILE", "").strip()
+    print(f"plane:   {plane}")
+    print(f"carrier: {'AWS_PROFILE=' + carrier if carrier else 'ambient credentials'}")
+    print(f"stack:   {TF_DIR}")
     print(f"secret: {SECRETS_NAME}")
     print(f"key:    *** ({key_len} chars, hidden)")
     print(f"state:  {state_bucket} / {state_key}")
@@ -827,8 +830,8 @@ def main() -> int:
                     print(f"then run: {' '.join(force_delete_command(is_emulator, values))}")
             if args.purge_state:
                 print(f"then purge: every object version in {state_bucket}, then delete the bucket")
-            if args.drop_iam:
-                print(f"then drop: {DEPLOY_POLICY_NAME} and the {DEPLOY_ROLE_NAME} role")
+            if args.drop_seeder:
+                print(f"then drop: {SEEDER_POLICY_NAME} and the {SEEDER_ROLE_NAME} role")
         print("(dry run: no terraform, no AWS)")
         return 0
 
@@ -874,11 +877,11 @@ def main() -> int:
                 print("note: --force-delete has no effect on the emulator (0-day recovery window)")
             else:
                 run_aws(force_delete_command(is_emulator, values), is_emulator)
-        # Wipe chain runs only after terraform succeeded: purge, then the deploy role.
+        # Wipe chain runs only after terraform succeeded: purge, then the seeder role.
         if args.purge_state and purge_state(is_emulator, values) != 0:
             return 1
-        if args.drop_iam:
-            return drop_iam_flow(is_emulator, values, args.dry_run)
+        if args.drop_seeder:
+            return drop_seeder_flow(is_emulator, values, args.dry_run)
         return 0
     finally:
         backend_file.unlink(missing_ok=True)

@@ -1,28 +1,28 @@
-# The AWS slice — secrets, config, runtime role
+# The AWS slice — secrets, config, no IAM
 
 What `make secrets-*` runs, what the planes are, and the gotchas that bite.
 
-## What the stack creates (three resources, one naming root)
+## What the stack creates (two resources, one naming root)
 
 | Resource | Name | Who reads it |
 |----------|------|--------------|
 | Secrets Manager blob | `detectai/document-parser/secrets` | prod config plane at boot — one fetch, JSON of env-named keys |
 | SSM parameters | `/detectai/document-parser/<KEY>` | prod config plane at boot — non-secret config from the `SSM_SEED_KEYS` allowlist in `tools/secrets.py` |
-| IAM runtime role | `detectai-document-parser` | the app's read identity — blob + prefix, nothing else |
 
-The stack never deploys the app. The deploy role
-(`detectai-document-parser-deploy`) is out-of-stack by design (terraform
-never manages its own identity); `make secrets-iam-bootstrap` creates it
-once, idempotently.
+The stack never deploys the app and creates no IAM. The seeder role
+(`detectai-document-parser-seeder`, policy `seeder-policy`) is out-of-stack
+by design (terraform never manages its own carrier);
+`make secrets-seeder-bootstrap` creates it once, idempotently, and
+`mk/secrets.mk` runs every AWS verb under it (`AWS_PROFILE ?= dp-seeder`).
 
 ## Two planes, flipped by one line
 
 `EMULATOR_ENDPOINT` in `infra/.env` selects everything: set → Floci/LocalStack
 emulator (dummy `test` credentials, auto-approved apply, in-memory state,
-0-day secret deletion); empty → real AWS (real credentials, interactive
-confirm, 30-day recovery window, `TF_STATE_BUCKET` required). The provider
-block adapts itself; the emulator pins account id `000000000000` unless
-`TF_VAR_aws_account_id` says otherwise.
+0-day secret deletion); empty → real AWS (real credentials via the carrier
+profile, interactive confirm, 30-day recovery window, `TF_STATE_BUCKET`
+required). The provider block adapts itself; nothing in the stack reads an
+account id.
 
 The emulator accepts every IAM call but never enforces IAM policies — a
 green apply there proves structure only; enforcement bites on real AWS.
@@ -35,7 +35,7 @@ make secrets-check               # validate + preview plane/vars — no terrafor
 make secrets-bootstrap-state     # state bucket for the selected plane (idempotent)
 make secrets-plan
 make secrets-apply               # auto on the emulator, confirm on real AWS
-make secrets-iam-bootstrap       # one-time: the out-of-stack deploy role
+make secrets-seeder-bootstrap    # one-time: the out-of-stack seeder role
 ```
 
 `tools/secrets.py` is the only bridge into terraform: it parses and
@@ -49,8 +49,8 @@ at three layers by design (tool → root `variables.tf` → module
 
 | Verb | Removes | Keeps |
 |------|---------|-------|
-| `make secrets-clean` | blob + SSM parameters + runtime role | state bucket, ledger, deploy role |
-| `make secrets-destroy` | all of it, plus object versions and the bucket (`--purge-state`) and the deploy role (`--drop-iam`) | nothing |
+| `make secrets-clean` | blob + SSM parameters | state bucket, ledger, seeder role |
+| `make secrets-destroy` | all of it, plus object versions and the bucket (`--purge-state`) and the seeder role (`--drop-seeder`) | nothing |
 
 `terraform destroy` never touches the state bucket — only the purge verb
 does, and only after destroy succeeded. On real AWS, `secrets-destroy`

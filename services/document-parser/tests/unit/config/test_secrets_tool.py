@@ -517,15 +517,15 @@ def test_build_tf_vars_ignores_unlisted_keys():
     assert "PORT" not in payload and "RANDOM_THING" not in payload
 
 
-def test_iam_bootstrap_commands_emulator():
-    commands = dp_secrets.iam_bootstrap_commands(True, EMULATOR_VALUE)
+def test_seeder_bootstrap_commands_emulator():
+    commands = dp_secrets.seeder_bootstrap_commands(True, EMULATOR_VALUE)
     assert len(commands) == 2
     create = " ".join(commands[0])
-    assert "--role-name detectai-document-parser-deploy" in create
+    assert "--role-name detectai-document-parser-seeder" in create
     assert "--endpoint-url http://localhost:4566" in create
     trust = json.loads(commands[0][commands[0].index("--assume-role-policy-document") + 1])
     statement = trust["Statement"][0]
-    assert statement["Principal"]["AWS"] == "arn:aws:iam::000000000000:user/detectai-deploy"
+    assert statement["Principal"]["AWS"] == "arn:aws:iam::000000000000:user/detectai-seeder"
     assert statement["Condition"]["Bool"]["aws:MultiFactorAuthPresent"] == "true"
     policy = json.loads(commands[1][commands[1].index("--policy-document") + 1])
     assert {part["Sid"] for part in policy["Statement"]} == {
@@ -533,15 +533,14 @@ def test_iam_bootstrap_commands_emulator():
         "RunTerraformStateObjects",
         "ManageServiceSecret",
         "ManageServiceConfig",
-        "ManageRuntimeRole",
     }
     bucket_statement = next(part for part in policy["Statement"] if part["Sid"] == "RunTerraformStateBucket")
     assert bucket_statement["Resource"] == ["arn:aws:s3:::detectai-docparser-tfstate"]
 
 
-def test_iam_bootstrap_commands_real_aws():
-    real = {**REAL_VALUE, "DEPLOY_TRUST_USER_ARN": "arn:aws:iam::123456789012:user/kunalpisolkar"}
-    commands = dp_secrets.iam_bootstrap_commands(False, real)
+def test_seeder_bootstrap_commands_real_aws():
+    real = {**REAL_VALUE, "SEEDER_TRUST_USER_ARN": "arn:aws:iam::123456789012:user/kunalpisolkar"}
+    commands = dp_secrets.seeder_bootstrap_commands(False, real)
     assert "--endpoint-url" not in " ".join(commands[0])
     trust = json.loads(commands[0][commands[0].index("--assume-role-policy-document") + 1])
     assert trust["Statement"][0]["Principal"]["AWS"] == "arn:aws:iam::123456789012:user/kunalpisolkar"
@@ -550,13 +549,11 @@ def test_iam_bootstrap_commands_real_aws():
     assert secret_statement["Resource"] == [
         "arn:aws:secretsmanager:ap-southeast-2:123456789012:secret:detectai/document-parser/secrets-*"
     ]
-    role_statement = next(part for part in policy["Statement"] if part["Sid"] == "ManageRuntimeRole")
-    assert role_statement["Resource"] == ["arn:aws:iam::123456789012:role/detectai-document-parser"]
 
 
-def test_iam_bootstrap_policy_scope_is_service_pinned():
-    real = {**REAL_VALUE, "DEPLOY_TRUST_USER_ARN": "arn:aws:iam::123456789012:user/kunalpisolkar"}
-    policy = dp_secrets.deploy_policy_document(False, real, real["DEPLOY_TRUST_USER_ARN"])
+def test_seeder_bootstrap_policy_scope_is_service_pinned():
+    real = {**REAL_VALUE, "SEEDER_TRUST_USER_ARN": "arn:aws:iam::123456789012:user/kunalpisolkar"}
+    policy = dp_secrets.seeder_policy_document(False, real, real["SEEDER_TRUST_USER_ARN"])
     objects_statement = next(part for part in policy["Statement"] if part["Sid"] == "RunTerraformStateObjects")
     assert objects_statement["Resource"] == ["arn:aws:s3:::detectai-tfstate-sandbox/*"]
     config_statement = next(part for part in policy["Statement"] if part["Sid"] == "ManageServiceConfig")
@@ -565,40 +562,40 @@ def test_iam_bootstrap_policy_scope_is_service_pinned():
     ]
 
 
-def test_validate_iam_bootstrap_real_plane_requires_trust_user_arn():
-    errors = "\n".join(dp_secrets.validate_iam_bootstrap(False, REAL_VALUE))
-    assert "DEPLOY_TRUST_USER_ARN" in errors
+def test_validate_seeder_bootstrap_real_plane_requires_trust_user_arn():
+    errors = "\n".join(dp_secrets.validate_seeder_bootstrap(False, REAL_VALUE))
+    assert "SEEDER_TRUST_USER_ARN" in errors
 
 
-def test_validate_iam_bootstrap_rejects_bad_user_arn():
-    bad = {**REAL_VALUE, "DEPLOY_TRUST_USER_ARN": "arn:aws:iam::123:user/short-account-id"}
-    errors = "\n".join(dp_secrets.validate_iam_bootstrap(False, bad))
-    assert "DEPLOY_TRUST_USER_ARN" in errors
+def test_validate_seeder_bootstrap_rejects_bad_user_arn():
+    bad = {**REAL_VALUE, "SEEDER_TRUST_USER_ARN": "arn:aws:iam::123:user/short-account-id"}
+    errors = "\n".join(dp_secrets.validate_seeder_bootstrap(False, bad))
+    assert "SEEDER_TRUST_USER_ARN" in errors
     errors = "\n".join(
-        dp_secrets.validate_iam_bootstrap(
-            True, {**EMULATOR_VALUE, "DEPLOY_TRUST_USER_ARN": "arn:aws:iam::x:user/oops"}
+        dp_secrets.validate_seeder_bootstrap(
+            True, {**EMULATOR_VALUE, "SEEDER_TRUST_USER_ARN": "arn:aws:iam::x:user/oops"}
         )
     )
-    assert "DEPLOY_TRUST_USER_ARN" in errors
+    assert "SEEDER_TRUST_USER_ARN" in errors
 
 
-def test_validate_iam_bootstrap_emulator_ok_without_user_arn():
-    assert dp_secrets.validate_iam_bootstrap(True, EMULATOR_VALUE) == []
+def test_validate_seeder_bootstrap_emulator_ok_without_user_arn():
+    assert dp_secrets.validate_seeder_bootstrap(True, EMULATOR_VALUE) == []
 
 
-def test_iam_bootstrap_flow_dry_run_prints_and_runs_nothing(monkeypatch, capsys):
+def test_seeder_bootstrap_flow_dry_run_prints_and_runs_nothing(monkeypatch, capsys):
     calls: list[list[str]] = []
     monkeypatch.setattr(
         dp_secrets, "run_aws_captured",
         lambda command, is_emulator: (calls.append(list(command)), (0, "", ""))[1],
     )
-    assert dp_secrets.iam_bootstrap_flow(True, EMULATOR_VALUE, True) == 0
+    assert dp_secrets.seeder_bootstrap_flow(True, EMULATOR_VALUE, True) == 0
     assert calls == []  # dry run: nothing touches AWS
     out = capsys.readouterr().out
     assert "would run" in out and "iam create-role" in out
 
 
-def test_iam_bootstrap_flow_emulator_never_prompts(monkeypatch):
+def test_seeder_bootstrap_flow_emulator_never_prompts(monkeypatch):
     monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (0, "", ""))
     monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator: 0)
 
@@ -606,38 +603,38 @@ def test_iam_bootstrap_flow_emulator_never_prompts(monkeypatch):
         raise AssertionError("emulator plane must not prompt")
 
     monkeypatch.setattr("builtins.input", no_prompt)
-    assert dp_secrets.iam_bootstrap_flow(True, EMULATOR_VALUE, False) == 0
+    assert dp_secrets.seeder_bootstrap_flow(True, EMULATOR_VALUE, False) == 0
 
 
-def test_iam_bootstrap_flow_keeps_existing_role(monkeypatch, capsys):
+def test_seeder_bootstrap_flow_keeps_existing_role(monkeypatch, capsys):
     results = iter([
         (1, "", "An error occurred (EntityAlreadyExists) when calling the CreateRole operation"),
         (0, "", ""),
     ])
     monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: next(results))
     monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator: 0)
-    assert dp_secrets.iam_bootstrap_flow(True, EMULATOR_VALUE, False) == 0
+    assert dp_secrets.seeder_bootstrap_flow(True, EMULATOR_VALUE, False) == 0
     out = capsys.readouterr().out
-    assert "already exists" in out and "policy: deploy-policy attached" in out
+    assert "already exists" in out and "policy: seeder-policy attached" in out
 
 
-def test_iam_bootstrap_flow_fails_loud_when_role_creation_fails(monkeypatch, capsys):
+def test_seeder_bootstrap_flow_fails_loud_when_role_creation_fails(monkeypatch, capsys):
     monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (299, "", "boom"))
-    assert dp_secrets.iam_bootstrap_flow(True, EMULATOR_VALUE, False) == 1
+    assert dp_secrets.seeder_bootstrap_flow(True, EMULATOR_VALUE, False) == 1
     out = capsys.readouterr().out
     assert "create-role failed" in out and "boom" in out
 
 
-def test_iam_bootstrap_main_wiring(monkeypatch, tmp_path):
+def test_seeder_bootstrap_main_wiring(monkeypatch, tmp_path):
     env = tmp_path / ".env"
     monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
     env.write_text("API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=http://localhost:4566\n")
     started = []
     monkeypatch.setattr(
-        dp_secrets, "iam_bootstrap_flow",
+        dp_secrets, "seeder_bootstrap_flow",
         lambda is_emulator, values, dry_run: started.append((is_emulator, dry_run)) or 0,
     )
-    monkeypatch.setattr("sys.argv", ["secrets.py", "iam-bootstrap", "--dry-run"])
+    monkeypatch.setattr("sys.argv", ["secrets.py", "seeder-bootstrap", "--dry-run"])
     assert dp_secrets.main() == 0
     assert started == [(True, True)]
 
@@ -656,33 +653,33 @@ def test_build_tf_vars_maps_the_license_key_to_the_blob():
     assert "TF_VAR_new_relic_license_key" not in dp_secrets.build_tf_vars({**VALID, "NEW_RELIC_LICENSE_KEY": ""})
 
 
-def test_validate_iam_bootstrap_real_plane_requires_state_bucket():
-    values = {**VALID, "DEPLOY_TRUST_USER_ARN": "arn:aws:iam::123456789012:user/kunalpisolkar"}
-    errors = "\n".join(dp_secrets.validate_iam_bootstrap(False, values))
+def test_validate_seeder_bootstrap_real_plane_requires_state_bucket():
+    values = {**VALID, "SEEDER_TRUST_USER_ARN": "arn:aws:iam::123456789012:user/kunalpisolkar"}
+    errors = "\n".join(dp_secrets.validate_seeder_bootstrap(False, values))
     assert "TF_STATE_BUCKET" in errors
 
 
-def test_drop_iam_commands_detach_policy_before_deleting_role():
-    commands = dp_secrets.drop_iam_commands(True, EMULATOR_VALUE)
+def test_drop_seeder_commands_detach_policy_before_deleting_role():
+    commands = dp_secrets.drop_seeder_commands(True, EMULATOR_VALUE)
     assert len(commands) == 2
-    assert "iam delete-role-policy --role-name detectai-document-parser-deploy --policy-name deploy-policy" in " ".join(commands[0])
-    assert "iam delete-role --role-name detectai-document-parser-deploy" in " ".join(commands[1])
+    assert "iam delete-role-policy --role-name detectai-document-parser-seeder --policy-name seeder-policy" in " ".join(commands[0])
+    assert "iam delete-role --role-name detectai-document-parser-seeder" in " ".join(commands[1])
     assert "--endpoint-url http://localhost:4566" in " ".join(commands[0])
 
 
-def test_drop_iam_flow_dry_run_prints_and_runs_nothing(monkeypatch, capsys):
+def test_drop_seeder_flow_dry_run_prints_and_runs_nothing(monkeypatch, capsys):
     calls: list[list[str]] = []
     monkeypatch.setattr(
         dp_secrets, "run_aws_captured",
         lambda command, is_emulator: (calls.append(list(command)), (0, "", ""))[1],
     )
     monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator: calls.append(list(command)) or 0)
-    assert dp_secrets.drop_iam_flow(True, EMULATOR_VALUE, True) == 0
+    assert dp_secrets.drop_seeder_flow(True, EMULATOR_VALUE, True) == 0
     assert calls == []  # dry run: nothing touches AWS
     assert "would run" in capsys.readouterr().out
 
 
-def test_drop_iam_flow_acts_in_order_on_emulator(monkeypatch, capsys):
+def test_drop_seeder_flow_acts_in_order_on_emulator(monkeypatch, capsys):
     run_calls: list[list[str]] = []
     monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (0, "", ""))  # role exists
     monkeypatch.setattr(
@@ -693,46 +690,46 @@ def test_drop_iam_flow_acts_in_order_on_emulator(monkeypatch, capsys):
         raise AssertionError("emulator plane must not prompt")
 
     monkeypatch.setattr("builtins.input", no_prompt)
-    assert dp_secrets.drop_iam_flow(True, EMULATOR_VALUE, False) == 0
+    assert dp_secrets.drop_seeder_flow(True, EMULATOR_VALUE, False) == 0
     joined = [" ".join(call) for call in run_calls]
     assert "iam delete-role-policy" in joined[0]
     assert "iam delete-role" in joined[1]  # the role goes only after its policy
     out = capsys.readouterr().out
-    assert "detached: deploy-policy" in out and "deleted: detectai-document-parser-deploy" in out
+    assert "detached: seeder-policy" in out and "deleted: detectai-document-parser-seeder" in out
 
 
-def test_drop_iam_flow_skips_missing_role(monkeypatch, capsys):
+def test_drop_seeder_flow_skips_missing_role(monkeypatch, capsys):
     run_calls: list[list[str]] = []
     monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (255, "", ""))
     monkeypatch.setattr(
         dp_secrets, "run_aws", lambda command, is_emulator: run_calls.append(list(command)) or 0
     )
-    assert dp_secrets.drop_iam_flow(True, EMULATOR_VALUE, False) == 0
+    assert dp_secrets.drop_seeder_flow(True, EMULATOR_VALUE, False) == 0
     assert run_calls == []  # nothing to drop: no mutations ran
     assert "nothing to drop" in capsys.readouterr().out
 
 
-def test_drop_iam_flow_real_plane_typed_barrier(monkeypatch, capsys):
+def test_drop_seeder_flow_real_plane_typed_barrier(monkeypatch, capsys):
     run_calls: list[list[str]] = []
     monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (0, "", ""))  # role exists
     monkeypatch.setattr(
         dp_secrets, "run_aws", lambda command, is_emulator: run_calls.append(list(command)) or 0
     )
     monkeypatch.setattr("builtins.input", lambda prompt="": "wrong-name")
-    assert dp_secrets.drop_iam_flow(False, REAL_VALUE, False) == 1
+    assert dp_secrets.drop_seeder_flow(False, REAL_VALUE, False) == 1
     assert run_calls == []  # refusal keeps the role
 
-    monkeypatch.setattr("builtins.input", lambda prompt="": "detectai-document-parser-deploy")
-    assert dp_secrets.drop_iam_flow(False, REAL_VALUE, False) == 0
+    monkeypatch.setattr("builtins.input", lambda prompt="": "detectai-document-parser-seeder")
+    assert dp_secrets.drop_seeder_flow(False, REAL_VALUE, False) == 0
     assert len(run_calls) == 2
     assert "cancelled" in capsys.readouterr().out
 
 
-def test_drop_iam_flow_fails_loud_when_policy_detach_fails(monkeypatch, capsys):
+def test_drop_seeder_flow_fails_loud_when_policy_detach_fails(monkeypatch, capsys):
     monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (0, "", ""))  # role exists
     monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator: 1)
-    assert dp_secrets.drop_iam_flow(True, EMULATOR_VALUE, False) == 1
-    assert "detach deploy-policy manually" in capsys.readouterr().out
+    assert dp_secrets.drop_seeder_flow(True, EMULATOR_VALUE, False) == 1
+    assert "detach seeder-policy manually" in capsys.readouterr().out
 
 
 def test_full_destroy_wipes_then_drops(monkeypatch, tmp_path):
@@ -744,22 +741,22 @@ def test_full_destroy_wipes_then_drops(monkeypatch, tmp_path):
     monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (0, "", ""))
     monkeypatch.setattr(dp_secrets, "purge_state", lambda is_emulator, values: sequence.append("purge") or 0)
     monkeypatch.setattr(
-        dp_secrets, "drop_iam_flow",
+        dp_secrets, "drop_seeder_flow",
         lambda is_emulator, values, dry_run: sequence.append("drop") or 0,
     )
     env = tmp_path / ".env"
     monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
     env.write_text("API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=http://localhost:4566\n")
-    monkeypatch.setattr("sys.argv", ["secrets.py", "destroy", "--purge-state", "--drop-iam"])
+    monkeypatch.setattr("sys.argv", ["secrets.py", "destroy", "--purge-state", "--drop-seeder"])
     assert dp_secrets.main() == 0
     assert sequence == ["purge", "drop"]  # bucket wiped before the identity is dropped
 
 
-def test_main_rejects_drop_iam_on_other_verbs(monkeypatch, tmp_path):
+def test_main_rejects_drop_seeder_on_other_verbs(monkeypatch, tmp_path):
     env = tmp_path / ".env"
     monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
     env.write_text("API_KEY=" + "a" * 20 + "\n")
-    monkeypatch.setattr("sys.argv", ["secrets.py", "apply", "--drop-iam"])
+    monkeypatch.setattr("sys.argv", ["secrets.py", "apply", "--drop-seeder"])
     with pytest.raises(SystemExit) as excinfo:
         dp_secrets.main()
     assert excinfo.value.code == 1

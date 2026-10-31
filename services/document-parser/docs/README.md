@@ -36,7 +36,7 @@ Start here:
 |-------|-------------------|--------------|
 | [Testing](guides/testing.md) | Unit, integration, and load testing with k6 | Verifying changes |
 | [Secrets](guides/secrets.md) | How the API key is stored, resolved, and compared | Provisioning or rotating credentials |
-| [Infrastructure](guides/infrastructure.md) | Provisioning AWS secrets, config parameters, and the runtime role — planes, state, teardown | First AWS apply, or something there broke |
+| [Infrastructure](guides/infrastructure.md) | Provisioning AWS secrets and config parameters — planes, state, teardown, the seeder identity | First AWS apply, or something there broke |
 
 ### Reference
 

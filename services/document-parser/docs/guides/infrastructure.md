@@ -1,6 +1,6 @@
 # Infrastructure
 
-How this service's app-side AWS slice gets provisioned: the credential store, the non-secret config parameters, and the runtime role. Driven by make targets at the service root; the terraform stack lives in `infra/terraform/`. Read the [secrets guide](secrets.md) first if you are here for how the key is handled at runtime — this page is about provisioning it.
+How this service's app-side AWS slice gets provisioned: the credential store and the non-secret config parameters — and no IAM of any kind. Driven by make targets at the service root; the terraform stack lives in `infra/terraform/`. Read the [secrets guide](secrets.md) first if you are here for how the key is handled at runtime — this page is about provisioning it.
 
 The stack does not deploy the app. The app runs locally (`make run`) or through compose; terraform manages only what the app *reads*.
 
@@ -10,28 +10,26 @@ The stack does not deploy the app. The app runs locally (`make run`) or through 
 |----------|------|--------------------|
 | Secrets Manager blob | `detectai/document-parser/secrets` | the prod config plane at boot — one fetch of a JSON blob whose keys are env names (`API_KEY`, license key) |
 | SSM parameters | `/detectai/document-parser/<KEY>` | the prod config plane at boot — non-secret runtime config, seeded from the `.env` allowlist (`SSM_SEED_KEYS` in `tools/secrets.py`) |
-| IAM runtime role | `detectai-document-parser` | the app's read identity: get the blob, read the config prefix — nothing else |
 
-Because the blob is a JSON object read whole at boot, adding a key later is a terraform-only change — no consumer-side schema migration. There is no S3 in the stack: the app is stateless, so the state bucket is deploy-tooling territory, not a stack resource.
+Because the blob is a JSON object read whole at boot, adding a key later is a terraform-only change — no consumer-side schema migration. There is no S3 in the stack: the app is stateless, so the state bucket is deploy-tooling territory, not a stack resource. And there is no IAM: the app reads the blob and the prefix under whatever identity its environment carries — the stack's job is data, not permissions.
 
 ```mermaid
 graph LR
-    START(["start: prod boot"]) --> ROLE["runtime role<br/>detectai-document-parser"]
-    ROLE --> SEC["one Secrets Manager get<br/>the whole JSON blob"]
-    ROLE --> SSM["one SSM prefix read<br/>/detectai/document-parser/*"]
+    START(["start: prod boot"]) --> APP["the app<br/>prod config plane"]
+    APP --> SEC["one Secrets Manager get<br/>the whole JSON blob"]
+    APP --> SSM["one SSM prefix read<br/>/detectai/document-parser/*"]
     SEC --> LOCK["config plane builds Settings"]
     SSM --> LOCK
     LOCK --> END(["end: service ready"])
 ```
 
-### Two identities
+### The seeder identity
 
 | Role | Created by | Can do |
 |------|------------|--------|
-| `detectai-document-parser` (runtime, in-stack) | `make secrets-apply`, on both planes | read the secret blob and the config prefix — nothing else |
-| `detectai-document-parser-deploy` (deploy, out-of-stack) | `make secrets-iam-bootstrap`, one-time | terraform's own workload for this service only: state-bucket lifecycle, secret and SSM write/read, administering the runtime role |
+| `detectai-document-parser-seeder` (seeder, out-of-stack) | `make secrets-seeder-bootstrap`, one-time | the single carrier for this service's AWS writes — state-bucket lifecycle, secret and SSM write/read (`seeder-policy`), trusting your own user with MFA |
 
-The runtime role is in-stack with an inline policy, so the deploy role never needs managed-policy churn or `PassRole`. The deploy role is deliberately out-of-stack so terraform never manages its own identity — the first-ever apply still runs under your current credentials.
+With the stack creating no IAM, the identity picture stays one-deep. The seeder is out-of-stack on purpose — terraform never manages its own carrier — and personal credentials only ever run that one-time bootstrap (plus the optional `--drop-seeder` at teardown). Every plan/apply/destroy runs under the seeder: `mk/secrets.mk` bakes `AWS_PROFILE ?= dp-seeder` into its AWS-touching targets, and the driver prints `carrier: AWS_PROFILE=...` on every run so a bypass is visible in the transcript.
 
 ## Two planes
 
@@ -49,12 +47,12 @@ graph LR
 | | Emulator (Floci/LocalStack) | Real AWS |
 |--|-----------------------------|----------|
 | Selected by | `EMULATOR_ENDPOINT` set | line empty or removed |
-| Credentials | dummy `test`/`test` | real AWS keys |
+| Credentials | dummy `test`/`test`, carrier profile stripped | real AWS credentials via the carrier profile (`AWS_PROFILE ?= dp-seeder`) |
 | State bucket | `TF_STATE_BUCKET`, or default `detectai-docparser-tfstate` when unset | `TF_STATE_BUCKET` (required) |
 | Secret deletion | instant (0-day recovery window) | 30-day recovery window (`SECRET_RECOVERY_WINDOW` seeds 0 or 7–30 instead) |
 | Apply | auto-approved | interactive confirm |
 
-The provider block adapts itself (`providers.tf`): the emulator plane gets `test` credentials, `skip_*` flags, and endpoint overrides for `secretsmanager`, `ssm`, `iam`, `sts`; the real-AWS plane leaves all of that unset. IAM policy ARNs need a 12-digit account id — real AWS resolves it from your credentials; the emulator pins `000000000000` (override with `TF_VAR_aws_account_id`).
+The provider block adapts itself (`providers.tf`): the emulator plane gets `test` credentials, `skip_*` flags, and endpoint overrides for `secretsmanager`, `ssm`, `iam`, `sts`; the real-AWS plane leaves all of that unset. The stack itself is addressed entirely by service-pinned names (`detectai/...`) — nothing in it is IAM, so no account-id plumbing exists; the seeder's CLI verbs derive the account from your trust-user ARN.
 
 One caveat: the emulator accepts every IAM call but **never enforces IAM policies**, so a green apply there proves structure only — enforcement bites on real AWS.
 
@@ -68,7 +66,7 @@ graph LR
     ENV --> VAL{"tools/secrets.py<br/>parse + validate"}
     VAL -->|"invalid"| FAIL["named config error<br/>terraform never touched"] --> END(["end"])
     VAL -->|"valid"| TF["backend config composed per plane<br/>init -reconfigure · plan · apply"]
-    TF --> LIVE["secret blob + SSM parameters<br/>+ runtime role, in the selected plane"]
+    TF --> LIVE["secret blob + SSM parameters<br/>in the selected plane"]
     LIVE --> END
 ```
 
@@ -86,7 +84,7 @@ make secrets-check              # validate .env, preview plane and vars (no terr
 make secrets-bootstrap-state    # create the state bucket for the selected plane (idempotent)
 make secrets-plan               # plan against the plane .env selects
 make secrets-apply              # apply (auto on the emulator, confirm on real AWS)
-make secrets-iam-bootstrap      # one-time: the out-of-stack deploy role
+make secrets-seeder-bootstrap   # one-time: the out-of-stack seeder role (the state/secrets/config carrier)
 ```
 
 The state bucket must exist before the first `init`. On the emulator an unset `TF_STATE_BUCKET` falls back to the fixed local default; on real AWS a bucket name is required — a sandbox bucket per engineer, versioned and encrypted (bootstrap enables versioning), so parallel testing never collides on one ledger.
@@ -95,8 +93,8 @@ The state bucket must exist before the first `init`. On the emulator an unset `T
 
 | Command | Removes | Keeps |
 |---------|---------|-------|
-| `make secrets-clean` | the secret + versions, the SSM parameters, the runtime role (terraform destroy) | state bucket, ledger, deploy role |
-| `make secrets-destroy` | everything above, **plus** every object version, the state bucket itself, and the deploy role | nothing |
+| `make secrets-clean` | the secret + versions, the SSM parameters (terraform destroy) | state bucket, ledger, seeder role |
+| `make secrets-destroy` | everything above, **plus** every object version, the state bucket itself, and (`--drop-seeder`) the seeder role | nothing |
 
 Two rules make these safe to reach for:
 
@@ -117,7 +115,7 @@ After `secrets-clean`, re-applying is just `make secrets-apply` again — init r
 
 Two suites cover this area, and they are not the same thing:
 
-- `terraform test` (run from `infra/terraform/`) — `tests/document-parser.tftest.hcl`, mocked AWS provider, no emulator or real AWS needed. Asserts the contract name is the output, the emulator plane keeps a 0-day recovery window, the prod plane keeps 30 days, the runtime role keeps its service-scoped name, and SSM seeding follows the `/detectai/document-parser/` prefix only (an unset map seeds nothing).
+- `terraform test` (run from `infra/terraform/`) — `tests/document-parser.tftest.hcl`, mocked AWS provider, no emulator or real AWS needed. Asserts the contract name is the output, the emulator plane keeps a 0-day recovery window, the prod plane keeps 30 days, and SSM seeding follows the `/detectai/document-parser/` prefix only (an unset map seeds nothing).
 - `make secrets-test` — pytest of the pipeline driver itself (`tests/unit/config/test_secrets_tool.py`): the `.env` parse and validation layer.
 
 ## Next Steps

@@ -47,17 +47,6 @@ variable "aws_region" {
   }
 }
 
-variable "aws_account_id" {
-  description = "Account id for IAM policy ARNs: resolved by the root module (data source on real AWS, pinned fallback on the emulator)."
-  type        = string
-
-  validation {
-    # Non-empty only: string-shape checks belong to the root variable and the test mocks.
-    condition     = length(var.aws_account_id) > 0
-    error_message = "aws_account_id must be a non-empty account id."
-  }
-}
-
 variable "ssm_parameters" {
   description = "Non-secret runtime config seeded from .env: each key becomes /detectai/document-parser/<KEY> (String)."
   type        = map(string)
@@ -69,16 +58,5 @@ variable "ssm_parameters" {
       [for value in values(var.ssm_parameters) : value != ""],
     ))
     error_message = "ssm_parameters keys must be UPPER_SNAKE config names and values must be non-empty."
-  }
-}
-
-variable "iam_role_name" {
-  description = "Runtime identity of the service: reads the secret blob and the config params, nothing else."
-  type        = string
-  default     = "detectai-document-parser"
-
-  validation {
-    condition     = can(regex("^[a-zA-Z0-9+=,.@_-]+$", var.iam_role_name))
-    error_message = "iam_role_name must be a valid IAM role name (letters, digits and + = , . @ _ -)."
   }
 }

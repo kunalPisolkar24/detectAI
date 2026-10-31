@@ -61,7 +61,7 @@ make secrets-check      # validate infra/.env, preview the plane — no AWS
 make secrets-bootstrap-state  # create the state bucket for the selected plane
 make secrets-plan       # terraform plan of the secrets stack
 make secrets-apply      # apply (auto on the emulator plane, confirm on real AWS)
-make secrets-iam-bootstrap    # the out-of-stack deploy role
+make secrets-seeder-bootstrap  # one-time: the out-of-stack seeder role (the write carrier)
 ```
 
 Those verbs, the planes behind them, state handling, and teardown are the [infrastructure guide's](infrastructure.md) subject — here we only needed the destination.

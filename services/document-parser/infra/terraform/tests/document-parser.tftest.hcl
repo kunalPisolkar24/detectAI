@@ -55,15 +55,6 @@ run "real_aws_plane_keeps_prod_recovery_window" {
   }
 }
 
-run "runtime_role_keeps_the_service_name" {
-  command = plan
-
-  assert {
-    condition     = output.iam_role_name == "detectai-document-parser"
-    error_message = "the runtime identity keeps its service-scoped role name"
-  }
-}
-
 run "config_params_land_on_the_service_prefix" {
   command = plan
 

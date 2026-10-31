@@ -12,13 +12,3 @@ output "ssm_parameter_names" {
   description = "Full names of the seeded config parameters (sorted)."
   value       = module.document_parser.ssm_parameter_names
 }
-
-output "iam_role_name" {
-  description = "Runtime identity role name (assumable in-account)."
-  value       = module.document_parser.iam_role_name
-}
-
-output "iam_role_arn" {
-  description = "Runtime identity role ARN."
-  value       = module.document_parser.iam_role_arn
-}
