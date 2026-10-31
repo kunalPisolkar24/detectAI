@@ -110,16 +110,4 @@ Out of this build's phase-1 code, tracked here so the contract change is visible
 ## Deferred
 
 - **Load rig stress/soak/negative profiles** — deliberately postponed; the internal face of this service is low-volume, and Paddle's retry cadence cannot be load-rigged meaningfully against Lambda platform latency
-- **`references/` LLDs** — drafted with the build, per [README.md](README.md)
-
-## Open decisions (cleared before build starts)
-
-- [x] Broker: **AWS SQS over RabbitMQ/Amazon MQ** — managed FIFO removes cluster operation and the entire connection lifecycle; the survey and the rejected alternatives live in [messaging.md](messaging.md)
-- [x] Queue type: **FIFO** with per-category message groups and body-derived dedup — preserves the delivery-order semantics the untouched worker relies on; rationale in [messaging.md](messaging.md)
-- [x] HTTP contract: endpoints, paths, request/response shape, status codes — resolved in [http.md](http.md)
-- [x] Internal credential: **renamed to the document-parser scheme** — header `x-api-key`, env/secret `API_KEY`, constant-time compare; scheme in [Authentication scheme](#authentication-scheme)
-- [x] Probes: `/health` and `/ready` at the root, open, kept for local parity — flat and version-free, a deliberate reverse of document-parser's versioned-everything shape
-- [x] Deployment runtime: **Lambda + API Gateway**, container image via Lambda Web Adapter — decided by the runtime survey above for operational sameness with document-parser
-- [x] Body bound: **1 MiB** (unchanged from the gateway it replaces); too-large answers 413, malformed answers 400 (the split document-parser standardized)
-
-Resolved: the metric inventory point of continuity and the New Relic migration are recorded in [observability.md](observability.md).
+- **`references/` LLDs** — drafted with the build, per [design.md](design.md)

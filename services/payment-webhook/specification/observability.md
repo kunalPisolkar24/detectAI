@@ -2,8 +2,6 @@
 
 What the payment-webhook service monitors and exports. Requirements live in [requirements.md](requirements.md) (NFR-5); the wire contract is [http.md](http.md); the queue contract in [messaging.md](messaging.md).
 
-**Status: drafted — the pipeline, metric names, and migration surface are spec'd here; the build implements against this document.**
-
 ## Pipeline
 
 ```mermaid

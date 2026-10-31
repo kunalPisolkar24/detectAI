@@ -2,8 +2,6 @@
 
 Module layout, runtime model, and the decisions behind them. Requirements live in [requirements.md](requirements.md); the wire contract in [http.md](http.md); delivery fidelity in [messaging.md](messaging.md); observability in [observability.md](observability.md).
 
-Status: drafted ahead of the build. `slop/` stays beside this tree as frozen reference material until the `worker-payments` cutover removes its last consumer, then it is removed and recoverable from git history.
-
 ## Module layout
 
 The build starts flat — `go run .` is the whole runtime:
@@ -11,7 +9,7 @@ The build starts flat — `go run .` is the whole runtime:
 ```
 services/payment-webhook/
   go.mod
-  main.go         # boot (PORT, default 8080), gin engine, the two static probes
+  main.go         # boot (PORT, default 8080), gin engine, the two probes, drain on SIGINT/SIGTERM
 ```
 
 Everything is `package main` in one file; the skeleton serves exactly `/health` and `/ready` and owns no middleware beyond gin's built-in logger/recovery. Growth is mechanical — split **files** before folders as real features land (`handlers.go`, `config.go`, `publisher.go`, `validator.go`, all still `package main` at the root), and move code under `cmd/` + `internal/` only when a boundary genuinely earns the folder: the SQS publisher and the Paddle validator are the first such strangers.
@@ -23,6 +21,8 @@ One of each kind still applies when that split happens. The pre-refactor tree ca
 There is **no executor, no worker pool, no connection machinery — anywhere**. The request path is strictly sequential: bounded body read → validate → parse metadata → enqueue (one `SendMessage` with the 5 s budget) → response 200. Concurrency exists outside the process — Lambda instances — and for the container runtime, replicas. The local compose instance runs the same code path with no in-process pooling, mirroring document-parser's one-code-path-per-runtime model.
 
 Health: `ready` reflects boot validation only (config, credentials, queue URL); there is nothing to check at request time because there is no broker connection to monitor. This deletes the connection-manager gauges and their readiness gate with one stroke ([messaging.md](messaging.md) records what dies).
+
+Shutdown: `signal.NotifyContext` watches SIGINT/SIGTERM; on arrival the server stops accepting and drains in-flight requests within a 10 s drain timeout — the 5 s publish budget plus slack — then exits with the drain logged, the container-runtime half of NFR-9. Lambda owes no drain (the platform stops the instance); the same signal path is harmless there.
 
 ## Error taxonomy
 
