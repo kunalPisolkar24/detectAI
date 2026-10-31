@@ -11,13 +11,22 @@ What `make secrets-*` runs, what the planes are, and the gotchas that bite.
 
 The stack never deploys the app and creates no IAM. The seeder role
 (`detectai-document-parser-seeder`, policy `seeder-policy`) is out-of-stack
-by design (terraform never manages its own carrier). Zero-config on real AWS:
-its trust is the **auto-detected ambient caller** (or a pinned
-`SEEDER_TRUST_USER_ARN`), `make secrets-seeder-bootstrap` creates it once,
-idempotently, under your personal creds, and every carrier verb assumes it
-with your MFA for one hour — the triplet rides as env credentials (outrank
-any profile, nothing written to `~/.aws`) and is cached gitignored in
-`infra/.aws-session.json` so a multi-verb stretch prompts once.
+by design (terraform never manages its own carrier):
+
+- Trust: the **auto-detected ambient caller** (or a pinned
+  `SEEDER_TRUST_USER_ARN`); an assumed-role caller strips to its base role
+  but then needs `SEEDER_MFA_SERIAL` pinned in `.env`.
+- Carrier verbs assume the role with your MFA for a **12-hour session** (the
+  STS ceiling); the triplet rides as env credentials — outranks any profile,
+  nothing written to `~/.aws` — and is cached gitignored in
+  `infra/.aws-session.json` so a multi-verb stretch prompts once.
+- `make secrets-seeder-bootstrap` creates it idempotently, once per AWS
+  account, on your personal creds; the role teardown also runs on personal
+  creds (a role cannot create or delete itself).
+- The driver prints `carrier: role session (…, valid mm:ss)` on every run
+  and refuses to run when the ambient identity already *is* a seeder session
+  (stale exported `AWS_*` triplets) — `make secrets-session-clear` drops the
+  cache and unsets the exports.
 
 ## Two planes, flipped by one line
 
@@ -61,8 +70,9 @@ at three layers by design (tool → root `variables.tf` → module
 `terraform destroy` never touches the state bucket — only the purge verb
 does, and only after destroy succeeded. On real AWS, `secrets-destroy`
 demands the bucket name as a typed barrier and warns if the bucket holds
-objects outside `document-parser/` — deleting a shared sandbox bucket takes
-sibling stacks' state too.
+objects outside `document-parser/`. Destroy schedules the secret into the
+recovery window (30 days, or whatever `SECRET_RECOVERY_WINDOW` seeded); the
+emulator plane always uses 0.
 
 ## Gotchas
 
@@ -72,17 +82,11 @@ sibling stacks' state too.
 - The emulator's S3/Secrets data is in-memory: a container restart can drop
   it. Any terraform verb recreates the bucket, so a bare
   `make secrets-apply` rebuilds the plane.
-- The tool refuses to run when the ambient identity already *is* a seeder
-  session (stale exported `AWS_*` triplets) — `make secrets-session-clear`
-  drops the local cache and unset the exports.
 - Real AWS needs Terraform ≥ 1.10 for the `use_lockfile` backend flag.
 - The state file stores `secret_string` in plaintext — keep the prod bucket
   versioned, encrypted, access-restricted.
-- Skipping the 30-day recovery window needs `--force-delete`, which has no
+- Skipping an existing recovery window needs `--force-delete`, which has no
   make wrapper: `poetry run python tools/secrets.py destroy --force-delete`.
-  Or seed without a window at all: `SECRET_RECOVERY_WINDOW=0` in `infra/.env`
-  makes `terraform destroy` delete the blob immediately (opt-in; unset keeps
-  30 days, `7-30` keeps an AWS window; the emulator plane always uses 0).
 
 Full operator guide: `services/document-parser/docs/guides/infrastructure.md`
 · credential handling: `services/document-parser/docs/guides/secrets.md`

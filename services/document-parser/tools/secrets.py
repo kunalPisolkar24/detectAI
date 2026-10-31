@@ -11,7 +11,7 @@ AWS on the resource path; the opt-in direct-AWS verbs are `bootstrap`
 
 On real AWS the seeder identity is zero-config: the trust principal is
 auto-detected from the ambient caller (or pinned via SEEDER_TRUST_USER_ARN),
-and every carrier verb runs under a one-hour MFA-gated session of the
+and every carrier verb runs under a 12-hour MFA-gated session of the
 detectai-document-parser-seeder role, cached in infra/.aws-session.json between
 verbs. The emulator keeps fake credentials and never assumes anything.
 """

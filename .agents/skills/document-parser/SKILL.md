@@ -85,10 +85,13 @@ fail-fast table: [references/running.md](references/running.md)
 ## Infra and testing — the short tours
 
 - **AWS slice:** `make env` → `make secrets-check` (always first) →
-  `make secrets-bootstrap-state` → `make secrets-plan` →
+  `make secrets-seeder-bootstrap` (one-time: the out-of-stack write
+  carrier) → `make secrets-bootstrap-state` → `make secrets-plan` →
   `make secrets-apply` — auto-approved on the Floci emulator plane,
   interactive on real AWS; the plane flips on `EMULATOR_ENDPOINT` in
-  `infra/.env`. Teardown: `secrets-clean` keeps the bucket and ledger,
+  `infra/.env`. Then `make secrets-verify`: reads the live plane and
+  matches it against `infra/.env` — fingerprints only, exit 1 on drift.
+  Teardown: `secrets-clean` keeps the bucket and ledger,
   `secrets-destroy` wipes everything including the role.
   Verbs, state gotchas: [references/infra.md](references/infra.md)
 - **Tests:** `make test` is the default gate; `make test-unit` for
