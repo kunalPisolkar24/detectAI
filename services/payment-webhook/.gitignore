@@ -1,0 +1,16 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+webhook
+payment-webhook
+
+# Coverage and build artifacts
+*.test
+*.out
+/vendor/
+
+# Local env
+.env

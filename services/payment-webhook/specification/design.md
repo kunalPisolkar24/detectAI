@@ -6,44 +6,17 @@ Status: drafted ahead of the build. `slop/` stays beside this tree as frozen ref
 
 ## Module layout
 
+The build starts flat — `go run .` is the whole runtime:
+
 ```
 services/payment-webhook/
-  cmd/
-    webhook/
-      main.go            # boot: config plane → observability → adapters → server/lambda
-  internal/
-    domain/
-      event.go           # ParseEvent (metadata-only), Event, group-key ladder output
-      errors.go          # typed verdicts: ErrInvalidSignature, ErrBodyTooLarge, ErrEnqueueUnavailable, ErrDeadlineExceeded…
-      ports/             # Publisher, SignatureValidator, HealthChecker, MetricsRecorder — transport-free interfaces
-    application/
-      webhook_service.go # the two use cases: ProcessWebhook, ProcessInternalEvent; span attrs + metrics + errors mapped to typed verdicts
-    adapters/
-      inbound/http/
-        routes.go        # gin route group /api/v1; probes excluded from middleware auth paths
-        handler.go       # bounded body read (1 MiB + 1), status mapping, error envelope {"error": …}
-        probes.go        # /api/v1/health, /api/v1/ready — open, static
-        middleware.go    # otelgin + RejectedBody metrics
-      outbound/paddle/
-        validator.go     # Paddle HMAC: ts=…;h1=…, ±5 min freshness, hmac constant-time compare
-      outbound/sqs/
-        client.go        # SDK config wiring (region, endpoint override for tests)
-        publisher.go     # Publisher: SendMessage with FIFO attributes, env-config budget
-    config/
-      config.go          # settings contract, fail-closed validation, bounds
-      aws.go             # prod plane: Secrets Manager blob, region
-      provider.go        # plane flick: dev env-over-file, prod AWS-exact
-    observability/
-      resource.go        # service.name/version, deployment.environment flick
-      logger.go          # slog bridge → OTel logs (otelslog)
-      tracing.go         # tracer provider, otelgin wiring
-      meters.go          # the metric inventory; the null build behind the NFR-5 gate
-      sdk.go             # boot lifecycle: providers or null build; flush-on-shutdown
+  go.mod
+  main.go         # boot (PORT, default 8080), gin engine, the two static probes
 ```
 
-One of each kind. The pre-refactor tree carried parallel layers from stacked iterations — `internal/transport/http` alongside `internal/adapters/inbound/http`, `internal/infrastructure/rabbitmq` alongside `internal/adapters/outbound/rabbitmq`, three observability homes. The rebuild collapses to the one layer of each that the repo's clean-architecture rule names; there is no interface growth beyond the four domain ports, and no `ports/messaging.go` leaking AMQP primitives into the domain (the pre-refactor `ports/messaging.go` was an AMQP interface file — the domain depended on broker transport-shaped things).
+Everything is `package main` in one file; the skeleton serves exactly `/health` and `/ready` and owns no middleware beyond gin's built-in logger/recovery. Growth is mechanical — split **files** before folders as real features land (`handlers.go`, `config.go`, `publisher.go`, `validator.go`, all still `package main` at the root), and move code under `cmd/` + `internal/` only when a boundary genuinely earns the folder: the SQS publisher and the Paddle validator are the first such strangers.
 
-Dependency direction is one-way inside: `domain` has zero SDK/Gin imports; `application` depends on `domain` only; adapters depend on application/domain ports; wiring happens in `cmd`.
+One of each kind still applies when that split happens. The pre-refactor tree carried parallel layers from stacked iterations — `internal/transport/http` alongside `internal/adapters/inbound/http`, `internal/infrastructure/rabbitmq` alongside `internal/adapters/outbound/rabbitmq`, three observability homes. The rebuild collapses to one layer of each that the repo's clean-architecture rule names, with no interface growth beyond the domain ports, and no `ports/messaging.go` leaking AMQP primitives into the domain (the pre-refactor `ports/messaging.go` was an AMQP interface file — the domain depended on broker transport-shaped things). Dependency direction is one-way whenever the split exists: SDK/Gin imports stay out of the inner layers, wiring happens at boot.
 
 ## Runtime model
 

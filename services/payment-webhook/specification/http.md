@@ -6,7 +6,7 @@ The wire contract for the payment-webhook service. Requirements live in [require
 
 This is a rebuild, and the wire surface changes deliberately; everything not named below is behavior-preserving:
 
-1. **Paths move under the `/api/v1` prefix** and the probes rename — `/webhook/paddle` → `/api/v1/webhook/paddle`, `/internal/events` → `/api/v1/internal/events`, `/healthz` → `/api/v1/health`, `/readyz` → `/api/v1/ready`. The prefix keeps future versioning off the callers' critical path.
+1. **Paths move** — the two ingress endpoints gain the `/api/v1` prefix (`/webhook/paddle` → `/api/v1/webhook/paddle`, `/internal/events` → `/api/v1/internal/events`) for future versioning; the probes rename flat — `/healthz` → `/health`, `/readyz` → `/ready` — keeping probe-tool URLs free of version churn.
 2. **The internal credential carries as `x-api-key`** (was `X-Internal-Key`), matching the document-parser scheme; the Paddle ingress keeps `Paddle-Signature` and its HMAC semantics exactly.
 3. **Oversized bodies answer 413** naming the limit; malformed/unreadable bodies answer 400 — the pre-refactor gateway answered 400 for both, hiding the distinction.
 4. Error envelope stays `{"error": "…"}` (Gin-native); callers need no schema changes.
@@ -19,10 +19,10 @@ Callers affected: the knock-on list in [requirements.md](requirements.md).
 |---------------|------|---------|
 | `POST /api/v1/webhook/paddle` | required | Validate + queue a Paddle event |
 | `POST /api/v1/internal/events` | required | Validate + queue an event from `apps/web` |
-| `GET /api/v1/health` | open | Liveness probe |
-| `GET /api/v1/ready` | open | Readiness signal |
+| `GET /health` | open | Liveness probe |
+| `GET /ready` | open | Readiness signal |
 
-The `/api/v1` prefix is part of the contract. There is **no metrics endpoint** — the service is observed exclusively through the OTel push pipeline (see [observability.md](observability.md)).
+The `/api/v1` prefix shapes the two ingress endpoints and is part of their contract; the probes sit at the root and are version-free by convention. There is **no metrics endpoint** — the service is observed exclusively through the OTel push pipeline (see [observability.md](observability.md)).
 
 ### Request lifecycle
 
@@ -103,14 +103,14 @@ Same envelope and table as the Paddle face minus the signature rules: 401 covers
 
 | Path | 200 body | 503 body |
 |------|----------|----------|
-| `/api/v1/health` | `{"status": "ok"}` | `{"status": "unavailable"}` |
-| `/api/v1/ready` | `{"status": "ready"}` | `{"status": "not_ready"}` |
+| `/health` | `{"status": "ok"}` | `{"status": "unavailable"}` |
+| `/ready` | `{"status": "ready"}` | `{"status": "not_ready"}` |
 
 The endpoints stay in the contract for local parity — Lambda has no probes; the platform owns availability and shedding. On the rebuilt service `ready` is a static signal: boot validation (config plane, credentials, queue URL) either passed or failed the process launch. The old `rabbitmq_connection_status`-gated readiness has no equivalent, because there is no long-lived connection to track.
 
 ## Resolved decisions and rationale
 
-1. **`/api/v1` prefix on everything, probes included** — one convention across the two Lambda-fronted services; document-parser set it, and versioning pins it. The probes stay open per the shared standard.
+1. **Prefix on ingress, flat probes** — the two authenticated endpoints carry `/api/v1` (future versioning stays off the callers' critical path); the probes stay root-level and version-free, matching probe-tool expectations. document-parser versioned everything including probes; the differentiated shape is the deliberate reverse — the probe namespace never needs an API version.
 2. **One credential, one header, one comparison path** — `x-api-key` only. `X-Internal-Key` carried the same secret in a second envelope whose cost was a second comparison path to test and a non-standard header name; the document-parser inheritance makes the compare constant-time in the same stroke (the pre-refactor gateway compared with `!=`).
 3. **413/400 split** — an oversized body and a malformed body are different caller failures (config vs payload); document-parser already standardized the distinction, and Paddle treats any 4xx identically (failure → retry), so nothing rides on the change.
 4. **Unknown event types queue** — the gateway's job is transport, not vocabulary. Rejecting an unknown `event_type` would let a Paddle schema evolution 400 the whole pipeline; the worker owns interpretation and the counter owns visibility (FR-7).

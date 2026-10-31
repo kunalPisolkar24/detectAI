@@ -18,7 +18,7 @@ Detailed designs: [spec index](README.md) · [HTTP contract](http.md) · [delive
 | FR-5 | Return 200 `{"status":"queued"}` once SQS accepts the message — SQS's success response is the durability guarantee (no in-flight buffering, no publisher-confirm dance) |
 | FR-6 | Return clear error responses when a request cannot be processed: unreadable or malformed body 400, oversized body 413, enqueue unavailable 503 with `Retry-After`, unexpected failure 500 |
 | FR-7 | Queue events whose `event_type` cannot be recognized rather than rejecting them; count them (unknown type is a worker-side concern, not an admission error) |
-| FR-8 | Serve `/api/v1/health` and `/api/v1/ready` open, without authentication, for probes and local runtimes |
+| FR-8 | Serve `/health` and `/ready` open, without authentication, for probes and local runtimes |
 
 ### Authentication scheme
 
@@ -101,7 +101,7 @@ Out of this build's phase-1 code, tracked here so the contract change is visible
 - **Paddle dashboard** — webhook destination URL re-pointed to `<host>/api/v1/webhook/paddle`
 - **`apps/web` `cancel-subscription.ts`** — header `X-Internal-Key: env.INTERNAL_API_KEY` → `x-api-key: env.PAYMENT_GATEWAY_API_KEY`; path → `/api/v1/internal/events`
 - **`apps/web` env** — new caller-side name `PAYMENT_GATEWAY_API_KEY` per the document-parser `FILE_EXTRACTOR_API_KEY` precedent (the service side stays `API_KEY`); compose files re-wired in the same PR; the web's own `INTERNAL_API_KEY` (analyze-stream load-test bypass) is a different credential and is untouched
-- **`apps/web` BFF status route** — `app/api/services/payment-gateway/status` polls `/readyz` → `/api/v1/ready`
+- **`apps/web` BFF status route** — `app/api/services/payment-gateway/status` polls `/readyz` → `/ready`
 - **`apps/web` docs** — configuration/request-flows/services pages name the old path and header
 - **Load rigs** — `apps/web/test/load/mock-server` fakes the old path; rig env files carry the internal key
 - **Secrets tooling** — the gateway's Secrets Manager blob (`{"API_KEY": …}`) joins the seed process allowlist; `PADDLE_WEBHOOK_SECRET` rides the same mechanism
@@ -118,7 +118,7 @@ Out of this build's phase-1 code, tracked here so the contract change is visible
 - [x] Queue type: **FIFO** with per-category message groups and body-derived dedup — preserves the delivery-order semantics the untouched worker relies on; rationale in [messaging.md](messaging.md)
 - [x] HTTP contract: endpoints, paths, request/response shape, status codes — resolved in [http.md](http.md)
 - [x] Internal credential: **renamed to the document-parser scheme** — header `x-api-key`, env/secret `API_KEY`, constant-time compare; scheme in [Authentication scheme](#authentication-scheme)
-- [x] Probes: `/api/v1/health` and `/api/v1/ready`, open, kept for local parity
+- [x] Probes: `/health` and `/ready` at the root, open, kept for local parity — flat and version-free, a deliberate reverse of document-parser's versioned-everything shape
 - [x] Deployment runtime: **Lambda + API Gateway**, container image via Lambda Web Adapter — decided by the runtime survey above for operational sameness with document-parser
 - [x] Body bound: **1 MiB** (unchanged from the gateway it replaces); too-large answers 413, malformed answers 400 (the split document-parser standardized)
 
