@@ -542,15 +542,19 @@ def test_build_tf_vars_ignores_unlisted_keys():
 
 def test_seeder_bootstrap_commands_emulator():
     commands = dp_secrets.seeder_bootstrap_commands(True, EMULATOR_VALUE)
-    assert len(commands) == 2
+    assert len(commands) == 3
     create = " ".join(commands[0])
     assert "--role-name detectai-document-parser-seeder" in create
     assert "--endpoint-url http://localhost:4566" in create
+    assert "--max-session-duration 43200" in create
     trust = json.loads(commands[0][commands[0].index("--assume-role-policy-document") + 1])
     statement = trust["Statement"][0]
     assert statement["Principal"]["AWS"] == "arn:aws:iam::000000000000:user/detectai-seeder"
     assert statement["Condition"]["Bool"]["aws:MultiFactorAuthPresent"] == "true"
-    policy = json.loads(commands[1][commands[1].index("--policy-document") + 1])
+    update = " ".join(commands[1])
+    assert "iam update-role --role-name detectai-document-parser-seeder" in update
+    assert "--max-session-duration 43200" in update
+    policy = json.loads(commands[2][commands[2].index("--policy-document") + 1])
     assert {part["Sid"] for part in policy["Statement"]} == {
         "RunTerraformStateBucket",
         "RunTerraformStateObjects",
@@ -564,10 +568,12 @@ def test_seeder_bootstrap_commands_emulator():
 def test_seeder_bootstrap_commands_real_aws():
     real = {**REAL_VALUE, "SEEDER_TRUST_USER_ARN": "arn:aws:iam::123456789012:user/kunalpisolkar"}
     commands = dp_secrets.seeder_bootstrap_commands(False, real)
-    assert "--endpoint-url" not in " ".join(commands[0])
+    joined = " ".join(" ".join(command) for command in commands)
+    assert "--endpoint-url" not in joined
+    assert joined.count("--max-session-duration 43200") == 2  # create and update both carry the cap
     trust = json.loads(commands[0][commands[0].index("--assume-role-policy-document") + 1])
     assert trust["Statement"][0]["Principal"]["AWS"] == "arn:aws:iam::123456789012:user/kunalpisolkar"
-    policy = json.loads(commands[1][commands[1].index("--policy-document") + 1])
+    policy = json.loads(commands[2][commands[2].index("--policy-document") + 1])
     secret_statement = next(part for part in policy["Statement"] if part["Sid"] == "ManageServiceSecret")
     assert secret_statement["Resource"] == [
         "arn:aws:secretsmanager:ap-southeast-2:123456789012:secret:detectai/document-parser/secrets-*"
@@ -638,7 +644,21 @@ def test_seeder_bootstrap_flow_keeps_existing_role(monkeypatch, capsys):
     monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator: 0)
     assert dp_secrets.seeder_bootstrap_flow(True, EMULATOR_VALUE, False) == 0
     out = capsys.readouterr().out
-    assert "already exists" in out and "policy: seeder-policy attached" in out
+    assert "already exists" in out and "session: 12h cap refreshed" in out
+    assert "policy: seeder-policy attached" in out
+
+
+def test_seeder_bootstrap_flow_warns_when_cap_refresh_fails(monkeypatch, capsys):
+    results = iter([
+        (1, "", "An error occurred (EntityAlreadyExists) when calling the CreateRole operation"),
+        (299, "", "update boom"),
+    ])
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: next(results))
+    monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator: 0)
+    assert dp_secrets.seeder_bootstrap_flow(True, EMULATOR_VALUE, False) == 0
+    out = capsys.readouterr().out
+    assert "warning: could not refresh the session cap" in out and "update boom" in out
+    assert "aws iam update-role" in out and "policy: seeder-policy attached" in out
 
 
 def test_seeder_bootstrap_flow_fails_loud_when_role_creation_fails(monkeypatch, capsys):
@@ -1003,7 +1023,7 @@ def test_assume_seeder_session_promotes_with_the_prompted_code(monkeypatch, tmp_
     monkeypatch.setattr("builtins.input", lambda prompt="": "123456")
     session = dp_secrets.assume_seeder_session(ROLE_ARN, "arn:aws:iam::123456789012:mfa/kunalpisolkar")
     joined = " ".join(commands[0])
-    assert "--token-code 123456" in joined and "--duration-seconds 3600" in joined
+    assert "--token-code 123456" in joined and "--duration-seconds 43200" in joined
     assert "--endpoint-url" not in joined
     assert session["access_key_id"] == "ASIA1" and session["role_arn"] == ROLE_ARN
 
@@ -1208,3 +1228,23 @@ def test_bootstrap_carries_the_resolved_session(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.argv", ["secrets.py", "bootstrap", "--dry-run"])
     assert dp_secrets.main() == 0
     assert captured == [(True, True, None)]
+
+
+def test_cli_main_returns_130_on_keyboard_interrupt(monkeypatch, capsys):
+    def interrupted():
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(dp_secrets, "main", interrupted)
+    assert dp_secrets.cli_main() == 130
+    out = capsys.readouterr().out
+    assert "interrupted" in out and "traceback" not in out.lower()
+
+
+def test_cli_main_reads_eof_at_a_prompt_as_cancellation(monkeypatch, capsys):
+    def eof():
+        raise EOFError
+
+    monkeypatch.setattr(dp_secrets, "main", eof)
+    assert dp_secrets.cli_main() == 1
+    out = capsys.readouterr().out
+    assert "cancelled" in out

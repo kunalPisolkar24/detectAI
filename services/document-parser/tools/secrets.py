@@ -89,12 +89,14 @@ SEEDER_USER_DEFAULT = "detectai-seeder"
 USER_ARN_RE = re.compile(r"^arn:aws:iam::[0-9]{12}:user/[a-zA-Z0-9+=,.@_-]+$")
 
 # Real-plane carrier session: every carrier verb assumes the seeder role with
-# the caller's MFA, for one hour. The triplet is cached in a gitignored file
-# beside .env (chmod 600) so a multi-verb stretch prompts for the code once;
-# it is refreshed once less than the renewal margin remains.
+# the caller's MFA, for a 12-hour window (the STS role-session ceiling). The
+# triplet is cached in a gitignored file beside .env (chmod 600) so a multi-verb
+# stretch prompts for the code once; it is refreshed once less than the renewal
+# margin remains. The role's MaxSessionDuration must raise with it, which
+# seeder-bootstrap applies on every run.
 SEEDER_MFA_SERIAL_KEY = "SEEDER_MFA_SERIAL"
 SESSION_CACHE_FILE = SERVICE_DIR / "infra" / ".aws-session.json"
-SESSION_DURATION_SECONDS = 3600
+SESSION_DURATION_SECONDS = 12 * 60 * 60
 SESSION_RENEWAL_MARGIN_SECONDS = 10 * 60
 SEEDER_ROLE_SESSION_MARK = f"assumed-role/{SEEDER_ROLE_NAME}/"
 MFA_CODE_RE = re.compile(r"^[0-9]{6}$")
@@ -615,7 +617,10 @@ def seeder_bootstrap_commands(is_emulator: bool, values: dict[str, str]) -> list
     base = aws_base(is_emulator, values)
     return [
         base + ["iam", "create-role", "--role-name", SEEDER_ROLE_NAME,
-                "--assume-role-policy-document", json.dumps(seeder_trust_document(user_arn))],
+                "--assume-role-policy-document", json.dumps(seeder_trust_document(user_arn)),
+                "--max-session-duration", str(SESSION_DURATION_SECONDS)],
+        base + ["iam", "update-role", "--role-name", SEEDER_ROLE_NAME,
+                "--max-session-duration", str(SESSION_DURATION_SECONDS)],
         base + ["iam", "put-role-policy", "--role-name", SEEDER_ROLE_NAME,
                 "--policy-name", SEEDER_POLICY_NAME,
                 "--policy-document", json.dumps(seeder_policy_document(is_emulator, values, user_arn))],
@@ -649,21 +654,35 @@ def seeder_bootstrap_flow(is_emulator: bool, values: dict[str, str], dry_run: bo
 
     code, _, stderr = run_aws_captured(commands[0], is_emulator)
     if code == 0:
-        print(f"created: {SEEDER_ROLE_NAME}")
+        print(f"created: {SEEDER_ROLE_NAME} (12h session cap)")
     elif "EntityAlreadyExists" in (stderr or ""):
         print(f"ok: role {SEEDER_ROLE_NAME} already exists")
+        # Older roles predate the 12h cap; refresh it so the carrier's 43200s
+        # assume-role is accepted. A refresh failure is non-fatal: assuming
+        # succeeds at the default cap and fails loudly with its own fix hint.
+        cap_code, _, cap_stderr = run_aws_captured(commands[1], is_emulator)
+        if cap_code == 0:
+            print("session: 12h cap refreshed")
+        else:
+            print("warning: could not refresh the session cap (older roles default to 1h)")
+            if (cap_stderr or "").strip():
+                print(cap_stderr.strip())
+            print(
+                f"fix: aws iam update-role --role-name {SEEDER_ROLE_NAME} "
+                f"--max-session-duration {SESSION_DURATION_SECONDS}"
+            )
     else:
         print("error: create-role failed")
         if (stderr or "").strip():
             print(stderr.strip())
         return 1
 
-    if run_aws(commands[1], is_emulator) != 0:
+    if run_aws(commands[2], is_emulator) != 0:
         print(f"fix: inspect the role and attach {SEEDER_POLICY_NAME} manually, then retry")
         return 1
     scopes = ", ".join(statement["Sid"] for statement in seeder_policy_document(is_emulator, values, user_arn)["Statement"])
     print(f"policy: {SEEDER_POLICY_NAME} attached ({scopes})")
-    print("next:   carrier verbs assume this role automatically with your MFA code (one prompt per hour window)")
+    print("next:   carrier verbs assume this role automatically with your MFA code (once per 12h session)")
     return 0
 
 
@@ -857,9 +876,9 @@ def clear_cached_session() -> bool:
 
 
 def assume_seeder_session(role_arn: str, serial: str) -> dict[str, Any]:
-    """One MFA prompt, one hour of seeder-role credentials. The assume response
+    """One MFA prompt, a 12-hour seeder role session from it. The assume response
     itself proves the identity, so no follow-up caller check is needed."""
-    print(f"carrier: assuming {SEEDER_ROLE_NAME} (MFA, valid for one hour)")
+    print(f"carrier: assuming {SEEDER_ROLE_NAME} (MFA, valid for 12 hours)")
     code = input(f"MFA code for {serial}: ").strip()
     if not MFA_CODE_RE.fullmatch(code):
         die(f"{code!r} is not a 6-digit MFA code", "enter the six-digit code from your MFA device")
@@ -873,11 +892,15 @@ def assume_seeder_session(role_arn: str, serial: str) -> dict[str, Any]:
     ]
     exit_code, stdout, stderr = run_aws_captured(command, False)
     if exit_code != 0:
-        detail = (stderr or "").strip().splitlines()[-1] if (stderr or "").strip() else "unknown error"
-        die(
-            f"could not assume {role_arn}",
-            f"check the MFA code and that make secrets-seeder-bootstrap installed the role ({detail})",
-        )
+        stderr_text = (stderr or "").strip()
+        detail = stderr_text.splitlines()[-1] if stderr_text else "unknown error"
+        hint = f"check the MFA code and that make secrets-seeder-bootstrap installed the role ({detail})"
+        if "MaxSessionDuration" in stderr_text or "DurationSeconds" in stderr_text:
+            hint = (
+                f"the role's session cap is below {SESSION_DURATION_SECONDS}s; run "
+                f"make secrets-seeder-bootstrap once to raise it ({detail})"
+            )
+        die(f"could not assume {role_arn}", hint)
     try:
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
@@ -1131,5 +1154,20 @@ def main() -> int:
         backend_file.unlink(missing_ok=True)
 
 
+def cli_main() -> int:
+    """Signal net around the whole verb run: Ctrl+C exits with the conventional
+    130 instead of a traceback, and EOF at any prompt reads as a cancellation."""
+    try:
+        return main()
+    except KeyboardInterrupt:
+        print()
+        print("interrupted: rerun the same verb when ready; terraform writes are atomic per run")
+        return 130
+    except EOFError:
+        print()
+        print("cancelled: no input received")
+        return 1
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(cli_main())
