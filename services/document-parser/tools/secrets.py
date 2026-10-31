@@ -18,6 +18,7 @@ verbs. The emulator keeps fake credentials and never assumes anything.
 from __future__ import annotations
 
 import argparse
+import getpass
 import io
 import json
 import os
@@ -100,6 +101,10 @@ SESSION_DURATION_SECONDS = 12 * 60 * 60
 SESSION_RENEWAL_MARGIN_SECONDS = 10 * 60
 SEEDER_ROLE_SESSION_MARK = f"assumed-role/{SEEDER_ROLE_NAME}/"
 MFA_CODE_RE = re.compile(r"^[0-9]{6}$")
+
+# CLI >= 2.34 requires --role-session-name on sts assume-role; a stable,
+# sanitized name keeps each laptop's carrier session identifiable in CloudTrail.
+ROLE_SESSION_NAME = re.sub(r"[^A-Za-z0-9=_,.@-]", ".", f"document-parser-{getpass.getuser()}")
 
 
 def die(message: str, fix: str) -> NoReturn:
@@ -885,6 +890,7 @@ def assume_seeder_session(role_arn: str, serial: str) -> dict[str, Any]:
     command = [
         "aws", "sts", "assume-role",
         "--role-arn", role_arn,
+        "--role-session-name", ROLE_SESSION_NAME,
         "--serial-number", serial,
         "--token-code", code,
         "--duration-seconds", str(SESSION_DURATION_SECONDS),

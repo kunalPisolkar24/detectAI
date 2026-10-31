@@ -1024,6 +1024,7 @@ def test_assume_seeder_session_promotes_with_the_prompted_code(monkeypatch, tmp_
     session = dp_secrets.assume_seeder_session(ROLE_ARN, "arn:aws:iam::123456789012:mfa/kunalpisolkar")
     joined = " ".join(commands[0])
     assert "--token-code 123456" in joined and "--duration-seconds 43200" in joined
+    assert "--role-session-name document-parser-" in joined
     assert "--endpoint-url" not in joined
     assert session["access_key_id"] == "ASIA1" and session["role_arn"] == ROLE_ARN
 
