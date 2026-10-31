@@ -67,7 +67,9 @@ One `infra/.env.load` configures everything, `SCENARIO` included (`smoke` or `lo
 | `make secrets-bootstrap-state` | creates the state bucket for the plane `.env` selects (idempotent) | first apply, or after an emulator restart ate the bucket |
 | `make secrets-plan` | terraform plan against the selected plane | reading what would change |
 | `make secrets-apply` | terraform apply — auto-approved on the emulator, interactive confirm on real AWS | making it real |
-| `make secrets-seeder-bootstrap` | creates/updates the out-of-stack seeder role (`seeder-policy`) | one-time, or to recreate it after a full wipe |
+| `make secrets-seeder-bootstrap` | creates/updates the out-of-stack seeder role (`seeder-policy`), trusting your auto-detected identity | one-time, or to recreate it after a full wipe |
+| `make secrets-drop-seeder` | detaches `seeder-policy` and deletes the role (personal credentials) | swapping the trust identity, or leaving an account clean |
+| `make secrets-session-clear` | removes the cached seeder session (`infra/.aws-session.json`) | after a stale/failed MFA window; the next verb re-prompts |
 | `make secrets-clean` | terraform destroy; keeps the state bucket and ledger | wiping resources, keeping your place |
 | `make secrets-destroy` | full teardown: destroy, then the bucket purge, then (`--drop-seeder`) the seeder role | leaving no trace |
 | `make secrets-test` | pytest for the pipeline driver `tools/secrets.py` | the parse/validation layer changed |

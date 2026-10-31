@@ -11,18 +11,22 @@ What `make secrets-*` runs, what the planes are, and the gotchas that bite.
 
 The stack never deploys the app and creates no IAM. The seeder role
 (`detectai-document-parser-seeder`, policy `seeder-policy`) is out-of-stack
-by design (terraform never manages its own carrier);
-`make secrets-seeder-bootstrap` creates it once, idempotently, and
-`mk/secrets.mk` runs every AWS verb under it (`AWS_PROFILE ?= dp-seeder`).
+by design (terraform never manages its own carrier). Zero-config on real AWS:
+its trust is the **auto-detected ambient caller** (or a pinned
+`SEEDER_TRUST_USER_ARN`), `make secrets-seeder-bootstrap` creates it once,
+idempotently, under your personal creds, and every carrier verb assumes it
+with your MFA for one hour — the triplet rides as env credentials (outrank
+any profile, nothing written to `~/.aws`) and is cached gitignored in
+`infra/.aws-session.json` so a multi-verb stretch prompts once.
 
 ## Two planes, flipped by one line
 
 `EMULATOR_ENDPOINT` in `infra/.env` selects everything: set → Floci/LocalStack
 emulator (dummy `test` credentials, auto-approved apply, in-memory state,
-0-day secret deletion); empty → real AWS (real credentials via the carrier
-profile, interactive confirm, 30-day recovery window, `TF_STATE_BUCKET`
-required). The provider block adapts itself; nothing in the stack reads an
-account id.
+0-day secret deletion); empty → real AWS (ambient personal creds + the
+MFA-gated seeder session, interactive confirm, 30-day recovery window,
+`TF_STATE_BUCKET` required). The provider block adapts itself; nothing in
+the stack reads an account id.
 
 The emulator accepts every IAM call but never enforces IAM policies — a
 green apply there proves structure only; enforcement bites on real AWS.
@@ -32,10 +36,10 @@ green apply there proves structure only; enforcement bites on real AWS.
 ```sh
 make env                         # infra/.env — the single config input
 make secrets-check               # validate + preview plane/vars — no terraform, no AWS
+make secrets-seeder-bootstrap    # one-time: the out-of-stack seeder role
 make secrets-bootstrap-state     # state bucket for the selected plane (idempotent)
 make secrets-plan
 make secrets-apply               # auto on the emulator, confirm on real AWS
-make secrets-seeder-bootstrap    # one-time: the out-of-stack seeder role
 ```
 
 `tools/secrets.py` is the only bridge into terraform: it parses and
@@ -51,6 +55,7 @@ at three layers by design (tool → root `variables.tf` → module
 |------|---------|-------|
 | `make secrets-clean` | blob + SSM parameters | state bucket, ledger, seeder role |
 | `make secrets-destroy` | all of it, plus object versions and the bucket (`--purge-state`) and the seeder role (`--drop-seeder`) | nothing |
+| `make secrets-drop-seeder` | the seeder policy + role only (personal creds; the role cannot delete itself) | state bucket, ledger, stack resources |
 
 `terraform destroy` never touches the state bucket — only the purge verb
 does, and only after destroy succeeded. On real AWS, `secrets-destroy`
@@ -66,6 +71,9 @@ sibling stacks' state too.
 - The emulator's S3/Secrets data is in-memory: a container restart can drop
   it. Any terraform verb recreates the bucket, so a bare
   `make secrets-apply` rebuilds the plane.
+- The tool refuses to run when the ambient identity already *is* a seeder
+  session (stale exported `AWS_*` triplets) — `make secrets-session-clear`
+  drops the local cache and unset the exports.
 - Real AWS needs Terraform ≥ 1.10 for the `use_lockfile` backend flag.
 - The state file stores `secret_string` in plaintext — keep the prod bucket
   versioned, encrypted, access-restricted.

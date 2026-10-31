@@ -4,6 +4,9 @@
 **/.env
 **/.env.*
 
+# Local derived seeder session cache (document-parser staging credentials)
+services/document-parser/infra/.aws-session.json
+
 # Python
 .pytest_cache/
 __pycache__/

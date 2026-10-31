@@ -57,11 +57,11 @@ The rules pinned by this one credential:
 The secret seed lives in `infra/.env` (copied from `.env.example`) and the pipeline is driven through make targets — the app never writes secrets anywhere:
 
 ```sh
-make secrets-check      # validate infra/.env, preview the plane — no AWS
-make secrets-bootstrap-state  # create the state bucket for the selected plane
-make secrets-plan       # terraform plan of the secrets stack
-make secrets-apply      # apply (auto on the emulator plane, confirm on real AWS)
+make secrets-check             # validate infra/.env, preview the plane — no AWS
 make secrets-seeder-bootstrap  # one-time: the out-of-stack seeder role (the write carrier)
+make secrets-bootstrap-state   # create the state bucket for the selected plane
+make secrets-plan              # terraform plan of the secrets stack
+make secrets-apply             # apply (auto on the emulator plane, confirm on real AWS)
 ```
 
 Those verbs, the planes behind them, state handling, and teardown are the [infrastructure guide's](infrastructure.md) subject — here we only needed the destination.

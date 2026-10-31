@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +34,25 @@ dp_secrets: Any = _load_script(SCRIPT)
 VALID = {"API_KEY": "a" * 20}
 EMULATOR_VALUE = {**VALID, "EMULATOR_ENDPOINT": "http://localhost:4566"}
 REAL_VALUE = {**VALID, "TF_STATE_BUCKET": "detectai-tfstate-sandbox"}
+
+USER_ARN = "arn:aws:iam::123456789012:user/kunalpisolkar"
+ROLE_ARN = "arn:aws:iam::123456789012:role/detectai-document-parser-seeder"
+
+
+def fake_carrier_session(is_emulator: bool, values: Any, dry_run: bool) -> Any:
+    """Stand-in for resolve_carrier_session: None off the real plane, otherwise a
+    far-future session — real-plane main() tests stay hermetic and land on AWS."""
+    return (
+        None
+        if is_emulator or dry_run
+        else {
+            "role_arn": ROLE_ARN,
+            "access_key_id": "ASIAFAKEID000000",
+            "secret_access_key": "fake-secret",
+            "session_token": "fake-token",
+            "expires_at": "2086-01-01T00:00:00Z",
+        }
+    )
 
 
 def _field(hcl: str, key: str) -> str:
@@ -257,6 +278,7 @@ def test_main_verb_args_per_plane(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
     monkeypatch.setattr(dp_secrets, "ensure_state_bucket", lambda is_emulator, values: 0)
+    monkeypatch.setattr(dp_secrets, "resolve_carrier_session", fake_carrier_session)
     env = tmp_path / ".env"
     monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
 
@@ -285,6 +307,7 @@ def test_destroy_verb_args_per_plane(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
     monkeypatch.setattr(dp_secrets, "ensure_state_bucket", lambda is_emulator, values: 0)
+    monkeypatch.setattr(dp_secrets, "resolve_carrier_session", fake_carrier_session)
     env = tmp_path / ".env"
     monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
 
@@ -307,10 +330,10 @@ def test_destroy_with_purge_runs_after_destroy(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
     monkeypatch.setattr(dp_secrets, "ensure_state_bucket", lambda is_emulator, values: 0)
-    monkeypatch.setattr(dp_secrets, "confirm_purge", lambda is_emulator, values: True)
+    monkeypatch.setattr(dp_secrets, "confirm_purge", lambda is_emulator, values, session=None: True)
     purged = []
     monkeypatch.setattr(
-        dp_secrets, "purge_state", lambda is_emulator, values: purged.append(True) or 0
+        dp_secrets, "purge_state", lambda is_emulator, values, session=None: purged.append(True) or 0
     )
     env = tmp_path / ".env"
     monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
@@ -377,7 +400,7 @@ def test_force_delete_command_pins_the_contract_name():
 def test_purge_state_wipes_versions_and_delete_markers_then_bucket(monkeypatch, capsys):
     calls: list[list[str]] = []
 
-    def fake_run_aws(command: list[str], is_emulator: bool) -> int:
+    def fake_run_aws(command: list[str], is_emulator: bool, session=None) -> int:
         calls.append(list(command))
         return 0
 
@@ -393,7 +416,7 @@ def test_purge_state_wipes_versions_and_delete_markers_then_bucket(monkeypatch, 
 
     monkeypatch.setattr(dp_secrets, "run_aws", fake_run_aws)
 
-    def fake_captured(command: list[str], is_emulator: bool) -> tuple[int, str, str]:
+    def fake_captured(command: list[str], is_emulator: bool, session=None) -> tuple[int, str, str]:
         calls.append(list(command))
         return 0, json.dumps(listing), ""
 
@@ -411,7 +434,7 @@ def test_purge_state_wipes_versions_and_delete_markers_then_bucket(monkeypatch, 
 
 
 def test_purge_state_skips_missing_bucket(monkeypatch, capsys):
-    def fake_run_aws(command: list[str], is_emulator: bool) -> int:
+    def fake_run_aws(command: list[str], is_emulator: bool, session=None) -> int:
         return 255 if "head-bucket" in command else 0
 
     monkeypatch.setattr(dp_secrets, "run_aws", fake_run_aws)
@@ -420,9 +443,9 @@ def test_purge_state_skips_missing_bucket(monkeypatch, capsys):
 
 
 def test_confirm_purge_typed_barrier_on_real_plane(monkeypatch, capsys):
-    monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator: 0)  # bucket exists
+    monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator, session=None: 0)  # bucket exists
     listing = [("document-parser/terraform.tfstate", "v1"), ("chats/terraform.tfstate", "v2")]
-    monkeypatch.setattr(dp_secrets, "list_bucket_versions", lambda is_emulator, values: listing)
+    monkeypatch.setattr(dp_secrets, "list_bucket_versions", lambda is_emulator, values, session=None: listing)
     monkeypatch.setattr("builtins.input", lambda prompt="": "wrong-name")
     assert dp_secrets.confirm_purge(False, REAL_VALUE) is False
     out = capsys.readouterr().out
@@ -430,14 +453,14 @@ def test_confirm_purge_typed_barrier_on_real_plane(monkeypatch, capsys):
     assert "outside document-parser/" in out  # sibling stacks in the shared sandbox are called out
     assert "cancelled: nothing was destroyed" in out
 
-    monkeypatch.setattr(dp_secrets, "list_bucket_versions", lambda is_emulator, values: [])
+    monkeypatch.setattr(dp_secrets, "list_bucket_versions", lambda is_emulator, values, session=None: [])
     monkeypatch.setattr("builtins.input", lambda prompt="": "detectai-tfstate-sandbox")
     assert dp_secrets.confirm_purge(False, REAL_VALUE) is True
 
 
 def test_confirm_purge_emulator_never_prompts(monkeypatch):
-    monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator: 0)  # bucket exists
-    monkeypatch.setattr(dp_secrets, "list_bucket_versions", lambda is_emulator, values: [])
+    monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator, session=None: 0)  # bucket exists
+    monkeypatch.setattr(dp_secrets, "list_bucket_versions", lambda is_emulator, values, session=None: [])
 
     def no_prompt(prompt=""):
         raise AssertionError("emulator plane must not prompt")
@@ -447,13 +470,13 @@ def test_confirm_purge_emulator_never_prompts(monkeypatch):
 
 
 def test_confirm_purge_bucket_missing_is_a_noop(monkeypatch, capsys):
-    monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator: 255)  # head-bucket 404
+    monkeypatch.setattr(dp_secrets, "run_aws", lambda command, is_emulator, session=None: 255)  # head-bucket 404
     assert dp_secrets.confirm_purge(False, REAL_VALUE) is True
     assert "does not exist; the purge step will be a no-op" in capsys.readouterr().out
 
 
 def test_ensure_state_bucket_self_heals_missing_emulator_bucket(monkeypatch, capsys):
-    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (255, "", "NoSuchBucket"))
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator, session=None: (255, "", "NoSuchBucket"))
     created = []
     monkeypatch.setattr(
         dp_secrets, "bootstrap_state", lambda is_emulator, values, dry_run: created.append(dry_run) or 0
@@ -467,10 +490,10 @@ def test_ensure_state_bucket_skips_existing_bucket_and_real_plane(monkeypatch, c
     created = []
     monkeypatch.setattr(dp_secrets, "bootstrap_state", lambda *__: created.append(True) or 1)
 
-    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (0, "", ""))
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator, session=None: (0, "", ""))
     assert dp_secrets.ensure_state_bucket(True, EMULATOR_VALUE) == 0  # bucket exists: nothing to do
 
-    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (255, "", "NoSuchBucket"))
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator, session=None: (255, "", "NoSuchBucket"))
     assert dp_secrets.ensure_state_bucket(False, REAL_VALUE) == 0  # real AWS never auto-creates
     assert created == []
     assert capsys.readouterr().out == ""
@@ -486,7 +509,7 @@ def test_apply_self_heals_the_emulator_bucket(monkeypatch, tmp_path):
     monkeypatch.setattr(
         dp_secrets, "bootstrap_state", lambda is_emulator, values, dry_run: created.append(dry_run) or 0
     )
-    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (255, "", "NoSuchBucket"))
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator, session=None: (255, "", "NoSuchBucket"))
 
     env = tmp_path / ".env"
     monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
@@ -562,9 +585,9 @@ def test_seeder_bootstrap_policy_scope_is_service_pinned():
     ]
 
 
-def test_validate_seeder_bootstrap_real_plane_requires_trust_user_arn():
-    errors = "\n".join(dp_secrets.validate_seeder_bootstrap(False, REAL_VALUE))
-    assert "SEEDER_TRUST_USER_ARN" in errors
+def test_validate_seeder_bootstrap_real_plane_allows_missing_trust_user_arn():
+    # Auto-detection made the pin optional; it is only shape-checked when present.
+    assert dp_secrets.validate_seeder_bootstrap(False, REAL_VALUE) == []
 
 
 def test_validate_seeder_bootstrap_rejects_bad_user_arn():
@@ -739,7 +762,7 @@ def test_full_destroy_wipes_then_drops(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
     monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda command, is_emulator: (0, "", ""))
-    monkeypatch.setattr(dp_secrets, "purge_state", lambda is_emulator, values: sequence.append("purge") or 0)
+    monkeypatch.setattr(dp_secrets, "purge_state", lambda is_emulator, values, session=None: sequence.append("purge") or 0)
     monkeypatch.setattr(
         dp_secrets, "drop_seeder_flow",
         lambda is_emulator, values, dry_run: sequence.append("drop") or 0,
@@ -846,3 +869,342 @@ def test_dry_run_rejects_the_invalid_recovery_window(monkeypatch, tmp_path, caps
     monkeypatch.setattr("sys.argv", ["secrets.py", "plan", "--dry-run"])
     assert dp_secrets.main() == 1
     assert "between 7 and 30" in capsys.readouterr().out
+
+
+ASSUME_PAYLOAD = {
+    "AssumedRoleUser": {"Arn": "arn:aws:sts::123456789012:assumed-role/detectai-document-parser-seeder/verbs"},
+    "Credentials": {
+        "AccessKeyId": "ASIA1",
+        "SecretAccessKey": "s2",
+        "SessionToken": "t3",
+        "Expiration": "2025-01-01T02:00:00Z",
+    },
+}
+
+
+def test_resolve_trust_principal_ladder():
+    # Emulator: the structural placeholder unless pinned.
+    assert dp_secrets.resolve_trust_principal(True, EMULATOR_VALUE) == "arn:aws:iam::000000000000:user/detectai-seeder"
+    pinned = {**EMULATOR_VALUE, "SEEDER_TRUST_USER_ARN": USER_ARN}
+    assert dp_secrets.resolve_trust_principal(True, pinned) == USER_ARN
+    # Real plane: a pinned user ARN wins over whatever the environment reports.
+    assert dp_secrets.resolve_trust_principal(False, {**REAL_VALUE, "SEEDER_TRUST_USER_ARN": USER_ARN}) == USER_ARN
+
+
+def test_resolve_trust_principal_auto_detects_the_ambient_caller(monkeypatch):
+    monkeypatch.setattr(dp_secrets, "sts_caller_identity", lambda: ("123456789012", USER_ARN))
+    assert dp_secrets.resolve_trust_principal(False, REAL_VALUE) == USER_ARN
+
+
+def test_resolve_trust_principal_strips_assumed_role_sessions(monkeypatch, capsys):
+    monkeypatch.setattr(
+        dp_secrets,
+        "sts_caller_identity",
+        lambda: ("123456789012", "arn:aws:sts::123456789012:assumed-role/OpsRole/kunal@corp"),
+    )
+    assert dp_secrets.resolve_trust_principal(False, REAL_VALUE) == "arn:aws:iam::123456789012:role/OpsRole"
+    assert "assumed-role/OpsRole" in capsys.readouterr().out
+
+
+def test_resolve_trust_principal_refuses_root(monkeypatch, capsys):
+    monkeypatch.setattr(dp_secrets, "sts_caller_identity", lambda: ("123456789012", "arn:aws:iam::123456789012:root"))
+    with pytest.raises(SystemExit) as excinfo:
+        dp_secrets.resolve_trust_principal(False, REAL_VALUE)
+    assert excinfo.value.code == 1
+    out = capsys.readouterr().out
+    assert "account root" in out and "SEEDER_TRUST_USER_ARN" in out
+
+
+def test_resolve_trust_principal_refuses_its_own_session(monkeypatch, capsys):
+    monkeypatch.setattr(
+        dp_secrets,
+        "sts_caller_identity",
+        lambda: ("123456789012", "arn:aws:sts::123456789012:assumed-role/detectai-document-parser-seeder/verbs"),
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        dp_secrets.resolve_trust_principal(False, REAL_VALUE)
+    assert excinfo.value.code == 1
+    assert "already a detectai-document-parser-seeder session" in capsys.readouterr().out
+
+
+def test_resolve_trust_principal_rejects_a_bad_override():
+    with pytest.raises(SystemExit) as excinfo:
+        dp_secrets.resolve_trust_principal(False, {**REAL_VALUE, "SEEDER_TRUST_USER_ARN": "oops"})
+    assert excinfo.value.code == 1
+
+
+def test_mfa_serial_derives_from_the_user_arn():
+    assert dp_secrets.mfa_serial_for(USER_ARN, "") == "arn:aws:iam::123456789012:mfa/kunalpisolkar"
+    assert dp_secrets.mfa_serial_for(USER_ARN, "arn:aws:iam::123456789012:mfa/legacy") == (
+        "arn:aws:iam::123456789012:mfa/legacy"
+    )
+    assert dp_secrets.mfa_serial_for("arn:aws:iam::123456789012:role/OpsRole", "") is None
+
+
+def test_seeder_role_arn_and_principal_account_round_trip():
+    assert dp_secrets.seeder_role_arn("123456789012") == ROLE_ARN
+    assert dp_secrets.iam_account_id("arn:aws:iam::123456789012:role/OpsRole") == "123456789012"
+    assert dp_secrets.role_arn_of_session("arn:aws:sts::123456789012:assumed-role/OpsRole/kunal@corp") == (
+        "arn:aws:iam::123456789012:role/OpsRole"
+    )
+    # A role path survives the session-suffix strip.
+    assert dp_secrets.role_arn_of_session("arn:aws:sts::123456789012:assumed-role/Team/OpsRole/verbs") == (
+        "arn:aws:iam::123456789012:role/Team/OpsRole"
+    )
+
+
+def test_cached_session_reads_only_fresh_matching_triples(monkeypatch, tmp_path):
+    cache = tmp_path / "session.json"
+    monkeypatch.setattr(dp_secrets, "SESSION_CACHE_FILE", cache)
+    monkeypatch.setattr(dp_secrets, "_utcnow", lambda: datetime(2025, 1, 1, tzinfo=UTC))
+    payload = {
+        "role_arn": ROLE_ARN,
+        "access_key_id": "ASIA1",
+        "secret_access_key": "s",
+        "session_token": "t",
+        "expires_at": "2025-01-01T01:00:00Z",
+    }
+
+    cache.write_text(json.dumps(payload))
+    assert dp_secrets.cached_session(ROLE_ARN) == payload
+
+    payload["expires_at"] = "2025-01-01T00:05:00Z"  # inside the renewal margin
+    cache.write_text(json.dumps(payload))
+    assert dp_secrets.cached_session(ROLE_ARN) is None
+
+    payload["expires_at"] = "2025-01-01T01:00:00Z"  # a different role reads as no cache
+    cache.write_text(json.dumps(payload))
+    assert dp_secrets.cached_session("arn:aws:iam::999999999999:role/nope") is None
+
+    cache.write_text("not json")
+    assert dp_secrets.cached_session(ROLE_ARN) is None
+
+
+def test_save_cached_session_writes_owner_only_json(monkeypatch, tmp_path):
+    session = {
+        "role_arn": ROLE_ARN,
+        "access_key_id": "ASIA1",
+        "secret_access_key": "s",
+        "session_token": "t",
+        "expires_at": "2025-01-01T02:00:00Z",
+    }
+    monkeypatch.setattr(dp_secrets, "SESSION_CACHE_FILE", tmp_path / "session.json")
+    dp_secrets.save_cached_session(session)
+    assert json.loads((tmp_path / "session.json").read_text()) == session
+    assert (tmp_path / "session.json").stat().st_mode & 0o777 == 0o600
+
+
+def test_assume_seeder_session_promotes_with_the_prompted_code(monkeypatch, tmp_path):
+    commands = []
+    monkeypatch.setattr(
+        dp_secrets, "run_aws_captured",
+        lambda command, is_emulator, session=None: commands.append(list(command)) or (0, json.dumps(ASSUME_PAYLOAD), ""),
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt="": "123456")
+    session = dp_secrets.assume_seeder_session(ROLE_ARN, "arn:aws:iam::123456789012:mfa/kunalpisolkar")
+    joined = " ".join(commands[0])
+    assert "--token-code 123456" in joined and "--duration-seconds 3600" in joined
+    assert "--endpoint-url" not in joined
+    assert session["access_key_id"] == "ASIA1" and session["role_arn"] == ROLE_ARN
+
+
+def test_assume_seeder_session_rejects_a_bad_code(monkeypatch, capsys):
+    monkeypatch.setattr("builtins.input", lambda prompt="": "12ab56")
+    with pytest.raises(SystemExit) as excinfo:
+        dp_secrets.assume_seeder_session(ROLE_ARN, "serial")
+    assert excinfo.value.code == 1
+    assert "6-digit" in capsys.readouterr().out
+
+
+def test_assume_seeder_session_rejects_identity_that_is_not_the_seeder(monkeypatch, capsys):
+    alien = {
+        "AssumedRoleUser": {"Arn": "arn:aws:sts::123456789012:assumed-role/Other/x"},
+        "Credentials": ASSUME_PAYLOAD["Credentials"],
+    }
+    monkeypatch.setattr(
+        dp_secrets, "run_aws_captured",
+        lambda command, is_emulator, session=None: (0, json.dumps(alien), ""),
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt="": "123456")
+    with pytest.raises(SystemExit):
+        dp_secrets.assume_seeder_session(ROLE_ARN, "serial")
+    assert "not the seeder role" in capsys.readouterr().out
+
+
+def test_assume_seeder_session_fails_loud_on_aws_errors(monkeypatch, capsys):
+    monkeypatch.setattr(
+        dp_secrets, "run_aws_captured",
+        lambda command, is_emulator, session=None: (255, "", "InvalidClientTokenException boom"),
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt="": "999999")
+    with pytest.raises(SystemExit):
+        dp_secrets.assume_seeder_session(ROLE_ARN, "serial")
+    out = capsys.readouterr().out
+    assert "could not assume" in out and "boom" in out
+
+
+def test_resolve_carrier_session_stays_session_free_off_the_real_plane(monkeypatch):
+    def no_aws(*args, **kwargs):
+        raise AssertionError("no AWS on the emulator or dry runs")
+
+    monkeypatch.setattr(dp_secrets, "sts_caller_identity", no_aws)
+
+    def no_prompt(prompt=""):
+        raise AssertionError("no MFA prompt on the emulator or dry runs")
+
+    monkeypatch.setattr("builtins.input", no_prompt)
+    assert dp_secrets.resolve_carrier_session(True, EMULATOR_VALUE, False) is None
+    assert dp_secrets.resolve_carrier_session(False, REAL_VALUE, True) is None
+
+
+def test_resolve_carrier_session_reuses_the_cached_triplet(monkeypatch, tmp_path):
+    cache = tmp_path / "session.json"
+    monkeypatch.setattr(dp_secrets, "SESSION_CACHE_FILE", cache)
+    monkeypatch.setattr(dp_secrets, "_utcnow", lambda: datetime(2025, 1, 1, tzinfo=UTC))
+    cached = {
+        "role_arn": ROLE_ARN,
+        "access_key_id": "ASIA1",
+        "secret_access_key": "s",
+        "session_token": "t",
+        "expires_at": "2025-01-01T01:00:00Z",
+    }
+    cache.write_text(json.dumps(cached))
+    monkeypatch.setattr(dp_secrets, "sts_caller_identity", lambda: ("123456789012", USER_ARN))
+
+    def no_assume(command, is_emulator, session=None):
+        raise AssertionError("a cached session must not re-assume")
+
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", no_assume)
+    assert dp_secrets.resolve_carrier_session(False, REAL_VALUE, False) == cached
+
+
+def test_resolve_carrier_session_promotes_and_caches_when_fresh(monkeypatch, tmp_path):
+    cache = tmp_path / "session.json"
+    monkeypatch.setattr(dp_secrets, "SESSION_CACHE_FILE", cache)
+    monkeypatch.setattr(dp_secrets, "sts_caller_identity", lambda: ("123456789012", USER_ARN))
+    monkeypatch.setattr(
+        dp_secrets, "run_aws_captured",
+        lambda command, is_emulator, session=None: (0, json.dumps(ASSUME_PAYLOAD), ""),
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt="": "123456")
+    session = dp_secrets.resolve_carrier_session(False, REAL_VALUE, False)
+    assert session["session_token"] == "t3"
+    assert json.loads(cache.read_text())["role_arn"] == ROLE_ARN
+
+
+def test_resolve_carrier_session_reports_an_undetectable_serial(monkeypatch, capsys):
+    monkeypatch.setattr(
+        dp_secrets, "sts_caller_identity",
+        lambda: ("123456789012", "arn:aws:iam::123456789012:role/OpsRole"),
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        dp_secrets.resolve_carrier_session(False, REAL_VALUE, False)
+    assert excinfo.value.code == 1
+    out = capsys.readouterr().out
+    assert "cannot derive" in out and "SEEDER_MFA_SERIAL" in out
+
+
+def test_aws_env_injects_the_session_triplet_and_drops_the_profile(monkeypatch):
+    monkeypatch.setenv("AWS_PROFILE", "floci")
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "stale-token")
+    session = {"access_key_id": "A", "secret_access_key": "B", "session_token": "C"}
+    env = dp_secrets.aws_env(False, session)
+    assert env["AWS_ACCESS_KEY_ID"] == "A" and env["AWS_SESSION_TOKEN"] == "C"
+    assert "AWS_PROFILE" not in env
+
+
+def test_aws_env_keeps_emulator_fakes_and_leaves_ambient_untouched(monkeypatch):
+    monkeypatch.setenv("AWS_PROFILE", "floci")
+    emu = dp_secrets.aws_env(True)
+    assert "AWS_PROFILE" not in emu and emu["AWS_ACCESS_KEY_ID"] == "test"
+
+    monkeypatch.delenv("AWS_PROFILE")
+    assert dp_secrets.aws_env(False, None) == dict(os.environ)
+
+
+def test_real_apply_rides_the_seeder_session_triplet(monkeypatch, tmp_path, capsys):
+    overlays = []
+
+    def fake_run_terraform(args, tf_vars, env_overlay=None):
+        overlays.append(env_overlay)
+        return 0
+
+    monkeypatch.setattr(dp_secrets, "run_terraform", fake_run_terraform)
+    monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
+    monkeypatch.setattr(dp_secrets, "ensure_state_bucket", lambda is_emulator, values: 0)
+    monkeypatch.setattr(dp_secrets, "resolve_carrier_session", fake_carrier_session)
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+    env.write_text("API_KEY=" + "a" * 20 + "\nTF_STATE_BUCKET=detectai-tfstate-sandbox\n")
+    monkeypatch.setattr("sys.argv", ["secrets.py", "plan"])
+    assert dp_secrets.main() == 0
+    for overlay in overlays:
+        assert overlay["AWS_ACCESS_KEY_ID"] == "ASIAFAKEID000000"
+        assert overlay["AWS_SESSION_TOKEN"] == "fake-token"
+    out = capsys.readouterr().out
+    assert "role session (detectai-document-parser-seeder" in out
+
+
+def test_emulator_banner_states_the_fake_creds(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(dp_secrets, "run_terraform", lambda args, tf_vars, env_overlay=None: 0)
+    monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
+    monkeypatch.setattr(dp_secrets, "ensure_state_bucket", lambda is_emulator, values: 0)
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+    env.write_text("API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=http://localhost:4566\n")
+    monkeypatch.setattr("sys.argv", ["secrets.py", "plan"])
+    assert dp_secrets.main() == 0
+    assert "carrier: env creds (test/test, profile stripped)" in capsys.readouterr().out
+
+
+def test_dry_run_banner_defers_the_carrier(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(dp_secrets, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+    env.write_text("API_KEY=" + "a" * 20 + "\nTF_STATE_BUCKET=detectai-tfstate-sandbox\n")
+    monkeypatch.setattr("sys.argv", ["secrets.py", "plan", "--dry-run"])
+    assert dp_secrets.main() == 0
+    out = capsys.readouterr().out
+    assert "seeder role session (promoted when the command runs)" in out
+
+
+def test_session_clear_removes_and_reports(monkeypatch, tmp_path, capsys):
+    cache = tmp_path / "session.json"
+    monkeypatch.setattr(dp_secrets, "SESSION_CACHE_FILE", cache)
+    cache.write_text("{}")
+    monkeypatch.setattr("sys.argv", ["secrets.py", "session-clear"])
+    assert dp_secrets.main() == 0  # works without infra/.env (the verb needs no config)
+    out = capsys.readouterr().out
+    assert "removed:" in out and "session.json" in out
+
+    monkeypatch.setattr("sys.argv", ["secrets.py", "session-clear"])
+    assert dp_secrets.main() == 0
+    assert "nothing to clear" in capsys.readouterr().out
+
+
+def test_seeder_drop_command_runs_the_drop_flow(monkeypatch, tmp_path):
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+    env.write_text("API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=http://localhost:4566\n")
+    started = []
+    monkeypatch.setattr(
+        dp_secrets, "drop_seeder_flow",
+        lambda is_emulator, values, dry_run: started.append((is_emulator, dry_run)) or 0,
+    )
+    monkeypatch.setattr("sys.argv", ["secrets.py", "seeder-drop", "--dry-run"])
+    assert dp_secrets.main() == 0
+    assert started == [(True, True)]
+
+
+def test_bootstrap_carries_the_resolved_session(monkeypatch, tmp_path):
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+    env.write_text("API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=http://localhost:4566\n")
+    captured = []
+    monkeypatch.setattr(
+        dp_secrets, "bootstrap_state",
+        lambda is_emulator, values, dry_run, session=None: captured.append((is_emulator, dry_run, session)) or 0,
+    )
+    monkeypatch.setattr("sys.argv", ["secrets.py", "bootstrap", "--dry-run"])
+    assert dp_secrets.main() == 0
+    assert captured == [(True, True, None)]
