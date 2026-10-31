@@ -1235,6 +1235,200 @@ def test_bootstrap_carries_the_resolved_session(monkeypatch, tmp_path):
     assert captured == [(True, True, None)]
 
 
+def test_fingerprint_is_stable_and_masks_the_value():
+    fingerprint = dp_secrets.fingerprint("some-secret-value")
+    assert fingerprint == dp_secrets.fingerprint("some-secret-value")
+    assert fingerprint != dp_secrets.fingerprint("some-secret-other-value")
+    assert "some-secret" not in fingerprint and len(fingerprint) == 12
+
+
+def test_expected_seeds_follow_the_env_values():
+    values = {"UPLOAD_LIMIT_BYTES": "1", "MAX_PDF_PAGES": "", "API_KEY": "k" * 20}
+    assert dp_secrets.expected_ssm_seeds(values) == {"UPLOAD_LIMIT_BYTES": "1"}
+    assert dp_secrets.expected_blob(values) == {"API_KEY": "k" * 20}
+    assert dp_secrets.expected_ssm_seeds({}) == {}
+    assert dp_secrets.expected_blob({}) == {}
+
+
+def test_verify_commands_shape_per_plane():
+    ssm, describe, blob = dp_secrets.verify_commands(True, EMULATOR_VALUE)
+    assert ssm[:5] == ["aws", "--region", "ap-southeast-2", "--endpoint-url", "http://localhost:4566"]
+    assert ssm[5:10] == ["ssm", "get-parameters-by-path", "--path", dp_secrets.SSM_SEED_PREFIX, "--with-decryption"]
+    assert "secretsmanager describe-secret --secret-id detectai/document-parser/secrets" in " ".join(describe)
+    assert "secretsmanager get-secret-value" in " ".join(blob)
+    real = " ".join(" ".join(command) for command in dp_secrets.verify_commands(False, REAL_VALUE))
+    assert "--endpoint-url" not in real
+
+
+def test_compare_seeds_splits_fingerprint_drift():
+    matched, mismatched, missing = dp_secrets.compare_seeds(
+        {"A": "one", "B": "two", "C": "gone"}, {"A": "one", "B": "too"}
+    )
+    assert matched == ["A"]
+    assert mismatched == ["B"]
+    assert missing == ["C"]
+
+
+def test_collect_ssm_parameters_paginates(monkeypatch):
+    prefix = dp_secrets.SSM_SEED_PREFIX
+    payload = lambda name: {"Name": prefix + name, "Type": "String", "Value": "1"}
+    pages = [
+        json.dumps({"Parameters": [payload("A"), payload("B")], "NextToken": "next-page"}),
+        json.dumps({"Parameters": [payload("C")]}),
+    ]
+    calls: list[list[str]] = []
+
+    def fake_run(command, is_emulator, session=None):
+        calls.append(command)
+        first_page = all(argument != "--next-token" for argument in command)
+        return 0, pages[0 if first_page else 1], ""
+
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", fake_run)
+    live = dp_secrets.collect_ssm_parameters(True, dict(EMULATOR_VALUE))
+    assert live == {
+        prefix + "A": {"type": "String", "value": "1"},
+        prefix + "B": {"type": "String", "value": "1"},
+        prefix + "C": {"type": "String", "value": "1"},
+    }
+    assert len(calls) == 2
+    assert all(argument != "--next-token" for argument in calls[0])
+    assert any(argument == "--next-token" for argument in calls[1])
+
+
+def test_collect_ssm_parameters_fails_loud(monkeypatch, capsys):
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", lambda *arguments, **rest: (1, "", "boom"))
+    assert dp_secrets.collect_ssm_parameters(True, dict(EMULATOR_VALUE)) is None
+    out = capsys.readouterr().out
+    assert "could not list parameters" in out and "boom" in out
+
+
+def test_collect_secret_returns_the_describe_and_blob(monkeypatch):
+    def fake_run(command, is_emulator, session=None):
+        if "describe-secret" in command:
+            return 0, json.dumps({"Name": dp_secrets.SECRETS_NAME}), ""
+        return 0, json.dumps({"SecretString": json.dumps({"API_KEY": "k" * 20})}), ""
+
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", fake_run)
+    described, stored = dp_secrets.collect_secret(False, dict(REAL_VALUE))
+    assert described == {"Name": dp_secrets.SECRETS_NAME}
+    assert stored == {"API_KEY": "k" * 20}
+
+
+def test_collect_secret_treats_a_missing_version_as_empty(monkeypatch):
+    def fake_run(command, is_emulator, session=None):
+        if "describe-secret" in command:
+            return 0, json.dumps({"Name": dp_secrets.SECRETS_NAME}), ""
+        return 1, "", "ResourceNotFoundException: no value yet"
+
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", fake_run)
+    described, stored = dp_secrets.collect_secret(True, dict(EMULATOR_VALUE))
+    assert described == {"Name": dp_secrets.SECRETS_NAME}
+    assert stored is None
+
+
+def test_collect_secret_fails_loud_when_the_secret_is_absent(monkeypatch, capsys):
+    missing = lambda *arguments, **rest: (1, "", "ResourceNotFoundException: not found")
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", missing)
+    assert dp_secrets.collect_secret(True, dict(EMULATOR_VALUE)) == (None, None)
+    out = capsys.readouterr().out
+    assert "could not describe the secret" in out and "secrets-apply" in out
+
+
+def test_verify_flow_ok_case_shows_fingerprints_not_values(monkeypatch, capsys):
+    values = {**EMULATOR_VALUE, "UPLOAD_LIMIT_BYTES": "3145728", "MAX_PDF_PAGES": "1000"}
+    prefix = dp_secrets.SSM_SEED_PREFIX
+    live = {
+        prefix + "UPLOAD_LIMIT_BYTES": {"type": "String", "value": "3145728"},
+        prefix + "MAX_PDF_PAGES": {"type": "String", "value": "1000"},
+    }
+    described = {"Name": dp_secrets.SECRETS_NAME}
+    monkeypatch.setattr(dp_secrets, "collect_ssm_parameters", lambda *arguments, **rest: live)
+    monkeypatch.setattr(
+        dp_secrets, "collect_secret", lambda *arguments, **rest: (described, {"API_KEY": EMULATOR_VALUE["API_KEY"]})
+    )
+    assert dp_secrets.verify_flow(True, values, False, None) == 0
+    out = capsys.readouterr().out
+    assert "ok:      the seeded plane matches infra/.env" in out
+    assert dp_secrets.fingerprint("3145728") in out and dp_secrets.fingerprint("1000") in out
+    assert dp_secrets.fingerprint(values["API_KEY"]) in out
+    assert "3145728" not in out
+    assert "a" * 20 not in out
+
+
+def test_verify_flow_reports_drift_and_exits_1(monkeypatch, capsys):
+    values = {**EMULATOR_VALUE, "UPLOAD_LIMIT_BYTES": "1000", "MAX_PDF_PAGES": "4"}
+    prefix = dp_secrets.SSM_SEED_PREFIX
+    stale = {prefix + "UPLOAD_LIMIT_BYTES": {"type": "String", "value": "9999"}}
+    described = {"Name": dp_secrets.SECRETS_NAME}
+    monkeypatch.setattr(dp_secrets, "collect_ssm_parameters", lambda *arguments, **rest: stale)
+    monkeypatch.setattr(dp_secrets, "collect_secret", lambda *arguments, **rest: (described, None))
+    assert dp_secrets.verify_flow(True, values, False, None) == 1
+    out = capsys.readouterr().out
+    assert "fail:    the seeded plane does not match infra/.env" in out
+    assert "mismatch (expected fp" in out and "missing (expected from .env)" in out
+    assert "no stored version" in out
+    assert dp_secrets.fingerprint("9999") in out and dp_secrets.fingerprint("1000") in out
+    assert "9999" not in out.replace(dp_secrets.fingerprint("9999"), "")
+
+
+def test_verify_flow_flags_extras_as_notes_and_exits_0(monkeypatch, capsys):
+    values = {**EMULATOR_VALUE, "UPLOAD_LIMIT_BYTES": "1"}
+    prefix = dp_secrets.SSM_SEED_PREFIX
+    live = {
+        prefix + "UPLOAD_LIMIT_BYTES": {"type": "String", "value": "1"},
+        "detectai/document-parser/STRAY": {"type": "String", "value": "x"},
+    }
+    described = {"Name": dp_secrets.SECRETS_NAME}
+    monkeypatch.setattr(dp_secrets, "collect_ssm_parameters", lambda *arguments, **rest: live)
+    monkeypatch.setattr(dp_secrets, "collect_secret", lambda *arguments, **rest: (described, {"API_KEY": values["API_KEY"]}))
+    assert dp_secrets.verify_flow(True, values, False, None) == 0
+    out = capsys.readouterr().out
+    assert "extra: detectai/document-parser/STRAY" in out
+    assert "note:   detectai/document-parser/STRAY is on the plane outside the .env seed list" in out
+    assert "ok:      the seeded plane matches infra/.env" in out
+
+
+def test_verify_flow_flags_a_scheduled_deletion(monkeypatch, capsys):
+    values = EMULATOR_VALUE
+    described = {"Name": dp_secrets.SECRETS_NAME, "DeletedDate": "2026-11-03T00:00:00Z", "RecoveryWindowInDays": 7}
+    monkeypatch.setattr(dp_secrets, "collect_ssm_parameters", lambda *arguments, **rest: {})
+    monkeypatch.setattr(dp_secrets, "collect_secret", lambda *arguments, **rest: (described, None))
+    assert dp_secrets.verify_flow(True, values, False, None) == 1
+    out = capsys.readouterr().out
+    assert "scheduled for deletion (window 7 days)" in out
+
+
+def test_verify_flow_dry_run_runs_nothing(monkeypatch, capsys):
+    run_aws_captured = lambda *arguments, **rest: pytest.fail("dry-run must not touch the aws cli")
+    monkeypatch.setattr(dp_secrets, "run_aws_captured", run_aws_captured)
+    assert dp_secrets.verify_flow(True, dict(EMULATOR_VALUE), True, None) == 0
+    out = capsys.readouterr().out
+    assert out.count("would run:") == 3 and "(dry run: no AWS)" in out
+
+
+def test_verify_command_dispatches_like_the_other_carrier_verbs(monkeypatch, tmp_path):
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+    env.write_text("API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=http://localhost:4566\n")
+    captured = []
+    monkeypatch.setattr(
+        dp_secrets, "verify_flow",
+        lambda is_emulator, values, dry_run, session=None: captured.append((is_emulator, dry_run, session)) or 0,
+    )
+    monkeypatch.setattr("sys.argv", ["secrets.py", "verify", "--dry-run"])
+    assert dp_secrets.main() == 0
+    assert captured == [(True, True, None)]
+
+
+def test_verify_command_rejects_a_broken_plane_first(monkeypatch, tmp_path, capsys):
+    env = tmp_path / ".env"
+    monkeypatch.setattr(dp_secrets, "ENV_FILE", env)
+    env.write_text("API_KEY=" + "a" * 20 + "\nEMULATOR_ENDPOINT=gibberish\n")
+    monkeypatch.setattr("sys.argv", ["secrets.py", "verify"])
+    assert dp_secrets.main() == 1
+    assert "not a valid http(s) URL" in capsys.readouterr().out
+
+
 def test_cli_main_returns_130_on_keyboard_interrupt(monkeypatch, capsys):
     def interrupted():
         raise KeyboardInterrupt

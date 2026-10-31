@@ -3,7 +3,7 @@
 # session-less: the tool resolves ambient credentials itself (Floci fakes, or
 # auto-detected identity + seeder role session on real AWS).
 
-.PHONY: secrets-check secrets-plan secrets-apply secrets-clean secrets-destroy secrets-bootstrap-state secrets-seeder-bootstrap secrets-drop-seeder secrets-session-clear secrets-test help-secrets
+.PHONY: secrets-check secrets-plan secrets-apply secrets-verify secrets-clean secrets-destroy secrets-bootstrap-state secrets-seeder-bootstrap secrets-drop-seeder secrets-session-clear secrets-test help-secrets
 
 help-secrets:
 	@echo "  Secrets pipeline (mk/secrets.mk):"
@@ -11,6 +11,7 @@ help-secrets:
 	@echo "    secrets-bootstrap-state  create the state bucket for the plane .env selects (idempotent)"
 	@echo "    secrets-plan             terraform plan against the plane .env selects"
 	@echo "    secrets-apply            terraform apply (auto on Floci, interactive confirm on real AWS)"
+	@echo "    secrets-verify           read the live plane and match it against infra/.env (fingerprints only)"
 	@echo "    secrets-seeder-bootstrap create/update the out-of-stack seeder role (detectai-document-parser-seeder)"
 	@echo "    secrets-drop-seeder      detach the seeder policy and delete the role (creator permissions)"
 	@echo "    secrets-clean            terraform destroy the secrets blob; keeps the state bucket and ledger"
@@ -33,6 +34,9 @@ secrets-plan:
 
 secrets-apply:
 	poetry run python tools/secrets.py apply
+
+secrets-verify:
+	poetry run python tools/secrets.py verify
 
 secrets-seeder-bootstrap:
 	poetry run python tools/secrets.py seeder-bootstrap

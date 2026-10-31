@@ -6,7 +6,8 @@ then drives `terraform plan/apply` for the service-scoped stack. The plane
 comes from EMULATOR_ENDPOINT: an http(s) URL -> Floci/LocalStack
 (auto-approved), unset -> real AWS (confirm prompt). Terraform alone touches
 AWS on the resource path; the opt-in direct-AWS verbs are `bootstrap`
-(state bucket), `destroy --purge-state` / `--force-delete`, `seeder-bootstrap`.
+(state bucket), `destroy --purge-state` / `--force-delete`,
+`seeder-bootstrap`, and the read-only `verify` (live plane vs .env).
 
 On real AWS the seeder identity is zero-config: the trust principal is
 auto-detected from the ambient caller (or pinned via SEEDER_TRUST_USER_ARN),
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import hashlib
 import io
 import json
 import os
@@ -449,6 +451,216 @@ def force_delete_command(is_emulator: bool, values: dict[str, str]) -> list[str]
         "--secret-id", SECRETS_NAME,
         "--force-delete-without-recovery",
     ]
+
+
+def fingerprint(value: str) -> str:
+    """Short reproducible checksum for locating drift; never renders the value."""
+    return hashlib.sha256(value.encode()).hexdigest()[:12]
+
+
+def expected_ssm_seeds(values: dict[str, str]) -> dict[str, str]:
+    """The SSM map terraform would seed: the .env-populated allowlist subset."""
+    return {key: values[key] for key in SSM_SEED_KEYS if values.get(key, "") != ""}
+
+
+def expected_blob(values: dict[str, str]) -> dict[str, str]:
+    """The blob contract rebuilt from .env: both keys ride the blob when set."""
+    blob = {}
+    if api_key := values.get("API_KEY", ""):
+        blob["API_KEY"] = api_key
+    if license_key := values.get("NEW_RELIC_LICENSE_KEY", ""):
+        blob["NEW_RELIC_LICENSE_KEY"] = license_key
+    return blob
+
+
+def compare_seeds(expected: dict[str, str], live: dict[str, str]) -> tuple[list[str], list[str], list[str]]:
+    """Shared keys split by value fingerprint into (matched, mismatched); plus
+    expected keys absent from the live plane."""
+    matched, mismatched = [], []
+    for key in sorted(set(expected) & set(live)):
+        matched_or_mismatched = matched if fingerprint(expected[key]) == fingerprint(live[key]) else mismatched
+        matched_or_mismatched.append(key)
+    return matched, mismatched, sorted(set(expected) - set(live))
+
+
+def verify_commands(is_emulator: bool, values: dict[str, str]) -> list[list[str]]:
+    """The three reads behind a verify run: parameter inventory, secret status, stored blob."""
+    base = aws_base(is_emulator, values)
+    return [
+        base + ["ssm", "get-parameters-by-path", "--path", SSM_SEED_PREFIX,
+                "--with-decryption", "--output", "json"],
+        base + ["secretsmanager", "describe-secret", "--secret-id", SECRETS_NAME, "--output", "json"],
+        base + ["secretsmanager", "get-secret-value", "--secret-id", SECRETS_NAME, "--output", "json"],
+    ]
+
+
+def collect_ssm_parameters(
+    is_emulator: bool, values: dict[str, str], session: dict[str, str] | None = None
+) -> dict[str, dict[str, str]] | None:
+    """Live parameter inventory keyed by full name: {name: {type, value}}; the
+    CLI paginates, so the loop pulls page after page on NextToken."""
+    base = aws_base(is_emulator, values)
+    parameters: dict[str, dict[str, str]] = {}
+    next_token: str | None = None
+    for _ in range(100):  # seatbelt: the plane seeds at most a handful of pages
+        command = base + ["ssm", "get-parameters-by-path", "--path", SSM_SEED_PREFIX,
+                          "--with-decryption", "--output", "json"]
+        if next_token:
+            command += ["--next-token", next_token]
+        code, stdout, stderr = run_aws_captured(command, is_emulator, session)
+        if code != 0:
+            if next_token:
+                print(f"error: could not page {SSM_SEED_PREFIX} parameters (first {len(parameters)} collected)")
+            else:
+                print(f"error: could not list parameters under {SSM_SEED_PREFIX}")
+            if stderr.strip():
+                print(stderr.strip())
+            return None
+        try:
+            payload = json.loads(stdout)
+        except json.JSONDecodeError as exc:
+            print(f"error: get-parameters-by-path returned unparseable output: {exc}")
+            return None
+        for entry in payload.get("Parameters") or []:
+            parameters[entry["Name"]] = {"type": entry.get("Type", ""), "value": entry.get("Value", "")}
+        next_token = payload.get("NextToken")
+        if not next_token:
+            return parameters
+    print("error: get-parameters-by-path pagination did not terminate after 100 pages")
+    return None
+
+
+def collect_secret(
+    is_emulator: bool, values: dict[str, str], session: dict[str, str] | None = None
+) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
+    """(describe payload, stored blob keys). stored is None when the secret has
+    no version yet or the value read failed; None describe means the secret is
+    unreachable and the caller's checklist must abort."""
+    code, stdout, stderr = run_aws_captured(
+        aws_base(is_emulator, values) + ["secretsmanager", "describe-secret", "--secret-id", SECRETS_NAME,
+                                         "--output", "json"],
+        is_emulator, session,
+    )
+    if code != 0:
+        print(f"error: could not describe the secret {SECRETS_NAME}")
+        if "ResourceNotFound" in stderr:
+            print("fix: the secret does not exist on this plane — run make secrets-apply")
+        elif stderr.strip():
+            print(stderr.strip())
+        return None, None
+    try:
+        described = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        print(f"error: describe-secret returned unparseable output: {exc}")
+        return None, None
+    code, stdout, stderr = run_aws_captured(
+        aws_base(is_emulator, values) + ["secretsmanager", "get-secret-value", "--secret-id", SECRETS_NAME,
+                                         "--output", "json"],
+        is_emulator, session,
+    )
+    if code != 0:
+        if "ResourceNotFound" in stderr:
+            return described, None  # created empty, or its only version is pending deletion
+        print(f"error: could not read the stored blob of {SECRETS_NAME}")
+        if stderr.strip():
+            print(stderr.strip())
+        return described, None
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        print(f"error: get-secret-value returned unparseable output: {exc}")
+        return described, None
+    blob: Any = payload.get("SecretString")
+    try:
+        return described, json.loads(blob) if blob is not None else None
+    except (json.JSONDecodeError, TypeError):
+        print("error: the stored blob is not JSON; the runtime pull contract expects {key: value}")
+        return described, None
+
+
+def verify_flow(is_emulator: bool, values: dict[str, str], dry_run: bool, session: dict[str, str] | None = None) -> int:
+    """Match the live plane against what infra/.env would seed. Values never
+    surface: rows carry lengths and fingerprints; drift is exit code 1."""
+    commands = verify_commands(is_emulator, values)
+    if dry_run:
+        for command in commands:
+            print(f"would run: {' '.join(command)}")
+        print("(dry run: no AWS)")
+        return 0
+    plane, _ = resolve_plane(values)
+    print(f"plane:   {plane}")
+    if is_emulator:
+        print("carrier: env creds (test/test, profile stripped)")
+    elif session:
+        print(f"carrier: role session ({SEEDER_ROLE_NAME}, valid {session_remaining_text(session)})")
+    print(f"region:  {resolve_region(values)}")
+
+    findings: list[str] = []
+    extras: list[str] = []
+
+    expected_ssm = expected_ssm_seeds(values)
+    print(f"ssm:     {SSM_SEED_PREFIX}")
+    live = collect_ssm_parameters(is_emulator, values, session)
+    if live is None:
+        return 1
+    full_names: dict[str, str] = {}
+    live_values: dict[str, str] = {}
+    for name, entry in live.items():
+        leaf = name.removeprefix(SSM_SEED_PREFIX)
+        full_names[leaf] = name
+        live_values[leaf] = entry["value"]
+    _, mismatched, missing = compare_seeds(expected_ssm, live_values)
+    for leaf in sorted(live_values):
+        if leaf not in expected_ssm:
+            print(f"  extra: {full_names[leaf]}")
+            extras.append(full_names[leaf])
+            continue
+        entry = live[full_names[leaf]]
+        print(f"  {leaf:<32} {entry['type'] or '?':<12} "
+              f"len {len(entry['value']):<6} fp {fingerprint(entry['value'])}")
+    for leaf in sorted(missing):
+        print(f"  {leaf:<32} missing (expected from .env)")
+        findings.append(f"{SSM_SEED_PREFIX}{leaf} is not seeded")
+    for leaf in sorted(mismatched):
+        print(f"  {leaf:<32} mismatch (expected fp {fingerprint(expected_ssm[leaf])})")
+        findings.append(f"{SSM_SEED_PREFIX}{leaf} does not match .env (expected fp {fingerprint(expected_ssm[leaf])})")
+
+    blob_keys = expected_blob(values)
+    print(f"secret:  {SECRETS_NAME}")
+    described, stored = collect_secret(is_emulator, values, session)
+    if described is None:
+        return 1
+    if described.get("DeletedDate") or described.get("Status") == "PENDINGDELETION":
+        findings.append(f"the secret is scheduled for deletion (window {described.get('RecoveryWindowInDays', '?')} days)")
+    if stored is None:
+        print("  (no stored version)")
+        if blob_keys:
+            findings.append(f"the blob holds no version while .env expects {', '.join(sorted(blob_keys))}")
+    else:
+        _, blob_mismatched, blob_missing = compare_seeds(blob_keys, stored)
+        for key in sorted(stored):
+            if key not in blob_keys:
+                print(f"  extra: {key}")
+                extras.append(key)
+                continue
+            print(f"  {key:<32} {'':12} len {len(stored[key]):<6} fp {fingerprint(stored[key])}")
+        for key in sorted(blob_mismatched):
+            print(f"  {key:<32} mismatch (expected fp {fingerprint(blob_keys[key])})")
+            findings.append(f"{key} does not match .env (expected fp {fingerprint(blob_keys[key])})")
+        for key in sorted(blob_missing):
+            print(f"  {key:<32} missing (expected from .env)")
+            findings.append(f"{key} is missing from the stored blob")
+
+    print()
+    for note in extras:
+        print(f"note:   {note} is on the plane outside the .env seed list")
+    if findings:
+        for finding in findings:
+            print(f"problem: {finding}")
+        print("fail:    the seeded plane does not match infra/.env")
+        return 1
+    print("ok:      the seeded plane matches infra/.env")
+    return 0
 
 
 def resolve_trust_principal(is_emulator: bool, values: dict[str, str]) -> str:
@@ -985,8 +1197,9 @@ def main() -> int:
     )
     parser.add_argument(
         "command",
-        choices=("plan", "apply", "bootstrap", "destroy", "seeder-bootstrap", "seeder-drop", "session-clear"),
+        choices=("plan", "apply", "verify", "bootstrap", "destroy", "seeder-bootstrap", "seeder-drop", "session-clear"),
         help="terraform plan/apply/destroy, bootstrap (create the plane's state bucket via the aws CLI), "
+             "verify (read the live plane and match it against infra/.env, fingerprints only), "
              "seeder-bootstrap (create/update the out-of-stack seeder role), seeder-drop (detach and "
              "delete it), or session-clear (drop the cached seeder session file)",
     )
@@ -1056,6 +1269,15 @@ def main() -> int:
         if errors:
             return 1
         return drop_seeder_flow(is_emulator, values, args.dry_run)
+
+    if args.command == "verify":
+        errors = plane_errors(is_emulator, values)
+        for error in errors:
+            print(error)
+        if errors:
+            return 1
+        session = resolve_carrier_session(is_emulator, values, args.dry_run)
+        return verify_flow(is_emulator, values, args.dry_run, session)
 
     errors = validate(is_emulator, values)
     for error in errors:

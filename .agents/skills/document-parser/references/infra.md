@@ -40,6 +40,7 @@ make secrets-seeder-bootstrap    # one-time: the out-of-stack seeder role
 make secrets-bootstrap-state     # state bucket for the selected plane (idempotent)
 make secrets-plan
 make secrets-apply               # auto on the emulator, confirm on real AWS
+make secrets-verify              # live plane vs .env — fingerprints only, exit 1 on drift
 ```
 
 `tools/secrets.py` is the only bridge into terraform: it parses and

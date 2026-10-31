@@ -89,6 +89,21 @@ make secrets-apply              # apply (auto on the emulator, confirm on real A
 
 The seeder role must exist before the first carrier verb: on real AWS `secrets-bootstrap-state`, `plan`, and `apply` all assume it, so the first such verb asks for your MFA code and caches the session for the 12-hour window. On the emulator the order is only a formality (nothing prompts), but keeping it keeps both planes identical. The state bucket must exist before the first `init`. On the emulator an unset `TF_STATE_BUCKET` falls back to the fixed local default; on real AWS a bucket name is required — a sandbox bucket per engineer, versioned and encrypted (bootstrap enables versioning), so parallel testing never collides on one ledger.
 
+## Verifying after apply
+
+`make secrets-verify` reads the live plane directly — SSM parameters under the prefix (paginated) and the secret's status plus stored blob — and matches them against what `infra/.env` would seed, so it shows reality, not terraform's model. No value ever prints: parameter rows carry type, length, and a short SHA-256 fingerprint, blob rows carry length and fingerprint, and a fingerprint equal to the one computed from `.env` proves the stored value is the one you configured.
+
+```text
+ssm:     /detectai/document-parser/
+  MAX_PDF_PAGES              String   len 4   fp 3f2b9a1d8c4e
+  ...
+secret:  detectai/document-parser/secrets
+  API_KEY                             len 22  fp 9d8f3c1a2b4e
+ok:      the seeded plane matches infra/.env
+```
+
+Anything on the plane that `.env` does not seed is flagged `extra` and listed as a note; anything expected but missing, fingerprint-different, or a secret scheduled for deletion is a `problem:` line and exits `1`. Plain-listing `terraform plan` compares terraform's ledger — this verb compares the plane itself. On real AWS it rides the same MFA-gated seeder session as the other carrier verbs.
+
 ## Teardown
 
 | Command | Removes | Keeps |
