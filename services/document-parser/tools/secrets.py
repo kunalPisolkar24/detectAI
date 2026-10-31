@@ -570,7 +570,7 @@ def seeder_trust_document(user_arn: str) -> dict[str, Any]:
 
 
 def seeder_policy_document(is_emulator: bool, values: dict[str, str], user_arn: str) -> dict[str, Any]:
-    """Least privilege, service-pinned on every ARN: state, blob, and config writes only."""
+    """Least privilege on service-pinned ARNs; DescribeParameters alone takes a wildcard."""
     region = resolve_region(values)
     account = iam_account_id(user_arn)
     bucket = resolve_state_bucket(is_emulator, values)
@@ -600,6 +600,7 @@ def seeder_policy_document(is_emulator: bool, values: dict[str, str], user_arn: 
                     "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue",
                     "secretsmanager:UpdateSecret", "secretsmanager:DeleteSecret",
                     "secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue",
+                    "secretsmanager:GetResourcePolicy", "secretsmanager:ListSecretVersionIds",
                     "secretsmanager:TagResource",
                 ],
                 "Resource": [f"arn:aws:secretsmanager:{region}:{account}:secret:detectai/document-parser/secrets-*"],
@@ -610,8 +611,17 @@ def seeder_policy_document(is_emulator: bool, values: dict[str, str], user_arn: 
                 "Action": [
                     "ssm:PutParameter", "ssm:DeleteParameter", "ssm:GetParameter",
                     "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:AddTagsToResource",
+                    "ssm:ListTagsForResource",
                 ],
                 "Resource": [f"arn:aws:ssm:{region}:{account}:parameter{SSM_SEED_PREFIX}*"],
+            },
+            {
+                # Terraform reads aws_ssm_parameter metadata through DescribeParameters,
+                # which IAM offers at account level only — no resource scoping exists for it.
+                "Sid": "DescribeSsmParameters",
+                "Effect": "Allow",
+                "Action": ["ssm:DescribeParameters"],
+                "Resource": ["*"],
             },
         ],
     }

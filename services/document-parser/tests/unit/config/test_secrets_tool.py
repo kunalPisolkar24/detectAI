@@ -560,6 +560,7 @@ def test_seeder_bootstrap_commands_emulator():
         "RunTerraformStateObjects",
         "ManageServiceSecret",
         "ManageServiceConfig",
+        "DescribeSsmParameters",
     }
     bucket_statement = next(part for part in policy["Statement"] if part["Sid"] == "RunTerraformStateBucket")
     assert bucket_statement["Resource"] == ["arn:aws:s3:::detectai-docparser-tfstate"]
@@ -589,6 +590,9 @@ def test_seeder_bootstrap_policy_scope_is_service_pinned():
     assert config_statement["Resource"] == [
         "arn:aws:ssm:ap-southeast-2:123456789012:parameter/detectai/document-parser/*"
     ]
+    # DescribeParameters is the one account-level API; every other statement stays ARN-pinned.
+    wildcard_statements = [part["Sid"] for part in policy["Statement"] if "*" in part["Resource"]]
+    assert wildcard_statements == ["DescribeSsmParameters"]
 
 
 def test_validate_seeder_bootstrap_real_plane_allows_missing_trust_user_arn():
