@@ -10,6 +10,9 @@ The build starts flat — `go run .` is the whole runtime:
 services/payment-webhook/
   go.mod
   main.go         # boot (PORT, default 8080), gin engine, the two probes, drain on SIGINT/SIGTERM
+  Makefile        # default goal run; help aggregates the per-file help targets
+  mk/
+    local.mk      # local-dev verbs: tidy, test, vet, run
 ```
 
 Everything is `package main` in one file; the skeleton serves exactly `/health` and `/ready` and owns no middleware beyond gin's built-in logger/recovery. Growth is mechanical — split **files** before folders as real features land (`handlers.go`, `config.go`, `publisher.go`, `validator.go`, all still `package main` at the root), and move code under `cmd/` + `internal/` only when a boundary genuinely earns the folder: the SQS publisher and the Paddle validator are the first such strangers.
