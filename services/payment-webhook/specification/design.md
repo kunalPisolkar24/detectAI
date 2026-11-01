@@ -11,8 +11,11 @@ services/payment-webhook/
   go.mod
   cmd/
     api/
-      main.go       # boot (PORT, default 8080), server, drain on SIGINT/SIGTERM
+      main.go       # boot (PORT, default 8080), server assembly
   internal/
+    server/
+      server.go     # serve until SIGINT/SIGTERM (NFR-9)
+      shutdown.go   # drain within budget + slack, drain logged
     router/
       router.go     # gin engine: root probes, the /api/v1 route group
     handlers/
