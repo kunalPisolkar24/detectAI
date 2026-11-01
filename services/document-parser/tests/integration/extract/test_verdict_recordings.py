@@ -1,6 +1,6 @@
-"""The route's verdict recordings against a recording stub of the seam:
-every row of observability.md's verdict table, with the instrument fold
-itself left to the facade's own tests. The wire shapes double-check the
+"""The pipeline's verdict recordings against a recording stub of the seam:
+every row of observability.md's verdict table, folded inside the processing
+service and driven through the real route. The wire shapes double-check the
 statuses the recordings ride, and the 401 proves transport-level guards
 record nothing.
 """
@@ -11,12 +11,13 @@ from fastapi.testclient import TestClient
 
 from app.api.extract import router as extract_router
 from app.config import Settings
-from app.extraction import (
+from app.processing import DocumentProcessingService
+from app.processing.extraction import (
     DocumentExtractionService,
     build_default_extraction_service,
 )
-from app.validation import build_default_service
-from app.validation.models import (
+from app.processing.validation import build_default_service
+from app.processing.validation.models import (
     DEFAULT_MAX_PDF_PAGES,
     DEFAULT_UPLOAD_LIMIT_BYTES,
 )
@@ -52,17 +53,16 @@ def _client(
     extraction: DocumentExtractionService | None = None,
 ) -> TestClient:
     """The state the lifespan would install, with the recorder standing in
-    for the wired service — what these rows vary is what the route records."""
+    for the wired service — what these rows vary is what the pipeline records."""
     throwaway = FastAPI()
     throwaway.include_router(extract_router)
     throwaway.state.settings = Settings(
         api_key=KEY, upload_limit_bytes=upload_limit_bytes
     )
-    throwaway.state.validation_service = build_default_service(
-        max_pdf_pages=max_pdf_pages
-    )
-    throwaway.state.extraction_service = (
-        extraction or build_default_extraction_service()
+    throwaway.state.document_processing_service = DocumentProcessingService(
+        build_default_service(max_pdf_pages=max_pdf_pages),
+        extraction or build_default_extraction_service(),
+        recorder,
     )
     throwaway.state.observability = recorder
     return TestClient(throwaway)

@@ -9,7 +9,7 @@ shape stays abstract — a strategy without a validate is not instantiable.
 
 import pytest
 
-from app.validation import (
+from app.processing.validation import (
     DEFAULT_MAX_PDF_PAGES,
     CorruptDocumentError,
     DocumentValidationService,
@@ -18,7 +18,7 @@ from app.validation import (
     ValidationOutcome,
     build_default_service,
 )
-from app.validation.strategies import (
+from app.processing.validation.strategies import (
     DocumentValidationStrategy,
     DocxValidationStrategy,
     PdfValidationStrategy,

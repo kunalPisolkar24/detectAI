@@ -13,14 +13,14 @@ import zipfile
 
 import pytest
 
-from app.validation.models import (
+from app.processing.validation.models import (
     DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES,
     DEFAULT_MAX_PDF_PAGES,
     CorruptDocumentError,
     TooLargeError,
     ValidationOutcome,
 )
-from app.validation.strategies import (
+from app.processing.validation.strategies import (
     DocxValidationStrategy,
     PdfValidationStrategy,
     TextValidationStrategy,

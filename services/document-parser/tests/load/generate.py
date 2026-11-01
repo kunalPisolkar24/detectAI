@@ -20,11 +20,11 @@ from collections.abc import Callable
 from pathlib import Path
 from time import perf_counter
 
-from app.extraction import build_default_extraction_service
-from app.extraction.cleaning import normalize
-from app.extraction.models import DEFAULT_OUTPUT_CHAR_LIMIT
-from app.validation import build_default_service
-from app.validation.models import (
+from app.processing.extraction import build_default_extraction_service
+from app.processing.extraction.cleaning import normalize
+from app.processing.extraction.models import DEFAULT_OUTPUT_CHAR_LIMIT
+from app.processing.validation import build_default_service
+from app.processing.validation.models import (
     DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES,
     DEFAULT_UPLOAD_LIMIT_BYTES,
     DOCX_MIME,

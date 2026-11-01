@@ -4,7 +4,7 @@ mechanics — deadline, cleaning, cap — driven by fakes."""
 
 import pytest
 
-from app.extraction import (
+from app.processing.extraction import (
     BudgetExhaustedError,
     CleaningKnobs,
     Deadline,
@@ -13,14 +13,14 @@ from app.extraction import (
     UnreadableDocumentError,
     build_default_extraction_service,
 )
-from app.extraction.service import DocumentExtractionService
-from app.extraction.strategies import (
+from app.processing.extraction.service import DocumentExtractionService
+from app.processing.extraction.strategies import (
     DocumentExtractionStrategy,
     DocxExtractionStrategy,
     PdfExtractionStrategy,
     TextExtractionStrategy,
 )
-from app.validation import build_default_service
+from app.processing.validation import build_default_service
 from tests.support.documents import minimal_docx_bytes, minimal_pdf_bytes
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

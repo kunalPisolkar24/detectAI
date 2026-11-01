@@ -13,7 +13,7 @@ from app.config import ConfigProvider, Settings, deployment_flick
 from app.config.adapters import dotenv as dotenv_module
 from app.config.adapters.dotenv import DotEnvAdapter
 from app.config.provider import DevConfig
-from app.extraction import (
+from app.processing.extraction import (
     DEFAULT_EDGE_TOLERANCE_RATIO,
     DEFAULT_EDGE_ZONE_RATIO,
     DEFAULT_FOLIO_MONOTONIC_RATIO,
@@ -23,7 +23,7 @@ from app.extraction import (
     DEFAULT_PROCESSING_BUDGET_SECONDS,
     DEFAULT_REPETITION_MIN_PAGES,
 )
-from app.validation.models import (
+from app.processing.validation.models import (
     DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES,
     DEFAULT_MAX_PDF_PAGES,
     DEFAULT_UPLOAD_LIMIT_BYTES,

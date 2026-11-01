@@ -1,6 +1,6 @@
 """The phase-2 normalizer's ordered rules, one anchor per decision."""
 
-from app.extraction.cleaning import normalize
+from app.processing.extraction.cleaning import normalize
 
 
 def test_line_endings_normalize_to_lf() -> None:

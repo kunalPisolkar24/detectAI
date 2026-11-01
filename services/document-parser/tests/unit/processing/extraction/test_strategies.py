@@ -7,14 +7,14 @@ from typing import Self
 import pymupdf
 import pytest
 
-from app.extraction import CleaningKnobs
-from app.extraction.models import (
+from app.processing.extraction import CleaningKnobs
+from app.processing.extraction.models import (
     BudgetExhaustedError,
     Deadline,
     RawLines,
     UnreadableDocumentError,
 )
-from app.extraction.strategies import (
+from app.processing.extraction.strategies import (
     DocxExtractionStrategy,
     PdfExtractionStrategy,
     TextExtractionStrategy,

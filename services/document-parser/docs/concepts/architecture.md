@@ -10,15 +10,16 @@ A stateless text extractor: PDF, DOCX, or TXT goes in as a multipart upload, tex
 
 ```
 app/
-├── main.py            lifespan: resolve config, wire the services, start observability
+├── main.py            lifespan: resolve config, wire the pipeline, start observability
 ├── api/               the extract route: key guard, bounded read, multipart parse
-├── validation/        admission: is this a document type we accept, within bounds?
-├── extraction/        the pipeline: strategies, deadline, cleaning, cap
+├── processing/        the pipeline behind one service (DocumentProcessingService)
+│   ├── validation/    admission: is this a document type we accept, within bounds?
+│   └── extraction/    strategies, deadline, cleaning, cap
 ├── config/            planes (dev env-over-file, prod AWS) and typed Settings
 └── observability/     the OTel facade: traces, metrics, logs
 ```
 
-The layering is strict and inward-facing: `api` orchestrates, `validation` and `extraction` do the two halves of the work, and `config`/`observability` exist to serve the first three. Nothing in the inner layers knows about HTTP.
+The layering is strict and inward-facing: `api` orchestrates, `processing` runs the two halves of the work — `validation` and `extraction` — behind one service, and `config`/`observability` serve the first two. Nothing inside `processing` knows about HTTP.
 
 ## What happens on one request
 
@@ -27,6 +28,7 @@ sequenceDiagram
     autonumber
     participant C as caller
     participant E as api route
+    participant P as processing (DocumentProcessingService)
     participant V as validation
     participant X as extraction
 
@@ -37,17 +39,19 @@ sequenceDiagram
     E-->>C: 413 if the read proves a breach
     E->>E: parse multipart, take the file field
     E-->>C: 422 malformed form or missing field
-    E->>V: validate bytes
-    V-->>E: sniffed mime or a typed verdict
-    E-->>C: 413 / 415 / 422
-    E->>X: extract bytes with the sniffed mime
+    E->>P: process bytes
+    P->>V: validate bytes
+    V-->>P: sniffed mime or a typed verdict
+    E-->>C: 413 / 415 / 422 (re-raised)
+    P->>X: extract bytes with the sniffed mime
     X->>X: deadline · strategy · cleaning · cap
-    X-->>E: ExtractionResult or a typed verdict
+    X-->>P: ExtractionResult or a typed verdict
+    P-->>E: ProcessedDocument or a typed verdict
     E-->>C: 200 JSON / 422 / 504
-    note over E: every branch from the bound read onward is recorded by observability<br/>as a rejection or an extraction outcome — the 401 lands before the bracket opens
+    note over P,X: every pipeline branch folds its recording here —<br/>rejections before extraction, outcomes with duration after<br/>the 401 lands before the bracket opens
 ```
 
-The route itself never parses documents — it only bounds the input, hands bytes to the two inner layers, and translates typed verdicts into HTTP.
+The route itself never parses documents — it only bounds the input, hands bytes to the pipeline service, and maps the typed verdicts the service re-raises onto HTTP.
 
 Questions the map answers, page by page:
 

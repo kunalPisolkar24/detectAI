@@ -14,7 +14,7 @@ what a caller actually gets.
 import pytest
 from fastapi.testclient import TestClient
 
-from app.validation.models import DEFAULT_UPLOAD_LIMIT_BYTES
+from app.processing.validation.models import DEFAULT_UPLOAD_LIMIT_BYTES
 from tests.support.documents import (
     docx_body_bytes,
     minimal_docx_bytes,

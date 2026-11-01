@@ -22,8 +22,9 @@ services/document-parser/
 ├── app/
 │   ├── main.py            lifespan: resolve config, wire services, start observability
 │   ├── api/               the extract route: key guard, bounded read, multipart parse, verdicts → HTTP
-│   ├── validation/        admission: magic sniff + container checks + bounds → typed verdicts
-│   ├── extraction/        pipeline: strategies, deadline, cleaning, output cap
+│   ├── processing/        the pipeline behind one service: admission + extraction
+│   │   ├── validation/    admission: magic sniff + container checks + bounds → typed verdicts
+│   │   └── extraction/    pipeline: strategies, deadline, cleaning, output cap
 │   ├── config/            planes (dev env-over-file, prod AWS), typed Settings
 │   └── observability/     OTel facade: traces, metrics, logs — or NullObservability
 ├── infra/                 .env planes, compose files, secrets terraform stack
@@ -34,8 +35,8 @@ services/document-parser/
 └── mk/ + Makefile         make targets: local / docker / tests / load / secrets
 ```
 
-The layering is inward-facing: `api` orchestrates, `validation` and
-`extraction` do the two halves of the work, `config`/`observability` serve
+The layering is inward-facing: `api` orchestrates, `processing` runs the
+two halves of the work behind one service, `config`/`observability` serve
 them. Nothing in the inner layers knows about HTTP.
 
 ## Run it
@@ -52,9 +53,10 @@ fail-fast table: [references/running.md](references/running.md)
 
 ## Change the pipeline without breaking it
 
-- `api/` never parses documents — it bounds the body, hands bytes down, and
-  translates typed verdicts (its own auth guard, `413`, `415`, `422`, `504`)
-  into HTTP. Inner layers speak verdicts, never HTTP.
+- `api/` never parses documents — it bounds the body, hands bytes to the
+  pipeline service, and translates typed verdicts (its own auth guard,
+  `413`, `415`, `422`, `504`) into HTTP. Inner layers speak verdicts,
+  never HTTP; the pipeline folds its own verdict rows onto the seam.
 - The declared `Content-Type` is metadata only: **the sniffed MIME wins** and
   is what validation, extraction, and the response all use.
 - The deadline is a value passed down, checked in strategy inner loops —

@@ -20,7 +20,6 @@ from opentelemetry.sdk.metrics import Counter, Histogram
 from opentelemetry.sdk.metrics.export import AggregationTemporality
 from opentelemetry.trace import Tracer
 
-from ..config import Settings, deployment_flick
 from .adapters import LogsAdapter, MetricsAdapter, TracesAdapter
 from .contract import (
     ExtractionOutcome,
@@ -32,7 +31,11 @@ from .otlp import headers, logs_url, metrics_url, traces_url
 from .resource import build_resource
 
 if TYPE_CHECKING:
+    # The boot's types ride in as parameters: importing config at runtime
+    # would cycle, since settings resolves this pipeline's model defaults.
     from fastapi import FastAPI
+
+    from ..config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +154,7 @@ class ObservabilityService:
                 )
 
 
-def build_observability_service(settings: Settings, app: "FastAPI") -> Observability:
+def build_observability_service(settings: "Settings", app: "FastAPI", flick: str) -> Observability:
     """Unset endpoint -> NullObservability (zero SDK objects); otherwise build ready or fail the boot."""
     # app is only consumed by the wired build; the disabled path installs nothing.
     endpoint = settings.otel_exporter_otlp_endpoint
@@ -164,7 +167,7 @@ def build_observability_service(settings: Settings, app: "FastAPI") -> Observabi
     resource = build_resource(
         settings.otel_service_name,
         settings.otel_service_version or "dev",
-        deployment_flick(),
+        flick,
     )
     traces = TracesAdapter(
         OTLPSpanExporter(

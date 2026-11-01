@@ -48,7 +48,7 @@ Timeouts are *not* also failures, so sums of the counters never double count.
 
 ## What each outcome records
 
-The route hands the facade a typed verdict; the facade maps it to instruments:
+The pipeline folds each verdict onto the seam as it happens; the route maps only the re-raised verdicts onto HTTP statuses:
 
 ```mermaid
 graph LR
@@ -98,16 +98,17 @@ The full lifecycle in call order — brackets open, instruments update, and the 
 sequenceDiagram
     autonumber
     participant R as the route handler
+    participant P as the processing service
     participant O as ObservabilityService
     participant T as TracesAdapter
     participant M as MetricsAdapter
     participant L as LogsAdapter
 
-    R->>O: track_request() — the bracket opens
+    R->>O: track_request() — the transport bracket opens
     O-->>M: in_flight_requests +1
-    R->>O: track_extraction(mime, size)
+    P->>O: track_extraction(mime, size)
     O-->>T: the extraction span opens with its attributes
-    R->>O: record_extraction(mime, ok, seconds)
+    P->>O: record_extraction(mime, ok, seconds)
     O-->>M: parsed_documents_total +1 and one duration sample
     R-->>O: brackets close on return — gauge -1, span ends
     note over T,M,L: at shutdown the drain is traces then metrics then logs — each flush guarded, idempotent, 5 s capped
@@ -117,7 +118,7 @@ sequenceDiagram
 
 ### Overview
 
-Two realizations of one seam. The route calls the same five methods regardless of what was installed at boot.
+Two realizations of one seam. The pipeline folds through the same five methods regardless of what was installed at boot, and the route drives the transport brackets on the same seam.
 
 ```mermaid
 classDiagram
@@ -140,7 +141,7 @@ classDiagram
     ObservabilityService o--> MetricsAdapter
     ObservabilityService o--> LogsAdapter
     note for ObservabilityService "instruments from the adapters' own providers, never OTel globals"
-    note for NullObservability "same methods, zero cost: the route has one code path"
+    note for NullObservability "same methods, zero cost: one code path, everywhere the seam is installed"
 ```
 
 ### The adapters up close

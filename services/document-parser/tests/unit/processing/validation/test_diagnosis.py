@@ -7,7 +7,7 @@ non-zip bytes at the default registry.
 
 import pytest
 
-from app.validation.diagnosis import classify_unknown
+from app.processing.validation.diagnosis import classify_unknown
 
 
 @pytest.mark.parametrize(

@@ -18,6 +18,8 @@ from app.observability import (
     build_observability_service,
 )
 
+_FLICK = "dev"  # the boot's plane rides in as the parameter the factory builds from
+
 
 class _AcceptAnyPost(BaseHTTPRequestHandler):
     """Swallows OTLP payloads whole — the tests watch shapes, not bytes."""
@@ -57,7 +59,7 @@ def _settings(**overrides: object) -> Settings:
 def test_an_endpoint_less_boot_installs_nothing() -> None:
     app = FastAPI()
 
-    null_build = build_observability_service(_settings(otel_exporter_otlp_endpoint=""), app)
+    null_build = build_observability_service(_settings(otel_exporter_otlp_endpoint=""), app, _FLICK)
 
     assert isinstance(null_build, NullObservability)
     # the app stays untouched: the disabled build is what the route rides
@@ -67,7 +69,7 @@ def test_an_endpoint_less_boot_installs_nothing() -> None:
 def test_the_wired_build_is_ready_and_instruments_the_app(receiver: str) -> None:
     app = FastAPI()
 
-    wired = build_observability_service(_settings(otel_exporter_otlp_endpoint=receiver), app)
+    wired = build_observability_service(_settings(otel_exporter_otlp_endpoint=receiver), app, _FLICK)
     try:
         assert isinstance(wired, ObservabilityService)
         # the instrumentation wraps the middleware-stack builder, explicitly
@@ -90,7 +92,7 @@ def test_the_wired_exporter_declares_delta_temporality(receiver: str) -> None:
     (observability.md's export shape). The periodic reader defers to the
     exporter's preferred temporality — this pins that linkage where an SDK
     upgrade could silently regenerate CUMULATIVE counters."""
-    wired = build_observability_service(_settings(otel_exporter_otlp_endpoint=receiver), FastAPI())
+    wired = build_observability_service(_settings(otel_exporter_otlp_endpoint=receiver), FastAPI(), _FLICK)
     try:
         binding = wired._metrics._metric_exporter._preferred_temporality
         assert binding[Counter] == AggregationTemporality.DELTA
@@ -100,7 +102,7 @@ def test_the_wired_exporter_declares_delta_temporality(receiver: str) -> None:
 
 
 def test_the_version_falls_back_to_dev_via_the_factory(receiver: str) -> None:
-    wired = build_observability_service(_settings(otel_exporter_otlp_endpoint=receiver), FastAPI())
+    wired = build_observability_service(_settings(otel_exporter_otlp_endpoint=receiver), FastAPI(), _FLICK)
     try:
         attributes = wired._traces.provider().resource.attributes
         assert attributes["service.version"] == "dev"
@@ -112,6 +114,7 @@ def test_an_explicit_version_rides_the_resource(receiver: str) -> None:
     wired = build_observability_service(
         _settings(otel_exporter_otlp_endpoint=receiver, otel_service_version="1.2.3"),
         FastAPI(),
+        _FLICK,
     )
     try:
         attributes = wired._traces.provider().resource.attributes

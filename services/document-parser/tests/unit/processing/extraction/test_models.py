@@ -3,8 +3,8 @@ deadline clocked."""
 
 import pytest
 
-from app.extraction import models
-from app.extraction.models import (
+from app.processing.extraction import models
+from app.processing.extraction.models import (
     DEFAULT_OUTPUT_CHAR_LIMIT,
     DEFAULT_PROCESSING_BUDGET_SECONDS,
     BudgetExhaustedError,
