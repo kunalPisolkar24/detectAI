@@ -17,8 +17,8 @@ services/payment-webhook/
       server.go     # serve until SIGINT/SIGTERM (NFR-9)
       shutdown.go   # drain within budget + slack, drain logged
     config/
-      config.go     # Load + DeploymentFlick — skeletons (wire-up build)
-      settings.go   # Config{Port, DrainTimeout} + Resolve — skeleton
+      load.go       # Load + DeploymentFlick — skeletons (wire-up build)
+      config.go     # Config{Port, DrainTimeout} + Resolve — skeleton
       interfaces.go # contracts hub: the Source plane contract
       errors.go     # the Load-boundary ConfigError wrapper
       adapters/

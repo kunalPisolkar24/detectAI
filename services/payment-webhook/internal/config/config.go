@@ -1,22 +1,17 @@
-// Package config resolves the boot config per plane; the model and the LLD live
-// in specification/references/config.md.
 package config
 
-import "fmt"
+import "time"
 
-// Load resolves the flick, composes the plane source, and resolves the config —
-// the composition root's one call.
-func Load() (Config, error) {
-	return Config{}, skeleton("Load")
+// Config is the typed boot contract — the single place that talks types, bounds,
+// and failure behavior. Fields land when runtime code consumes them
+// (consume-first); plane keys without a field are ignored.
+type Config struct {
+	Port         int
+	DrainTimeout time.Duration
 }
 
-// DeploymentFlick reads ENV_TYPE and fails closed: only an exact dev or prod
-// match is accepted, so a mis-flicked boot never serves.
-func DeploymentFlick() (string, error) {
-	return "", skeleton("DeploymentFlick")
-}
-
-// skeleton marks the not-yet-wired config surface; the message names the build.
-func skeleton(what string) error {
-	return &ConfigError{cause: fmt.Errorf("config: %s is a skeleton; the wire-up build connects it", what)}
+// Resolve reads the declared fields off one plane source: each field is read by
+// its env name, and the field's own contract owns its failure behavior.
+func Resolve(source Source) (Config, error) {
+	return Config{}, skeleton("Resolve")
 }
