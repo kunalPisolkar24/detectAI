@@ -16,6 +16,20 @@ services/payment-webhook/
     server/
       server.go     # serve until SIGINT/SIGTERM (NFR-9)
       shutdown.go   # drain within budget + slack, drain logged
+    config/
+      config.go     # Load + DeploymentFlick — skeletons (wire-up build)
+      settings.go   # Config{Port, DrainTimeout} + Resolve — skeleton
+      interfaces.go # contracts hub: the Source plane contract
+      errors.go     # the Load-boundary ConfigError wrapper
+      adapters/
+        dotenv.go     # dev file plane reader — skeleton (dotenv build)
+        parameters.go # prod SSM tree reader — skeleton (AWS build)
+        secrets_manager.go # prod secrets blob reader — skeleton (AWS build)
+      factories/
+        config_factory.go      # the Source contract + Create — skeleton
+        dev_source.go          # dev plane: env over dotenv — skeleton
+        prod_source.go         # prod plane: blob + SSM disjoint — skeleton (AWS build)
+        aws_client_factory.go  # bootstrap clients — skeleton (AWS build)
     router/
       router.go     # gin engine: root probes, the /api/v1 route group
     handlers/
@@ -57,7 +71,7 @@ All mapping paths use `errors.Is` — the pre-refactor `err.Error() == "invalid 
 
 ## Config planes
 
-Same double-plane shape document-parser landed (its `references/config.md` is the model; the webhook's own LLD lands in `references/`):
+Same double-plane shape document-parser landed; this service's own LLD lives in [references/config.md](references/config.md), and the surface is a declared skeleton today — every entry point answers a loud skeleton error until its landing build connects it (dotenv reader + wire-up next, prod plane with AWS):
 
 - **Dev (`ENV_TYPE=dev`)** — env-over-file: process env first, `.env` via godotenv second. Bare keys, no comments — repository convention. Plane values: `API_KEY`, `PADDLE_WEBHOOK_SECRET`, `QUEUE_URL`, bounds, OTel knobs.
 - **Prod (`ENV_TYPE=prod`)** — AWS-exact: no env-file fallback. `API_KEY` and the license key read from the service's Secrets Manager blob; `PADDLE_WEBHOOK_SECRET` rides the same blob; `QUEUE_URL` and region from SSM/env as IaC decides. The ~100 ms cold-start cost is accepted in [requirements.md](requirements.md).
