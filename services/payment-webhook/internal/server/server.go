@@ -1,4 +1,4 @@
-// Package server owns the process lifecycle: serve until SIGINT/SIGTERM, then drain (NFR-9).
+// Package server owns the process lifecycle: serve until SIGINT/SIGTERM, then drain.
 package server
 
 import (
@@ -8,10 +8,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
-// Run serves until SIGINT/SIGTERM, then returns the drain outcome.
-func Run(srv *http.Server) error {
+// Run serves until SIGINT/SIGTERM, then drains within the configured budget (NFR-9).
+func Run(srv *http.Server, drain time.Duration) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -27,5 +28,5 @@ func Run(srv *http.Server) error {
 		return err
 	case <-ctx.Done():
 	}
-	return shutdown(srv)
+	return shutdown(srv, drain)
 }

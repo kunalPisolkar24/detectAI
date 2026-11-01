@@ -2,7 +2,7 @@
 
 How payment-webhook resolves its config values per plane. Requirements live in [requirements.md](../requirements.md) (NFR-3/NFR-9 bounds, NFR-5 gate); the runtime contract is [design.md](../design.md)'s config planes. document-parser's config LLD is the model this follows.
 
-**Status: declared skeleton.** Every entry point answers a loud skeleton error until its landing build connects it; nothing outside `internal/config` reads a config key yet. Landings: the dotenv reader and the flick/factory/`Resolve` wire-up with the next build; `ParameterStoreAdapter`, `SecretsManagerAdapter`, `AWSClientFactory`, and the prod plane with the AWS build.
+**Status: the dev plane is landed.** The dotenv reader, the flick, the factory, `Resolve`, and the service boot run the dev path today: `ENV_TYPE=dev` boots on the file-under-environment plane, a missing default `.env` is an empty plane, a malformed one fails the boot, and unknown flicks never serve. The prod side stays declared until the AWS build — `ParameterStoreAdapter`, `SecretsManagerAdapter`, `AWSClientFactory`, and `ProdSource` answer loud skeleton errors, and `ENV_TYPE=prod` boots fail loudly on the refusal rather than half-serving.
 
 ## Source model
 

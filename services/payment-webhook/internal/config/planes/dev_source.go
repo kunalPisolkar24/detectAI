@@ -1,7 +1,7 @@
 package planes
 
 import (
-	"fmt"
+	"strings"
 
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config/adapters"
 )
@@ -16,7 +16,18 @@ type DevSource struct {
 // process env over it: the reader owns parsing and the missing/malformed-file
 // failure contract, the plane owns precedence.
 func NewDevSource(dotenv *adapters.DotEnvAdapter, environ []string) (*DevSource, error) {
-	return nil, fmt.Errorf("config: NewDevSource is a skeleton; the wire-up build merges the dotenv plane and the environment")
+	values := make(map[string]string)
+	for key, value := range dotenv.Fetch() {
+		values[key] = value
+	}
+	for _, entry := range environ {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok || key == "" {
+			continue
+		}
+		values[key] = value
+	}
+	return &DevSource{values: values}, nil
 }
 
 // Get answers from the merged plane values.

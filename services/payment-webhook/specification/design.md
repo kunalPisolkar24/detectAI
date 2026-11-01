@@ -11,26 +11,26 @@ services/payment-webhook/
   go.mod
   cmd/
     api/
-      main.go       # boot (PORT, default 8080), server assembly
+      main.go       # boot: config.Load, then server assembly
   internal/
     server/
       server.go     # serve until SIGINT/SIGTERM (NFR-9)
-      shutdown.go   # drain within budget + slack, drain logged
+      shutdown.go   # drain within the configured budget, drain logged
     config/
-      load.go       # Load + DeploymentFlick — skeletons (wire-up build)
-      config.go     # Config{Port, DrainTimeout} + Resolve — skeleton
+      load.go       # Load: flick → factory → Resolve, wrapped once into ConfigError
+      config.go     # Config{Port, DrainTimeout} + Resolve — parsed per field
       interfaces.go # contracts hub: the Source plane contract
       errors.go     # the Load-boundary ConfigError wrapper
       adapters/
-        dotenv.go     # dev file plane reader — skeleton (dotenv build)
+        dotenv.go     # dev file plane reader
         parameters.go # prod SSM tree reader — skeleton (AWS build)
         secrets_manager.go # prod secrets blob reader — skeleton (AWS build)
       planes/
         source.go      # the Source plane contract
-        dev_source.go  # dev plane: env over dotenv — skeleton
+        dev_source.go  # dev plane: env over dotenv
         prod_source.go # prod plane: blob + SSM disjoint — skeleton (AWS build)
       factories/
-        config_factory.go      # the flick wiring: Create — skeleton
+        config_factory.go      # the flick wiring: dev wired, prod refuses
         aws_client_factory.go  # bootstrap clients — skeleton (AWS build)
     router/
       router.go     # gin engine: root probes, the /api/v1 route group
