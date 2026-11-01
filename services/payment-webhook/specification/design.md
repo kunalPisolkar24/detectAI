@@ -48,7 +48,8 @@ services/payment-webhook/
         config_test.go         # the flick, Resolve contracts, Load end-to-end
   Makefile          # default goal run; help aggregates the per-file help targets
   mk/
-    local.mk        # local-dev verbs: tidy, test, vet, run
+    local.mk       # local-dev verbs: tidy, vet, env, run
+    tests.mk       # testing verbs: test, test-unit (tests tree boundary)
 ```
 
 The skeleton serves the full route surface with static bodies: the two POST handlers answer the contract envelope without validation or enqueue — placeholders until the Paddle validator and SQS publisher builds land, when the handlers mount their `Validator`/`Publisher` deps, wired at boot. Middleware stays gin's built-in logger/recovery (otelgin joins with the observability build). Growth continues file-first within the standing `cmd/` + `internal/` layout: config, validators, and the publisher grow as files, and the SQS publisher adapter and the Paddle validator adapter remain the first code to earn their own folders.
