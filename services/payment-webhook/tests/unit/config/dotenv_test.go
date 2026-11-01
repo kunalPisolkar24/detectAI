@@ -53,7 +53,7 @@ func TestNewDotEnvAdapterMissingDefaultIsEmptyPlane(t *testing.T) {
 
 func TestNewDotEnvAdapterReadsTheDefaultPathFromTheWorkingDirectory(t *testing.T) {
 	dir := t.TempDir()
-	writePlane(t, dir, ".env", "PORT=9137\n")
+	writePlane(t, dir, filepath.Join("infra", ".env"), "PORT=9137\n")
 	t.Chdir(dir)
 
 	adapter, err := adapters.NewDotEnvAdapter("")

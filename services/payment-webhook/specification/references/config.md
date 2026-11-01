@@ -8,7 +8,7 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 
 `Config` is the single typed contract — today the two consumed fields (`Port`, `DrainTimeout`); the credentials, `QUEUE_URL`, the bounds, and the OTel keys land with their consuming builds (consume-first: fields exist only when runtime code reads them; plane keys without a field are ignored). *Where values come from* is selected once at boot by the `ENV_TYPE` flick and composed through the factories:
 
-- **dev** (flick `dev`): `DevSource` — the process environment over the parsed service-root `.env`. Env wins because a container ships no dotenv file and receives its values injected (compose `env_file`); locally the file is the baseline and an export still overrides it.
+- **dev** (flick `dev`): `DevSource` — the process environment over the parsed `infra/.env`. Env wins because a container ships no dotenv file and receives its values injected (compose `env_file`); locally the file is the baseline and an export still overrides it.
 - **prod** (flick `prod`): `ProdSource` — **AWS exact**. The secrets blob fills first and the prefix-stripped SSM tree completes the plane; process env and dotenv never reach this path, so a stray variable cannot leak a value in. The two AWS planes are disjoint by seeding contract, and the merge enforces it: a case-insensitive key collision fails the boot loud.
 
 `AWS_REGION` and the endpoint override are bootstrap variables, not config: `aws_client_factory` reads them from the process environment once, and credentials ride the ambient chain — never the planes.
@@ -60,4 +60,4 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 
 ## Non-goals
 
-No polling/TTL or reload (a config change means a restart), no caching layer, no per-key reads, no AppConfig/feature flags, no dotenv files in prod images, no `DOTENV_PATH` knob until a caller exists, and no AWS SDK dependency before the AWS build.
+No polling/TTL or reload (a config change means a restart), no caching layer, no per-key reads, no AppConfig/feature flags, no dotenv files in prod images, no `DOTENV_PATH` knob until a caller exists, no AWS SDK dependency before the AWS build, and no compose wiring before the deployment build (document-parser's compose is the model).

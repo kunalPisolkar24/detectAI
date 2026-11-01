@@ -2,7 +2,7 @@ package config_test
 
 import (
 	"errors"
-	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -129,9 +129,7 @@ func TestLoadEndToEnd(t *testing.T) {
 	t.Run("dev boots on the file plane", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "dev")
 		t.Chdir(t.TempDir())
-		if err := os.WriteFile(".env", []byte("PORT=9137\nDRAIN_TIMEOUT=250ms\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		writePlane(t, ".", filepath.Join("infra", ".env"), "PORT=9137\nDRAIN_TIMEOUT=250ms\n")
 
 		cfg, err := config.Load()
 		if err != nil {

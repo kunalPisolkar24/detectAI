@@ -15,8 +15,8 @@ vet:
 	go vet ./...
 
 env:
-	@test -f .env || cp .env.example .env
-	@echo ".env ready (edit .env to override)"
+	@test -f infra/.env || cp infra/.env.example infra/.env
+	@echo "infra/.env ready (edit infra/.env to override)"
 
 run:
 	ENV_TYPE=dev go run ./cmd/api

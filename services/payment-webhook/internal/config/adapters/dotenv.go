@@ -5,10 +5,11 @@ package adapters
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
-const dotenvFix = "create it with make env (copies .env.example) or fix the file"
+const dotenvFix = "create it with make env (copies infra/.env.example) or fix the file"
 
 // DotEnvAdapter is the dev plane's file reader. Nothing is ever written to
 // os.environ: the file is parsed once and the merge with the process environment
@@ -17,15 +18,15 @@ type DotEnvAdapter struct {
 	values map[string]string
 }
 
-// NewDotEnvAdapter parses one dotenv plane. An empty path targets the
-// service-root .env relative to the working directory; a missing default file is
-// an empty plane (values come from the process environment alone), while a
-// missing explicit path and a malformed file fail the boot loudly. Blank KEY=
-// entries drop out, so an empty value can never win over the default.
+// NewDotEnvAdapter parses one dotenv plane. An empty path targets the infra .env
+// plane relative to the working directory; a missing default file is an empty
+// plane (values come from the process environment alone), while a missing
+// explicit path and a malformed file fail the boot loudly. Blank KEY= entries
+// drop out, so an empty value can never win over the default.
 func NewDotEnvAdapter(path string) (*DotEnvAdapter, error) {
 	explicit := path != ""
 	if !explicit {
-		path = ".env"
+		path = filepath.Join("infra", ".env")
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {

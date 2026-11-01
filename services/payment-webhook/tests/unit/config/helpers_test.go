@@ -11,10 +11,14 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config/adapters"
 )
 
-// writePlane writes one file into dir and returns its path.
+// writePlane writes one file into dir and returns its path, creating intermediate
+// directories so nested plane names fit.
 func writePlane(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
