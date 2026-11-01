@@ -25,10 +25,12 @@ services/payment-webhook/
         dotenv.go     # dev file plane reader — skeleton (dotenv build)
         parameters.go # prod SSM tree reader — skeleton (AWS build)
         secrets_manager.go # prod secrets blob reader — skeleton (AWS build)
+      planes/
+        source.go      # the Source plane contract
+        dev_source.go  # dev plane: env over dotenv — skeleton
+        prod_source.go # prod plane: blob + SSM disjoint — skeleton (AWS build)
       factories/
-        config_factory.go      # the Source contract + Create — skeleton
-        dev_source.go          # dev plane: env over dotenv — skeleton
-        prod_source.go         # prod plane: blob + SSM disjoint — skeleton (AWS build)
+        config_factory.go      # the flick wiring: Create — skeleton
         aws_client_factory.go  # bootstrap clients — skeleton (AWS build)
     router/
       router.go     # gin engine: root probes, the /api/v1 route group

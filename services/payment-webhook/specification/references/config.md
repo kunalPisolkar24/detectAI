@@ -32,21 +32,23 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 
 | File | Role |
 |---|---|
-| `internal/config/interfaces.go` | contracts hub — the `Source` plane contract, declared once in `factories` and aliased here |
+| `internal/config/interfaces.go` | contracts hub — the `Source` plane contract, declared once in `planes` and aliased here |
 | `internal/config/config.go` | composition root: `Load` (flick → factory → `Resolve`) and `DeploymentFlick` |
 | `internal/config/settings.go` | the typed contract: `Config` fields + `Resolve`, parsing per field |
 | `internal/config/errors.go` | `ConfigError` — every plane failure wraps once across the `Load` boundary |
 | `internal/config/adapters/dotenv.go` | the dev file plane reader: one parse, never written to `os.environ` |
 | `internal/config/adapters/parameters.go` | the prod SSM tree reader: paged, prefix-stripped, String-only |
 | `internal/config/adapters/secrets_manager.go` | the prod secrets blob reader: JSON-object contract |
-| `internal/config/factories/config_factory.go` | the `Source` contract and the flick wiring |
-| `internal/config/factories/dev_source.go` | the dev merge: file under env |
-| `internal/config/factories/prod_source.go` | the prod merge: blob + SSM with the disjointness check |
+| `internal/config/planes/source.go` | the `Source` plane contract |
+| `internal/config/planes/dev_source.go` | the dev merge: file under env |
+| `internal/config/planes/prod_source.go` | the prod merge: blob + SSM with the disjointness check |
+| `internal/config/factories/config_factory.go` | the flick wiring: the `ENV_TYPE` selection and each plane's adapter construction |
 | `internal/config/factories/aws_client_factory.go` | region/endpoint decided once; clients stay method-local |
 
 ## Settled decisions
 
 - **Go-native naming over the Python model's**: `Source` (not ConfigProvider), `DevSource`/`ProdSource` (not the dev/prod config classes), `Config` + `Resolve` (not Settings/from_provider) — recorded so nobody re-imports the Provider vocabulary; "plane" stays the prose word for both services' docs.
+- **Planes own a package**: `Source` plus both plane sources declare in `internal/config/planes`; the Python model keeps them at the config root, but Go needs the boundary because the root owns `Load` and the factories must import the contract inward. Plane sources take their adapters (`NewDevSource` the `DotEnvAdapter`, `NewProdSource` the two AWS readers) — adapters parse, sources merge.
 - **Consume-first**: fields exist only when runtime reads them; seeded keys without fields ride along ignored, so future fields return with their consumers.
 - **The flick is strict**: unset and unknown values fail the boot (delta over the model's warn-to-dev, since a mis-flicked instance must never serve).
 - **One error vocabulary at the `Load` boundary**: factories/adapters return plain descriptive errors and never values; `Load` wraps once into `ConfigError` (`Unwrap` readable).

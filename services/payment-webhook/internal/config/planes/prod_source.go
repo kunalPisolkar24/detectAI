@@ -1,4 +1,4 @@
-package factories
+package planes
 
 import (
 	"fmt"
