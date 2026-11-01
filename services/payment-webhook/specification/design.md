@@ -4,18 +4,27 @@ Module layout, runtime model, and the decisions behind them. Requirements live i
 
 ## Module layout
 
-The build starts flat — `go run .` is the whole runtime:
+`go run ./cmd/api` is the whole runtime:
 
 ```
 services/payment-webhook/
   go.mod
-  main.go         # boot (PORT, default 8080), gin engine, the two probes, drain on SIGINT/SIGTERM
-  Makefile        # default goal run; help aggregates the per-file help targets
+  cmd/
+    api/
+      main.go       # boot (PORT, default 8080), server, drain on SIGINT/SIGTERM
+  internal/
+    router/
+      router.go     # gin engine: root probes, the /api/v1 route group
+    handlers/
+      probes.go     # /health, /ready — static bodies
+      webhook.go    # POST /api/v1/webhook/paddle — static 200 {"status":"queued"}
+      events.go     # POST /api/v1/internal/events — static 200 {"status":"queued"}
+  Makefile          # default goal run; help aggregates the per-file help targets
   mk/
-    local.mk      # local-dev verbs: tidy, test, vet, run
+    local.mk        # local-dev verbs: tidy, test, vet, run
 ```
 
-Everything is `package main` in one file; the skeleton serves exactly `/health` and `/ready` and owns no middleware beyond gin's built-in logger/recovery. Growth is mechanical — split **files** before folders as real features land (`handlers.go`, `config.go`, `publisher.go`, `validator.go`, all still `package main` at the root), and move code under `cmd/` + `internal/` only when a boundary genuinely earns the folder: the SQS publisher and the Paddle validator are the first such strangers.
+The skeleton serves the full route surface with static bodies: the two POST handlers answer the contract envelope without validation or enqueue — placeholders until the Paddle validator and SQS publisher builds land, when the handlers mount their `Validator`/`Publisher` deps, wired at boot. Middleware stays gin's built-in logger/recovery (otelgin joins with the observability build). Growth continues file-first within the standing `cmd/` + `internal/` layout: config, validators, and the publisher grow as files, and the SQS publisher adapter and the Paddle validator adapter remain the first code to earn their own folders.
 
 One of each kind still applies when that split happens. The pre-refactor tree carried parallel layers from stacked iterations — `internal/transport/http` alongside `internal/adapters/inbound/http`, `internal/infrastructure/rabbitmq` alongside `internal/adapters/outbound/rabbitmq`, three observability homes. The rebuild collapses to one layer of each that the repo's clean-architecture rule names, with no interface growth beyond the domain ports, and no `ports/messaging.go` leaking AMQP primitives into the domain (the pre-refactor `ports/messaging.go` was an AMQP interface file — the domain depended on broker transport-shaped things). Dependency direction is one-way whenever the split exists: SDK/Gin imports stay out of the inner layers, wiring happens at boot.
 

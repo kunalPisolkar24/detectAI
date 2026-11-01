@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/router"
 )
 
 // drainTimeout covers the 5 s publish budget plus slack (NFR-9).
@@ -23,18 +23,9 @@ func main() {
 		port = "8080"
 	}
 
-	r := gin.Default()
-
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
-	r.GET("/ready", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ready"})
-	})
-
 	srv := &http.Server{
 		Addr:    ":" + port,
-		Handler: r,
+		Handler: router.New(),
 	}
 
 	if err := serveAndDrain(srv); err != nil {
