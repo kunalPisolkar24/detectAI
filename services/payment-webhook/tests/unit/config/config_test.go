@@ -1,4 +1,4 @@
-package config
+package config_test
 
 import (
 	"errors"
@@ -6,8 +6,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config"
 )
 
+// mapSource stands in for a plane source over plain key/value entries.
 type mapSource map[string]string
 
 func (m mapSource) Get(key string) (string, bool) {
@@ -18,20 +21,19 @@ func (m mapSource) Get(key string) (string, bool) {
 func TestDeploymentFlick(t *testing.T) {
 	for name, tc := range map[string]struct {
 		value   string
-		set     bool
 		wantErr string
 		wantOwn string
 	}{
 		"unset fails":      {wantErr: "ENV_TYPE is unset"},
-		"empty fails":      {value: "", set: true, wantErr: "ENV_TYPE is unset"},
-		"wrong case fails": {value: "DEV", set: true, wantErr: `ENV_TYPE "DEV" is not a flick`},
-		"unknown fails":    {value: "qa", set: true, wantErr: `ENV_TYPE "qa" is not a flick`},
-		"dev serves":       {value: "dev", set: true, wantOwn: "dev"},
-		"prod serves":      {value: "prod", set: true, wantOwn: "prod"},
+		"empty fails":      {value: "", wantErr: "ENV_TYPE is unset"},
+		"wrong case fails": {value: "DEV", wantErr: `ENV_TYPE "DEV" is not a flick`},
+		"unknown fails":    {value: "qa", wantErr: `ENV_TYPE "qa" is not a flick`},
+		"dev serves":       {value: "dev", wantOwn: "dev"},
+		"prod serves":      {value: "prod", wantOwn: "prod"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("ENV_TYPE", tc.value)
-			flick, err := DeploymentFlick()
+			flick, err := config.DeploymentFlick()
 			if tc.wantOwn != "" {
 				if err != nil || flick != tc.wantOwn {
 					t.Fatalf("DeploymentFlick = %q, %v; want %q", flick, err, tc.wantOwn)
@@ -47,7 +49,7 @@ func TestDeploymentFlick(t *testing.T) {
 
 func TestResolveContracts(t *testing.T) {
 	t.Run("empty source keeps both defaults", func(t *testing.T) {
-		cfg, err := Resolve(mapSource{})
+		cfg, err := config.Resolve(mapSource{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -68,7 +70,7 @@ func TestResolveContracts(t *testing.T) {
 		"spaced zero": "   0 ",
 	} {
 		t.Run("PORT "+caseName+" fails naming the var", func(t *testing.T) {
-			_, err := Resolve(mapSource{"PORT": bad})
+			_, err := config.Resolve(mapSource{"PORT": bad})
 			if err == nil || !strings.Contains(err.Error(), "PORT must be an integer between 1 and 65535") {
 				t.Errorf("err = %v, want the PORT identity failure", err)
 			}
@@ -76,7 +78,7 @@ func TestResolveContracts(t *testing.T) {
 	}
 
 	t.Run("PORT within bounds serves", func(t *testing.T) {
-		cfg, err := Resolve(mapSource{"PORT": "9137"})
+		cfg, err := config.Resolve(mapSource{"PORT": "9137"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -92,7 +94,7 @@ func TestResolveContracts(t *testing.T) {
 		"negative": "-5s",
 	} {
 		t.Run("DRAIN_TIMEOUT "+caseName+" fail-closes", func(t *testing.T) {
-			cfg, err := Resolve(mapSource{"DRAIN_TIMEOUT": bad})
+			cfg, err := config.Resolve(mapSource{"DRAIN_TIMEOUT": bad})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -103,7 +105,7 @@ func TestResolveContracts(t *testing.T) {
 	}
 
 	t.Run("DRAIN_TIMEOUT valid serves", func(t *testing.T) {
-		cfg, err := Resolve(mapSource{"DRAIN_TIMEOUT": "250ms"})
+		cfg, err := config.Resolve(mapSource{"DRAIN_TIMEOUT": "250ms"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -113,7 +115,7 @@ func TestResolveContracts(t *testing.T) {
 	})
 
 	t.Run("unknown plane keys ride along ignored", func(t *testing.T) {
-		cfg, err := Resolve(mapSource{"QUEUE_URL": "https://x/a", "OTEL_SERVICE_NAME": "payment-webhook"})
+		cfg, err := config.Resolve(mapSource{"QUEUE_URL": "https://x/a", "OTEL_SERVICE_NAME": "payment-webhook"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -131,7 +133,7 @@ func TestLoadEndToEnd(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		cfg, err := Load()
+		cfg, err := config.Load()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -145,7 +147,7 @@ func TestLoadEndToEnd(t *testing.T) {
 		t.Setenv("PORT", "9138")
 		t.Chdir(t.TempDir())
 
-		cfg, err := Load()
+		cfg, err := config.Load()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -158,8 +160,8 @@ func TestLoadEndToEnd(t *testing.T) {
 		t.Setenv("ENV_TYPE", "prod")
 		t.Chdir(t.TempDir())
 
-		_, err := Load()
-		var cfgErr *ConfigError
+		_, err := config.Load()
+		var cfgErr *config.ConfigError
 		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "refuses") {
 			t.Errorf("err = %v, want a *ConfigError carrying the prod refusal", err)
 		}
@@ -169,8 +171,8 @@ func TestLoadEndToEnd(t *testing.T) {
 		t.Setenv("ENV_TYPE", "qa")
 		t.Chdir(t.TempDir())
 
-		_, err := Load()
-		var cfgErr *ConfigError
+		_, err := config.Load()
+		var cfgErr *config.ConfigError
 		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "not a flick") {
 			t.Errorf("err = %v, want a *ConfigError carrying the flick failure", err)
 		}
@@ -181,8 +183,8 @@ func TestLoadEndToEnd(t *testing.T) {
 		t.Setenv("PORT", "70000")
 		t.Chdir(t.TempDir())
 
-		_, err := Load()
-		var cfgErr *ConfigError
+		_, err := config.Load()
+		var cfgErr *config.ConfigError
 		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "PORT") {
 			t.Errorf("err = %v, want a *ConfigError naming PORT", err)
 		}

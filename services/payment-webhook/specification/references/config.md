@@ -44,11 +44,13 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 | `internal/config/planes/prod_source.go` | the prod merge: blob + SSM with the disjointness check |
 | `internal/config/factories/config_factory.go` | the flick wiring: the `ENV_TYPE` selection and each plane's adapter construction |
 | `internal/config/factories/aws_client_factory.go` | region/endpoint decided once; clients stay method-local |
+| `tests/unit/config/` | the config tests as one black-box package: the dotenv grammar, the dev merge, the flick wiring, `Resolve`, and `Load` |
 
 ## Settled decisions
 
 - **Go-native naming over the Python model's**: `Source` (not ConfigProvider), `DevSource`/`ProdSource` (not the dev/prod config classes), `Config` + `Resolve` (not Settings/from_provider) — recorded so nobody re-imports the Provider vocabulary; "plane" stays the prose word for both services' docs; the file names followed — `config.go` holds the typed contract and `load.go` the composition root (chats' `internal/config` is the precedent).
 - **Planes own a package**: `Source` plus both plane sources declare in `internal/config/planes`; the Python model keeps them at the config root, but Go needs the boundary because the root owns `Load` and the factories must import the contract inward. Plane sources take their adapters (`NewDevSource` the `DotEnvAdapter`, `NewProdSource` the two AWS readers) — adapters parse, sources merge.
+- **Tests live in the tests tree**: `tests/unit/config` is one black-box `config_test` package exercising the exported API, mirroring document-parser's `tests/unit/config`; nothing lands as in-package `_test.go`, so the sources stay bloat-free and unexported behavior stays out of reach until it earns a seam.
 - **Consume-first**: fields exist only when runtime reads them; seeded keys without fields ride along ignored, so future fields return with their consumers.
 - **The flick is strict**: unset and unknown values fail the boot (delta over the model's warn-to-dev, since a mis-flicked instance must never serve).
 - **One error vocabulary at the `Load` boundary**: factories/adapters return plain descriptive errors and never values; `Load` wraps once into `ConfigError` (`Unwrap` readable).

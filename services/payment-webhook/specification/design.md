@@ -38,6 +38,14 @@ services/payment-webhook/
       probes.go     # /health, /ready — static bodies
       webhook.go    # POST /api/v1/webhook/paddle — static 200 {"status":"queued"}
       events.go     # POST /api/v1/internal/events — static 200 {"status":"queued"}
+  tests/
+    unit/
+      config/                # one black-box config_test package, document-parser's tests-tree layout
+        helpers_test.go        # shared: plane writers, the adapter reader
+        dotenv_test.go         # the dotenv grammar and its path modes
+        dev_source_test.go     # env wins over the file
+        config_factory_test.go # dev wired, prod refuses
+        config_test.go         # the flick, Resolve contracts, Load end-to-end
   Makefile          # default goal run; help aggregates the per-file help targets
   mk/
     local.mk        # local-dev verbs: tidy, test, vet, run

@@ -1,31 +1,16 @@
-package planes
+package config_test
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config/adapters"
+	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config/planes"
 )
 
-func readPlane(t *testing.T, dir, content string) *adapters.DotEnvAdapter {
-	t.Helper()
-	path := filepath.Join(dir, "custom.env")
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	adapter, err := adapters.NewDotEnvAdapter(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return adapter
-}
-
 func TestNewDevSourceEnvWinsOverTheFile(t *testing.T) {
-	dotenv := readPlane(t, t.TempDir(), "PORT=9137\nQA=from-file\n")
+	dotenv := readEnvPlane(t, t.TempDir(), "PORT=9137\nQA=from-file\n")
 	environ := []string{"PORT=1001", "EXTRA=x"}
 
-	src, err := NewDevSource(dotenv, environ)
+	src, err := planes.NewDevSource(dotenv, environ)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,10 +29,10 @@ func TestNewDevSourceEnvWinsOverTheFile(t *testing.T) {
 }
 
 func TestNewDevSourceSkipsEnvironEntriesWithoutAKey(t *testing.T) {
-	dotenv := readPlane(t, t.TempDir(), "")
+	dotenv := readEnvPlane(t, t.TempDir(), "")
 	environ := []string{"NOEQUALS", "=novalue", "PORT=1001"}
 
-	src, err := NewDevSource(dotenv, environ)
+	src, err := planes.NewDevSource(dotenv, environ)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,10 +45,10 @@ func TestNewDevSourceSkipsEnvironEntriesWithoutAKey(t *testing.T) {
 }
 
 func TestNewDevSourceEmptyEnvValueWinsAsEmpty(t *testing.T) {
-	dotenv := readPlane(t, t.TempDir(), "PORT=9137\n")
+	dotenv := readEnvPlane(t, t.TempDir(), "PORT=9137\n")
 	environ := []string{"PORT="}
 
-	src, err := NewDevSource(dotenv, environ)
+	src, err := planes.NewDevSource(dotenv, environ)
 	if err != nil {
 		t.Fatal(err)
 	}

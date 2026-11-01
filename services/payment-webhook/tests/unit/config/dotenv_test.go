@@ -1,20 +1,12 @@
-package adapters
+package config_test
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-)
 
-func writePlane(t *testing.T, dir, name, content string) string {
-	t.Helper()
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
+	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config/adapters"
+)
 
 func TestNewDotEnvAdapterParsesThePlane(t *testing.T) {
 	dir := t.TempDir()
@@ -28,7 +20,7 @@ DROPPED=
 PORT=9138
 `)
 
-	adapter, err := NewDotEnvAdapter(path)
+	adapter, err := adapters.NewDotEnvAdapter(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +42,7 @@ PORT=9138
 func TestNewDotEnvAdapterMissingDefaultIsEmptyPlane(t *testing.T) {
 	t.Chdir(t.TempDir())
 
-	adapter, err := NewDotEnvAdapter("")
+	adapter, err := adapters.NewDotEnvAdapter("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +56,7 @@ func TestNewDotEnvAdapterReadsTheDefaultPathFromTheWorkingDirectory(t *testing.T
 	writePlane(t, dir, ".env", "PORT=9137\n")
 	t.Chdir(dir)
 
-	adapter, err := NewDotEnvAdapter("")
+	adapter, err := adapters.NewDotEnvAdapter("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +68,7 @@ func TestNewDotEnvAdapterReadsTheDefaultPathFromTheWorkingDirectory(t *testing.T
 func TestNewDotEnvAdapterMissingExplicitPathFails(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nope.env")
 
-	_, err := NewDotEnvAdapter(path)
+	_, err := adapters.NewDotEnvAdapter(path)
 	if err == nil || !strings.Contains(err.Error(), "make env") {
 		t.Errorf("err = %v, want an error naming the path and the make env fix", err)
 	}
@@ -85,7 +77,7 @@ func TestNewDotEnvAdapterMissingExplicitPathFails(t *testing.T) {
 func TestNewDotEnvAdapterMalformedPlaneFails(t *testing.T) {
 	path := writePlane(t, t.TempDir(), "custom.env", "PORT=8080\ngarbage\n")
 
-	_, err := NewDotEnvAdapter(path)
+	_, err := adapters.NewDotEnvAdapter(path)
 	if err == nil || !strings.Contains(err.Error(), "line 2") {
 		t.Errorf("err = %v, want an error naming line 2", err)
 	}
