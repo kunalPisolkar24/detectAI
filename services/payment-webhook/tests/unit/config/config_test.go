@@ -12,6 +12,7 @@ import (
 )
 
 const testAPIKey = "change-me-min-16-chars"
+const testPaddleSecret = "paddle-change-me-16-chars"
 
 // mapSource stands in for a plane source over plain key/value entries.
 type mapSource map[string]string
@@ -21,10 +22,10 @@ func (m mapSource) Get(key string) (string, bool) {
 	return value, ok
 }
 
-// withkey merges the mandatory API_KEY over extra so each field contract case
-// carries one failure point.
+// withkey merges the mandatory credentials over extra so each field contract
+// case carries one failure point.
 func withkey(extra map[string]string) mapSource {
-	source := mapSource{"API_KEY": testAPIKey}
+	source := mapSource{"API_KEY": testAPIKey, "PADDLE_WEBHOOK_SECRET": testPaddleSecret}
 	for key, value := range extra {
 		source[key] = value
 	}
@@ -61,7 +62,7 @@ func TestDeploymentFlick(t *testing.T) {
 }
 
 func TestResolveContracts(t *testing.T) {
-	t.Run("source with only the key keeps defaults", func(t *testing.T) {
+	t.Run("source with only the keys keeps defaults", func(t *testing.T) {
 		cfg, err := config.Resolve(withkey(nil))
 		if err != nil {
 			t.Fatal(err)
@@ -74,6 +75,12 @@ func TestResolveContracts(t *testing.T) {
 		}
 		if cfg.APIKey != testAPIKey {
 			t.Errorf("APIKey = %q, want the plane value", cfg.APIKey)
+		}
+		if cfg.PaddleSecret != testPaddleSecret {
+			t.Errorf("PaddleSecret = %q, want the plane value", cfg.PaddleSecret)
+		}
+		if cfg.MaxBodyBytes != 1<<20 {
+			t.Errorf("MaxBodyBytes = %d, want the 1 MiB default", cfg.MaxBodyBytes)
 		}
 	})
 
@@ -130,24 +137,87 @@ func TestResolveContracts(t *testing.T) {
 		}
 	})
 
+	// Each mandatory credential is dropped or blanked one at a time: the other
+	// stays valid, so the failure always points at exactly one var.
+	for _, key := range []string{"API_KEY", "PADDLE_WEBHOOK_SECRET"} {
+		for caseName, bad := range map[string]string{
+			"missing": "",
+			"blank":   "   ",
+		} {
+			t.Run(key+" "+caseName+" fails without echo", func(t *testing.T) {
+				source := withkey(nil)
+				delete(source, key)
+				if caseName == "blank" {
+					source[key] = bad
+				}
+				_, err := config.Resolve(source)
+				if err == nil || !strings.Contains(err.Error(), key+" is mandatory in every plane") {
+					t.Errorf("err = %v, want the mandatory-secret failure", err)
+				}
+				if err != nil && bad != "" && strings.Contains(err.Error(), bad) {
+					t.Errorf("err = %v; the attempted secret must never be echoed", err)
+				}
+			})
+		}
+	}
+
+	t.Run("API_KEY shorter than 16 characters fails", func(t *testing.T) {
+		_, err := config.Resolve(withkey(map[string]string{"API_KEY": "0123456789abcde"}))
+		if err == nil || !strings.Contains(err.Error(), "API_KEY must be at least 16 characters") {
+			t.Errorf("err = %v, want the minimum-length failure", err)
+		}
+		if err != nil && strings.Contains(err.Error(), "0123456789abcde") {
+			t.Errorf("err = %v; the attempted secret must never be echoed", err)
+		}
+	})
+	t.Run("PADDLE_WEBHOOK_SECRET shorter than 16 characters fails", func(t *testing.T) {
+		_, err := config.Resolve(withkey(map[string]string{"PADDLE_WEBHOOK_SECRET": "0123456789abcde"}))
+		if err == nil || !strings.Contains(err.Error(), "PADDLE_WEBHOOK_SECRET must be at least 16 characters") {
+			t.Errorf("err = %v, want the minimum-length failure", err)
+		}
+	})
+	t.Run("short credentials serve at exactly 16 characters, trimmed", func(t *testing.T) {
+		cfg, err := config.Resolve(withkey(map[string]string{
+			"API_KEY":               " xq3wq8ne7an349er ",
+			"PADDLE_WEBHOOK_SECRET": " abcdef0123456789 ",
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.APIKey != "xq3wq8ne7an349er" {
+			t.Errorf("APIKey = %q, want the trimmed 16-character value", cfg.APIKey)
+		}
+		if cfg.PaddleSecret != "abcdef0123456789" {
+			t.Errorf("PaddleSecret = %q, want the trimmed 16-character value", cfg.PaddleSecret)
+		}
+	})
+
 	for caseName, bad := range map[string]string{
-		"missing": "",
-		"blank":   "   ",
+		"garbage":  "big",
+		"blank":    "  ",
+		"zero":     "0",
+		"negative": "-1",
 	} {
-		t.Run("API_KEY "+caseName+" fails without echo", func(t *testing.T) {
-			source := mapSource{}
-			if caseName == "blank" {
-				source["API_KEY"] = bad
+		t.Run("MAX_BODY_BYTES "+caseName+" fail-closes to 1 MiB", func(t *testing.T) {
+			cfg, err := config.Resolve(withkey(map[string]string{"MAX_BODY_BYTES": bad}))
+			if err != nil {
+				t.Fatal(err)
 			}
-			_, err := config.Resolve(source)
-			if err == nil || !strings.Contains(err.Error(), "API_KEY is mandatory in every plane") {
-				t.Errorf("err = %v, want the mandatory-secret failure", err)
-			}
-			if err != nil && strings.Contains(err.Error(), bad) && bad != "" {
-				t.Errorf("err = %v; the attempted secret must never be echoed", err)
+			if cfg.MaxBodyBytes != 1<<20 {
+				t.Errorf("MaxBodyBytes = %d, want the fail-closed 1 MiB default", cfg.MaxBodyBytes)
 			}
 		})
 	}
+
+	t.Run("MAX_BODY_BYTES valid serves", func(t *testing.T) {
+		cfg, err := config.Resolve(withkey(map[string]string{"MAX_BODY_BYTES": "2048"}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.MaxBodyBytes != 2048 {
+			t.Errorf("MaxBodyBytes = %d, want 2048", cfg.MaxBodyBytes)
+		}
+	})
 
 	t.Run("unknown plane keys ride along ignored", func(t *testing.T) {
 		cfg, err := config.Resolve(withkey(map[string]string{"QUEUE_URL": "https://x/a", "OTEL_SERVICE_NAME": "payment-webhook"}))
@@ -173,12 +243,19 @@ func TestLoadEndToEnd(t *testing.T) {
 		if cfg.Port != 9137 || cfg.DrainTimeout != 250*time.Millisecond || cfg.APIKey != testAPIKey {
 			t.Errorf("cfg = %+v, want Port 9137, DrainTimeout 250ms, and the shared key from infra/.env", cfg)
 		}
+		if cfg.PaddleSecret != testPaddleSecret {
+			t.Errorf("PaddleSecret = %q, want the plane value from infra/.env", cfg.PaddleSecret)
+		}
+		if cfg.MaxBodyBytes != 2048 {
+			t.Errorf("MaxBodyBytes = %d, want 2048 from the file plane", cfg.MaxBodyBytes)
+		}
 	})
 
 	t.Run("dev boots env-only when the file plane is absent", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "dev")
 		t.Setenv("PORT", "9138")
 		t.Setenv("API_KEY", testAPIKey)
+		t.Setenv("PADDLE_WEBHOOK_SECRET", testPaddleSecret)
 		t.Chdir(t.TempDir())
 
 		cfg, err := config.Load()
@@ -187,6 +264,9 @@ func TestLoadEndToEnd(t *testing.T) {
 		}
 		if cfg.Port != 9138 || cfg.DrainTimeout != 10*time.Second || cfg.APIKey != testAPIKey {
 			t.Errorf("cfg = %+v, want Port 9138, the 10s default, and the key from the environment", cfg)
+		}
+		if cfg.PaddleSecret != testPaddleSecret || cfg.MaxBodyBytes != 1<<20 {
+			t.Errorf("cfg = %+v, want the plane paddle secret and the 1 MiB bound default", cfg)
 		}
 	})
 
@@ -245,7 +325,9 @@ func writeEnvPlane(t *testing.T) {
 	if err := os.MkdirAll("infra", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join("infra", ".env"), []byte("PORT=9137\nDRAIN_TIMEOUT=250ms\nAPI_KEY="+testAPIKey+"\n"), 0o600); err != nil {
+	plane := "PORT=9137\nDRAIN_TIMEOUT=250ms\nAPI_KEY=" + testAPIKey +
+		"\nPADDLE_WEBHOOK_SECRET=" + testPaddleSecret + "\nMAX_BODY_BYTES=2048\n"
+	if err := os.WriteFile(filepath.Join("infra", ".env"), []byte(plane), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

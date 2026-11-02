@@ -16,7 +16,11 @@ const sharedKey = "change-me-min-16-chars"
 func newEngine(t *testing.T) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	return router.New(config.Config{APIKey: sharedKey})
+	return router.New(config.Config{
+		APIKey:       sharedKey,
+		PaddleSecret: sharedKey,
+		MaxBodyBytes: 1 << 20,
+	})
 }
 
 func postInternal(t *testing.T, key string) *httptest.ResponseRecorder {
@@ -63,12 +67,17 @@ func TestInternalEventServesWithTheSharedKey(t *testing.T) {
 	}
 }
 
-func TestPaddleFaceCarriesNoAPIKeyGuard(t *testing.T) {
+func TestPaddleFaceRequiresAValidSignature(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhook/paddle", nil)
 	w := httptest.NewRecorder()
 	newEngine(t).ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200; the paddle face owns signature validation later, no API key guard",
-			w.Code)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401 from the signature guard, not a framework default", w.Code)
+	}
+	if body := w.Body.String(); body != `{"error":"unauthorized"}` {
+		t.Errorf("body = %q, want the generic unauthorized envelope", body)
+	}
+	if header := w.Header().Get("WWW-Authenticate"); header != "" {
+		t.Errorf("WWW-Authenticate = %q, want absent", header)
 	}
 }

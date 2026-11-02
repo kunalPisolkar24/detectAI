@@ -6,7 +6,7 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 
 ## Source model
 
-`Config` is the single typed contract — today the three consumed fields (`Port`, `DrainTimeout`, `API_KEY`); the Paddle secret, `QUEUE_URL`, the bounds, and the OTel keys land with their consuming builds (consume-first: fields exist only when runtime code reads them; plane keys without a field are ignored). *Where values come from* is selected once at boot by the `ENV_TYPE` flick and composed through the factories:
+`Config` is the single typed contract — today the five consumed fields (`Port`, `DrainTimeout`, `API_KEY`, `PADDLE_WEBHOOK_SECRET`, `MAX_BODY_BYTES`); the `QUEUE_URL`, the publish budget, and the OTel keys land with their consuming builds (consume-first: fields exist only when runtime code reads them; plane keys without a field are ignored). *Where values come from* is selected once at boot by the `ENV_TYPE` flick and composed through the factories:
 
 - **dev** (flick `dev`): `DevSource` — the process environment over the parsed `infra/.env`. Env wins because a container ships no dotenv file and receives its values injected (compose `env_file`); locally the file is the baseline and an export still overrides it.
 - **prod** (flick `prod`): `ProdSource` — **AWS exact**. The secrets blob fills first and the prefix-stripped SSM tree completes the plane; process env and dotenv never reach this path, so a stray variable cannot leak a value in. The two AWS planes are disjoint by seeding contract, and the merge enforces it: a case-insensitive key collision fails the boot loud.
@@ -24,7 +24,9 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 | dev: blank `KEY=` entry in the file | dropped — an empty value can never win over the default |
 | dev: extra file keys | ignored (consume-first) |
 | `PORT` garbage or outside 1–65535 | **boot fails** naming the var — identity, not a bound; absent falls back to 8080 |
-| `API_KEY` missing or blank in any plane | **boot fails** naming the var — mandatory in every environment (FR-3); the attempted secret is never echoed |
+| `API_KEY` / `PADDLE_WEBHOOK_SECRET` missing or blank in any plane | **boot fails** naming the var — mandatory in every environment (FR-3, FR-1); the attempted secret is never echoed |
+| either credential shorter than 16 characters | **boot fails** naming the var and the floor; values trim before the length check, and the trimmed value is what the plane serves |
+| `MAX_BODY_BYTES` unreadable or non-positive | fail closed to the 1 MiB bound (NFR-4), never fail the boot |
 | `DRAIN_TIMEOUT` missing, blank, unreadable, or ≤ 0 | fail closed to 10 s — the publish budget + slack number (NFR-9); the publisher build re-checks the default once the budget becomes a setting |
 | prod: key seeded in both the blob and SSM | **boot fails** — disjoint by seeding contract; remove the duplicates and re-apply |
 | prod: fetch failure, access denied, or bad blob shape | **boot fails** naming the stack and the fix |
