@@ -41,7 +41,7 @@ Why FIFO, given the constraint that decided it: **the worker is out of scope and
 | Visibility timeout | 300 s on the main queue | — | Terraform |
 | Retention | 14 days, both queues | — | Terraform |
 
-The service knows exactly one queue parameter: `QUEUE_URL`, mandatory, fail-fast at boot. Queue creation, redrive, alarms live in IaC — never service runtime state. Local runs point `QUEUE_URL` at LocalStack or any real SQS endpoint; there is no topology code on the app side to dry-run.
+The service knows exactly one queue parameter: `QUEUE_URL`, mandatory, fail-fast at boot. Queue creation, redrive, alarms live in IaC — never service runtime state. Local runs point `QUEUE_URL` at the Floci emulator or any real SQS endpoint; there is no topology code on the app side to dry-run.
 
 ## Message shape
 

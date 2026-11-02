@@ -222,10 +222,10 @@ func TestResolveContracts(t *testing.T) {
 		}
 	})
 
-	t.Run("QUEUE_URL serves for real and LocalStack shapes", func(t *testing.T) {
+	t.Run("QUEUE_URL serves for real and Floci emulator shapes", func(t *testing.T) {
 		for name, queueURL := range map[string]string{
 			"prod shape":  "https://sqs.eu-central-1.amazonaws.com/123456789012/payment_events.fifo",
-			"local shape": "http://localhost:4566/000000000000/payment_events.fifo",
+			"Floci shape": "http://localhost:4566/000000000000/payment_events.fifo",
 		} {
 			t.Run(name, func(t *testing.T) {
 				cfg, err := config.Resolve(withkey(map[string]string{"QUEUE_URL": queueURL}))

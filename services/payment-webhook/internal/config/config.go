@@ -98,8 +98,8 @@ func Resolve(source Source) (Config, error) {
 }
 
 // sqsURL validates the QUEUE_URL grammar: http(s), a host, and at least a
-// two-segment path (<account>/<queue name>). Real SQS and LocalStack endpoints
-// both qualify, so local runs and prod answer the same check. QUEUE_URL is
+// two-segment path (<account>/<queue name>). Real SQS and Floci (emulator)
+// endpoints both qualify, so local runs and prod answer the same check. QUEUE_URL is
 // mandatory: an empty or malformed URL fails the boot naming the var.
 func sqsURL(raw string) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
