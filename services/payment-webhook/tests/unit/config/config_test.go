@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,12 +11,24 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config"
 )
 
+const testAPIKey = "change-me-min-16-chars"
+
 // mapSource stands in for a plane source over plain key/value entries.
 type mapSource map[string]string
 
 func (m mapSource) Get(key string) (string, bool) {
 	value, ok := m[key]
 	return value, ok
+}
+
+// withkey merges the mandatory API_KEY over extra so each field contract case
+// carries one failure point.
+func withkey(extra map[string]string) mapSource {
+	source := mapSource{"API_KEY": testAPIKey}
+	for key, value := range extra {
+		source[key] = value
+	}
+	return source
 }
 
 func TestDeploymentFlick(t *testing.T) {
@@ -48,8 +61,8 @@ func TestDeploymentFlick(t *testing.T) {
 }
 
 func TestResolveContracts(t *testing.T) {
-	t.Run("empty source keeps both defaults", func(t *testing.T) {
-		cfg, err := config.Resolve(mapSource{})
+	t.Run("source with only the key keeps defaults", func(t *testing.T) {
+		cfg, err := config.Resolve(withkey(nil))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,6 +71,9 @@ func TestResolveContracts(t *testing.T) {
 		}
 		if cfg.DrainTimeout != 10*time.Second {
 			t.Errorf("DrainTimeout = %v, want the budget default 10s", cfg.DrainTimeout)
+		}
+		if cfg.APIKey != testAPIKey {
+			t.Errorf("APIKey = %q, want the plane value", cfg.APIKey)
 		}
 	})
 
@@ -70,7 +86,7 @@ func TestResolveContracts(t *testing.T) {
 		"spaced zero": "   0 ",
 	} {
 		t.Run("PORT "+caseName+" fails naming the var", func(t *testing.T) {
-			_, err := config.Resolve(mapSource{"PORT": bad})
+			_, err := config.Resolve(withkey(map[string]string{"PORT": bad}))
 			if err == nil || !strings.Contains(err.Error(), "PORT must be an integer between 1 and 65535") {
 				t.Errorf("err = %v, want the PORT identity failure", err)
 			}
@@ -78,7 +94,7 @@ func TestResolveContracts(t *testing.T) {
 	}
 
 	t.Run("PORT within bounds serves", func(t *testing.T) {
-		cfg, err := config.Resolve(mapSource{"PORT": "9137"})
+		cfg, err := config.Resolve(withkey(map[string]string{"PORT": "9137"}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +110,7 @@ func TestResolveContracts(t *testing.T) {
 		"negative": "-5s",
 	} {
 		t.Run("DRAIN_TIMEOUT "+caseName+" fail-closes", func(t *testing.T) {
-			cfg, err := config.Resolve(mapSource{"DRAIN_TIMEOUT": bad})
+			cfg, err := config.Resolve(withkey(map[string]string{"DRAIN_TIMEOUT": bad}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -105,7 +121,7 @@ func TestResolveContracts(t *testing.T) {
 	}
 
 	t.Run("DRAIN_TIMEOUT valid serves", func(t *testing.T) {
-		cfg, err := config.Resolve(mapSource{"DRAIN_TIMEOUT": "250ms"})
+		cfg, err := config.Resolve(withkey(map[string]string{"DRAIN_TIMEOUT": "250ms"}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -114,8 +130,27 @@ func TestResolveContracts(t *testing.T) {
 		}
 	})
 
+	for caseName, bad := range map[string]string{
+		"missing": "",
+		"blank":   "   ",
+	} {
+		t.Run("API_KEY "+caseName+" fails without echo", func(t *testing.T) {
+			source := mapSource{}
+			if caseName == "blank" {
+				source["API_KEY"] = bad
+			}
+			_, err := config.Resolve(source)
+			if err == nil || !strings.Contains(err.Error(), "API_KEY is mandatory in every plane") {
+				t.Errorf("err = %v, want the mandatory-secret failure", err)
+			}
+			if err != nil && strings.Contains(err.Error(), bad) && bad != "" {
+				t.Errorf("err = %v; the attempted secret must never be echoed", err)
+			}
+		})
+	}
+
 	t.Run("unknown plane keys ride along ignored", func(t *testing.T) {
-		cfg, err := config.Resolve(mapSource{"QUEUE_URL": "https://x/a", "OTEL_SERVICE_NAME": "payment-webhook"})
+		cfg, err := config.Resolve(withkey(map[string]string{"QUEUE_URL": "https://x/a", "OTEL_SERVICE_NAME": "payment-webhook"}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -129,33 +164,46 @@ func TestLoadEndToEnd(t *testing.T) {
 	t.Run("dev boots on the file plane", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "dev")
 		t.Chdir(t.TempDir())
-		writePlane(t, ".", filepath.Join("infra", ".env"), "PORT=9137\nDRAIN_TIMEOUT=250ms\n")
+		writeEnvPlane(t)
 
 		cfg, err := config.Load()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if cfg.Port != 9137 || cfg.DrainTimeout != 250*time.Millisecond {
-			t.Errorf("cfg = %+v, want Port 9137 and DrainTimeout 250ms from .env", cfg)
+		if cfg.Port != 9137 || cfg.DrainTimeout != 250*time.Millisecond || cfg.APIKey != testAPIKey {
+			t.Errorf("cfg = %+v, want Port 9137, DrainTimeout 250ms, and the shared key from infra/.env", cfg)
 		}
 	})
 
 	t.Run("dev boots env-only when the file plane is absent", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "dev")
 		t.Setenv("PORT", "9138")
+		t.Setenv("API_KEY", testAPIKey)
 		t.Chdir(t.TempDir())
 
 		cfg, err := config.Load()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if cfg.Port != 9138 || cfg.DrainTimeout != 10*time.Second {
-			t.Errorf("cfg = %+v, want Port 9138 from the environment and the 10s default", cfg)
+		if cfg.Port != 9138 || cfg.DrainTimeout != 10*time.Second || cfg.APIKey != testAPIKey {
+			t.Errorf("cfg = %+v, want Port 9138, the 10s default, and the key from the environment", cfg)
+		}
+	})
+
+	t.Run("missing API_KEY fails wrapped without echo", func(t *testing.T) {
+		t.Setenv("ENV_TYPE", "dev")
+		t.Chdir(t.TempDir())
+
+		_, err := config.Load()
+		var cfgErr *config.ConfigError
+		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "API_KEY is mandatory") {
+			t.Errorf("err = %v, want a *ConfigError naming the mandatory secret", err)
 		}
 	})
 
 	t.Run("prod flick refuses wrapped once", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "prod")
+		t.Setenv("API_KEY", testAPIKey)
 		t.Chdir(t.TempDir())
 
 		_, err := config.Load()
@@ -167,6 +215,7 @@ func TestLoadEndToEnd(t *testing.T) {
 
 	t.Run("unknown flick refuses wrapped once", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "qa")
+		t.Setenv("API_KEY", testAPIKey)
 		t.Chdir(t.TempDir())
 
 		_, err := config.Load()
@@ -179,6 +228,7 @@ func TestLoadEndToEnd(t *testing.T) {
 	t.Run("port identity failure crosses the boundary typed", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "dev")
 		t.Setenv("PORT", "70000")
+		t.Setenv("API_KEY", testAPIKey)
 		t.Chdir(t.TempDir())
 
 		_, err := config.Load()
@@ -187,4 +237,15 @@ func TestLoadEndToEnd(t *testing.T) {
 			t.Errorf("err = %v, want a *ConfigError naming PORT", err)
 		}
 	})
+}
+
+// writeEnvPlane seeds the default infra/.env under the current directory.
+func writeEnvPlane(t *testing.T) {
+	t.Helper()
+	if err := os.MkdirAll("infra", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("infra", ".env"), []byte("PORT=9137\nDRAIN_TIMEOUT=250ms\nAPI_KEY="+testAPIKey+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }

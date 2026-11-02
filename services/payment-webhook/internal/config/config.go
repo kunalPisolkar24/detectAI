@@ -13,6 +13,7 @@ import (
 type Config struct {
 	Port         int
 	DrainTimeout time.Duration
+	APIKey       string
 }
 
 // The field defaults: the identity port and the drain budget — the 5 s publish
@@ -26,7 +27,9 @@ const (
 // its env name, and the field's own contract owns its failure behavior. PORT is
 // identity — garbage or outside 1–65535 fails the boot naming the var — while
 // DRAIN_TIMEOUT fail-closes: missing, blank, unreadable, or ≤ 0 keeps the budget
-// default so a bad timeout can never shorten the drain.
+// default so a bad timeout can never shorten the drain. API_KEY is mandatory in
+// every plane: missing or blank fails the boot, and the attempted secret is
+// never echoed in the failure (NFR-8).
 func Resolve(source Source) (Config, error) {
 	cfg := Config{Port: defaultPort, DrainTimeout: defaultDrain}
 	if raw, ok := source.Get("PORT"); ok {
@@ -42,5 +45,10 @@ func Resolve(source Source) (Config, error) {
 			cfg.DrainTimeout = drain
 		}
 	}
+	key, ok := source.Get("API_KEY")
+	if !ok || strings.TrimSpace(key) == "" {
+		return Config{}, fmt.Errorf("config: API_KEY is mandatory in every plane; export the shared secret before the boot")
+	}
+	cfg.APIKey = key
 	return cfg, nil
 }

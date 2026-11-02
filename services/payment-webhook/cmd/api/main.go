@@ -18,7 +18,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:    ":" + strconv.Itoa(cfg.Port),
-		Handler: router.New(),
+		Handler: router.New(cfg),
 	}
 
 	if err := server.Run(srv, cfg.DrainTimeout); err != nil {

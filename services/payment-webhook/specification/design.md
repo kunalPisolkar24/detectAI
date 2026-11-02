@@ -18,7 +18,7 @@ services/payment-webhook/
       shutdown.go   # drain within the configured budget, drain logged
     config/
       load.go       # Load: flick → factory → Resolve, wrapped once into ConfigError
-      config.go     # Config{Port, DrainTimeout} + Resolve — parsed per field
+      config.go     # Config{Port, DrainTimeout, APIKey} + Resolve — parsed per field
       interfaces.go # contracts hub: the Source plane contract
       errors.go     # the Load-boundary ConfigError wrapper
       adapters/
@@ -34,6 +34,7 @@ services/payment-webhook/
         aws_client_factory.go  # bootstrap clients — skeleton (AWS build)
     router/
       router.go     # gin engine: root probes, the /api/v1 route group
+      middleware.go # RequireAPIKey: the shared x-api-key guard for the internal face
     handlers/
       probes.go     # /health, /ready — static bodies
       webhook.go    # POST /api/v1/webhook/paddle — static 200 {"status":"queued"}
@@ -46,6 +47,8 @@ services/payment-webhook/
         dev_source_test.go     # env wins over the file
         config_factory_test.go # dev wired, prod refuses
         config_test.go         # the flick, Resolve contracts, Load end-to-end
+      router/                  # the x-api-key guard, black-box
+        router_test.go         # identical 401s, the shared key serves, the paddle face stays open
   Makefile          # default goal run; help aggregates the per-file help targets
   mk/
     local.mk       # local-dev verbs: tidy, vet, env, run
