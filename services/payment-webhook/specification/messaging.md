@@ -74,7 +74,7 @@ Sequence:
 3. **`event_type`** when neither id resolves → per-type ordering; same-kind events still never interleave.
 4. **`default`** when the body parses to nothing usable; dedup falls back to content-based.
 
-The alias list lives in one place (`ParseEvent` in the domain) and is unit-tested against each source's real payload shape ([design.md](design.md)'s test plan). Unknown types with addressable ids still group correctly.
+The alias list lives in one place (`ParseEvent` in `internal/queue`) and is unit-tested against each source's real payload shape ([design.md](design.md)'s test plan). Unknown types with addressable ids still group correctly.
 
 Two consequences worth naming:
 

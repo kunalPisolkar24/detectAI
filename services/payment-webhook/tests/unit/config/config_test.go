@@ -13,6 +13,7 @@ import (
 
 const testAPIKey = "change-me-min-16-chars"
 const testPaddleSecret = "paddle-change-me-16-chars"
+const testQueueURL = "https://sqs.eu-central-1.amazonaws.com/123456789012/payment_events.fifo"
 
 // mapSource stands in for a plane source over plain key/value entries.
 type mapSource map[string]string
@@ -25,7 +26,7 @@ func (m mapSource) Get(key string) (string, bool) {
 // withkey merges the mandatory credentials over extra so each field contract
 // case carries one failure point.
 func withkey(extra map[string]string) mapSource {
-	source := mapSource{"API_KEY": testAPIKey, "PADDLE_WEBHOOK_SECRET": testPaddleSecret}
+	source := mapSource{"API_KEY": testAPIKey, "PADDLE_WEBHOOK_SECRET": testPaddleSecret, "QUEUE_URL": testQueueURL}
 	for key, value := range extra {
 		source[key] = value
 	}
@@ -128,12 +129,14 @@ func TestResolveContracts(t *testing.T) {
 	}
 
 	t.Run("DRAIN_TIMEOUT valid serves", func(t *testing.T) {
-		cfg, err := config.Resolve(withkey(map[string]string{"DRAIN_TIMEOUT": "250ms"}))
+		// 12 s clears the clamp floor (budget 5 s + 5 s slack) while proving
+		// the plane read still edges out the default.
+		cfg, err := config.Resolve(withkey(map[string]string{"DRAIN_TIMEOUT": "12s"}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if cfg.DrainTimeout != 250*time.Millisecond {
-			t.Errorf("DrainTimeout = %v, want 250ms", cfg.DrainTimeout)
+		if cfg.DrainTimeout != 12*time.Second {
+			t.Errorf("DrainTimeout = %v, want 12s", cfg.DrainTimeout)
 		}
 	})
 
@@ -219,8 +222,79 @@ func TestResolveContracts(t *testing.T) {
 		}
 	})
 
+	t.Run("QUEUE_URL serves for real and LocalStack shapes", func(t *testing.T) {
+		for name, queueURL := range map[string]string{
+			"prod shape":  "https://sqs.eu-central-1.amazonaws.com/123456789012/payment_events.fifo",
+			"local shape": "http://localhost:4566/000000000000/payment_events.fifo",
+		} {
+			t.Run(name, func(t *testing.T) {
+				cfg, err := config.Resolve(withkey(map[string]string{"QUEUE_URL": queueURL}))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if cfg.QueueURL != queueURL {
+					t.Errorf("QueueURL = %q, want %q round-tripped", cfg.QueueURL, queueURL)
+				}
+			})
+		}
+	})
+
+	for caseName, bad := range map[string]string{
+		"missing":      "",
+		"not a url":    "nonsense",
+		"wrong scheme": "ftp://h/account/queue.fifo",
+		"no host":      "https:///account/queue.fifo",
+		"queue-less":   "https://sqs.eu-central-1.amazonaws.com/123456789012",
+	} {
+		t.Run("QUEUE_URL "+caseName+" fails", func(t *testing.T) {
+			_, err := config.Resolve(withkey(map[string]string{"QUEUE_URL": bad}))
+			if err == nil || !strings.Contains(err.Error(), "QUEUE_URL") {
+				t.Errorf("err = %v, want the QUEUE_URL failure", err)
+			}
+		})
+	}
+
+	for caseName, bad := range map[string]string{
+		"garbage":  "junks",
+		"zero":     "0s",
+		"negative": "-5s",
+	} {
+		t.Run("PUBLISH_BUDGET "+caseName+" fail-closes to 5s", func(t *testing.T) {
+			cfg, err := config.Resolve(withkey(map[string]string{"PUBLISH_BUDGET": bad}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.PublishBudget != 5*time.Second {
+				t.Errorf("PublishBudget = %v, want the fail-closed 5s default", cfg.PublishBudget)
+			}
+		})
+	}
+
+	t.Run("PUBLISH_BUDGET valid serves", func(t *testing.T) {
+		cfg, err := config.Resolve(withkey(map[string]string{"PUBLISH_BUDGET": "2s"}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.PublishBudget != 2*time.Second {
+			t.Errorf("PublishBudget = %v, want 2s", cfg.PublishBudget)
+		}
+		if cfg.DrainTimeout != 10*time.Second { // 2 < 5: the default drain already clears the floor
+			t.Errorf("DrainTimeout = %v, want the 10s default", cfg.DrainTimeout)
+		}
+	})
+
+	t.Run("drain clamps over a bigger budget", func(t *testing.T) {
+		cfg, err := config.Resolve(withkey(map[string]string{"DRAIN_TIMEOUT": "250ms", "PUBLISH_BUDGET": "8s"}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.DrainTimeout != 13*time.Second { // 8s budget + 5s slack
+			t.Errorf("DrainTimeout = %v, want the 13s clamp floor", cfg.DrainTimeout)
+		}
+	})
+
 	t.Run("unknown plane keys ride along ignored", func(t *testing.T) {
-		cfg, err := config.Resolve(withkey(map[string]string{"QUEUE_URL": "https://x/a", "OTEL_SERVICE_NAME": "payment-webhook"}))
+		cfg, err := config.Resolve(withkey(map[string]string{"OTEL_SERVICE_NAME": "payment-webhook", "OLD_API_KEY": "legacy-secret-16"}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -240,14 +314,17 @@ func TestLoadEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if cfg.Port != 9137 || cfg.DrainTimeout != 250*time.Millisecond || cfg.APIKey != testAPIKey {
-			t.Errorf("cfg = %+v, want Port 9137, DrainTimeout 250ms, and the shared key from infra/.env", cfg)
+		if cfg.Port != 9137 || cfg.DrainTimeout != 12*time.Second || cfg.APIKey != testAPIKey {
+			t.Errorf("cfg = %+v, want Port 9137, DrainTimeout 12s, and the shared key from infra/.env", cfg)
 		}
 		if cfg.PaddleSecret != testPaddleSecret {
 			t.Errorf("PaddleSecret = %q, want the plane value from infra/.env", cfg.PaddleSecret)
 		}
 		if cfg.MaxBodyBytes != 2048 {
 			t.Errorf("MaxBodyBytes = %d, want 2048 from the file plane", cfg.MaxBodyBytes)
+		}
+		if cfg.QueueURL != testQueueURL || cfg.PublishBudget != 7*time.Second {
+			t.Errorf("cfg = %+v, want the plane queue URL and a 7s budget from infra/.env", cfg)
 		}
 	})
 
@@ -256,6 +333,7 @@ func TestLoadEndToEnd(t *testing.T) {
 		t.Setenv("PORT", "9138")
 		t.Setenv("API_KEY", testAPIKey)
 		t.Setenv("PADDLE_WEBHOOK_SECRET", testPaddleSecret)
+		t.Setenv("QUEUE_URL", testQueueURL)
 		t.Chdir(t.TempDir())
 
 		cfg, err := config.Load()
@@ -267,6 +345,9 @@ func TestLoadEndToEnd(t *testing.T) {
 		}
 		if cfg.PaddleSecret != testPaddleSecret || cfg.MaxBodyBytes != 1<<20 {
 			t.Errorf("cfg = %+v, want the plane paddle secret and the 1 MiB bound default", cfg)
+		}
+		if cfg.QueueURL != testQueueURL || cfg.PublishBudget != 5*time.Second {
+			t.Errorf("cfg = %+v, want the plane queue URL and the 5s budget default", cfg)
 		}
 	})
 
@@ -325,8 +406,9 @@ func writeEnvPlane(t *testing.T) {
 	if err := os.MkdirAll("infra", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	plane := "PORT=9137\nDRAIN_TIMEOUT=250ms\nAPI_KEY=" + testAPIKey +
-		"\nPADDLE_WEBHOOK_SECRET=" + testPaddleSecret + "\nMAX_BODY_BYTES=2048\n"
+	plane := "PORT=9137\nDRAIN_TIMEOUT=12s\nAPI_KEY=" + testAPIKey +
+		"\nPADDLE_WEBHOOK_SECRET=" + testPaddleSecret + "\nMAX_BODY_BYTES=2048" +
+		"\nQUEUE_URL=" + testQueueURL + "\nPUBLISH_BUDGET=7s\n"
 	if err := os.WriteFile(filepath.Join("infra", ".env"), []byte(plane), 0o600); err != nil {
 		t.Fatal(err)
 	}

@@ -6,12 +6,12 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 
 ## Source model
 
-`Config` is the single typed contract — today the five consumed fields (`Port`, `DrainTimeout`, `API_KEY`, `PADDLE_WEBHOOK_SECRET`, `MAX_BODY_BYTES`); the `QUEUE_URL`, the publish budget, and the OTel keys land with their consuming builds (consume-first: fields exist only when runtime code reads them; plane keys without a field are ignored). *Where values come from* is selected once at boot by the `ENV_TYPE` flick and composed through the factories:
+`Config` is the single typed contract — today the seven consumed fields (`Port`, `DrainTimeout`, `API_KEY`, `PADDLE_WEBHOOK_SECRET`, `MAX_BODY_BYTES`, `QUEUE_URL`, `PUBLISH_BUDGET`); the OTel keys land with their consuming build (consume-first: fields exist only when runtime code reads them; plane keys without a field are ignored). *Where values come from* is selected once at boot by the `ENV_TYPE` flick and composed through the factories:
 
 - **dev** (flick `dev`): `DevSource` — the process environment over the parsed `infra/.env`. Env wins because a container ships no dotenv file and receives its values injected (compose `env_file`); locally the file is the baseline and an export still overrides it.
 - **prod** (flick `prod`): `ProdSource` — **AWS exact**. The secrets blob fills first and the prefix-stripped SSM tree completes the plane; process env and dotenv never reach this path, so a stray variable cannot leak a value in. The two AWS planes are disjoint by seeding contract, and the merge enforces it: a case-insensitive key collision fails the boot loud.
 
-`AWS_REGION` and the endpoint override are bootstrap variables, not config: `aws_client_factory` reads them from the process environment once, and credentials ride the ambient chain — never the planes.
+`AWS_REGION` and the endpoint override are bootstrap variables, not config: the publisher composition reads them from the process environment once through the SDK's default chain; credentials ride the ambient provider chain — never the planes.
 
 ## Resolution and failure contract
 
@@ -27,7 +27,9 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 | `API_KEY` / `PADDLE_WEBHOOK_SECRET` missing or blank in any plane | **boot fails** naming the var — mandatory in every environment (FR-3, FR-1); the attempted secret is never echoed |
 | either credential shorter than 16 characters | **boot fails** naming the var and the floor; values trim before the length check, and the trimmed value is what the plane serves |
 | `MAX_BODY_BYTES` unreadable or non-positive | fail closed to the 1 MiB bound (NFR-4), never fail the boot |
-| `DRAIN_TIMEOUT` missing, blank, unreadable, or ≤ 0 | fail closed to 10 s — the publish budget + slack number (NFR-9); the publisher build re-checks the default once the budget becomes a setting |
+| `QUEUE_URL` missing, blank, or malformed | **boot fails** naming the var and the expected shape — the SQS URL is mandatory in every plane once the publisher mounts |
+| `PUBLISH_BUDGET` unreadable or non-positive | fail closed to the 5 s budget (NFR-3), never fail the boot |
+| `DRAIN_TIMEOUT` missing, blank, unreadable, or ≤ 0 | fail closed to 10 s, then clamped up to never serve shorter than `PUBLISH_BUDGET` + slack (NFR-9) |
 | prod: key seeded in both the blob and SSM | **boot fails** — disjoint by seeding contract; remove the duplicates and re-apply |
 | prod: fetch failure, access denied, or bad blob shape | **boot fails** naming the stack and the fix |
 
@@ -58,8 +60,9 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 - **The flick is strict**: unset and unknown values fail the boot (delta over the model's warn-to-dev, since a mis-flicked instance must never serve).
 - **One error vocabulary at the `Load` boundary**: factories/adapters return plain descriptive errors and never values; `Load` wraps once into `ConfigError` (`Unwrap` readable).
 - **No environ writes**: the dotenv reader parses in memory; the merge in `DevSource` owns precedence.
-- **`DRAIN_TIMEOUT` = from the budget**: 10 s default while the publish budget stays in-code; never shorter than budget + slack once the budget is configurable too.
-- **Bootstrap stays out of config**: region, endpoint, and credentials are deployment variables read once by `aws_client_factory` — never `Config` fields, never plane keys.
+- **`DRAIN_TIMEOUT` follows the budget**: 10 s default while the budget is the in-code 5 s; with `PUBLISH_BUDGET` configurable, `Resolve` clamps the drain up to budget + slack at the end (NFR-9).
+- **Bootstrap stays out of config**: region, endpoint, and credentials are deployment variables read once by the publisher composition through the SDK's default chain — never `Config` fields, never plane keys (the prod `aws_client_factory` keeps its skeleton until the AWS build).
+- **The reader bound clamps at the wiring**: the faces read `min(MAX_BODY_BYTES, 262144)` — SQS cannot carry more per message, so an over-ceiling body answers the 413 naming the ceiling instead of surfacing mid-budget as a send fault.
 
 ## Non-goals
 

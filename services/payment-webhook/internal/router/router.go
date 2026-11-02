@@ -6,14 +6,18 @@ import (
 
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config"
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/handlers"
+	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/queue"
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/validator"
 )
 
-// New builds the engine: probes at the root, the ingress under /api/v1, and the
-// internal face behind the shared x-api-key credential. The Paddle face mounts
-// its signature validator at boot; the internal face stays static until the
-// publisher build mounts its deps.
-func New(cfg config.Config) *gin.Engine {
+// New builds the engine: probes at the root, the two ingress faces under
+// /api/v1, and the internal face behind the shared x-api-key credential. The
+// publisher mount comes from the boot composition — main wires the SQS
+// adapter; the tests inject a fake. The readers clamp to SQS's per-message
+// ceiling so an unshippable body answers the shaped 413 instead of surfacing
+// mid-budget as a send fault.
+func New(cfg config.Config, publish *queue.Service) *gin.Engine {
+	bound := min(cfg.MaxBodyBytes, queue.SQSMessageCeiling)
 	r := gin.Default()
 
 	r.GET("/health", handlers.Health)
@@ -21,8 +25,8 @@ func New(cfg config.Config) *gin.Engine {
 
 	v1 := r.Group("/api/v1")
 	v1.POST("/webhook/paddle",
-		handlers.NewPaddleWebhook(validator.NewPaddle(cfg.PaddleSecret), cfg.MaxBodyBytes))
-	v1.POST("/internal/events", RequireAPIKey(cfg.APIKey), handlers.InternalEvent)
+		handlers.NewPaddleWebhook(validator.NewPaddle(cfg.PaddleSecret), bound, publish))
+	v1.POST("/internal/events", RequireAPIKey(cfg.APIKey), handlers.NewInternalEvent(publish, bound))
 
 	return r
 }

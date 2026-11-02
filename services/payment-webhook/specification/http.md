@@ -55,7 +55,7 @@ API Gateway → Lambda (container image via the Lambda Web Adapter). The door sh
 
 - **Body bound 1 MiB** against API GW's 10 MB request cap and Lambda's 6 MB invocation ceiling — the base64-inflated event payload (1 MiB → ~1.33 MB) and the JSON response (~100 bytes) sit far under both.
 - API Gateway buffers the full request body before invoking; the bounded read enforces the boundary inside the service and rejects at 413 before buffering completes when the limit is exceeded.
-- **Timeout stack**: function timeout (10 s) above the in-code publish budget (5 s); the API Gateway integration timeout (≤ 29 s) above both. The innermost shaped response wins — a deadline-exceeded enqueue answers the shaped 503 with `Retry-After: 5`, and a platform kill is an opaque 502 the layering makes unreachable in practice ([requirements.md](requirements.md) NFR-3).
+- **Timeout stack**: function timeout (10 s) above the in-code publish budget (5 s); the API Gateway integration timeout (≤ 29 s) above both. The innermost shaped response wins — a deadline-exceeded enqueue answers the shaped 503 with `Retry-After` at the publish budget's ceil (5 at the default), and a platform kill is an opaque 502 the layering makes unreachable in practice ([requirements.md](requirements.md) NFR-3).
 
 ## POST /api/v1/webhook/paddle
 
@@ -81,8 +81,8 @@ Emitted only after SQS accepts the message — the SDK response is the durabilit
 | 200 | SQS accepted the message | `{"status": "queued"}` |
 | 400 | Body unreadable or malformed during the bounded read | generic |
 | 401 | Signature missing, malformed, stale, or tampered | generic; failure classes indistinguishable |
-| 413 | Body larger than 1 MiB | includes the limit |
-| 503 | Enqueue unavailable: SQS outage, throttling, or deadline exceeded | `{"error": "...", "retryable": true}` + `Retry-After: 5` |
+| 413 | Body larger than the effective bound — `min(MAX_BODY_BYTES, SQS's 256 KiB ceiling)` | includes the limit |
+| 503 | Enqueue unavailable: SQS outage, throttling, or deadline exceeded | `{"error": "...", "retryable": true}` + `Retry-After` (budget ceil; 5 default) |
 | 500 | Unexpected error | generic |
 
 404/405 and other framework defaults are untouched. A 401 never inherits `WWW-Authenticate` (there is no interactive auth surface; the credential carries via one header and one comparison path, per [requirements.md](requirements.md)).
@@ -114,6 +114,6 @@ The endpoints stay in the contract for local parity — Lambda has no probes; th
 2. **One credential, one header, one comparison path** — `x-api-key` only. `X-Internal-Key` carried the same secret in a second envelope whose cost was a second comparison path to test and a non-standard header name; the document-parser inheritance makes the compare constant-time in the same stroke (the pre-refactor gateway compared with `!=`).
 3. **413/400 split** — an oversized body and a malformed body are different caller failures (config vs payload); document-parser already standardized the distinction, and Paddle treats any 4xx identically (failure → retry), so nothing rides on the change.
 4. **Unknown event types queue** — the gateway's job is transport, not vocabulary. Rejecting an unknown `event_type` would let a Paddle schema evolution 400 the whole pipeline; the worker owns interpretation and the counter owns visibility (FR-7).
-5. **503 on enqueue failure, always with `Retry-After: 5`** — the fast-fail contract survives. SQS being an AWS-managed service, "broker down" is rare, but throttling and short-lived 5xx exist; the shaped response plus the dedup window make the ambiguous "did it actually enqueue?" case harmless ([requirements.md](requirements.md) NFR-3).
+5. **503 on enqueue failure, always with `Retry-After` (the budget's ceil)** — the fast-fail contract survives. SQS being an AWS-managed service, "broker down" is rare, but throttling and short-lived 5xx exist; the shaped response plus the dedup window make the ambiguous "did it actually enqueue?" case harmless ([requirements.md](requirements.md) NFR-3).
 6. **Error envelope stays `{"error": "…"}`** — Gin-native, the only shape every handler in a Go Gin service produces; document-parser's `{"detail": "…"}` is a FastAPI convention, not a repo standard to copy.
 7. **Freshness window ±5 min kept** — recorded so it is not read as accidental: it bounds replay of captured signatures, and Paddle's clock-bound rejections are comfortably outside legitimate delivery latency.

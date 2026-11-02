@@ -1,0 +1,136 @@
+package queue_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"testing"
+
+	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/queue"
+)
+
+const testQueueURL = "https://sqs.eu-central-1.amazonaws.com/123456789012/payment_events.fifo"
+
+func TestSQSAdapterShapesTheFIFOMessage(t *testing.T) {
+	target := &fakeSQS{}
+	adapter := queue.NewSQSAdapter(target, testQueueURL)
+	message := queue.Message{
+		Body:      []byte(`{"event_id":"evt_1","event_type":"subscription.updated","data":{"id":"sub_1"}}`),
+		Source:    queue.SourcePaddle,
+		EventID:   "evt_1",
+		DedupID:   "evt_1",
+		EventType: "subscription.updated",
+		GroupID:   "subscription:sub_1",
+	}
+
+	if err := adapter.Publish(context.Background(), message); err != nil {
+		t.Fatal(err)
+	}
+	input := target.input
+	if input == nil {
+		t.Fatal("SendMessage was not called")
+	}
+	if derefString(input.QueueUrl) != testQueueURL {
+		t.Errorf("QueueUrl = %q, want %q", derefString(input.QueueUrl), testQueueURL)
+	}
+	if derefString(input.MessageBody) != string(message.Body) {
+		t.Errorf("MessageBody = %q, want the body verbatim", derefString(input.MessageBody))
+	}
+	if derefString(input.MessageDeduplicationId) != "evt_1" {
+		t.Errorf("MessageDeduplicationId = %q, want the event id", derefString(input.MessageDeduplicationId))
+	}
+	if derefString(input.MessageGroupId) != "subscription:sub_1" {
+		t.Errorf("MessageGroupId = %q, want the ladder group", derefString(input.MessageGroupId))
+	}
+	for name, want := range map[string]string{
+		"source":     queue.SourcePaddle,
+		"event_type": "subscription.updated",
+		"event_id":   "evt_1",
+	} {
+		attribute, ok := input.MessageAttributes[name]
+		if !ok {
+			t.Errorf("attribute %q missing", name)
+			continue
+		}
+		if derefString(attribute.DataType) != "String" || derefString(attribute.StringValue) != want {
+			t.Errorf("attribute %q = %s/%s, want String/%s", name,
+				derefString(attribute.DataType), derefString(attribute.StringValue), want)
+		}
+	}
+	if len(input.MessageAttributes) != 3 {
+		t.Errorf("attribute count = %d, want 3", len(input.MessageAttributes))
+	}
+}
+
+func TestSQSAdapterOmitsTheEventIDAttributeWhenAbsent(t *testing.T) {
+	target := &fakeSQS{}
+	adapter := queue.NewSQSAdapter(target, testQueueURL)
+	message := queue.Message{
+		Body:      []byte(`{"random":true}`),
+		Source:    queue.SourceInternal,
+		DedupID:   "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		EventType: queue.UnknownEventType,
+		GroupID:   queue.DefaultGroupID,
+	}
+	if err := adapter.Publish(context.Background(), message); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := target.input.MessageAttributes["event_id"]; ok {
+		t.Error("event_id attribute present, want omitted when the payload carries none")
+	}
+	if derefString(target.input.MessageAttributes["event_type"].StringValue) != queue.UnknownEventType {
+		t.Error("event_type = want the unknown constant, never an empty attribute")
+	}
+}
+
+func TestSQSAdapterMapsTheRetryableSQSFaults(t *testing.T) {
+	for _, code := range []string{"ThrottlingException", "InternalFailure", "ServiceUnavailable"} {
+		t.Run(code, func(t *testing.T) {
+			adapter := queue.NewSQSAdapter(&fakeSQS{err: &apiErr{code: code, msg: code}}, testQueueURL)
+			err := adapter.Publish(context.Background(), queue.Message{
+				Body: []byte(`{}`), Source: queue.SourcePaddle,
+				EventType: queue.UnknownEventType, GroupID: queue.DefaultGroupID,
+			})
+			if !errors.Is(err, queue.ErrEnqueueUnavailable) {
+				t.Errorf("err = %v, want ErrEnqueueUnavailable", err)
+			}
+		})
+	}
+}
+
+func TestSQSAdapterPassesDeadlinesThrough(t *testing.T) {
+	adapter := queue.NewSQSAdapter(&fakeSQS{err: context.DeadlineExceeded}, testQueueURL)
+	err := adapter.Publish(context.Background(), queue.Message{
+		Body: []byte(`{}`), EventType: queue.UnknownEventType, GroupID: queue.DefaultGroupID,
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("err = %v, want the sentinel passed through unmapped", err)
+	}
+}
+
+func TestSQSAdapterKeepsUnexpectedFaultsUnmapped(t *testing.T) {
+	// NonExistentQueue, access faults, network JSON — none are retryable rows;
+	// the handler's 500 catch-all owns them per the taxonomy.
+	adapter := queue.NewSQSAdapter(&fakeSQS{err: &apiErr{code: "AWS.SimpleQueueService.NonExistentQueue", msg: "dne"}}, testQueueURL)
+	err := adapter.Publish(context.Background(), queue.Message{
+		Body: []byte(`{}`), EventType: queue.UnknownEventType, GroupID: queue.DefaultGroupID,
+	})
+	if err == nil || errors.Is(err, queue.ErrEnqueueUnavailable) {
+		t.Errorf("err = %v, want an unmapped error bound for the 500 row", err)
+	}
+	// and a bare transport error without API shape survives untouched
+	adapter = queue.NewSQSAdapter(&fakeSQS{err: errors.New("connection reset")}, testQueueURL)
+	err = adapter.Publish(context.Background(), queue.Message{
+		Body: []byte(`{}`), EventType: queue.UnknownEventType, GroupID: queue.DefaultGroupID,
+	})
+	if got := fmt.Sprint(err); got != "connection reset" {
+		t.Errorf("err = %q, want the raw transport error", got)
+	}
+}
+
+func derefString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
