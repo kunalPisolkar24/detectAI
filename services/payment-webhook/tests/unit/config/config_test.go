@@ -11,7 +11,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config"
 )
 
-const testAPIKey = "change-me-min-16-chars"
 const testPaddleSecret = "paddle-change-me-16-chars"
 const testQueueURL = "https://sqs.eu-central-1.amazonaws.com/123456789012/payment_events.fifo"
 
@@ -23,10 +22,10 @@ func (m mapSource) Get(key string) (string, bool) {
 	return value, ok
 }
 
-// withkey merges the mandatory credentials over extra so each field contract
+// withkey merges the mandatory plane keys over extra so each field contract
 // case carries one failure point.
 func withkey(extra map[string]string) mapSource {
-	source := mapSource{"API_KEY": testAPIKey, "PADDLE_WEBHOOK_SECRET": testPaddleSecret, "QUEUE_URL": testQueueURL}
+	source := mapSource{"PADDLE_WEBHOOK_SECRET": testPaddleSecret, "QUEUE_URL": testQueueURL}
 	for key, value := range extra {
 		source[key] = value
 	}
@@ -73,9 +72,6 @@ func TestResolveContracts(t *testing.T) {
 		}
 		if cfg.DrainTimeout != 10*time.Second {
 			t.Errorf("DrainTimeout = %v, want the budget default 10s", cfg.DrainTimeout)
-		}
-		if cfg.APIKey != testAPIKey {
-			t.Errorf("APIKey = %q, want the plane value", cfg.APIKey)
 		}
 		if cfg.PaddleSecret != testPaddleSecret {
 			t.Errorf("PaddleSecret = %q, want the plane value", cfg.PaddleSecret)
@@ -140,55 +136,43 @@ func TestResolveContracts(t *testing.T) {
 		}
 	})
 
-	// Each mandatory credential is dropped or blanked one at a time: the other
-	// stays valid, so the failure always points at exactly one var.
-	for _, key := range []string{"API_KEY", "PADDLE_WEBHOOK_SECRET"} {
-		for caseName, bad := range map[string]string{
-			"missing": "",
-			"blank":   "   ",
-		} {
-			t.Run(key+" "+caseName+" fails without echo", func(t *testing.T) {
-				source := withkey(nil)
-				delete(source, key)
-				if caseName == "blank" {
-					source[key] = bad
-				}
-				_, err := config.Resolve(source)
-				if err == nil || !strings.Contains(err.Error(), key+" is mandatory in every plane") {
-					t.Errorf("err = %v, want the mandatory-secret failure", err)
-				}
-				if err != nil && bad != "" && strings.Contains(err.Error(), bad) {
-					t.Errorf("err = %v; the attempted secret must never be echoed", err)
-				}
-			})
-		}
+	// The mandatory secret is dropped or blanked: the failure names the var,
+	// never the attempt.
+	for caseName, bad := range map[string]string{
+		"missing": "",
+		"blank":   "   ",
+	} {
+		t.Run("PADDLE_WEBHOOK_SECRET "+caseName+" fails without echo", func(t *testing.T) {
+			source := withkey(nil)
+			delete(source, "PADDLE_WEBHOOK_SECRET")
+			if caseName == "blank" {
+				source["PADDLE_WEBHOOK_SECRET"] = bad
+			}
+			_, err := config.Resolve(source)
+			if err == nil || !strings.Contains(err.Error(), "PADDLE_WEBHOOK_SECRET is mandatory in every plane") {
+				t.Errorf("err = %v, want the mandatory-secret failure", err)
+			}
+			if err != nil && bad != "" && strings.Contains(err.Error(), bad) {
+				t.Errorf("err = %v; the attempted secret must never be echoed", err)
+			}
+		})
 	}
 
-	t.Run("API_KEY shorter than 16 characters fails", func(t *testing.T) {
-		_, err := config.Resolve(withkey(map[string]string{"API_KEY": "0123456789abcde"}))
-		if err == nil || !strings.Contains(err.Error(), "API_KEY must be at least 16 characters") {
+	t.Run("PADDLE_WEBHOOK_SECRET shorter than 16 characters fails", func(t *testing.T) {
+		_, err := config.Resolve(withkey(map[string]string{"PADDLE_WEBHOOK_SECRET": "0123456789abcde"}))
+		if err == nil || !strings.Contains(err.Error(), "PADDLE_WEBHOOK_SECRET must be at least 16 characters") {
 			t.Errorf("err = %v, want the minimum-length failure", err)
 		}
 		if err != nil && strings.Contains(err.Error(), "0123456789abcde") {
 			t.Errorf("err = %v; the attempted secret must never be echoed", err)
 		}
 	})
-	t.Run("PADDLE_WEBHOOK_SECRET shorter than 16 characters fails", func(t *testing.T) {
-		_, err := config.Resolve(withkey(map[string]string{"PADDLE_WEBHOOK_SECRET": "0123456789abcde"}))
-		if err == nil || !strings.Contains(err.Error(), "PADDLE_WEBHOOK_SECRET must be at least 16 characters") {
-			t.Errorf("err = %v, want the minimum-length failure", err)
-		}
-	})
-	t.Run("short credentials serve at exactly 16 characters, trimmed", func(t *testing.T) {
+	t.Run("the short credential serves at exactly 16 characters, trimmed", func(t *testing.T) {
 		cfg, err := config.Resolve(withkey(map[string]string{
-			"API_KEY":               " xq3wq8ne7an349er ",
 			"PADDLE_WEBHOOK_SECRET": " abcdef0123456789 ",
 		}))
 		if err != nil {
 			t.Fatal(err)
-		}
-		if cfg.APIKey != "xq3wq8ne7an349er" {
-			t.Errorf("APIKey = %q, want the trimmed 16-character value", cfg.APIKey)
 		}
 		if cfg.PaddleSecret != "abcdef0123456789" {
 			t.Errorf("PaddleSecret = %q, want the trimmed 16-character value", cfg.PaddleSecret)
@@ -314,8 +298,8 @@ func TestLoadEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if cfg.Port != 9137 || cfg.DrainTimeout != 12*time.Second || cfg.APIKey != testAPIKey {
-			t.Errorf("cfg = %+v, want Port 9137, DrainTimeout 12s, and the shared key from infra/.env", cfg)
+		if cfg.Port != 9137 || cfg.DrainTimeout != 12*time.Second {
+			t.Errorf("cfg = %+v, want Port 9137 and the 12s drain from infra/.env", cfg)
 		}
 		if cfg.PaddleSecret != testPaddleSecret {
 			t.Errorf("PaddleSecret = %q, want the plane value from infra/.env", cfg.PaddleSecret)
@@ -331,7 +315,6 @@ func TestLoadEndToEnd(t *testing.T) {
 	t.Run("dev boots env-only when the file plane is absent", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "dev")
 		t.Setenv("PORT", "9138")
-		t.Setenv("API_KEY", testAPIKey)
 		t.Setenv("PADDLE_WEBHOOK_SECRET", testPaddleSecret)
 		t.Setenv("QUEUE_URL", testQueueURL)
 		t.Chdir(t.TempDir())
@@ -340,8 +323,8 @@ func TestLoadEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if cfg.Port != 9138 || cfg.DrainTimeout != 10*time.Second || cfg.APIKey != testAPIKey {
-			t.Errorf("cfg = %+v, want Port 9138, the 10s default, and the key from the environment", cfg)
+		if cfg.Port != 9138 || cfg.DrainTimeout != 10*time.Second {
+			t.Errorf("cfg = %+v, want Port 9138 and the 10s default drain", cfg)
 		}
 		if cfg.PaddleSecret != testPaddleSecret || cfg.MaxBodyBytes != 1<<20 {
 			t.Errorf("cfg = %+v, want the plane paddle secret and the 1 MiB bound default", cfg)
@@ -351,20 +334,19 @@ func TestLoadEndToEnd(t *testing.T) {
 		}
 	})
 
-	t.Run("missing API_KEY fails wrapped without echo", func(t *testing.T) {
+	t.Run("missing PADDLE_WEBHOOK_SECRET fails wrapped without echo", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "dev")
 		t.Chdir(t.TempDir())
 
 		_, err := config.Load()
 		var cfgErr *config.ConfigError
-		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "API_KEY is mandatory") {
+		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "PADDLE_WEBHOOK_SECRET is mandatory") {
 			t.Errorf("err = %v, want a *ConfigError naming the mandatory secret", err)
 		}
 	})
 
 	t.Run("prod flick refuses wrapped once", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "prod")
-		t.Setenv("API_KEY", testAPIKey)
 		t.Chdir(t.TempDir())
 
 		_, err := config.Load()
@@ -376,7 +358,6 @@ func TestLoadEndToEnd(t *testing.T) {
 
 	t.Run("unknown flick refuses wrapped once", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "qa")
-		t.Setenv("API_KEY", testAPIKey)
 		t.Chdir(t.TempDir())
 
 		_, err := config.Load()
@@ -389,7 +370,6 @@ func TestLoadEndToEnd(t *testing.T) {
 	t.Run("port identity failure crosses the boundary typed", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "dev")
 		t.Setenv("PORT", "70000")
-		t.Setenv("API_KEY", testAPIKey)
 		t.Chdir(t.TempDir())
 
 		_, err := config.Load()
@@ -406,8 +386,8 @@ func writeEnvPlane(t *testing.T) {
 	if err := os.MkdirAll("infra", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	plane := "PORT=9137\nDRAIN_TIMEOUT=12s\nAPI_KEY=" + testAPIKey +
-		"\nPADDLE_WEBHOOK_SECRET=" + testPaddleSecret + "\nMAX_BODY_BYTES=2048" +
+	plane := "PORT=9137\nDRAIN_TIMEOUT=12s\nPADDLE_WEBHOOK_SECRET=" + testPaddleSecret +
+		"\nMAX_BODY_BYTES=2048" +
 		"\nQUEUE_URL=" + testQueueURL + "\nPUBLISH_BUDGET=7s\n"
 	if err := os.WriteFile(filepath.Join("infra", ".env"), []byte(plane), 0o600); err != nil {
 		t.Fatal(err)

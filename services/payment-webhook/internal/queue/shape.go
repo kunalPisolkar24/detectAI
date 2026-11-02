@@ -8,8 +8,7 @@ import (
 )
 
 const (
-	SourcePaddle   = "paddle"
-	SourceInternal = "internal"
+	SourcePaddle = "paddle"
 
 	UnknownEventType = "unknown"
 	DefaultGroupID   = "default"
@@ -38,8 +37,9 @@ type payloadData struct {
 
 // Shape parses the payload for metadata only and computes the dedup id: the
 // parsed event_id when present, else the SHA-256 of the body — content-based
-// determinism the queue-level flag cannot add once events lack their id.
-func Shape(body []byte, source string) Message {
+// determinism the queue-level flag cannot add once events lack their id. The
+// gateway is Paddle-only: Source is the constant, never a parameter.
+func Shape(body []byte) Message {
 	event := ParseEvent(body)
 	dedup := event.ID
 	if dedup == "" {
@@ -48,7 +48,7 @@ func Shape(body []byte, source string) Message {
 	}
 	return Message{
 		Body:      body,
-		Source:    source,
+		Source:    SourcePaddle,
 		EventID:   event.ID,
 		DedupID:   dedup,
 		EventType: event.Type,

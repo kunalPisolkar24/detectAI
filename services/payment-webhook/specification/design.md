@@ -18,7 +18,7 @@ services/payment-webhook/
       shutdown.go   # drain within the configured budget, drain logged
     config/
       load.go       # Load: flick → factory → Resolve, wrapped once into ConfigError
-      config.go     # Config{Port, DrainTimeout, APIKey} + Resolve — parsed per field
+      config.go     # Config{Port, DrainTimeout, PaddleSecret} + Resolve — parsed per field
       interfaces.go # contracts hub: the Source plane contract
       errors.go     # the Load-boundary ConfigError wrapper
       adapters/
@@ -33,21 +33,19 @@ services/payment-webhook/
         config_factory.go      # the flick wiring: dev wired, prod refuses
         aws_client_factory.go  # bootstrap clients — skeleton (AWS build)
     router/
-      router.go     # gin engine: root probes, the /api/v1 route group
-      middleware.go # RequireAPIKey: the shared x-api-key guard for the internal face
+      router.go     # gin engine: root probes, the single /api/v1 ingress route
     validator/
-      body.go       # ReadBounded + the bound error pair — the check both faces share
+      body.go       # ReadBounded + the bound error pair
       paddle.go     # the Paddle HMAC verifier: header grammar, freshness, constant-time compare
       envelope.go   # CheckEnvelope: the Paddle envelope gate — presence-only, warn-level advisory
     handlers/
       probes.go     # /health, /ready — static bodies
       webhook.go    # POST /api/v1/webhook/paddle — bounded read, verify, envelope gate, one publish
-      events.go     # POST /api/v1/internal/events — bounded read, one publish call
       response.go   # the shared rows: the two read rows, the publish rows 200/503/500
     queue/
       queue.go      # the Message contract, the Queue interface, the retryable sentinels
       shape.go      # ParseEvent + Shape — the metadata-only parse and the group-key ladder
-      service.go    # the publish budget composition both faces mount
+      service.go    # the publish budget composition the Paddle face mounts
       sqs.go        # the SQS adapter: SendMessage, the fault mapping, the per-message ceiling
   tests/
     unit/
@@ -62,8 +60,8 @@ services/payment-webhook/
         paddle_test.go         # signature classes: fresh, stale, future, tampered, malformed fragments
       handlers/                # the paddle face's status mapping, black-box
         webhook_test.go        # 200/400/401/413/503/500 over the real validator and a fake queue
-      router/                  # the x-api-key guard and the publisher mounting, black-box
-        router_test.go         # identical 401s, the shared key serves, the ceiling clamp, the 503
+      router/                  # the paddle face's mounting and guard wiring, black-box
+        router_test.go         # the signed publish-through, the retired face's 404, the ceiling clamp
       queue/                   # the transport contract, black-box
         fakes_test.go          # the fake Queue and the fake SQS client seams
         shape_test.go          # the group-key ladder vectors and the dedup id fallback
@@ -75,7 +73,7 @@ services/payment-webhook/
     tests.mk       # testing verbs: test, test-unit (tests tree boundary)
 ```
 
-Both faces mount the same publisher at boot: bounded read, then — per face — the signature check or the x-api-key guard, then one `Publish`; the 200 goes out only after the SQS response is in. The validator package owns the checks: the bounded read both faces share sits beside the paddle-specific verifier, one file each, stdlib imports only; the handler owns only statuses and bodies. The envelope gate (`envelope.go`) completes the paddle side: presence-only over the four core fields (`event_id`, `event_type`, `occurred_at`, `data`), with `notification_id` and data-addressability advisory-only — the worker keys idempotency on `event_id`, not on Paddle's delivery-layer id, so the delivery envelope can evolve without breaking anything (http.md's envelope section). The advisory addressable-id check calls `queue.ParseEvent` rather than owning a second alias list: messaging.md keeps that list in exactly one place. The single interface seam is the transport: `queue.Queue` exists so the handler- and router-matrix tests can run a fake instead of reaching an SQS endpoint — production runs one adapter. Middleware stays gin's built-in logger/recovery (otelgin joins with the observability build). Growth continues file-first within the standing `cmd/` + `internal/` layout: per-face validators grow as files in the standing directories.
+The paddle face mounts the publisher at boot: bounded read, then the signature check, then the envelope gate, then one `Publish`; the 200 goes out only after the SQS response is in. The validator package owns the checks: the bounded read sits beside the paddle-specific verifier and the envelope gate, one file each, stdlib imports only; the handler owns only statuses and bodies. The envelope gate (`envelope.go`) completes the paddle side: presence-only over the four core fields (`event_id`, `event_type`, `occurred_at`, `data`), with `notification_id` and data-addressability advisory-only — the worker keys idempotency on `event_id`, not on Paddle's delivery-layer id, so the delivery envelope can evolve without breaking anything (http.md's envelope section). The advisory addressable-id check calls `queue.ParseEvent` rather than owning a second alias list: messaging.md keeps that list in exactly one place. The single interface seam is the transport: `queue.Queue` exists so the handler- and router-matrix tests can run a fake instead of reaching an SQS endpoint — production runs one adapter. Middleware stays gin's built-in logger/recovery (otelgin joins with the observability build). Growth continues file-first within the standing `cmd/` + `internal/` layout: per-provider validators grow as files in the standing directories.
 
 One of each kind still applies when that split happens. The pre-refactor tree carried parallel layers from stacked iterations — `internal/transport/http` alongside `internal/adapters/inbound/http`, `internal/infrastructure/rabbitmq` alongside `internal/adapters/outbound/rabbitmq`, three observability homes. The rebuild collapses to one layer of each that the repo's clean-architecture rule names, with no interface growth beyond the contracts the standing packages carry, and no `ports/messaging.go` leaking AMQP primitives into the domain (the pre-refactor `ports/messaging.go` was an AMQP interface file — the domain depended on broker transport-shaped things). Dependency direction is one-way whenever the split exists: SDK/Gin imports stay out of the inner layers, wiring happens at boot.
 
@@ -89,15 +87,14 @@ Shutdown: `signal.NotifyContext` watches SIGINT/SIGTERM; on arrival the server s
 
 ## Error taxonomy
 
-The typed error set, mapped to HTTP exactly once on the faces — the read/signature errors live beside their checks, and the queue's retryable pair sits in `internal/queue/queue.go` (no domain package keeps them apart from their consumers):
+The typed error set, mapped to HTTP exactly once on the face — the read/signature errors live beside their checks, and the queue's retryable pair sits in `internal/queue/queue.go` (no domain package keeps them apart from their consumers):
 
 | Typed error | HTTP | Retryable? |
 |-------------|------|------------|
 | `ErrBodyTooLarge` | 413 | no |
 | `ErrBodyMalformed` (unreadable) | 400 | no |
 | `ErrInvalidSignature` | 401 | no |
-| `ErrInvalidAPIKey` | 401 | no |
-| envelope fields missing (CheckEnvelope, Paddle face) | 422 | no |
+| envelope fields missing (CheckEnvelope, paddle face) | 422 | no |
 | `ErrEnqueueUnavailable` (SQS 5xx/throttle) | 503 + `Retry-After: 5` | yes |
 | `ErrDeadlineExceeded` | 503 + `Retry-After: 5` | yes |
 | anything unexpected | 500 | no |
@@ -108,10 +105,10 @@ All mapping paths use `errors.Is` — the pre-refactor `err.Error() == "invalid 
 
 Same double-plane shape document-parser landed; this service's own LLD lives in [references/config.md](references/config.md), and the surface is a declared skeleton today — every entry point answers a loud skeleton error until its landing build connects it (dotenv reader + wire-up next, prod plane with AWS):
 
-- **Dev (`ENV_TYPE=dev`)** — env-over-file: process env first, `.env` via godotenv second. Bare keys, no comments — repository convention. Plane values: `API_KEY`, `PADDLE_WEBHOOK_SECRET`, `QUEUE_URL`, the body bound, the publish budget.
-- **Prod (`ENV_TYPE=prod`)** — AWS-exact: no env-file fallback. `API_KEY` and the license key read from the service's Secrets Manager blob; `PADDLE_WEBHOOK_SECRET` rides the same blob; `QUEUE_URL` and region from SSM/env as IaC decides. The ~100 ms cold-start cost is accepted in [requirements.md](requirements.md).
-- **Validation** — `ENV_TYPE` ∈ {dev, prod} mandatory; mandatory values non-empty and ≥ 16 chars (the two credentials); `QUEUE_URL` a valid SQS URL; bounds parse and fail closed to safe defaults, never partial. Boot fails fast on violation — a mis-provisioned instance never serves.
-- **Naming note** — `INTERNAL_API_KEY` retires with the slop code; the service-side credential is `API_KEY` (scheme inherited from document-parser), and the *caller-side* web env name `PAYMENT_GATEWAY_API_KEY` follows the `FILE_EXTRACTOR_API_KEY` precedent ([requirements.md](requirements.md) knock-ons).
+- **Dev (`ENV_TYPE=dev`)** — env-over-file: process env first, `.env` via godotenv second. Bare keys, no comments — repository convention. Plane values: `PADDLE_WEBHOOK_SECRET`, `QUEUE_URL`, the body bound, the publish budget.
+- **Prod (`ENV_TYPE=prod`)** — AWS-exact: no env-file fallback. The license key reads from the service's Secrets Manager blob; `PADDLE_WEBHOOK_SECRET` rides the same blob; `QUEUE_URL` and region from SSM/env as IaC decides. The ~100 ms cold-start cost is accepted in [requirements.md](requirements.md).
+- **Validation** — `ENV_TYPE` ∈ {dev, prod} mandatory; mandatory values non-empty and ≥ 16 chars (the webhook secret); `QUEUE_URL` a valid SQS URL; bounds parse and fail closed to safe defaults, never partial. Boot fails fast on violation — a mis-provisioned instance never serves.
+- **Naming note** — `INTERNAL_API_KEY` and the service-side `API_KEY` both retire with the internal face, which takes its document-parser-inherited credential scheme with it; the caller-side web env name `PAYMENT_GATEWAY_API_KEY` never ships ([requirements.md](requirements.md) knock-ons).
 
 ## Packaging (Lambda)
 

@@ -6,7 +6,7 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 
 ## Source model
 
-`Config` is the single typed contract — today the seven consumed fields (`Port`, `DrainTimeout`, `API_KEY`, `PADDLE_WEBHOOK_SECRET`, `MAX_BODY_BYTES`, `QUEUE_URL`, `PUBLISH_BUDGET`); the OTel keys land with their consuming build (consume-first: fields exist only when runtime code reads them; plane keys without a field are ignored). *Where values come from* is selected once at boot by the `ENV_TYPE` flick and composed through the factories:
+`Config` is the single typed contract — today the six consumed fields (`Port`, `DrainTimeout`, `PADDLE_WEBHOOK_SECRET`, `MAX_BODY_BYTES`, `QUEUE_URL`, `PUBLISH_BUDGET`); the OTel keys land with their consuming build (consume-first: fields exist only when runtime code reads them; plane keys without a field are ignored). *Where values come from* is selected once at boot by the `ENV_TYPE` flick and composed through the factories:
 
 - **dev** (flick `dev`): `DevSource` — the process environment over the parsed `infra/.env`. Env wins because a container ships no dotenv file and receives its values injected (compose `env_file`); locally the file is the baseline and an export still overrides it.
 - **prod** (flick `prod`): `ProdSource` — **AWS exact**. The secrets blob fills first and the prefix-stripped SSM tree completes the plane; process env and dotenv never reach this path, so a stray variable cannot leak a value in. The two AWS planes are disjoint by seeding contract, and the merge enforces it: a case-insensitive key collision fails the boot loud.
@@ -24,8 +24,8 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 | dev: blank `KEY=` entry in the file | dropped — an empty value can never win over the default |
 | dev: extra file keys | ignored (consume-first) |
 | `PORT` garbage or outside 1–65535 | **boot fails** naming the var — identity, not a bound; absent falls back to 8080 |
-| `API_KEY` / `PADDLE_WEBHOOK_SECRET` missing or blank in any plane | **boot fails** naming the var — mandatory in every environment (FR-3, FR-1); the attempted secret is never echoed |
-| either credential shorter than 16 characters | **boot fails** naming the var and the floor; values trim before the length check, and the trimmed value is what the plane serves |
+| `PADDLE_WEBHOOK_SECRET` missing or blank in any plane | **boot fails** naming the var — mandatory in every environment (FR-1, FR-2); the attempted secret is never echoed |
+| `PADDLE_WEBHOOK_SECRET` shorter than 16 characters | **boot fails** naming the var and the floor; values trim before the length check, and the trimmed value is what the plane serves |
 | `MAX_BODY_BYTES` unreadable or non-positive | fail closed to the 1 MiB bound (NFR-4), never fail the boot |
 | `QUEUE_URL` missing, blank, or malformed | **boot fails** naming the var and the expected shape — the SQS URL is mandatory in every plane once the publisher mounts |
 | `PUBLISH_BUDGET` unreadable or non-positive | fail closed to the 5 s budget (NFR-3), never fail the boot |
@@ -62,7 +62,7 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 - **No environ writes**: the dotenv reader parses in memory; the merge in `DevSource` owns precedence.
 - **`DRAIN_TIMEOUT` follows the budget**: 10 s default while the budget is the in-code 5 s; with `PUBLISH_BUDGET` configurable, `Resolve` clamps the drain up to budget + slack at the end (NFR-9).
 - **Bootstrap stays out of config**: region, endpoint, and credentials are deployment variables read once by the publisher composition through the SDK's default chain — never `Config` fields, never plane keys (the prod `aws_client_factory` keeps its skeleton until the AWS build).
-- **The reader bound clamps at the wiring**: the faces read `min(MAX_BODY_BYTES, 262144)` — SQS cannot carry more per message, so an over-ceiling body answers the 413 naming the ceiling instead of surfacing mid-budget as a send fault.
+- **The reader bound clamps at the wiring**: the face reads `min(MAX_BODY_BYTES, 262144)` — SQS cannot carry more per message, so an over-ceiling body answers the 413 naming the ceiling instead of surfacing mid-budget as a send fault.
 
 ## Non-goals
 

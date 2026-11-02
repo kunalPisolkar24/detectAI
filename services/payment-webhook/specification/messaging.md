@@ -47,15 +47,15 @@ The service knows exactly one queue parameter: `QUEUE_URL`, mandatory, fail-fast
 
 | SQS field | Value |
 |-----------|-------|
-| Body | The received JSON bytes **verbatim** — Paddle's payload or the web app's internal event, byte-for-byte (FR-4) |
+| Body | The received JSON bytes **verbatim** — the Paddle payload, byte-for-byte (FR-4) |
 | Content type implied | `application/json` (body is opaque bytes to SQS; the worker parses as today) |
-| `MessageDeduplicationId` | The parsed `event_id` — guaranteed present on the Paddle face by the envelope check ([http.md](http.md)); the internal face falls back to SQS content-based dedup on the body. See the ladder below |
+| `MessageDeduplicationId` | The parsed `event_id` — guaranteed present by the envelope check ([http.md](http.md)), so SQS content-based dedup stays a fallback the contract carries, never exercises. See the ladder below |
 | `MessageGroupId` | The group-key ladder below |
-| `MessageAttributes` — `source` | `paddle` or `internal` (String) |
+| `MessageAttributes` — `source` | `paddle` (String) — the only value; the attribute stays so the worker's parse contract is undisturbed |
 | `MessageAttributes` — `event_type` | Best-effort parse; `unknown` when the parse misses it |
-| `MessageAttributes` — `event_id` | Always present on the Paddle face (the envelope check guarantees it, [http.md](http.md)); omitted only when the internal face's `event_id` is absent |
+| `MessageAttributes` — `event_id` | Always present — the envelope check guarantees it ([http.md](http.md)) |
 
-The body passthrough is deliberate: the gateway's job is transport with verification, not vocabulary. The worker keeps parsing the same wire shape it parses today; the moved contract is the queue, not the envelope. The prerequisite parse (event_id/event_type/group keys) touches the payload for metadata only — the forwarded bytes are never altered by it. The parse's latitude narrows with the envelope check ([http.md](http.md)): unknown event types and arbitrary data contents queue (FR-7), while a Paddle body missing a core envelope field is rejected at the gate (422).
+The body passthrough is deliberate: the gateway's job is transport with verification, not vocabulary. The worker keeps parsing the same wire shape it parses today; the moved contract is the queue, not the envelope. The prerequisite parse (event_id/event_type/group keys) touches the payload for metadata only — the forwarded bytes are never altered by it. The parse's latitude narrows with the envelope check ([http.md](http.md)): unknown event types and arbitrary data contents queue (FR-7), while a Paddle body missing a core envelope field is rejected at the gate — with no second face, every body is a Paddle body.
 
 ### Group-key ladder
 
@@ -70,11 +70,11 @@ flowchart LR
 Sequence:
 
 1. **Subscription id** → group `subscription:<id>` — payment lifecycle events for one subscription never reorder. First hit among `data.subscription_id`, `data.subscriptionId`, `data.paddleSubscriptionId`, and `data.id` where the value is a `sub_…` id (Paddle Billing embeds subscription-id events as the object's own `id`).
-2. **Customer id** → group `customer:<id>` — ordering for subscription-less internal events. First hit among `data.customer_id`, `data.customerId`, `data.userId`.
+2. **Customer id** → group `customer:<id>` — ordering for events that carry a customer without a subscription. First hit among `data.customer_id`, `data.customerId`, `data.userId`.
 3. **`event_type`** when neither id resolves → per-type ordering; same-kind events still never interleave.
 4. **`default`** when the body parses to nothing usable; dedup falls back to content-based.
 
-On the Paddle face the envelope check guarantees a non-blank `event_type` and an object `data`, so rung 3 always resolves when no id is found and the `default` rung is reachable only from the internal face today.
+Every ingress body is a Paddle body now: the envelope check guarantees a non-blank `event_type` and an object `data`, so rung 3 always resolves when no id is found — the `default` rung is unreachable beneath the gate and stays as defense.
 
 The alias list lives in one place (`ParseEvent` in `internal/queue`) and is unit-tested against each source's real payload shape ([design.md](design.md)'s test plan). Unknown types with addressable ids still group correctly.
 
@@ -112,6 +112,18 @@ The trade recorded so it is not accidental: "keep forever until inspected" was a
 - Idempotency layer, state machine, and business logic untouched
 - The `workers` alert policy's `rabbitmq_connection_status` condition retires at cutover (see [observability.md](observability.md))
 
+### Cancellation contract (period-end)
+
+Client-triggered cancellation enters only through Paddle: the client hits the (deferred) `apps/web` cancel route, which calls Paddle's cancel API, and the gateway queues the lifecycle events Paddle emits. The worker reads no other producer, so its state machine rides exactly these:
+
+| Paddle event | Signal | Worker effect |
+|--------------|--------|---------------|
+| `subscription.updated` with `data.scheduled_change.action == "cancel"` | `effective_from` names the next billing period | **provisional** cancel state — entitlements keep serving until that date |
+| `subscription.canceled` | the scheduled change has taken effect at the billing date | **permanent** cancel |
+| `subscription.updated` with the scheduled change cleared, or `subscription.resumed` | the user changed their mind mid-period | downgrade the provisional state — the cancel never happened |
+
+The second row's name is Paddle's own spelling, `subscription.canceled` — one `l`; match it exactly. `apps/web` must request the cancel with `effective_from: "next_billing_period"` — period-end is the only flavor supported, which makes the provisional/permanent window weeks-wide, so the downgrade path is a first-class case the worker owns, not a corner.
+
 ## Cutover order (the no-loss invariant)
 
 The consumer must exist before the producer's first publish into SQS, and RabbitMQ must drain before decommissioning:
@@ -119,7 +131,7 @@ The consumer must exist before the producer's first publish into SQS, and Rabbit
 1. Terraform provisions the FIFO queue + DLQ + redrive + alarms
 2. `worker-payments` deploys its SQS consumer and begins polling (it idles on an empty queue)
 3. This service deploys, publishing to SQS; RabbitMQ publication retires
-4. Paddle's dashboard destination URL flips to `/api/v1/webhook/paddle`; `apps/web` env + BFF flip in the same window
+4. Paddle's dashboard destination URL flips to `/api/v1/webhook/paddle`; the internal-face producer has no cutover — the face retires with this deploy, and `apps/web`'s deferred cancel route re-enters through Paddle's API when it lands
 5. The RabbitMQ `payment_events` queue drains; RabbitMQ, Amazon MQ, and the exporter scrape retire
 
 The first event touches SQS only after step 2 — no gap where events would be accepted and lost.

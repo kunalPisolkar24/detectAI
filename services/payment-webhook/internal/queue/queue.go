@@ -1,7 +1,7 @@
 // Package queue carries ingress events to the payment events FIFO queue: one
-// transport contract, the composition both faces mount, and the SQS binding.
-// The body always rides verbatim; the SQS SDK is the durability point (FR-4,
-// messaging.md).
+// transport contract, the composition the Paddle face mounts, and the SQS
+// binding. The body always rides verbatim; the SQS SDK is the durability point
+// (FR-4, messaging.md).
 package queue
 
 import (
@@ -20,7 +20,7 @@ var (
 // the Queue boundary — only this struct.
 type Message struct {
 	Body      []byte // forwarded byte-for-byte, never mutated (FR-4)
-	Source    string // "paddle" | "internal"
+	Source    string // always "paddle"
 	EventID   string // the parsed event_id, "" when absent (attribute omitted)
 	DedupID   string // event_id when present, else sha256 of the body
 	EventType string // "unknown" when absent

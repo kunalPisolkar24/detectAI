@@ -14,7 +14,6 @@ import (
 type Config struct {
 	Port          int
 	DrainTimeout  time.Duration
-	APIKey        string
 	PaddleSecret  string
 	MaxBodyBytes  int64
 	QueueURL      string
@@ -39,7 +38,7 @@ const (
 // its env name, and the field's own contract owns its failure behavior. PORT is
 // identity — garbage or outside 1–65535 fails the boot naming the var — while
 // DRAIN_TIMEOUT fail-closes: missing, blank, unreadable, or ≤ 0 keeps the budget
-// default so a bad timeout can never shorten the drain. The two credentials are
+// default so a bad timeout can never shorten the drain. The webhook secret is
 // mandatory in every plane: missing or blank names the var, short names the
 // floor, and neither failure echoes the attempt (NFR-8). MAX_BODY_BYTES and
 // PUBLISH_BUDGET fail-closed: unreadable or non-positive keeps the 1 MiB bound
@@ -60,11 +59,6 @@ func Resolve(source Source) (Config, error) {
 			cfg.DrainTimeout = drain
 		}
 	}
-	key, err := credential(source, "API_KEY", "shared secret")
-	if err != nil {
-		return Config{}, err
-	}
-	cfg.APIKey = key
 	paddle, err := credential(source, "PADDLE_WEBHOOK_SECRET", "webhook secret")
 	if err != nil {
 		return Config{}, err

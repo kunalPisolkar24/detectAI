@@ -8,7 +8,7 @@ import (
 
 // Service composes the publish path: shape the raw body, run it through the
 // transport under the publish budget (NFR-3), and hand back the typed outcome.
-// Both faces mount it at boot; the body is never mutated (FR-4).
+// The Paddle face mounts it at boot; the body is never mutated (FR-4).
 type Service struct {
 	queue  Queue
 	budget time.Duration
@@ -28,8 +28,8 @@ func (s *Service) Budget() time.Duration { return s.budget }
 // answers ErrDeadlineExceeded even when the transport already returned; the
 // dedup id makes the ambiguity harmless. Transport errors pass through their
 // own vocabulary for the handler to map per the taxonomy.
-func (s *Service) Publish(ctx context.Context, body []byte, source string) error {
-	message := Shape(body, source)
+func (s *Service) Publish(ctx context.Context, body []byte) error {
+	message := Shape(body)
 	budgetCtx, cancel := context.WithTimeout(ctx, s.budget)
 	defer cancel()
 	err := s.queue.Publish(budgetCtx, message)

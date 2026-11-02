@@ -36,6 +36,6 @@ func NewPaddleWebhook(v *validator.Paddle, maxBody int64, publish *queue.Service
 			})
 			return
 		}
-		publishResponse(c, publish, publish.Publish(c.Request.Context(), body, queue.SourcePaddle))
+		publishResponse(c, publish, publish.Publish(c.Request.Context(), body))
 	}
 }

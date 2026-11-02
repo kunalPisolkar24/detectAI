@@ -25,7 +25,7 @@ func TestServiceShapesAndForwards(t *testing.T) {
 	svc := queue.NewService(target, 5*time.Second)
 	body := []byte(`{"event_id":"evt_1","event_type":"subscription.updated","data":{"id":"sub_1"}}`)
 
-	if err := svc.Publish(context.Background(), body, queue.SourcePaddle); err != nil {
+	if err := svc.Publish(context.Background(), body); err != nil {
 		t.Fatal(err)
 	}
 	if target.message.GroupID != "subscription:sub_1" {
@@ -41,7 +41,7 @@ func TestServiceShapesAndForwards(t *testing.T) {
 
 func TestServiceMapsTheBudgetDeadline(t *testing.T) {
 	svc := queue.NewService(&fakeQueue{err: context.DeadlineExceeded}, time.Second)
-	err := svc.Publish(context.Background(), []byte(`{}`), queue.SourcePaddle)
+	err := svc.Publish(context.Background(), []byte(`{}`))
 	if !errors.Is(err, queue.ErrDeadlineExceeded) {
 		t.Errorf("err = %v, want ErrDeadlineExceeded", err)
 	}
@@ -54,7 +54,7 @@ func TestServiceAnswersTheDeadlineWhenTheCallerDies(t *testing.T) {
 	parent, cancel := context.WithCancel(context.Background())
 	cancel()
 	svc := queue.NewService(&fakeQueue{}, time.Hour)
-	err := svc.Publish(parent, []byte(`{}`), queue.SourcePaddle)
+	err := svc.Publish(parent, []byte(`{}`))
 	if !errors.Is(err, queue.ErrDeadlineExceeded) {
 		t.Errorf("err = %v, want ErrDeadlineExceeded", err)
 	}
@@ -62,7 +62,7 @@ func TestServiceAnswersTheDeadlineWhenTheCallerDies(t *testing.T) {
 
 func TestServicePassesTransportVocabularyThrough(t *testing.T) {
 	svc := queue.NewService(&fakeQueue{err: queue.ErrEnqueueUnavailable}, time.Hour)
-	err := svc.Publish(context.Background(), []byte(`{}`), queue.SourcePaddle)
+	err := svc.Publish(context.Background(), []byte(`{}`))
 	if !errors.Is(err, queue.ErrEnqueueUnavailable) {
 		t.Errorf("err = %v, want ErrEnqueueUnavailable passed through", err)
 	}

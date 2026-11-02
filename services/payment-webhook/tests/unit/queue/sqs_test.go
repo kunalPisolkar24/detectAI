@@ -67,7 +67,7 @@ func TestSQSAdapterOmitsTheEventIDAttributeWhenAbsent(t *testing.T) {
 	adapter := queue.NewSQSAdapter(target, testQueueURL)
 	message := queue.Message{
 		Body:      []byte(`{"random":true}`),
-		Source:    queue.SourceInternal,
+		Source:    queue.SourcePaddle,
 		DedupID:   "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		EventType: queue.UnknownEventType,
 		GroupID:   queue.DefaultGroupID,

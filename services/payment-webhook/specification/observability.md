@@ -15,18 +15,17 @@ One pipeline, three signals, zero hops: the SDK exports traces, metrics, and log
 
 ## The gate (NFR-5)
 
-With `OTEL_EXPORTER_OTLP_ENDPOINT` unset nothing is emitted: the boot builds the null observability and installs no SDK providers at all — dev is a silent no-op. With the endpoint set but `NEW_RELIC_LICENSE_KEY` missing, the boot fails closed on the same path as `API_KEY`. Dev may also point the endpoint at any OTLP/HTTP receiver (a local collector on 4318, for instance) — the same code path, no special-casing anywhere.
+With `OTEL_EXPORTER_OTLP_ENDPOINT` unset nothing is emitted: the boot builds the null observability and installs no SDK providers at all — dev is a silent no-op. With the endpoint set but `NEW_RELIC_LICENSE_KEY` missing, the boot fails closed on the same path as `PADDLE_WEBHOOK_SECRET`. Dev may also point the endpoint at any OTLP/HTTP receiver (a local collector on 4318, for instance) — the same code path, no special-casing anywhere.
 
 ## Metric inventory
 
-Nine instruments; the six names preserved from the pre-refactor gateway keep the NRQL surface greppable across the migration. The two envelope instruments join with the gate that produces them ([http.md](http.md)'s 422 row); they are specified here and land with this service's observability build.
+Eight instruments; six names preserved from the pre-refactor gateway keep the NRQL surface greppable across the migration. The two envelope instruments join with the gate that produces them ([http.md](http.md)'s 422 row); they are specified here and land with this service's observability build.
 
 | Instrument | Type | Attributes | Consumed by |
 |------------|------|------------|-------------|
 | `payment_webhooks_received_total` | Counter | `event_type` | dashboards |
 | `payment_events_published_total` | Counter | `event_type`, `status` | dashboards + alert |
 | `payment_webhook_signatures_invalid_total` | Counter | — | dashboards + alert |
-| `payment_internal_events_unauthorized_total` | Counter | — | dashboards + alert |
 | `payment_webhooks_unknown_event_type_total` | Counter | — | dashboards |
 | `payment_webhook_body_errors_total` | Counter | `reason` | dashboards |
 | `payment_webhook_envelope_rejections_total` | Counter | `reason` — the missing field(s) | dashboards + alert |
@@ -57,7 +56,6 @@ Every recording site on the ingress, and what each call touches:
 | invalid Paddle signature | 401 | `record_invalid_signature()` | `payment_webhook_signatures_invalid_total` |
 | envelope fields incomplete | 422 | `record_envelope_rejection(reason)` | `payment_webhook_envelope_rejections_total` |
 | advisory-only oddity on a queued body | 200 | `record_envelope_advisory(reason)` | `payment_webhook_envelope_advisories_total` |
-| internal key missing/invalid | 401 | `record_internal_unauthorized()` + warn log (no key echoed) | `payment_internal_events_unauthorized_total` |
 | recognized event received | accepted | `record_webhook_received(event_type)` | `payment_webhooks_received_total` |
 | unrecognized `event_type` | accepted | received + unknown counters | `payment_webhooks_received_total`, `payment_webhooks_unknown_event_type_total` |
 | enqueue succeeded | 200 | `record_publish(event_type, "success", d)` | `payment_events_published_total`, `payment_events_enqueue_duration_seconds` |
@@ -75,7 +73,7 @@ OTEL_SERVICE_VERSION=               # optional; "dev" when unset (SSM-seedable)
 OTEL_TRACE_SAMPLE_RATIO=1.0         # 0 < ratio ≤ 1
 ```
 
-- Fail-closed: an endpoint without a license key fails the boot on the same path as `API_KEY`'s minimum length; an unset endpoint is a legitimate disabled boot in every plane.
+- Fail-closed: an endpoint without a license key fails the boot on the same path as `PADDLE_WEBHOOK_SECRET`'s minimum length; an unset endpoint is a legitimate disabled boot in every plane.
 - A set endpoint demands the key in every plane — the local collector on 4318 included; a throwaway value is legitimate there, and the destination knob stays `OTEL_EXPORTER_OTLP_ENDPOINT` alone (no enable/disable switch).
 - Resource identity: `service.name = payment-webhook`, `service.version`, and the `ENV_TYPE` flick supplying `deployment.environment` (`dev`/`prod`; `loadtest` on rigs) — direct push means the app owns the label the collector used to upsert.
 - The SSM allowlist (seed tooling) carries the `OTEL_*` keys; `NEW_RELIC_LICENSE_KEY` joins the secrets blob.
@@ -105,6 +103,6 @@ The existing assets move with the rebuild; nothing is silently half-migrated:
 | `alerts/shared.tf` | `payment_gateway` policy area stays; condition queries re-point |
 | `alerts/gateway.tf` — 5xx span condition | query updates to `service.name = 'payment-webhook'` — no semantic change |
 | `alerts/gateway.tf` — rabbitmq log-condition | dies; replaced by a condition on `payment_events_published_total` with `status = 'error'` (outage/throttle signal, the old condition's intent) |
-| recommended additions | conditions on `payment_webhook_signatures_invalid_total` and `payment_internal_events_unauthorized_total` above baseline rates — tamper/replay and brute-force signals the old policy never carried; thresholds set when wiring lands |
+| recommended additions | conditions on `payment_webhook_signatures_invalid_total` above baseline rates — tamper/replay and brute-force signals the old policy never carried; thresholds set when wiring lands |
 | `alerts/workers.tf` — `rabbitmq_connection_status` | retires with the broker at the worker cutover (not this service's PR) |
 | overview board | `payment-gateway` entries in the services list re-name |

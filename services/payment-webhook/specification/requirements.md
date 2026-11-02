@@ -13,7 +13,7 @@ Detailed designs: [spec index](README.md) · [HTTP contract](http.md) · [delive
 |----|-------------|
 | FR-1 | Accept Paddle webhooks at `POST /api/v1/webhook/paddle` and validate the `Paddle-Signature` HMAC before any other work |
 | FR-2 | Reject missing, malformed, stale, or tampered signatures with 401 (generic message; the failure classes are indistinguishable in the response) |
-| FR-3 | Accept internal events at `POST /api/v1/internal/events`, authenticated with the shared secret `API_KEY` — see [Authentication scheme](#authentication-scheme) |
+| FR-3 | Reject Paddle bodies whose envelope is incomplete — absent or blank `event_id`/`event_type`, unparseable `occurred_at`, or non-object `data` — with 422 naming the fields, after signature validation ([http.md](http.md)'s envelope check) |
 | FR-4 | Forward every authenticated event to the payment events FIFO queue with the body carried byte-for-byte and transport attributes for `source`, `event_type`, and `event_id` (see [messaging.md](messaging.md)) |
 | FR-5 | Return 200 `{"status":"queued"}` once SQS accepts the message — SQS's success response is the durability guarantee (no in-flight buffering, no publisher-confirm dance) |
 | FR-6 | Return clear error responses when a request cannot be processed: unreadable or malformed body 400, oversized body 413, enqueue unavailable 503 with `Retry-After`, unexpected failure 500 |
@@ -22,18 +22,18 @@ Detailed designs: [spec index](README.md) · [HTTP contract](http.md) · [delive
 
 ### Authentication scheme
 
-The internal ingress inherits the document-parser scheme verbatim — one credential, one header, one comparison path:
+One producer, one credential — the Paddle webhook secret, validated before any other work:
 
 | Piece | Decision |
 |-------|----------|
-| Credential | Shared secret `API_KEY` — mandatory in every environment (dev, load rig, prod); in prod it is delivered via Secrets Manager, elsewhere via env |
+| Credential | `PADDLE_WEBHOOK_SECRET` — from Paddle's dashboard, mandatory in every environment (dev, load rig, prod); in prod it is delivered via Secrets Manager, elsewhere via env |
 | Validation at boot | Non-empty and at least 16 characters |
-| Headers | `x-api-key` only — no `Authorization`/`Bearer` processing |
-| Comparison | Constant-time over the UTF-8 bytes |
-| Failure | 401 with a generic message; missing and invalid credentials are indistinguishable in the response |
-| Logging | Rejections are logged (NFR-8) at warning level without echoing the attempted key; the rejected-request counter lands with the metrics build |
+| Header | `Paddle-Signature` — `ts=<unix-seconds>;h1=<hex>`, HMAC-SHA256 over `<ts>:<raw-body>` |
+| Comparison | Constant-time, plus the ±5 min freshness window |
+| Failure | 401 with a generic message; missing, malformed, stale, and tampered signatures are indistinguishable in the response |
+| Logging | Rejections are logged (NFR-8) at warning level; the rejected-request counter lands with the metrics build |
 
-The Paddle ingress keeps its own credential — `PADDLE_WEBHOOK_SECRET` (non-empty, ≥ 16 characters, fail-fast) validating the `Paddle-Signature` HMAC — so the two faces have distinct secrets, distinct headers, and distinct comparison paths. The old `INTERNAL_API_KEY` name retires with the rebuild; see [Knock-ons](#knock-ons).
+The internal face and its `API_KEY`/`x-api-key` scheme retired with the gateway going Paddle-only — nothing reaches the gateway except Paddle (see [Knock-ons](#knock-ons)); the old `INTERNAL_API_KEY` name retires with the rebuild.
 
 ## Non-functional requirements
 
@@ -87,7 +87,7 @@ HTTP bounds are configurable at boot via environment variables with these defaul
 ## Explicitly out of scope
 
 - The `worker-payments` consumer swap to SQS — out of scope, tracked as a knock-on with the cutover order
-- Any provider beyond Paddle; the internal-events face is not a provider seam
+- Any provider beyond Paddle; the gateway accepts no other producer — cancellation enters through Paddle's own lifecycle events ([messaging.md](messaging.md)'s cancellation contract)
 - Service-level dedup storage (Redis/DB) — SQS dedup plus worker idempotency covers it
 - Rate limiting, admission control (429/503 on saturation) — shedding is not this service's lever
 - DLQ inspection/replay tooling — AWS console + CLI is the accepted operational surface
@@ -99,15 +99,15 @@ Out of this build's phase-1 code, tracked here so the contract change is visible
 
 - **`worker-payments`** — new SQS consumer (`payment_events.fifo`), RabbitMQ consumer retires at cutover; its own pull request
 - **Paddle dashboard** — webhook destination URL re-pointed to `<host>/api/v1/webhook/paddle`
-- **`apps/web` `cancel-subscription.ts`** — header `X-Internal-Key: env.INTERNAL_API_KEY` → `x-api-key: env.PAYMENT_GATEWAY_API_KEY`; path → `/api/v1/internal/events`
-- **`apps/web` env** — new caller-side name `PAYMENT_GATEWAY_API_KEY` per the document-parser `FILE_EXTRACTOR_API_KEY` precedent (the service side stays `API_KEY`); compose files re-wired in the same PR; the web's own `INTERNAL_API_KEY` (analyze-stream load-test bypass) is a different credential and is untouched
+- **`apps/web` cancel route** — deferred with apps/web's other work: it calls Paddle's cancel API directly (period-end, `effective_from: "next_billing_period"`) rather than posting internal events, and its calling path must carry the app's own auth — a user cancels only their own subscription
+- **`apps/web` env** — no `PAYMENT_GATEWAY_API_KEY` ever ships; the gateway's shared key retires with the internal face (the web's own `INTERNAL_API_KEY` (analyze-stream load-test bypass) is a different credential and is untouched)
 - **`apps/web` BFF status route** — `app/api/services/payment-gateway/status` polls `/readyz` → `/ready`
 - **`apps/web` docs** — configuration/request-flows/services pages name the old path and header
-- **Load rigs** — `apps/web/test/load/mock-server` fakes the old path; rig env files carry the internal key
-- **Secrets tooling** — the gateway's Secrets Manager blob (`{"API_KEY": …}`) joins the seed process allowlist; `PADDLE_WEBHOOK_SECRET` rides the same mechanism
+- **Load rigs** — `apps/web/test/load/mock-server` faked the internal path and its env files carried the internal key; both retire with the face
+- **Secrets tooling** — the gateway's Secrets Manager blob (`{"PADDLE_WEBHOOK_SECRET": …}`) joins the seed process allowlist
 - **Queue provisioning** — Terraform creates the FIFO queue, FIFO DLQ, redrive policy, and CloudWatch alarms (see [messaging.md](messaging.md))
 
 ## Deferred
 
-- **Load rig stress/soak/negative profiles** — deliberately postponed; the internal face of this service is low-volume, and Paddle's retry cadence cannot be load-rigged meaningfully against Lambda platform latency
+- **Load rig stress/soak/negative profiles** — deliberately postponed; the gateway is Paddle's delivery fan-out — low-volume, and Paddle's retry cadence cannot be load-rigged meaningfully against Lambda platform latency
 - **`references/` LLDs** — drafted with the build, per [design.md](design.md)

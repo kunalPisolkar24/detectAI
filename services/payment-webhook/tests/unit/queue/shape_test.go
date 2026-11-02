@@ -80,7 +80,7 @@ func TestShapeWalksTheGroupKeyLadder(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			message := queue.Shape([]byte(tc.body), queue.SourcePaddle)
+			message := queue.Shape([]byte(tc.body))
 			if message.GroupID != tc.pwgroup {
 				t.Errorf("GroupID = %q, want %q", message.GroupID, tc.pwgroup)
 			}
@@ -88,9 +88,16 @@ func TestShapeWalksTheGroupKeyLadder(t *testing.T) {
 	}
 }
 
+func TestShapeStampsThePaddleSource(t *testing.T) {
+	message := queue.Shape([]byte(`{"event_id":"evt_1"}`))
+	if message.Source != queue.SourcePaddle {
+		t.Errorf("Source = %q, want %q — the gateway is Paddle-only, so the stamp is the constant", message.Source, queue.SourcePaddle)
+	}
+}
+
 func TestShapeForwardsTheBodyVerbatim(t *testing.T) {
 	body := []byte(`{"event_id":"evt_1","data":{"id":"sub_1"}}`)
-	message := queue.Shape(body, queue.SourcePaddle)
+	message := queue.Shape(body)
 	if string(message.Body) != string(body) {
 		t.Errorf("Body = %q, want the identical bytes", message.Body)
 	}
@@ -100,11 +107,11 @@ func TestShapeForwardsTheBodyVerbatim(t *testing.T) {
 }
 
 func TestShapeNamesUnknownTypes(t *testing.T) {
-	message := queue.Shape([]byte(`{"random":true}`), queue.SourceInternal)
+	message := queue.Shape([]byte(`{"random":true}`))
 	if message.EventType != queue.UnknownEventType {
 		t.Errorf("EventType = %q, want %q", message.EventType, queue.UnknownEventType)
 	}
-	recognized := queue.Shape([]byte(`{"event_type":"subscription.updated"}`), queue.SourcePaddle)
+	recognized := queue.Shape([]byte(`{"event_type":"subscription.updated"}`))
 	if recognized.EventType != "subscription.updated" {
 		t.Errorf("EventType = %q, want the recognized type", recognized.EventType)
 	}
@@ -112,11 +119,11 @@ func TestShapeNamesUnknownTypes(t *testing.T) {
 
 func TestShapeComputesTheDedupID(t *testing.T) {
 	body := []byte(`{"event_id":"evt_9"}`)
-	message := queue.Shape(body, queue.SourcePaddle)
+	message := queue.Shape(body)
 	if message.DedupID != "evt_9" || message.EventID != "evt_9" {
 		t.Errorf("dedup/event = %q/%q, want the parsed event_id", message.DedupID, message.EventID)
 	}
-	fallback := queue.Shape([]byte(`{"random":true}`), queue.SourcePaddle)
+	fallback := queue.Shape([]byte(`{"random":true}`))
 	sum := sha256.Sum256([]byte(`{"random":true}`))
 	if fallback.DedupID != hex.EncodeToString(sum[:]) {
 		t.Errorf("DedupID = %q, want the sha256 of the body", fallback.DedupID)
