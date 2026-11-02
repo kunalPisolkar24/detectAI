@@ -37,6 +37,7 @@ sequenceDiagram
     P->>E: POST /api/v1/webhook/paddle (Paddle-Signature)
     E-->>P: 401 if signature missing, stale, malformed, or tampered
     E->>E: read body bounded at 1 MiB + 1 byte
+    E-->>P: 422 if the envelope check fails (below)
     E->>Q: SendMessage (FIFO attributes, body verbatim)
     Q-->>E: accepted (durable)
     E-->>P: 200 {"status":"queued"}
@@ -82,12 +83,19 @@ Emitted only after SQS accepts the message — the SDK response is the durabilit
 | 400 | Body unreadable or malformed during the bounded read | generic |
 | 401 | Signature missing, malformed, stale, or tampered | generic; failure classes indistinguishable |
 | 413 | Body larger than the effective bound — `min(MAX_BODY_BYTES, SQS's 256 KiB ceiling)` | includes the limit |
+| 422 | The envelope check failed: `event_id`, `event_type`, `occurred_at`, or `data` missing, blank, mistyped, or `data` not an object | names the missing fields; no `Retry-After` — the caller produced an unusable payload, not a queue outage |
 | 503 | Enqueue unavailable: SQS outage, throttling, or deadline exceeded | `{"error": "...", "retryable": true}` + `Retry-After` (budget ceil; 5 default) |
 | 500 | Unexpected error | generic |
 
 404/405 and other framework defaults are untouched. A 401 never inherits `WWW-Authenticate` (there is no interactive auth surface; the credential carries via one header and one comparison path, per [requirements.md](requirements.md)).
 
-## POST /api/v1/internal/events
+### The envelope check
+
+After the signature passes, the body must carry the minimal envelope the worker and FIFO ordering depend on: `event_id` (non-blank string), `event_type` (non-blank string), `occurred_at` (RFC3339), and `data` (a JSON object). Absent, blank, null, and mistyped all fail the same gate under the field's own name. Everything past that layer never rejects: the event_type vocabulary, data contents, and deep shapes stay the worker's interpretation (FR-7). Extra top-level keys are ignored — an open set, so Paddle can grow the envelope without breaking this face.
+
+A verified body missing any core field answers **422** naming the fields, with no `Retry-After`: this is a caller-produced unusable payload, not a queue outage. Paddle treats the delivery as failed and retries it on its own schedule, and the dashboard replay re-delivers after a fix — so envelope drift becomes a loud, visible failure with a repair window instead of silent misprocessing downstream. Two oddities are advisory only and never reject: a missing/blank `notification_id` (Paddle's delivery-layer id with no downstream consumer — the worker keys idempotency on `event_id`, not the delivery id), and a `data` that resolves no subscription/customer id in the group-key ladder (known-but-unaddressable events are legitimate). The advisory counters land with the observability build.
+
+### POST /api/v1/internal/events
 
 ### Request
 
@@ -97,7 +105,7 @@ Emitted only after SQS accepts the message — the SDK response is the durabilit
 
 ### Response — 200 / status codes
 
-Same envelope and table as the Paddle face minus the signature rules: 401 covers the key's missing/invalid cases, 503 covers the queue, 413/400 cover the body, 500 covers the unexpected.
+Same envelope and table as the Paddle face minus the signature rules and minus the envelope gate: 401 covers the key's missing/invalid cases, 503 covers the queue, 413/400 cover the body, 500 covers the unexpected.
 
 ## Liveness and readiness
 
@@ -113,7 +121,7 @@ The endpoints stay in the contract for local parity — Lambda has no probes; th
 1. **Prefix on ingress, flat probes** — the two authenticated endpoints carry `/api/v1` (future versioning stays off the callers' critical path); the probes stay root-level and version-free, matching probe-tool expectations. document-parser versioned everything including probes; the differentiated shape is the deliberate reverse — the probe namespace never needs an API version.
 2. **One credential, one header, one comparison path** — `x-api-key` only. `X-Internal-Key` carried the same secret in a second envelope whose cost was a second comparison path to test and a non-standard header name; the document-parser inheritance makes the compare constant-time in the same stroke (the pre-refactor gateway compared with `!=`).
 3. **413/400 split** — an oversized body and a malformed body are different caller failures (config vs payload); document-parser already standardized the distinction, and Paddle treats any 4xx identically (failure → retry), so nothing rides on the change.
-4. **Unknown event types queue** — the gateway's job is transport, not vocabulary. Rejecting an unknown `event_type` would let a Paddle schema evolution 400 the whole pipeline; the worker owns interpretation and the counter owns visibility (FR-7).
+4. **Unknown event types queue** — the gateway's job is transport, not vocabulary. Rejecting an unknown `event_type` would let a Paddle schema evolution 400 the whole pipeline; the worker owns interpretation and the counter owns visibility (FR-7). Presence and vocabulary split cleanly: the envelope check rejects a *missing/blank* `event_type` (422 — it starves routing outright), while an *unknown but present* value still queues.
 5. **503 on enqueue failure, always with `Retry-After` (the budget's ceil)** — the fast-fail contract survives. SQS being an AWS-managed service, "broker down" is rare, but throttling and short-lived 5xx exist; the shaped response plus the dedup window make the ambiguous "did it actually enqueue?" case harmless ([requirements.md](requirements.md) NFR-3).
 6. **Error envelope stays `{"error": "…"}`** — Gin-native, the only shape every handler in a Go Gin service produces; document-parser's `{"detail": "…"}` is a FastAPI convention, not a repo standard to copy.
 7. **Freshness window ±5 min kept** — recorded so it is not read as accidental: it bounds replay of captured signatures, and Paddle's clock-bound rejections are comfortably outside legitimate delivery latency.

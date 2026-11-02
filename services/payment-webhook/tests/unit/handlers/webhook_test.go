@@ -79,14 +79,19 @@ func post(t *testing.T, target queue.Queue, body []byte, header string) *httptes
 	return w
 }
 
+// validBody is the full envelope every happy-path test rides on: a fixed
+// event id and a sub_-prefixed data.id keep dedup/group assertions stable.
+const validEventID = "ntfsimevt_01m6dk7m1cmrykjg0da6qt2tke"
+const validGroupID = "subscription:sub_01hv8x29kz0t586xy6zn1a62ny"
+
 func validBody() []byte {
-	return []byte(`{"event_type":"subscription.updated"}`)
+	return []byte(`{"event_id":"` + validEventID + `","event_type":"subscription.updated","occurred_at":"2026-11-02T07:40:26.540606Z","notification_id":"ntfsimntf_01m6dk7m3h1gz9pfrhc9t33ty2","data":{"id":"sub_01hv8x29kz0t586xy6zn1a62ny"}}`)
 }
 
 func TestPaddleWebhookQueuesValidEvents(t *testing.T) {
 	for name, body := range map[string][]byte{
 		"small body":        validBody(),
-		"exactly the bound": bytesOf(max), // max is legal; max+1 is not
+		"exactly the bound": paddedEnvelope(t, max), // max is legal; max+1 is not
 	} {
 		t.Run(name, func(t *testing.T) {
 			target := &fakeQueue{}
@@ -99,6 +104,15 @@ func TestPaddleWebhookQueuesValidEvents(t *testing.T) {
 			}
 			if target.message.Source != queue.SourcePaddle {
 				t.Errorf("Source = %q, want %q", target.message.Source, queue.SourcePaddle)
+			}
+			if target.message.DedupID != validEventID {
+				t.Errorf("DedupID = %q, want the parsed event_id", target.message.DedupID)
+			}
+			if target.message.GroupID != validGroupID {
+				t.Errorf("GroupID = %q, want the subscription rung", target.message.GroupID)
+			}
+			if target.message.EventID != validEventID || target.message.EventType != "subscription.updated" {
+				t.Errorf("attrs = %q/%q, want the event_id and event_type carried", target.message.EventID, target.message.EventType)
 			}
 		})
 	}
@@ -130,6 +144,61 @@ func TestPaddleWebhookRejectsBadSignaturesIdentically(t *testing.T) {
 		if envelope != `{"error":"unauthorized"}` {
 			t.Errorf("%s body = %q, want the generic unauthorized envelope on every class", name, envelope)
 		}
+	}
+}
+
+func TestPaddleWebhookRejectsEnvelopeViolationsBeforeQueue(t *testing.T) {
+	cases := map[string]struct {
+		body []byte
+		want string
+	}{
+		"missing two hard fields": {
+			[]byte(`{"event_id":"ntfsimevt_01m6dk7m1cmrykjg0da6qt2tke","event_type":"subscription.updated"}`),
+			`{"error":"payload rejected by the envelope check","missing":["data","occurred_at"]}`,
+		},
+		"blank event_id": {
+			[]byte(`{"event_id":"  ","event_type":"subscription.updated","occurred_at":"2026-11-02T07:40:26.540606Z","data":{}}`),
+			`{"error":"payload rejected by the envelope check","missing":["event_id"]}`,
+		},
+		"unparseable occurred_at": {
+			[]byte(`{"event_id":"evt_1","event_type":"subscription.updated","occurred_at":"not a time","data":{}}`),
+			`{"error":"payload rejected by the envelope check","missing":["occurred_at"]}`,
+		},
+		"array data": {
+			[]byte(`{"event_id":"evt_1","event_type":"subscription.updated","occurred_at":"2026-11-02T07:40:26.540606Z","data":[1]}`),
+			`{"error":"payload rejected by the envelope check","missing":["data"]}`,
+		},
+		"non-object payload": {
+			[]byte(`[1,2,3]`),
+			`{"error":"payload rejected by the envelope check","missing":["payload"]}`,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			target := &fakeQueue{}
+			w := signedPost(t, target, tc.body)
+			if w.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status = %d, want 422", w.Code)
+			}
+			if body := w.Body.String(); body != tc.want {
+				t.Errorf("body = %q, want the named rejection", body)
+			}
+			if target.message.Source != "" {
+				t.Errorf("Source = %q, want zero — a 422 never publishes", target.message.Source)
+			}
+			if header := w.Header().Get("Retry-After"); header != "" {
+				t.Errorf("Retry-After = %q, want absent on the envelope row", header)
+			}
+		})
+	}
+}
+
+func TestPaddleWebhookChecksTheSignatureBeforeTheEnvelope(t *testing.T) {
+	// Gate order is verify-first: an unsigned body missing the envelope
+	// answers 401, the auth failure, never the vocabulary failure.
+	w := post(t, &fakeQueue{}, []byte(`[1,2,3]`), "garbage")
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", w.Code)
 	}
 }
 
@@ -193,6 +262,29 @@ func TestPaddleWebhookAnswersThe500CatchAll(t *testing.T) {
 	if header := w.Header().Get("Retry-After"); header != "" {
 		t.Errorf("Retry-After = %q, want absent on the non-retryable row", header)
 	}
+}
+
+// signedPost wraps post with the fresh valid signature over the exact bytes.
+func signedPost(t *testing.T, target queue.Queue, body []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	return post(t, target, body, sign(testSecret, freshTS(t), body))
+}
+
+// paddedEnvelope renders the valid envelope as an exactly-n-byte body with
+// trailing JSON whitespace, so the "exactly the bound" case still carries a
+// full envelope through the gate.
+func paddedEnvelope(t *testing.T, n int64) []byte {
+	t.Helper()
+	base := validBody()
+	if int64(len(base)) > n {
+		t.Fatalf("valid body is %d bytes, beyond the %d bound it must pad to", len(base), n)
+	}
+	body := make([]byte, n)
+	copy(body, base)
+	for i := len(base); i < int(n); i++ {
+		body[i] = ' '
+	}
+	return body
 }
 
 // brokenReader faults the transport mid-body to drive the 400 class.

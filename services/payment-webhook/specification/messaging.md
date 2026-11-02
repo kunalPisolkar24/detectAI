@@ -49,13 +49,13 @@ The service knows exactly one queue parameter: `QUEUE_URL`, mandatory, fail-fast
 |-----------|-------|
 | Body | The received JSON bytes **verbatim** — Paddle's payload or the web app's internal event, byte-for-byte (FR-4) |
 | Content type implied | `application/json` (body is opaque bytes to SQS; the worker parses as today) |
-| `MessageDeduplicationId` | Parsed `event_id` when present; otherwise SQS content-based dedup on the body. See the ladder below |
+| `MessageDeduplicationId` | The parsed `event_id` — guaranteed present on the Paddle face by the envelope check ([http.md](http.md)); the internal face falls back to SQS content-based dedup on the body. See the ladder below |
 | `MessageGroupId` | The group-key ladder below |
 | `MessageAttributes` — `source` | `paddle` or `internal` (String) |
-| `MessageAttributes` — `event_type` | Best-effort parse; `unknown` when absent |
-| `MessageAttributes` — `event_id` | Best-effort parse; attribute omitted when absent |
+| `MessageAttributes` — `event_type` | Best-effort parse; `unknown` when the parse misses it |
+| `MessageAttributes` — `event_id` | Always present on the Paddle face (the envelope check guarantees it, [http.md](http.md)); omitted only when the internal face's `event_id` is absent |
 
-The body passthrough is deliberate: the gateway's job is transport with verification, not vocabulary. The worker keeps parsing the same wire shape it parses today; the moved contract is the queue, not the envelope. The prerequisite parse (event_id/event_type/group keys) touches the payload for metadata only — the forwarded bytes are never altered by it.
+The body passthrough is deliberate: the gateway's job is transport with verification, not vocabulary. The worker keeps parsing the same wire shape it parses today; the moved contract is the queue, not the envelope. The prerequisite parse (event_id/event_type/group keys) touches the payload for metadata only — the forwarded bytes are never altered by it. The parse's latitude narrows with the envelope check ([http.md](http.md)): unknown event types and arbitrary data contents queue (FR-7), while a Paddle body missing a core envelope field is rejected at the gate (422).
 
 ### Group-key ladder
 
@@ -73,6 +73,8 @@ Sequence:
 2. **Customer id** → group `customer:<id>` — ordering for subscription-less internal events. First hit among `data.customer_id`, `data.customerId`, `data.userId`.
 3. **`event_type`** when neither id resolves → per-type ordering; same-kind events still never interleave.
 4. **`default`** when the body parses to nothing usable; dedup falls back to content-based.
+
+On the Paddle face the envelope check guarantees a non-blank `event_type` and an object `data`, so rung 3 always resolves when no id is found and the `default` rung is reachable only from the internal face today.
 
 The alias list lives in one place (`ParseEvent` in `internal/queue`) and is unit-tested against each source's real payload shape ([design.md](design.md)'s test plan). Unknown types with addressable ids still group correctly.
 

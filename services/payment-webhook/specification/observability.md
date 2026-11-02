@@ -19,7 +19,7 @@ With `OTEL_EXPORTER_OTLP_ENDPOINT` unset nothing is emitted: the boot builds the
 
 ## Metric inventory
 
-Seven instruments; the six names preserved from the pre-refactor gateway keep the NRQL surface greppable across the migration.
+Nine instruments; the six names preserved from the pre-refactor gateway keep the NRQL surface greppable across the migration. The two envelope instruments join with the gate that produces them ([http.md](http.md)'s 422 row); they are specified here and land with this service's observability build.
 
 | Instrument | Type | Attributes | Consumed by |
 |------------|------|------------|-------------|
@@ -29,6 +29,8 @@ Seven instruments; the six names preserved from the pre-refactor gateway keep th
 | `payment_internal_events_unauthorized_total` | Counter | — | dashboards + alert |
 | `payment_webhooks_unknown_event_type_total` | Counter | — | dashboards |
 | `payment_webhook_body_errors_total` | Counter | `reason` | dashboards |
+| `payment_webhook_envelope_rejections_total` | Counter | `reason` — the missing field(s) | dashboards + alert |
+| `payment_webhook_envelope_advisories_total` | Counter | `reason` — `notification_id`, `addressable_id` | dashboards |
 | `payment_events_enqueue_duration_seconds` | Histogram | `status` | dashboards |
 
 `status` on both the publish counter and the duration histogram partitions `success` | `error` | `timeout` — a share migration from RabbitMQ's `success`/`error` pair re-accounts the deadline-exceeded case on the same dimension, so boards aggregate unchanged.
@@ -53,6 +55,8 @@ Every recording site on the ingress, and what each call touches:
 |---|---|---|---|
 | body unreadable / beyond the bound | 400 / 413 | `record_body_error(reason)` (`unreadable`, `too_large`) | `payment_webhook_body_errors_total` |
 | invalid Paddle signature | 401 | `record_invalid_signature()` | `payment_webhook_signatures_invalid_total` |
+| envelope fields incomplete | 422 | `record_envelope_rejection(reason)` | `payment_webhook_envelope_rejections_total` |
+| advisory-only oddity on a queued body | 200 | `record_envelope_advisory(reason)` | `payment_webhook_envelope_advisories_total` |
 | internal key missing/invalid | 401 | `record_internal_unauthorized()` + warn log (no key echoed) | `payment_internal_events_unauthorized_total` |
 | recognized event received | accepted | `record_webhook_received(event_type)` | `payment_webhooks_received_total` |
 | unrecognized `event_type` | accepted | received + unknown counters | `payment_webhooks_received_total`, `payment_webhooks_unknown_event_type_total` |

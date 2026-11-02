@@ -38,9 +38,10 @@ services/payment-webhook/
     validator/
       body.go       # ReadBounded + the bound error pair — the check both faces share
       paddle.go     # the Paddle HMAC verifier: header grammar, freshness, constant-time compare
+      envelope.go   # CheckEnvelope: the Paddle envelope gate — presence-only, warn-level advisory
     handlers/
       probes.go     # /health, /ready — static bodies
-      webhook.go    # POST /api/v1/webhook/paddle — bounded read, verify, one publish call
+      webhook.go    # POST /api/v1/webhook/paddle — bounded read, verify, envelope gate, one publish
       events.go     # POST /api/v1/internal/events — bounded read, one publish call
       response.go   # the shared rows: the two read rows, the publish rows 200/503/500
     queue/
@@ -74,13 +75,13 @@ services/payment-webhook/
     tests.mk       # testing verbs: test, test-unit (tests tree boundary)
 ```
 
-Both faces mount the same publisher at boot: bounded read, then — per face — the signature check or the x-api-key guard, then one `Publish`; the 200 goes out only after the SQS response is in. The validator package owns the checks: the bounded read both faces share sits beside the paddle-specific verifier, one file each, stdlib imports only; the handler owns only statuses and bodies. The single interface seam is the transport: `queue.Queue` exists so the handler- and router-matrix tests can run a fake instead of reaching an SQS endpoint — production runs one adapter. Middleware stays gin's built-in logger/recovery (otelgin joins with the observability build). Growth continues file-first within the standing `cmd/` + `internal/` layout: per-face validators grow as files in the standing directories.
+Both faces mount the same publisher at boot: bounded read, then — per face — the signature check or the x-api-key guard, then one `Publish`; the 200 goes out only after the SQS response is in. The validator package owns the checks: the bounded read both faces share sits beside the paddle-specific verifier, one file each, stdlib imports only; the handler owns only statuses and bodies. The envelope gate (`envelope.go`) completes the paddle side: presence-only over the four core fields (`event_id`, `event_type`, `occurred_at`, `data`), with `notification_id` and data-addressability advisory-only — the worker keys idempotency on `event_id`, not on Paddle's delivery-layer id, so the delivery envelope can evolve without breaking anything (http.md's envelope section). The advisory addressable-id check calls `queue.ParseEvent` rather than owning a second alias list: messaging.md keeps that list in exactly one place. The single interface seam is the transport: `queue.Queue` exists so the handler- and router-matrix tests can run a fake instead of reaching an SQS endpoint — production runs one adapter. Middleware stays gin's built-in logger/recovery (otelgin joins with the observability build). Growth continues file-first within the standing `cmd/` + `internal/` layout: per-face validators grow as files in the standing directories.
 
 One of each kind still applies when that split happens. The pre-refactor tree carried parallel layers from stacked iterations — `internal/transport/http` alongside `internal/adapters/inbound/http`, `internal/infrastructure/rabbitmq` alongside `internal/adapters/outbound/rabbitmq`, three observability homes. The rebuild collapses to one layer of each that the repo's clean-architecture rule names, with no interface growth beyond the contracts the standing packages carry, and no `ports/messaging.go` leaking AMQP primitives into the domain (the pre-refactor `ports/messaging.go` was an AMQP interface file — the domain depended on broker transport-shaped things). Dependency direction is one-way whenever the split exists: SDK/Gin imports stay out of the inner layers, wiring happens at boot.
 
 ## Runtime model
 
-There is **no executor, no worker pool, no connection machinery — anywhere**. The request path is strictly sequential: bounded body read → validate → parse metadata → enqueue (one `SendMessage` with the 5 s budget) → response 200. Concurrency exists outside the process — Lambda instances — and for the container runtime, replicas. The local compose instance runs the same code path with no in-process pooling, mirroring document-parser's one-code-path-per-runtime model.
+There is **no executor, no worker pool, no connection machinery — anywhere**. The request path is strictly sequential: bounded body read → validate (sign) → envelope gate → parse metadata → enqueue (one `SendMessage` with the 5 s budget) → response 200. Concurrency exists outside the process — Lambda instances — and for the container runtime, replicas. The local compose instance runs the same code path with no in-process pooling, mirroring document-parser's one-code-path-per-runtime model.
 
 Health: `ready` reflects boot validation only (config, credentials, queue URL); there is nothing to check at request time because there is no broker connection to monitor. This deletes the connection-manager gauges and their readiness gate with one stroke ([messaging.md](messaging.md) records what dies).
 
@@ -96,6 +97,7 @@ The typed error set, mapped to HTTP exactly once on the faces — the read/signa
 | `ErrBodyMalformed` (unreadable) | 400 | no |
 | `ErrInvalidSignature` | 401 | no |
 | `ErrInvalidAPIKey` | 401 | no |
+| envelope fields missing (CheckEnvelope, Paddle face) | 422 | no |
 | `ErrEnqueueUnavailable` (SQS 5xx/throttle) | 503 + `Retry-After: 5` | yes |
 | `ErrDeadlineExceeded` | 503 + `Retry-After: 5` | yes |
 | anything unexpected | 500 | no |
@@ -120,8 +122,8 @@ Same double-plane shape document-parser landed; this service's own LLD lives in 
 
 ## Testing strategy
 
-- **Unit** — validator vectors: valid signature, tampered body, stale `ts` (−5 min + 1 s), future `ts` (+5 min + 1 s), missing/malformed header fragments, empty secret; bounded-read vectors (legal at exactly the bound, oversize answers before the excess is consumed, short corrupt transfers answer 400); config plane fail-closed cases (missing creds, short creds, bad bounds). The group-key ladder and `ParseEvent` vectors landed with the publisher build — their consumer did too.
-- **Handler matrix** — the landed face's status surface (200/400/401/413/503/500) over the real validator and a fake `Queue`, asserting the envelope and that the bound precedes auth (an oversize body with a garbage signature still answers 413); the metrics rows join the observability build.
+- **Unit** — validator vectors: valid signature, tampered body, stale `ts` (−5 min + 1 s), future `ts` (+5 min + 1 s), missing/malformed header fragments, empty secret; bounded-read vectors (legal at exactly the bound, oversize answers before the excess is consumed, short corrupt transfers answer 400); envelope vectors (the four hard fields absent/blank/null/mistyped, non-object top level, RFC3339-parseability, the two advisory-only signals, open top-level set); config plane fail-closed cases (missing creds, short creds, bad bounds). The group-key ladder and `ParseEvent` vectors landed with the publisher build — their consumer did too.
+- **Handler matrix** — the landed face's status surface (200/400/401/413/422/503/500) over the real validator and a fake `Queue`, asserting the envelope and that the bound precedes auth (an oversize body with a garbage signature still answers 413) and that the signature precedes the envelope gate (an unsigned envelope violation answers 401, never 422); a 422 asserts the fake queue saw zero publishes. The metrics rows join the observability build.
 - **Integration** — the SQS adapter runs against a fake client in the unit tree (message shape, fault mapping); the Testcontainers Floci fault-injection rig joins its own build, carrying the real `SendMessage` assertions (FIFO attribute values, dedup id, group key, body byte-equality verbatim). The pre-refactor RabbitMQ testcontainers rig does not port.
 - **Deferred** — load rig stress/soak profiles ([requirements.md](requirements.md)); e2e contract test updates for the renamed paths are part of the knock-on PRs, not the service's suite.
 
