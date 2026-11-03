@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/queue"
+	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/events"
 )
 
 // EnvelopeIssues splits the one-pass verdict over a Paddle body. Missing drives
@@ -45,9 +45,10 @@ func CheckEnvelope(body []byte) *EnvelopeIssues {
 		// wrappers that drop it are a counter, never a rejection.
 		issues.Advisory = append(issues.Advisory, "notification_id")
 	}
-	// ParseEvent is the alias list's single home (messaging.md): the advisory
-	// sees exactly the addressability the group ladder will see.
-	if event := queue.ParseEvent(body); event.Sub == "" && event.Customer == "" {
+	// ParseEvent lives in internal/events — one spelling walk for the whole
+	// gateway (messaging.md): the advisory sees exactly the addressability
+	// the group ladder will see.
+	if event := events.ParseEvent(body); event.Sub == "" && event.Customer == "" {
 		issues.Advisory = append(issues.Advisory, "addressable_id")
 	}
 	sort.Strings(issues.Advisory)

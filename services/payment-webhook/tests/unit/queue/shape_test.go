@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/events"
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/queue"
 )
 
@@ -178,8 +179,8 @@ func TestShapeForwardsTheBodyVerbatim(t *testing.T) {
 
 func TestShapeNamesUnknownTypes(t *testing.T) {
 	message := queue.Shape([]byte(`{"random":true}`))
-	if message.EventType != queue.UnknownEventType {
-		t.Errorf("EventType = %q, want %q", message.EventType, queue.UnknownEventType)
+	if message.EventType != events.UnknownEventType {
+		t.Errorf("EventType = %q, want %q", message.EventType, events.UnknownEventType)
 	}
 	recognized := queue.Shape([]byte(`{"event_type":"subscription.updated"}`))
 	if recognized.EventType != "subscription.updated" {

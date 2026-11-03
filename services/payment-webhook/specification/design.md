@@ -38,13 +38,15 @@ services/payment-webhook/
       body.go       # ReadBounded + the bound error pair
       paddle.go     # the Paddle HMAC verifier: header grammar, freshness, constant-time compare
       envelope.go   # CheckEnvelope: the Paddle envelope gate — presence-only, warn-level advisory
+    events/
+      parse.go      # ParseEvent: the one Paddle spelling walk — snake_case ids, the custom_data user, occurred_at
     handlers/
       probes.go     # /api/v1/health, /api/v1/ready — static bodies
       webhook.go    # POST /api/v1/webhook/paddle — bounded read, verify, envelope gate, one publish
       response.go   # the shared rows: the two read rows, the publish rows 200/503/500
     queue/
       queue.go      # the Message contract, the Queue interface, the retryable sentinels
-      shape.go      # ParseEvent + Shape — the metadata-only parse and the group-key ladder
+      shape.go      # Shape + the group-key ladder — the message factory consuming events.ParseEvent
       service.go    # the publish budget composition the Paddle face mounts
       sqs.go        # the SQS adapter: SendMessage, the fault mapping, the per-message ceiling
   tests/

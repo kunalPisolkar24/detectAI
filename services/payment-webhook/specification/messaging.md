@@ -81,7 +81,7 @@ Sequence:
 
 Every ingress body is a Paddle body now: the envelope check guarantees a non-blank `event_type` and an object `data`, so rung 3 always resolves when no id is found — the `default` rung is unreachable beneath the gate and stays as defense.
 
-The id extractions, the dedup fallback, and the ladder live in one place (`ParseEvent` and `Shape` in `internal/queue`) and are unit-tested against each source's real payload shape ([design.md](design.md)'s test plan), including bodies from the checkout-created-subscription burst. Paddle's spellings are uniformly snake_case, so the walks read exactly those names — camel-case variants are dead branches, and the envelope advisory (`addressable_id`) follows the same resolution the ladder runs. Unknown types with addressable ids still group correctly.
+The parse lives in `internal/events` — one home for Paddle's spellings, consumed identically by the envelope advisory and the message shaping (`Shape` and the ladder stay in `internal/queue`) — and is unit-tested against each source's real payload shape ([design.md](design.md)'s test plan), including bodies from the checkout-created-subscription burst. Paddle's spellings are uniformly snake_case, so the walks read exactly those names — camel-case variants are dead branches, and the envelope advisory (`addressable_id`) follows the same resolution the ladder runs. Unknown types with addressable ids still group correctly.
 
 Two consequences worth naming:
 
