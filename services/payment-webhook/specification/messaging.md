@@ -88,6 +88,14 @@ Two consequences worth naming:
 - **Ordering cost is serialization within a group** — the ladder's first rung is narrow enough (one subscription) that throughput stays multi-stream across groups; only same-subscription events serialize, which is correctness for lifecycle transitions.
 - **Dedup guarantees erode past 5 minutes** — Paddle retries spread over days are deduped only in-window; the worker's idempotency layer remains the ring-fenced backstop, as documented in [requirements.md](requirements.md)'s bounds table.
 
+### The creation burst spans groups, deliberately
+
+One checkout-created subscription emits a dozen-plus webhooks across entity types — `transaction.created`, `subscription.created`, `customer.created`, `address.created`, `payment_method.created`, plus the `transaction.updated` / `subscription.updated` status chain. The payloads share no single field: `subscription_id` is absent from the non-subscription events, and `customer_id` is absent from `report.*` and foreign shapes — so no group id spans the burst, and one is not attempted. The ladder's job is per-entity ordering ("two updates to the same entity never reorder"), not burst correlation; events of different entities interleave across their groups harmlessly. Three consequences worth recording:
+
+- **Sequencing correctness lives in the worker.** FIFO preserves enqueue order, and enqueue order is Paddle's delivery order — never causal order. The worker rebuilds per-entity state by comparing `occurred_at` (with `event_id` as the deterministic tiebreak) instead of trusting arrival position, and its idempotency layer absorbs the retries the 5-minute dedup window can no longer catch. The gateway ships `occurred_at` and `event_id` as message attributes precisely so the worker needs nothing beyond the body.
+- **An entity migrates groups mid-lifetime.** `transaction.created` rides `customer:<id>` before Paddle links the subscription; later `transaction.updated` carries `subscription_id` and rides `subscription:<id>`. FIFO cannot order across groups — covered by the same `occurred_at` rule. The burst still arrives with every per-entity pair in stream order, which is the guarantee the previous single-queue system gave.
+- **Per-action atomicity is a worker aggregation pattern, not a group-key feature.** A settle window keyed on the entity graph inside the worker is the honest shape; the gateway sees one body at a time and cannot correlate a burst. Customer-primary grouping (widening the ladder until nearly the whole burst serializes) stays available as a lever, at the cost of a hot customer head-of-line blocking its own stream — choose it only when a consumer demands per-burst coherence.
+
 ## What dies with RabbitMQ
 
 | RabbitMQ construct | Role | Replacement |
