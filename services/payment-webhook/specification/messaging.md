@@ -51,11 +51,16 @@ The service knows exactly one queue parameter: `QUEUE_URL`, mandatory, fail-fast
 | Content type implied | `application/json` (body is opaque bytes to SQS; the worker parses as today) |
 | `MessageDeduplicationId` | The parsed `event_id` — guaranteed present by the envelope check ([http.md](http.md)), so SQS content-based dedup stays a fallback the contract carries, never exercises. See the ladder below |
 | `MessageGroupId` | The group-key ladder below |
-| `MessageAttributes` — `source` | `paddle` (String) — the only value; the attribute stays so the worker's parse contract is undisturbed |
-| `MessageAttributes` — `event_type` | Best-effort parse; `unknown` when the parse misses it |
-| `MessageAttributes` — `event_id` | Always present — the envelope check guarantees it ([http.md](http.md)) |
+| `MessageAttributes` — `source` | `paddle` (String) — the constant; the gateway is Paddle-only |
+| `MessageAttributes` — `event_type` | The body's event_type; `unknown` when a foreign shape defeats the parse |
+| `MessageAttributes` — `event_id` | The body's event_id — the envelope check guarantees it on accepted bodies ([http.md](http.md)) |
+| `MessageAttributes` — `occurred_at` | The body's occurred_at as the raw RFC3339 string verbatim — the worker's cross-entity ordering key, since Paddle does not guarantee delivery order |
+| `MessageAttributes` — `subscription_id` | `data.subscription_id`, or `data.id` when `sub_`-prefixed |
+| `MessageAttributes` — `transaction_id` | `data.transaction_id` (the first-billing link subscription.created carries), or `data.id` when `txn_`-prefixed |
+| `MessageAttributes` — `customer_id` | `data.customer_id`, or `data.id` when `ctm_`-prefixed (`customer.*`, `address.*`, `payment_method.*` events) |
+| `MessageAttributes` — `user_id` | `data.custom_data.user_id` — the checkout's propagated app user; `apps/web` sends `custom_data.user_id` on the checkout |
 
-The body passthrough is deliberate: the gateway's job is transport with verification, not vocabulary. The worker keeps parsing the same wire shape it parses today; the moved contract is the queue, not the envelope. The prerequisite parse (event_id/event_type/group keys) touches the payload for metadata only — the forwarded bytes are never altered by it. The parse's latitude narrows with the envelope check ([http.md](http.md)): unknown event types and arbitrary data contents queue (FR-7), while a Paddle body missing a core envelope field is rejected at the gate — with no second face, every body is a Paddle body.
+The attribute set answers one flat rule — extract when the id resolves, omit when blank, and no empty string value ever reaches SQS. There is no per-type relevance matrix: event-type-specific interpretation stays the worker's (FR-7), and the body passthrough below stays byte-for-byte. The prerequisite parse touches the payload for metadata only — the forwarded bytes are never altered by it. The parse's latitude narrows with the envelope check ([http.md](http.md)): unknown event types and arbitrary data contents queue (FR-7), while a Paddle body missing a core envelope field is rejected at the gate — with no second face, every body is a Paddle body.
 
 ### Group-key ladder
 
@@ -69,14 +74,14 @@ flowchart LR
 
 Sequence:
 
-1. **Subscription id** → group `subscription:<id>` — payment lifecycle events for one subscription never reorder. First hit among `data.subscription_id`, `data.subscriptionId`, `data.paddleSubscriptionId`, and `data.id` where the value is a `sub_…` id (Paddle Billing embeds subscription-id events as the object's own `id`).
-2. **Customer id** → group `customer:<id>` — ordering for events that carry a customer without a subscription. First hit among `data.customer_id`, `data.customerId`, `data.userId`.
+1. **Subscription id** → group `subscription:<id>` — payment lifecycle events for one subscription never reorder. First hit between `data.subscription_id` and `data.id` when the value is a `sub_…` id (Paddle Billing embeds subscription-id events as the object's own `id`).
+2. **Customer id** → group `customer:<id>` — ordering for events that carry a customer without a subscription. First hit between `data.customer_id` and `data.id` when the value is a `ctm_…` id (same embedding convention).
 3. **`event_type`** when neither id resolves → per-type ordering; same-kind events still never interleave.
 4. **`default`** when the body parses to nothing usable; dedup falls back to content-based.
 
 Every ingress body is a Paddle body now: the envelope check guarantees a non-blank `event_type` and an object `data`, so rung 3 always resolves when no id is found — the `default` rung is unreachable beneath the gate and stays as defense.
 
-The alias list lives in one place (`ParseEvent` in `internal/queue`) and is unit-tested against each source's real payload shape ([design.md](design.md)'s test plan). Unknown types with addressable ids still group correctly.
+The id extractions, the dedup fallback, and the ladder live in one place (`ParseEvent` and `Shape` in `internal/queue`) and are unit-tested against each source's real payload shape ([design.md](design.md)'s test plan), including bodies from the checkout-created-subscription burst. Paddle's spellings are uniformly snake_case, so the walks read exactly those names — camel-case variants are dead branches, and the envelope advisory (`addressable_id`) follows the same resolution the ladder runs. Unknown types with addressable ids still group correctly.
 
 Two consequences worth naming:
 

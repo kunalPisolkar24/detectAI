@@ -63,15 +63,25 @@ func (a *SQSAdapter) Publish(ctx context.Context, message Message) error {
 	return nil
 }
 
-// messageAttributes converts the three contract attributes; event_id is
-// omitted when absent, and no empty string value ever reaches SQS.
+// messageAttributes converts the contract: source and event_type always
+// answer, and the optional identifiers omit when blank — no empty string
+// value ever reaches SQS.
 func messageAttributes(message Message) map[string]types.MessageAttributeValue {
 	attributes := map[string]types.MessageAttributeValue{
 		"source":     stringAttribute(message.Source),
 		"event_type": stringAttribute(message.EventType),
 	}
-	if message.EventID != "" {
-		attributes["event_id"] = stringAttribute(message.EventID)
+	for name, value := range map[string]string{
+		"event_id":        message.EventID,
+		"occurred_at":     message.OccurredAt,
+		"subscription_id": message.SubscriptionID,
+		"transaction_id":  message.TransactionID,
+		"customer_id":     message.CustomerID,
+		"user_id":         message.UserID,
+	} {
+		if value != "" {
+			attributes[name] = stringAttribute(value)
+		}
 	}
 	return attributes
 }

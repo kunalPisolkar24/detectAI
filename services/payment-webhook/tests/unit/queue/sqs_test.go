@@ -15,12 +15,17 @@ func TestSQSAdapterShapesTheFIFOMessage(t *testing.T) {
 	target := &fakeSQS{}
 	adapter := queue.NewSQSAdapter(target, testQueueURL)
 	message := queue.Message{
-		Body:      []byte(`{"event_id":"evt_1","event_type":"subscription.updated","data":{"id":"sub_1"}}`),
-		Source:    queue.SourcePaddle,
-		EventID:   "evt_1",
-		DedupID:   "evt_1",
-		EventType: "subscription.updated",
-		GroupID:   "subscription:sub_1",
+		Body:           []byte(`{"event_id":"evt_1","event_type":"subscription.updated","data":{"id":"sub_1"}}`),
+		Source:         queue.SourcePaddle,
+		EventID:        "evt_1",
+		DedupID:        "evt_1",
+		EventType:      "subscription.updated",
+		OccurredAt:     "2026-11-03T13:41:50.041827Z",
+		SubscriptionID: "sub_1",
+		TransactionID:  "txn_1",
+		CustomerID:     "ctm_1",
+		UserID:         "usr_1",
+		GroupID:        "subscription:sub_1",
 	}
 
 	if err := adapter.Publish(context.Background(), message); err != nil {
@@ -43,9 +48,14 @@ func TestSQSAdapterShapesTheFIFOMessage(t *testing.T) {
 		t.Errorf("MessageGroupId = %q, want the ladder group", derefString(input.MessageGroupId))
 	}
 	for name, want := range map[string]string{
-		"source":     queue.SourcePaddle,
-		"event_type": "subscription.updated",
-		"event_id":   "evt_1",
+		"source":          queue.SourcePaddle,
+		"event_type":      "subscription.updated",
+		"event_id":        "evt_1",
+		"occurred_at":     "2026-11-03T13:41:50.041827Z",
+		"subscription_id": "sub_1",
+		"transaction_id":  "txn_1",
+		"customer_id":     "ctm_1",
+		"user_id":         "usr_1",
 	} {
 		attribute, ok := input.MessageAttributes[name]
 		if !ok {
@@ -57,12 +67,12 @@ func TestSQSAdapterShapesTheFIFOMessage(t *testing.T) {
 				derefString(attribute.DataType), derefString(attribute.StringValue), want)
 		}
 	}
-	if len(input.MessageAttributes) != 3 {
-		t.Errorf("attribute count = %d, want 3", len(input.MessageAttributes))
+	if len(input.MessageAttributes) != 8 {
+		t.Errorf("attribute count = %d, want 8", len(input.MessageAttributes))
 	}
 }
 
-func TestSQSAdapterOmitsTheEventIDAttributeWhenAbsent(t *testing.T) {
+func TestSQSAdapterOmitsTheEmptyAttributes(t *testing.T) {
 	target := &fakeSQS{}
 	adapter := queue.NewSQSAdapter(target, testQueueURL)
 	message := queue.Message{
@@ -75,11 +85,16 @@ func TestSQSAdapterOmitsTheEventIDAttributeWhenAbsent(t *testing.T) {
 	if err := adapter.Publish(context.Background(), message); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := target.input.MessageAttributes["event_id"]; ok {
-		t.Error("event_id attribute present, want omitted when the payload carries none")
+	for _, name := range []string{"event_id", "occurred_at", "subscription_id", "transaction_id", "customer_id", "user_id"} {
+		if _, ok := target.input.MessageAttributes[name]; ok {
+			t.Errorf("%s attribute present, want omitted when the payload carries none", name)
+		}
 	}
 	if derefString(target.input.MessageAttributes["event_type"].StringValue) != queue.UnknownEventType {
 		t.Error("event_type = want the unknown constant, never an empty attribute")
+	}
+	if len(target.input.MessageAttributes) != 2 {
+		t.Errorf("attribute count = %d, want the always-present pair only", len(target.input.MessageAttributes))
 	}
 }
 

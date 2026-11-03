@@ -128,10 +128,10 @@ func TestCheckEnvelopeAdvisesWithoutRejecting(t *testing.T) {
 }
 
 func TestCheckEnvelopeOnlyAdvisesOnAddressability(t *testing.T) {
-	// A bare data.id that is not sub_-prefixed never resolves: the walk
-	// requires the prefix (queue.Shape rule), so it lands advisory-only even
-	// with a customer-shaped id sitting there.
-	body := replaced("data", `{"id":"ctm_should_not_resolve"}`)
+	// A bare data.id resolves only when it carries a recognized Paddle entity
+	// prefix (sub_/ctm_ — the queue.Shape rule): a prefix-free id never
+	// resolves and lands advisory-only, however customer-shaped it looks.
+	body := replaced("data", `{"id":"not_a_paddle_id"}`)
 	checkIssues(t, validator.CheckEnvelope(body), nil, []string{"addressable_id"})
 }
 

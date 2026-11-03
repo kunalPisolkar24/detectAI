@@ -21,33 +21,25 @@ func TestShapeWalksTheGroupKeyLadder(t *testing.T) {
 			body:    `{"data":{"subscription_id":"sub_456"}}`,
 			pwgroup: "subscription:sub_456",
 		},
-		"camel-case subscription alias": {
-			body:    `{"data":{"subscriptionId":"sub_789"}}`,
-			pwgroup: "subscription:sub_789",
+		"camel-case spellings are no ladder input": {
+			body:    `{"data":{"subscriptionId":"sub_789","customer_id":"ctm_9"}}`,
+			pwgroup: "customer:ctm_9",
 		},
-		"paddle legacy alias": {
-			body:    `{"data":{"paddleSubscriptionId":"sub_321"}}`,
-			pwgroup: "subscription:sub_321",
-		},
-		"a bare data.id is no ladder alias, and yields to one": {
+		"an explicit field beats the prefix guard": {
 			body:    `{"data":{"id":"ctm_1","customer_id":"ctm_9"}}`,
 			pwgroup: "customer:ctm_9",
 		},
-		"a bare data.id alone lands on default": {
-			body:    `{"data":{"id":"ctm_1"}}`,
+		"prefix-matched data.id is the customer rung": {
+			body:    `{"event_type":"customer.updated","data":{"id":"ctm_1"}}`,
+			pwgroup: "customer:ctm_1",
+		},
+		"a plain data.id alone lands on default": {
+			body:    `{"data":{"id":"randomvalue"}}`,
 			pwgroup: "default",
 		},
 		"customer rung": {
 			body:    `{"event_type":"payment.succeeded","data":{"customer_id":"ctm_9"}}`,
 			pwgroup: "customer:ctm_9",
-		},
-		"customer camel alias": {
-			body:    `{"data":{"customerId":"ctm_8"}}`,
-			pwgroup: "customer:ctm_8",
-		},
-		"userId alias": {
-			body:    `{"event_type":"internal.test","data":{"userId":"usr_77"}}`,
-			pwgroup: "customer:usr_77",
 		},
 		"subscription beats customer": {
 			body:    `{"data":{"subscription_id":"sub_2","customer_id":"ctm_5"}}`,
@@ -83,6 +75,84 @@ func TestShapeWalksTheGroupKeyLadder(t *testing.T) {
 			message := queue.Shape([]byte(tc.body))
 			if message.GroupID != tc.pwgroup {
 				t.Errorf("GroupID = %q, want %q", message.GroupID, tc.pwgroup)
+			}
+		})
+	}
+}
+
+func TestShapeExtractsTheIdentifierAttributes(t *testing.T) {
+	// Bodies from the real "subscription created from a checkout" burst: the
+	// attribute set answers flat — present where the entity links it, empty
+	// elsewhere, with no per-type relevance matrix.
+	cases := map[string]struct {
+		body             string
+		sub, txn         string
+		cust, user       string
+		occurred, pwtype string
+	}{
+		"subscription.created links its first billing transaction": {
+			body:     `{"event_id":"evt_1","event_type":"subscription.created","occurred_at":"2026-11-03T13:41:50.041827Z","data":{"id":"sub_1","transaction_id":"txn_1","customer_id":"ctm_1"}}`,
+			sub:      "sub_1",
+			txn:      "txn_1",
+			cust:     "ctm_1",
+			occurred: "2026-11-03T13:41:50.041827Z",
+			pwtype:   "subscription.created",
+		},
+		"transaction.update carries the subscription and its own txn id": {
+			body:     `{"event_type":"transaction.updated","occurred_at":"2026-11-03T13:41:51Z","data":{"id":"txn_1","subscription_id":"sub_1","customer_id":"ctm_1"}}`,
+			sub:      "sub_1",
+			txn:      "txn_1",
+			cust:     "ctm_1",
+			occurred: "2026-11-03T13:41:51Z",
+			pwtype:   "transaction.updated",
+		},
+		"customer.created has only the customer's own id": {
+			body:   `{"event_type":"customer.created","data":{"id":"ctm_1"}}`,
+			cust:   "ctm_1",
+			pwtype: "customer.created",
+		},
+		"payment_method.saved has no subscription to link": {
+			body:     `{"event_type":"payment_method.saved","occurred_at":"2026-11-03T13:41:52Z","data":{"id":"pm_1","customer_id":"ctm_1"}}`,
+			cust:     "ctm_1",
+			occurred: "2026-11-03T13:41:52Z",
+			pwtype:   "payment_method.saved",
+		},
+		"the checkout custom data carries the user id": {
+			body:     `{"event_type":"subscription.created","occurred_at":"2026-11-03T13:41:50Z","data":{"id":"sub_1","custom_data":{"user_id":"usr_77"}}}`,
+			sub:      "sub_1",
+			user:     "usr_77",
+			occurred: "2026-11-03T13:41:50Z",
+			pwtype:   "subscription.created",
+		},
+		"a foreign shape answers the zero ids": {
+			body:   `{"random_object":true}`,
+			pwtype: "unknown",
+		},
+		"non-string custom data values are ignored, not fatal": {
+			body:   `{"event_type":"transaction.updated","data":{"custom_data":{"user_id":77,"note":"carry"}}}`,
+			pwtype: "transaction.updated",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			message := queue.Shape([]byte(tc.body))
+			if message.SubscriptionID != tc.sub {
+				t.Errorf("SubscriptionID = %q, want %q", message.SubscriptionID, tc.sub)
+			}
+			if message.TransactionID != tc.txn {
+				t.Errorf("TransactionID = %q, want %q", message.TransactionID, tc.txn)
+			}
+			if message.CustomerID != tc.cust {
+				t.Errorf("CustomerID = %q, want %q", message.CustomerID, tc.cust)
+			}
+			if message.UserID != tc.user {
+				t.Errorf("UserID = %q, want %q", message.UserID, tc.user)
+			}
+			if message.OccurredAt != tc.occurred {
+				t.Errorf("OccurredAt = %q, want %q", message.OccurredAt, tc.occurred)
+			}
+			if message.EventType != tc.pwtype {
+				t.Errorf("EventType = %q, want %q", message.EventType, tc.pwtype)
 			}
 		})
 	}
