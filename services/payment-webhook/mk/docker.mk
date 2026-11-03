@@ -19,14 +19,14 @@ down: queue-down
 
 queue-up:
 	@if $(COMPOSE) ps --services 2>/dev/null | grep -qx elasticmq; then \
-		echo "elasticmq already running — queue-up left it as-is."; \
+		echo "elasticmq already running — left as-is"; \
 	else \
-		$(COMPOSE) up -d --wait; \
+		$(COMPOSE) up -d --wait && echo "elasticmq up"; \
 	fi
-	@$(COMPOSE) ps
-	@echo "Local SQS wiring: QUEUE_URL=http://localhost:9324/000000000000/payment_events.fifo in infra/.env, and"
-	@echo "  export AWS_ENDPOINT_URL_SQS=http://localhost:9324 AWS_REGION=eu-central-1 AWS_ACCESS_KEY_ID=x AWS_SECRET_ACCESS_KEY=x"
-	@echo "then: make run"
+	@echo ""
+	@echo "  sqs     http://localhost:9324"
+	@echo "  ui      http://localhost:3001"
+	@echo "  next    QUEUE_URL=http://localhost:9324/000000000000/payment_events.fifo in infra/.env, then make run"
 
 queue-down:
 	$(COMPOSE) down --remove-orphans
