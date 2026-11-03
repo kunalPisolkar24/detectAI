@@ -5,7 +5,7 @@ help-local:
 	@echo "  tidy      resolve and update go.mod/go.sum"
 	@echo "  vet       go vet ./..."
 	@echo "  env       create .env from .env.example if missing"
-	@echo "  run       run the API locally (go run ./cmd/api, .env supplies the plane)"
+	@echo "  run       run the API locally (infra/.env seeds the launch environment, then go run ./cmd/api)"
 	@echo ""
 
 tidy:
@@ -19,4 +19,4 @@ env:
 	@echo "infra/.env ready (edit infra/.env to override)"
 
 run:
-	ENV_TYPE=dev go run ./cmd/api
+	@set -a; if [ -f infra/.env ]; then . infra/.env; fi; set +a; ENV_TYPE=dev go run ./cmd/api

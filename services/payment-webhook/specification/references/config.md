@@ -8,10 +8,10 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 
 `Config` is the single typed contract — today the six consumed fields (`Port`, `DrainTimeout`, `PADDLE_WEBHOOK_SECRET`, `MAX_BODY_BYTES`, `QUEUE_URL`, `PUBLISH_BUDGET`); the OTel keys land with their consuming build (consume-first: fields exist only when runtime code reads them; plane keys without a field are ignored). *Where values come from* is selected once at boot by the `ENV_TYPE` flick and composed through the factories:
 
-- **dev** (flick `dev`): `DevSource` — the process environment over the parsed `infra/.env`. Env wins because a container ships no dotenv file and receives its values injected (compose `env_file`); locally the file is the baseline and an export still overrides it.
+- **dev** (flick `dev`): `DevSource` — the process environment over the parsed `infra/.env`. Env wins because a container ships no dotenv file and receives its values injected (compose `env_file`); locally `make run` seeds the shell from the same file before the boot, so the two sources agree and the in-process merge is a no-op at launch.
 - **prod** (flick `prod`): `ProdSource` — **AWS exact**. The secrets blob fills first and the prefix-stripped SSM tree completes the plane; process env and dotenv never reach this path, so a stray variable cannot leak a value in. The two AWS planes are disjoint by seeding contract, and the merge enforces it: a case-insensitive key collision fails the boot loud.
 
-`AWS_REGION` and the endpoint override are bootstrap variables, not config: the publisher composition reads them from the process environment once through the SDK's default chain; credentials ride the ambient provider chain — never the planes.
+`AWS_REGION` and the endpoint override are bootstrap variables, not config: the publisher composition reads them from the process environment once through the SDK's default chain; credentials ride the ambient provider chain — never the planes. Locally, `make run` seeds the launch shell from the same file (`set -a`, source, `set +a`): the dev merge re-reads the file as before (env still wins in-process), and the SDK's bootstrap trio reaches the process environment, so one file carries every local value and a later container receives the same keys through compose `env_file` with no file parse.
 
 ## Resolution and failure contract
 
