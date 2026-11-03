@@ -24,15 +24,13 @@ import (
 
 const testSecret = "change-me-min-16-chars"
 
-// max is shrunk from the 1 MiB default so an oversize body is a cheap test
-// literal instead of a megabyte allocation.
+// max is shrunk so an oversize body is a cheap test literal.
 const max = int64(1024)
 
-// The 1.5 s budget: Retry-After carries its ceil, so the shaped 503 asserts 2.
+// 1.5 s budget: Retry-After carries the ceil, so the 503 asserts 2.
 const testBudget = 1500 * time.Millisecond
 
-// The handler matrix runs the real validator; the transport is the fake Queue
-// seam — the one place a unit test may not touch a network (design.md).
+// The handler runs the real validator over a fake Queue; tests never touch a network.
 type fakeQueue struct {
 	message queue.Message
 	err     error
@@ -48,7 +46,6 @@ func newHandler(target queue.Queue) gin.HandlerFunc {
 	return handlers.NewPaddleWebhook(validator.NewPaddle(testSecret), max, queue.NewService(target, testBudget))
 }
 
-// serve runs the mounted handler over a fresh test context wired to w.
 func serve(t *testing.T, w *httptest.ResponseRecorder, req *http.Request, handler gin.HandlerFunc) {
 	t.Helper()
 	c, _ := gin.CreateTestContext(w)
@@ -79,8 +76,7 @@ func post(t *testing.T, target queue.Queue, body []byte, header string) *httptes
 	return w
 }
 
-// validBody is the full envelope every happy-path test rides on: a fixed
-// event id and a sub_-prefixed data.id keep dedup/group assertions stable.
+// A fixed event id and sub_-prefixed data.id keep the dedup/group assertions stable.
 const validEventID = "ntfsimevt_01m6dk7m1cmrykjg0da6qt2tke"
 const validGroupID = "subscription:sub_01hv8x29kz0t586xy6zn1a62ny"
 
@@ -194,8 +190,7 @@ func TestPaddleWebhookRejectsEnvelopeViolationsBeforeQueue(t *testing.T) {
 }
 
 func TestPaddleWebhookChecksTheSignatureBeforeTheEnvelope(t *testing.T) {
-	// Gate order is verify-first: an unsigned body missing the envelope
-	// answers 401, the auth failure, never the vocabulary failure.
+	// Verify-first gate order: an unsigned body never reaches the envelope check.
 	w := post(t, &fakeQueue{}, []byte(`[1,2,3]`), "garbage")
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", w.Code)
@@ -203,8 +198,7 @@ func TestPaddleWebhookChecksTheSignatureBeforeTheEnvelope(t *testing.T) {
 }
 
 func TestPaddleWebhookBoundsTheBodyBeforeAuth(t *testing.T) {
-	// An oversize body with a garbage signature still answers 413: the bound
-	// precedes any auth work (NFR-4), so the caller gets the failure it caused.
+	// The bound precedes auth: an oversize unsigned body still answers 413.
 	w := post(t, &fakeQueue{}, bytesOf(max+1), "garbage")
 	if w.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want 413", w.Code)
@@ -249,8 +243,7 @@ func TestPaddleWebhookShapesTheRetryable503(t *testing.T) {
 }
 
 func TestPaddleWebhookAnswersThe500CatchAll(t *testing.T) {
-	// An unmapped transport fault is not retryable vocabulary: generic 500,
-	// no Retry-After row (design.md taxonomy).
+	// An unmapped fault answers the generic 500, with no Retry-After.
 	w := post(t, &fakeQueue{err: errors.New("connection reset")},
 		validBody(), sign(testSecret, freshTS(t), validBody()))
 	if w.Code != http.StatusInternalServerError {
@@ -264,15 +257,13 @@ func TestPaddleWebhookAnswersThe500CatchAll(t *testing.T) {
 	}
 }
 
-// signedPost wraps post with the fresh valid signature over the exact bytes.
 func signedPost(t *testing.T, target queue.Queue, body []byte) *httptest.ResponseRecorder {
 	t.Helper()
 	return post(t, target, body, sign(testSecret, freshTS(t), body))
 }
 
-// paddedEnvelope renders the valid envelope as an exactly-n-byte body with
-// trailing JSON whitespace, so the "exactly the bound" case still carries a
-// full envelope through the gate.
+// paddedEnvelope pads with JSON whitespace so an exactly-n-byte body still
+// carries a full valid envelope.
 func paddedEnvelope(t *testing.T, n int64) []byte {
 	t.Helper()
 	base := validBody()

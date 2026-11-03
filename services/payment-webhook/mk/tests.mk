@@ -1,5 +1,4 @@
-# Testing verbs. tests/unit holds the black-box suite (no boot); later trees
-# join tests/ with their builds. test covers the module, test-unit the unit tree.
+# test covers the module; test-unit covers the black-box tests/unit tree.
 
 .PHONY: test test-unit help-tests
 

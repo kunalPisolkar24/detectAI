@@ -10,31 +10,24 @@ import (
 	"time"
 )
 
-// Everything past Paddle's ±5 min freshness window is invalid (http.md); the
-// exactly-at-window edge is valid, and untested on purpose — a false invalid
-// there is harmless by Paddle's retry design, and no clock seam exists to pin
-// it.
+// maxSignatureAge is Paddle's ±5 minute freshness window; the exact boundary is
+// untested on purpose — a false invalid there is harmless under Paddle's retries.
 const maxSignatureAge = 5 * time.Minute
 
-// ErrInvalid is every signature failure class collapsed: missing, malformed,
-// stale, future-dated, or tampered (FR-2). Callers cannot tell which failed.
+// ErrInvalid collapses every signature failure class; callers cannot tell which failed.
 var ErrInvalid = errors.New("paddle: invalid signature")
 
-// Paddle authenticates raw ingress bodies before any other work (FR-1).
+// Paddle authenticates raw ingress bodies before any other work.
 type Paddle struct {
 	secret string
 }
 
-// NewPaddle binds the webhook secret; the boot owns the credential, the caller
-// never sees it.
 func NewPaddle(secret string) *Paddle {
 	return &Paddle{secret: secret}
 }
 
-// Verify recomputes Paddle's HMAC-SHA256 over "<ts>:<raw-body>" and compares
-// the lowercase hex digest in constant time. The header's literal ts string is
-// the HMAC framing, never a reformatted integer, so zero-padded timestamps
-// verify against the exact bytes Paddle hashed.
+// Verify recomputes the constant-time HMAC over "<ts>:<raw-body>"; the header's
+// ts string frames it verbatim, never reformatted to an integer.
 func (v *Paddle) Verify(header string, body []byte) error {
 	if v.secret == "" {
 		return ErrInvalid
@@ -59,10 +52,8 @@ func (v *Paddle) Verify(header string, body []byte) error {
 	return nil
 }
 
-// parseHeader splits Paddle's "ts=<unix-seconds>;h1=<64 hex>" header: exactly
-// two key=value segments in either order, no duplicates, no extra keys. Keys
-// accept either order because Paddle's own header contract is key-bearing, not
-// positional; everything else — empty header included — is invalid.
+// parseHeader splits the ts/h1 segments; both orders are accepted, duplicates
+// and extras are invalid.
 func parseHeader(header string) (ts, h1 string, ok bool) {
 	segments := strings.Split(header, ";")
 	if len(segments) != 2 {

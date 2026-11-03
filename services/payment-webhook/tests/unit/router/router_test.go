@@ -21,8 +21,7 @@ import (
 
 const paddleSecret = "change-me-min-16-chars"
 
-// The engine mounts a fake queue: router tests answer wiring questions, and
-// touching an SQS endpoint for real is not one of them (design.md).
+// The engine mounts a fake queue; router tests never touch SQS.
 type fakeQueue struct {
 	published []queue.Message
 	err       error
@@ -71,8 +70,7 @@ func TestPaddleFacePublishesASignedBody(t *testing.T) {
 }
 
 func TestInternalFaceIsRetired(t *testing.T) {
-	// The gateway is Paddle-only: the retired internal face answers the
-	// framework's 404 even when it presents the old credential.
+	// The retired internal face answers 404 even with the old credential.
 	target := &fakeQueue{}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/internal/events", nil)
 	req.Header.Set("x-api-key", paddleSecret)
@@ -87,8 +85,7 @@ func TestInternalFaceIsRetired(t *testing.T) {
 }
 
 func TestProbesMoveUnderTheAPIv1Prefix(t *testing.T) {
-	// Probes version with the surface (http.md): the /api/v1-prefixed probes
-	// stay open, and the flat root paths answer the framework's 404.
+	// Probes version with the surface; flat root paths answer 404.
 	engine := newEngine(t, &fakeQueue{})
 	paths := map[string]string{
 		"/api/v1/health": `{"status":"ok"}`,
@@ -116,9 +113,7 @@ func TestProbesMoveUnderTheAPIv1Prefix(t *testing.T) {
 }
 
 func TestReaderBoundClampsToTheSQSCeiling(t *testing.T) {
-	// MAX_BODY_BYTES rides at 1 MiB while SQS accepts 262144 bytes at most:
-	// the wiring shrinks the bound, so the 413 names the ceiling — and the
-	// read precedes auth, so an unsigned body sees it too.
+	// The wiring clamps the read bound to the SQS ceiling, even before auth.
 	target := &fakeQueue{}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhook/paddle",
 		strings.NewReader(strings.Repeat("x", 262145)))

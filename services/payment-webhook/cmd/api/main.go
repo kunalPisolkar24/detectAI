@@ -36,10 +36,7 @@ func main() {
 	}
 }
 
-// newPublisher binds the SQS transport at boot: the SDK's default chain reads
-// region and credentials from the process environment — bootstrap vars never
-// ride the Config plane — and one SendMessage per publish heads the configured
-// FIFO queue.
+// newPublisher binds the SQS transport at boot; SDK bootstrap vars never enter the Config plane.
 func newPublisher(cfg config.Config) (*queue.Service, error) {
 	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background())
 	if err != nil {

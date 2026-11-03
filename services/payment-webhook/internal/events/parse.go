@@ -1,8 +1,5 @@
-// Package events parses Paddle ingress bodies into the event metadata the
-// gateway contracts on. One home for Paddle's snake_case spellings: the
-// envelope gate and the message shaping both consume ParseEvent, so they can
-// never disagree about what an id is. The forwarded body is never altered by
-// the parse (messaging.md).
+// Package events parses Paddle bodies into event metadata; envelope and message
+// shaping share this one parse so they cannot disagree about ids.
 package events
 
 import (
@@ -10,13 +7,10 @@ import (
 	"strings"
 )
 
-// UnknownEventType names the bucket for a blank event_type rather than an
-// empty attribute value.
+// UnknownEventType labels a blank event_type.
 const UnknownEventType = "unknown"
 
-// Event is the metadata the prerequisite parse may find in a payload. The
-// subscription and customer ids feed the group ladder and double as message
-// attributes; the rest are attribute-only reads.
+// Event carries the message-shaping inputs parsed from a Paddle body.
 type Event struct {
 	ID            string
 	Type          string
@@ -27,8 +21,6 @@ type Event struct {
 	UserID        string
 }
 
-// payloadData is the event's data object: Paddle's snake_case spellings plus
-// the object's own id, which the prefix guards qualify per entity kind.
 type payloadData struct {
 	ID             string         `json:"id"`
 	SubscriptionID string         `json:"subscription_id"`
@@ -37,10 +29,8 @@ type payloadData struct {
 	CustomData     map[string]any `json:"custom_data"`
 }
 
-// ParseEvent extracts the ladder inputs and attribute sources in one pass. A
-// malformed or foreign shape answers a zero Event — Type fills as unknown
-// downstream — and the caller queues it anyway (FR-7: the gateway is
-// transport, not vocabulary).
+// ParseEvent reads event metadata in one pass; a malformed or foreign body
+// yields an unknown-typed Event that still queues.
 func ParseEvent(body []byte) Event {
 	var payload struct {
 		EventID    string      `json:"event_id"`
@@ -63,7 +53,6 @@ func ParseEvent(body []byte) Event {
 	}
 }
 
-// eventType keeps the unknown bucket nameable rather than blank.
 func eventType(raw string) string {
 	if strings.TrimSpace(raw) == "" {
 		return UnknownEventType
@@ -71,10 +60,8 @@ func eventType(raw string) string {
 	return raw
 }
 
-// subscriptionID and customerID share one shape: the explicit field first,
-// then the object's own id when it carries the entity's Paddle id prefix —
-// Paddle Billing embeds entity ids as data.id, and a bare id must not group
-// under the wrong rung.
+// subscriptionID and customerID read the explicit field first, then data.id when
+// it carries the entity's Paddle prefix — a bare id must not group wrongly.
 func subscriptionID(data payloadData) string {
 	if data.SubscriptionID != "" {
 		return data.SubscriptionID
@@ -95,8 +82,6 @@ func customerID(data payloadData) string {
 	return ""
 }
 
-// transactionID reads the first-billing link subscription.created carries,
-// then the object's own id under the txn_ guard.
 func transactionID(data payloadData) string {
 	if data.TransactionID != "" {
 		return data.TransactionID
@@ -107,7 +92,6 @@ func transactionID(data payloadData) string {
 	return ""
 }
 
-// userID reads the checkout's propagated custom_data, snake_case throughout.
 func userID(data payloadData) string {
 	text, ok := data.CustomData["user_id"].(string)
 	if !ok {

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// shutdown stops the listener and drains in-flight requests with the drain logged.
+// shutdown stops the listener and drains in-flight requests.
 func shutdown(srv *http.Server, drain time.Duration) error {
 	log.Println("signal received; draining in-flight requests")
 	drainCtx, cancel := context.WithTimeout(context.Background(), drain)

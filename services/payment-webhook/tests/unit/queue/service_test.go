@@ -9,7 +9,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/queue"
 )
 
-// fakeQueue captures the shaped message and answers the configured error.
 type fakeQueue struct {
 	message queue.Message
 	err     error
@@ -48,9 +47,8 @@ func TestServiceMapsTheBudgetDeadline(t *testing.T) {
 }
 
 func TestServiceAnswersTheDeadlineWhenTheCallerDies(t *testing.T) {
-	// A client disconnect or a drain cancels the caller context mid-publish;
-	// with the transport presumably already back, that ambiguity still maps to
-	// ErrDeadlineExceeded — the dedup id makes replay harmless (NFR-3).
+	// A mid-publish caller cancel maps to ErrDeadlineExceeded; the dedup id
+	// keeps replay harmless.
 	parent, cancel := context.WithCancel(context.Background())
 	cancel()
 	svc := queue.NewService(&fakeQueue{}, time.Hour)

@@ -14,7 +14,6 @@ import (
 const testPaddleSecret = "paddle-change-me-16-chars"
 const testQueueURL = "https://sqs.eu-central-1.amazonaws.com/123456789012/payment_events.fifo"
 
-// mapSource stands in for a plane source over plain key/value entries.
 type mapSource map[string]string
 
 func (m mapSource) Get(key string) (string, bool) {
@@ -22,8 +21,7 @@ func (m mapSource) Get(key string) (string, bool) {
 	return value, ok
 }
 
-// withkey merges the mandatory plane keys over extra so each field contract
-// case carries one failure point.
+// withkey merges the mandatory keys so each case carries one failure point.
 func withkey(extra map[string]string) mapSource {
 	source := mapSource{"PADDLE_WEBHOOK_SECRET": testPaddleSecret, "QUEUE_URL": testQueueURL}
 	for key, value := range extra {
@@ -125,8 +123,7 @@ func TestResolveContracts(t *testing.T) {
 	}
 
 	t.Run("DRAIN_TIMEOUT valid serves", func(t *testing.T) {
-		// 12 s clears the clamp floor (budget 5 s + 5 s slack) while proving
-		// the plane read still edges out the default.
+		// 12s clears the clamp floor while proving the plane read out-reads the default.
 		cfg, err := config.Resolve(withkey(map[string]string{"DRAIN_TIMEOUT": "12s"}))
 		if err != nil {
 			t.Fatal(err)
@@ -136,8 +133,7 @@ func TestResolveContracts(t *testing.T) {
 		}
 	})
 
-	// The mandatory secret is dropped or blanked: the failure names the var,
-	// never the attempt.
+	// The secret is dropped or blanked; the failure names the var, never the value.
 	for caseName, bad := range map[string]string{
 		"missing": "",
 		"blank":   "   ",

@@ -10,11 +10,8 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/validator"
 )
 
-// New builds the engine: probes and the single Paddle ingress face both under
-// /api/v1. The publisher mount comes from the boot composition — main
-// wires the SQS adapter; the tests inject a fake. The reader clamps to SQS's
-// per-message ceiling so an unshippable body answers the shaped 413 instead of
-// surfacing mid-budget as a send fault.
+// New builds the engine; the webhook read bound clamps to the SQS message
+// ceiling so an unshippable body answers 413 instead of faulting mid-publish.
 func New(cfg config.Config, publish *queue.Service) *gin.Engine {
 	bound := min(cfg.MaxBodyBytes, queue.SQSMessageCeiling)
 	r := gin.Default()

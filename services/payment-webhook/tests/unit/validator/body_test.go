@@ -14,8 +14,7 @@ type errReader struct{}
 
 func (errReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
 
-// shortDropReader yields prefix bytes then errors — a transfer cut short is
-// kernel-truth unreadable, not oversized, and answers 400.
+// shortDropReader yields prefix bytes then errors, the transfer-cut-short case.
 type shortDropReader struct {
 	prefix []byte
 }
@@ -51,8 +50,7 @@ func TestReadBoundedAcceptsUpToTheBound(t *testing.T) {
 
 func TestReadBoundedRejectsOversizeBeforeTheTransportError(t *testing.T) {
 	const max = int64(64)
-	// Oversize read wins even when the client aborted mid-transfer: the bound
-	// names the failure, not the connection error.
+	// Oversize wins even when the client aborted mid-transfer.
 	data, err := validator.ReadBounded(
 		io.MultiReader(strings.NewReader(string(bytesOf(65))), errReader{}), max)
 	if !errors.Is(err, validator.ErrBodyTooLarge) {

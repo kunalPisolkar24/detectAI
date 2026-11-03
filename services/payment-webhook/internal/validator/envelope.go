@@ -9,23 +9,18 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/events"
 )
 
-// EnvelopeIssues splits the one-pass verdict over a Paddle body. Missing drives
-// the 422 at the transport; Advisory records drift-shaped oddities the worker
-// never needs to reject on (the counters land with the observability build).
+// EnvelopeIssues is the one-pass verdict; Missing rejects and Advisory only counts.
 type EnvelopeIssues struct {
-	Missing  []string // event_id, event_type, occurred_at, data, payload
-	Advisory []string // notification_id, addressable_id
+	Missing  []string
+	Advisory []string
 }
 
-// CheckEnvelope verifies the Paddle envelope exists: the four core fields the
-// worker and FIFO ordering depend on (http.md). It judges presence, type, and
-// shape only — values, event_type vocabulary, and data contents stay the
-// worker's (FR-7). Extra top-level keys are tolerated, per the open-set rule.
+// CheckEnvelope judges envelope presence only; values and data contents remain
+// the worker's interpretation, and extra top-level keys are tolerated.
 func CheckEnvelope(body []byte) *EnvelopeIssues {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(body, &fields); err != nil || fields == nil {
-		// A body that never parses to an object carries no envelope to judge:
-		// array/string/number/null cases name the payload as a whole.
+		// A body that never parses to an object has no envelope to judge.
 		return &EnvelopeIssues{Missing: []string{"payload"}}
 	}
 	issues := &EnvelopeIssues{}
@@ -35,19 +30,14 @@ func CheckEnvelope(body []byte) *EnvelopeIssues {
 		}
 	}
 	sort.Strings(issues.Missing)
-	// Advisory only matters for bodies that will queue: a rejected body opens
-	// no advisory dimension worth counting, so the 422 path stops here.
 	if len(issues.Missing) > 0 {
 		return issues
 	}
 	if requiredString(fields, "notification_id") == "" {
-		// Delivery-layer id with no downstream consumer: evolution or replay
-		// wrappers that drop it are a counter, never a rejection.
+		// Delivery-layer only: dropping it is a counter, never a rejection.
 		issues.Advisory = append(issues.Advisory, "notification_id")
 	}
-	// ParseEvent lives in internal/events — one spelling walk for the whole
-	// gateway (messaging.md): the advisory sees exactly the addressability
-	// the group ladder will see.
+	// The advisory sees the same addressability the group ladder will see.
 	if event := events.ParseEvent(body); event.Sub == "" && event.Customer == "" {
 		issues.Advisory = append(issues.Advisory, "addressable_id")
 	}
@@ -55,10 +45,8 @@ func CheckEnvelope(body []byte) *EnvelopeIssues {
 	return issues
 }
 
-// satisfiesHardGate answers whether the field is present with real substance:
-// a JSON string that trims to something, an RFC3339-parseable timestamp, or —
-// for data — a non-nil JSON object. Absent, blank, null, and mistyped values
-// all fail the same gate under one reason.
+// satisfiesHardGate checks presence with substance; absent, blank, null, and
+// mistyped values all fail the same gate.
 func satisfiesHardGate(fields map[string]json.RawMessage, name string) bool {
 	raw, ok := fields[name]
 	if !ok {
@@ -81,9 +69,7 @@ func satisfiesHardGate(fields map[string]json.RawMessage, name string) bool {
 	}
 }
 
-// requiredString reads one JSON string field: absent, non-string, null, or
-// whitespace-only all blank-fail. Nothing here trims for the caller — the
-// trimmed-shape question is the gate's, the value rides through untouched.
+// requiredString blank-fails absent, non-string, null, and whitespace-only values.
 func requiredString(fields map[string]json.RawMessage, name string) string {
 	raw, ok := fields[name]
 	if !ok {

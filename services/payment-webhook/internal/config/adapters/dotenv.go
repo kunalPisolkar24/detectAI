@@ -1,5 +1,4 @@
-// Package adapters holds the plane readers; every adapter parses or fetches once
-// at construction and answers pure in-memory lookups afterwards.
+// Package adapters holds the plane readers; each fetches once and serves in-memory lookups.
 package adapters
 
 import (
@@ -18,11 +17,8 @@ type DotEnvAdapter struct {
 	values map[string]string
 }
 
-// NewDotEnvAdapter parses one dotenv plane. An empty path targets the infra .env
-// plane relative to the working directory; a missing default file is an empty
-// plane (values come from the process environment alone), while a missing
-// explicit path and a malformed file fail the boot loudly. Blank KEY= entries
-// drop out, so an empty value can never win over the default.
+// NewDotEnvAdapter parses the dotenv plane; a missing default (infra/.env) is an
+// empty plane, while a missing explicit path or malformed file fails the boot.
 func NewDotEnvAdapter(path string) (*DotEnvAdapter, error) {
 	explicit := path != ""
 	if !explicit {
@@ -31,8 +27,7 @@ func NewDotEnvAdapter(path string) (*DotEnvAdapter, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) && !explicit {
-			// A container ships no file and receives its values injected;
-			// the file plane stays empty and the environment carries config.
+			// Containers receive their values injected; the missing file plane stays empty.
 			return &DotEnvAdapter{values: map[string]string{}}, nil
 		}
 		return nil, fmt.Errorf("config: could not read the dotenv plane %q (%v); %s", path, err, dotenvFix)
@@ -44,14 +39,12 @@ func NewDotEnvAdapter(path string) (*DotEnvAdapter, error) {
 	return &DotEnvAdapter{values: values}, nil
 }
 
-// Fetch returns the parsed plane; callers must treat the map as read-only.
+// Fetch returns the parsed plane; treat the map as read-only.
 func (a *DotEnvAdapter) Fetch() map[string]string {
 	return a.values
 }
 
-// parseDotEnv applies the one plane grammar: blanks and #-comment lines pass,
-// KEY=VALUE entries keep their trimmed parts and drop blank values, and any
-// other line fails the boot naming the line and the fix. Last assignment wins.
+// parseDotEnv applies the dotenv grammar; blank values drop and last assignment wins.
 func parseDotEnv(raw []byte, path string) (map[string]string, error) {
 	values := map[string]string{}
 	for i, line := range strings.Split(string(raw), "\n") {

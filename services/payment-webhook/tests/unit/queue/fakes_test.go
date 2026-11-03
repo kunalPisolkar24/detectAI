@@ -7,8 +7,7 @@ import (
 	"github.com/aws/smithy-go"
 )
 
-// fakeSQS embeds the SDK client interface so any unexpected method panics via
-// the nil embedded value; only SendMessage runs in these tests.
+// fakeSQS embeds the SDK client interface so unstubbed methods panic.
 type fakeSQS struct {
 	sqs.Client
 	input *sqs.SendMessageInput

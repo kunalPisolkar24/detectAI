@@ -13,9 +13,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/validator"
 )
 
-// respondReadError shapes the two bounded-read rows both faces own: an
-// oversize body answers 413 naming the bound, an unreadable body 400 (FR-6).
-// It reports whether a response was written.
+// respondReadError maps bounded-read failures to 413/400; it reports whether a response was written.
 func respondReadError(c *gin.Context, err error, maxBody int64) bool {
 	switch {
 	case errors.Is(err, validator.ErrBodyTooLarge):
@@ -30,10 +28,7 @@ func respondReadError(c *gin.Context, err error, maxBody int64) bool {
 	}
 }
 
-// publishResponse maps one publish outcome (design.md taxonomy): 200 only
-// after the SQS response — the durability point; the two retryable sentinels
-// shape the 503 with Retry-After at the budget's ceil and the retryable hint;
-// anything unmapped falls to the 500 catch-all.
+// publishResponse maps publish outcomes; Retry-After rounds the publish budget up to whole seconds.
 func publishResponse(c *gin.Context, publish *queue.Service, err error) {
 	switch {
 	case err == nil:

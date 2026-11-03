@@ -125,8 +125,7 @@ func TestSQSAdapterPassesDeadlinesThrough(t *testing.T) {
 }
 
 func TestSQSAdapterKeepsUnexpectedFaultsUnmapped(t *testing.T) {
-	// NonExistentQueue, access faults, network JSON — none are retryable rows;
-	// the handler's 500 catch-all owns them per the taxonomy.
+	// Unmapped faults — access, routing, network — fall to the 500 catch-all.
 	adapter := queue.NewSQSAdapter(&fakeSQS{err: &apiErr{code: "AWS.SimpleQueueService.NonExistentQueue", msg: "dne"}}, testQueueURL)
 	err := adapter.Publish(context.Background(), queue.Message{
 		Body: []byte(`{}`), EventType: events.UnknownEventType, GroupID: queue.DefaultGroupID,

@@ -1,5 +1,4 @@
-// Package config resolves the boot config per plane; the model and the LLD live
-// in specification/references/config.md.
+// Package config resolves the boot config per deployment plane.
 package config
 
 import (
@@ -9,8 +8,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config/factories"
 )
 
-// Load resolves the flick, composes the plane source, and resolves the config —
-// the composition root's one call.
 func Load() (Config, error) {
 	flick, err := DeploymentFlick()
 	if err != nil {
@@ -27,8 +24,7 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-// DeploymentFlick reads ENV_TYPE and fails closed: only an exact dev or prod
-// match is accepted, so a mis-flicked boot never serves.
+// DeploymentFlick reads ENV_TYPE and fails closed: only dev or prod is accepted.
 func DeploymentFlick() (string, error) {
 	flick := os.Getenv("ENV_TYPE")
 	if flick == "" {

@@ -13,11 +13,8 @@ const (
 	DefaultGroupID = "default"
 )
 
-// Shape builds the outbound message from a raw Paddle body: the parsed event
-// metadata resolves the identifiers, the dedup id is the parsed event_id when
-// present else the SHA-256 of the body — content-based determinism the
-// queue-level flag cannot add once events lack their id. The gateway is
-// Paddle-only: Source is the constant, never a parameter.
+// Shape builds the outbound message; a body without event_id dedups on its
+// SHA-256 so identical bodies collide deterministically.
 func Shape(body []byte) Message {
 	event := events.ParseEvent(body)
 	dedup := event.ID
@@ -40,9 +37,7 @@ func Shape(body []byte) Message {
 	}
 }
 
-// GroupKey is the group-key ladder verbatim (messaging.md): subscription →
-// customer → event_type → default. A known-but-novel event_type still groups
-// per type; only a shape with nothing usable lands on default.
+// GroupKey walks the group ladder: subscription, customer, then event type, else default.
 func GroupKey(event events.Event) string {
 	if event.Sub != "" {
 		return "subscription:" + event.Sub

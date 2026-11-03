@@ -7,11 +7,10 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/validator"
 )
 
-// fullEnvelope is the real Paddle shape: four hard fields plus the delivery
-// id, with a sub_-prefixed data.id the group ladder resolves.
+// fullEnvelope is the real Paddle shape: four hard fields plus the delivery id,
+// with a sub_-prefixed data.id.
 var fullEnvelope = []byte(`{"event_id":"ntfsimevt_01m6dk7m1cmrykjg0da6qt2tke","event_type":"subscription.created","occurred_at":"2026-11-02T07:40:26.540606Z","notification_id":"ntfsimntf_01m6dk7m3h1gz9pfrhc9t33ty2","data":{"id":"sub_01hv8x29kz0t586xy6zn1a62ny"}}`)
 
-// without removes top-level key(s) from the envelope, keeping everything else.
 func without(keys ...string) []byte {
 	fields := envelopeFields()
 	for _, key := range keys {
@@ -20,8 +19,7 @@ func without(keys ...string) []byte {
 	return marshal(fields)
 }
 
-// replaced swaps one top-level key for arbitrary raw JSON so null, wrong
-// types, and blanks need no hand-assembled strings.
+// replaced swaps one top-level key for arbitrary raw JSON.
 func replaced(key, raw string) []byte {
 	fields := envelopeFields()
 	fields[key] = json.RawMessage(raw)
@@ -128,15 +126,13 @@ func TestCheckEnvelopeAdvisesWithoutRejecting(t *testing.T) {
 }
 
 func TestCheckEnvelopeOnlyAdvisesOnAddressability(t *testing.T) {
-	// A bare data.id resolves only when it carries a recognized Paddle entity
-	// prefix (sub_/ctm_ — the queue.Shape rule): a prefix-free id never
-	// resolves and lands advisory-only, however customer-shaped it looks.
+	// A bare data.id resolves only under the sub_/ctm_ prefix; a prefix-free id
+	// stays advisory-only.
 	body := replaced("data", `{"id":"not_a_paddle_id"}`)
 	checkIssues(t, validator.CheckEnvelope(body), nil, []string{"addressable_id"})
 }
 
-// checkIssues asserts both halves of the verdict positionally — CheckEnvelope
-// sorts them, so order is deterministic and worth asserting.
+// checkIssues asserts both halves of the sorted verdict positionally.
 func checkIssues(t *testing.T, issues *validator.EnvelopeIssues, wantMissing, wantAdvisory []string) {
 	t.Helper()
 	if issues == nil {

@@ -18,9 +18,7 @@ const secret = "paddle-change-me-16-chars"
 
 var validBody = []byte(`{"event_type":"subscription.updated","data":{"id":"ctm_123"}}`)
 
-// time-based vectors are computed from time.Now at test runtime: the valid
-// margins sit inside the window by whole seconds, so no clock seam is needed —
-// implementation latency cannot push them across the edge.
+// Timestamps are computed at runtime with whole-second margins, so no clock seam is needed.
 func freshTS(t *testing.T) string {
 	t.Helper()
 	return strconv.FormatInt(time.Now().Unix(), 10)
@@ -41,8 +39,7 @@ func insideTS(t *testing.T) string { // −4:59, safely inside the window
 	return strconv.FormatInt(time.Now().Unix()-299, 10)
 }
 
-// sign recomputes the exact header Paddle sends: HMAC over "<ts>:<body>" framed
-// with the literal ts string.
+// sign recomputes the exact header Paddle sends: HMAC over "<ts>:<body>".
 func sign(ts string, body []byte) string {
 	tsPart, h1Part := signParts(ts, body)
 	return fmt.Sprintf("ts=%s;h1=%s", tsPart, h1Part)

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Run serves until SIGINT/SIGTERM, then drains within the configured budget (NFR-9).
+// Run serves until SIGINT/SIGTERM, then drains within the configured budget.
 func Run(srv *http.Server, drain time.Duration) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

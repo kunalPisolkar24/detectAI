@@ -1,6 +1,4 @@
-// Package factories selects and wires each config plane: the flick picks the
-// plane, the factories construct the adapters, and the plane sources are
-// composed in planes.
+// Package factories selects and wires the config plane sources.
 package factories
 
 import (
@@ -11,11 +9,9 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config/planes"
 )
 
-// ConfigFactory assembles the source for the plane the ENV_TYPE flick selects.
+// ConfigFactory assembles the plane source for the selected environment.
 type ConfigFactory struct{}
 
-// Create builds the plane source for a flick; a known flick always yields a plane
-// and unknown flicks never reach this far.
 func (ConfigFactory) Create(flick string) (planes.Source, error) {
 	switch flick {
 	case "dev":

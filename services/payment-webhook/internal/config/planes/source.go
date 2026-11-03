@@ -1,8 +1,7 @@
-// Package planes holds the plane contract and the two plane sources: the
-// factories select and wire them, and nothing else names them.
+// Package planes holds the plane sources and the Source contract.
 package planes
 
-// Source is the plane contract: absence is a normal answer, never an error.
+// Source is a plane string lookup; absence is a normal result, never an error.
 type Source interface {
 	Get(key string) (string, bool)
 }

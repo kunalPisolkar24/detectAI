@@ -82,9 +82,8 @@ func TestShapeWalksTheGroupKeyLadder(t *testing.T) {
 }
 
 func TestShapeExtractsTheIdentifierAttributes(t *testing.T) {
-	// Bodies from the real "subscription created from a checkout" burst: the
-	// attribute set answers flat — present where the entity links it, empty
-	// elsewhere, with no per-type relevance matrix.
+	// Attribute reads mirror real traffic: present where the entity links
+	// them, empty elsewhere.
 	cases := map[string]struct {
 		body             string
 		sub, txn         string

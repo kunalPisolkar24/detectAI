@@ -12,7 +12,7 @@ func Health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// Ready is the readiness signal; static until the config plane boot validation lands.
+// Ready is the readiness signal.
 func Ready(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ready"})
 }
