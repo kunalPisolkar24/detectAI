@@ -1,18 +1,19 @@
-# Load rig: parser + k6 on an isolated network, nothing published to the
-# host. Every knob lives in infra/.env.load.
+# Load rig: the parser stack from compose.yml plus k6, on an isolated
+# network, nothing published to the host. Every knob lives in infra/.env.load.
 name: document-parser-load
 
 include:
+  - compose.yml
   - compose.k6.yml
 
 services:
   document-parser:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    stop_grace_period: 15s
-    env_file:
+    # Inherited restart is unless-stopped; a crashed parser must not
+    # resurrect mid-run — thresholds should see the truth.
+    restart: "no"
+    env_file: !override
       - .env.load
+    ports: !override []
     healthcheck:
       # python-slim ships no curl; the same probe the Dockerfile uses.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
