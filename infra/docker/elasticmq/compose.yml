@@ -1,0 +1,28 @@
+# Composable from consumer compose files: no networks/container_name, everything varying is a variable.
+# The emulator is in-memory — down/up drops every message it held.
+
+services:
+  elasticmq:
+    image: softwaremill/elasticmq-native:1.7.1
+    restart: unless-stopped
+    ports:
+      - "${ELASTICMQ_PORT:-9324}:9324"
+    volumes:
+      - ./elasticmq.conf:/opt/elasticmq.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9324/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  elasticmq-ui:
+    image: softwaremill/elasticmq-ui:1.7.1
+    restart: unless-stopped
+    depends_on:
+      elasticmq:
+        condition: service_healthy
+    environment:
+      SQS_ENDPOINT: http://elasticmq:9324
+    ports:
+      - "${ELASTICMQ_UI_PORT:-3001}:3000"
