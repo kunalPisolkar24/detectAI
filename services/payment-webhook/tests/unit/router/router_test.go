@@ -86,6 +86,35 @@ func TestInternalFaceIsRetired(t *testing.T) {
 	}
 }
 
+func TestProbesMoveUnderTheAPIv1Prefix(t *testing.T) {
+	// Probes version with the surface (http.md): the /api/v1-prefixed probes
+	// stay open, and the flat root paths answer the framework's 404.
+	engine := newEngine(t, &fakeQueue{})
+	paths := map[string]string{
+		"/api/v1/health": `{"status":"ok"}`,
+		"/api/v1/ready":  `{"status":"ready"}`,
+	}
+	for path, want := range paths {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200", path, w.Code)
+		}
+		if got := w.Body.String(); got != want {
+			t.Errorf("GET %s body = %q, want %q", path, got, want)
+		}
+	}
+	for _, path := range []string{"/health", "/ready"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want the framework's 404", path, w.Code)
+		}
+	}
+}
+
 func TestReaderBoundClampsToTheSQSCeiling(t *testing.T) {
 	// MAX_BODY_BYTES rides at 1 MiB while SQS accepts 262144 bytes at most:
 	// the wiring shrinks the bound, so the 413 names the ceiling — and the

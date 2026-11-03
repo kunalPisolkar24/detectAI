@@ -6,7 +6,7 @@ The wire contract for the payment-webhook service. Requirements live in [require
 
 This is a rebuild, and the wire surface changes deliberately; everything not named below is behavior-preserving:
 
-1. **Paths move** — ingress gains the `/api/v1` prefix (`/webhook/paddle` → `/api/v1/webhook/paddle`) for future versioning; the probes rename flat — `/healthz` → `/health`, `/readyz` → `/ready` — keeping probe-tool URLs free of version churn.
+1. **Paths move** — the whole surface gains the `/api/v1` prefix: ingress (`/webhook/paddle` → `/api/v1/webhook/paddle`) and the probes (`/healthz` → `/api/v1/health`, `/readyz` → `/api/v1/ready`), so a future version moves every path with one prefix.
 2. **The internal face retires** — `POST /api/v1/internal/events`, its `x-api-key` credential, and the `API_KEY` config are gone; the gateway is Paddle-only and every queued event has crossed the signature header and the envelope gate. Client-triggered cancellation rides Paddle's own lifecycle events under the contract [messaging.md](messaging.md) records.
 3. **Oversized bodies answer 413** naming the limit; malformed/unreadable bodies answer 400 — the pre-refactor gateway answered 400 for both, hiding the distinction.
 4. Error envelope stays `{"error": "…"}` (Gin-native); callers need no schema changes.
@@ -18,10 +18,10 @@ Callers affected: the knock-on list in [requirements.md](requirements.md).
 | Method + Path | Auth | Purpose |
 |---------------|------|---------|
 | `POST /api/v1/webhook/paddle` | required | Validate + queue a Paddle event |
-| `GET /health` | open | Liveness probe |
-| `GET /ready` | open | Readiness signal |
+| `GET /api/v1/health` | open | Liveness probe |
+| `GET /api/v1/ready` | open | Readiness signal |
 
-The `/api/v1` prefix shapes the ingress endpoint and is part of its contract; the probes sit at the root and are version-free by convention. There is **no metrics endpoint** — the service is observed exclusively through the OTel push pipeline (see [observability.md](observability.md)).
+The `/api/v1` prefix shapes every route and is part of the contract; the probes mount inside the same group as the ingress. There is **no metrics endpoint** — the service is observed exclusively through the OTel push pipeline (see [observability.md](observability.md)).
 
 ### Request lifecycle
 
@@ -92,14 +92,14 @@ A verified body missing any core field answers **422** naming the fields, with n
 
 | Path | 200 body | 503 body |
 |------|----------|----------|
-| `/health` | `{"status": "ok"}` | `{"status": "unavailable"}` |
-| `/ready` | `{"status": "ready"}` | `{"status": "not_ready"}` |
+| `/api/v1/health` | `{"status": "ok"}` | `{"status": "unavailable"}` |
+| `/api/v1/ready` | `{"status": "ready"}` | `{"status": "not_ready"}` |
 
 The endpoints stay in the contract for local parity — Lambda has no probes; the platform owns availability and shedding. On the rebuilt service `ready` is a static signal: boot validation (config plane, credentials, queue URL) either passed or failed the process launch. The old `rabbitmq_connection_status`-gated readiness has no equivalent, because there is no long-lived connection to track.
 
 ## Resolved decisions and rationale
 
-1. **Prefix on ingress, flat probes** — the two authenticated endpoints carry `/api/v1` (future versioning stays off the callers' critical path); the probes stay root-level and version-free, matching probe-tool expectations. document-parser versioned everything including probes; the differentiated shape is the deliberate reverse — the probe namespace never needs an API version.
+1. **One prefixed namespace — the flat-probe shape reversed** — the first rebuild kept the probes root-level and version-free (document-parser's differentiated shape), the deliberate reverse. The reversal: every route, probes included, now carries `/api/v1` — one version prefix moves the whole surface together, and probe tooling carries the version as part of the base URL rather than as a path exception.
 2. **One credential, one header, one comparison path — evolved, not retired light** — `x-api-key` carried the internal face's shared secret; that face is gone, and with it the second credential. The Paddle signature header is now the one authentication surface, compared constant-time against `PADDLE_WEBHOOK_SECRET`.
 3. **413/400 split** — an oversized body and a malformed body are different caller failures (config vs payload); document-parser already standardized the distinction, and Paddle treats any 4xx identically (failure → retry), so nothing rides on the change.
 4. **Unknown event types queue** — the gateway's job is transport, not vocabulary. Rejecting an unknown `event_type` would let a Paddle schema evolution 400 the whole pipeline; the worker owns interpretation and the counter owns visibility (FR-7). Presence and vocabulary split cleanly: the envelope check rejects a *missing/blank* `event_type` (422 — it starves routing outright), while an *unknown but present* value still queues.

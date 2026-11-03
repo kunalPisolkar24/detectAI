@@ -33,13 +33,13 @@ services/payment-webhook/
         config_factory.go      # the flick wiring: dev wired, prod refuses
         aws_client_factory.go  # bootstrap clients — skeleton (AWS build)
     router/
-      router.go     # gin engine: root probes, the single /api/v1 ingress route
+      router.go     # gin engine: the /api/v1 group — probes plus the single ingress route
     validator/
       body.go       # ReadBounded + the bound error pair
       paddle.go     # the Paddle HMAC verifier: header grammar, freshness, constant-time compare
       envelope.go   # CheckEnvelope: the Paddle envelope gate — presence-only, warn-level advisory
     handlers/
-      probes.go     # /health, /ready — static bodies
+      probes.go     # /api/v1/health, /api/v1/ready — static bodies
       webhook.go    # POST /api/v1/webhook/paddle — bounded read, verify, envelope gate, one publish
       response.go   # the shared rows: the two read rows, the publish rows 200/503/500
     queue/

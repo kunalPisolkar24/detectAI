@@ -18,7 +18,7 @@ Detailed designs: [spec index](README.md) · [HTTP contract](http.md) · [delive
 | FR-5 | Return 200 `{"status":"queued"}` once SQS accepts the message — SQS's success response is the durability guarantee (no in-flight buffering, no publisher-confirm dance) |
 | FR-6 | Return clear error responses when a request cannot be processed: unreadable or malformed body 400, oversized body 413, enqueue unavailable 503 with `Retry-After`, unexpected failure 500 |
 | FR-7 | Queue events whose `event_type` cannot be recognized rather than rejecting them; count them (unknown type is a worker-side concern, not an admission error) |
-| FR-8 | Serve `/health` and `/ready` open, without authentication, for probes and local runtimes |
+| FR-8 | Serve `/api/v1/health` and `/api/v1/ready` open, without authentication, for probes and local runtimes |
 
 ### Authentication scheme
 
@@ -101,7 +101,7 @@ Out of this build's phase-1 code, tracked here so the contract change is visible
 - **Paddle dashboard** — webhook destination URL re-pointed to `<host>/api/v1/webhook/paddle`
 - **`apps/web` cancel route** — deferred with apps/web's other work: it calls Paddle's cancel API directly (period-end, `effective_from: "next_billing_period"`) rather than posting internal events, and its calling path must carry the app's own auth — a user cancels only their own subscription
 - **`apps/web` env** — no `PAYMENT_GATEWAY_API_KEY` ever ships; the gateway's shared key retires with the internal face (the web's own `INTERNAL_API_KEY` (analyze-stream load-test bypass) is a different credential and is untouched)
-- **`apps/web` BFF status route** — `app/api/services/payment-gateway/status` polls `/readyz` → `/ready`
+- **`apps/web` BFF status route** — `app/api/services/payment-gateway/status` polls `/readyz` → `/api/v1/ready`
 - **`apps/web` docs** — configuration/request-flows/services pages name the old path and header
 - **Load rigs** — `apps/web/test/load/mock-server` faked the internal path and its env files carried the internal key; both retire with the face
 - **Secrets tooling** — the gateway's Secrets Manager blob (`{"PADDLE_WEBHOOK_SECRET": …}`) joins the seed process allowlist
