@@ -1,0 +1,32 @@
+name: payment-webhook
+
+services:
+  payment-webhook:
+    image: detectai-payment-webhook:latest
+    container_name: detectai-payment-webhook
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 15s
+    env_file:
+      - .env
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    environment:
+      PORT: "8080"
+      QUEUE_URL: http://${QUEUE_HOST:-host.docker.internal}:${ELASTICMQ_PORT:-9324}${QUEUE_PATH:-/000000000000/payment_events.fifo}
+      AWS_ENDPOINT_URL_SQS: http://${QUEUE_HOST:-host.docker.internal}:${ELASTICMQ_PORT:-9324}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "</dev/tcp/127.0.0.1/8080"]
+      interval: 30s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
+    ports:
+      - "${PORT:-8080}:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M

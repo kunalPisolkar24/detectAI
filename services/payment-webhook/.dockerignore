@@ -1,0 +1,16 @@
+.git/
+slop/
+specification/
+README.md
+.dockerignore
+Dockerfile
+infra/
+tests/
+mk/
+Makefile
+.env*
+vendor/
+webhook
+payment-webhook
+*.test
+*.out
