@@ -100,23 +100,21 @@ def test_verify_validation_failure_short_circuits(tmp_path, monkeypatch):
     assert cli.main(["verify"], workspace=workspace) == 1
 
 
-def test_seeder_verbs_wiring(tmp_path, monkeypatch):
+def test_seeder_verb_wiring(tmp_path, monkeypatch):
     workspace = ws_with(tmp_path, EMULATOR_ENV)
     seen = {}
-
-    def fake_boot(declaration, values, is_emulator, dry_run):
-        seen["boot"] = True
-        return 0
 
     def fake_drop(declaration, values, is_emulator, dry_run):
         seen["drop"] = True
         return 0
 
-    monkeypatch.setattr(cli, "seeder_bootstrap_flow", fake_boot)
     monkeypatch.setattr(cli, "drop_seeder_flow", fake_drop)
-    assert cli.main(["seeder-bootstrap"], workspace=workspace) == 0
     assert cli.main(["seeder-drop"], workspace=workspace) == 0
-    assert seen == {"boot": True, "drop": True}
+    assert seen == {"drop": True}
+
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(["seeder-bootstrap"], workspace=workspace)
+    assert excinfo.value.code == 2
 
 
 def test_plane_selection_defaults_to_floci_and_follows_the_flags(tmp_path, monkeypatch):

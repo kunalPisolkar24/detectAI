@@ -1,7 +1,8 @@
 """Out-of-stack seeder identity: the IAM carrier role and its STS sessions.
 
-terraform never manages its own carrier: this role is created directly, trusts
-the ambient caller (or a pinned user ARN), and every carrier verb runs under an
+terraform never manages its own carrier: this role is created on demand and
+converged (trust, session cap, policy) whenever a verb needs a fresh session;
+it trusts whoever runs the tool, and every carrier verb runs under an
 MFA-gated 12-hour session cached beside the service's .env.
 """
 
@@ -15,10 +16,10 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 from secretsctl.config import Declaration, state_bucket_for
 from secretsctl.env import (
-    plane_display,
     plane_errors,
     resolve_floci_url,
     resolve_region,
@@ -100,24 +101,12 @@ def plane_account(session: dict[str, Any] | None, is_emulator: bool) -> str:
     return sts_caller_identity()[0]
 
 
-def resolve_trust_principal(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
-) -> str:
-    """The IAM principal the seeder role trusts: the pinned user ARN, else the
-    ambient caller on real AWS, else the structural emulator placeholder."""
+def resolve_trust_principal(declaration: Declaration, is_emulator: bool) -> str:
+    """The IAM principal the seeder role trusts: whoever runs the tool. The
+    emulator gets a structural placeholder (it enforces no trust conditions);
+    real AWS gets the ambient caller, so the verb runner is the trusted identity."""
     if is_emulator:
-        return (
-            values.get("SEEDER_TRUST_USER_ARN", "")
-            or f"arn:aws:iam::{DEFAULT_ACCOUNT_ID}:user/{declaration.seeder_role_name}"
-        )
-    override = values.get("SEEDER_TRUST_USER_ARN", "")
-    if override:
-        if not USER_ARN_RE.fullmatch(override):
-            die(
-                f"SEEDER_TRUST_USER_ARN is not a plain IAM user ARN: {override!r}",
-                "set arn:aws:iam::<account-id>:user/<your-user> in .env, or remove the line for auto-detection",
-            )
-        return override
+        return f"arn:aws:iam::{DEFAULT_ACCOUNT_ID}:user/{declaration.seeder_role_name}"
     _, caller_arn = sts_caller_identity()
     mark = seeder_role_session_mark(declaration)
     if mark in caller_arn:
@@ -130,7 +119,7 @@ def resolve_trust_principal(
         die(
             f"the caller is the account root ({caller_arn}); root sessions cannot satisfy an "
             "MFA-gated assume-role",
-            "set SEEDER_TRUST_USER_ARN=arn:aws:iam::<account-id>:user/<your-user> in .env",
+            "run the verb under an IAM user's credentials",
         )
     if ":assumed-role/" in caller_arn:
         stripped = role_arn_of_session(caller_arn)
@@ -150,22 +139,6 @@ def mfa_serial_for(principal: str, override: str) -> str | None:
         account_id = principal.split(":")[4]
         return f"arn:aws:iam::{account_id}:mfa/{principal.split(':user/', 1)[1]}"
     return None
-
-
-def validate_seeder_bootstrap(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
-) -> list[str]:
-    """Only what the bootstrap consumes: region, endpoint, trust user."""
-    errors: list[str] = []
-    errors.extend(plane_errors(values))
-    user_arn = values.get("SEEDER_TRUST_USER_ARN", "")
-    if user_arn and not USER_ARN_RE.fullmatch(user_arn):
-        errors.append(
-            f"error: SEEDER_TRUST_USER_ARN is not a plain IAM user ARN: {user_arn!r}\n"
-            "fix:   set SEEDER_TRUST_USER_ARN=arn:aws:iam::<account-id>:user/<your-user> in .env "
-            "(leave it unset for auto-detection)"
-        )
-    return errors
 
 
 def validate_seeder_role(
@@ -270,118 +243,198 @@ def seeder_policy_document(
     }
 
 
-def seeder_bootstrap_commands(
+def seeder_role_payload(
     declaration: Declaration, values: dict[str, str], is_emulator: bool
-) -> list[list[str]]:
-    user_arn = resolve_trust_principal(declaration, values, is_emulator)
-    base = aws_base(declaration, values, is_emulator)
-    return [
-        base
-        + [
-            "iam",
-            "create-role",
-            "--role-name",
-            declaration.seeder_role_name,
-            "--assume-role-policy-document",
-            json.dumps(seeder_trust_document(user_arn)),
-            "--max-session-duration",
-            str(SESSION_DURATION_SECONDS),
-        ],
-        base
-        + [
-            "iam",
-            "update-role",
-            "--role-name",
-            declaration.seeder_role_name,
-            "--max-session-duration",
-            str(SESSION_DURATION_SECONDS),
-        ],
-        base
-        + [
-            "iam",
-            "put-role-policy",
-            "--role-name",
-            declaration.seeder_role_name,
-            "--policy-name",
-            SEEDER_POLICY_NAME,
-            "--policy-document",
-            json.dumps(seeder_policy_document(declaration, values, is_emulator, user_arn)),
-        ],
-    ]
-
-
-def confirm_seeder_bootstrap(declaration: Declaration, user_arn: str) -> bool:
-    answer = input(
-        f'type "{declaration.seeder_role_name}" to create or update it (trust: {user_arn}): '
-    ).strip()
-    if answer != declaration.seeder_role_name:
-        print("cancelled: the seeder role is untouched")
-        return False
-    return True
-
-
-def seeder_bootstrap_flow(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool, dry_run: bool
-) -> int:
-    """Idempotent create/update; emulator runs unattended, real AWS asks a typed barrier."""
-    user_arn = resolve_trust_principal(declaration, values, is_emulator)
-    role_name = declaration.seeder_role_name
-    print(f"plane:  {plane_display(is_emulator)}")
-    print(f"role:   {role_name} (out-of-stack seeder identity)")
-    print(f"trust:  {user_arn} (MFA required)")
-    commands = seeder_bootstrap_commands(declaration, values, is_emulator)
-    if dry_run:
-        for command in commands:
-            print(f"would run: {' '.join(command)}")
-        print("(dry run: no AWS)")
-        return 0
-    if not is_emulator and not confirm_seeder_bootstrap(declaration, user_arn):
-        return 1
-
-    code, _, stderr = run_aws_captured(commands[0], is_emulator)
-    if code == 0:
-        print(f"created: {role_name} (12h session cap)")
-    elif "EntityAlreadyExists" in (stderr or ""):
-        print(f"ok: role {role_name} already exists")
-        # Older roles predate the 12h cap; refresh it so the carrier's 43200s
-        # assume-role is accepted. A refresh failure is non-fatal: assuming
-        # succeeds at the default cap and fails loudly with its own fix hint.
-        cap_code, _, cap_stderr = run_aws_captured(commands[1], is_emulator)
-        if cap_code == 0:
-            print("session: 12h cap refreshed")
-        else:
-            print("warning: could not refresh the session cap (older roles default to 1h)")
-            if (cap_stderr or "").strip():
-                print(cap_stderr.strip())
-            print(
-                f"fix: aws iam update-role --role-name {role_name} "
-                f"--max-session-duration {SESSION_DURATION_SECONDS}"
-            )
-    else:
-        print("error: create-role failed")
-        if (stderr or "").strip():
-            print(stderr.strip())
-        return 1
-
-    if run_aws(commands[2], is_emulator) != 0:
-        print(f"fix: inspect the role and attach {SEEDER_POLICY_NAME} manually, then retry")
-        return 1
-    policy = seeder_policy_document(declaration, values, is_emulator, user_arn)
-    scopes = ", ".join(statement["Sid"] for statement in policy["Statement"])
-    print(f"policy: {SEEDER_POLICY_NAME} attached ({scopes})")
-    print(
-        "next:   carrier verbs assume this role automatically with your MFA code (once per 12h session)"
-    )
-    return 0
-
-
-def seeder_role_exists(declaration: Declaration, values: dict[str, str], is_emulator: bool) -> bool:
-    code, _, _ = run_aws_captured(
+) -> dict[str, Any] | None:
+    """The role's get-role payload, or None when the role is missing (or unreadable)."""
+    code, stdout, _ = run_aws_captured(
         aws_base(declaration, values, is_emulator)
-        + ["iam", "get-role", "--role-name", declaration.seeder_role_name],
+        + [
+            "iam",
+            "get-role",
+            "--role-name",
+            declaration.seeder_role_name,
+            "--output",
+            "json",
+        ],
         is_emulator,
     )
-    return code == 0
+    if code != 0:
+        return None
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) and payload.get("Role") else None
+
+
+def _document_of(raw: Any) -> dict[str, Any] | None:
+    """An IAM payload's embedded policy document: already-JSON dict or URL-encoded string."""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(unquote(raw))
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
+def _ensure_seeder_role(
+    declaration: Declaration, values: dict[str, str], is_emulator: bool
+) -> None:
+    """Create-on-demand with convergence, before every fresh assume: the
+    emulator loses IAM on restart, a fresh real account starts empty, and an
+    old role's trust, session cap, or policy may lag the code. A converged role
+    passes silently; consistent output never blocks the verb."""
+    base = aws_base(declaration, values, is_emulator)
+    role_name = declaration.seeder_role_name
+    principal = resolve_trust_principal(declaration, is_emulator)
+    desired_trust = seeder_trust_document(principal)
+    desired_policy = seeder_policy_document(declaration, values, is_emulator, principal)
+
+    payload = seeder_role_payload(declaration, values, is_emulator)
+    if payload is None:
+        print(f"note: seeder role {role_name} is missing; creating it")
+        code, _, stderr = run_aws_captured(
+            base
+            + [
+                "iam",
+                "create-role",
+                "--role-name",
+                role_name,
+                "--assume-role-policy-document",
+                json.dumps(desired_trust),
+                "--max-session-duration",
+                str(SESSION_DURATION_SECONDS),
+            ],
+            is_emulator,
+        )
+        if code != 0 and "EntityAlreadyExists" not in (stderr or ""):
+            print("error: create-role failed")
+            print((stderr or "").strip())
+            die(
+                "could not create the seeder role",
+                "confirm your credentials may create IAM roles, then rerun the verb",
+            )
+        print(
+            f"created: {role_name} (12h session cap)"
+            if code == 0
+            else f"ok: role {role_name} already exists"
+        )
+        if (
+            run_aws(
+                base
+                + [
+                    "iam",
+                    "put-role-policy",
+                    "--role-name",
+                    role_name,
+                    "--policy-name",
+                    SEEDER_POLICY_NAME,
+                    "--policy-document",
+                    json.dumps(desired_policy),
+                ],
+                is_emulator,
+            )
+            != 0
+        ):
+            die(
+                f"could not attach {SEEDER_POLICY_NAME}",
+                f"attach {SEEDER_POLICY_NAME} manually, then rerun the verb",
+            )
+        scopes = ", ".join(statement["Sid"] for statement in desired_policy["Statement"])
+        print(f"policy: {SEEDER_POLICY_NAME} attached ({scopes})")
+        return
+
+    role = payload["Role"]
+    trust = _document_of(role.get("AssumeRolePolicyDocument"))
+    if trust is None or trust != desired_trust:
+        print(f"note: re-anchoring {role_name}'s trust to the caller ({principal})")
+        if (
+            run_aws(
+                base
+                + [
+                    "iam",
+                    "update-assume-role-policy",
+                    "--role-name",
+                    role_name,
+                    "--policy-document",
+                    json.dumps(desired_trust),
+                ],
+                is_emulator,
+            )
+            != 0
+        ):
+            die(
+                f"could not re-anchor {role_name}'s trust",
+                "confirm your credentials may update the role's trust policy",
+            )
+    cap = role.get("MaxSessionDuration")
+    if not isinstance(cap, int) or cap < SESSION_DURATION_SECONDS:
+        print(f"note: raising {role_name}'s session cap to 12h")
+        if (
+            run_aws(
+                base
+                + [
+                    "iam",
+                    "update-role",
+                    "--role-name",
+                    role_name,
+                    "--max-session-duration",
+                    str(SESSION_DURATION_SECONDS),
+                ],
+                is_emulator,
+            )
+            != 0
+        ):
+            # A stale cap is non-fatal: a 1h-capped role still assumes, and the
+            # assume itself fails loudly with the manual fix when it matters.
+            print(f"warning: could not raise {role_name}'s session cap")
+    code, stdout, _ = run_aws_captured(
+        base
+        + [
+            "iam",
+            "get-role-policy",
+            "--role-name",
+            role_name,
+            "--policy-name",
+            SEEDER_POLICY_NAME,
+            "--output",
+            "json",
+        ],
+        is_emulator,
+    )
+    attached = None
+    if code == 0:
+        try:
+            attached = _document_of(json.loads(stdout).get("PolicyDocument"))
+        except (json.JSONDecodeError, AttributeError):
+            attached = None
+    if attached != desired_policy:
+        print(f"note: re-attaching {SEEDER_POLICY_NAME} (drifted from the code's pin)")
+        if (
+            run_aws(
+                base
+                + [
+                    "iam",
+                    "put-role-policy",
+                    "--role-name",
+                    role_name,
+                    "--policy-name",
+                    SEEDER_POLICY_NAME,
+                    "--policy-document",
+                    json.dumps(desired_policy),
+                ],
+                is_emulator,
+            )
+            != 0
+        ):
+            die(
+                f"could not re-attach {SEEDER_POLICY_NAME}",
+                f"attach {SEEDER_POLICY_NAME} manually, then rerun the verb",
+            )
 
 
 def drop_seeder_commands(
@@ -412,7 +465,7 @@ def drop_seeder_flow(
             print(f"would run: {' '.join(command)}")
         print("(dry run: no AWS)")
         return 0
-    if not seeder_role_exists(declaration, values, is_emulator):
+    if seeder_role_payload(declaration, values, is_emulator) is None:
         print(f"ok: role {declaration.seeder_role_name} does not exist; nothing to drop")
         return 0
     if not is_emulator:
@@ -535,14 +588,12 @@ def assume_seeder_session(
     if exit_code != 0:
         stderr_text = (stderr or "").strip()
         detail = stderr_text.splitlines()[-1] if stderr_text else "unknown error"
-        hint = (
-            "check the MFA code and that the seeder-bootstrap verb installed the role "
-            f"({detail})"
-        )
+        hint = f"check the MFA code and that the seeder role trusts your caller ({detail})"
         if "MaxSessionDuration" in stderr_text or "DurationSeconds" in stderr_text:
             hint = (
-                f"the role's session cap is below {SESSION_DURATION_SECONDS}s; run the "
-                f"seeder-bootstrap verb once to raise it ({detail})"
+                f"the role's session cap is below {SESSION_DURATION_SECONDS}s, fix it with "
+                f"aws iam update-role --role-name {declaration.seeder_role_name} "
+                f"--max-session-duration {SESSION_DURATION_SECONDS} ({detail})"
             )
         die(f"could not assume {role_arn}", hint)
     try:
@@ -570,20 +621,6 @@ def assume_seeder_session(
     return {"role_arn": role_arn, **triplet}
 
 
-def _ensure_emulator_role(declaration: Declaration, values: dict[str, str]) -> None:
-    """Emulator-only self-heal: the emulator loses its IAM state on restart, so
-    the carrier re-creates its role with the same generated trust and policy
-    documents before assuming it."""
-    if seeder_role_exists(declaration, values, True):
-        return
-    print(f"note: re-creating {declaration.seeder_role_name} lost with the emulator state")
-    if seeder_bootstrap_flow(declaration, values, True, False) != 0:
-        die(
-            "could not re-create the emulator seeder role",
-            "run the seeder-bootstrap verb manually and retry",
-        )
-
-
 def resolve_carrier_session(
     declaration: Declaration,
     values: dict[str, str],
@@ -591,33 +628,25 @@ def resolve_carrier_session(
     dry_run: bool,
     session_cache: Path,
 ) -> dict[str, Any] | None:
-    """The carrier on both planes: cached triplet when valid, otherwise a fresh
-    assume of the service's out-of-stack seeder role. One session shape on both
-    planes; the differences are the MFA prompt (real AWS only) and the role
-    self-heal (emulator only, its state vanishes on restart).
-    Dry runs stay session-free."""
+    """The carrier on both planes: cached triplet when valid, otherwise converge
+    the service's out-of-stack seeder role (create or repair its trust, session
+    cap, and policy) and take a fresh assume of it. Dry runs stay session-free."""
     if dry_run:
         return None
-    if is_emulator:
-        principal = resolve_trust_principal(declaration, values, True)
-        role_arn = seeder_role_arn(declaration, iam_account_id(principal))
-        session = cached_session(role_arn, session_cache)
-        if session is None:
-            _ensure_emulator_role(declaration, values)
-            session = assume_seeder_session(role_arn, None, declaration, True)
-            save_cached_session(session, session_cache)
-        return session
-    principal = resolve_trust_principal(declaration, values, is_emulator)
-    serial = mfa_serial_for(principal, values.get(SEEDER_MFA_SERIAL_KEY, ""))
-    if serial is None:
-        die(
-            f"cannot derive the caller's MFA device (trust principal: {principal})",
-            f"run the verb with your IAM user credentials, or set "
-            f"{SEEDER_MFA_SERIAL_KEY}=arn:aws:iam::<account-id>:mfa/<your-user> in .env",
-        )
+    principal = resolve_trust_principal(declaration, is_emulator)
+    serial = None
+    if not is_emulator:
+        serial = mfa_serial_for(principal, values.get(SEEDER_MFA_SERIAL_KEY, ""))
+        if serial is None:
+            die(
+                f"cannot derive the caller's MFA device (trust principal: {principal})",
+                "run the verb under your IAM user credentials, or set "
+                f"{SEEDER_MFA_SERIAL_KEY}=arn:aws:iam::<account-id>:mfa/<your-user> in .env",
+            )
     role_arn = seeder_role_arn(declaration, iam_account_id(principal))
     session = cached_session(role_arn, session_cache)
     if session is None:
-        session = assume_seeder_session(role_arn, serial, declaration)
+        _ensure_seeder_role(declaration, values, is_emulator)
+        session = assume_seeder_session(role_arn, serial, declaration, is_emulator)
         save_cached_session(session, session_cache)
     return session

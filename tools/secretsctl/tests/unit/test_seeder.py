@@ -1,4 +1,4 @@
-"""Seeder carrier: trust ladder, MFA serials, cached sessions, bootstrap and drop flows."""
+"""Seeder carrier: trust ladder, MFA serials, cached sessions, create-on-demand, and drop flows."""
 
 from __future__ import annotations
 
@@ -38,24 +38,20 @@ def test_iam_account_id_reads_the_account_and_rejects_non_iam_principals():
 
 
 def test_resolve_trust_principal_emulator_placeholder_derives_from_the_role():
-    principal = seeder.resolve_trust_principal(DP, EMULATOR_ENV, True)
-    assert principal == f"arn:aws:iam::000000000000:user/{DP.seeder_role_name}"
-
-
-def test_resolve_trust_principal_emulator_honors_the_override():
-    values = {**EMULATOR_ENV, "SEEDER_TRUST_USER_ARN": USER_ARN}
-    assert seeder.resolve_trust_principal(DP, values, True) == USER_ARN
+    assert seeder.resolve_trust_principal(DP, True) == (
+        f"arn:aws:iam::000000000000:user/{DP.seeder_role_name}"
+    )
 
 
 def test_resolve_trust_principal_real_uses_the_ambient_user(monkeypatch):
     monkeypatch.setattr(seeder, "sts_caller_identity", lambda: ("123456789012", USER_ARN))
-    assert seeder.resolve_trust_principal(DP, REAL_ENV, False) == USER_ARN
+    assert seeder.resolve_trust_principal(DP, False) == USER_ARN
 
 
 def test_resolve_trust_principal_promotes_role_sessions_to_their_base_role(monkeypatch, capsys):
     session_arn = "arn:aws:sts::123456789012:assumed-role/OpsRole/sess"
     monkeypatch.setattr(seeder, "sts_caller_identity", lambda: ("123456789012", session_arn))
-    principal = seeder.resolve_trust_principal(DP, REAL_ENV, False)
+    principal = seeder.resolve_trust_principal(DP, False)
     assert principal == "arn:aws:iam::123456789012:role/OpsRole"
     assert "its base role becomes the trust principal" in capsys.readouterr().out
 
@@ -65,7 +61,7 @@ def test_resolve_trust_principal_rejects_root(monkeypatch):
         seeder, "sts_caller_identity", lambda: ("123456789012", "arn:aws:iam::123456789012:root")
     )
     with pytest.raises(SystemExit) as excinfo:
-        seeder.resolve_trust_principal(DP, REAL_ENV, False)
+        seeder.resolve_trust_principal(DP, False)
     assert excinfo.value.code == 1
 
 
@@ -73,18 +69,11 @@ def test_resolve_trust_principal_rejects_an_existing_seeder_session(monkeypatch,
     session_arn = f"arn:aws:sts::123456789012:assumed-role/{DP.seeder_role_name}/sess"
     monkeypatch.setattr(seeder, "sts_caller_identity", lambda: ("123456789012", session_arn))
     with pytest.raises(SystemExit) as excinfo:
-        seeder.resolve_trust_principal(DP, REAL_ENV, False)
+        seeder.resolve_trust_principal(DP, False)
     assert excinfo.value.code == 1
     out = capsys.readouterr().out
     assert "already a detectai-document-parser-seeder session" in out
     assert "session-clear" in out
-
-
-def test_resolve_trust_principal_validates_the_override_shape():
-    values = {**REAL_ENV, "SEEDER_TRUST_USER_ARN": "arn:aws:iam::123456789012:role/OpsRole"}
-    with pytest.raises(SystemExit) as excinfo:
-        seeder.resolve_trust_principal(DP, values, False)
-    assert excinfo.value.code == 1
 
 
 def test_mfa_serial_ladder():
@@ -92,18 +81,6 @@ def test_mfa_serial_ladder():
     override = "arn:aws:iam::123456789012:mfa/custom-device"
     assert seeder.mfa_serial_for(USER_ARN, override) == override
     assert seeder.mfa_serial_for("arn:aws:iam::123456789012:role/OpsRole", "") is None
-
-
-def test_validate_seeder_bootstrap_scope(dp):
-    assert seeder.validate_seeder_bootstrap(DP, EMULATOR_ENV, True) == []
-    bad_arn = "\n".join(
-        seeder.validate_seeder_bootstrap(DP, {**REAL_ENV, "SEEDER_TRUST_USER_ARN": "nope"}, False)
-    )
-    assert "SEEDER_TRUST_USER_ARN" in bad_arn
-    bad_region = "\n".join(
-        seeder.validate_seeder_bootstrap(DP, {**EMULATOR_ENV, "AWS_REGION": "Mars-1"}, True)
-    )
-    assert "AWS_REGION" in bad_region
 
 
 def test_validate_seeder_role_scope():
@@ -143,7 +120,7 @@ def test_policy_document_scopes_every_service_pinned_arn():
 
 
 def test_policy_bucket_pin_follows_the_plane_account():
-    emulator_placeholder = seeder.resolve_trust_principal(DP, EMULATOR_ENV, True)
+    emulator_placeholder = seeder.resolve_trust_principal(DP, True)
     real = seeder.seeder_policy_document(DP, REAL_ENV, False, USER_ARN)
     assert real["Statement"][0]["Resource"] == [
         "arn:aws:s3:::detectai-document-parser-tfstate-123456789012"
@@ -176,131 +153,212 @@ def test_plane_account_routes_by_plane_and_session(monkeypatch):
     assert seeder.plane_account(None, False) == "436242974989"  # the real dry-run lookup
 
 
-def test_bootstrap_commands_shape():
-    commands = seeder.seeder_bootstrap_commands(DP, EMULATOR_ENV, True)
-    assert len(commands) == 3
-    create = commands[0]
-    iam = create.index("iam")
-    assert create[iam : iam + 4] == ["iam", "create-role", "--role-name", DP.seeder_role_name]
-    assert "--max-session-duration" in create and "43200" in create
-    trust = json.loads(create[create.index("--assume-role-policy-document") + 1])
-    placeholder = seeder.resolve_trust_principal(DP, EMULATOR_ENV, True)
-    assert trust == seeder.seeder_trust_document(placeholder)
-    update = commands[1]
-    assert update[update.index("iam") : update.index("iam") + 2] == ["iam", "update-role"]
-    put_policy = commands[2]
-    iam = put_policy.index("iam")
-    assert put_policy[iam : iam + 4] == [
-        "iam",
-        "put-role-policy",
-        "--role-name",
-        DP.seeder_role_name,
-    ]
-    assert "--policy-name" in put_policy and "seeder-policy" in put_policy
-    policy = json.loads(put_policy[put_policy.index("--policy-document") + 1])
-    assert policy["Statement"][0]["Sid"] == "RunTerraformStateBucket"
-
-
-def test_confirm_seeder_bootstrap_barrier(monkeypatch):
-    monkeypatch.setattr("builtins.input", lambda prompt="": DP.seeder_role_name)
-    assert seeder.confirm_seeder_bootstrap(DP, USER_ARN) is True
-    monkeypatch.setattr("builtins.input", lambda prompt="": "no")
-    assert seeder.confirm_seeder_bootstrap(DP, USER_ARN) is False
-
-
-def test_bootstrap_flow_dry_run_prints_three_commands(monkeypatch, capsys):
-    def boom(*arguments, **rest):
-        raise AssertionError("dry run must not touch AWS")
-
-    monkeypatch.setattr(seeder, "run_aws", boom)
-    monkeypatch.setattr(seeder, "run_aws_captured", boom)
-    assert seeder.seeder_bootstrap_flow(DP, EMULATOR_ENV, True, True) == 0
-    out = capsys.readouterr().out
-    assert out.count("would run:") == 3 and "(dry run: no AWS)" in out
-
-
-def test_bootstrap_flow_creates_and_attaches(monkeypatch, capsys):
+def test_role_payload_probe(monkeypatch):
     monkeypatch.setattr(
         seeder,
         "run_aws_captured",
-        lambda command, is_emulator, session=None: (0, json.dumps({"Role": {}}), ""),
+        lambda command, is_emulator, session=None: (
+            0,
+            json.dumps({"Role": {"RoleName": DP.seeder_role_name}}),
+            "",
+        ),
     )
-    monkeypatch.setattr(seeder, "run_aws", lambda command, is_emulator, session=None: 0)
-    assert seeder.seeder_bootstrap_flow(DP, EMULATOR_ENV, True, False) == 0
-    out = capsys.readouterr().out
-    assert f"created: {DP.seeder_role_name} (12h session cap)" in out
-    assert "policy: seeder-policy attached" in out
-    assert "next:" in out
-
-
-def test_bootstrap_flow_refreshes_an_existing_role(monkeypatch, capsys):
-    def captured(command, is_emulator, session=None):
-        if "create-role" in command:
-            return (
-                1,
-                "",
-                "An error occurred (EntityAlreadyExists) when calling the CreateRole operation",
-            )
-        return 0, "", ""
-
-    monkeypatch.setattr(seeder, "run_aws_captured", captured)
-    monkeypatch.setattr(seeder, "run_aws", lambda command, is_emulator, session=None: 0)
-    assert seeder.seeder_bootstrap_flow(DP, EMULATOR_ENV, True, False) == 0
-    out = capsys.readouterr().out
-    assert f"ok: role {DP.seeder_role_name} already exists" in out
-    assert "session: 12h cap refreshed" in out
-
-
-def test_bootstrap_flow_warns_when_the_cap_refresh_fails(monkeypatch, capsys):
-    def captured(command, is_emulator, session=None):
-        if "create-role" in command:
-            return (
-                1,
-                "",
-                "An error occurred (EntityAlreadyExists) when calling the CreateRole operation",
-            )
-        return 1, "", "update failed"
-
-    monkeypatch.setattr(seeder, "run_aws_captured", captured)
-    monkeypatch.setattr(seeder, "run_aws", lambda command, is_emulator, session=None: 0)
-    assert seeder.seeder_bootstrap_flow(DP, EMULATOR_ENV, True, False) == 0
-    out = capsys.readouterr().out
-    assert "warning: could not refresh the session cap" in out
-    assert "fix: aws iam update-role" in out
-    assert "policy: seeder-policy attached" in out
-
-
-def test_bootstrap_flow_reports_create_failures(monkeypatch, capsys):
-    monkeypatch.setattr(
-        seeder,
-        "run_aws_captured",
-        lambda command, is_emulator, session=None: (1, "", "AccessDenied"),
+    assert seeder.seeder_role_payload(DP, EMULATOR_ENV, True)["Role"]["RoleName"] == (
+        DP.seeder_role_name
     )
-    assert seeder.seeder_bootstrap_flow(DP, EMULATOR_ENV, True, False) == 1
-    out = capsys.readouterr().out
-    assert "error: create-role failed" in out and "AccessDenied" in out
-
-
-def test_bootstrap_flow_reports_policy_failures(monkeypatch, capsys):
-    monkeypatch.setattr(
-        seeder, "run_aws_captured", lambda command, is_emulator, session=None: (0, "{}", "")
-    )
-    monkeypatch.setattr(seeder, "run_aws", lambda command, is_emulator, session=None: 1)
-    assert seeder.seeder_bootstrap_flow(DP, EMULATOR_ENV, True, False) == 1
-    assert "fix: inspect the role" in capsys.readouterr().out
-
-
-def test_role_exists_probe(monkeypatch):
-    monkeypatch.setattr(
-        seeder, "run_aws_captured", lambda command, is_emulator, session=None: (0, "{}", "")
-    )
-    assert seeder.seeder_role_exists(DP, EMULATOR_ENV, True) is True
     monkeypatch.setattr(
         seeder,
         "run_aws_captured",
         lambda command, is_emulator, session=None: (254, "", "NoSuchEntity"),
     )
-    assert seeder.seeder_role_exists(DP, EMULATOR_ENV, True) is False
+    assert seeder.seeder_role_payload(DP, EMULATOR_ENV, True) is None
+    monkeypatch.setattr(
+        seeder, "run_aws_captured", lambda command, is_emulator, session=None: (0, "{not json", "")
+    )
+    assert seeder.seeder_role_payload(DP, EMULATOR_ENV, True) is None
+
+
+def test_ensure_seeder_role_creates_a_missing_role(monkeypatch, capsys):
+    emulator_trust(monkeypatch)
+    monkeypatch.setattr(seeder, "seeder_role_payload", lambda declaration, values, is_em: None)
+    calls: list[list[str]] = []
+
+    def fake_captured(command, is_emulator, session=None):
+        calls.append(list(command))
+        return 0, "", ""
+
+    monkeypatch.setattr(seeder, "run_aws_captured", fake_captured)
+
+    def fake_run(command, is_emulator, session=None):
+        calls.append(list(command))
+        return 0
+
+    monkeypatch.setattr(seeder, "run_aws", fake_run)
+    seeder._ensure_seeder_role(DP, EMULATOR_ENV, True)
+    out = capsys.readouterr().out
+    assert f"note: seeder role {DP.seeder_role_name} is missing; creating it" in out
+    assert f"created: {DP.seeder_role_name} (12h session cap)" in out
+    assert "policy: seeder-policy attached" in out
+    create = next(command for command in calls if "create-role" in command)
+    assert json.loads(create[create.index("--assume-role-policy-document") + 1]) == (
+        seeder.seeder_trust_document(EMULATOR_TRUST_ARN)
+    )
+    put = next(command for command in calls if "put-role-policy" in command)
+    assert json.loads(put[put.index("--policy-document") + 1]) == (
+        seeder.seeder_policy_document(DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN)
+    )
+    assert not any("update-role" in command for command in calls)  # the create carries the cap
+
+
+def test_ensure_seeder_role_passes_a_converged_role_silently(monkeypatch, capsys):
+    emulator_trust(monkeypatch)
+    desired_policy = seeder.seeder_policy_document(DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN)
+    converged = {
+        "RoleName": DP.seeder_role_name,
+        "MaxSessionDuration": seeder.SESSION_DURATION_SECONDS,
+        "AssumeRolePolicyDocument": seeder.seeder_trust_document(EMULATOR_TRUST_ARN),
+    }
+
+    def captured(command, is_emulator, session=None):
+        if "get-role-policy" in command:
+            return 0, json.dumps({"PolicyDocument": json.dumps(desired_policy)}), ""
+        return 0, json.dumps({"Role": converged}), ""
+
+    def boom(*arguments, **rest):
+        raise AssertionError("a converged role must not be written")
+
+    monkeypatch.setattr(seeder, "run_aws_captured", captured)
+    monkeypatch.setattr(seeder, "run_aws", boom)
+    seeder._ensure_seeder_role(DP, EMULATOR_ENV, True)
+    assert capsys.readouterr().out == ""
+
+
+def test_ensure_seeder_role_reanchors_drifted_trust(monkeypatch, capsys):
+    emulator_trust(monkeypatch)
+    desired_policy = seeder.seeder_policy_document(DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN)
+    stale = {
+        "RoleName": DP.seeder_role_name,
+        "MaxSessionDuration": seeder.SESSION_DURATION_SECONDS,
+        "AssumeRolePolicyDocument": seeder.seeder_trust_document(
+            "arn:aws:iam::123456789012:user/old-owner"
+        ),
+    }
+    calls: list[list[str]] = []
+
+    def captured(command, is_emulator, session=None):
+        if "get-role-policy" in command:
+            return 0, json.dumps({"PolicyDocument": json.dumps(desired_policy)}), ""
+        return 0, json.dumps({"Role": stale}), ""
+
+    monkeypatch.setattr(seeder, "run_aws_captured", captured)
+
+    def fake_run(command, is_emulator, session=None):
+        calls.append(list(command))
+        return 0
+
+    monkeypatch.setattr(seeder, "run_aws", fake_run)
+    seeder._ensure_seeder_role(DP, EMULATOR_ENV, True)
+    out = capsys.readouterr().out
+    assert f"note: re-anchoring {DP.seeder_role_name}'s trust to the caller" in out
+    re_anchor = next(command for command in calls if "update-assume-role-policy" in command)
+    assert json.loads(re_anchor[re_anchor.index("--policy-document") + 1]) == (
+        seeder.seeder_trust_document(EMULATOR_TRUST_ARN)
+    )
+    assert not any("put-role-policy" in command for command in calls)
+
+
+def test_ensure_seeder_role_raises_a_legacy_cap(monkeypatch, capsys):
+    emulator_trust(monkeypatch)
+    desired_policy = seeder.seeder_policy_document(DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN)
+    legacy = {
+        "RoleName": DP.seeder_role_name,
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": seeder.seeder_trust_document(EMULATOR_TRUST_ARN),
+    }
+    calls: list[list[str]] = []
+
+    def captured(command, is_emulator, session=None):
+        if "get-role-policy" in command:
+            return 0, json.dumps({"PolicyDocument": json.dumps(desired_policy)}), ""
+        return 0, json.dumps({"Role": legacy}), ""
+
+    monkeypatch.setattr(seeder, "run_aws_captured", captured)
+
+    def fake_run(command, is_emulator, session=None):
+        calls.append(list(command))
+        return 0 if "--max-session-duration" not in command else 1
+
+    monkeypatch.setattr(seeder, "run_aws", fake_run)
+    seeder._ensure_seeder_role(DP, EMULATOR_ENV, True)
+    out = capsys.readouterr().out
+    assert f"note: raising {DP.seeder_role_name}'s session cap to 12h" in out
+    assert f"warning: could not raise {DP.seeder_role_name}'s session cap" in out
+    assert any("update-role" in command for command in calls)
+
+
+def test_ensure_seeder_role_reputs_a_drifted_policy(monkeypatch, capsys):
+    emulator_trust(monkeypatch)
+    converged = {
+        "RoleName": DP.seeder_role_name,
+        "MaxSessionDuration": seeder.SESSION_DURATION_SECONDS,
+        "AssumeRolePolicyDocument": seeder.seeder_trust_document(EMULATOR_TRUST_ARN),
+    }
+    stale_policy = {"Version": "2012-10-17", "Statement": [{"Sid": "RunTerraformStateBucket"}]}
+    calls: list[list[str]] = []
+
+    def captured(command, is_emulator, session=None):
+        if "get-role-policy" in command:
+            return 0, json.dumps({"PolicyDocument": json.dumps(stale_policy)}), ""
+        return 0, json.dumps({"Role": converged}), ""
+
+    monkeypatch.setattr(seeder, "run_aws_captured", captured)
+
+    def fake_run(command, is_emulator, session=None):
+        calls.append(list(command))
+        return 0
+
+    monkeypatch.setattr(seeder, "run_aws", fake_run)
+    seeder._ensure_seeder_role(DP, EMULATOR_ENV, True)
+    out = capsys.readouterr().out
+    assert f"note: re-attaching {seeder.SEEDER_POLICY_NAME} (drifted from the code's pin)" in out
+    put = next(command for command in calls if "put-role-policy" in command)
+    assert json.loads(put[put.index("--policy-document") + 1]) == (
+        seeder.seeder_policy_document(DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN)
+    )
+
+
+def test_ensure_seeder_role_dies_when_create_fails(monkeypatch, capsys):
+    emulator_trust(monkeypatch)
+    monkeypatch.setattr(seeder, "seeder_role_payload", lambda declaration, values, is_em: None)
+    monkeypatch.setattr(
+        seeder,
+        "run_aws_captured",
+        lambda command, is_emulator, session=None: (1, "", "AccessDenied"),
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        seeder._ensure_seeder_role(DP, EMULATOR_ENV, True)
+    assert excinfo.value.code == 1
+    out = capsys.readouterr().out
+    assert "error: create-role failed" in out and "AccessDenied" in out
+
+
+def test_ensure_seeder_role_dies_when_the_policy_attach_fails(monkeypatch, capsys):
+    emulator_trust(monkeypatch)
+    monkeypatch.setattr(seeder, "seeder_role_payload", lambda declaration, values, is_em: None)
+    monkeypatch.setattr(
+        seeder,
+        "run_aws_captured",
+        lambda command, is_emulator, session=None: (
+            0,
+            "",
+            "An error occurred (EntityAlreadyExists) when calling the CreateRole operation",
+        ),
+    )
+    monkeypatch.setattr(seeder, "run_aws", lambda command, is_emulator, session=None: 1)
+    with pytest.raises(SystemExit) as excinfo:
+        seeder._ensure_seeder_role(DP, EMULATOR_ENV, True)
+    assert excinfo.value.code == 1
+    assert "could not attach seeder-policy" in capsys.readouterr().out
 
 
 def test_drop_flow_dry_run(monkeypatch, capsys):
@@ -308,22 +366,22 @@ def test_drop_flow_dry_run(monkeypatch, capsys):
         raise AssertionError("dry run must not touch AWS")
 
     monkeypatch.setattr(seeder, "run_aws", boom)
-    monkeypatch.setattr(seeder, "seeder_role_exists", boom)
+    monkeypatch.setattr(seeder, "seeder_role_payload", boom)
     assert seeder.drop_seeder_flow(DP, EMULATOR_ENV, True, True) == 0
     out = capsys.readouterr().out
     assert out.count("would run:") == 2 and "(dry run: no AWS)" in out
 
 
 def test_drop_flow_noop_when_role_missing(monkeypatch, capsys):
-    monkeypatch.setattr(
-        seeder, "seeder_role_exists", lambda declaration, values, is_emulator: False
-    )
+    monkeypatch.setattr(seeder, "seeder_role_payload", lambda declaration, values, is_em: None)
     assert seeder.drop_seeder_flow(DP, EMULATOR_ENV, True, False) == 0
     assert "does not exist; nothing to drop" in capsys.readouterr().out
 
 
 def test_drop_flow_emulator_never_prompts(monkeypatch, capsys):
-    monkeypatch.setattr(seeder, "seeder_role_exists", lambda declaration, values, is_emulator: True)
+    monkeypatch.setattr(
+        seeder, "seeder_role_payload", lambda declaration, values, is_em: {"Role": {}}
+    )
 
     def no_prompt(prompt=""):
         raise AssertionError("emulator plane must not prompt")
@@ -337,14 +395,18 @@ def test_drop_flow_emulator_never_prompts(monkeypatch, capsys):
 
 
 def test_drop_flow_real_barrier(monkeypatch, capsys):
-    monkeypatch.setattr(seeder, "seeder_role_exists", lambda declaration, values, is_emulator: True)
+    monkeypatch.setattr(
+        seeder, "seeder_role_payload", lambda declaration, values, is_em: {"Role": {}}
+    )
     monkeypatch.setattr("builtins.input", lambda prompt="": "wrong-name")
     assert seeder.drop_seeder_flow(DP, REAL_ENV, False, False) == 1
     assert "cancelled: the seeder role is untouched" in capsys.readouterr().out
 
 
 def test_drop_flow_reports_policy_and_role_failures(monkeypatch, capsys):
-    monkeypatch.setattr(seeder, "seeder_role_exists", lambda declaration, values, is_emulator: True)
+    monkeypatch.setattr(
+        seeder, "seeder_role_payload", lambda declaration, values, is_em: {"Role": {}}
+    )
     codes = iter([1])
     monkeypatch.setattr(seeder, "run_aws", lambda command, is_emulator, session=None: next(codes))
     assert seeder.drop_seeder_flow(DP, EMULATOR_ENV, True, False) == 1
@@ -467,7 +529,7 @@ def test_assume_rejects_non_numeric_codes(monkeypatch):
     assert excinfo.value.code == 1
 
 
-def test_assume_failure_hints_at_the_bootstrap_verb(monkeypatch, capsys):
+def test_assume_failure_hints_at_the_trust_or_mfa(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda prompt="": "654321")
     monkeypatch.setattr(
         seeder,
@@ -477,7 +539,7 @@ def test_assume_failure_hints_at_the_bootstrap_verb(monkeypatch, capsys):
     with pytest.raises(SystemExit) as excinfo:
         seeder.assume_seeder_session(ROLE_ARN, "serial", DP)
     assert excinfo.value.code == 1
-    assert "seeder-bootstrap verb" in capsys.readouterr().out
+    assert "trusts your caller" in capsys.readouterr().out
 
 
 def test_assume_failure_hints_at_the_session_cap(monkeypatch, capsys):
@@ -488,7 +550,8 @@ def test_assume_failure_hints_at_the_session_cap(monkeypatch, capsys):
     )
     with pytest.raises(SystemExit):
         seeder.assume_seeder_session(ROLE_ARN, "serial", DP)
-    assert "session cap" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "session cap" in out and "aws iam update-role" in out
 
 
 def test_assume_rejects_a_foreign_identity(monkeypatch):
@@ -561,7 +624,7 @@ EMULATOR_ROLE_ARN = seeder.seeder_role_arn(DP, "000000000000")
 
 
 def emulator_trust(monkeypatch):
-    monkeypatch.setattr(seeder, "resolve_trust_principal", lambda d, v, e: EMULATOR_TRUST_ARN)
+    monkeypatch.setattr(seeder, "resolve_trust_principal", lambda d, e: EMULATOR_TRUST_ARN)
 
 
 def fresh_triplet():
@@ -582,7 +645,12 @@ def test_resolve_carrier_session_is_dry_run_free_on_both_planes(tmp_path):
 
 def test_resolve_carrier_session_on_the_emulator_assumes_without_mfa(tmp_path, monkeypatch, capsys):
     emulator_trust(monkeypatch)
-    monkeypatch.setattr(seeder, "seeder_role_exists", lambda d, v, e: True)
+    healed = {}
+
+    def fake_heal(declaration, values, is_emulator):
+        healed["plane"] = is_emulator
+
+    monkeypatch.setattr(seeder, "_ensure_seeder_role", fake_heal)
     seen = {}
 
     def fake_assume(role_arn, serial, declaration, is_emulator=False):
@@ -594,6 +662,7 @@ def test_resolve_carrier_session_on_the_emulator_assumes_without_mfa(tmp_path, m
     monkeypatch.setattr(seeder, "assume_seeder_session", fake_assume)
     cache = tmp_path / "c.json"
     assert seeder.resolve_carrier_session(DP, EMULATOR_ENV, True, False, cache) == fresh_triplet()
+    assert healed["plane"] is True
     assert seen["role_arn"] == EMULATOR_ROLE_ARN
     assert seen["serial"] is None and seen["is_emulator"] is True
     assert json.loads(cache.read_text())["role_arn"] == EMULATOR_ROLE_ARN
@@ -609,41 +678,40 @@ def test_resolve_carrier_session_on_the_emulator_reuses_a_cached_triplet(
     def boom(*arguments, **rest):
         raise AssertionError("a cached emulator session must not touch the role or assume")
 
-    monkeypatch.setattr(seeder, "seeder_role_exists", boom)
+    monkeypatch.setattr(seeder, "_ensure_seeder_role", boom)
     monkeypatch.setattr(seeder, "assume_seeder_session", boom)
     assert seeder.resolve_carrier_session(DP, EMULATOR_ENV, True, False, cache) == fresh_triplet()
 
 
-def test_resolve_carrier_session_on_the_emulator_recreates_a_missing_role(
+def test_resolve_carrier_session_on_real_aws_converges_and_assumes_with_mfa(
     tmp_path, monkeypatch, capsys
 ):
-    emulator_trust(monkeypatch)
-    monkeypatch.setattr(seeder, "seeder_role_exists", lambda d, v, e: False)
+    monkeypatch.setattr(seeder, "sts_caller_identity", lambda: ("123456789012", USER_ARN))
     healed = {}
 
-    def fake_flow(declaration, values, is_emulator, dry_run):
-        healed["flow"] = (declaration.slug, is_emulator, dry_run)
-        return 0
+    def fake_heal(declaration, values, is_emulator):
+        healed["plane"] = is_emulator
 
-    monkeypatch.setattr(seeder, "seeder_bootstrap_flow", fake_flow)
-    monkeypatch.setattr(seeder, "assume_seeder_session", lambda *a, **k: fresh_triplet())
+    monkeypatch.setattr(seeder, "_ensure_seeder_role", fake_heal)
+    seen = {}
+
+    def fake_assume(role_arn, serial, declaration, is_emulator=False):
+        seen["role_arn"] = role_arn
+        seen["serial"] = serial
+        seen["is_emulator"] = is_emulator
+        return fake_triplet(role_arn)
+
+    monkeypatch.setattr(seeder, "assume_seeder_session", fake_assume)
     cache = tmp_path / "c.json"
-    assert seeder.resolve_carrier_session(DP, EMULATOR_ENV, True, False, cache) == fresh_triplet()
-    assert healed["flow"] == ("document-parser", True, False)
-    out = capsys.readouterr().out
-    assert f"note: re-creating {DP.seeder_role_name} lost with the emulator state" in out
-
-
-def test_resolve_carrier_session_on_the_emulator_dies_when_the_heal_fails(
-    tmp_path, monkeypatch, capsys
-):
-    emulator_trust(monkeypatch)
-    monkeypatch.setattr(seeder, "seeder_role_exists", lambda d, v, e: False)
-    monkeypatch.setattr(seeder, "seeder_bootstrap_flow", lambda d, v, e, r: 1)
-    with pytest.raises(SystemExit) as excinfo:
-        seeder.resolve_carrier_session(DP, EMULATOR_ENV, True, False, tmp_path / "c.json")
-    assert excinfo.value.code == 1
-    assert "could not re-create the emulator seeder role" in capsys.readouterr().out
+    assert seeder.resolve_carrier_session(DP, REAL_ENV, False, False, cache) == fake_triplet(
+        ROLE_ARN
+    )
+    assert healed["plane"] is False
+    assert seen["role_arn"] == ROLE_ARN
+    assert seen["is_emulator"] is False
+    # the MFA serial derives from the trusted caller, no .env override needed
+    assert seen["serial"] == "arn:aws:iam::123456789012:mfa/kunalpisolkar"
+    assert json.loads(cache.read_text())["role_arn"] == ROLE_ARN
 
 
 def test_resolve_carrier_session_reuses_a_cached_triplet(tmp_path, monkeypatch):
@@ -668,6 +736,7 @@ def test_resolve_carrier_session_reuses_a_cached_triplet(tmp_path, monkeypatch):
 def test_resolve_carrier_session_assumes_and_saves_when_uncached(tmp_path, monkeypatch):
     cache = tmp_path / "c.json"
     monkeypatch.setattr(seeder, "sts_caller_identity", lambda: ("123456789012", USER_ARN))
+    monkeypatch.setattr(seeder, "_ensure_seeder_role", lambda declaration, values, is_em: None)
     fresh = {
         "role_arn": ROLE_ARN,
         "access_key_id": "A",
@@ -676,7 +745,7 @@ def test_resolve_carrier_session_assumes_and_saves_when_uncached(tmp_path, monke
         "expires_at": "2086-01-01T00:00:00Z",
     }
     monkeypatch.setattr(
-        seeder, "assume_seeder_session", lambda role_arn, serial, declaration: fresh
+        seeder, "assume_seeder_session", lambda role_arn, serial, declaration, is_emulator: fresh
     )
     assert seeder.resolve_carrier_session(DP, REAL_ENV, False, False, cache) == fresh
     assert json.loads(cache.read_text())["role_arn"] == ROLE_ARN

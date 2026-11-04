@@ -1,10 +1,10 @@
 # secretsctl
 
 One generic engine that drives a service's AWS secrets plane: validate its
-`infra/.env`, `terraform plan/apply/destroy` its stack (the derived state bucket
-is created on demand on both planes), manage the out-of-stack seeder carrier
-role (the assumed session every verb rides, cached), verify the live plane
-against the values, and tear it all down.
+`infra/.env`, `terraform plan/apply/destroy` its stack, verify the live plane
+against the values, and tear it all down. The state bucket and the out-of-stack
+seeder carrier role (the assumed session every verb rides, cached) are created
+on demand and converged on both planes.
 
 Written in place of `services/document-parser/tools/secrets.py` (removed once
 the engine matched its suite).
@@ -29,12 +29,15 @@ runs Floci, `make secrets-plan PLANE=aws` runs real AWS.
 
 Every verb on both planes rides the service's out-of-stack seeder role
 (`detectai-<service>-seeder`) through an STS assume-role; the 12-hour triplet
-caches in `infra/.aws-session.json` and `session-clear` drops it. The planes
-differ only in friction: real AWS gates the assume behind an MFA prompt, the
-emulator needs no prompt and self-heals its role plus the state bucket when a
-restart wiped its state. The state bucket derives from the service and plane
-(`detectai-<service>-tfstate-<account>`) and is never hand-passed. `--dry-run`
-resolves no session.
+caches in `infra/.aws-session.json` and `session-clear` drops it. The role
+trusts whoever runs the tool (the ambient caller; the emulator uses a
+structural placeholder) and is created or re-converged — trust, session cap,
+inline policy — whenever a verb resolves a fresh session, with a cached one
+skipping IAM entirely. The planes differ only in friction: real AWS gates the
+assume behind an MFA prompt, the emulator needs no prompt. `SEEDER_MFA_SERIAL`
+is the only .env knob left (clones unusual MFA device names; the trust and
+state bucket derive from the service and caller: `detectai-<service>-tfstate-<account>`).
+`--dry-run` resolves no session.
 
 ## Install and test
 

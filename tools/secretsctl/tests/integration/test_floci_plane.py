@@ -230,9 +230,10 @@ def test_happy_path_apply_then_verify(service):
     service_dir, slug = service
     apply = run_cli(service_dir, "apply")
     assert apply.returncode == 0, apply.stdout + apply.stderr
-    # The self-heal ladder rides the first apply: a fresh emulator means neither
-    # the seeder role nor the derived state bucket pre-exists.
-    assert f"note: re-creating detectai-{slug}-seeder lost with the emulator state" in apply.stdout
+    # The convergence ladder rides the first apply: a fresh emulator means
+    # neither the seeder role nor the derived state bucket pre-exists.
+    assert f"note: seeder role detectai-{slug}-seeder is missing; creating it" in apply.stdout
+    assert f"created: detectai-{slug}-seeder (12h session cap)" in apply.stdout
     assert f"carrier: assuming detectai-{slug}-seeder" in apply.stdout
     assert f"created: detectai-{slug}-tfstate-000000000000" in apply.stdout
     assert "versioning: Enabled" in apply.stdout
@@ -260,7 +261,7 @@ def test_the_carrier_recreates_a_dropped_role(service):
 
     plan = run_cli(service_dir, "plan")
     assert plan.returncode == 0, plan.stdout + plan.stderr
-    assert f"note: re-creating detectai-{slug}-seeder lost with the emulator state" in plan.stdout
+    assert f"note: seeder role detectai-{slug}-seeder is missing; creating it" in plan.stdout
     assert "carrier: assuming" in plan.stdout
 
     verify = run_cli(service_dir, "verify")
@@ -330,8 +331,6 @@ def test_apply_twice_leaves_the_bucket_alone(service):
 def test_destroy_leaves_the_role_and_state_intact_without_flags(service):
     service_dir, slug = service
     seed(service_dir)
-    seeder = run_cli(service_dir, "seeder-bootstrap")
-    assert seeder.returncode == 0, seeder.stdout + seeder.stderr
 
     destroy = run_cli(service_dir, "destroy")
     assert destroy.returncode == 0, destroy.stdout + destroy.stderr

@@ -1,7 +1,7 @@
 # secretsctl validates infra/.env, drives the shared terraform plane, and its
-# bootstrap/drop verbs are the steps that touch AWS directly. Every verb rides
-# the seeder carrier role session: assumed with an MFA prompt on real AWS,
-# prompt-free with role self-heal on Floci; the triplet caches for ~12 hours in
+# verbs need no pre-setup: the state bucket and the seeder carrier role are
+# created on demand. The carrier is assumed with an MFA prompt on real AWS,
+# prompt-free on Floci; the triplet caches for ~12 hours in
 # infra/.aws-session.json (secrets-session-clear drops it).
 #
 # Plane selection: PLANE=floci (default) or PLANE=aws, e.g.
@@ -11,16 +11,14 @@ SECRETSCTL := poetry -C $(abspath ../../tools/secretsctl) run secretsctl --servi
 PLANE ?= floci
 PLANE_FLAG := $(if $(filter aws,$(PLANE)),--aws,)
 
-.PHONY: secrets-check secrets-plan secrets-apply secrets-verify secrets-clean secrets-destroy secrets-bootstrap-state secrets-seeder-bootstrap secrets-drop-seeder secrets-session-clear secrets-test help-secrets
+.PHONY: secrets-check secrets-plan secrets-apply secrets-verify secrets-clean secrets-destroy secrets-drop-seeder secrets-session-clear secrets-test help-secrets
 
 help-secrets:
 	@echo "  Secrets pipeline (mk/secrets.mk):"
 	@echo "    secrets-check            validate infra/.env and preview the plane/vars (no terraform, no AWS)"
-	@echo "    secrets-bootstrap-state  create the state bucket for the selected plane (idempotent)"
 	@echo "    secrets-plan             terraform plan against the selected plane"
 	@echo "    secrets-apply            terraform apply (auto on Floci, interactive confirm on real AWS)"
 	@echo "    secrets-verify           read the live plane and match it against infra/.env (fingerprints only)"
-	@echo "    secrets-seeder-bootstrap create/update the out-of-stack seeder role (detectai-document-parser-seeder)"
 	@echo "    secrets-drop-seeder      detach the seeder policy and delete the role (creator permissions)"
 	@echo "    secrets-clean            terraform destroy the secrets blob; keeps the state bucket and ledger"
 	@echo "    secrets-destroy          full teardown: terraform destroy, wipe and delete the state bucket, drop the seeder role"
@@ -35,9 +33,6 @@ secrets-test:
 secrets-check:
 	$(SECRETSCTL) $(PLANE_FLAG) plan --dry-run
 
-secrets-bootstrap-state:
-	$(SECRETSCTL) $(PLANE_FLAG) bootstrap
-
 secrets-plan:
 	$(SECRETSCTL) $(PLANE_FLAG) plan
 
@@ -46,9 +41,6 @@ secrets-apply:
 
 secrets-verify:
 	$(SECRETSCTL) $(PLANE_FLAG) verify
-
-secrets-seeder-bootstrap:
-	$(SECRETSCTL) $(PLANE_FLAG) seeder-bootstrap
 
 secrets-drop-seeder:
 	$(SECRETSCTL) $(PLANE_FLAG) seeder-drop

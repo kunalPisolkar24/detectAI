@@ -58,8 +58,6 @@ The secret seed lives in `infra/.env` (copied from `.env.example`) and the pipel
 
 ```sh
 make secrets-check             # validate infra/.env, preview the plane — no AWS
-make secrets-seeder-bootstrap  # one-time: the out-of-stack seeder role (the write carrier)
-make secrets-bootstrap-state   # create the state bucket for the selected plane
 make secrets-plan              # terraform plan of the secrets stack
 make secrets-apply             # apply (auto on the emulator plane, confirm on real AWS)
 ```

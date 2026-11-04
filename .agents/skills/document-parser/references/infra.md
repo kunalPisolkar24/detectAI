@@ -13,16 +13,16 @@ The stack never deploys the app and creates no IAM. The seeder role
 (`detectai-document-parser-seeder`, policy `seeder-policy`) is out-of-stack
 by design (terraform never manages its own carrier):
 
-- Trust: the **auto-detected ambient caller** (or a pinned
-  `SEEDER_TRUST_USER_ARN`); an assumed-role caller strips to its base role
-  but then needs `SEEDER_MFA_SERIAL` pinned in `.env`.
+- Trust: the **auto-detected ambient caller**; an assumed-role caller strips to
+  its base role but then needs `SEEDER_MFA_SERIAL` pinned in `.env`.
 - Carrier verbs assume the role with your MFA for a **12-hour session** (the
   STS ceiling); the triplet rides as env credentials — outranks any profile,
   nothing written to `~/.aws` — and is cached gitignored in
-  `infra/.aws-session.json` so a multi-verb stretch prompts once.
-- `make secrets-seeder-bootstrap` creates it idempotently, once per AWS
-  account, on your personal creds; the role teardown also runs on personal
-  creds (a role cannot create or delete itself).
+  `infra/.aws-session.json` so a multi-verb stretch prompts once. Before the
+  first assume of a session the role is created when missing and reconciled
+  (trust, 12h cap, `seeder-policy`); a converged role passes silently, and a
+  cached session skips IAM entirely. The role teardown runs on personal creds
+  (a role cannot delete itself).
 - The driver prints `carrier: role session (…, valid mm:ss)` on every run
   and refuses to run when the ambient identity already *is* a seeder session
   (stale exported `AWS_*` triplets) — `make secrets-session-clear` drops the
@@ -43,13 +43,11 @@ green apply there proves structure only; enforcement bites on real AWS.
 ## The verb order
 
 ```sh
-make env                         # infra/.env — the single config input
-make secrets-check               # validate + preview plane/vars — no terraform, no AWS
-make secrets-seeder-bootstrap    # one-time: the out-of-stack seeder role
-make secrets-bootstrap-state     # state bucket for the selected plane (idempotent)
-make secrets-plan
-make secrets-apply               # auto on the emulator, confirm on real AWS
-make secrets-verify              # live plane vs .env — fingerprints only, exit 1 on drift
+make env                       # infra/.env — the single config input
+make secrets-check             # validate + preview plane/vars — no terraform, no AWS
+make secrets-plan              # bucket and seeder role ride on demand
+make secrets-apply             # auto on the emulator, confirm on real AWS
+make secrets-verify            # live plane vs .env — fingerprints only, exit 1 on drift
 ```
 
 `tools/secrets.py` is the only bridge into terraform: it parses and

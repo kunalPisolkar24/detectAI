@@ -25,13 +25,14 @@ graph LR
 
 | Role | Created by | Can do |
 |------|------------|--------|
-| `detectai-document-parser-seeder` (seeder, out-of-stack) | `make secrets-seeder-bootstrap`, one-time | the single carrier for this service's AWS writes — state-bucket lifecycle, secret and SSM write/read (`seeder-policy`), trusting your identity with MFA |
+| `detectai-document-parser-seeder` (seeder, out-of-stack) | any carrier verb, on demand | the single carrier for this service's AWS writes — state-bucket lifecycle, secret and SSM write/read (`seeder-policy`), trusting your identity with MFA |
 
-- Trust: **your ambient caller, auto-detected** (`aws sts get-caller-identity` under personal credentials — an assumed-role session strips down to its base role), or a pinned `SEEDER_TRUST_USER_ARN`.
+- Trust: **your ambient caller, auto-detected** (`aws sts get-caller-identity` under personal credentials — an assumed-role session strips down to its base role).
 - Carrier verbs assume the seeder role with your MFA code for a **12-hour session** — the STS role-session ceiling — and inject that temporary triplet as env credentials: they outrank any local profile, so nothing is written to `~/.aws`.
 - The triplet is cached in gitignored `infra/.aws-session.json` (`make secrets-session-clear` drops it), so a plan → apply stretch prompts for the code once. The driver prints `carrier: role session (…, valid mm:ss)` on every run, and refuses to run when the ambient identity already *is* a seeder session (stale exported `AWS_*` triplets fail loudly instead of bypassing the role).
 - An assumed-role caller cannot derive an MFA device — pin `SEEDER_MFA_SERIAL` in `.env`, or the verb dies asking for one.
-- `secrets-seeder-bootstrap` and the role teardown are the exceptions: they run on your personal credentials, because a role cannot create or delete itself. Bootstrap is once per AWS account, not per machine — a second laptop reuses the role as-is.
+- Before every fresh assume (once per session, not per verb), the role is created when missing — true right after a full wipe, or whenever the emulator restart lost it — and an existing one is reconciled: trust re-anchored to the caller, 12-hour cap raised, `seeder-policy` re-attached on drift. A converged role passes silently; with a cached session no IAM call happens at all.
+- The role teardown (`--drop-seeder`) is the one step outside the carrier session: a role cannot assume itself, so it runs on your personal credentials.
 
 ## Two planes
 
@@ -79,13 +80,16 @@ From the service root (`services/document-parser`):
 ```sh
 make env                        # create infra/.env from the example; set a real API_KEY
 make secrets-check              # validate .env, preview plane and vars (no terraform, no AWS)
-make secrets-seeder-bootstrap   # one-time: the out-of-stack seeder role (the state/secrets/config carrier)
-make secrets-bootstrap-state    # create the state bucket for the selected plane (idempotent)
-make secrets-plan               # plan against the plane .env selects
+make secrets-plan               # plan against the selected plane
 make secrets-apply              # apply (auto on the emulator, confirm on real AWS)
 ```
 
-The seeder role must exist before the first carrier verb: on real AWS the first one asks for your MFA code and caches the 12-hour session; on the emulator the order is only a formality, but it keeps both planes identical. On the emulator an unset `TF_STATE_BUCKET` falls back to the fixed local default; on real AWS a bucket name is required — a sandbox bucket per engineer, versioned and encrypted (bootstrap enables versioning), so parallel testing never collides on one ledger.
+No bootstrap step: the first carrier verb creates the state bucket
+(`detectai-document-parser-tfstate-<account>`) and the seeder role when they are
+missing, then assumes the role. On real AWS that first assume asks for your MFA
+code and caches the 12-hour session; on the emulator it is prompt-free. One
+versioned bucket per (service, account) keeps parallel testing from colliding
+on one ledger.
 
 ## Verifying after apply
 

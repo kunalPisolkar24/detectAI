@@ -25,9 +25,7 @@ from secretsctl.seeder import (
     drop_seeder_flow,
     plane_account,
     resolve_carrier_session,
-    seeder_bootstrap_flow,
     session_remaining_text,
-    validate_seeder_bootstrap,
     validate_seeder_role,
 )
 from secretsctl.stack import (
@@ -46,7 +44,6 @@ VERBS = (
     "apply",
     "verify",
     "destroy",
-    "seeder-bootstrap",
     "seeder-drop",
     "session-clear",
 )
@@ -80,11 +77,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         choices=VERBS,
-        help="terraform plan/apply/destroy "
-        "(the state bucket is created on demand on both planes), "
-        "verify (read the live plane and match it against the .env values, fingerprints only), "
-        "seeder-bootstrap (create/update the out-of-stack seeder role), seeder-drop (detach and "
-        "delete it), or session-clear (drop the cached seeder session file)",
+        help="terraform plan/apply/destroy and verify, with the state bucket and seeder "
+        "role created on demand on both planes; seeder-drop detaches and deletes the "
+        "seeder role; session-clear drops the cached seeder session file",
     )
     parser.add_argument(
         "--service",
@@ -297,14 +292,6 @@ def main(argv: list[str] | None = None, workspace: Workspace | None = None) -> i
             "the plane comes from --aws/--floci (default: floci)"
         )
     plane, is_emulator = resolve_plane(args.aws)
-
-    if args.command == "seeder-bootstrap":
-        errors = validate_seeder_bootstrap(declaration, values, is_emulator)
-        for error in errors:
-            print(error)
-        if errors:
-            return 1
-        return seeder_bootstrap_flow(declaration, values, is_emulator, args.dry_run)
 
     if args.command == "seeder-drop":
         errors = validate_seeder_role(declaration, values, is_emulator)
