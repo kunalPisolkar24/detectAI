@@ -1,4 +1,4 @@
-"""Terraform composition and the bucket verbs: TF vars, backend HCL, bootstrap, purge."""
+"""Terraform composition and the bucket verbs: TF vars, backend HCL, create-on-demand, purge."""
 
 from __future__ import annotations
 
@@ -77,31 +77,6 @@ def test_build_backend_hcl_ignores_a_stray_tf_state_bucket_line():
     stray = {**EMULATOR_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"}
     hcl = stack.build_backend_hcl(DP, stray, True, "000000000000")
     assert _field(hcl, "bucket") == FLOCI_BUCKET  # always derived, never hand-passed
-
-
-def test_bootstrap_commands_emulator():
-    commands = stack.bootstrap_commands(DP, EMULATOR_ENV, True, "000000000000")
-    assert len(commands) == 3  # head-bucket, mb, put-bucket-versioning — same shape as real AWS
-    assert commands[0][-3:] == ["head-bucket", "--bucket", FLOCI_BUCKET]
-    assert "--endpoint-url http://localhost:4566" in " ".join(commands[0])
-    assert commands[1][-1] == f"s3://{FLOCI_BUCKET}"
-    assert " ".join(commands[2]) == (
-        f"aws --region ap-southeast-2 --endpoint-url http://localhost:4566 "
-        f"s3api put-bucket-versioning --bucket {FLOCI_BUCKET} "
-        "--versioning-configuration Status=Enabled"
-    )
-
-
-def test_bootstrap_commands_real_aws():
-    commands = stack.bootstrap_commands(DP, REAL_ENV, False, REAL_ACCOUNT)
-    assert len(commands) == 3  # head-bucket, mb, put-bucket-versioning
-    assert commands[0][-3:] == ["head-bucket", "--bucket", REAL_BUCKET]
-    assert "endpoint-url" not in commands[0]
-    assert commands[1][-1] == f"s3://{REAL_BUCKET}"
-    assert " ".join(commands[2]) == (
-        "aws --region ap-southeast-2 s3api put-bucket-versioning "
-        f"--bucket {REAL_BUCKET} --versioning-configuration Status=Enabled"
-    )
 
 
 def test_force_delete_command_pins_the_contract_name():
@@ -214,20 +189,20 @@ def test_confirm_purge_bucket_missing_is_a_noop(monkeypatch, capsys):
     assert "does not exist; the purge step will be a no-op" in capsys.readouterr().out
 
 
-def test_ensure_state_bucket_self_heals_missing_emulator_bucket(monkeypatch, capsys):
+def test_ensure_state_bucket_heals_a_missing_bucket_on_both_planes(monkeypatch, capsys):
+    calls: list[list[str]] = []
+    sessions = []
+
+    def fake_run_aws(command, is_emulator, session=None) -> int:
+        calls.append(list(command))
+        sessions.append(session)
+        return 0
+
+    monkeypatch.setattr(stack, "run_aws", fake_run_aws)
     monkeypatch.setattr(
         stack,
         "run_aws_captured",
         lambda command, is_emulator, session=None: (255, "", "NoSuchBucket"),
-    )
-    created = []
-    monkeypatch.setattr(
-        stack,
-        "bootstrap_state",
-        lambda declaration, values, is_emulator, dry_run, account, session=None: created.append(
-            (account, session)
-        )
-        or 0,
     )
     carrier = {
         "role_arn": "r",
@@ -236,68 +211,51 @@ def test_ensure_state_bucket_self_heals_missing_emulator_bucket(monkeypatch, cap
         "session_token": "C",
     }
     assert stack.ensure_state_bucket(DP, EMULATOR_ENV, True, "000000000000", carrier) == 0
-    assert created == [("000000000000", carrier)]  # a real, acting creation on the carrier session
-    assert f"{FLOCI_BUCKET} is missing; creating it" in capsys.readouterr().out
+    joined = [" ".join(call) for call in calls]
+    assert f"mb s3://{FLOCI_BUCKET}" in joined[0]
+    assert "--endpoint-url http://localhost:4566" in joined[0]
+    assert joined[1].endswith(
+        f"put-bucket-versioning --bucket {FLOCI_BUCKET} --versioning-configuration Status=Enabled"
+    )
+    assert sessions == [carrier, carrier]  # creation rides the carrier session
+    out = capsys.readouterr().out
+    assert f"note: state bucket {FLOCI_BUCKET} is missing; creating it" in out
+    assert f"created: {FLOCI_BUCKET}" in out
+    assert "versioning: Enabled" in out
+
+    calls.clear()
+    sessions.clear()
+    assert stack.ensure_state_bucket(DP, REAL_ENV, False, REAL_ACCOUNT, carrier) == 0
+    joined = [" ".join(call) for call in calls]
+    assert f"mb s3://{REAL_BUCKET}" in joined[0]
+    assert "endpoint-url" not in joined[0]
+    assert joined[1].endswith(
+        f"put-bucket-versioning --bucket {REAL_BUCKET} --versioning-configuration Status=Enabled"
+    )
+    assert sessions == [carrier, carrier]
 
 
-def test_ensure_state_bucket_skips_existing_bucket_and_real_plane(monkeypatch, capsys):
-    created = []
-    monkeypatch.setattr(stack, "bootstrap_state", lambda *arguments: created.append(True) or 1)
+def test_ensure_state_bucket_skips_existing_bucket_on_both_planes(monkeypatch, capsys):
+    def boom(*arguments, **rest):
+        raise AssertionError("an existing bucket must not be touched")
 
     monkeypatch.setattr(
         stack, "run_aws_captured", lambda command, is_emulator, session=None: (0, "", "")
     )
-    assert stack.ensure_state_bucket(DP, EMULATOR_ENV, True, "000000000000") == 0  # bucket exists
+    monkeypatch.setattr(stack, "run_aws", boom)
+    assert stack.ensure_state_bucket(DP, EMULATOR_ENV, True, "000000000000") == 0
+    assert stack.ensure_state_bucket(DP, REAL_ENV, False, REAL_ACCOUNT) == 0
+    assert capsys.readouterr().out == ""  # the happy path stays silent on every verb
 
+
+def test_ensure_state_bucket_reports_an_unreachable_emulator(monkeypatch, capsys):
     monkeypatch.setattr(
-        stack,
-        "run_aws_captured",
-        lambda command, is_emulator, session=None: (255, "", "NoSuchBucket"),
+        stack, "run_aws_captured", lambda command, is_emulator, session=None: (255, "", "")
     )
-    assert stack.ensure_state_bucket(DP, REAL_ENV, False, REAL_ACCOUNT) == 0  # never auto-creates
-    assert created == []
-    assert capsys.readouterr().out == ""
-
-
-def test_bootstrap_state_dry_run_prints_and_runs_nothing(monkeypatch, capsys):
-    def fail(*arguments, **rest):
-        raise AssertionError("dry run must not touch AWS")
-
-    monkeypatch.setattr(stack, "run_aws", fail)
-    assert stack.bootstrap_state(DP, EMULATOR_ENV, True, True, "000000000000") == 0
+    monkeypatch.setattr(stack, "run_aws", lambda command, is_emulator, session=None: 255)
+    assert stack.ensure_state_bucket(DP, EMULATOR_ENV, True, "000000000000") == 1
     out = capsys.readouterr().out
-    assert out.count("would run:") == 3 and "(dry run: no AWS writes)" in out
-
-
-def test_bootstrap_state_creates_and_reuses(monkeypatch, capsys):
-    calls: list[list[str]] = []
-    monkeypatch.setattr(
-        stack,
-        "run_aws",
-        lambda command, is_emulator, session=None: calls.append(list(command))
-        or (255 if "head-bucket" in command else 0),
-    )
-    assert stack.bootstrap_state(DP, REAL_ENV, False, False, REAL_ACCOUNT) == 0
-    created_output = capsys.readouterr().out
-    assert f"created: {REAL_BUCKET}" in created_output
-    assert "versioning: Enabled" in created_output
-
-    calls.clear()
-    monkeypatch.setattr(stack, "run_aws", lambda command, is_emulator, session=None: 0)
-    assert stack.bootstrap_state(DP, REAL_ENV, False, False, REAL_ACCOUNT) == 0
-    assert "already exists" in capsys.readouterr().out
-
-
-def test_bootstrap_state_reports_an_unreachable_emulator(monkeypatch, capsys):
-    calls: list[list[str]] = []
-
-    def fake_run_aws(command: list[str], is_emulator: bool, session=None) -> int:
-        calls.append(list(command))
-        return 255
-
-    monkeypatch.setattr(stack, "run_aws", fake_run_aws)
-    assert stack.bootstrap_state(DP, EMULATOR_ENV, True, False, "000000000000") == 1
-    out = capsys.readouterr().out
+    assert "is missing; creating it" in out
     assert "docker start floci" in out
 
 

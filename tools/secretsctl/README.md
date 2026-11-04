@@ -1,10 +1,10 @@
 # secretsctl
 
 One generic engine that drives a service's AWS secrets plane: validate its
-`infra/.env`, `terraform plan/apply/destroy` its stack, bootstrap the state
-bucket, manage the out-of-stack seeder carrier role (the assumed session every
-verb rides, cached), verify the live plane against the values, and tear it all
-down.
+`infra/.env`, `terraform plan/apply/destroy` its stack (the derived state bucket
+is created on demand on both planes), manage the out-of-stack seeder carrier
+role (the assumed session every verb rides, cached), verify the live plane
+against the values, and tear it all down.
 
 Written in place of `services/document-parser/tools/secrets.py` (removed once
 the engine matched its suite).

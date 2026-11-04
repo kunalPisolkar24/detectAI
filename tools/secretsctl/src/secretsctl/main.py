@@ -18,7 +18,6 @@ from secretsctl.env import (
     resolve_plane,
     resolve_recovery_window,
     validate,
-    validate_bootstrap,
 )
 from secretsctl.proc import die, run_aws, run_terraform
 from secretsctl.seeder import (
@@ -32,7 +31,6 @@ from secretsctl.seeder import (
     validate_seeder_role,
 )
 from secretsctl.stack import (
-    bootstrap_state,
     build_backend_hcl,
     build_tf_vars,
     confirm_purge,
@@ -47,7 +45,6 @@ VERBS = (
     "plan",
     "apply",
     "verify",
-    "bootstrap",
     "destroy",
     "seeder-bootstrap",
     "seeder-drop",
@@ -83,7 +80,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         choices=VERBS,
-        help="terraform plan/apply/destroy, bootstrap (create the plane's state bucket via the aws CLI), "
+        help="terraform plan/apply/destroy "
+        "(the state bucket is created on demand on both planes), "
         "verify (read the live plane and match it against the .env values, fingerprints only), "
         "seeder-bootstrap (create/update the out-of-stack seeder role), seeder-drop (detach and "
         "delete it), or session-clear (drop the cached seeder session file)",
@@ -224,16 +222,15 @@ def _terraform_verb_flow(
         if run_terraform(config.PLANE_ROOT, init_args, tf_vars, backend_creds) != 0:
             print()
             if is_emulator:
-                print("fix: create the emulator state bucket and retry (the bootstrap verb)")
+                print("fix: start floci and rerun; the state bucket recreates itself")
                 print(
-                    f"fix: aws --endpoint-url {resolve_floci_url()} "
-                    f"s3 mb s3://{state_bucket_for(declaration.slug, plane_account(None, True))} "
-                    f"--region {declaration.region_default}"
+                    f"fix: check the emulator is reachable at {resolve_floci_url()} "
+                    "(e.g. docker start floci)"
                 )
             else:
                 print(
-                    f"fix: confirm bucket {state_bucket} exists and your credentials allow access "
-                    f"(region {declaration.region_default}); the bootstrap verb can create it"
+                    f"fix: check backend access to bucket {state_bucket} "
+                    f"in region {declaration.region_default}"
                 )
             return 1
         destroyed = run_terraform(config.PLANE_ROOT, verb_args, tf_vars, backend_creds)
@@ -300,24 +297,6 @@ def main(argv: list[str] | None = None, workspace: Workspace | None = None) -> i
             "the plane comes from --aws/--floci (default: floci)"
         )
     plane, is_emulator = resolve_plane(args.aws)
-
-    if args.command == "bootstrap":
-        errors = validate_bootstrap(declaration, values, is_emulator)
-        for error in errors:
-            print(error)
-        if errors:
-            return 1
-        session = resolve_carrier_session(
-            declaration, values, is_emulator, args.dry_run, workspace.session_cache
-        )
-        return bootstrap_state(
-            declaration,
-            values,
-            is_emulator,
-            args.dry_run,
-            plane_account(session, is_emulator),
-            session,
-        )
 
     if args.command == "seeder-bootstrap":
         errors = validate_seeder_bootstrap(declaration, values, is_emulator)

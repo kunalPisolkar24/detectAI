@@ -1,4 +1,4 @@
-"""Terraform inputs and the stack verbs: plan/apply/destroy, state-bucket bootstrap and purge."""
+"""Terraform inputs and the stack verbs: plan/apply/destroy, bucket healing and state purge."""
 
 from __future__ import annotations
 
@@ -81,61 +81,6 @@ def write_backend_hcl(backend_hcl: str) -> Path:
         return Path(handle.name)
 
 
-def bootstrap_commands(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool, account: str
-) -> list[list[str]]:
-    bucket = state_bucket_for(declaration.slug, account)
-    command_base = aws_base(declaration, values, is_emulator)
-    return [
-        command_base + ["s3api", "head-bucket", "--bucket", bucket],
-        command_base + ["s3", "mb", f"s3://{bucket}"],
-        command_base
-        + [
-            "s3api",
-            "put-bucket-versioning",
-            "--bucket",
-            bucket,
-            "--versioning-configuration",
-            "Status=Enabled",
-        ],
-    ]
-
-
-def bootstrap_state(
-    declaration: Declaration,
-    values: dict[str, str],
-    is_emulator: bool,
-    dry_run: bool,
-    account: str,
-    session: dict[str, str] | None = None,
-) -> int:
-    commands = bootstrap_commands(declaration, values, is_emulator, account)
-    if dry_run:
-        for command in commands:
-            print(f"would run: {' '.join(command)}")
-        print("(dry run: no AWS writes)")
-        return 0
-
-    bucket = state_bucket_for(declaration.slug, account)
-    head_result = run_aws(commands[0], is_emulator, session)
-    if head_result == 0:
-        print(f"ok:  bucket {bucket} already exists")
-    else:
-        if run_aws(commands[1], is_emulator, session) != 0:
-            if is_emulator:
-                print()
-                print(
-                    f"fix: check that the emulator is reachable at {resolve_floci_url()} (e.g. docker start floci)"
-                )
-            return 1
-        print(f"created: {bucket}")
-    if run_aws(commands[2], is_emulator, session) != 0:
-        print("fix: enable bucket versioning manually (required for terraform state safety)")
-        return 1
-    print("versioning: Enabled")
-    return 0
-
-
 def ensure_state_bucket(
     declaration: Declaration,
     values: dict[str, str],
@@ -143,20 +88,48 @@ def ensure_state_bucket(
     account: str,
     session: dict[str, str] | None = None,
 ) -> int:
-    """Emulator-only self-heal: the emulator loses its S3 data on restart, so
-    any verb may start against a missing bucket."""
-    if not is_emulator:
-        return 0
+    """Create-on-demand: terraform owns nothing about the state bucket, so any
+    acting verb may find it missing (the emulator loses S3 data on restart; a
+    fresh real plane starts empty) and heal it under the carrier session."""
+    base = aws_base(declaration, values, is_emulator)
     bucket = state_bucket_for(declaration.slug, account)
+    # The head rides captured streams: an existing bucket stays silent, and a
+    # missing one reports through the note instead of a raw SDK error.
     head = run_aws_captured(
-        aws_base(declaration, values, True) + ["s3api", "head-bucket", "--bucket", bucket],
-        True,
-        session,
+        base + ["s3api", "head-bucket", "--bucket", bucket], is_emulator, session
     )
     if head[0] == 0:
         return 0
-    print(f"note: emulator state bucket {bucket} is missing; creating it")
-    return bootstrap_state(declaration, values, True, False, account, session)
+
+    print(f"note: state bucket {bucket} is missing; creating it")
+    if run_aws(base + ["s3", "mb", f"s3://{bucket}"], is_emulator, session) != 0:
+        if is_emulator:
+            print()
+            print(
+                f"fix: check that the emulator is reachable at {resolve_floci_url()} (e.g. docker start floci)"
+            )
+        return 1
+    print(f"created: {bucket}")
+    if (
+        run_aws(
+            base
+            + [
+                "s3api",
+                "put-bucket-versioning",
+                "--bucket",
+                bucket,
+                "--versioning-configuration",
+                "Status=Enabled",
+            ],
+            is_emulator,
+            session,
+        )
+        != 0
+    ):
+        print("fix: enable bucket versioning manually (required for terraform state safety)")
+        return 1
+    print("versioning: Enabled")
+    return 0
 
 
 def force_delete_command(

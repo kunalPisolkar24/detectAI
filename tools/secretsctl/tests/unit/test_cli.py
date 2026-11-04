@@ -27,7 +27,6 @@ def test_destroy_only_flags_guard_every_other_verb(ws_env, capsys):
         ("plan", "--purge-state"),
         ("apply", "--force-delete"),
         ("verify", "--drop-seeder"),
-        ("bootstrap", "--purge-state"),
     ):
         with pytest.raises(SystemExit) as excinfo:
             cli.main([verb, flag], workspace=ws_env)
@@ -99,23 +98,6 @@ def test_verify_validation_failure_short_circuits(tmp_path, monkeypatch):
 
     monkeypatch.setattr(verify_module, "verify_flow", boom)
     assert cli.main(["verify"], workspace=workspace) == 1
-
-
-def test_bootstrap_wiring(tmp_path, monkeypatch):
-    workspace = ws_with(tmp_path, EMULATOR_ENV)
-    seen = {}
-
-    def fake_bootstrap(declaration, values, is_emulator, dry_run, account, session=None):
-        seen["call"] = (declaration, values, is_emulator, dry_run, account, session)
-        return 0
-
-    monkeypatch.setattr(cli, "bootstrap_state", fake_bootstrap)
-    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
-    assert cli.main(["bootstrap"], workspace=workspace) == 0
-    declaration, values, is_emulator, dry_run, account, session = seen["call"]
-    assert is_emulator is True and dry_run is False
-    assert account == "000000000000"  # the floci account, derived not hand-passed
-    assert session == fake_carrier_session(None, None, True, False)
 
 
 def test_seeder_verbs_wiring(tmp_path, monkeypatch):

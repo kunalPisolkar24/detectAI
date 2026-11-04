@@ -136,13 +136,6 @@ def validate(declaration: Declaration, values: dict[str, str], is_emulator: bool
     return errors
 
 
-def validate_bootstrap(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
-) -> list[str]:
-    """Only what bucket creation consumes; no blob-key or ENV_TYPE demands."""
-    return plane_errors(values)
-
-
 def plane_notes(declaration: Declaration, values: dict[str, str], is_emulator: bool) -> list[str]:
     notes = []
     if values.get("ENV_TYPE") == "prod" and is_emulator:

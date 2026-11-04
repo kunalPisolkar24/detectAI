@@ -222,29 +222,25 @@ def teardown_service(service_dir: Path) -> None:
 
 
 def seed(service_dir: Path) -> None:
-    bootstrap = run_cli(service_dir, "bootstrap")
-    assert bootstrap.returncode == 0, bootstrap.stdout + bootstrap.stderr
     apply = run_cli(service_dir, "apply")
     assert apply.returncode == 0, apply.stdout + apply.stderr
 
 
-def test_happy_path_bootstrap_apply_then_verify(service):
+def test_happy_path_apply_then_verify(service):
     service_dir, slug = service
-    bootstrap = run_cli(service_dir, "bootstrap")
-    assert bootstrap.returncode == 0, bootstrap.stdout + bootstrap.stderr
-    assert f"created: detectai-{slug}-tfstate-000000000000" in bootstrap.stdout
-    assert "versioning: Enabled" in bootstrap.stdout  # the bucket parity runs on both planes
-    # The bootstrap verb carries too: the self-heal ladder ran its first assume here
-    # (a unique slug means the role never pre-exists).
-    assert (
-        f"note: re-creating detectai-{slug}-seeder lost with the emulator state" in bootstrap.stdout
-    )
-    assert f"carrier: assuming detectai-{slug}-seeder" in bootstrap.stdout
-
     apply = run_cli(service_dir, "apply")
     assert apply.returncode == 0, apply.stdout + apply.stderr
-    assert f"carrier: role session (detectai-{slug}-seeder, valid " in apply.stdout
-    assert "carrier: assuming" not in apply.stdout  # the cached triplet rides every later verb
+    # The self-heal ladder rides the first apply: a fresh emulator means neither
+    # the seeder role nor the derived state bucket pre-exists.
+    assert f"note: re-creating detectai-{slug}-seeder lost with the emulator state" in apply.stdout
+    assert f"carrier: assuming detectai-{slug}-seeder" in apply.stdout
+    assert f"created: detectai-{slug}-tfstate-000000000000" in apply.stdout
+    assert "versioning: Enabled" in apply.stdout
+
+    plan = run_cli(service_dir, "plan")
+    assert plan.returncode == 0, plan.stdout + plan.stderr
+    assert f"carrier: role session (detectai-{slug}-seeder, valid " in plan.stdout
+    assert "carrier: assuming" not in plan.stdout  # the cached triplet rides every later verb
 
     verify = run_cli(service_dir, "verify")
     assert verify.returncode == 0, verify.stdout + verify.stderr
@@ -320,15 +316,15 @@ def test_destroy_purge_then_reapply_self_heals(service):
     assert verify.returncode == 0, verify.stdout + verify.stderr
 
 
-def test_bootstrap_twice_is_idempotent(service):
+def test_apply_twice_leaves_the_bucket_alone(service):
     service_dir, slug = service
-    first = run_cli(service_dir, "bootstrap")
-    assert first.returncode == 0, first.stdout + first.stderr
-    assert f"created: detectai-{slug}-tfstate-000000000000" in first.stdout
+    seed(service_dir)  # the first apply creates the seeder role and the derived bucket
 
-    second = run_cli(service_dir, "bootstrap")
+    second = run_cli(service_dir, "apply")
     assert second.returncode == 0, second.stdout + second.stderr
-    assert f"ok:  bucket detectai-{slug}-tfstate-000000000000 already exists" in second.stdout
+    assert "is missing; creating it" not in second.stdout  # the bucket already rides
+    head = aws("s3api", "head-bucket", "--bucket", f"detectai-{slug}-tfstate-000000000000")
+    assert head.returncode == 0
 
 
 def test_destroy_leaves_the_role_and_state_intact_without_flags(service):

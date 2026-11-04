@@ -90,13 +90,6 @@ def test_the_state_bucket_is_always_derived_from_slug_and_account(dp):
     )
 
 
-def test_validate_bootstrap_is_region_and_shape_free(dp):
-    assert env.validate_bootstrap(dp, {}, True) == []
-    assert env.validate_bootstrap(dp, {"TF_STATE_BUCKET": "Bad"}, True) == []
-    bad_plane = "\n".join(env.validate_bootstrap(dp, {"AWS_REGION": "Mars-1"}, True))
-    assert "AWS_REGION" in bad_plane
-
-
 def test_resolve_plane_follows_the_flag_and_defaults_to_floci(monkeypatch):
     monkeypatch.delenv("SECRETSCTL_FLOCI_URL", raising=False)
     plane, is_emulator = env.resolve_plane(False)
