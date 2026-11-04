@@ -86,25 +86,18 @@ def bootstrap_commands(
     bucket = resolve_state_bucket(declaration, values, is_emulator)
     command_base = aws_base(declaration, values, is_emulator)
     assert bucket is not None
-    head_bucket = command_base + ["s3api", "head-bucket", "--bucket", bucket]
     return [
-        head_bucket,
+        command_base + ["s3api", "head-bucket", "--bucket", bucket],
         command_base + ["s3", "mb", f"s3://{bucket}"],
-        *(
-            []
-            if is_emulator
-            else [
-                command_base
-                + [
-                    "s3api",
-                    "put-bucket-versioning",
-                    "--bucket",
-                    bucket,
-                    "--versioning-configuration",
-                    "Status=Enabled",
-                ]
-            ]
-        ),
+        command_base
+        + [
+            "s3api",
+            "put-bucket-versioning",
+            "--bucket",
+            bucket,
+            "--versioning-configuration",
+            "Status=Enabled",
+        ],
     ]
 
 
@@ -136,16 +129,19 @@ def bootstrap_state(
                 )
             return 1
         print(f"created: {bucket}")
-    if not is_emulator:
-        bucket_put_versioning = commands[-1]
-        if run_aws(bucket_put_versioning, is_emulator, session) != 0:
-            print("fix: enable bucket versioning manually (required for terraform state safety)")
-            return 1
-        print("versioning: Enabled")
+    if run_aws(commands[2], is_emulator, session) != 0:
+        print("fix: enable bucket versioning manually (required for terraform state safety)")
+        return 1
+    print("versioning: Enabled")
     return 0
 
 
-def ensure_state_bucket(declaration: Declaration, values: dict[str, str], is_emulator: bool) -> int:
+def ensure_state_bucket(
+    declaration: Declaration,
+    values: dict[str, str],
+    is_emulator: bool,
+    session: dict[str, str] | None = None,
+) -> int:
     """Emulator-only self-heal: the emulator loses its S3 data on restart, so
     any verb may start against a missing bucket."""
     if not is_emulator:
@@ -153,12 +149,14 @@ def ensure_state_bucket(declaration: Declaration, values: dict[str, str], is_emu
     bucket = resolve_state_bucket(declaration, values, True)  # the fallback keeps this resolvable
     assert bucket is not None
     head = run_aws_captured(
-        aws_base(declaration, values, True) + ["s3api", "head-bucket", "--bucket", bucket], True
+        aws_base(declaration, values, True) + ["s3api", "head-bucket", "--bucket", bucket],
+        True,
+        session,
     )
     if head[0] == 0:
         return 0
     print(f"note: emulator state bucket {bucket} is missing; creating it")
-    return bootstrap_state(declaration, values, True, False)
+    return bootstrap_state(declaration, values, True, False, session)
 
 
 def force_delete_command(

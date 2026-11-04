@@ -78,11 +78,11 @@ REAL_ENV = {"API_KEY": "a" * 20, "TF_STATE_BUCKET": "detectai-tfstate-sandbox"}
 
 
 def fake_carrier_session(declaration, values, is_emulator, dry_run, session_cache=None):
-    """Stand-in for resolve_carrier_session: None off the real plane, otherwise a
-    far-future session — real-plane main() tests stay hermetic and land on AWS."""
+    """Stand-in for resolve_carrier_session: None on a dry run, otherwise a
+    far-future seeder triplet — both planes carry verbs through the session."""
     return (
         None
-        if is_emulator or dry_run
+        if dry_run
         else {
             "role_arn": ROLE_ARN,
             "access_key_id": "ASIAFAKEID000000",

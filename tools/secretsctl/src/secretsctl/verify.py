@@ -215,9 +215,7 @@ def verify_flow(
         return 0
     plane = plane_display(is_emulator)
     print(f"plane:   {plane}")
-    if is_emulator:
-        print("carrier: env creds (test/test, profile stripped)")
-    elif session:
+    if session:
         print(
             f"carrier: role session ({declaration.seeder_role_name}, "
             f"valid {session_remaining_text(session)})"

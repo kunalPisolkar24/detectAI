@@ -75,10 +75,15 @@ def test_build_backend_hcl_emulator_honors_custom_bucket():
 
 def test_bootstrap_commands_emulator():
     commands = stack.bootstrap_commands(DP, EMULATOR_ENV, True)
-    assert len(commands) == 2  # head-bucket then mb; no versioning pinning on the emulator
+    assert len(commands) == 3  # head-bucket, mb, put-bucket-versioning — same shape as real AWS
     assert commands[0][-3:] == ["head-bucket", "--bucket", "detectai-docparser-tfstate"]
     assert "--endpoint-url http://localhost:4566" in " ".join(commands[0])
     assert commands[1][-1] == "s3://detectai-docparser-tfstate"
+    assert " ".join(commands[2]) == (
+        "aws --region ap-southeast-2 --endpoint-url http://localhost:4566 "
+        "s3api put-bucket-versioning --bucket detectai-docparser-tfstate "
+        "--versioning-configuration Status=Enabled"
+    )
 
     custom = stack.bootstrap_commands(
         DP, {**EMULATOR_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"}, True
@@ -214,10 +219,19 @@ def test_ensure_state_bucket_self_heals_missing_emulator_bucket(monkeypatch, cap
     monkeypatch.setattr(
         stack,
         "bootstrap_state",
-        lambda declaration, values, is_emulator, dry_run: created.append(dry_run) or 0,
+        lambda declaration, values, is_emulator, dry_run, session=None: created.append(
+            (dry_run, session)
+        )
+        or 0,
     )
-    assert stack.ensure_state_bucket(DP, EMULATOR_ENV, True) == 0
-    assert created == [False]  # a real, acting creation — never a dry run
+    carrier = {
+        "role_arn": "r",
+        "access_key_id": "A",
+        "secret_access_key": "B",
+        "session_token": "C",
+    }
+    assert stack.ensure_state_bucket(DP, EMULATOR_ENV, True, carrier) == 0
+    assert created == [(False, carrier)]  # a real, acting creation on the carrier session
     assert "detectai-docparser-tfstate is missing; creating it" in capsys.readouterr().out
 
 
@@ -247,7 +261,7 @@ def test_bootstrap_state_dry_run_prints_and_runs_nothing(monkeypatch, capsys):
     monkeypatch.setattr(stack, "run_aws", fail)
     assert stack.bootstrap_state(DP, EMULATOR_ENV, True, True) == 0
     out = capsys.readouterr().out
-    assert out.count("would run:") == 2 and "(dry run: no AWS)" in out
+    assert out.count("would run:") == 3 and "(dry run: no AWS)" in out
 
 
 def test_bootstrap_state_creates_and_reuses(monkeypatch, capsys):

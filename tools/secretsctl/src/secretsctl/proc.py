@@ -26,21 +26,22 @@ def aws_base(declaration: Declaration, values: dict[str, str], is_emulator: bool
 
 
 def aws_env(is_emulator: bool, session: dict[str, str] | None = None) -> dict[str, str]:
-    """Subprocess credentials: the emulator fakes or a cached seeder session
-    triplet as env creds (they outrank any named profile, which the CLI resolves
-    first), or the ambient environment untouched."""
+    """Subprocess credentials: an assumed carrier session triplet where present
+    (env creds outrank any named profile, which the CLI resolves first), the
+    emulator fakes when the carrier runs session-less, or the ambient
+    environment untouched."""
     env = dict(os.environ)
-    if is_emulator:
-        env.pop("AWS_PROFILE", None)
-        env.pop("AWS_SESSION_TOKEN", None)
-        env |= {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}
-    elif session:
+    if session:
         env.pop("AWS_PROFILE", None)
         env |= {
             "AWS_ACCESS_KEY_ID": session["access_key_id"],
             "AWS_SECRET_ACCESS_KEY": session["secret_access_key"],
             "AWS_SESSION_TOKEN": session["session_token"],
         }
+    elif is_emulator:
+        env.pop("AWS_PROFILE", None)
+        env.pop("AWS_SESSION_TOKEN", None)
+        env |= {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}
     return env
 
 

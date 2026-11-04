@@ -163,10 +163,17 @@ def test_verify_flow_happy_path(dp, monkeypatch, capsys):
             {"API_KEY": "a" * 20},
         ),
     )
-    assert verify.verify_flow(dp, EMULATOR_ENV, True, False) == 0
+    session = {
+        "role_arn": "arn:aws:iam::000000000000:role/detectai-document-parser-seeder",
+        "access_key_id": "A",
+        "secret_access_key": "B",
+        "session_token": "C",
+        "expires_at": "2086-01-01T00:00:00Z",
+    }
+    assert verify.verify_flow(dp, EMULATOR_ENV, True, False, session) == 0
     out = capsys.readouterr().out
     assert "ok:      the seeded plane matches the .env values" in out
-    assert "carrier: env creds (test/test, profile stripped)" in out
+    assert "carrier: role session (detectai-document-parser-seeder, valid " in out
     assert f"secret:  {dp.secret_name}" in out
     assert f"ssm:     {dp.ssm_prefix}" in out
 

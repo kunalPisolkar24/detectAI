@@ -154,10 +154,8 @@ def _terraform_verb_flow(
     )
 
     print(f"plane:   {plane}")
-    if is_emulator:
-        print("carrier: env creds (test/test, profile stripped)")
-    elif args.dry_run:
-        print("carrier: seeder role session (promoted when the command runs)")
+    if args.dry_run:
+        print("carrier: role session (promoted when the command runs)")
     else:
         print(
             f"carrier: role session ({declaration.seeder_role_name}, valid {session_remaining_text(session)})"
@@ -205,7 +203,7 @@ def _terraform_verb_flow(
     ):
         return 1
 
-    if ensure_state_bucket(declaration, values, is_emulator) != 0:
+    if ensure_state_bucket(declaration, values, is_emulator, session) != 0:
         return 1
 
     backend_file = write_backend_hcl(backend_hcl)
@@ -217,17 +215,13 @@ def _terraform_verb_flow(
             verb_args.append("-input=false")
         if command in ("apply", "destroy") and is_emulator:
             verb_args.append("-auto-approve")
-        # Terraform runs on the carrier's creds: emulator fakes, or the seeder
-        # session triplet (env creds outrank any named profile downstream).
-        backend_creds = (
-            {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}
-            if is_emulator
-            else {
-                "AWS_ACCESS_KEY_ID": session["access_key_id"],
-                "AWS_SECRET_ACCESS_KEY": session["secret_access_key"],
-                "AWS_SESSION_TOKEN": session["session_token"],
-            }
-        )
+        # Terraform runs on the carrier session triplet; env creds outrank any
+        # named profile downstream.
+        backend_creds = {
+            "AWS_ACCESS_KEY_ID": session["access_key_id"],
+            "AWS_SECRET_ACCESS_KEY": session["secret_access_key"],
+            "AWS_SESSION_TOKEN": session["session_token"],
+        }
 
         if run_terraform(config.PLANE_ROOT, init_args, tf_vars, backend_creds) != 0:
             print()

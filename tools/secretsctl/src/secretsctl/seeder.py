@@ -21,6 +21,7 @@ from secretsctl.env import (
     bucket_errors,
     plane_display,
     plane_errors,
+    resolve_floci_url,
     resolve_region,
     resolve_state_bucket,
 )
@@ -484,31 +485,43 @@ def clear_cached_session(session_cache: Path) -> bool:
         return False
 
 
-def assume_seeder_session(role_arn: str, serial: str, declaration: Declaration) -> dict[str, Any]:
-    """One MFA prompt, a 12-hour seeder role session from it. The assume response
-    itself proves the identity, so no follow-up caller check is needed."""
-    print(f"carrier: assuming {declaration.seeder_role_name} (MFA, valid for 12 hours)")
-    code = input(f"MFA code for {serial}: ").strip()
-    if not MFA_CODE_RE.fullmatch(code):
-        die(f"{code!r} is not a 6-digit MFA code", "enter the six-digit code from your MFA device")
-    command = [
-        "aws",
+def assume_seeder_session(
+    role_arn: str,
+    serial: str | None,
+    declaration: Declaration,
+    is_emulator: bool = False,
+) -> dict[str, Any]:
+    """One assume-role exchange producing a 12-hour seeder session. The assume
+    response itself proves the identity, so no follow-up caller check is needed.
+    The real plane gates the call behind an MFA prompt; the emulator enforces no
+    trust conditions, so it assumes without one."""
+    command = ["aws"]
+    if is_emulator:
+        command += ["--endpoint-url", resolve_floci_url()]
+    command += [
         "sts",
         "assume-role",
         "--role-arn",
         role_arn,
         "--role-session-name",
         role_session_name(declaration),
-        "--serial-number",
-        serial,
-        "--token-code",
-        code,
         "--duration-seconds",
         str(SESSION_DURATION_SECONDS),
         "--output",
         "json",
     ]
-    exit_code, stdout, stderr = run_aws_captured(command, False)
+    if serial is None:
+        print(f"carrier: assuming {declaration.seeder_role_name}")
+    else:
+        print(f"carrier: assuming {declaration.seeder_role_name} (MFA, valid for 12 hours)")
+        code = input(f"MFA code for {serial}: ").strip()
+        if not MFA_CODE_RE.fullmatch(code):
+            die(
+                f"{code!r} is not a 6-digit MFA code",
+                "enter the six-digit code from your MFA device",
+            )
+        command += ["--serial-number", serial, "--token-code", code]
+    exit_code, stdout, stderr = run_aws_captured(command, is_emulator)
     if exit_code != 0:
         stderr_text = (stderr or "").strip()
         detail = stderr_text.splitlines()[-1] if stderr_text else "unknown error"
@@ -547,6 +560,20 @@ def assume_seeder_session(role_arn: str, serial: str, declaration: Declaration) 
     return {"role_arn": role_arn, **triplet}
 
 
+def _ensure_emulator_role(declaration: Declaration, values: dict[str, str]) -> None:
+    """Emulator-only self-heal: the emulator loses its IAM state on restart, so
+    the carrier re-creates its role with the same generated trust and policy
+    documents before assuming it."""
+    if seeder_role_exists(declaration, values, True):
+        return
+    print(f"note: re-creating {declaration.seeder_role_name} lost with the emulator state")
+    if seeder_bootstrap_flow(declaration, values, True, False) != 0:
+        die(
+            "could not re-create the emulator seeder role",
+            "run the seeder-bootstrap verb manually and retry",
+        )
+
+
 def resolve_carrier_session(
     declaration: Declaration,
     values: dict[str, str],
@@ -554,10 +581,22 @@ def resolve_carrier_session(
     dry_run: bool,
     session_cache: Path,
 ) -> dict[str, Any] | None:
-    """The real-plane carrier: ambient caller -> derived seeder role -> cached
-    triplet, else a fresh assumption. Emulator and dry-run stay session-free."""
-    if dry_run or is_emulator:
+    """The carrier on both planes: cached triplet when valid, otherwise a fresh
+    assume of the service's out-of-stack seeder role. One session shape on both
+    planes; the differences are the MFA prompt (real AWS only) and the role
+    self-heal (emulator only, its state vanishes on restart).
+    Dry runs stay session-free."""
+    if dry_run:
         return None
+    if is_emulator:
+        principal = resolve_trust_principal(declaration, values, True)
+        role_arn = seeder_role_arn(declaration, iam_account_id(principal))
+        session = cached_session(role_arn, session_cache)
+        if session is None:
+            _ensure_emulator_role(declaration, values)
+            session = assume_seeder_session(role_arn, None, declaration, True)
+            save_cached_session(session, session_cache)
+        return session
     principal = resolve_trust_principal(declaration, values, is_emulator)
     serial = mfa_serial_for(principal, values.get(SEEDER_MFA_SERIAL_KEY, ""))
     if serial is None:

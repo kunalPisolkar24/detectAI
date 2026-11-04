@@ -1,7 +1,8 @@
 # secretsctl validates infra/.env, drives the shared terraform plane, and its
-# bootstrap/drop verbs are the steps that touch AWS directly. The carrier runs
-# session-less: the tool resolves ambient credentials itself (Floci fakes, or
-# auto-detected identity + seeder role session on real AWS).
+# bootstrap/drop verbs are the steps that touch AWS directly. Every verb rides
+# the seeder carrier role session: assumed with an MFA prompt on real AWS,
+# prompt-free with role self-heal on Floci; the triplet caches for ~12 hours in
+# infra/.aws-session.json (secrets-session-clear drops it).
 #
 # Plane selection: PLANE=floci (default) or PLANE=aws, e.g.
 #   make secrets-plan PLANE=aws
@@ -23,7 +24,7 @@ help-secrets:
 	@echo "    secrets-drop-seeder      detach the seeder policy and delete the role (creator permissions)"
 	@echo "    secrets-clean            terraform destroy the secrets blob; keeps the state bucket and ledger"
 	@echo "    secrets-destroy          full teardown: terraform destroy, wipe and delete the state bucket, drop the seeder role"
-	@echo "    secrets-session-clear    drop the cached seeder session (the next verb re-prompts for MFA)"
+	@echo "    secrets-session-clear    drop the cached seeder session (the next verb assumes the carrier role again)"
 	@echo "    secrets-test             run the secretsctl engine test suite"
 	@echo "    Override the plane: PLANE=aws make secrets-plan (default PLANE=floci)"
 	@echo ""

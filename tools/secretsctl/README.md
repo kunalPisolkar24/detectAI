@@ -2,8 +2,9 @@
 
 One generic engine that drives a service's AWS secrets plane: validate its
 `infra/.env`, `terraform plan/apply/destroy` its stack, bootstrap the state
-bucket, manage the out-of-stack seeder carrier role (MFA session, cached),
-verify the live plane against the values, and tear it all down.
+bucket, manage the out-of-stack seeder carrier role (the assumed session every
+verb rides, cached), verify the live plane against the values, and tear it all
+down.
 
 Written in place of `services/document-parser/tools/secrets.py` (removed once
 the engine matched its suite).
@@ -23,6 +24,15 @@ engine constant `http://localhost:4566`; override it with `SECRETSCTL_FLOCI_URL`
 if you ever need to. A legacy `EMULATOR_ENDPOINT` line in a values file is
 ignored with a note. Make targets thread the same choice: `make secrets-plan`
 runs Floci, `make secrets-plan PLANE=aws` runs real AWS.
+
+## Carrier
+
+Every verb on both planes rides the service's out-of-stack seeder role
+(`detectai-<service>-seeder`) through an STS assume-role; the 12-hour triplet
+caches in `infra/.aws-session.json` and `session-clear` drops it. The planes
+differ only in friction: real AWS gates the assume behind an MFA prompt, the
+emulator needs no prompt and self-heals its role plus the state bucket when a
+restart wiped its state. `--dry-run` resolves no session.
 
 ## Install and test
 

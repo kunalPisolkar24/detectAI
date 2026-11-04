@@ -222,8 +222,10 @@ def teardown_service(service_dir: Path) -> None:
 
 
 def seed(service_dir: Path) -> None:
-    assert run_cli(service_dir, "bootstrap").returncode == 0
-    assert run_cli(service_dir, "apply").returncode == 0
+    bootstrap = run_cli(service_dir, "bootstrap")
+    assert bootstrap.returncode == 0, bootstrap.stdout + bootstrap.stderr
+    apply = run_cli(service_dir, "apply")
+    assert apply.returncode == 0, apply.stdout + apply.stderr
 
 
 def test_happy_path_bootstrap_apply_then_verify(service):
@@ -231,13 +233,42 @@ def test_happy_path_bootstrap_apply_then_verify(service):
     bootstrap = run_cli(service_dir, "bootstrap")
     assert bootstrap.returncode == 0, bootstrap.stdout + bootstrap.stderr
     assert f"created: detectai-{slug}-tfstate" in bootstrap.stdout
+    assert "versioning: Enabled" in bootstrap.stdout  # the bucket parity runs on both planes
+    # The bootstrap verb carries too: the self-heal ladder ran its first assume here
+    # (a unique slug means the role never pre-exists).
+    assert (
+        f"note: re-creating detectai-{slug}-seeder lost with the emulator state" in bootstrap.stdout
+    )
+    assert f"carrier: assuming detectai-{slug}-seeder" in bootstrap.stdout
 
     apply = run_cli(service_dir, "apply")
     assert apply.returncode == 0, apply.stdout + apply.stderr
+    assert f"carrier: role session (detectai-{slug}-seeder, valid " in apply.stdout
+    assert "carrier: assuming" not in apply.stdout  # the cached triplet rides every later verb
 
     verify = run_cli(service_dir, "verify")
     assert verify.returncode == 0, verify.stdout + verify.stderr
     assert "ok:      the seeded plane matches the .env values" in verify.stdout
+    assert f"carrier: role session (detectai-{slug}-seeder, valid " in verify.stdout
+
+
+def test_the_carrier_recreates_a_dropped_role(service):
+    service_dir, slug = service
+    seed(service_dir)
+
+    drop = run_cli(service_dir, "seeder-drop")
+    assert drop.returncode == 0, drop.stdout + drop.stderr
+    # A stale cached session is the stale-session contract on both planes: clearing it is manual.
+    clear = run_cli(service_dir, "session-clear")
+    assert clear.returncode == 0, clear.stdout + clear.stderr
+
+    plan = run_cli(service_dir, "plan")
+    assert plan.returncode == 0, plan.stdout + plan.stderr
+    assert f"note: re-creating detectai-{slug}-seeder lost with the emulator state" in plan.stdout
+    assert "carrier: assuming" in plan.stdout
+
+    verify = run_cli(service_dir, "verify")
+    assert verify.returncode == 0, verify.stdout + verify.stderr
 
 
 def test_plan_is_idempotent_after_apply(service):

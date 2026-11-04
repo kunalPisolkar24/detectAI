@@ -492,10 +492,126 @@ def test_assume_rejects_incomplete_credentials(monkeypatch):
         seeder.assume_seeder_session(ROLE_ARN, "serial", DP)
 
 
-def test_resolve_carrier_session_short_circuits_off_the_real_plane(tmp_path):
+def test_assume_seeder_session_on_the_emulator_skips_the_prompt(monkeypatch, capsys):
+    payload = {
+        "Credentials": {
+            "AccessKeyId": "A",
+            "SecretAccessKey": "B",
+            "SessionToken": "C",
+            "Expiration": "2086-01-01T00:00:00Z",
+        },
+        "AssumedRoleUser": {
+            "Arn": f"arn:aws:sts::123456789012:assumed-role/{DP.seeder_role_name}/session"
+        },
+    }
+    seen = {}
+
+    def captured(command, is_emulator, session=None):
+        seen["command"] = command
+        seen["is_emulator"] = is_emulator
+        return 0, json.dumps(payload), ""
+
+    monkeypatch.setattr(seeder, "run_aws_captured", captured)
+
+    def no_prompt(prompt=""):
+        raise AssertionError("the emulator assume must not prompt")
+
+    monkeypatch.setattr("builtins.input", no_prompt)
+    session = seeder.assume_seeder_session(EMULATOR_ROLE_ARN, None, DP, True)
+    assert session["access_key_id"] == "A" and session["role_arn"] == EMULATOR_ROLE_ARN
+    assert "--token-code" not in seen["command"] and "--serial-number" not in seen["command"]
+    assert seen["is_emulator"] is True
+    assert "carrier: assuming detectai-document-parser-seeder" in capsys.readouterr().out
+
+
+EMULATOR_TRUST_ARN = f"arn:aws:iam::000000000000:user/{DP.seeder_role_name}"
+EMULATOR_ROLE_ARN = seeder.seeder_role_arn(DP, "000000000000")
+
+
+def emulator_trust(monkeypatch):
+    monkeypatch.setattr(seeder, "resolve_trust_principal", lambda d, v, e: EMULATOR_TRUST_ARN)
+
+
+def fresh_triplet():
+    return {
+        "role_arn": EMULATOR_ROLE_ARN,
+        "access_key_id": "A",
+        "secret_access_key": "B",
+        "session_token": "C",
+        "expires_at": "2086-01-01T00:00:00Z",
+    }
+
+
+def test_resolve_carrier_session_is_dry_run_free_on_both_planes(tmp_path):
     cache = tmp_path / "c.json"
-    assert seeder.resolve_carrier_session(DP, EMULATOR_ENV, True, False, cache) is None
+    assert seeder.resolve_carrier_session(DP, EMULATOR_ENV, True, True, cache) is None
     assert seeder.resolve_carrier_session(DP, REAL_ENV, False, True, cache) is None
+
+
+def test_resolve_carrier_session_on_the_emulator_assumes_without_mfa(tmp_path, monkeypatch, capsys):
+    emulator_trust(monkeypatch)
+    monkeypatch.setattr(seeder, "seeder_role_exists", lambda d, v, e: True)
+    seen = {}
+
+    def fake_assume(role_arn, serial, declaration, is_emulator=False):
+        seen["role_arn"] = role_arn
+        seen["serial"] = serial
+        seen["is_emulator"] = is_emulator
+        return fresh_triplet()
+
+    monkeypatch.setattr(seeder, "assume_seeder_session", fake_assume)
+    cache = tmp_path / "c.json"
+    assert seeder.resolve_carrier_session(DP, EMULATOR_ENV, True, False, cache) == fresh_triplet()
+    assert seen["role_arn"] == EMULATOR_ROLE_ARN
+    assert seen["serial"] is None and seen["is_emulator"] is True
+    assert json.loads(cache.read_text())["role_arn"] == EMULATOR_ROLE_ARN
+
+
+def test_resolve_carrier_session_on_the_emulator_reuses_a_cached_triplet(
+    tmp_path, monkeypatch, capsys
+):
+    emulator_trust(monkeypatch)
+    cache = tmp_path / "c.json"
+    cache.write_text(json.dumps(fresh_triplet()))
+
+    def boom(*arguments, **rest):
+        raise AssertionError("a cached emulator session must not touch the role or assume")
+
+    monkeypatch.setattr(seeder, "seeder_role_exists", boom)
+    monkeypatch.setattr(seeder, "assume_seeder_session", boom)
+    assert seeder.resolve_carrier_session(DP, EMULATOR_ENV, True, False, cache) == fresh_triplet()
+
+
+def test_resolve_carrier_session_on_the_emulator_recreates_a_missing_role(
+    tmp_path, monkeypatch, capsys
+):
+    emulator_trust(monkeypatch)
+    monkeypatch.setattr(seeder, "seeder_role_exists", lambda d, v, e: False)
+    healed = {}
+
+    def fake_flow(declaration, values, is_emulator, dry_run):
+        healed["flow"] = (declaration.slug, is_emulator, dry_run)
+        return 0
+
+    monkeypatch.setattr(seeder, "seeder_bootstrap_flow", fake_flow)
+    monkeypatch.setattr(seeder, "assume_seeder_session", lambda *a, **k: fresh_triplet())
+    cache = tmp_path / "c.json"
+    assert seeder.resolve_carrier_session(DP, EMULATOR_ENV, True, False, cache) == fresh_triplet()
+    assert healed["flow"] == ("document-parser", True, False)
+    out = capsys.readouterr().out
+    assert f"note: re-creating {DP.seeder_role_name} lost with the emulator state" in out
+
+
+def test_resolve_carrier_session_on_the_emulator_dies_when_the_heal_fails(
+    tmp_path, monkeypatch, capsys
+):
+    emulator_trust(monkeypatch)
+    monkeypatch.setattr(seeder, "seeder_role_exists", lambda d, v, e: False)
+    monkeypatch.setattr(seeder, "seeder_bootstrap_flow", lambda d, v, e, r: 1)
+    with pytest.raises(SystemExit) as excinfo:
+        seeder.resolve_carrier_session(DP, EMULATOR_ENV, True, False, tmp_path / "c.json")
+    assert excinfo.value.code == 1
+    assert "could not re-create the emulator seeder role" in capsys.readouterr().out
 
 
 def test_resolve_carrier_session_reuses_a_cached_triplet(tmp_path, monkeypatch):

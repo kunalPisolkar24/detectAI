@@ -82,11 +82,13 @@ def test_verify_wiring(dp, tmp_path, monkeypatch):
         return 0
 
     monkeypatch.setattr(verify_module, "verify_flow", fake_flow)
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["verify"], workspace=workspace) == 0
     declaration, values, is_emulator, dry_run, session = seen["call"]
     assert declaration.slug == "document-parser"
     assert values == EMULATOR_ENV
-    assert is_emulator is True and dry_run is False and session is None
+    assert is_emulator is True and dry_run is False
+    assert session == fake_carrier_session(None, None, True, False)
 
 
 def test_verify_validation_failure_short_circuits(tmp_path, monkeypatch):
@@ -108,9 +110,11 @@ def test_bootstrap_wiring(tmp_path, monkeypatch):
         return 0
 
     monkeypatch.setattr(cli, "bootstrap_state", fake_bootstrap)
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["bootstrap"], workspace=workspace) == 0
     declaration, values, is_emulator, dry_run, session = seen["call"]
-    assert is_emulator is True and dry_run is False and session is None
+    assert is_emulator is True and dry_run is False
+    assert session == fake_carrier_session(None, None, True, False)
 
 
 def test_seeder_verbs_wiring(tmp_path, monkeypatch):
@@ -167,6 +171,7 @@ def test_legacy_emulator_endpoint_key_is_ignored_with_a_note(tmp_path, monkeypat
         return 0
 
     monkeypatch.setattr(verify_module, "verify_flow", fake_flow)
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["verify"], workspace=workspace) == 0
     assert seen["is_emulator"] is True  # the flag decides, never the file
     assert "EMULATOR_ENDPOINT in the values file is ignored" in capsys.readouterr().out
@@ -196,7 +201,9 @@ def test_plan_runs_init_then_plan_on_the_emulator(tmp_path, monkeypatch, capsys)
         return 0
 
     monkeypatch.setattr(cli, "run_terraform", fake_run_terraform)
-    monkeypatch.setattr(cli, "ensure_state_bucket", lambda declaration, values, is_emulator: 0)
+    monkeypatch.setattr(
+        cli, "ensure_state_bucket", lambda declaration, values, is_emulator, session=None: 0
+    )
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["plan"], workspace=workspace) == 0
 
@@ -208,11 +215,16 @@ def test_plan_runs_init_then_plan_on_the_emulator(tmp_path, monkeypatch, capsys)
     assert tf_vars["TF_VAR_service_slug"] == "document-parser"
     assert tf_vars["TF_VAR_emulator_endpoint"] == "http://localhost:4566"
     assert tf_vars["TF_VAR_secret_recovery_window"] == "0"
-    assert calls[0][3] == {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}
+    session = fake_carrier_session(None, None, True, False)
+    assert calls[0][3] == {
+        "AWS_ACCESS_KEY_ID": session["access_key_id"],
+        "AWS_SECRET_ACCESS_KEY": session["secret_access_key"],
+        "AWS_SESSION_TOKEN": session["session_token"],
+    }
 
     out = capsys.readouterr().out
     assert "plane:   floci (emulator http://localhost:4566)" in out
-    assert "carrier: env creds (test/test, profile stripped)" in out
+    assert "carrier: role session (detectai-document-parser-seeder, valid " in out
     assert "secret: detectai/document-parser/secrets" in out
     assert "keys:    API_KEY *** (20 chars, hidden)" in out
     assert "state:  detectai-docparser-tfstate / document-parser/floci/terraform.tfstate" in out
@@ -228,7 +240,9 @@ def test_apply_on_real_aws_uses_the_session_triplet(tmp_path, monkeypatch):
         return 0
 
     monkeypatch.setattr(cli, "run_terraform", fake_run_terraform)
-    monkeypatch.setattr(cli, "ensure_state_bucket", lambda declaration, values, is_emulator: 0)
+    monkeypatch.setattr(
+        cli, "ensure_state_bucket", lambda declaration, values, is_emulator, session=None: 0
+    )
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["apply", "--aws"], workspace=workspace) == 0
 
@@ -263,7 +277,9 @@ def test_destroy_chain_on_the_emulator_runs_purge_then_seeder_drop(tmp_path, mon
     monkeypatch.setattr(cli, "run_terraform", fake_run_terraform)
     monkeypatch.setattr(cli, "purge_state", fake_purge)
     monkeypatch.setattr(cli, "drop_seeder_flow", fake_drop)
-    monkeypatch.setattr(cli, "ensure_state_bucket", lambda declaration, values, is_emulator: 0)
+    monkeypatch.setattr(
+        cli, "ensure_state_bucket", lambda declaration, values, is_emulator, session=None: 0
+    )
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
 
     arguments = ["destroy", "--purge-state", "--force-delete", "--drop-seeder"]
@@ -278,6 +294,7 @@ def test_destroy_refused_purge_aborts_before_terraform(tmp_path, monkeypatch):
     monkeypatch.setattr(
         cli, "confirm_purge", lambda declaration, values, is_emulator, session=None: False
     )
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
 
     def boom(*arguments, **rest):
         raise AssertionError("a refused purge must abort before terraform")
@@ -297,7 +314,9 @@ def test_destroy_force_delete_on_real_aws_runs_the_cli_delete(tmp_path, monkeypa
 
     monkeypatch.setattr(cli, "run_aws", fake_run_aws)
     monkeypatch.setattr(cli, "run_terraform", lambda tf_dir, args, tf_vars, env_overlay=None: 0)
-    monkeypatch.setattr(cli, "ensure_state_bucket", lambda declaration, values, is_emulator: 0)
+    monkeypatch.setattr(
+        cli, "ensure_state_bucket", lambda declaration, values, is_emulator, session=None: 0
+    )
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["destroy", "--force-delete", "--aws"], workspace=workspace) == 0
     command = " ".join(seen["command"])
@@ -320,7 +339,9 @@ def test_destroy_purge_failure_aborts_before_the_seeder_drop(tmp_path, monkeypat
         raise AssertionError("a failed purge must abort before the seeder drop")
 
     monkeypatch.setattr(cli, "drop_seeder_flow", boom)
-    monkeypatch.setattr(cli, "ensure_state_bucket", lambda declaration, values, is_emulator: 0)
+    monkeypatch.setattr(
+        cli, "ensure_state_bucket", lambda declaration, values, is_emulator, session=None: 0
+    )
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["destroy", "--purge-state", "--drop-seeder"], workspace=workspace) == 1
 
@@ -361,7 +382,9 @@ def test_values_file_flag_rebuilds_the_workspace(tmp_path, monkeypatch):
     seen = {}
 
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
-    monkeypatch.setattr(cli, "ensure_state_bucket", lambda declaration, values, is_emulator: 0)
+    monkeypatch.setattr(
+        cli, "ensure_state_bucket", lambda declaration, values, is_emulator, session=None: 0
+    )
 
     def fake_run_terraform(tf_dir, args, tf_vars, env_overlay=None):
         seen["tf_dir"] = tf_dir

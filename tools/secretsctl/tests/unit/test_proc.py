@@ -31,6 +31,17 @@ def test_aws_env_injects_the_session_triplet_and_drops_the_profile(monkeypatch):
     assert "AWS_PROFILE" not in env
 
 
+def test_aws_env_prefers_the_session_triplet_on_the_emulator_too(monkeypatch):
+    monkeypatch.setenv("AWS_PROFILE", "floci")
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "stale-token")
+    session = {"access_key_id": "A", "secret_access_key": "B", "session_token": "C"}
+    env = proc.aws_env(True, session)
+    assert env["AWS_ACCESS_KEY_ID"] == "A"
+    assert env["AWS_SECRET_ACCESS_KEY"] == "B"
+    assert env["AWS_SESSION_TOKEN"] == "C"
+    assert "AWS_PROFILE" not in env
+
+
 def test_aws_env_leaves_the_ambient_environment_alone_off_both_planes(monkeypatch):
     monkeypatch.setenv("AWS_PROFILE", "personal")
     env = proc.aws_env(False, None)

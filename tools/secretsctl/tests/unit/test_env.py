@@ -105,9 +105,7 @@ def test_validate_bootstrap_keeps_bucket_and_region_checks(dp):
     missing = "\n".join(env.validate_bootstrap(dp, {}, False))
     assert "TF_STATE_BUCKET" in missing
 
-    bad_shape = "\n".join(
-        env.validate_bootstrap(dp, {"TF_STATE_BUCKET": "Bad"}, True)
-    )
+    bad_shape = "\n".join(env.validate_bootstrap(dp, {"TF_STATE_BUCKET": "Bad"}, True))
     assert "valid S3 bucket name" in bad_shape
 
     bad_plane = "\n".join(env.validate_bootstrap(dp, {"AWS_REGION": "Mars-1"}, True))
@@ -165,13 +163,9 @@ def test_build_recovery_window_rules(dp):
 
 
 def test_plane_notes_recovery_window_messaging(dp):
-    ignored = "\n".join(
-        env.plane_notes(dp, {**EMULATOR_ENV, "SECRET_RECOVERY_WINDOW": "30"}, True)
-    )
+    ignored = "\n".join(env.plane_notes(dp, {**EMULATOR_ENV, "SECRET_RECOVERY_WINDOW": "30"}, True))
     assert "ignored on the emulator plane" in ignored
-    zero_real = "\n".join(
-        env.plane_notes(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "0"}, False)
-    )
+    zero_real = "\n".join(env.plane_notes(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "0"}, False))
     assert "destroy deletes the secret immediately" in zero_real
     assert all(
         "SECRET_RECOVERY_WINDOW" not in note
