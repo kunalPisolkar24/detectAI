@@ -5,21 +5,31 @@ subprocess. A service is just its secrets.toml plus infra/.env: the engine
 owns the shared terraform root, so the fixture scaffolds nothing else.
 stdin is /dev/null throughout: any prompt would EOF-fail the run, which proves
 the emulator plane never asks.
+
+Nothing survives the run: the service fixture's teardown re-runs the destroy
+chain after every test (rerunnable and prompt-free on the emulator, even when
+the test body failed), and a session hygiene gate sweeps stale itn-* leftovers
+at startup and asserts that the sandbox namespaces end the run empty.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
 import uuid
 from pathlib import Path
+from typing import Any
 
 import pytest
+from secretsctl.seeder import SEEDER_POLICY_NAME
 
 FLOCI_URL = os.environ.get("SECRETSCTL_FLOCI", "http://localhost:4566")
 REGION = "ap-southeast-2"
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+
+ITN_SLUG_PREFIX = "itn-"
 
 pytestmark = pytest.mark.integration
 
@@ -37,16 +47,146 @@ def floci_reachable() -> bool:
     return probe.returncode == 0
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def floci() -> str:
     if not floci_reachable():
         pytest.skip(f"no Floci reachable at {FLOCI_URL} (set SECRETSCTL_FLOCI to override)")
     return FLOCI_URL
 
 
+# The leave-nothing contract: sandbox namespaces for throwaway itn-* services.
+
+
+def aws(*arguments: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["aws", "--endpoint-url", FLOCI_URL, "--region", REGION, *arguments],
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=60,
+    )
+
+
+def aws_json(*arguments: str) -> Any:
+    result = aws(*arguments)
+    if result.returncode != 0:
+        raise AssertionError(f"aws {' '.join(arguments)} failed: {result.stderr.strip()}")
+    return json.loads(result.stdout)
+
+
+def itn_state_buckets() -> list[str]:
+    payload = aws_json("s3api", "list-buckets", "--output", "json")
+    return [
+        bucket["Name"]
+        for bucket in payload["Buckets"]
+        if bucket["Name"].startswith(f"detectai-{ITN_SLUG_PREFIX}")
+    ]
+
+
+def itn_secret_names() -> list[str]:
+    payload = aws_json("secretsmanager", "list-secrets", "--output", "json")
+    return [
+        secret["Name"]
+        for secret in payload["SecretList"]
+        if secret["Name"].startswith(f"detectai/{ITN_SLUG_PREFIX}/")
+    ]
+
+
+def itn_parameter_names() -> list[str]:
+    payload = aws_json(
+        "ssm", "get-parameters-by-path", "--path", "/detectai/", "--recursive", "--output", "json"
+    )
+    return [
+        parameter["Name"]
+        for parameter in payload["Parameters"]
+        if parameter["Name"].startswith(f"/detectai/{ITN_SLUG_PREFIX}/")
+    ]
+
+
+def itn_role_names() -> list[str]:
+    payload = aws_json("iam", "list-roles", "--output", "json")
+    return [
+        role["RoleName"]
+        for role in payload["Roles"]
+        if role["RoleName"].startswith(f"detectai-{ITN_SLUG_PREFIX}")
+    ]
+
+
+def collect_itn_leftovers() -> dict[str, list[str]]:
+    return {
+        "state bucket": itn_state_buckets(),
+        "secret": itn_secret_names(),
+        "ssm parameter": itn_parameter_names(),
+        "iam role": itn_role_names(),
+    }
+
+
+def delete_bucket_completely(bucket: str) -> None:
+    payload = aws_json("s3api", "list-object-versions", "--bucket", bucket, "--output", "json")
+    for kind in ("Versions", "DeleteMarkers"):
+        for entry in payload.get(kind) or []:
+            aws(
+                "s3api",
+                "delete-object",
+                "--bucket",
+                bucket,
+                "--key",
+                entry["Key"],
+                "--version-id",
+                entry["VersionId"],
+            )
+    aws("s3api", "delete-bucket", "--bucket", bucket)
+
+
+def sweep_itn_leftovers() -> None:
+    """Delete stale itn-* data from crashed or suppressed teardowns before the run."""
+    for bucket in itn_state_buckets():
+        delete_bucket_completely(bucket)
+    for name in itn_secret_names():
+        aws(
+            "secretsmanager",
+            "delete-secret",
+            "--secret-id",
+            name,
+            "--force-delete-without-recovery",
+        )
+    for name in itn_parameter_names():
+        aws("ssm", "delete-parameters", "--name", name)
+    for name in itn_role_names():
+        aws("iam", "delete-role-policy", "--role-name", name, "--policy-name", SEEDER_POLICY_NAME)
+        aws("iam", "delete-role", "--role-name", name)
+    assert_sandbox_empty()
+
+
+def assert_sandbox_empty() -> None:
+    """Survivors after a sweep are a bug: the run cannot proceed on them."""
+    survivors = {kind: names for kind, names in collect_itn_leftovers().items() if names}
+    if survivors:
+        raise AssertionError(
+            f"the floci sandbox could not be cleared:\n{survivors_as_text(survivors)}"
+        )
+
+
+def survivors_as_text(survivors: dict[str, list[str]]) -> str:
+    return "\n".join(f"  {kind}: {', '.join(sorted(names))}" for kind, names in survivors.items())
+
+
+@pytest.fixture(scope="session")
+def floci_hygiene(floci) -> None:
+    """Guarantee the run starts in a clean sandbox and ends leaving it clean."""
+    sweep_itn_leftovers()
+    yield
+    survivors = {kind: names for kind, names in collect_itn_leftovers().items() if names}
+    if survivors:
+        pytest.fail(
+            f"the integration run left floci data behind:\n{survivors_as_text(survivors)}",
+            pytrace=False,
+        )
+
+
 @pytest.fixture
-def service(tmp_path, floci):
-    slug = f"itn-{uuid.uuid4().hex[:10]}"
+def service(floci_hygiene, tmp_path):
+    slug = f"{ITN_SLUG_PREFIX}{uuid.uuid4().hex[:10]}"
     (tmp_path / "secrets.toml").write_text(
         f'[service]\nslug = "{slug}"\n\n[secrets]\nkeys = ["API_KEY"]\n\n'
         '[ssm]\nkeys = ["MAX_PDF_PAGES"]\n'
@@ -54,7 +194,8 @@ def service(tmp_path, floci):
     infra = tmp_path / "infra"
     infra.mkdir()
     (infra / ".env").write_text(f"API_KEY={'k' * 24}\nMAX_PDF_PAGES=1200\n")
-    return tmp_path, slug
+    yield tmp_path, slug
+    teardown_service(tmp_path)
 
 
 def run_cli(service_dir: Path, *arguments: str, timeout: int = 600) -> subprocess.CompletedProcess:
@@ -72,14 +213,12 @@ def run_cli(service_dir: Path, *arguments: str, timeout: int = 600) -> subproces
     )
 
 
-def aws(service_dir: Path, *arguments: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["aws", "--endpoint-url", FLOCI_URL, "--region", REGION, *arguments],
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-        timeout=60,
-    )
+def teardown_service(service_dir: Path) -> None:
+    result = run_cli(service_dir, "destroy", "--purge-state", "--drop-seeder")
+    if result.returncode != 0:
+        print(f"\nwarning: the teardown failed for {service_dir}")
+        print(result.stdout)
+        print(result.stderr)
 
 
 def seed(service_dir: Path) -> None:
@@ -113,11 +252,14 @@ def test_verify_detects_an_ssm_tamper(service):
     service_dir, slug = service
     seed(service_dir)
     tamper = aws(
-        service_dir,
-        "ssm", "put-parameter",
-        "--name", f"/detectai/{slug}/MAX_PDF_PAGES",
-        "--type", "String",
-        "--value", "999",
+        "ssm",
+        "put-parameter",
+        "--name",
+        f"/detectai/{slug}/MAX_PDF_PAGES",
+        "--type",
+        "String",
+        "--value",
+        "999",
         "--overwrite",
     )
     assert tamper.returncode == 0, tamper.stderr
@@ -136,7 +278,7 @@ def test_destroy_purge_then_reapply_self_heals(service):
     assert destroy.returncode == 0, destroy.stdout + destroy.stderr
     assert f"deleted: detectai-{slug}-tfstate" in destroy.stdout
 
-    gone = aws(service_dir, "s3api", "head-bucket", "--bucket", f"detectai-{slug}-tfstate")
+    gone = aws("s3api", "head-bucket", "--bucket", f"detectai-{slug}-tfstate")
     assert gone.returncode != 0
 
     reapply = run_cli(service_dir, "apply")
@@ -167,7 +309,7 @@ def test_destroy_leaves_the_role_and_state_intact_without_flags(service):
     destroy = run_cli(service_dir, "destroy")
     assert destroy.returncode == 0, destroy.stdout + destroy.stderr
 
-    head = aws(service_dir, "s3api", "head-bucket", "--bucket", f"detectai-{slug}-tfstate")
-    assert head.returncode == 0  # no --purge-state: the bucket survives
-    role = aws(service_dir, "iam", "get-role", "--role-name", f"detectai-{slug}-seeder")
-    assert role.returncode == 0  # no --drop-seeder: the carrier survives
+    head = aws("s3api", "head-bucket", "--bucket", f"detectai-{slug}-tfstate")
+    assert head.returncode == 0  # no --purge-state: the bucket survives until teardown
+    role = aws("iam", "get-role", "--role-name", f"detectai-{slug}-seeder")
+    assert role.returncode == 0  # no --drop-seeder: the carrier survives until teardown
