@@ -102,7 +102,12 @@ def test_workspace_layout_follows_the_service_dir(tmp_path):
     workspace = config.workspace_for(tmp_path)
     assert workspace.values_file == tmp_path / "infra" / ".env"
     assert workspace.session_cache == tmp_path / "infra" / ".aws-session.json"
-    assert workspace.tf_dir == tmp_path / "infra" / "terraform"
+
+
+def test_plane_root_is_the_shared_package_root():
+    assert config.PLANE_ROOT.name == "plane"
+    assert config.PLANE_ROOT.parent.name == "terraform"
+    assert (config.PLANE_ROOT / "main.tf").exists()
 
 
 def test_workspace_values_file_override(tmp_path):

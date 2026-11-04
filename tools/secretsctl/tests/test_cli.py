@@ -329,4 +329,4 @@ def test_values_file_flag_rebuilds_the_workspace(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli, "run_terraform", fake_run_terraform)
     assert cli.main(["plan", "--values-file", str(central)], workspace=workspace) == 0
-    assert seen["tf_dir"] == workspace.tf_dir  # the stack stays put; only the values move
+    assert seen["tf_dir"] == config.PLANE_ROOT  # the stack stays put; only the values move

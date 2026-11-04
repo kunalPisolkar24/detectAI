@@ -8,6 +8,6 @@ terraform {
     }
   }
 
-  # Partial config: tools/secrets.py always passes the plane's backend file, never a bare init.
+  # Partial config: secretsctl always passes the plane's backend file, never a bare init.
   backend "s3" {}
 }

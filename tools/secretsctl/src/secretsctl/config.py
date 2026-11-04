@@ -10,6 +10,10 @@ from pathlib import Path
 DEFAULT_REGION = "ap-southeast-2"
 DEFAULT_RECOVERY_WINDOW = 30
 
+# One shared terraform root for every service; the backend file and TF_VARs
+# select the service's plane at run time.
+PLANE_ROOT = Path(__file__).resolve().parents[2] / "terraform" / "plane"
+
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 PLANE_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 BUCKET_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
@@ -65,7 +69,6 @@ class Workspace:
     service_dir: Path
     values_file: Path
     session_cache: Path
-    tf_dir: Path
 
 
 def workspace_for(service_dir: Path, values_file: Path | None = None) -> Workspace:
@@ -74,7 +77,6 @@ def workspace_for(service_dir: Path, values_file: Path | None = None) -> Workspa
         service_dir=service_dir,
         values_file=values,
         session_cache=values.parent / ".aws-session.json",
-        tf_dir=service_dir / "infra" / "terraform",
     )
 
 

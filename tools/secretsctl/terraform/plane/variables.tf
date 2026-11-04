@@ -1,3 +1,13 @@
+variable "service_slug" {
+  description = "Service slug the plane belongs to; every derived name comes from it."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]+(-[a-z0-9]+)*$", var.service_slug))
+    error_message = "service_slug must be lowercase digits/hyphens, e.g. document-parser."
+  }
+}
+
 variable "emulator_endpoint" {
   description = "Emulator endpoint (Floci or LocalStack, e.g. http://localhost:4566). Null or empty = real AWS."
   type        = string
@@ -17,17 +27,6 @@ variable "aws_region" {
   validation {
     condition     = can(regex("^[a-z]{2}-[a-z]+-[0-9]+$", var.aws_region))
     error_message = "aws_region must be a valid AWS region (e.g. ap-southeast-2, us-east-1)."
-  }
-}
-
-variable "service_slug" {
-  description = "Service slug the secrets plane belongs to; the secretsctl engine always passes it."
-  type        = string
-  default     = "document-parser"
-
-  validation {
-    condition     = can(regex("^[a-z0-9]+(-[a-z0-9]+)*$", var.service_slug))
-    error_message = "service_slug must be lowercase digits/hyphens, e.g. document-parser."
   }
 }
 
@@ -53,10 +52,4 @@ variable "ssm_parameters" {
   description = "Non-secret runtime config seeded from .env; each key becomes /detectai/<slug>/<KEY>."
   type        = map(string)
   default     = {}
-}
-
-variable "ssm_description" {
-  description = "Description stamped on every seeded SSM parameter."
-  type        = string
-  default     = "document-parser runtime config seeded from .env (tools/secrets.py)."
 }

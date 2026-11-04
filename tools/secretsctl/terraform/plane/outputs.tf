@@ -1,5 +1,5 @@
-output "secrets_name" {
-  description = "Secret name of the document-parser blob (runtime reads target it by name)."
+output "secret_name" {
+  description = "Secret name of the service blob (runtime reads target it by name)."
   value       = module.secrets_plane.secret_name
 }
 

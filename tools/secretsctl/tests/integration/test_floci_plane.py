@@ -1,7 +1,8 @@
 """Black-box runs of `python -m secretsctl` against a live Floci.
 
-Each test drives a throwaway service (unique slug, the real secrets-plane
-module copied into its terraform dir) through the real CLI as a subprocess.
+Each test drives a throwaway service (unique slug) through the real CLI as a
+subprocess. A service is just its secrets.toml plus infra/.env: the engine
+owns the shared terraform root, so the fixture scaffolds nothing else.
 stdin is /dev/null throughout: any prompt would EOF-fail the run, which proves
 the emulator plane never asks.
 """
@@ -9,7 +10,6 @@ the emulator plane never asks.
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 import uuid
@@ -20,72 +20,8 @@ import pytest
 FLOCI_URL = os.environ.get("SECRETSCTL_FLOCI", "http://localhost:4566")
 REGION = "ap-southeast-2"
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
-MODULE_SOURCE = PACKAGE_ROOT / "terraform" / "secrets-plane"
 
 pytestmark = pytest.mark.integration
-
-VERSIONS_TF = """\
-terraform {
-  required_providers {
-    aws = {
-      source = "hashicorp/aws"
-    }
-  }
-}
-"""
-
-ROOT_MAIN_TF = """\
-variable "aws_region" {
-  type = string
-}
-
-variable "service_slug" {
-  type = string
-}
-
-variable "secret_recovery_window" {
-  type = number
-}
-
-variable "emulator_endpoint" {
-  type = string
-}
-
-variable "blob" {
-  type    = map(string)
-  default = {}
-}
-
-variable "ssm_parameters" {
-  type    = map(string)
-  default = {}
-}
-
-provider "aws" {
-  region                      = var.aws_region
-  access_key                  = "test"
-  secret_key                  = "test"
-  skip_credentials_validation = true
-  skip_metadata_api_check     = true
-  skip_requesting_account_id  = true
-  skip_region_validation      = true
-  s3_use_path_style           = true
-
-  endpoints {
-    secretsmanager = var.emulator_endpoint
-    ssm            = var.emulator_endpoint
-  }
-}
-
-module "secrets_plane" {
-  source                 = "./secrets-plane"
-  service_slug           = var.service_slug
-  aws_region             = var.aws_region
-  secret_recovery_window = var.secret_recovery_window
-  blob                   = var.blob
-  ssm_parameters         = var.ssm_parameters
-}
-"""
 
 
 def floci_reachable() -> bool:
@@ -120,11 +56,6 @@ def service(tmp_path, floci):
     (infra / ".env").write_text(
         f"API_KEY={'k' * 24}\nMAX_PDF_PAGES=1200\nEMULATOR_ENDPOINT={floci}\n"
     )
-    tf_dir = infra / "terraform"
-    tf_dir.mkdir()
-    (tf_dir / "versions.tf").write_text(VERSIONS_TF)
-    (tf_dir / "main.tf").write_text(ROOT_MAIN_TF)
-    shutil.copytree(MODULE_SOURCE, tf_dir / "secrets-plane")
     return tmp_path, slug
 
 

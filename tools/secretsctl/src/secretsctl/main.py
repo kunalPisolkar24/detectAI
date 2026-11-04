@@ -149,7 +149,7 @@ def _terraform_verb_flow(
         print(
             f"carrier: role session ({declaration.seeder_role_name}, valid {session_remaining_text(session)})"
         )
-    print(f"stack:   {workspace.tf_dir}")
+    print(f"stack:   {config.PLANE_ROOT}")
     print(f"secret: {declaration.secret_name}")
     print(f"keys:    {keys_desc}")
     print(f"state:  {state_bucket} / {state_key_value}")
@@ -216,7 +216,7 @@ def _terraform_verb_flow(
             }
         )
 
-        if run_terraform(workspace.tf_dir, init_args, tf_vars, backend_creds) != 0:
+        if run_terraform(config.PLANE_ROOT, init_args, tf_vars, backend_creds) != 0:
             print()
             if is_emulator:
                 print("fix: create the emulator state bucket and retry (the bootstrap verb)")
@@ -231,7 +231,7 @@ def _terraform_verb_flow(
                     f"(region {declaration.region_default}); the bootstrap verb can create it"
                 )
             return 1
-        destroyed = run_terraform(workspace.tf_dir, verb_args, tf_vars, backend_creds)
+        destroyed = run_terraform(config.PLANE_ROOT, verb_args, tf_vars, backend_creds)
         if command != "destroy" or destroyed != 0:
             return destroyed
         if args.force_delete:
