@@ -32,7 +32,9 @@ Every verb on both planes rides the service's out-of-stack seeder role
 caches in `infra/.aws-session.json` and `session-clear` drops it. The planes
 differ only in friction: real AWS gates the assume behind an MFA prompt, the
 emulator needs no prompt and self-heals its role plus the state bucket when a
-restart wiped its state. `--dry-run` resolves no session.
+restart wiped its state. The state bucket derives from the service and plane
+(`detectai-<service>-tfstate-<account>`) and is never hand-passed. `--dry-run`
+resolves no session.
 
 ## Install and test
 

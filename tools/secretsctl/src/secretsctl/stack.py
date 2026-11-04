@@ -6,12 +6,11 @@ import json
 import tempfile
 from pathlib import Path
 
-from secretsctl.config import Declaration
+from secretsctl.config import Declaration, state_bucket_for
 from secretsctl.env import (
     resolve_floci_url,
     resolve_recovery_window,
     resolve_region,
-    resolve_state_bucket,
 )
 from secretsctl.proc import aws_base, run_aws, run_aws_captured
 
@@ -44,9 +43,11 @@ def build_tf_vars(
     return tf_vars
 
 
-def build_backend_hcl(declaration: Declaration, values: dict[str, str], is_emulator: bool) -> str:
+def build_backend_hcl(
+    declaration: Declaration, values: dict[str, str], is_emulator: bool, account: str
+) -> str:
     region = resolve_region(declaration, values)
-    bucket = resolve_state_bucket(declaration, values, is_emulator)
+    bucket = state_bucket_for(declaration.slug, account)
     key = state_key(declaration, is_emulator)
     if is_emulator:
         lines = [
@@ -81,11 +82,10 @@ def write_backend_hcl(backend_hcl: str) -> Path:
 
 
 def bootstrap_commands(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
+    declaration: Declaration, values: dict[str, str], is_emulator: bool, account: str
 ) -> list[list[str]]:
-    bucket = resolve_state_bucket(declaration, values, is_emulator)
+    bucket = state_bucket_for(declaration.slug, account)
     command_base = aws_base(declaration, values, is_emulator)
-    assert bucket is not None
     return [
         command_base + ["s3api", "head-bucket", "--bucket", bucket],
         command_base + ["s3", "mb", f"s3://{bucket}"],
@@ -106,17 +106,17 @@ def bootstrap_state(
     values: dict[str, str],
     is_emulator: bool,
     dry_run: bool,
+    account: str,
     session: dict[str, str] | None = None,
 ) -> int:
-    commands = bootstrap_commands(declaration, values, is_emulator)
+    commands = bootstrap_commands(declaration, values, is_emulator, account)
     if dry_run:
         for command in commands:
             print(f"would run: {' '.join(command)}")
-        print("(dry run: no AWS)")
+        print("(dry run: no AWS writes)")
         return 0
 
-    bucket = resolve_state_bucket(declaration, values, is_emulator)
-    assert bucket is not None
+    bucket = state_bucket_for(declaration.slug, account)
     head_result = run_aws(commands[0], is_emulator, session)
     if head_result == 0:
         print(f"ok:  bucket {bucket} already exists")
@@ -140,14 +140,14 @@ def ensure_state_bucket(
     declaration: Declaration,
     values: dict[str, str],
     is_emulator: bool,
+    account: str,
     session: dict[str, str] | None = None,
 ) -> int:
     """Emulator-only self-heal: the emulator loses its S3 data on restart, so
     any verb may start against a missing bucket."""
     if not is_emulator:
         return 0
-    bucket = resolve_state_bucket(declaration, values, True)  # the fallback keeps this resolvable
-    assert bucket is not None
+    bucket = state_bucket_for(declaration.slug, account)
     head = run_aws_captured(
         aws_base(declaration, values, True) + ["s3api", "head-bucket", "--bucket", bucket],
         True,
@@ -156,7 +156,7 @@ def ensure_state_bucket(
     if head[0] == 0:
         return 0
     print(f"note: emulator state bucket {bucket} is missing; creating it")
-    return bootstrap_state(declaration, values, True, False, session)
+    return bootstrap_state(declaration, values, True, False, account, session)
 
 
 def force_delete_command(
@@ -175,12 +175,12 @@ def list_bucket_versions(
     declaration: Declaration,
     values: dict[str, str],
     is_emulator: bool,
+    account: str,
     session: dict[str, str] | None = None,
 ) -> list[tuple[str, str]] | None:
     """Every (key, version id) in the plane's state bucket, None when listing failed;
     the CLI paginates, so one call spans the bucket."""
-    bucket = resolve_state_bucket(declaration, values, is_emulator)
-    assert bucket is not None  # a None bucket is a validation error, not a listing input
+    bucket = state_bucket_for(declaration.slug, account)
     code, stdout, stderr = run_aws_captured(
         aws_base(declaration, values, is_emulator)
         + ["s3api", "list-object-versions", "--bucket", bucket, "--output", "json"],
@@ -208,11 +208,11 @@ def confirm_purge(
     declaration: Declaration,
     values: dict[str, str],
     is_emulator: bool,
+    account: str,
     session: dict[str, str] | None = None,
 ) -> bool:
     """Typed barrier — terraform does not manage the bucket; a refusal leaves everything intact."""
-    bucket = resolve_state_bucket(declaration, values, is_emulator)
-    assert bucket is not None  # validation already rejected a missing bucket
+    bucket = state_bucket_for(declaration.slug, account)
     if (
         run_aws(
             aws_base(declaration, values, is_emulator)
@@ -224,7 +224,7 @@ def confirm_purge(
     ):
         print(f"note: bucket {bucket} does not exist; the purge step will be a no-op")
         return True
-    items = list_bucket_versions(declaration, values, is_emulator, session) or []
+    items = list_bucket_versions(declaration, values, is_emulator, account, session) or []
     if items:
         print(f"purge will wipe {len(items)} object version(s) in {bucket}")
         prefixes = sorted({key.split("/", 1)[0] for key, _ in items})
@@ -250,16 +250,16 @@ def purge_state(
     declaration: Declaration,
     values: dict[str, str],
     is_emulator: bool,
+    account: str,
     session: dict[str, str] | None = None,
 ) -> int:
     """Wipe + delete the state bucket, only after terraform destroy succeeded; rerunnable."""
-    bucket = resolve_state_bucket(declaration, values, is_emulator)
-    assert bucket is not None  # validation already rejected a missing bucket
+    bucket = state_bucket_for(declaration.slug, account)
     base = aws_base(declaration, values, is_emulator)
     if run_aws(base + ["s3api", "head-bucket", "--bucket", bucket], is_emulator, session) != 0:
         print(f"note: bucket {bucket} is already gone; nothing to purge")
         return 0
-    items = list_bucket_versions(declaration, values, is_emulator, session)
+    items = list_bucket_versions(declaration, values, is_emulator, account, session)
     if items is None:
         return 1
     if not items:

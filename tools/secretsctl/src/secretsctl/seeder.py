@@ -16,14 +16,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from secretsctl.config import Declaration
+from secretsctl.config import Declaration, state_bucket_for
 from secretsctl.env import (
-    bucket_errors,
     plane_display,
     plane_errors,
     resolve_floci_url,
     resolve_region,
-    resolve_state_bucket,
 )
 from secretsctl.proc import aws_base, die, run_aws, run_aws_captured
 
@@ -90,6 +88,18 @@ def iam_account_id(principal: str) -> str:
     return principal.split(":")[4]
 
 
+def plane_account(session: dict[str, Any] | None, is_emulator: bool) -> str:
+    """The account owning the plane (its seeder role, stack, and derived state
+    bucket): the emulator's constant, the carrier role's account under a live
+    session, or — a real dry run carries no session — one read-only identity
+    lookup."""
+    if is_emulator:
+        return DEFAULT_ACCOUNT_ID
+    if session:
+        return iam_account_id(session["role_arn"])
+    return sts_caller_identity()[0]
+
+
 def resolve_trust_principal(
     declaration: Declaration, values: dict[str, str], is_emulator: bool
 ) -> str:
@@ -145,10 +155,9 @@ def mfa_serial_for(principal: str, override: str) -> str | None:
 def validate_seeder_bootstrap(
     declaration: Declaration, values: dict[str, str], is_emulator: bool
 ) -> list[str]:
-    """Only what the bootstrap consumes: region, endpoint, bucket, trust user."""
+    """Only what the bootstrap consumes: region, endpoint, trust user."""
     errors: list[str] = []
     errors.extend(plane_errors(values))
-    bucket_errors(errors, values.get("TF_STATE_BUCKET", ""), required=not is_emulator)
     user_arn = values.get("SEEDER_TRUST_USER_ARN", "")
     if user_arn and not USER_ARN_RE.fullmatch(user_arn):
         errors.append(
@@ -187,8 +196,9 @@ def seeder_policy_document(
     """Least privilege on service-pinned ARNs; DescribeParameters alone takes a wildcard."""
     region = resolve_region(declaration, values)
     account = iam_account_id(user_arn)
-    bucket = resolve_state_bucket(declaration, values, is_emulator)
-    assert bucket is not None  # validation already rejected a missing bucket
+    # The bucket pin rides the plane account: the emulator places every bucket
+    # in one account whatever the trust placeholder says.
+    bucket = state_bucket_for(declaration.slug, DEFAULT_ACCOUNT_ID if is_emulator else account)
     return {
         "Version": "2012-10-17",
         "Statement": [

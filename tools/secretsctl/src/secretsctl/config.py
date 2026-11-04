@@ -16,15 +16,13 @@ PLANE_ROOT = Path(__file__).resolve().parents[2] / "terraform" / "plane"
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 PLANE_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
-BUCKET_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
 REGION_RE = re.compile(r"^[a-z]{2}-[a-z]+-[0-9]+$")
 
 RECOVERY_WINDOW_MIN = 7
 RECOVERY_WINDOW_MAX = 30
 
-TOP_SECTIONS = {"service", "state", "secrets", "ssm", "requires"}
+TOP_SECTIONS = {"service", "secrets", "ssm", "requires"}
 SERVICE_FIELDS = {"slug", "region", "recovery_window"}
-STATE_FIELDS = {"emulator_default"}
 SECRETS_FIELDS = {"keys", "min_lengths"}
 SSM_FIELDS = {"keys"}
 
@@ -45,8 +43,10 @@ def seeder_role_for(slug: str) -> str:
     return f"detectai-{slug}-seeder"
 
 
-def derived_emulator_bucket(slug: str) -> str:
-    return f"detectai-{slug}-tfstate"
+def state_bucket_for(slug: str, account: str) -> str:
+    """The service's state bucket on any plane: slug-derived, account-suffixed
+    for global S3 uniqueness (the account owning the seeder role and stack)."""
+    return f"detectai-{slug}-tfstate-{account}"
 
 
 @dataclass
@@ -59,7 +59,6 @@ class Declaration:
     min_lengths: dict[str, int]
     requires: dict[str, tuple[str, int]]
     seeder_role_name: str
-    emulator_bucket: str
     region_default: str
     recovery_window: int
 
@@ -95,7 +94,6 @@ def declaration_errors(data: dict) -> list[str]:
         return errors
 
     for section, allowed in (
-        ("state", STATE_FIELDS),
         ("secrets", SECRETS_FIELDS),
         ("ssm", SSM_FIELDS),
     ):
@@ -109,8 +107,10 @@ def declaration_errors(data: dict) -> list[str]:
         fail(f"[service] has unknown field(s) {sorted(extra)}; allowed: {sorted(SERVICE_FIELDS)}")
 
     slug = service.get("slug")
-    if not isinstance(slug, str) or not SLUG_RE.fullmatch(slug):
-        fail(f"slug {slug!r} must be lowercase digits/hyphens, e.g. document-parser")
+    # The slug feeds every derived name; the 34-char ceiling keeps the account-
+    # suffixed state bucket within S3's 63-char limit (29 chars of scaffold).
+    if not isinstance(slug, str) or not SLUG_RE.fullmatch(slug) or len(slug) > 34:
+        fail(f"slug {slug!r} must be 34 or fewer lowercase digits/hyphens, e.g. document-parser")
 
     region = service.get("region")
     if region is not None and (not isinstance(region, str) or not REGION_RE.fullmatch(region)):
@@ -124,13 +124,6 @@ def declaration_errors(data: dict) -> list[str]:
             fail(
                 f"recovery_window must be 0 or between {RECOVERY_WINDOW_MIN} and {RECOVERY_WINDOW_MAX}"
             )
-
-    state = data.get("state", {})
-    emulator_default = state.get("emulator_default")
-    if emulator_default is not None and (
-        not isinstance(emulator_default, str) or not BUCKET_RE.fullmatch(emulator_default)
-    ):
-        fail(f"emulator_default {emulator_default!r} is not a valid S3 bucket name")
 
     secrets = data.get("secrets", {})
     raw_keys = secrets.get("keys")
@@ -195,7 +188,6 @@ def load(toml_path: Path) -> Declaration:
     requires = {
         trigger: (pair[0], int(pair[1])) for trigger, pair in data.get("requires", {}).items()
     }
-    emulator_bucket = data.get("state", {}).get("emulator_default") or derived_emulator_bucket(slug)
     return Declaration(
         slug=slug,
         secret_name=secret_name(slug),
@@ -205,7 +197,6 @@ def load(toml_path: Path) -> Declaration:
         min_lengths=min_lengths,
         requires=requires,
         seeder_role_name=seeder_role_for(slug),
-        emulator_bucket=emulator_bucket,
         region_default=service.get("region", DEFAULT_REGION),
         recovery_window=service.get("recovery_window", DEFAULT_RECOVERY_WINDOW),
     )

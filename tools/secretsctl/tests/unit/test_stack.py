@@ -12,6 +12,11 @@ from secretsctl import stack
 pytestmark = pytest.mark.unit
 
 
+FLOCI_BUCKET = "detectai-document-parser-tfstate-000000000000"
+REAL_ACCOUNT = "123456789012"
+REAL_BUCKET = f"detectai-document-parser-tfstate-{REAL_ACCOUNT}"
+
+
 def test_build_tf_vars_maps_both_planes():
     emulator = stack.build_tf_vars(DP, EMULATOR_ENV, True)
     assert emulator["TF_VAR_emulator_endpoint"] == "http://localhost:4566"
@@ -39,8 +44,8 @@ def _field(hcl: str, key: str) -> str:
 
 
 def test_build_backend_hcl_emulator():
-    hcl = stack.build_backend_hcl(DP, EMULATOR_ENV, True)
-    assert _field(hcl, "bucket") == "detectai-docparser-tfstate"
+    hcl = stack.build_backend_hcl(DP, EMULATOR_ENV, True, "000000000000")
+    assert _field(hcl, "bucket") == FLOCI_BUCKET
     assert _field(hcl, "key").endswith("/floci/terraform.tfstate")
     assert _field(hcl, "encrypt") == "false"
     assert _field(hcl, "skip_credentials_validation") == "true"
@@ -50,8 +55,8 @@ def test_build_backend_hcl_emulator():
 
 
 def test_build_backend_hcl_real_aws():
-    hcl = stack.build_backend_hcl(DP, REAL_ENV, False)
-    assert _field(hcl, "bucket") == "detectai-tfstate-sandbox"
+    hcl = stack.build_backend_hcl(DP, REAL_ENV, False, REAL_ACCOUNT)
+    assert _field(hcl, "bucket") == REAL_BUCKET
     assert _field(hcl, "key") == "document-parser/terraform.tfstate"
     assert _field(hcl, "encrypt") == "true"
     assert _field(hcl, "use_lockfile") == "true"
@@ -60,46 +65,42 @@ def test_build_backend_hcl_real_aws():
 
 
 def test_build_backend_hcl_region_resolution():
-    assert _field(stack.build_backend_hcl(DP, EMULATOR_ENV, True), "region") == "ap-southeast-2"
-    custom = {**REAL_ENV, "AWS_REGION": "us-east-1"}
-    assert _field(stack.build_backend_hcl(DP, custom, False), "region") == "us-east-1"
-
-
-def test_build_backend_hcl_emulator_honors_custom_bucket():
-    hcl = stack.build_backend_hcl(
-        DP, {**EMULATOR_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"}, True
+    assert (
+        _field(stack.build_backend_hcl(DP, EMULATOR_ENV, True, "000000000000"), "region")
+        == "ap-southeast-2"
     )
-    assert _field(hcl, "bucket") == "dp-tester-sandbox"
-    assert _field(hcl, "key").endswith("/floci/terraform.tfstate")
+    custom = {**REAL_ENV, "AWS_REGION": "us-east-1"}
+    assert _field(stack.build_backend_hcl(DP, custom, False, REAL_ACCOUNT), "region") == "us-east-1"
+
+
+def test_build_backend_hcl_ignores_a_stray_tf_state_bucket_line():
+    stray = {**EMULATOR_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"}
+    hcl = stack.build_backend_hcl(DP, stray, True, "000000000000")
+    assert _field(hcl, "bucket") == FLOCI_BUCKET  # always derived, never hand-passed
 
 
 def test_bootstrap_commands_emulator():
-    commands = stack.bootstrap_commands(DP, EMULATOR_ENV, True)
+    commands = stack.bootstrap_commands(DP, EMULATOR_ENV, True, "000000000000")
     assert len(commands) == 3  # head-bucket, mb, put-bucket-versioning — same shape as real AWS
-    assert commands[0][-3:] == ["head-bucket", "--bucket", "detectai-docparser-tfstate"]
+    assert commands[0][-3:] == ["head-bucket", "--bucket", FLOCI_BUCKET]
     assert "--endpoint-url http://localhost:4566" in " ".join(commands[0])
-    assert commands[1][-1] == "s3://detectai-docparser-tfstate"
+    assert commands[1][-1] == f"s3://{FLOCI_BUCKET}"
     assert " ".join(commands[2]) == (
-        "aws --region ap-southeast-2 --endpoint-url http://localhost:4566 "
-        "s3api put-bucket-versioning --bucket detectai-docparser-tfstate "
+        f"aws --region ap-southeast-2 --endpoint-url http://localhost:4566 "
+        f"s3api put-bucket-versioning --bucket {FLOCI_BUCKET} "
         "--versioning-configuration Status=Enabled"
     )
 
-    custom = stack.bootstrap_commands(
-        DP, {**EMULATOR_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"}, True
-    )
-    assert custom[0][-3:] == ["head-bucket", "--bucket", "dp-tester-sandbox"]
-
 
 def test_bootstrap_commands_real_aws():
-    commands = stack.bootstrap_commands(DP, REAL_ENV, False)
+    commands = stack.bootstrap_commands(DP, REAL_ENV, False, REAL_ACCOUNT)
     assert len(commands) == 3  # head-bucket, mb, put-bucket-versioning
-    assert commands[0][-3:] == ["head-bucket", "--bucket", "detectai-tfstate-sandbox"]
+    assert commands[0][-3:] == ["head-bucket", "--bucket", REAL_BUCKET]
     assert "endpoint-url" not in commands[0]
-    assert commands[1][-1] == "s3://detectai-tfstate-sandbox"
+    assert commands[1][-1] == f"s3://{REAL_BUCKET}"
     assert " ".join(commands[2]) == (
         "aws --region ap-southeast-2 s3api put-bucket-versioning "
-        "--bucket detectai-tfstate-sandbox --versioning-configuration Status=Enabled"
+        f"--bucket {REAL_BUCKET} --versioning-configuration Status=Enabled"
     )
 
 
@@ -132,7 +133,7 @@ def test_purge_state_wipes_versions_and_delete_markers_then_bucket(monkeypatch, 
         return 0, json.dumps(listing), ""
 
     monkeypatch.setattr(stack, "run_aws_captured", fake_captured)
-    assert stack.purge_state(DP, REAL_ENV, False) == 0
+    assert stack.purge_state(DP, REAL_ENV, False, REAL_ACCOUNT) == 0
 
     joined = [" ".join(call) for call in calls]
     assert "head-bucket" in joined[0]  # the purge walks over existing buckets only
@@ -145,9 +146,9 @@ def test_purge_state_wipes_versions_and_delete_markers_then_bucket(monkeypatch, 
         and "--version-id v2" in joined[3]
         and "--version-id d1" in joined[4]
     )
-    assert joined[-1].endswith("delete-bucket --bucket detectai-tfstate-sandbox")
-    assert all("detectai-tfstate-sandbox" in call for call in joined)
-    assert "deleted: detectai-tfstate-sandbox" in capsys.readouterr().out
+    assert joined[-1].endswith(f"delete-bucket --bucket {REAL_BUCKET}")
+    assert all(REAL_BUCKET in call for call in joined)
+    assert f"deleted: {REAL_BUCKET}" in capsys.readouterr().out
 
 
 def test_purge_state_skips_missing_bucket(monkeypatch, capsys):
@@ -155,7 +156,7 @@ def test_purge_state_skips_missing_bucket(monkeypatch, capsys):
         return 255 if "head-bucket" in command else 0
 
     monkeypatch.setattr(stack, "run_aws", fake_run_aws)
-    assert stack.purge_state(DP, REAL_ENV, False) == 0
+    assert stack.purge_state(DP, REAL_ENV, False, REAL_ACCOUNT) == 0
     assert "already gone; nothing to purge" in capsys.readouterr().out
 
 
@@ -170,20 +171,22 @@ def test_confirm_purge_typed_barrier_on_real_plane(monkeypatch, capsys):
     monkeypatch.setattr(
         stack,
         "list_bucket_versions",
-        lambda declaration, values, is_emulator, session=None: listing,
+        lambda declaration, values, is_emulator, account, session=None: listing,
     )
     monkeypatch.setattr("builtins.input", lambda prompt="": "wrong-name")
-    assert stack.confirm_purge(DP, REAL_ENV, False) is False
+    assert stack.confirm_purge(DP, REAL_ENV, False, REAL_ACCOUNT) is False
     out = capsys.readouterr().out
     assert "purge will wipe 2 object version(s)" in out
     assert "outside document-parser/" in out  # sibling stacks in the shared sandbox are called out
     assert "cancelled: nothing was destroyed" in out
 
     monkeypatch.setattr(
-        stack, "list_bucket_versions", lambda declaration, values, is_emulator, session=None: []
+        stack,
+        "list_bucket_versions",
+        lambda declaration, values, is_emulator, account, session=None: [],
     )
-    monkeypatch.setattr("builtins.input", lambda prompt="": "detectai-tfstate-sandbox")
-    assert stack.confirm_purge(DP, REAL_ENV, False) is True
+    monkeypatch.setattr("builtins.input", lambda prompt="": REAL_BUCKET)
+    assert stack.confirm_purge(DP, REAL_ENV, False, REAL_ACCOUNT) is True
 
 
 def test_confirm_purge_emulator_never_prompts(monkeypatch):
@@ -191,21 +194,23 @@ def test_confirm_purge_emulator_never_prompts(monkeypatch):
         stack, "run_aws", lambda command, is_emulator, session=None: 0
     )  # bucket exists
     monkeypatch.setattr(
-        stack, "list_bucket_versions", lambda declaration, values, is_emulator, session=None: []
+        stack,
+        "list_bucket_versions",
+        lambda declaration, values, is_emulator, account, session=None: [],
     )
 
     def no_prompt(prompt=""):
         raise AssertionError("emulator plane must not prompt")
 
     monkeypatch.setattr("builtins.input", no_prompt)
-    assert stack.confirm_purge(DP, EMULATOR_ENV, True) is True
+    assert stack.confirm_purge(DP, EMULATOR_ENV, True, "000000000000") is True
 
 
 def test_confirm_purge_bucket_missing_is_a_noop(monkeypatch, capsys):
     monkeypatch.setattr(
         stack, "run_aws", lambda command, is_emulator, session=None: 255
     )  # head-bucket 404
-    assert stack.confirm_purge(DP, REAL_ENV, False) is True
+    assert stack.confirm_purge(DP, REAL_ENV, False, REAL_ACCOUNT) is True
     assert "does not exist; the purge step will be a no-op" in capsys.readouterr().out
 
 
@@ -219,8 +224,8 @@ def test_ensure_state_bucket_self_heals_missing_emulator_bucket(monkeypatch, cap
     monkeypatch.setattr(
         stack,
         "bootstrap_state",
-        lambda declaration, values, is_emulator, dry_run, session=None: created.append(
-            (dry_run, session)
+        lambda declaration, values, is_emulator, dry_run, account, session=None: created.append(
+            (account, session)
         )
         or 0,
     )
@@ -230,9 +235,9 @@ def test_ensure_state_bucket_self_heals_missing_emulator_bucket(monkeypatch, cap
         "secret_access_key": "B",
         "session_token": "C",
     }
-    assert stack.ensure_state_bucket(DP, EMULATOR_ENV, True, carrier) == 0
-    assert created == [(False, carrier)]  # a real, acting creation on the carrier session
-    assert "detectai-docparser-tfstate is missing; creating it" in capsys.readouterr().out
+    assert stack.ensure_state_bucket(DP, EMULATOR_ENV, True, "000000000000", carrier) == 0
+    assert created == [("000000000000", carrier)]  # a real, acting creation on the carrier session
+    assert f"{FLOCI_BUCKET} is missing; creating it" in capsys.readouterr().out
 
 
 def test_ensure_state_bucket_skips_existing_bucket_and_real_plane(monkeypatch, capsys):
@@ -242,14 +247,14 @@ def test_ensure_state_bucket_skips_existing_bucket_and_real_plane(monkeypatch, c
     monkeypatch.setattr(
         stack, "run_aws_captured", lambda command, is_emulator, session=None: (0, "", "")
     )
-    assert stack.ensure_state_bucket(DP, EMULATOR_ENV, True) == 0  # bucket exists: nothing to do
+    assert stack.ensure_state_bucket(DP, EMULATOR_ENV, True, "000000000000") == 0  # bucket exists
 
     monkeypatch.setattr(
         stack,
         "run_aws_captured",
         lambda command, is_emulator, session=None: (255, "", "NoSuchBucket"),
     )
-    assert stack.ensure_state_bucket(DP, REAL_ENV, False) == 0  # real AWS never auto-creates
+    assert stack.ensure_state_bucket(DP, REAL_ENV, False, REAL_ACCOUNT) == 0  # never auto-creates
     assert created == []
     assert capsys.readouterr().out == ""
 
@@ -259,9 +264,9 @@ def test_bootstrap_state_dry_run_prints_and_runs_nothing(monkeypatch, capsys):
         raise AssertionError("dry run must not touch AWS")
 
     monkeypatch.setattr(stack, "run_aws", fail)
-    assert stack.bootstrap_state(DP, EMULATOR_ENV, True, True) == 0
+    assert stack.bootstrap_state(DP, EMULATOR_ENV, True, True, "000000000000") == 0
     out = capsys.readouterr().out
-    assert out.count("would run:") == 3 and "(dry run: no AWS)" in out
+    assert out.count("would run:") == 3 and "(dry run: no AWS writes)" in out
 
 
 def test_bootstrap_state_creates_and_reuses(monkeypatch, capsys):
@@ -272,14 +277,14 @@ def test_bootstrap_state_creates_and_reuses(monkeypatch, capsys):
         lambda command, is_emulator, session=None: calls.append(list(command))
         or (255 if "head-bucket" in command else 0),
     )
-    assert stack.bootstrap_state(DP, REAL_ENV, False, False) == 0
+    assert stack.bootstrap_state(DP, REAL_ENV, False, False, REAL_ACCOUNT) == 0
     created_output = capsys.readouterr().out
-    assert "created: detectai-tfstate-sandbox" in created_output
+    assert f"created: {REAL_BUCKET}" in created_output
     assert "versioning: Enabled" in created_output
 
     calls.clear()
     monkeypatch.setattr(stack, "run_aws", lambda command, is_emulator, session=None: 0)
-    assert stack.bootstrap_state(DP, REAL_ENV, False, False) == 0
+    assert stack.bootstrap_state(DP, REAL_ENV, False, False, REAL_ACCOUNT) == 0
     assert "already exists" in capsys.readouterr().out
 
 
@@ -291,7 +296,7 @@ def test_bootstrap_state_reports_an_unreachable_emulator(monkeypatch, capsys):
         return 255
 
     monkeypatch.setattr(stack, "run_aws", fake_run_aws)
-    assert stack.bootstrap_state(DP, EMULATOR_ENV, True, False) == 1
+    assert stack.bootstrap_state(DP, EMULATOR_ENV, True, False, "000000000000") == 1
     out = capsys.readouterr().out
     assert "docker start floci" in out
 

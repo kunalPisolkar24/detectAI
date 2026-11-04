@@ -1,12 +1,12 @@
-"""Values-plane validation: env parsing, per-verb rules, notes, and shell conflicts."""
+"""Values-plane validation: env parsing, per-verb rules, and plane notes."""
 
 from __future__ import annotations
 
 import pytest
 
 from conftest import EMULATOR_ENV, REAL_ENV
+from secretsctl import config
 from secretsctl import env
-from secretsctl.env import BUCKET_SHAPE_ERROR
 
 pytestmark = pytest.mark.unit
 
@@ -71,43 +71,28 @@ def test_validate_accepts_a_set_endpoint_with_a_key_over_the_floor(dp):
     assert "NEW_RELIC_LICENSE_KEY" in "\n".join(env.validate(dp, short, False))
 
 
-def test_validate_real_plane_requires_bucket(dp):
-    errors = "\n".join(env.validate(dp, {"API_KEY": "a" * 20}, False))
-    assert "TF_STATE_BUCKET" in errors and "bootstrap" in errors
+def test_tf_state_bucket_is_not_a_concept_anywhere(dp):
+    """A stray TF_STATE_BUCKET line is inert: no override, no note, no error
+    — the derived bucket wins on every plane."""
+    stray = {**EMULATOR_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"}
+    assert env.validate(dp, stray, True) == []
+    assert env.validate(dp, {**REAL_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"}, False) == []
+    for note in env.plane_notes(dp, stray, True):
+        assert "TF_STATE_BUCKET" not in note
 
 
-def test_validate_real_plane_rejects_bad_bucket_names(dp):
-    for bucket in ("A" * 20, "ok-but-", "-nope", "a", "detectai.tier", "z" * 64):
-        errors = "\n".join(env.validate(dp, {**REAL_ENV, "TF_STATE_BUCKET": bucket}, False))
-        assert "TF_STATE_BUCKET" in errors, bucket
+def test_the_state_bucket_is_always_derived_from_slug_and_account(dp):
+    assert config.state_bucket_for(dp.slug, "000000000000") == (
+        "detectai-document-parser-tfstate-000000000000"
+    )
+    assert config.state_bucket_for(dp.slug, "123456789012") == (
+        "detectai-document-parser-tfstate-123456789012"
+    )
 
 
-def test_bucket_shape_error_renders_the_offender():
-    assert "Bad" in BUCKET_SHAPE_ERROR.format(bucket="Bad")
-
-
-def test_validate_real_plane_accepts_valid_bucket_names(dp):
-    assert env.validate(dp, {**REAL_ENV, "TF_STATE_BUCKET": "abc"}, False) == []
-    assert env.validate(dp, {**REAL_ENV, "TF_STATE_BUCKET": "detectai-tfstate-123"}, False) == []
-
-
-def test_validate_emulator_plane_rejects_bad_bucket_name(dp):
-    errors = "\n".join(env.validate(dp, {**EMULATOR_ENV, "TF_STATE_BUCKET": "Bad_Bucket"}, True))
-    assert "TF_STATE_BUCKET" in errors and "valid S3 bucket name" in errors
-
-
-def test_validate_bootstrap_skips_key_and_env_type_checks(dp):
+def test_validate_bootstrap_is_region_and_shape_free(dp):
     assert env.validate_bootstrap(dp, {}, True) == []
-    assert env.validate_bootstrap(dp, {"TF_STATE_BUCKET": "detectai-tfstate-sandbox"}, False) == []
-
-
-def test_validate_bootstrap_keeps_bucket_and_region_checks(dp):
-    missing = "\n".join(env.validate_bootstrap(dp, {}, False))
-    assert "TF_STATE_BUCKET" in missing
-
-    bad_shape = "\n".join(env.validate_bootstrap(dp, {"TF_STATE_BUCKET": "Bad"}, True))
-    assert "valid S3 bucket name" in bad_shape
-
+    assert env.validate_bootstrap(dp, {"TF_STATE_BUCKET": "Bad"}, True) == []
     bad_plane = "\n".join(env.validate_bootstrap(dp, {"AWS_REGION": "Mars-1"}, True))
     assert "AWS_REGION" in bad_plane
 
@@ -127,25 +112,6 @@ def test_resolve_floci_url_overrides_from_the_environment(monkeypatch):
     assert "floci (emulator http://localhost:9999)" in env.plane_display(True)
     monkeypatch.delenv("SECRETSCTL_FLOCI_URL")
     assert env.resolve_floci_url() == env.DEFAULT_FLOCI_URL
-
-
-def test_resolve_state_bucket_defaults_and_overrides(dp):
-    # Emulator: unset falls back to the declaration's emulator default; set passes through.
-    assert env.resolve_state_bucket(dp, EMULATOR_ENV, True) == "detectai-docparser-tfstate"
-    custom = env.resolve_state_bucket(
-        dp, {**EMULATOR_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"}, True
-    )
-    assert custom == "dp-tester-sandbox"
-    # Real AWS: unset stays None (validation rejects it); set passes through.
-    assert env.resolve_state_bucket(dp, {"API_KEY": "a" * 20}, False) is None
-    assert env.resolve_state_bucket(dp, REAL_ENV, False) == "detectai-tfstate-sandbox"
-
-
-def test_plane_notes_defaults_on_emulator_when_bucket_unset(dp):
-    defaulting = "\n".join(env.plane_notes(dp, EMULATOR_ENV, True))
-    assert "defaults to detectai-docparser-tfstate" in defaulting
-    custom = {**EMULATOR_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"}
-    assert all("defaults" not in note for note in env.plane_notes(dp, custom, True))
 
 
 def test_build_recovery_window_rules(dp):
@@ -174,11 +140,3 @@ def test_plane_notes_recovery_window_messaging(dp):
     assert all(
         "SECRET_RECOVERY_WINDOW" not in note for note in env.plane_notes(dp, REAL_ENV, False)
     )
-
-
-def test_warn_shell_conflicts_only_when_env_bucket_set(monkeypatch, capsys):
-    monkeypatch.setenv("TF_STATE_BUCKET", "shell-bucket")
-    env.warn_shell_conflicts(EMULATOR_ENV)  # .env bucket unset: nothing to conflict
-    assert capsys.readouterr().out == ""
-    env.warn_shell_conflicts({**EMULATOR_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"})
-    assert "the .env value wins" in capsys.readouterr().out

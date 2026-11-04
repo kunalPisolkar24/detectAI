@@ -10,9 +10,6 @@ DP_TOML = """\
 [service]
 slug = "document-parser"
 
-[state]
-emulator_default = "detectai-docparser-tfstate"
-
 [secrets]
 keys = ["API_KEY", "NEW_RELIC_LICENSE_KEY"]
 
@@ -40,7 +37,6 @@ DP = config.Declaration(
     min_lengths={"API_KEY": 16},
     requires={"OTEL_EXPORTER_OTLP_ENDPOINT": ("NEW_RELIC_LICENSE_KEY", 16)},
     seeder_role_name="detectai-document-parser-seeder",
-    emulator_bucket="detectai-docparser-tfstate",
     region_default="ap-southeast-2",
     recovery_window=30,
 )
@@ -74,7 +70,7 @@ USER_ARN = "arn:aws:iam::123456789012:user/kunalpisolkar"
 ROLE_ARN = "arn:aws:iam::123456789012:role/detectai-document-parser-seeder"
 
 EMULATOR_ENV = {"API_KEY": "a" * 20}
-REAL_ENV = {"API_KEY": "a" * 20, "TF_STATE_BUCKET": "detectai-tfstate-sandbox"}
+REAL_ENV = {"API_KEY": "a" * 20}
 
 
 def fake_carrier_session(declaration, values, is_emulator, dry_run, session_cache=None):

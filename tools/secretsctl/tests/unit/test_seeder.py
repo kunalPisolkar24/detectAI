@@ -100,8 +100,6 @@ def test_validate_seeder_bootstrap_scope(dp):
         seeder.validate_seeder_bootstrap(DP, {**REAL_ENV, "SEEDER_TRUST_USER_ARN": "nope"}, False)
     )
     assert "SEEDER_TRUST_USER_ARN" in bad_arn
-    missing_bucket = "\n".join(seeder.validate_seeder_bootstrap(DP, {"API_KEY": "a" * 20}, False))
-    assert "TF_STATE_BUCKET" in missing_bucket
     bad_region = "\n".join(
         seeder.validate_seeder_bootstrap(DP, {**EMULATOR_ENV, "AWS_REGION": "Mars-1"}, True)
     )
@@ -133,8 +131,8 @@ def test_policy_document_scopes_every_service_pinned_arn():
         "DescribeSsmParameters",
     ]
     bucket, objects, secret, ssm, describe = policy["Statement"]
-    assert bucket["Resource"] == ["arn:aws:s3:::detectai-docparser-tfstate"]
-    assert objects["Resource"] == ["arn:aws:s3:::detectai-docparser-tfstate/*"]
+    assert bucket["Resource"] == ["arn:aws:s3:::detectai-document-parser-tfstate-000000000000"]
+    assert objects["Resource"] == ["arn:aws:s3:::detectai-document-parser-tfstate-000000000000/*"]
     assert secret["Resource"] == [
         "arn:aws:secretsmanager:ap-southeast-2:123456789012:secret:detectai/document-parser/secrets-*"
     ]
@@ -142,6 +140,40 @@ def test_policy_document_scopes_every_service_pinned_arn():
         "arn:aws:ssm:ap-southeast-2:123456789012:parameter/detectai/document-parser/*"
     ]
     assert describe["Resource"] == ["*"]
+
+
+def test_policy_bucket_pin_follows_the_plane_account():
+    emulator_placeholder = seeder.resolve_trust_principal(DP, EMULATOR_ENV, True)
+    real = seeder.seeder_policy_document(DP, REAL_ENV, False, USER_ARN)
+    assert real["Statement"][0]["Resource"] == [
+        "arn:aws:s3:::detectai-document-parser-tfstate-123456789012"
+    ]
+    assert emulator_placeholder == f"arn:aws:iam::000000000000:user/{DP.seeder_role_name}"
+
+
+def fake_triplet(role_arn):
+    return {
+        "role_arn": role_arn,
+        "access_key_id": "A",
+        "secret_access_key": "B",
+        "session_token": "C",
+        "expires_at": "2086-01-01T00:00:00Z",
+    }
+
+
+def test_plane_account_routes_by_plane_and_session(monkeypatch):
+    assert seeder.plane_account(None, True) == "000000000000"
+    session = fake_triplet(ROLE_ARN)
+    assert seeder.plane_account(session, False) == "123456789012"
+
+    def boom(*arguments, **rest):
+        raise AssertionError("a live session must not shell out for identity")
+
+    monkeypatch.setattr(seeder, "sts_caller_identity", boom)
+    assert seeder.plane_account(session, False) == "123456789012"
+
+    monkeypatch.setattr(seeder, "sts_caller_identity", lambda: ("436242974989", USER_ARN))
+    assert seeder.plane_account(None, False) == "436242974989"  # the real dry-run lookup
 
 
 def test_bootstrap_commands_shape():

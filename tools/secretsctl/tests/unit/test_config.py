@@ -26,7 +26,9 @@ def test_derived_names_use_the_slug(tmp_path):
     assert declaration.secret_name == "detectai/chats/secrets"
     assert declaration.ssm_prefix == "/detectai/chats/"
     assert declaration.seeder_role_name == "detectai-chats-seeder"
-    assert declaration.emulator_bucket == "detectai-chats-tfstate"
+    assert config.state_bucket_for(declaration.slug, "123456789012") == (
+        "detectai-chats-tfstate-123456789012"
+    )
     assert declaration.blob_keys == ("API_KEY",)
     assert declaration.ssm_keys == ()
     assert declaration.min_lengths == {}
@@ -35,13 +37,15 @@ def test_derived_names_use_the_slug(tmp_path):
     assert declaration.recovery_window == config.DEFAULT_RECOVERY_WINDOW
 
 
-def test_emulator_default_is_explicit_when_declared(tmp_path):
+def test_the_state_table_is_retired_not_honored(tmp_path):
     toml = tmp_path / "secrets.toml"
     toml.write_text(
         '[service]\nslug = "chats"\n\n[state]\nemulator_default = "detectai-test-state"\n'
         '\n[secrets]\nkeys = ["API_KEY"]\n'
     )
-    assert config.load(toml).emulator_bucket == "detectai-test-state"
+    with pytest.raises(DeclarationError) as excinfo:
+        config.load(toml)
+    assert "unknown section(s) ['state']" in str(excinfo.value)
 
 
 def test_defaults_are_taken_from_the_declaration(tmp_path):
@@ -63,7 +67,8 @@ def test_defaults_are_taken_from_the_declaration(tmp_path):
         '[service]\nslug="x"\nregion = "Mars-1"\n[secrets]\nkeys=["A"]\n',  # bad region
         '[service]\nslug = "x"\nrecovery_window = 31\n[secrets]\nkeys = ["A"]\n',  # bounds
         '[service]\nslug = "x"\nrecovery_window = 3\n[secrets]\nkeys = ["A"]\n',
-        '[service]\nslug = "x"\nemulator_default = "A_B"\n[secrets]\nkeys = ["A"]\n',  # unknown state field
+        '[service]\nslug = "x"\nemulator_default = "A_B"\n[secrets]\nkeys = ["A"]\n',  # unknown service field
+        f'[service]\nslug = "{"a" * 35}"\n\n[secrets]\nkeys = ["A"]\n',  # slug blows the bucket-name ceiling
         '[service]\nslug = "x"\n\n[secrets]\nkeys = []\n',  # empty blob keys
         '[service]\nslug = "x"\n\n[secrets]\nkeys = ["a-b"]\n',  # bad key shape
         '[service]\nslug = "x"\n\n[secrets]\nkeys = ["A", "A"]\n',  # duplicate

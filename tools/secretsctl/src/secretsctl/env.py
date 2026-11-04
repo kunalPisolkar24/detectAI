@@ -4,27 +4,16 @@ from __future__ import annotations
 
 import os
 import re
-
 from secretsctl.config import Declaration
 
 REGION_RE = re.compile(r"^[a-z]{2}-[a-z]+-[0-9]+$")
 URL_RE = re.compile(r"^https?://\S+$")
-# S3 naming minus dots: exactly 3-63 lowercase/digits/hyphens, alnum boundaries.
-BUCKET_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
 ENV_TYPES = ("dev", "prod")
 EMULATOR_RECOVERY_WINDOW = 0
 RECOVERY_WINDOW_MIN = 7
 RECOVERY_WINDOW_MAX = 30
 
 DEFAULT_FLOCI_URL = "http://localhost:4566"
-
-BUCKET_MISSING_ERROR = "the real-AWS plane needs a state bucket: TF_STATE_BUCKET is not set in .env"
-BUCKET_MISSING_FIX = (
-    "add TF_STATE_BUCKET=<unique 3-63 char lowercase bucket> to .env and create it "
-    "(the bootstrap verb does it, or aws s3 mb + versioning)"
-)
-BUCKET_SHAPE_ERROR = "TF_STATE_BUCKET is not a valid S3 bucket name: {bucket!r}"
-BUCKET_SHAPE_FIX = "use 3-63 lowercase letters, digits or hyphens, starting and ending alphanumeric"
 
 
 def parse_env_file(path) -> dict[str, str]:
@@ -68,16 +57,6 @@ def resolve_region(declaration: Declaration, values: dict[str, str]) -> str:
     return values.get("AWS_REGION") or declaration.region_default
 
 
-def resolve_state_bucket(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
-) -> str | None:
-    """The .env value, or the declaration's emulator default; real AWS stays explicit."""
-    bucket = values.get("TF_STATE_BUCKET", "")
-    if bucket:
-        return bucket
-    return declaration.emulator_bucket if is_emulator else None
-
-
 def resolve_recovery_window(
     declaration: Declaration, values: dict[str, str], is_emulator: bool
 ) -> int:
@@ -88,18 +67,6 @@ def resolve_recovery_window(
     if not raw:
         return declaration.recovery_window
     return int(raw)
-
-
-def bucket_errors(errors: list[str], bucket: str, required: bool) -> None:
-    def fail(message: str, fix: str) -> None:
-        errors.append(f"error: {message}\nfix:   {fix}")
-
-    if not bucket:
-        if required:
-            fail(BUCKET_MISSING_ERROR, BUCKET_MISSING_FIX)
-        return
-    if not BUCKET_RE.fullmatch(bucket):
-        fail(BUCKET_SHAPE_ERROR.format(bucket=bucket), BUCKET_SHAPE_FIX)
 
 
 def plane_errors(values: dict[str, str]) -> list[str]:
@@ -166,7 +133,6 @@ def validate(declaration: Declaration, values: dict[str, str], is_emulator: bool
                 "or https://otlp.nr-data.net (New Relic)",
             )
     errors.extend(plane_errors(values))
-    bucket_errors(errors, values.get("TF_STATE_BUCKET", ""), required=not is_emulator)
     return errors
 
 
@@ -174,10 +140,7 @@ def validate_bootstrap(
     declaration: Declaration, values: dict[str, str], is_emulator: bool
 ) -> list[str]:
     """Only what bucket creation consumes; no blob-key or ENV_TYPE demands."""
-    errors: list[str] = []
-    errors.extend(plane_errors(values))
-    bucket_errors(errors, values.get("TF_STATE_BUCKET", ""), required=not is_emulator)
-    return errors
+    return plane_errors(values)
 
 
 def plane_notes(declaration: Declaration, values: dict[str, str], is_emulator: bool) -> list[str]:
@@ -190,10 +153,6 @@ def plane_notes(declaration: Declaration, values: dict[str, str], is_emulator: b
         notes.append(
             "warning: applying to real AWS while ENV_TYPE=dev (dev runtime reads .env, not SM)"
         )
-    if is_emulator and not values.get("TF_STATE_BUCKET"):
-        notes.append(
-            f"note: TF_STATE_BUCKET unset; the Floci plane defaults to {declaration.emulator_bucket}"
-        )
     if values.get("SECRET_RECOVERY_WINDOW"):
         if is_emulator:
             notes.append("note: SECRET_RECOVERY_WINDOW ignored on the emulator plane (always 0)")
@@ -202,12 +161,3 @@ def plane_notes(declaration: Declaration, values: dict[str, str], is_emulator: b
                 "warning: SECRET_RECOVERY_WINDOW=0 on real AWS — destroy deletes the secret immediately"
             )
     return notes
-
-
-def warn_shell_conflicts(values: dict[str, str]) -> None:
-    env_bucket = values.get("TF_STATE_BUCKET", "")
-    shell_bucket = os.environ.get("TF_STATE_BUCKET")
-    if env_bucket and shell_bucket and shell_bucket != env_bucket:
-        print(
-            f"note: TF_STATE_BUCKET also exported in the shell ({shell_bucket!r}); the .env value wins"
-        )

@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from secretsctl import config, verify
-from secretsctl.config import Declaration, DeclarationError, Workspace
+from secretsctl.config import Declaration, DeclarationError, Workspace, state_bucket_for
 from secretsctl.env import (
     parse_env_file,
     plane_display,
@@ -17,15 +17,14 @@ from secretsctl.env import (
     resolve_floci_url,
     resolve_plane,
     resolve_recovery_window,
-    resolve_state_bucket,
     validate,
     validate_bootstrap,
-    warn_shell_conflicts,
 )
 from secretsctl.proc import die, run_aws, run_terraform
 from secretsctl.seeder import (
     clear_cached_session,
     drop_seeder_flow,
+    plane_account,
     resolve_carrier_session,
     seeder_bootstrap_flow,
     session_remaining_text,
@@ -140,11 +139,10 @@ def _terraform_verb_flow(
     session: dict[str, str] | None,
 ) -> int:
     plane = plane_display(is_emulator)
+    account = plane_account(session, is_emulator)
     tf_vars = build_tf_vars(declaration, values, is_emulator)
-    backend_hcl = build_backend_hcl(declaration, values, is_emulator)
-    warn_shell_conflicts(values)
-    state_bucket = resolve_state_bucket(declaration, values, is_emulator)
-    assert state_bucket is not None  # validation already rejected a missing bucket
+    backend_hcl = build_backend_hcl(declaration, values, is_emulator, account)
+    state_bucket = state_bucket_for(declaration.slug, account)
     state_key_value = state_key(declaration, is_emulator)
 
     blob = {key: values[key] for key in declaration.blob_keys if values.get(key, "") != ""}
@@ -193,17 +191,17 @@ def _terraform_verb_flow(
                 print(f"then purge: every object version in {state_bucket}, then delete the bucket")
             if args.drop_seeder:
                 print(f"then drop: {declaration.seeder_role_name} inline policy and role")
-        print("(dry run: no terraform, no AWS)")
+        print("(dry run: no terraform, no AWS writes)")
         return 0
 
     if (
         command == "destroy"
         and args.purge_state
-        and not confirm_purge(declaration, values, is_emulator, session)
+        and not confirm_purge(declaration, values, is_emulator, account, session)
     ):
         return 1
 
-    if ensure_state_bucket(declaration, values, is_emulator, session) != 0:
+    if ensure_state_bucket(declaration, values, is_emulator, account, session) != 0:
         return 1
 
     backend_file = write_backend_hcl(backend_hcl)
@@ -229,7 +227,7 @@ def _terraform_verb_flow(
                 print("fix: create the emulator state bucket and retry (the bootstrap verb)")
                 print(
                     f"fix: aws --endpoint-url {resolve_floci_url()} "
-                    f"s3 mb s3://{resolve_state_bucket(declaration, values, True)} "
+                    f"s3 mb s3://{state_bucket_for(declaration.slug, plane_account(None, True))} "
                     f"--region {declaration.region_default}"
                 )
             else:
@@ -249,7 +247,10 @@ def _terraform_verb_flow(
                     force_delete_command(declaration, values, is_emulator), is_emulator, session
                 )
         # Wipe chain runs only after terraform succeeded: purge, then the seeder role.
-        if args.purge_state and purge_state(declaration, values, is_emulator, session) != 0:
+        if (
+            args.purge_state
+            and purge_state(declaration, values, is_emulator, account, session) != 0
+        ):
             return 1
         if args.drop_seeder:
             return drop_seeder_flow(declaration, values, is_emulator, args.dry_run)
@@ -309,7 +310,14 @@ def main(argv: list[str] | None = None, workspace: Workspace | None = None) -> i
         session = resolve_carrier_session(
             declaration, values, is_emulator, args.dry_run, workspace.session_cache
         )
-        return bootstrap_state(declaration, values, is_emulator, args.dry_run, session)
+        return bootstrap_state(
+            declaration,
+            values,
+            is_emulator,
+            args.dry_run,
+            plane_account(session, is_emulator),
+            session,
+        )
 
     if args.command == "seeder-bootstrap":
         errors = validate_seeder_bootstrap(declaration, values, is_emulator)

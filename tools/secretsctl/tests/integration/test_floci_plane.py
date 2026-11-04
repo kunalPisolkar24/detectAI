@@ -232,7 +232,7 @@ def test_happy_path_bootstrap_apply_then_verify(service):
     service_dir, slug = service
     bootstrap = run_cli(service_dir, "bootstrap")
     assert bootstrap.returncode == 0, bootstrap.stdout + bootstrap.stderr
-    assert f"created: detectai-{slug}-tfstate" in bootstrap.stdout
+    assert f"created: detectai-{slug}-tfstate-000000000000" in bootstrap.stdout
     assert "versioning: Enabled" in bootstrap.stdout  # the bucket parity runs on both planes
     # The bootstrap verb carries too: the self-heal ladder ran its first assume here
     # (a unique slug means the role never pre-exists).
@@ -307,9 +307,9 @@ def test_destroy_purge_then_reapply_self_heals(service):
 
     destroy = run_cli(service_dir, "destroy", "--purge-state")
     assert destroy.returncode == 0, destroy.stdout + destroy.stderr
-    assert f"deleted: detectai-{slug}-tfstate" in destroy.stdout
+    assert f"deleted: detectai-{slug}-tfstate-000000000000" in destroy.stdout
 
-    gone = aws("s3api", "head-bucket", "--bucket", f"detectai-{slug}-tfstate")
+    gone = aws("s3api", "head-bucket", "--bucket", f"detectai-{slug}-tfstate-000000000000")
     assert gone.returncode != 0
 
     reapply = run_cli(service_dir, "apply")
@@ -324,11 +324,11 @@ def test_bootstrap_twice_is_idempotent(service):
     service_dir, slug = service
     first = run_cli(service_dir, "bootstrap")
     assert first.returncode == 0, first.stdout + first.stderr
-    assert f"created: detectai-{slug}-tfstate" in first.stdout
+    assert f"created: detectai-{slug}-tfstate-000000000000" in first.stdout
 
     second = run_cli(service_dir, "bootstrap")
     assert second.returncode == 0, second.stdout + second.stderr
-    assert f"ok:  bucket detectai-{slug}-tfstate already exists" in second.stdout
+    assert f"ok:  bucket detectai-{slug}-tfstate-000000000000 already exists" in second.stdout
 
 
 def test_destroy_leaves_the_role_and_state_intact_without_flags(service):
@@ -340,7 +340,7 @@ def test_destroy_leaves_the_role_and_state_intact_without_flags(service):
     destroy = run_cli(service_dir, "destroy")
     assert destroy.returncode == 0, destroy.stdout + destroy.stderr
 
-    head = aws("s3api", "head-bucket", "--bucket", f"detectai-{slug}-tfstate")
+    head = aws("s3api", "head-bucket", "--bucket", f"detectai-{slug}-tfstate-000000000000")
     assert head.returncode == 0  # no --purge-state: the bucket survives until teardown
     role = aws("iam", "get-role", "--role-name", f"detectai-{slug}-seeder")
     assert role.returncode == 0  # no --drop-seeder: the carrier survives until teardown
