@@ -20,38 +20,14 @@ variable "aws_region" {
   }
 }
 
-variable "secrets_name" {
-  description = "Secrets Manager name of the document-parser secrets blob."
+variable "service_slug" {
+  description = "Service slug the secrets plane belongs to; the secretsctl engine always passes it."
   type        = string
-  default     = "detectai/document-parser/secrets"
+  default     = "document-parser"
 
   validation {
-    condition     = can(regex("^detectai/document-parser/secrets$", var.secrets_name))
-    error_message = "secrets_name is the fixed service contract detectai/document-parser/secrets."
-  }
-}
-
-variable "api_key" {
-  description = "API key stored as {\"API_KEY\": ...}. Null skips storing a version."
-  type        = string
-  default     = null
-  sensitive   = true
-
-  validation {
-    condition     = var.api_key == null || length(var.api_key) >= 16
-    error_message = "api_key must be at least 16 characters (or null to skip storing a version)."
-  }
-}
-
-variable "new_relic_license_key" {
-  description = "New Relic ingest license key stored as {\"NEW_RELIC_LICENSE_KEY\": ...}. Null skips adding the blob key."
-  type        = string
-  default     = null
-  sensitive   = true
-
-  validation {
-    condition     = var.new_relic_license_key == null || length(var.new_relic_license_key) >= 16
-    error_message = "new_relic_license_key must be at least 16 characters (or null to skip adding the blob key)."
+    condition     = can(regex("^[a-z0-9]+(-[a-z0-9]+)*$", var.service_slug))
+    error_message = "service_slug must be lowercase digits/hyphens, e.g. document-parser."
   }
 }
 
@@ -66,8 +42,21 @@ variable "secret_recovery_window" {
   }
 }
 
-variable "ssm_parameters" {
-  description = "Non-secret runtime config seeded from .env via tools/secrets.py; each key becomes /detectai/document-parser/<KEY>."
+variable "blob" {
+  description = "Secret blob seeded as one JSON version; keys and length floors live in the service's secrets.toml."
   type        = map(string)
   default     = {}
+  sensitive   = true
+}
+
+variable "ssm_parameters" {
+  description = "Non-secret runtime config seeded from .env; each key becomes /detectai/<slug>/<KEY>."
+  type        = map(string)
+  default     = {}
+}
+
+variable "ssm_description" {
+  description = "Description stamped on every seeded SSM parameter."
+  type        = string
+  default     = "document-parser runtime config seeded from .env (tools/secrets.py)."
 }

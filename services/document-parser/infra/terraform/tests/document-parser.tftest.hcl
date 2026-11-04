@@ -4,8 +4,10 @@ run "contract_name_becomes_the_output" {
   command = plan
 
   variables {
-    api_key               = "test-api-key-0123456789"
-    new_relic_license_key = "test-license-key-0123456789"
+    blob = {
+      API_KEY               = "test-api-key-0123456789"
+      NEW_RELIC_LICENSE_KEY = "test-license-key-0123456789"
+    }
   }
 
   assert {
@@ -18,8 +20,9 @@ run "a_license_key_alone_still_versions_the_blob" {
   command = plan
 
   variables {
-    api_key               = null
-    new_relic_license_key = "test-license-key-0123456789"
+    blob = {
+      NEW_RELIC_LICENSE_KEY = "test-license-key-0123456789"
+    }
   }
 
   assert {

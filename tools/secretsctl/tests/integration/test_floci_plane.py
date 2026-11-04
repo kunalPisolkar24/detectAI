@@ -1,13 +1,15 @@
 """Black-box runs of `python -m secretsctl` against a live Floci.
 
-Each test drives a throwaway service (unique slug, its own minimal terraform
-stack) through the real CLI as a subprocess. stdin is /dev/null throughout:
-any prompt would EOF-fail the run, which proves the emulator plane never asks.
+Each test drives a throwaway service (unique slug, the real secrets-plane
+module copied into its terraform dir) through the real CLI as a subprocess.
+stdin is /dev/null throughout: any prompt would EOF-fail the run, which proves
+the emulator plane never asks.
 """
 
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import uuid
@@ -18,6 +20,7 @@ import pytest
 FLOCI_URL = os.environ.get("SECRETSCTL_FLOCI", "http://localhost:4566")
 REGION = "ap-southeast-2"
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+MODULE_SOURCE = PACKAGE_ROOT / "terraform" / "secrets-plane"
 
 pytestmark = pytest.mark.integration
 
@@ -31,7 +34,7 @@ terraform {
 }
 """
 
-MAIN_TF = """\
+ROOT_MAIN_TF = """\
 variable "aws_region" {
   type = string
 }
@@ -69,27 +72,18 @@ provider "aws" {
   s3_use_path_style           = true
 
   endpoints {
-    s3             = var.emulator_endpoint
     secretsmanager = var.emulator_endpoint
     ssm            = var.emulator_endpoint
   }
 }
 
-resource "aws_secretsmanager_secret" "blob" {
-  name                    = "detectai/${var.service_slug}/secrets"
-  recovery_window_in_days = var.secret_recovery_window
-}
-
-resource "aws_secretsmanager_secret_version" "blob" {
-  secret_id     = aws_secretsmanager_secret.blob.id
-  secret_string = jsonencode(var.blob)
-}
-
-resource "aws_ssm_parameter" "config" {
-  for_each = var.ssm_parameters
-  name     = "/detectai/${var.service_slug}/${each.key}"
-  type     = "String"
-  value    = each.value
+module "secrets_plane" {
+  source                 = "./secrets-plane"
+  service_slug           = var.service_slug
+  aws_region             = var.aws_region
+  secret_recovery_window = var.secret_recovery_window
+  blob                   = var.blob
+  ssm_parameters         = var.ssm_parameters
 }
 """
 
@@ -129,7 +123,8 @@ def service(tmp_path, floci):
     tf_dir = infra / "terraform"
     tf_dir.mkdir()
     (tf_dir / "versions.tf").write_text(VERSIONS_TF)
-    (tf_dir / "main.tf").write_text(MAIN_TF)
+    (tf_dir / "main.tf").write_text(ROOT_MAIN_TF)
+    shutil.copytree(MODULE_SOURCE, tf_dir / "secrets-plane")
     return tmp_path, slug
 
 
@@ -190,14 +185,10 @@ def test_verify_detects_an_ssm_tamper(service):
     seed(service_dir)
     tamper = aws(
         service_dir,
-        "ssm",
-        "put-parameter",
-        "--name",
-        f"/detectai/{slug}/MAX_PDF_PAGES",
-        "--type",
-        "String",
-        "--value",
-        "999",
+        "ssm", "put-parameter",
+        "--name", f"/detectai/{slug}/MAX_PDF_PAGES",
+        "--type", "String",
+        "--value", "999",
         "--overwrite",
     )
     assert tamper.returncode == 0, tamper.stderr
@@ -241,6 +232,9 @@ def test_bootstrap_twice_is_idempotent(service):
 def test_destroy_leaves_the_role_and_state_intact_without_flags(service):
     service_dir, slug = service
     seed(service_dir)
+    seeder = run_cli(service_dir, "seeder-bootstrap")
+    assert seeder.returncode == 0, seeder.stdout + seeder.stderr
+
     destroy = run_cli(service_dir, "destroy")
     assert destroy.returncode == 0, destroy.stdout + destroy.stderr
 

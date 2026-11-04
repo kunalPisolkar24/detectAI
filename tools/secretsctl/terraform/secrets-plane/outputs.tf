@@ -1,6 +1,6 @@
-output "secrets_name" {
+output "secret_name" {
   description = "Secret name (the identifier every consumer uses)."
-  value       = aws_secretsmanager_secret.services.name
+  value       = aws_secretsmanager_secret.blob.name
 }
 
 output "ssm_parameter_prefix" {
