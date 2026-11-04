@@ -49,9 +49,13 @@ Preferred patterns: Dependency Injection, Repository/Adapter, Factory, Strategy,
 
 ## Comments
 
-Write self-explanatory code. Add a comment only when the why is not obvious from the code: workarounds, gotchas, tricky intent. Never add commented-out code.
+Default to no comments. Write code that doesn't need them: good names, small functions, clear types.
 
-Keep comments sparse — never narrate what the code already shows (`# increment i`), no section-divider banners, no hype wording. Docstrings stay short: one line maximum, or none; never multi-paragraph essays. Never restate the signature in a docstring.
+Add a comment only if the code cannot be made self-explanatory and the *why* would otherwise be lost: non-obvious constraints, workarounds, gotchas, links to issues. Before writing one, try renaming or simplifying the code instead — if that fixes it, no comment.
+
+Never add: narration of what the code does, section-divider banners, hype or filler wording, TODOs, changelog/authorship notes, or commented-out code. Delete stale comments in code you touch.
+
+Docstrings only where a convention requires them (e.g. lint rules or public API docs), one line maximum. Never restate the signature.
 
 Keep `.env` files (`.env`, `.env.example`, and all `.env.*` variants) clean: bare variables, no explanatory comments per key. At most one short header line when usage is genuinely non-obvious; when in doubt, leave it out.
 
