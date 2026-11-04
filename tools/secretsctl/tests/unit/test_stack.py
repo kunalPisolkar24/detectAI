@@ -13,19 +13,19 @@ pytestmark = pytest.mark.unit
 
 
 def test_build_tf_vars_maps_both_planes():
-    emulator = stack.build_tf_vars(DP, EMULATOR_ENV)
+    emulator = stack.build_tf_vars(DP, EMULATOR_ENV, True)
     assert emulator["TF_VAR_emulator_endpoint"] == "http://localhost:4566"
     assert emulator["TF_VAR_secret_recovery_window"] == "0"
     assert json.loads(emulator["TF_VAR_blob"]) == {"API_KEY": "a" * 20}
 
-    real = stack.build_tf_vars(DP, REAL_ENV)
+    real = stack.build_tf_vars(DP, REAL_ENV, False)
     assert "TF_VAR_emulator_endpoint" not in real
     assert real["TF_VAR_secret_recovery_window"] == "30"
     assert real["TF_VAR_aws_region"] == "ap-southeast-2"
 
 
 def test_build_tf_vars_region_override_and_no_pinned_secret_name():
-    mapped = stack.build_tf_vars(DP, {**EMULATOR_ENV, "AWS_REGION": "us-east-1"})
+    mapped = stack.build_tf_vars(DP, {**EMULATOR_ENV, "AWS_REGION": "us-east-1"}, True)
     assert mapped["TF_VAR_aws_region"] == "us-east-1"
     assert "TF_VAR_secrets_name" not in mapped  # the contract name is terraform's own default
 
@@ -284,7 +284,7 @@ def test_bootstrap_state_reports_an_unreachable_emulator(monkeypatch, capsys):
 
 def test_build_tf_vars_seeds_present_config_keys():
     values = {**EMULATOR_ENV, "OTEL_TRACE_SAMPLE_RATIO": "0.5", "MAX_PDF_PAGES": "1200"}
-    mapped = stack.build_tf_vars(DP, values)
+    mapped = stack.build_tf_vars(DP, values, True)
     assert json.loads(mapped["TF_VAR_ssm_parameters"]) == {
         "OTEL_TRACE_SAMPLE_RATIO": "0.5",
         "MAX_PDF_PAGES": "1200",
@@ -292,47 +292,47 @@ def test_build_tf_vars_seeds_present_config_keys():
 
 
 def test_build_tf_vars_skips_absent_and_empty_config_keys():
-    assert "TF_VAR_ssm_parameters" not in stack.build_tf_vars(DP, EMULATOR_ENV)
+    assert "TF_VAR_ssm_parameters" not in stack.build_tf_vars(DP, EMULATOR_ENV, True)
     assert "TF_VAR_ssm_parameters" not in stack.build_tf_vars(
-        DP, {**EMULATOR_ENV, "OTEL_TRACE_SAMPLE_RATIO": ""}
+        DP, {**EMULATOR_ENV, "OTEL_TRACE_SAMPLE_RATIO": ""}, True
     )
 
 
 def test_build_tf_vars_ignores_unlisted_keys():
     values = {**EMULATOR_ENV, "PORT": "8000", "RANDOM_THING": "v"}
-    payload = json.loads(stack.build_tf_vars(DP, values).get("TF_VAR_ssm_parameters", "{}"))
+    payload = json.loads(stack.build_tf_vars(DP, values, True).get("TF_VAR_ssm_parameters", "{}"))
     assert "PORT" not in payload and "RANDOM_THING" not in payload
 
 
 def test_build_tf_vars_json_escapes_seed_values():
     values = {**EMULATOR_ENV, "OTEL_EXPORTER_OTLP_ENDPOINT": "http://host:4318/?trailing=a=b"}
-    payload = json.loads(stack.build_tf_vars(DP, values)["TF_VAR_ssm_parameters"])
+    payload = json.loads(stack.build_tf_vars(DP, values, True)["TF_VAR_ssm_parameters"])
     assert payload["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://host:4318/?trailing=a=b"
 
 
 def test_build_tf_vars_maps_the_license_key_to_the_blob():
     values = {**{"API_KEY": "a" * 20}, "NEW_RELIC_LICENSE_KEY": "d" * 20}
-    blob = json.loads(stack.build_tf_vars(DP, values)["TF_VAR_blob"])
+    blob = json.loads(stack.build_tf_vars(DP, values, False)["TF_VAR_blob"])
     assert blob == {"API_KEY": "a" * 20, "NEW_RELIC_LICENSE_KEY": "d" * 20}
     # Absent or empty: the blob key is not seeded, matching the SSM map rule.
     bare = {"API_KEY": "a" * 20}
-    assert json.loads(stack.build_tf_vars(DP, bare)["TF_VAR_blob"]) == {"API_KEY": "a" * 20}
+    assert json.loads(stack.build_tf_vars(DP, bare, False)["TF_VAR_blob"]) == {"API_KEY": "a" * 20}
     blanked = {**bare, "NEW_RELIC_LICENSE_KEY": ""}
     assert "NEW_RELIC_LICENSE_KEY" not in json.loads(
-        stack.build_tf_vars(DP, blanked)["TF_VAR_blob"]
+        stack.build_tf_vars(DP, blanked, False)["TF_VAR_blob"]
     )
 
 
 def test_build_tf_vars_recovery_window_per_plane():
-    assert stack.build_tf_vars(DP, EMULATOR_ENV)["TF_VAR_secret_recovery_window"] == "0"
+    assert stack.build_tf_vars(DP, EMULATOR_ENV, True)["TF_VAR_secret_recovery_window"] == "0"
     # The emulator pins 0 whatever the knob says.
-    pinned = stack.build_tf_vars(DP, {**EMULATOR_ENV, "SECRET_RECOVERY_WINDOW": "30"})
+    pinned = stack.build_tf_vars(DP, {**EMULATOR_ENV, "SECRET_RECOVERY_WINDOW": "30"}, True)
     assert pinned["TF_VAR_secret_recovery_window"] == "0"
 
     assert (
-        stack.build_tf_vars(DP, REAL_ENV)["TF_VAR_secret_recovery_window"] == "30"
+        stack.build_tf_vars(DP, REAL_ENV, False)["TF_VAR_secret_recovery_window"] == "30"
     )  # unset keeps the default
-    zero = stack.build_tf_vars(DP, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "0"})
+    zero = stack.build_tf_vars(DP, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "0"}, False)
     assert zero["TF_VAR_secret_recovery_window"] == "0"
-    seven = stack.build_tf_vars(DP, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "7"})
+    seven = stack.build_tf_vars(DP, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "7"}, False)
     assert seven["TF_VAR_secret_recovery_window"] == "7"

@@ -16,6 +16,8 @@ EMULATOR_RECOVERY_WINDOW = 0
 RECOVERY_WINDOW_MIN = 7
 RECOVERY_WINDOW_MAX = 30
 
+DEFAULT_FLOCI_URL = "http://localhost:4566"
+
 BUCKET_MISSING_ERROR = "the real-AWS plane needs a state bucket: TF_STATE_BUCKET is not set in .env"
 BUCKET_MISSING_FIX = (
     "add TF_STATE_BUCKET=<unique 3-63 char lowercase bucket> to .env and create it "
@@ -45,10 +47,21 @@ def parse_env_file(path) -> dict[str, str]:
     return values
 
 
-def resolve_plane(values: dict[str, str]) -> tuple[str, bool]:
-    is_emulator = bool(values.get("EMULATOR_ENDPOINT"))
-    plane = "emulator (Floci)" if is_emulator else "real AWS"
-    return plane, is_emulator
+def resolve_floci_url() -> str:
+    """The emulator endpoint: an engine constant, overridable for exotic setups."""
+    return os.environ.get("SECRETSCTL_FLOCI_URL") or DEFAULT_FLOCI_URL
+
+
+def plane_display(is_emulator: bool) -> str:
+    if is_emulator:
+        return f"floci (emulator {resolve_floci_url()})"
+    return "real AWS"
+
+
+def resolve_plane(use_aws: bool) -> tuple[str, bool]:
+    """The --aws/--floci flag decides; the values file never selects the plane."""
+    is_emulator = not use_aws
+    return plane_display(is_emulator), is_emulator
 
 
 def resolve_region(declaration: Declaration, values: dict[str, str]) -> str:
@@ -90,7 +103,7 @@ def bucket_errors(errors: list[str], bucket: str, required: bool) -> None:
 
 
 def plane_errors(values: dict[str, str]) -> list[str]:
-    """Region and endpoint checks shared by every verb validator."""
+    """Region checks shared by every verb validator."""
     errors: list[str] = []
 
     def fail(message: str, fix: str) -> None:
@@ -100,11 +113,6 @@ def plane_errors(values: dict[str, str]) -> list[str]:
         fail(
             f"AWS_REGION is not a valid region: {region!r}",
             "use a plain region code, e.g. ap-southeast-2",
-        )
-    if (endpoint := values.get("EMULATOR_ENDPOINT")) and not URL_RE.fullmatch(endpoint):
-        fail(
-            f"EMULATOR_ENDPOINT is not a valid http(s) URL: {endpoint!r}",
-            "set it to the Floci URL (http://localhost:4566) or remove the line for real AWS",
         )
     return errors
 
@@ -172,22 +180,22 @@ def validate_bootstrap(
     return errors
 
 
-def plane_notes(declaration: Declaration, values: dict[str, str], plane: str) -> list[str]:
+def plane_notes(declaration: Declaration, values: dict[str, str], is_emulator: bool) -> list[str]:
     notes = []
-    if values.get("ENV_TYPE") == "prod" and plane == "emulator (Floci)":
+    if values.get("ENV_TYPE") == "prod" and is_emulator:
         notes.append(
             "note: ENV_TYPE=prod with the emulator — the local-testing shape for the prod pull path"
         )
-    if values.get("ENV_TYPE") == "dev" and plane == "real AWS":
+    if values.get("ENV_TYPE") == "dev" and not is_emulator:
         notes.append(
             "warning: applying to real AWS while ENV_TYPE=dev (dev runtime reads .env, not SM)"
         )
-    if plane == "emulator (Floci)" and not values.get("TF_STATE_BUCKET"):
+    if is_emulator and not values.get("TF_STATE_BUCKET"):
         notes.append(
             f"note: TF_STATE_BUCKET unset; the Floci plane defaults to {declaration.emulator_bucket}"
         )
     if values.get("SECRET_RECOVERY_WINDOW"):
-        if plane == "emulator (Floci)":
+        if is_emulator:
             notes.append("note: SECRET_RECOVERY_WINDOW ignored on the emulator plane (always 0)")
         elif values["SECRET_RECOVERY_WINDOW"] == "0":
             notes.append(

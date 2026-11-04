@@ -73,7 +73,7 @@ def dp() -> config.Declaration:
 USER_ARN = "arn:aws:iam::123456789012:user/kunalpisolkar"
 ROLE_ARN = "arn:aws:iam::123456789012:role/detectai-document-parser-seeder"
 
-EMULATOR_ENV = {"API_KEY": "a" * 20, "EMULATOR_ENDPOINT": "http://localhost:4566"}
+EMULATOR_ENV = {"API_KEY": "a" * 20}
 REAL_ENV = {"API_KEY": "a" * 20, "TF_STATE_BUCKET": "detectai-tfstate-sandbox"}
 
 

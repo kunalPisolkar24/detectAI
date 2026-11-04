@@ -9,7 +9,7 @@ import sys
 from typing import NoReturn
 
 from secretsctl.config import Declaration
-from secretsctl.env import resolve_region
+from secretsctl.env import resolve_floci_url, resolve_region
 
 
 def die(message: str, fix: str) -> NoReturn:
@@ -21,7 +21,7 @@ def die(message: str, fix: str) -> NoReturn:
 def aws_base(declaration: Declaration, values: dict[str, str], is_emulator: bool) -> list[str]:
     base = ["aws", "--region", resolve_region(declaration, values)]
     if is_emulator:
-        base += ["--endpoint-url", values["EMULATOR_ENDPOINT"]]
+        base += ["--endpoint-url", resolve_floci_url()]
     return base
 
 

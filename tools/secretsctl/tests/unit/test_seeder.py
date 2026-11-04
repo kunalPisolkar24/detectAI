@@ -102,16 +102,16 @@ def test_validate_seeder_bootstrap_scope(dp):
     assert "SEEDER_TRUST_USER_ARN" in bad_arn
     missing_bucket = "\n".join(seeder.validate_seeder_bootstrap(DP, {"API_KEY": "a" * 20}, False))
     assert "TF_STATE_BUCKET" in missing_bucket
-    bad_endpoint = "\n".join(
-        seeder.validate_seeder_bootstrap(DP, {**EMULATOR_ENV, "EMULATOR_ENDPOINT": "nope"}, True)
+    bad_region = "\n".join(
+        seeder.validate_seeder_bootstrap(DP, {**EMULATOR_ENV, "AWS_REGION": "Mars-1"}, True)
     )
-    assert "EMULATOR_ENDPOINT" in bad_endpoint
+    assert "AWS_REGION" in bad_region
 
 
 def test_validate_seeder_role_scope():
     assert seeder.validate_seeder_role(DP, EMULATOR_ENV, True) == []
-    errors = "\n".join(seeder.validate_seeder_role(DP, {"EMULATOR_ENDPOINT": "nope"}, True))
-    assert "EMULATOR_ENDPOINT" in errors
+    errors = "\n".join(seeder.validate_seeder_role(DP, {"AWS_REGION": "Mars-1"}, True))
+    assert "AWS_REGION" in errors
 
 
 def test_trust_document_requires_mfa():

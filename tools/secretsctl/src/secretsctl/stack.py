@@ -8,7 +8,7 @@ from pathlib import Path
 
 from secretsctl.config import Declaration
 from secretsctl.env import (
-    resolve_plane,
+    resolve_floci_url,
     resolve_recovery_window,
     resolve_region,
     resolve_state_bucket,
@@ -21,8 +21,9 @@ def state_key(declaration: Declaration, is_emulator: bool) -> str:
     return f"{declaration.slug}/{segment}terraform.tfstate"
 
 
-def build_tf_vars(declaration: Declaration, values: dict[str, str]) -> dict[str, str]:
-    _, is_emulator = resolve_plane(values)
+def build_tf_vars(
+    declaration: Declaration, values: dict[str, str], is_emulator: bool
+) -> dict[str, str]:
     tf_vars = {
         "TF_VAR_aws_region": resolve_region(declaration, values),
         "TF_VAR_service_slug": declaration.slug,
@@ -39,7 +40,7 @@ def build_tf_vars(declaration: Declaration, values: dict[str, str]) -> dict[str,
     if config:
         tf_vars["TF_VAR_ssm_parameters"] = json.dumps(config)
     if is_emulator:
-        tf_vars["TF_VAR_emulator_endpoint"] = values["EMULATOR_ENDPOINT"]
+        tf_vars["TF_VAR_emulator_endpoint"] = resolve_floci_url()
     return tf_vars
 
 
@@ -59,7 +60,7 @@ def build_backend_hcl(declaration: Declaration, values: dict[str, str], is_emula
             "skip_region_validation      = true",
             "use_path_style              = true",
             "endpoints = {",
-            f'  s3 = "{values["EMULATOR_ENDPOINT"]}"',
+            f'  s3 = "{resolve_floci_url()}"',
             "}",
         ]
     else:
@@ -131,7 +132,7 @@ def bootstrap_state(
             if is_emulator:
                 print()
                 print(
-                    f"fix: check that the emulator is reachable at {values['EMULATOR_ENDPOINT']} (e.g. docker start floci)"
+                    f"fix: check that the emulator is reachable at {resolve_floci_url()} (e.g. docker start floci)"
                 )
             return 1
         print(f"created: {bucket}")

@@ -40,13 +40,6 @@ def test_validate_rejects_bad_region_and_env_type(dp):
     assert "AWS_REGION" in errors and "ENV_TYPE" in errors
 
 
-def test_validate_emulator_plane_rejects_bad_endpoint(dp):
-    errors = "\n".join(
-        env.validate(dp, {"API_KEY": "a" * 20, "EMULATOR_ENDPOINT": "localhost:4566"}, True)
-    )
-    assert "EMULATOR_ENDPOINT" in errors
-
-
 def test_validate_rejects_an_endpoint_without_a_url_shape(dp):
     errors = env.validate(
         dp, {**EMULATOR_ENV, "OTEL_EXPORTER_OTLP_ENDPOINT": "localhost:4318"}, True
@@ -72,7 +65,7 @@ def test_validate_accepts_a_set_endpoint_with_a_key_over_the_floor(dp):
         "NEW_RELIC_LICENSE_KEY": "d" * 20,
     }
     assert env.validate(dp, values, False) == []
-    assert env.validate(dp, {**values, "EMULATOR_ENDPOINT": "http://localhost:4566"}, True) == []
+    assert env.validate(dp, values, True) == []
 
     short = {**values, "NEW_RELIC_LICENSE_KEY": "d" * 8}
     assert "NEW_RELIC_LICENSE_KEY" in "\n".join(env.validate(dp, short, False))
@@ -104,25 +97,38 @@ def test_validate_emulator_plane_rejects_bad_bucket_name(dp):
 
 
 def test_validate_bootstrap_skips_key_and_env_type_checks(dp):
-    assert env.validate_bootstrap(dp, {"EMULATOR_ENDPOINT": "http://localhost:4566"}, True) == []
+    assert env.validate_bootstrap(dp, {}, True) == []
     assert env.validate_bootstrap(dp, {"TF_STATE_BUCKET": "detectai-tfstate-sandbox"}, False) == []
 
 
-def test_validate_bootstrap_keeps_bucket_region_and_endpoint_checks(dp):
+def test_validate_bootstrap_keeps_bucket_and_region_checks(dp):
     missing = "\n".join(env.validate_bootstrap(dp, {}, False))
     assert "TF_STATE_BUCKET" in missing
 
     bad_shape = "\n".join(
-        env.validate_bootstrap(
-            dp, {"EMULATOR_ENDPOINT": "http://localhost:4566", "TF_STATE_BUCKET": "Bad"}, True
-        )
+        env.validate_bootstrap(dp, {"TF_STATE_BUCKET": "Bad"}, True)
     )
     assert "valid S3 bucket name" in bad_shape
 
-    bad_plane = "\n".join(
-        env.validate_bootstrap(dp, {"EMULATOR_ENDPOINT": "nope", "AWS_REGION": "Mars-1"}, True)
-    )
-    assert "EMULATOR_ENDPOINT" in bad_plane and "AWS_REGION" in bad_plane
+    bad_plane = "\n".join(env.validate_bootstrap(dp, {"AWS_REGION": "Mars-1"}, True))
+    assert "AWS_REGION" in bad_plane
+
+
+def test_resolve_plane_follows_the_flag_and_defaults_to_floci(monkeypatch):
+    monkeypatch.delenv("SECRETSCTL_FLOCI_URL", raising=False)
+    plane, is_emulator = env.resolve_plane(False)
+    assert plane == "floci (emulator http://localhost:4566)" and is_emulator
+
+    plane, is_emulator = env.resolve_plane(True)
+    assert plane == "real AWS" and not is_emulator
+
+
+def test_resolve_floci_url_overrides_from_the_environment(monkeypatch):
+    monkeypatch.setenv("SECRETSCTL_FLOCI_URL", "http://localhost:9999")
+    assert env.resolve_floci_url() == "http://localhost:9999"
+    assert "floci (emulator http://localhost:9999)" in env.plane_display(True)
+    monkeypatch.delenv("SECRETSCTL_FLOCI_URL")
+    assert env.resolve_floci_url() == env.DEFAULT_FLOCI_URL
 
 
 def test_resolve_state_bucket_defaults_and_overrides(dp):
@@ -138,10 +144,10 @@ def test_resolve_state_bucket_defaults_and_overrides(dp):
 
 
 def test_plane_notes_defaults_on_emulator_when_bucket_unset(dp):
-    defaulting = "\n".join(env.plane_notes(dp, EMULATOR_ENV, "emulator (Floci)"))
+    defaulting = "\n".join(env.plane_notes(dp, EMULATOR_ENV, True))
     assert "defaults to detectai-docparser-tfstate" in defaulting
     custom = {**EMULATOR_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"}
-    assert all("defaults" not in note for note in env.plane_notes(dp, custom, "emulator (Floci)"))
+    assert all("defaults" not in note for note in env.plane_notes(dp, custom, True))
 
 
 def test_build_recovery_window_rules(dp):
@@ -160,19 +166,19 @@ def test_build_recovery_window_rules(dp):
 
 def test_plane_notes_recovery_window_messaging(dp):
     ignored = "\n".join(
-        env.plane_notes(dp, {**EMULATOR_ENV, "SECRET_RECOVERY_WINDOW": "30"}, "emulator (Floci)")
+        env.plane_notes(dp, {**EMULATOR_ENV, "SECRET_RECOVERY_WINDOW": "30"}, True)
     )
     assert "ignored on the emulator plane" in ignored
     zero_real = "\n".join(
-        env.plane_notes(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "0"}, "real AWS")
+        env.plane_notes(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "0"}, False)
     )
     assert "destroy deletes the secret immediately" in zero_real
     assert all(
         "SECRET_RECOVERY_WINDOW" not in note
-        for note in env.plane_notes(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "30"}, "real AWS")
+        for note in env.plane_notes(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "30"}, False)
     )
     assert all(
-        "SECRET_RECOVERY_WINDOW" not in note for note in env.plane_notes(dp, REAL_ENV, "real AWS")
+        "SECRET_RECOVERY_WINDOW" not in note for note in env.plane_notes(dp, REAL_ENV, False)
     )
 
 

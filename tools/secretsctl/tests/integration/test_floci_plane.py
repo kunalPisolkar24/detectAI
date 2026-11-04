@@ -53,9 +53,7 @@ def service(tmp_path, floci):
     )
     infra = tmp_path / "infra"
     infra.mkdir()
-    (infra / ".env").write_text(
-        f"API_KEY={'k' * 24}\nMAX_PDF_PAGES=1200\nEMULATOR_ENDPOINT={floci}\n"
-    )
+    (infra / ".env").write_text(f"API_KEY={'k' * 24}\nMAX_PDF_PAGES=1200\n")
     return tmp_path, slug
 
 

@@ -17,7 +17,13 @@ from pathlib import Path
 from typing import Any
 
 from secretsctl.config import Declaration
-from secretsctl.env import bucket_errors, plane_errors, resolve_region, resolve_state_bucket
+from secretsctl.env import (
+    bucket_errors,
+    plane_display,
+    plane_errors,
+    resolve_region,
+    resolve_state_bucket,
+)
 from secretsctl.proc import aws_base, die, run_aws, run_aws_captured
 
 DEFAULT_ACCOUNT_ID = "000000000000"
@@ -309,7 +315,7 @@ def seeder_bootstrap_flow(
     """Idempotent create/update; emulator runs unattended, real AWS asks a typed barrier."""
     user_arn = resolve_trust_principal(declaration, values, is_emulator)
     role_name = declaration.seeder_role_name
-    print(f"plane:  {'emulator (Floci)' if is_emulator else 'real AWS'}")
+    print(f"plane:  {plane_display(is_emulator)}")
     print(f"role:   {role_name} (out-of-stack seeder identity)")
     print(f"trust:  {user_arn} (MFA required)")
     commands = seeder_bootstrap_commands(declaration, values, is_emulator)

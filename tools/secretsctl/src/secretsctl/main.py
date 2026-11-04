@@ -11,8 +11,10 @@ from secretsctl import config, verify
 from secretsctl.config import Declaration, DeclarationError, Workspace
 from secretsctl.env import (
     parse_env_file,
+    plane_display,
     plane_errors,
     plane_notes,
+    resolve_floci_url,
     resolve_plane,
     resolve_recovery_window,
     resolve_state_bucket,
@@ -91,6 +93,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--service",
         help="service name under <repo root>/services (default: nearest secrets.toml upward)",
     )
+    plane_group = parser.add_mutually_exclusive_group()
+    plane_group.add_argument(
+        "--floci",
+        action="store_true",
+        help="run against the Floci emulator (the default plane; explicit for scripts)",
+    )
+    plane_group.add_argument(
+        "--aws",
+        action="store_true",
+        help="run against real AWS (the seeder role session, MFA-gated)",
+    )
     parser.add_argument(
         "--values-file", help="alternate values file (default: the service's infra/.env)"
     )
@@ -126,8 +139,8 @@ def _terraform_verb_flow(
     args: argparse.Namespace,
     session: dict[str, str] | None,
 ) -> int:
-    plane, _ = resolve_plane(values)
-    tf_vars = build_tf_vars(declaration, values)
+    plane = plane_display(is_emulator)
+    tf_vars = build_tf_vars(declaration, values, is_emulator)
     backend_hcl = build_backend_hcl(declaration, values, is_emulator)
     warn_shell_conflicts(values)
     state_bucket = resolve_state_bucket(declaration, values, is_emulator)
@@ -157,7 +170,7 @@ def _terraform_verb_flow(
     config_keys = [key for key in declaration.ssm_keys if values.get(key, "") != ""]
     if config_keys:
         print(f"config: {len(config_keys)} key(s) -> SSM {declaration.ssm_prefix}")
-    for note in plane_notes(declaration, values, plane):
+    for note in plane_notes(declaration, values, is_emulator):
         print(note)
 
     command = args.command
@@ -221,7 +234,7 @@ def _terraform_verb_flow(
             if is_emulator:
                 print("fix: create the emulator state bucket and retry (the bootstrap verb)")
                 print(
-                    f"fix: aws --endpoint-url {values['EMULATOR_ENDPOINT']} "
+                    f"fix: aws --endpoint-url {resolve_floci_url()} "
                     f"s3 mb s3://{resolve_state_bucket(declaration, values, True)} "
                     f"--region {declaration.region_default}"
                 )
@@ -286,7 +299,12 @@ def main(argv: list[str] | None = None, workspace: Workspace | None = None) -> i
             "create the service's infra/.env first (copy its committed .env.example)",
         )
     values = parse_env_file(workspace.values_file)
-    plane, is_emulator = resolve_plane(values)
+    if "EMULATOR_ENDPOINT" in values:
+        print(
+            "note: EMULATOR_ENDPOINT in the values file is ignored; "
+            "the plane comes from --aws/--floci (default: floci)"
+        )
+    plane, is_emulator = resolve_plane(args.aws)
 
     if args.command == "bootstrap":
         errors = validate_bootstrap(declaration, values, is_emulator)

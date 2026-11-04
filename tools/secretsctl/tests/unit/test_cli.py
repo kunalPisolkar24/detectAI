@@ -90,7 +90,7 @@ def test_verify_wiring(dp, tmp_path, monkeypatch):
 
 
 def test_verify_validation_failure_short_circuits(tmp_path, monkeypatch):
-    workspace = ws_with(tmp_path, {"API_KEY": "a" * 20, "EMULATOR_ENDPOINT": "nope"})
+    workspace = ws_with(tmp_path, {"API_KEY": "a" * 20, "AWS_REGION": "STATE-ONE"})
 
     def boom(*arguments, **rest):
         raise AssertionError("a failed validation must not reach the flow")
@@ -132,6 +132,46 @@ def test_seeder_verbs_wiring(tmp_path, monkeypatch):
     assert seen == {"boot": True, "drop": True}
 
 
+def test_plane_selection_defaults_to_floci_and_follows_the_flags(tmp_path, monkeypatch):
+    workspace = ws_with(tmp_path, EMULATOR_ENV)
+    seen = {}
+
+    def fake_flow(declaration, values, is_emulator, dry_run, session=None):
+        seen["is_emulator"] = is_emulator
+        return 0
+
+    monkeypatch.setattr(verify_module, "verify_flow", fake_flow)
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
+    assert cli.main(["verify"], workspace=workspace) == 0
+    assert seen["is_emulator"] is True  # the default plane
+
+    assert cli.main(["verify", "--floci"], workspace=workspace) == 0
+    assert seen["is_emulator"] is True  # explicit, same plane
+
+    assert cli.main(["verify", "--aws"], workspace=workspace) == 0
+    assert seen["is_emulator"] is False
+
+
+def test_floci_and_aws_flags_are_mutually_exclusive(ws_env):
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(["plan", "--floci", "--aws"], workspace=ws_env)
+    assert excinfo.value.code == 2
+
+
+def test_legacy_emulator_endpoint_key_is_ignored_with_a_note(tmp_path, monkeypatch, capsys):
+    workspace = ws_with(tmp_path, {**EMULATOR_ENV, "EMULATOR_ENDPOINT": "http://elsewhere:4566"})
+    seen = {}
+
+    def fake_flow(declaration, values, is_emulator, dry_run, session=None):
+        seen["is_emulator"] = is_emulator
+        return 0
+
+    monkeypatch.setattr(verify_module, "verify_flow", fake_flow)
+    assert cli.main(["verify"], workspace=workspace) == 0
+    assert seen["is_emulator"] is True  # the flag decides, never the file
+    assert "EMULATOR_ENDPOINT in the values file is ignored" in capsys.readouterr().out
+
+
 def test_plan_dry_run_prints_the_backend_and_never_runs_terraform(tmp_path, monkeypatch, capsys):
     workspace = ws_with(tmp_path, EMULATOR_ENV)
 
@@ -171,7 +211,7 @@ def test_plan_runs_init_then_plan_on_the_emulator(tmp_path, monkeypatch, capsys)
     assert calls[0][3] == {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}
 
     out = capsys.readouterr().out
-    assert "plane:   emulator (Floci)" in out
+    assert "plane:   floci (emulator http://localhost:4566)" in out
     assert "carrier: env creds (test/test, profile stripped)" in out
     assert "secret: detectai/document-parser/secrets" in out
     assert "keys:    API_KEY *** (20 chars, hidden)" in out
@@ -190,7 +230,7 @@ def test_apply_on_real_aws_uses_the_session_triplet(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "run_terraform", fake_run_terraform)
     monkeypatch.setattr(cli, "ensure_state_bucket", lambda declaration, values, is_emulator: 0)
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
-    assert cli.main(["apply"], workspace=workspace) == 0
+    assert cli.main(["apply", "--aws"], workspace=workspace) == 0
 
     apply_args, overlay = calls[1]
     assert apply_args == ["apply"]  # real AWS keeps its own confirm prompt
@@ -259,7 +299,7 @@ def test_destroy_force_delete_on_real_aws_runs_the_cli_delete(tmp_path, monkeypa
     monkeypatch.setattr(cli, "run_terraform", lambda tf_dir, args, tf_vars, env_overlay=None: 0)
     monkeypatch.setattr(cli, "ensure_state_bucket", lambda declaration, values, is_emulator: 0)
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
-    assert cli.main(["destroy", "--force-delete"], workspace=workspace) == 0
+    assert cli.main(["destroy", "--force-delete", "--aws"], workspace=workspace) == 0
     command = " ".join(seen["command"])
     assert "--secret-id detectai/document-parser/secrets" in command
     assert "--force-delete-without-recovery" in command
