@@ -15,7 +15,7 @@ services:
       - .env.load
     ports: !override []
     healthcheck:
-      # python-slim ships no curl; the same probe the Dockerfile uses.
+      # python-slim ships no curl; thresholds stay fast so k6 gates on health.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
       interval: 5s
       timeout: 5s
