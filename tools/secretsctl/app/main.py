@@ -133,6 +133,16 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
             "--force only applies to the session-refresh-all command",
             "run it with session-refresh-all",
         )
+    if args.service and args.command in ("session-clear-all", "session-refresh-all"):
+        die(
+            f"--service does not apply to the {args.command} command (it runs across every service)",
+            "run a single-service verb without --service",
+        )
+    if args.values_file and args.command in ("session-clear-all", "session-refresh-all"):
+        die(
+            f"--values-file does not apply to the {args.command} command (each service rides its own infra/.env)",
+            "run a single-service verb without --values-file",
+        )
 
     if args.command == "session-clear-all":
         removed = clear_cached_session_files()

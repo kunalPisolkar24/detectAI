@@ -102,6 +102,26 @@ def test_force_flag_only_applies_to_session_refresh_all(ws_env, capsys):
     assert "only applies to the session-refresh-all command" in capsys.readouterr().out
 
 
+def test_session_cache_verbs_reject_service_targeting(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(["session-refresh-all", "--service", "web"])
+    assert excinfo.value.code == 1
+    assert (
+        "--service does not apply to the session-refresh-all command"
+        in capsys.readouterr().out
+    )
+
+
+def test_session_cache_verbs_reject_values_files(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(["session-clear-all", "--values-file", "central.env"])
+    assert excinfo.value.code == 1
+    assert (
+        "--values-file does not apply to the session-clear-all command"
+        in capsys.readouterr().out
+    )
+
+
 def test_ready_service_workspaces_needs_the_declaration_and_the_values(tmp_path):
     services = tmp_path / "services"
     ready = services / "ready"
