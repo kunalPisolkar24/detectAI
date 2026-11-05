@@ -7,7 +7,7 @@ import json
 import pytest
 
 from conftest import DP, EMULATOR_ENV, REAL_ENV
-from secretsctl import stack
+from app import stack
 
 pytestmark = pytest.mark.unit
 

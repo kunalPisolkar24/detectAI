@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from conftest import DP, EMULATOR_ENV, REAL_ENV, ROLE_ARN, USER_ARN
-from secretsctl import seeder
+from app import seeder
 
 pytestmark = pytest.mark.unit
 

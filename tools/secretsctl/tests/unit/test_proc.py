@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from conftest import EMULATOR_ENV, REAL_ENV
-from secretsctl import proc
+from app import proc
 
 pytestmark = pytest.mark.unit
 

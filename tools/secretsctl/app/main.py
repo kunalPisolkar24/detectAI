@@ -7,9 +7,9 @@ import io
 import sys
 from pathlib import Path
 
-from secretsctl import config, verify
-from secretsctl.config import Declaration, DeclarationError, Workspace, state_bucket_for
-from secretsctl.env import (
+from app import config, verify
+from app.config import Declaration, DeclarationError, Workspace, state_bucket_for
+from app.env import (
     parse_env_file,
     plane_display,
     plane_errors,
@@ -19,8 +19,8 @@ from secretsctl.env import (
     resolve_recovery_window,
     validate,
 )
-from secretsctl.proc import die, run_aws, run_terraform
-from secretsctl.seeder import (
+from app.proc import die, run_aws, run_terraform
+from app.seeder import (
     clear_cached_session,
     drop_seeder_flow,
     plane_account,
@@ -28,7 +28,7 @@ from secretsctl.seeder import (
     session_remaining_text,
     validate_seeder_role,
 )
-from secretsctl.stack import (
+from app.stack import (
     build_backend_hcl,
     build_tf_vars,
     confirm_purge,
@@ -48,7 +48,7 @@ VERBS = (
     "session-clear",
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def find_service_workspace(repo_root: Path, service: str | None) -> Workspace:

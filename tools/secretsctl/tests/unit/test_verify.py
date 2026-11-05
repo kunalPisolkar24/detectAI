@@ -7,7 +7,7 @@ import json
 import pytest
 
 from conftest import EMULATOR_ENV, REAL_ENV, ROLE_ARN
-from secretsctl import verify
+from app import verify
 
 pytestmark = pytest.mark.unit
 

@@ -18,13 +18,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
-from secretsctl.config import Declaration, state_bucket_for
-from secretsctl.env import (
+from app.config import Declaration, state_bucket_for
+from app.env import (
     plane_errors,
     resolve_floci_url,
     resolve_region,
 )
-from secretsctl.proc import aws_base, die, run_aws, run_aws_captured
+from app.proc import aws_base, die, run_aws, run_aws_captured
 
 DEFAULT_ACCOUNT_ID = "000000000000"
 SEEDER_POLICY_NAME = "seeder-policy"

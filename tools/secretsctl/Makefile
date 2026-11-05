@@ -33,7 +33,7 @@ test-all:
 	$(POETRY) run pytest -q -o addopts=""
 
 test-cov:
-	$(POETRY) run pytest -m "not integration" --cov=src --cov-report=term-missing --cov-fail-under=65
+	$(POETRY) run pytest -m "not integration" --cov=app --cov-report=term-missing --cov-fail-under=65
 
 clean:
 	rm -rf .pytest_cache .ruff_cache .coverage htmlcov

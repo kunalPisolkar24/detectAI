@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from conftest import EMULATOR_ENV, REAL_ENV, fake_carrier_session, render_env, write_service
-from secretsctl import config, main as cli
-from secretsctl import verify as verify_module
+from app import config, main as cli
+from app import verify as verify_module
 
 pytestmark = pytest.mark.unit
 

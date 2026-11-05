@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from secretsctl import config
+from app import config
 
 DP_TOML = """\
 [service]

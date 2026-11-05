@@ -1,4 +1,4 @@
-"""Black-box runs of `python -m secretsctl` against a live Floci.
+"""Black-box runs of `python -m app` against a live Floci.
 
 Each test drives a throwaway service (unique slug) through the real CLI as a
 subprocess. A service is just its secrets.toml plus infra/.env: the engine
@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from secretsctl.seeder import SEEDER_POLICY_NAME
+from app.seeder import SEEDER_POLICY_NAME
 
 FLOCI_URL = os.environ.get("SECRETSCTL_FLOCI", "http://localhost:4566")
 REGION = "ap-southeast-2"
@@ -200,10 +200,10 @@ def service(floci_hygiene, tmp_path):
 
 def run_cli(service_dir: Path, *arguments: str, timeout: int = 600) -> subprocess.CompletedProcess:
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(PACKAGE_ROOT / "src")
+    env["PYTHONPATH"] = str(PACKAGE_ROOT)
     env.setdefault("TF_PLUGIN_CACHE_DIR", str(PACKAGE_ROOT / ".tfcache"))
     return subprocess.run(
-        [sys.executable, "-m", "secretsctl", *arguments],
+        [sys.executable, "-m", "app", *arguments],
         cwd=service_dir,
         capture_output=True,
         text=True,

@@ -12,7 +12,7 @@ DEFAULT_RECOVERY_WINDOW = 30
 
 # One shared terraform root for every service; the backend file and TF_VARs
 # select the service's plane at run time.
-PLANE_ROOT = Path(__file__).resolve().parents[2] / "terraform" / "plane"
+PLANE_ROOT = Path(__file__).resolve().parents[1] / "terraform" / "plane"
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 PLANE_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")

@@ -6,10 +6,10 @@ import hashlib
 import json
 from typing import Any
 
-from secretsctl.config import Declaration
-from secretsctl.env import plane_display, resolve_region
-from secretsctl.proc import aws_base, run_aws_captured
-from secretsctl.seeder import session_remaining_text
+from app.config import Declaration
+from app.env import plane_display, resolve_region
+from app.proc import aws_base, run_aws_captured
+from app.seeder import session_remaining_text
 
 
 def fingerprint(value: str) -> str:

@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from conftest import EMULATOR_ENV, REAL_ENV
-from secretsctl import config
-from secretsctl import env
+from app import config
+from app import env
 
 pytestmark = pytest.mark.unit
 

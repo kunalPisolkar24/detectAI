@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-from secretsctl.config import Declaration
+from app.config import Declaration
 
 REGION_RE = re.compile(r"^[a-z]{2}-[a-z]+-[0-9]+$")
 URL_RE = re.compile(r"^https?://\S+$")

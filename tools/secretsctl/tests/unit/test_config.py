@@ -7,8 +7,8 @@ import tomllib
 import pytest
 
 from conftest import DP, DP_TOML
-from secretsctl import config
-from secretsctl.config import DeclarationError
+from app import config
+from app.config import DeclarationError
 
 pytestmark = pytest.mark.unit
 

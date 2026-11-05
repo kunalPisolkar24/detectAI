@@ -6,13 +6,13 @@ import json
 import tempfile
 from pathlib import Path
 
-from secretsctl.config import Declaration, state_bucket_for
-from secretsctl.env import (
+from app.config import Declaration, state_bucket_for
+from app.env import (
     resolve_floci_url,
     resolve_recovery_window,
     resolve_region,
 )
-from secretsctl.proc import aws_base, run_aws, run_aws_captured
+from app.proc import aws_base, run_aws, run_aws_captured
 
 
 def state_key(declaration: Declaration, is_emulator: bool) -> str:

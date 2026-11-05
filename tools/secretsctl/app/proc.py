@@ -8,8 +8,8 @@ import subprocess
 import sys
 from typing import NoReturn
 
-from secretsctl.config import Declaration
-from secretsctl.env import resolve_floci_url, resolve_region
+from app.config import Declaration
+from app.env import resolve_floci_url, resolve_region
 
 
 def die(message: str, fix: str) -> NoReturn:
