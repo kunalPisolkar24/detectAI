@@ -27,9 +27,6 @@ WITH_INFRA ?= 0
 WITH_SEED ?= 0
 CONFIRM_PROD ?= 0
 
-SEED_FILE ?= $(PROD_ENV)
-SEED_DIR := tools/seed-secrets
-SEED_RUN := poetry -C $(SEED_DIR) run python main.py
 
 DOCKER_BIN := $(strip $(shell command -v docker 2>/dev/null))
 DOCKER_BIN := $(if $(DOCKER_BIN),$(DOCKER_BIN),docker)
@@ -63,9 +60,9 @@ DETECT_AI_NETWORK := $(if $(DETECT_AI_NETWORK),$(DETECT_AI_NETWORK),detect-ai-ne
 	prod-up prod-down prod-logs prod-clean prod-build prod-rebuild prod-config prod-ps prod-migrate \
 	prod-up-floci prod-config-floci \
 	local-up local-down local-logs local-clean local-build local-rebuild local-config local-ps \
-	tf-fmt tf-validate tf-test tf-plan tf-apply tf-destroy tf-plan-local tf-apply-local tf-destroy-local floci-seed floci-verify floci-up floci-down floci-clean \
+	tf-fmt tf-validate tf-test tf-plan tf-apply tf-destroy tf-plan-local tf-apply-local tf-destroy-local floci-verify floci-up floci-down floci-clean \
 	obs-fmt obs-validate obs-test obs-plan obs-apply obs-destroy \
-	seed-install seed seed-floci seed-floci-dry seed-aws seed-dry prod-floci-bootstrap
+	prod-floci-bootstrap
 
 help:
 	@printf "\nDetect AI Docker commands\n\n"
@@ -112,29 +109,17 @@ help:
 	@printf "  make tf-apply-local    alias: tf-apply ENV=floci\n"
 	@printf "  make tf-destroy-local  alias: tf-destroy ENV=floci\n\n"
 	@printf "Floci (FLOCI_ENDPOINT=$(FLOCI_ENDPOINT))\n"
-	@printf "  make floci-seed        Seed app-only secrets Floci doesn't TF-manage (legacy, alias to seed-floci)\n"
-	@printf "  make seed-floci        Seed app secrets from SEED_FILE=$(SEED_FILE) into Floci\n"
-	@printf "  make seed-floci-dry    Preview seed-floci without writing\n"
-	@printf "  make seed-aws          Seed app secrets into real AWS (requires --confirm-prod guard)\n"
-	@printf "  make seed-dry          Preview seed against current AWS_ENDPOINT_URL (dry-run)\n"
 	@printf "  make floci-verify      Check emulator APIs + secrets exist\n"
-	@printf "  make prod-floci-bootstrap Bootstrap: tf-apply ENV=floci + seed-floci + verify + DATABASE_URL hint\n"
+	@printf "  make prod-floci-bootstrap Bootstrap: tf-apply ENV=floci + verify + DATABASE_URL hint (seed service planes with secretsctl)\n"
 	@printf "  make prod-up-floci     Alias: prod-up ENV=floci (attached to FLOCI_NETWORK)\n"
 	@printf "  make prod-config-floci Alias: prod-config ENV=floci\n"
 	@printf "  make floci-up          Start emulator daemon (named volume, standalone, not part of prod)\n"
 	@printf "  make floci-down        Stop emulator daemon (keeps volume)\n"
 	@printf "  make floci-clean       Stop daemon and remove its volume (fresh emulator)\n"
-	@printf "  make seed              Seed for ENV (floci -> seed-floci, prod -> seed-aws)\n"
 	@printf "  ai-service GPU: auto (host GPU + docker nvidia runtime = gpu, else cpu); override with GPU=1 / GPU=0\n\n"
 	@printf "Single command: make prod-up ENV=floci WITH_INFRA=1 WITH_SEED=1  (skip steps by leaving flags 0)\n"
 	@printf "Full cleanup: make prod-down ENV=floci WITH_INFRA=1  (apps + tf-destroy; daemon/volume via floci-down/clean)\n"
 	@printf "Prod AWS: make prod-up ENV=prod WITH_INFRA=1 WITH_SEED=1 CONFIRM_PROD=1\n"
-	@printf "Seed (new, .env-driven via poetry, works for Floci and real AWS)\n"
-	@printf "  make seed-install      Install seeder deps (poetry -C $(SEED_DIR) install)\n"
-	@printf "  make seed-floci SEED_FILE=$(SEED_FILE) FLOCI_ENDPOINT=$(FLOCI_ENDPOINT) AWS_REGION=$(AWS_REGION)\n"
-	@printf "  make seed-floci-dry    Preview (no writes)\n"
-	@printf "  make seed-aws SEED_FILE=$(SEED_FILE) AWS_REGION=$(AWS_REGION)   # needs confirm\n"
-	@printf "  Override: make seed-floci ARGS=\"--only detectai/web/secrets\" SEED_FILE=my.env\n\n"
 	@printf "Setup\n"
 	@printf "  cp infra/docker/local/.env.example infra/docker/local/.env\n"
 	@printf "  cp infra/docker/prod/.env.example infra/docker/prod/.env\n"
@@ -238,7 +223,11 @@ prod-up: validate-env ensure-prod-env guard-prod network check-database-url
 	fi
 	@if [ "$(WITH_SEED)" = "1" ]; then \
 		if [ "$(ENV)" = "prod" ] && [ "$(CONFIRM_PROD)" != "1" ]; then echo "Refusing: ENV=prod WITH_SEED=1 needs CONFIRM_PROD=1"; exit 1; fi; \
-		$(MAKE) --no-print-directory seed ENV="$(ENV)"; \
+		for declared in $$(ls services/*/secrets.toml); do \
+			svc=$$(basename $$(dirname "$$declared")); \
+			[ -f "services/$$svc/infra/.env" ] || continue; \
+			poetry -C tools/secretsctl run secretsctl --service "$$svc" auto-apply || exit $$?; \
+		done; \
 	fi
 	@echo "ai-service mode: $(GPU_MODE) (GPU=1 force GPU, GPU=0 force CPU) ENV=$(ENV)"
 	@if [ "$(ENV)" = "floci" ]; then \
@@ -393,47 +382,7 @@ obs-destroy:
 	terraform -chdir=$(OBS_DIR) init -reconfigure -backend-config=$(OBS_BACKEND)
 	terraform -chdir=$(OBS_DIR) destroy -var-file=$(OBS_VARS)
 
-# ---------------------------------------------------------------------------
-# Seed app-only secrets (Floci + real AWS) — .env-driven via Python
-# ---------------------------------------------------------------------------
-# New (recommended): reads SEED_FILE (default infra/docker/prod/.env, gitignored)
-# allowlist-only, shared-key sync, dry-run, guarded real-AWS write.
-#   make seed ENV=floci|prod -> Floci at FLOCI_ENDPOINT or real AWS (needs CONFIRM_PROD=1)
-#   make seed-floci          -> Floci/LocalStack at FLOCI_ENDPOINT
-#   make seed-floci-dry      -> preview
-#   make seed-aws            -> real AWS (needs --confirm-prod)
-#   make prod-floci-bootstrap-> tf-apply ENV=floci + seed-floci + DATABASE_URL hint
-#
-# Legacy floci-seed (bash, mirrors infra/docker/local/.env) kept as alias.
-# ---------------------------------------------------------------------------
-
-seed-install:
-	@poetry -C $(SEED_DIR) install --no-interaction
-
-seed: validate-env ensure-prod-env
-	@if [ "$(ENV)" = "prod" ]; then \
-		if [ "$(CONFIRM_PROD)" != "1" ]; then echo "Refusing: seed ENV=prod needs CONFIRM_PROD=1"; exit 1; fi; \
-		$(MAKE) --no-print-directory seed-aws; \
-	else \
-		$(MAKE) --no-print-directory seed-floci; \
-	fi
-
-seed-floci: ensure-prod-env
-	@$(SEED_RUN) --env-file "$(SEED_FILE)" --endpoint-url "$(FLOCI_ENDPOINT)" --region "$(AWS_REGION)" $(ARGS)
-
-seed-floci-dry: ensure-prod-env
-	@$(SEED_RUN) --env-file "$(SEED_FILE)" --endpoint-url "$(FLOCI_ENDPOINT)" --region "$(AWS_REGION)" --dry-run $(ARGS)
-
-seed-aws:
-	@echo "Seeding to REAL AWS (region=$(AWS_REGION), file=$(SEED_FILE)) — requires --confirm-prod"
-	@$(SEED_RUN) --env-file "$(SEED_FILE)" --endpoint-url "" --region "$(AWS_REGION)" --confirm-prod $(ARGS)
-
-seed-dry:
-	@EP_VAL=""; if [ -f "$(PROD_ENV)" ]; then EP_VAL="$$(awk -F= '/^AWS_ENDPOINT_URL=/{sub("^[^=]*=",""); gsub(/^[ \t]+|[ \t]+$$/,""); print; exit}' $(PROD_ENV) 2>/dev/null)"; fi; \
-	if [ -n "$$EP_VAL" ]; then echo "Dry-run against Floci: $$EP_VAL"; else echo "Dry-run against real AWS (empty endpoint)"; fi; \
-	$(SEED_RUN) --env-file "$(SEED_FILE)" --endpoint-url "$$EP_VAL" --region "$(AWS_REGION)" --dry-run $(ARGS)
-
-prod-floci-bootstrap: tf-apply-local seed-floci
+prod-floci-bootstrap: tf-apply-local
 	@echo ""
 	@echo "== DATABASE_URL hint (paste into $(PROD_ENV) if not set) =="
 	@terraform -chdir=$(TF_DIR) output -raw database_url 2>/dev/null | sed 's/localhost/host.docker.internal/g; s/127\.0\.0\.1/host.docker.internal/g' | awk '{print "DATABASE_URL="$$0}' || echo "(terraform output not available — run: terraform -chdir=$(TF_DIR) output -raw database_url)"
@@ -442,45 +391,6 @@ prod-floci-bootstrap: tf-apply-local seed-floci
 	@$(MAKE) --no-print-directory floci-verify
 	@echo ""
 	@echo "Next: make prod-up-floci   (or make prod-config-floci to preview)"
-
-# Legacy alias (bash, mirrors infra/docker/local/.env) — kept for backward compat
-# Prefer: make seed-floci SEED_FILE=infra/docker/prod/.env
-floci-seed:
-	@EP="$(FLOCI_ENDPOINT)"; R="$(AWS_REGION)"; LOCAL_ENV_FILE="infra/docker/local/.env"; \
-	randhex() { openssl rand -hex "$$1" 2>/dev/null || od -An -tx1 -N "$$1" /dev/urandom | tr -d ' \n'; }; \
-	local_val() { if [ -f "$$LOCAL_ENV_FILE" ]; then awk -F= -v k="$$1" '$$1==k{sub($$1"=","");print}' "$$LOCAL_ENV_FILE" | tail -n 1; fi; }; \
-	with_local() { v="$$(local_val "$$1")"; if [ -n "$$v" ]; then printf '%s' "$$v"; else printf '%s' "$$2"; fi; }; \
-	PROD_ENV_FILE="infra/docker/prod/.env"; \
-	prod_val() { if [ -f "$$PROD_ENV_FILE" ]; then awk -F= -v k="$$1" '$$1==k{sub($$1"=","");print}' "$$PROD_ENV_FILE" | tail -n 1; fi; }; \
-	# The collector scrapes the web app's /api/metrics with this token, so the
-	# seed and the compose env have to agree. infra/docker/prod/.env is the
-	# single source of truth for both.
-	SCRAPE_TOKEN="$$(prod_val PROMETHEUS_WEB_SCRAPE_TOKEN)"; [ -n "$$SCRAPE_TOKEN" ] || SCRAPE_TOKEN="mock-prometheus-scrape-token-32ch"; \
-	INTERNAL_KEY="$$(randhex 24)"; AI_KEY="$$(randhex 24)"; \
-	GOOGLE_ID="$$(with_local GOOGLE_ID floci-test-google-client-id)"; \
-	GOOGLE_SECRET="$$(with_local GOOGLE_SECRET floci-test-google-client-secret)"; \
-	GITHUB_ID="$$(with_local GITHUB_ID floci-test-github-client-id)"; \
-	GITHUB_SECRET="$$(with_local GITHUB_SECRET floci-test-github-client-secret)"; \
-	AUTH_SECRET="$$(with_local NEXTAUTH_SECRET "$$(randhex 32)")"; \
-	HOOK_SECRET="$$(with_local PADDLE_WEBHOOK_SECRET "$$(randhex 24)")"; \
-	PADDLE_KEY="$$(with_local PADDLE_API_KEY mock-paddle-api-key-not-configured)"; \
-	CLIENT_TOKEN="$$(with_local NEXT_PUBLIC_PADDLE_CLIENT_TOKEN mock-paddle-client-token-not-configured)"; \
-	TS_SITE="$$(with_local NEXT_PUBLIC_TURNSTILE_SITE_KEY 1x00000000000000000000AA)"; \
-	TS_SECRET="$$(with_local TURNSTILE_SECRET_KEY 1x0000000000000000000000000000000AA)"; \
-	put_secret() { \
-		name="$$1"; payload="$$2"; \
-		if aws --endpoint-url "$$EP" --region "$$R" secretsmanager describe-secret --secret-id "$$name" >/dev/null 2>&1; then \
-			aws --endpoint-url "$$EP" --region "$$R" secretsmanager put-secret-value --secret-id "$$name" --secret-string "$$payload" >/dev/null; \
-		else \
-			aws --endpoint-url "$$EP" --region "$$R" secretsmanager create-secret --name "$$name" --secret-string "$$payload" >/dev/null; \
-		fi; \
-		echo "seeded $$name"; \
-	}; \
-	put_secret "detectai/web/secrets" "{\"NEXTAUTH_SECRET\":\"$$AUTH_SECRET\",\"INTERNAL_API_KEY\":\"$$INTERNAL_KEY\",\"AI_SERVICE_API_KEY\":\"$$AI_KEY\",\"NEXT_PUBLIC_TURNSTILE_SITE_KEY\":\"$$TS_SITE\",\"TURNSTILE_SECRET_KEY\":\"$$TS_SECRET\",\"NEXT_PUBLIC_PADDLE_CLIENT_TOKEN\":\"$$CLIENT_TOKEN\",\"GOOGLE_ID\":\"$$GOOGLE_ID\",\"GOOGLE_SECRET\":\"$$GOOGLE_SECRET\",\"GITHUB_ID\":\"$$GITHUB_ID\",\"GITHUB_SECRET\":\"$$GITHUB_SECRET\",\"PROMETHEUS_WEB_SCRAPE_TOKEN\":\"$$SCRAPE_TOKEN\"}"; \
-	put_secret "detectai/gateway/secrets" "{\"PADDLE_WEBHOOK_SECRET\":\"$$HOOK_SECRET\",\"INTERNAL_API_KEY\":\"$$INTERNAL_KEY\"}"; \
-	put_secret "detectai/workers/secrets" "{\"PADDLE_API_KEY\":\"$$PADDLE_KEY\",\"PADDLE_ENVIRONMENT\":\"sandbox\"}"; \
-	put_secret "detectai/inference/secrets" "{\"API_KEY\":\"$$AI_KEY\"}"; \
-	echo "Done. OAuth/Paddle/NextAuth mirrored from local .env; INTERNAL/AI keys in sync."
 
 # Standalone Floci emulator daemon (plain docker CLI, named volume for persistence).
 # Never called by prod-up/prod-down: prod only health-checks $(FLOCI_ENDPOINT).
@@ -546,6 +456,6 @@ floci-verify:
 		if aws --endpoint-url "$$EP" --region "$$R" secretsmanager describe-secret --secret-id "$$s" >/dev/null 2>&1; then \
 			echo "  ok  $$s"; \
 		else \
-			echo "  MISSING $$s  (run: make seed-floci)"; \
+			echo "  MISSING $$s  (seed via secretsctl — tools/secretsctl/README.md)"; \
 		fi; \
 	done
