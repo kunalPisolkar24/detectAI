@@ -9,7 +9,7 @@
 
 SECRETSCTL := poetry -C $(abspath ../../tools/secretsctl) run secretsctl --service document-parser
 
-.PHONY: secrets-check secrets-plan secrets-auto-apply secrets-apply secrets-verify secrets-clean secrets-destroy secrets-drop-seeder secrets-session-clear secrets-test help-secrets
+.PHONY: secrets-check secrets-plan secrets-auto-apply secrets-apply secrets-verify secrets-clean secrets-destroy secrets-drop-seeder secrets-session-clear secrets-session-clear-all secrets-test help-secrets
 
 help-secrets:
 	@echo "  Secrets pipeline (mk/secrets.mk):"
@@ -22,6 +22,7 @@ help-secrets:
 	@echo "    secrets-clean            terraform destroy the secrets blob; keeps the state bucket and ledger"
 	@echo "    secrets-destroy          full teardown: terraform destroy, wipe and delete the state bucket, drop the seeder role"
 	@echo "    secrets-session-clear    drop the cached seeder session (the next verb assumes the carrier role again)"
+	@echo "    secrets-session-clear-all drop every cached seeder session across all services (no service needed)"
 	@echo "    secrets-test             run the secretsctl engine test suite"
 	@echo "    Flags pass through verbatim: make secrets-plan ARGS:='--aws --dry-run' (default plane: floci)"
 	@echo ""
@@ -55,3 +56,6 @@ secrets-destroy:
 
 secrets-session-clear:
 	$(SECRETSCTL) session-clear $(ARGS)
+
+secrets-session-clear-all:
+	$(SECRETSCTL) session-clear-all
