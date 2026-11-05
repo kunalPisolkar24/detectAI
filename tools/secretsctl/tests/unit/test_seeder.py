@@ -397,13 +397,20 @@ def test_drop_flow_emulator_never_prompts(monkeypatch, capsys):
     assert f"deleted: {DP.seeder_role_name}" in out
 
 
-def test_drop_flow_real_barrier(monkeypatch, capsys):
+def test_drop_flow_real_plane_runs_without_a_typed_barrier(monkeypatch, capsys):
     monkeypatch.setattr(
         role, "seeder_role_payload", lambda declaration, values, is_em: {"Role": {}}
     )
-    monkeypatch.setattr("builtins.input", lambda prompt="": "wrong-name")
-    assert role.drop_seeder_flow(DP, REAL_ENV, False, False) == 1
-    assert "cancelled: the seeder role is untouched" in capsys.readouterr().out
+
+    def no_prompt(prompt=""):
+        raise AssertionError("the drop flow must not prompt on the real plane")
+
+    monkeypatch.setattr("builtins.input", no_prompt)
+    monkeypatch.setattr(role, "run_aws", lambda command, is_emulator, session=None: 0)
+    assert role.drop_seeder_flow(DP, REAL_ENV, False, False) == 0
+    out = capsys.readouterr().out
+    assert "detached: seeder-policy" in out
+    assert f"deleted: {DP.seeder_role_name}" in out
 
 
 def test_drop_flow_reports_policy_and_role_failures(monkeypatch, capsys):

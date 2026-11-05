@@ -17,9 +17,9 @@ from app.stack.inputs import (
     write_backend_hcl,
 )
 from app.stack.state import (
-    confirm_purge,
     ensure_state_bucket,
     force_delete_command,
+    preview_purge,
     purge_state,
 )
 from app.values.plane import (
@@ -93,12 +93,8 @@ def terraform_verb_flow(
         print("(dry run: no terraform, no AWS writes)")
         return 0
 
-    if (
-        command == "destroy"
-        and args.purge_state
-        and not confirm_purge(declaration, values, is_emulator, account, session)
-    ):
-        return 1
+    if command == "destroy" and args.purge_state:
+        preview_purge(declaration, values, is_emulator, account, session)
 
     if ensure_state_bucket(declaration, values, is_emulator, account, session) != 0:
         return 1
@@ -106,11 +102,12 @@ def terraform_verb_flow(
     backend_file = write_backend_hcl(backend_hcl)
     try:
         init_args = ["init", "-reconfigure", "-backend-config", str(backend_file)]
-        # -input=false kills every prompt incl. apply approval; real AWS keeps its confirm.
+        # -input=false kills every prompt; real-AWS apply keeps its approval prompt,
+        # while destroy auto-approves on both planes.
         verb_args = [command]
-        if command == "plan" or is_emulator:
+        if command == "plan" or is_emulator or command == "destroy":
             verb_args.append("-input=false")
-        if command in ("apply", "destroy") and is_emulator:
+        if command == "destroy" or (command == "apply" and is_emulator):
             verb_args.append("-auto-approve")
         # Terraform runs on the carrier session triplet; env creds outrank any
         # named profile downstream.

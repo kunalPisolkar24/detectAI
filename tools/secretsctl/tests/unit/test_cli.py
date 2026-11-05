@@ -469,9 +469,8 @@ def test_destroy_chain_on_the_emulator_runs_purge_then_seeder_drop(tmp_path, mon
     workspace = ws_with(tmp_path, EMULATOR_ENV)
     order = []
 
-    def fake_confirm(declaration, values, is_emulator, account, session=None):
-        order.append("confirm")
-        return True
+    def fake_preview(declaration, values, is_emulator, account, session=None):
+        order.append("preview")
 
     def fake_run_terraform(tf_dir, args, tf_vars, env_overlay=None):
         order.append(" ".join(args))
@@ -485,7 +484,7 @@ def test_destroy_chain_on_the_emulator_runs_purge_then_seeder_drop(tmp_path, mon
         order.append("drop")
         return 0
 
-    monkeypatch.setattr(stack_flow, "confirm_purge", fake_confirm)
+    monkeypatch.setattr(stack_flow, "preview_purge", fake_preview)
     monkeypatch.setattr(stack_flow, "run_terraform", fake_run_terraform)
     monkeypatch.setattr(stack_flow, "purge_state", fake_purge)
     monkeypatch.setattr(stack_flow, "drop_seeder_flow", fake_drop)
@@ -498,25 +497,50 @@ def test_destroy_chain_on_the_emulator_runs_purge_then_seeder_drop(tmp_path, mon
 
     arguments = ["destroy", "--purge-state", "--force-delete", "--drop-seeder"]
     assert cli.main(arguments, workspace=workspace) == 0
-    assert order[0] == "confirm"  # the barrier comes before any terraform
+    assert order[0] == "preview"  # the preview comes before any terraform
     assert "destroy -input=false -auto-approve" in order
     assert order[-2:] == ["purge", "drop"]
 
 
-def test_destroy_refused_purge_aborts_before_terraform(tmp_path, monkeypatch):
-    workspace = ws_with(tmp_path, EMULATOR_ENV)
+def test_destroy_on_real_aws_runs_unattended_with_the_chain(tmp_path, monkeypatch):
+    workspace = ws_with(tmp_path, REAL_ENV)
+    order = []
+
+    def fake_preview(declaration, values, is_emulator, account, session=None):
+        order.append("preview")
+
+    def fake_run_terraform(tf_dir, args, tf_vars, env_overlay=None):
+        order.append(" ".join(args))
+        return 0
+
+    def fake_purge(declaration, values, is_emulator, account, session=None):
+        order.append("purge")
+        return 0
+
+    def fake_drop(declaration, values, is_emulator, dry_run):
+        order.append("drop")
+        return 0
+
+    def no_prompt(prompt=""):
+        raise AssertionError("destroy on the real plane must run unattended")
+
+    monkeypatch.setattr("builtins.input", no_prompt)
+    monkeypatch.setattr(stack_flow, "preview_purge", fake_preview)
+    monkeypatch.setattr(stack_flow, "run_terraform", fake_run_terraform)
+    monkeypatch.setattr(stack_flow, "purge_state", fake_purge)
+    monkeypatch.setattr(stack_flow, "drop_seeder_flow", fake_drop)
     monkeypatch.setattr(
         stack_flow,
-        "confirm_purge",
-        lambda declaration, values, is_emulator, account, session=None: False,
+        "ensure_state_bucket",
+        lambda declaration, values, is_emulator, account, session=None: 0,
     )
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
 
-    def boom(*arguments, **rest):
-        raise AssertionError("a refused purge must abort before terraform")
-
-    monkeypatch.setattr(stack_flow, "run_terraform", boom)
-    assert cli.main(["destroy", "--purge-state"], workspace=workspace) == 1
+    arguments = ["destroy", "--aws", "--purge-state", "--drop-seeder"]
+    assert cli.main(arguments, workspace=workspace) == 0
+    assert order[0] == "preview"
+    assert "destroy -input=false -auto-approve" in order
+    assert order[-2:] == ["purge", "drop"]
 
 
 def test_destroy_force_delete_on_real_aws_runs_the_cli_delete(tmp_path, monkeypatch):
@@ -547,11 +571,6 @@ def test_destroy_force_delete_on_real_aws_runs_the_cli_delete(tmp_path, monkeypa
 
 def test_destroy_purge_failure_aborts_before_the_seeder_drop(tmp_path, monkeypatch):
     workspace = ws_with(tmp_path, EMULATOR_ENV)
-    monkeypatch.setattr(
-        stack_flow,
-        "confirm_purge",
-        lambda declaration, values, is_emulator, account, session=None: True,
-    )
     monkeypatch.setattr(
         stack_flow, "run_terraform", lambda tf_dir, args, tf_vars, env_overlay=None: 0
     )

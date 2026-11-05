@@ -135,7 +135,7 @@ def test_purge_state_skips_missing_bucket(monkeypatch, capsys):
     assert "already gone; nothing to purge" in capsys.readouterr().out
 
 
-def test_confirm_purge_typed_barrier_on_real_plane(monkeypatch, capsys):
+def test_preview_purge_prints_the_summary_on_both_planes(monkeypatch, capsys):
     monkeypatch.setattr(
         state, "run_aws", lambda command, is_emulator, session=None: 0
     )  # bucket exists
@@ -148,44 +148,25 @@ def test_confirm_purge_typed_barrier_on_real_plane(monkeypatch, capsys):
         "list_bucket_versions",
         lambda declaration, values, is_emulator, account, session=None: listing,
     )
-    monkeypatch.setattr("builtins.input", lambda prompt="": "wrong-name")
-    assert state.confirm_purge(DP, REAL_ENV, False, REAL_ACCOUNT) is False
+
+    def no_prompt(prompt=""):
+        raise AssertionError("destroy runs unattended: the summary prints, nothing blocks")
+
+    monkeypatch.setattr("builtins.input", no_prompt)
+    state.preview_purge(DP, REAL_ENV, False, REAL_ACCOUNT)
     out = capsys.readouterr().out
     assert "purge will wipe 2 object version(s)" in out
     assert "outside document-parser/" in out  # sibling stacks in the shared sandbox are called out
-    assert "cancelled: nothing was destroyed" in out
 
-    monkeypatch.setattr(
-        state,
-        "list_bucket_versions",
-        lambda declaration, values, is_emulator, account, session=None: [],
-    )
-    monkeypatch.setattr("builtins.input", lambda prompt="": REAL_BUCKET)
-    assert state.confirm_purge(DP, REAL_ENV, False, REAL_ACCOUNT) is True
+    state.preview_purge(DP, EMULATOR_ENV, True, "000000000000")
+    assert "purge will wipe 2 object version(s)" in capsys.readouterr().out
 
 
-def test_confirm_purge_emulator_never_prompts(monkeypatch):
-    monkeypatch.setattr(
-        state, "run_aws", lambda command, is_emulator, session=None: 0
-    )  # bucket exists
-    monkeypatch.setattr(
-        state,
-        "list_bucket_versions",
-        lambda declaration, values, is_emulator, account, session=None: [],
-    )
-
-    def no_prompt(prompt=""):
-        raise AssertionError("emulator plane must not prompt")
-
-    monkeypatch.setattr("builtins.input", no_prompt)
-    assert state.confirm_purge(DP, EMULATOR_ENV, True, "000000000000") is True
-
-
-def test_confirm_purge_bucket_missing_is_a_noop(monkeypatch, capsys):
+def test_preview_purge_bucket_missing_is_a_noop(monkeypatch, capsys):
     monkeypatch.setattr(
         state, "run_aws", lambda command, is_emulator, session=None: 255
     )  # head-bucket 404
-    assert state.confirm_purge(DP, REAL_ENV, False, REAL_ACCOUNT) is True
+    state.preview_purge(DP, REAL_ENV, False, REAL_ACCOUNT)
     assert "does not exist; the purge step will be a no-op" in capsys.readouterr().out
 
 

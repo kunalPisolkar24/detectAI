@@ -263,7 +263,7 @@ def drop_seeder_commands(
 def drop_seeder_flow(
     declaration: Declaration, values: dict[str, str], is_emulator: bool, dry_run: bool
 ) -> int:
-    """Policy first, then role; a missing role is a no-op. Real AWS repeats the purge barrier."""
+    """Policy first, then role; a missing role is a no-op."""
     commands = drop_seeder_commands(declaration, values, is_emulator)
     if dry_run:
         for command in commands:
@@ -273,13 +273,6 @@ def drop_seeder_flow(
     if seeder_role_payload(declaration, values, is_emulator) is None:
         print(f"ok: role {declaration.seeder_role_name} does not exist; nothing to drop")
         return 0
-    if not is_emulator:
-        answer = input(
-            f'type "{declaration.seeder_role_name}" to detach its policy and delete the role: '
-        ).strip()
-        if answer != declaration.seeder_role_name:
-            print("cancelled: the seeder role is untouched")
-            return 1
     if run_aws(commands[0], is_emulator) != 0:
         print(
             f"fix: detach {SEEDER_POLICY_NAME} manually, then rerun (an existing policy is overwritten by reruns)"

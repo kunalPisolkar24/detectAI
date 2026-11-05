@@ -67,8 +67,8 @@ at three layers by design (tool → root `variables.tf` → module
 | `make secrets-drop-seeder` | the seeder policy + role only (personal creds; the role cannot delete itself) | state bucket, ledger, stack resources |
 
 `terraform destroy` never touches the state bucket — only the purge verb
-does, and only after destroy succeeded. On real AWS, `secrets-destroy`
-demands the bucket name as a typed barrier and warns if the bucket holds
+does, and only after destroy succeeded. Teardown runs unattended: destroy
+auto-approves, and the purge prints a summary — warning if the bucket holds
 objects outside `document-parser/`. Destroy schedules the secret into the
 recovery window (30 days, or whatever `SECRET_RECOVERY_WINDOW` seeded); the
 emulator plane always uses 0.

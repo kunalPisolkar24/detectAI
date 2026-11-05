@@ -1,4 +1,4 @@
-"""The state bucket lifecycle: create-on-demand, list, purge, and the typed barrier."""
+"""The state bucket lifecycle: create-on-demand, list, purge, and the purge preview."""
 
 from __future__ import annotations
 
@@ -105,14 +105,14 @@ def list_bucket_versions(
     return items
 
 
-def confirm_purge(
+def preview_purge(
     declaration: Declaration,
     values: dict[str, str],
     is_emulator: bool,
     account: str,
     session: dict[str, str] | None = None,
-) -> bool:
-    """Typed barrier — terraform does not manage the bucket; a refusal leaves everything intact."""
+) -> None:
+    """Prints what the post-destroy purge will wipe; destroy proceeds without a confirmation."""
     bucket = state_bucket_for(declaration.slug, account)
     if (
         run_aws(
@@ -124,7 +124,7 @@ def confirm_purge(
         != 0
     ):
         print(f"note: bucket {bucket} does not exist; the purge step will be a no-op")
-        return True
+        return
     items = list_bucket_versions(declaration, values, is_emulator, account, session) or []
     if items:
         print(f"purge will wipe {len(items)} object version(s) in {bucket}")
@@ -135,16 +135,6 @@ def confirm_purge(
                 f"warning: {bucket} also holds objects outside {declaration.slug}/ "
                 f"(prefixes: {', '.join(others)}); deleting the bucket removes them too"
             )
-    if is_emulator:
-        print(
-            f"note: emulator plane purges {bucket} without a typed confirmation (auto-apply plane)"
-        )
-        return True
-    answer = input(f'type "{bucket}" to wipe it and delete it: ').strip()
-    if answer != bucket:
-        print("cancelled: nothing was destroyed")
-        return False
-    return True
 
 
 def purge_state(

@@ -114,7 +114,7 @@ Anything on the plane that `.env` does not seed is flagged `extra` and listed as
 | `make secrets-destroy` | everything above, **plus** every object version, the state bucket itself, and (`--drop-seeder`) the seeder role | nothing |
 | `make secrets-drop-seeder` | the seeder policy and role only (your personal credentials — the role cannot delete itself) | state bucket, ledger, stack resources |
 
-- `terraform destroy` never touches the state bucket — only `secrets-destroy` deletes it, and only after destroy succeeded. On real AWS it demands the bucket name typed back, and warns when the bucket holds objects outside `document-parser/` (wiping a shared sandbox bucket takes sibling stacks' state with it).
+- `terraform destroy` never touches the state bucket — only `secrets-destroy` deletes it, and only after destroy succeeded. Teardown runs unattended: destroy auto-approves, and the purge prints its summary — warning when the bucket holds objects outside `document-parser/` (wiping a shared sandbox bucket takes sibling stacks' state with it) — before the run.
 - Destroy schedules the secret into the recovery window (30 days, or whatever `SECRET_RECOVERY_WINDOW` seeded); `0` in `.env` means no window at all. Skipping an existing window needs `--force-delete`, which has no make wrapper: `poetry run python tools/secrets.py destroy --force-delete`.
 - After `secrets-clean`, re-applying is just `make secrets-apply` — init reuses the kept ledger, which now holds empty state.
 

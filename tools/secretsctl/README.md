@@ -26,6 +26,11 @@ ignored with a note. Make targets take named switches — `make secrets-plan`
 runs Floci (the CLI default), `make secrets-plan PLANE=aws` runs real AWS, and
 `DRY_RUN`, `FORCE`, and `FORCE_DELETE` cover the remaining verbs.
 
+Teardown never waits on input: `destroy` auto-approves on both planes, and its
+`--purge-state`/`--drop-seeder` steps print what they are about to wipe — plus
+a warning when the state bucket holds objects outside the service — before
+running. Real-AWS `apply` keeps its interactive approval.
+
 ## Carrier
 
 Every verb on both planes rides the service's out-of-stack seeder role
