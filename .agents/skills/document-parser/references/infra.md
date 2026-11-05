@@ -18,7 +18,8 @@ by design (terraform never manages its own carrier):
 - Carrier verbs assume the role with your MFA for a **12-hour session** (the
   STS ceiling); the triplet rides as env credentials — outranks any profile,
   nothing written to `~/.aws` — and is cached gitignored in
-  `infra/.aws-session.json` so a multi-verb stretch prompts once. Before the
+  `tools/secretsctl/.session-cache/<service>.json` so a multi-verb stretch
+  prompts once. Before the
   first assume of a session the role is created when missing and reconciled
   (trust, 12h cap, `seeder-policy`); a converged role passes silently, and a
   cached session skips IAM entirely. The role teardown runs on personal creds

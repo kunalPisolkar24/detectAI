@@ -6,6 +6,7 @@ import pytest
 
 from conftest import EMULATOR_ENV, REAL_ENV, fake_carrier_session, render_env, write_service
 from app import main as cli
+from app.carrier import session as carrier_session
 from app.declaration.locate import workspace_for
 from app.stack import flow as stack_flow
 from app.verify import flow as verify_module
@@ -37,24 +38,56 @@ def test_destroy_only_flags_guard_every_other_verb(ws_env, capsys):
     assert "only applies to the destroy command" in capsys.readouterr().out
 
 
-def test_session_clear_removes_the_cache_file(tmp_path):
-    workspace = write_service(tmp_path, "")
-    cache = workspace.session_cache
+def test_session_clear_removes_only_that_service(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(carrier_session, "CACHE_ROOT", tmp_path / "cache")
+    workspace = write_service(tmp_path, "")  # the declaration's slug keys the cache slot
+    cache = tmp_path / "cache" / "document-parser.json"
+    other = tmp_path / "cache" / "chats.json"
     cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_text("{}")
+    other.write_text("{}")
+
     assert cli.main(["session-clear"], workspace=workspace) == 0
     assert not cache.exists()
+    assert other.exists()  # targeted: another service's cached triplet stays
+    assert f"removed: {cache}" in capsys.readouterr().out
 
     assert cli.main(["session-clear"], workspace=workspace) == 0  # rerun is a no-op
+    assert "nothing to clear (no cached seeder session for document-parser)" in (
+        capsys.readouterr().out
+    )
 
 
-def test_session_clear_runs_before_the_declaration_load(tmp_path):
-    workspace = workspace_for(tmp_path)  # no secrets.toml at all
-    cache = workspace.session_cache
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_text("{}")
-    assert cli.main(["session-clear"], workspace=workspace) == 0
-    assert not cache.exists()
+def test_session_clear_all_removes_every_cached_session(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(carrier_session, "CACHE_ROOT", tmp_path)
+    caches = [tmp_path / "document-parser.json", tmp_path / "chats.json"]
+    for cache in caches:
+        cache.write_text("{}")
+
+    assert cli.main(["session-clear-all"]) == 0
+    assert not caches[0].exists() and not caches[1].exists()
+    out = capsys.readouterr().out
+    assert "document-parser.json" in out and "chats.json" in out
+
+    assert cli.main(["session-clear-all"]) == 0  # rerun is a no-op
+    assert "nothing to clear (no cached seeder sessions)" in capsys.readouterr().out
+
+
+def test_session_clear_needs_a_service_context(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)  # no secrets.toml anywhere upward
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(["session-clear"])
+    assert excinfo.value.code == 1
+    assert "service directory" in capsys.readouterr().out
+
+
+def test_session_clear_with_a_broken_declaration_points_at_clear_all(tmp_path, capsys):
+    (tmp_path / "secrets.toml").write_text("[nonsense]\n")
+    workspace = workspace_for(tmp_path)  # no values file: session-clear needs none
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(["session-clear"], workspace=workspace)
+    assert excinfo.value.code == 1
+    assert "session-clear-all" in capsys.readouterr().out
 
 
 def test_missing_values_file_dies(tmp_path, capsys):
@@ -282,6 +315,11 @@ def test_auto_apply_stops_when_plan_fails(tmp_path, monkeypatch):
         raise AssertionError("a failed plan must stop the chain before verify")
 
     monkeypatch.setattr(stack_flow, "run_terraform", fake_run_terraform)
+    monkeypatch.setattr(
+        stack_flow,
+        "ensure_state_bucket",
+        lambda declaration, values, is_emulator, account, session=None: 0,
+    )
     monkeypatch.setattr(verify_module, "verify_flow", boom)
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["auto-apply"], workspace=workspace) == 1

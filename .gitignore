@@ -4,8 +4,8 @@
 **/.env
 **/.env.*
 
-# Local derived seeder session cache (document-parser staging credentials)
-services/document-parser/infra/.aws-session.json
+# Local derived seeder sessions (secretsctl's carrier cache)
+tools/secretsctl/.session-cache/
 
 # Python
 .pytest_cache/

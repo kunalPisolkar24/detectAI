@@ -12,7 +12,12 @@ import sys
 from pathlib import Path
 
 from app.carrier.role import drop_seeder_flow, validate_seeder_role
-from app.carrier.session import clear_cached_session, resolve_carrier_session
+from app.carrier.session import (
+    clear_cached_session,
+    clear_cached_session_files,
+    resolve_carrier_session,
+    session_cache_for,
+)
 from app.declaration.loader import DeclarationError, load
 from app.declaration.locate import REPO_ROOT, find_service_workspace, workspace_for
 from app.shell import die
@@ -30,6 +35,7 @@ VERBS = (
     "destroy",
     "seeder-drop",
     "session-clear",
+    "session-clear-all",
 )
 
 
@@ -45,7 +51,8 @@ def build_parser() -> argparse.ArgumentParser:
         "the values check, terraform plan, apply, then verify of the live plane, "
         "aborting at the first failure), with the state bucket and seeder role "
         "created on demand on both planes; seeder-drop detaches and deletes the "
-        "seeder role; session-clear drops the cached seeder session file",
+        "seeder role; session-clear drops the targeted service's cached seeder "
+        "session and session-clear-all drops every cached one",
     )
     parser.add_argument(
         "--service",
@@ -102,22 +109,35 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
     if args.drop_seeder and args.command != "destroy":
         die("--drop-seeder only applies to the destroy command", "run it with destroy")
 
+    if args.command == "session-clear-all":
+        removed = clear_cached_session_files()
+        for path in removed:
+            print(f"removed: {path}")
+        if not removed:
+            print("nothing to clear (no cached seeder sessions)")
+        return 0
+
     if workspace is None:
         workspace = find_service_workspace(REPO_ROOT, args.service)
     if args.values_file:
         workspace = workspace_for(workspace.service_dir, Path(args.values_file))
 
-    if args.command == "session-clear":
-        if clear_cached_session(workspace.session_cache):
-            print(f"removed: {workspace.session_cache}")
-        else:
-            print("nothing to clear (no cached seeder session)")
-        return 0
-
     try:
         declaration = load(workspace.service_dir / "secrets.toml")
     except DeclarationError as exc:
-        die(str(exc), "fix the service's secrets.toml")
+        fix = "fix the service's secrets.toml"
+        if args.command == "session-clear":
+            fix = "run session-clear-all to drop every cached seeder session, or fix the service's secrets.toml"
+        die(str(exc), fix)
+
+    if args.command == "session-clear":
+        cache = session_cache_for(declaration)
+        if clear_cached_session(cache):
+            print(f"removed: {cache}")
+        else:
+            print(f"nothing to clear (no cached seeder session for {declaration.slug})")
+        return 0
+
     if not workspace.values_file.exists():
         die(
             f"{workspace.values_file} not found",
@@ -146,7 +166,7 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
         if errors:
             return 1
         session = resolve_carrier_session(
-            declaration, values, is_emulator, args.dry_run, workspace.session_cache
+            declaration, values, is_emulator, args.dry_run, session_cache_for(declaration)
         )
         return verify.verify_flow(declaration, values, is_emulator, args.dry_run, session)
 
@@ -157,7 +177,7 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
         return 1
 
     session = resolve_carrier_session(
-        declaration, values, is_emulator, args.dry_run, workspace.session_cache
+        declaration, values, is_emulator, args.dry_run, session_cache_for(declaration)
     )
 
     if args.command == "auto-apply":

@@ -15,7 +15,6 @@ def workspace_for(service_dir: Path, values_file: Path | None = None) -> Workspa
     return Workspace(
         service_dir=service_dir,
         values_file=values,
-        session_cache=values.parent / ".aws-session.json",
     )
 
 

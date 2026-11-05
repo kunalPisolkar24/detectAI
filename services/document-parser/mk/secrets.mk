@@ -1,8 +1,8 @@
 # secretsctl validates infra/.env, drives the shared terraform plane, and its
 # verbs need no pre-setup: the state bucket and the seeder carrier role are
 # created on demand. The carrier is assumed with an MFA prompt on real AWS,
-# prompt-free on Floci; the triplet caches for ~12 hours in
-# infra/.aws-session.json (secrets-session-clear drops it).
+# prompt-free on Floci; each service's triplet caches for ~12 hours inside
+# the secretsctl tree (.session-cache/<service>.json; secrets-session-clear drops it).
 #
 # Flags pass through verbatim to secretsctl; the default plane is floci, e.g.
 #   make secrets-plan ARGS:='--aws'

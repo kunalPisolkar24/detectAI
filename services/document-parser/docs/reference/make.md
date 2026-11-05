@@ -68,7 +68,7 @@ One `infra/.env.load` configures everything, `SCENARIO` included (`smoke` or `lo
 | `make secrets-apply` | terraform apply — auto-approved on the emulator, interactive confirm on real AWS | making it real |
 | `make secrets-verify` | reads the live plane (SSM + secret) and matches it against `infra/.env`; values appear as lengths and fingerprints only | after apply, or whenever "is the seed actually right?" nags |
 | `make secrets-drop-seeder` | detaches `seeder-policy` and deletes the role (personal credentials) | leaving an account clean |
-| `make secrets-session-clear` | removes the cached seeder session (`infra/.aws-session.json`) | after a stale/failed MFA window; the next verb re-prompts |
+| `make secrets-session-clear` | removes the service's cached seeder session (`tools/secretsctl/.session-cache/<service>.json`) | after a stale/failed MFA window; the next verb re-prompts |
 | `make secrets-clean` | terraform destroy; keeps the state bucket and ledger | wiping resources, keeping your place |
 | `make secrets-destroy` | full teardown: destroy, then the bucket purge, then (`--drop-seeder`) the seeder role | leaving no trace |
 | `make secrets-test` | pytest for the pipeline driver `tools/secrets.py` | the parse/validation layer changed |

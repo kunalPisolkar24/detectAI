@@ -112,7 +112,6 @@ def test_unreadable_or_incomplete_toml_raises(tmp_path, text):
 def test_workspace_layout_follows_the_service_dir(tmp_path):
     workspace = workspace_for(tmp_path)
     assert workspace.values_file == tmp_path / "infra" / ".env"
-    assert workspace.session_cache == tmp_path / "infra" / ".aws-session.json"
 
 
 def test_plane_root_is_the_shared_package_root():
@@ -125,7 +124,6 @@ def test_workspace_values_file_override(tmp_path):
     central = tmp_path / "central.env"
     workspace = workspace_for(tmp_path, central)
     assert workspace.values_file == central
-    assert workspace.session_cache == tmp_path / ".aws-session.json"
 
 
 def test_toml_keys_are_plain_names(tmp_path):

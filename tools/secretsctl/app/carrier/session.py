@@ -29,6 +29,15 @@ SEEDER_MFA_SERIAL_KEY = "SEEDER_MFA_SERIAL"
 
 SESSION_RENEWAL_MARGIN_SECONDS = 10 * 60
 
+# Session maintenance is the tool's job: every service's triplet lives in one
+# cache directory next to the engine, keyed by the service slug.
+CACHE_ROOT = Path(__file__).resolve().parents[2] / ".session-cache"
+
+
+def session_cache_for(declaration: Declaration) -> Path:
+    """The service's cache slot inside the tool-owned .session-cache directory."""
+    return CACHE_ROOT / f"{declaration.slug}.json"
+
 
 def role_session_name(declaration: Declaration) -> str:
     """A stable, sanitized name keeps each laptop's carrier session identifiable in CloudTrail."""
@@ -105,6 +114,20 @@ def clear_cached_session(session_cache: Path) -> bool:
         return True
     except FileNotFoundError:
         return False
+
+
+def clear_cached_session_files() -> list[Path]:
+    """Every triplet in the tool-owned cache directory; the session-clear-all verb."""
+    if not CACHE_ROOT.is_dir():
+        return []
+    removed: list[Path] = []
+    for cache in sorted(CACHE_ROOT.glob("*.json")):
+        try:
+            cache.unlink()
+            removed.append(cache)
+        except OSError as exc:
+            print(f"note: could not remove {cache} ({exc})")
+    return removed
 
 
 def assume_seeder_session(

@@ -30,7 +30,9 @@ runs real AWS.
 
 Every verb on both planes rides the service's out-of-stack seeder role
 (`detectai-<service>-seeder`) through an STS assume-role; the 12-hour triplet
-caches in `infra/.aws-session.json` and `session-clear` drops it. The role
+caches in the tool tree's `.session-cache/<service>.json` — sessions are the
+engine's job, never the service's — and `session-clear` drops the targeted
+service's file while `session-clear-all` drops every cached one. The role
 trusts whoever runs the tool (the ambient caller; the emulator uses a
 structural placeholder) and is created or re-converged — trust, session cap,
 inline policy — whenever a verb resolves a fresh session, with a cached one

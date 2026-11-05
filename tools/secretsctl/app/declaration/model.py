@@ -45,4 +45,3 @@ class Declaration:
 class Workspace:
     service_dir: Path
     values_file: Path
-    session_cache: Path
