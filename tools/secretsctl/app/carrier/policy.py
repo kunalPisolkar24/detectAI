@@ -93,6 +93,7 @@ def seeder_policy_document(
                     "s3:GetObjectVersion",
                     "s3:PutObject",
                     "s3:DeleteObject",
+                    "s3:DeleteObjectVersion",
                 ],
                 "Resource": [f"arn:aws:s3:::{bucket}/*"],
             },

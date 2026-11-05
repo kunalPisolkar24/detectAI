@@ -243,15 +243,17 @@ def resolve_carrier_session(
     dry_run: bool,
     session_cache: Path,
 ) -> dict[str, Any] | None:
-    """The carrier on both planes: cached triplet when valid, otherwise converge
-    the service's out-of-stack seeder role (create or repair its trust, session
-    cap, and policy) and take a fresh assume of it. Dry runs stay session-free."""
+    """The carrier on both planes: converge the service's out-of-stack seeder
+    role (create or repair its trust, session cap, and policy) before every
+    resolve, so a policy drift cannot outlive a cached 12-hour session, and ride
+    the cached triplet when valid — otherwise take a fresh assume of it. Dry runs
+    stay session-free."""
     if dry_run:
         return None
     role_arn, serial = _carrier_target(declaration, values, is_emulator)
+    _ensure_seeder_role(declaration, values, is_emulator)
     session = cached_session(role_arn, session_cache)
     if session is None:
-        _ensure_seeder_role(declaration, values, is_emulator)
         session = assume_seeder_session(role_arn, serial, declaration, is_emulator)
         save_cached_session(session, session_cache)
     return session

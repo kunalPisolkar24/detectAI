@@ -678,13 +678,19 @@ def test_resolve_carrier_session_on_the_emulator_reuses_a_cached_triplet(
     emulator_trust(monkeypatch)
     cache = tmp_path / "c.json"
     cache.write_text(json.dumps(fresh_triplet()))
+    healed = []
+
+    def fake_heal(declaration, values, is_emulator):
+        healed.append(is_emulator)
+
+    monkeypatch.setattr(session, "_ensure_seeder_role", fake_heal)
 
     def boom(*arguments, **rest):
-        raise AssertionError("a cached emulator session must not touch the role or assume")
+        raise AssertionError("a cached emulator session must not re-assume")
 
-    monkeypatch.setattr(session, "_ensure_seeder_role", boom)
     monkeypatch.setattr(session, "assume_seeder_session", boom)
     assert session.resolve_carrier_session(DP, EMULATOR_ENV, True, False, cache) == fresh_triplet()
+    assert healed == [True]
 
 
 def test_resolve_carrier_session_on_real_aws_converges_and_assumes_with_mfa(
@@ -729,12 +735,19 @@ def test_resolve_carrier_session_reuses_a_cached_triplet(tmp_path, monkeypatch):
     }
     cache.write_text(json.dumps(payload))
     monkeypatch.setattr(policy, "sts_caller_identity", lambda: ("123456789012", USER_ARN))
+    healed = []
+
+    def fake_heal(declaration, values, is_emulator):
+        healed.append(is_emulator)
+
+    monkeypatch.setattr(session, "_ensure_seeder_role", fake_heal)
 
     def boom(*arguments, **rest):
         raise AssertionError("a live cache must not prompt")
 
     monkeypatch.setattr(session, "assume_seeder_session", boom)
     assert session.resolve_carrier_session(DP, REAL_ENV, False, False, cache) == payload
+    assert healed == [False]
 
 
 def test_resolve_carrier_session_assumes_and_saves_when_uncached(tmp_path, monkeypatch):

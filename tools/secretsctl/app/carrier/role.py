@@ -217,7 +217,7 @@ def _converge_seeder_role(
 def _ensure_seeder_role(
     declaration: Declaration, values: dict[str, str], is_emulator: bool
 ) -> None:
-    """Create-on-demand with convergence, before every fresh assume: the
+    """Create-on-demand with convergence, before every carrier resolve: the
     emulator loses IAM on restart, a fresh real account starts empty, and an
     old role's trust, session cap, or policy may lag the code. A converged role
     passes silently; consistent output never blocks the verb."""
