@@ -22,8 +22,9 @@ secretsctl --service document-parser --aws plan    # real AWS (MFA-gated seeder 
 `--floci` and `--aws` are mutually exclusive. The emulator endpoint is the
 engine constant `http://localhost:4566`; override it with `SECRETSCTL_FLOCI_URL`
 if you ever need to. A legacy `EMULATOR_ENDPOINT` line in a values file is
-ignored with a note. Make targets thread the same choice: `make secrets-plan`
-runs Floci, `make secrets-plan PLANE=aws` runs real AWS.
+ignored with a note. Make targets pass flags through verbatim — `make
+secrets-plan` runs Floci (the CLI default) and `make secrets-plan ARGS:='--aws'`
+runs real AWS.
 
 ## Carrier
 

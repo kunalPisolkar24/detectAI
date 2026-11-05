@@ -4,12 +4,10 @@
 # prompt-free on Floci; the triplet caches for ~12 hours in
 # infra/.aws-session.json (secrets-session-clear drops it).
 #
-# Plane selection: PLANE=floci (default) or PLANE=aws, e.g.
-#   make secrets-plan PLANE=aws
+# Flags pass through verbatim to secretsctl; the default plane is floci, e.g.
+#   make secrets-plan ARGS:='--aws'
 
 SECRETSCTL := poetry -C $(abspath ../../tools/secretsctl) run secretsctl --service document-parser
-PLANE ?= floci
-PLANE_FLAG := $(if $(filter aws,$(PLANE)),--aws,)
 
 .PHONY: secrets-check secrets-plan secrets-auto-apply secrets-apply secrets-verify secrets-clean secrets-destroy secrets-drop-seeder secrets-session-clear secrets-test help-secrets
 
@@ -25,35 +23,35 @@ help-secrets:
 	@echo "    secrets-destroy          full teardown: terraform destroy, wipe and delete the state bucket, drop the seeder role"
 	@echo "    secrets-session-clear    drop the cached seeder session (the next verb assumes the carrier role again)"
 	@echo "    secrets-test             run the secretsctl engine test suite"
-	@echo "    Override the plane: PLANE=aws make secrets-plan (default PLANE=floci)"
+	@echo "    Flags pass through verbatim: make secrets-plan ARGS:='--aws --dry-run' (default plane: floci)"
 	@echo ""
 
 secrets-test:
 	make -C ../../tools/secretsctl test
 
 secrets-check:
-	$(SECRETSCTL) $(PLANE_FLAG) plan --dry-run
+	$(SECRETSCTL) plan --dry-run $(ARGS)
 
 secrets-plan:
-	$(SECRETSCTL) $(PLANE_FLAG) plan
+	$(SECRETSCTL) plan $(ARGS)
 
 secrets-apply:
-	$(SECRETSCTL) $(PLANE_FLAG) apply
+	$(SECRETSCTL) apply $(ARGS)
 
 secrets-auto-apply:
-	$(SECRETSCTL) $(PLANE_FLAG) auto-apply
+	$(SECRETSCTL) auto-apply $(ARGS)
 
 secrets-verify:
-	$(SECRETSCTL) $(PLANE_FLAG) verify
+	$(SECRETSCTL) verify $(ARGS)
 
 secrets-drop-seeder:
-	$(SECRETSCTL) $(PLANE_FLAG) seeder-drop
+	$(SECRETSCTL) seeder-drop $(ARGS)
 
 secrets-clean:
-	$(SECRETSCTL) $(PLANE_FLAG) destroy
+	$(SECRETSCTL) destroy $(ARGS)
 
 secrets-destroy:
-	$(SECRETSCTL) $(PLANE_FLAG) destroy --purge-state --drop-seeder
+	$(SECRETSCTL) destroy --purge-state --drop-seeder $(ARGS)
 
 secrets-session-clear:
-	$(SECRETSCTL) $(PLANE_FLAG) session-clear
+	$(SECRETSCTL) session-clear $(ARGS)
