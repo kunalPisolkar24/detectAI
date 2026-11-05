@@ -76,8 +76,7 @@ services/document-parser/
 │   ├── processing/         the pipeline behind one service: validation + extraction
 │   ├── config/             config planes, typed settings, factories
 │   └── observability/      OTel facade: traces, metrics, logs
-├── infra/                  .env planes, compose files, secrets terraform
-├── tools/secrets.py        the secrets pipeline driver
+├── infra/                  .env planes, compose files
 ├── tests/                  unit + integration + load (k6)
 ├── specification/          design history for maintainers
 └── docs/                   this documentation
