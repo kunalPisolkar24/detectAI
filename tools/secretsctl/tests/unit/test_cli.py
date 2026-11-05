@@ -5,8 +5,10 @@ from __future__ import annotations
 import pytest
 
 from conftest import EMULATOR_ENV, REAL_ENV, fake_carrier_session, render_env, write_service
-from app import config, main as cli
-from app import verify as verify_module
+from app import main as cli
+from app.declaration.locate import workspace_for
+from app.stack import flow as stack_flow
+from app.verify import flow as verify_module
 
 pytestmark = pytest.mark.unit
 
@@ -46,7 +48,7 @@ def test_session_clear_removes_the_cache_file(tmp_path):
 
 
 def test_session_clear_runs_before_the_declaration_load(tmp_path):
-    workspace = config.workspace_for(tmp_path)  # no secrets.toml at all
+    workspace = workspace_for(tmp_path)  # no secrets.toml at all
     cache = workspace.session_cache
     cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_text("{}")
@@ -64,7 +66,7 @@ def test_missing_values_file_dies(tmp_path, capsys):
 
 def test_bad_declaration_dies_with_a_fix_hint(tmp_path):
     (tmp_path / "secrets.toml").write_text("[nonsense]\n")
-    workspace = config.workspace_for(tmp_path)
+    workspace = workspace_for(tmp_path)
     (workspace.values_file.parent).mkdir(parents=True, exist_ok=True)
     workspace.values_file.write_text("")
     with pytest.raises(SystemExit) as excinfo:
@@ -164,8 +166,8 @@ def test_plan_dry_run_prints_the_backend_and_never_runs_terraform(tmp_path, monk
     def boom(*arguments, **rest):
         raise AssertionError("dry run must not run terraform")
 
-    monkeypatch.setattr(cli, "run_terraform", boom)
-    monkeypatch.setattr(cli, "ensure_state_bucket", boom)
+    monkeypatch.setattr(stack_flow, "run_terraform", boom)
+    monkeypatch.setattr(stack_flow, "ensure_state_bucket", boom)
     assert cli.main(["plan", "--dry-run"], workspace=workspace) == 0
     out = capsys.readouterr().out
     assert "backend overrides (written to a temp .hcl at run time):" in out
@@ -181,9 +183,9 @@ def test_plan_runs_init_then_plan_on_the_emulator(tmp_path, monkeypatch, capsys)
         calls.append((tf_dir, list(args), dict(tf_vars), dict(env_overlay or {})))
         return 0
 
-    monkeypatch.setattr(cli, "run_terraform", fake_run_terraform)
+    monkeypatch.setattr(stack_flow, "run_terraform", fake_run_terraform)
     monkeypatch.setattr(
-        cli,
+        stack_flow,
         "ensure_state_bucket",
         lambda declaration, values, is_emulator, account, session=None: 0,
     )
@@ -225,9 +227,9 @@ def test_apply_on_real_aws_uses_the_session_triplet(tmp_path, monkeypatch):
         calls.append((list(args), dict(env_overlay or {})))
         return 0
 
-    monkeypatch.setattr(cli, "run_terraform", fake_run_terraform)
+    monkeypatch.setattr(stack_flow, "run_terraform", fake_run_terraform)
     monkeypatch.setattr(
-        cli,
+        stack_flow,
         "ensure_state_bucket",
         lambda declaration, values, is_emulator, account, session=None: 0,
     )
@@ -261,12 +263,12 @@ def test_destroy_chain_on_the_emulator_runs_purge_then_seeder_drop(tmp_path, mon
         order.append("drop")
         return 0
 
-    monkeypatch.setattr(cli, "confirm_purge", fake_confirm)
-    monkeypatch.setattr(cli, "run_terraform", fake_run_terraform)
-    monkeypatch.setattr(cli, "purge_state", fake_purge)
-    monkeypatch.setattr(cli, "drop_seeder_flow", fake_drop)
+    monkeypatch.setattr(stack_flow, "confirm_purge", fake_confirm)
+    monkeypatch.setattr(stack_flow, "run_terraform", fake_run_terraform)
+    monkeypatch.setattr(stack_flow, "purge_state", fake_purge)
+    monkeypatch.setattr(stack_flow, "drop_seeder_flow", fake_drop)
     monkeypatch.setattr(
-        cli,
+        stack_flow,
         "ensure_state_bucket",
         lambda declaration, values, is_emulator, account, session=None: 0,
     )
@@ -282,14 +284,14 @@ def test_destroy_chain_on_the_emulator_runs_purge_then_seeder_drop(tmp_path, mon
 def test_destroy_refused_purge_aborts_before_terraform(tmp_path, monkeypatch):
     workspace = ws_with(tmp_path, EMULATOR_ENV)
     monkeypatch.setattr(
-        cli, "confirm_purge", lambda declaration, values, is_emulator, account, session=None: False
+        stack_flow, "confirm_purge", lambda declaration, values, is_emulator, account, session=None: False
     )
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
 
     def boom(*arguments, **rest):
         raise AssertionError("a refused purge must abort before terraform")
 
-    monkeypatch.setattr(cli, "run_terraform", boom)
+    monkeypatch.setattr(stack_flow, "run_terraform", boom)
     assert cli.main(["destroy", "--purge-state"], workspace=workspace) == 1
 
 
@@ -302,10 +304,10 @@ def test_destroy_force_delete_on_real_aws_runs_the_cli_delete(tmp_path, monkeypa
         seen["session"] = session
         return 0
 
-    monkeypatch.setattr(cli, "run_aws", fake_run_aws)
-    monkeypatch.setattr(cli, "run_terraform", lambda tf_dir, args, tf_vars, env_overlay=None: 0)
+    monkeypatch.setattr(stack_flow, "run_aws", fake_run_aws)
+    monkeypatch.setattr(stack_flow, "run_terraform", lambda tf_dir, args, tf_vars, env_overlay=None: 0)
     monkeypatch.setattr(
-        cli,
+        stack_flow,
         "ensure_state_bucket",
         lambda declaration, values, is_emulator, account, session=None: 0,
     )
@@ -320,19 +322,19 @@ def test_destroy_force_delete_on_real_aws_runs_the_cli_delete(tmp_path, monkeypa
 def test_destroy_purge_failure_aborts_before_the_seeder_drop(tmp_path, monkeypatch):
     workspace = ws_with(tmp_path, EMULATOR_ENV)
     monkeypatch.setattr(
-        cli, "confirm_purge", lambda declaration, values, is_emulator, account, session=None: True
+        stack_flow, "confirm_purge", lambda declaration, values, is_emulator, account, session=None: True
     )
-    monkeypatch.setattr(cli, "run_terraform", lambda tf_dir, args, tf_vars, env_overlay=None: 0)
+    monkeypatch.setattr(stack_flow, "run_terraform", lambda tf_dir, args, tf_vars, env_overlay=None: 0)
     monkeypatch.setattr(
-        cli, "purge_state", lambda declaration, values, is_emulator, account, session=None: 1
+        stack_flow, "purge_state", lambda declaration, values, is_emulator, account, session=None: 1
     )
 
     def boom(*arguments, **rest):
         raise AssertionError("a failed purge must abort before the seeder drop")
 
-    monkeypatch.setattr(cli, "drop_seeder_flow", boom)
+    monkeypatch.setattr(stack_flow, "drop_seeder_flow", boom)
     monkeypatch.setattr(
-        cli,
+        stack_flow,
         "ensure_state_bucket",
         lambda declaration, values, is_emulator, account, session=None: 0,
     )
@@ -377,7 +379,7 @@ def test_values_file_flag_rebuilds_the_workspace(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     monkeypatch.setattr(
-        cli,
+        stack_flow,
         "ensure_state_bucket",
         lambda declaration, values, is_emulator, account, session=None: 0,
     )
@@ -386,6 +388,6 @@ def test_values_file_flag_rebuilds_the_workspace(tmp_path, monkeypatch):
         seen["tf_dir"] = tf_dir
         return 0
 
-    monkeypatch.setattr(cli, "run_terraform", fake_run_terraform)
+    monkeypatch.setattr(stack_flow, "run_terraform", fake_run_terraform)
     assert cli.main(["plan", "--values-file", str(central)], workspace=workspace) == 0
-    assert seen["tf_dir"] == config.PLANE_ROOT  # the stack stays put; only the values move
+    assert seen["tf_dir"] == stack_flow.PLANE_ROOT  # the stack stays put; only the values move

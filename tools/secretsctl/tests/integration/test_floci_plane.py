@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from app.seeder import SEEDER_POLICY_NAME
+from app.carrier.role import SEEDER_POLICY_NAME
 
 FLOCI_URL = os.environ.get("SECRETSCTL_FLOCI", "http://localhost:4566")
 REGION = "ap-southeast-2"

@@ -1,18 +1,8 @@
-"""Service declarations: secrets.toml loading, validation, and derived names."""
+"""secrets.toml schema rules: section and field allowlists and value shapes."""
 
 from __future__ import annotations
 
 import re
-import tomllib
-from dataclasses import dataclass
-from pathlib import Path
-
-DEFAULT_REGION = "ap-southeast-2"
-DEFAULT_RECOVERY_WINDOW = 30
-
-# One shared terraform root for every service; the backend file and TF_VARs
-# select the service's plane at run time.
-PLANE_ROOT = Path(__file__).resolve().parents[1] / "terraform" / "plane"
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 PLANE_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
@@ -25,58 +15,6 @@ TOP_SECTIONS = {"service", "secrets", "ssm", "requires"}
 SERVICE_FIELDS = {"slug", "region", "recovery_window"}
 SECRETS_FIELDS = {"keys", "min_lengths"}
 SSM_FIELDS = {"keys"}
-
-
-class DeclarationError(Exception):
-    pass
-
-
-def secret_name(slug: str) -> str:
-    return f"detectai/{slug}/secrets"
-
-
-def ssm_prefix_for(slug: str) -> str:
-    return f"/detectai/{slug}/"
-
-
-def seeder_role_for(slug: str) -> str:
-    return f"detectai-{slug}-seeder"
-
-
-def state_bucket_for(slug: str, account: str) -> str:
-    """The service's state bucket on any plane: slug-derived, account-suffixed
-    for global S3 uniqueness (the account owning the seeder role and stack)."""
-    return f"detectai-{slug}-tfstate-{account}"
-
-
-@dataclass
-class Declaration:
-    slug: str
-    secret_name: str
-    ssm_prefix: str
-    blob_keys: tuple[str, ...]
-    ssm_keys: tuple[str, ...]
-    min_lengths: dict[str, int]
-    requires: dict[str, tuple[str, int]]
-    seeder_role_name: str
-    region_default: str
-    recovery_window: int
-
-
-@dataclass
-class Workspace:
-    service_dir: Path
-    values_file: Path
-    session_cache: Path
-
-
-def workspace_for(service_dir: Path, values_file: Path | None = None) -> Workspace:
-    values = values_file or service_dir / "infra" / ".env"
-    return Workspace(
-        service_dir=service_dir,
-        values_file=values,
-        session_cache=values.parent / ".aws-session.json",
-    )
 
 
 def declaration_errors(data: dict) -> list[str]:
@@ -170,33 +108,3 @@ def declaration_errors(data: dict) -> list[str]:
         if trigger not in set(blob_keys) | set(ssm_keys):
             fail(f"requires[{trigger!r}] triggers on {trigger!r} which is never seeded")
     return errors
-
-
-def load(toml_path: Path) -> Declaration:
-    try:
-        data = tomllib.loads(toml_path.read_text())
-    except (tomllib.TOMLDecodeError, OSError) as exc:
-        raise DeclarationError(f"cannot read {toml_path}: {exc}") from exc
-    errors = declaration_errors(data)
-    if errors:
-        raise DeclarationError("\n".join(errors))
-
-    service = data["service"]
-    slug: str = service["slug"]
-    blob_keys = tuple(data.get("secrets", {}).get("keys", []))
-    min_lengths = dict(data.get("secrets", {}).get("min_lengths", {}))
-    requires = {
-        trigger: (pair[0], int(pair[1])) for trigger, pair in data.get("requires", {}).items()
-    }
-    return Declaration(
-        slug=slug,
-        secret_name=secret_name(slug),
-        ssm_prefix=ssm_prefix_for(slug),
-        blob_keys=blob_keys,
-        ssm_keys=tuple(data.get("ssm", {}).get("keys", [])),
-        min_lengths=min_lengths,
-        requires=requires,
-        seeder_role_name=seeder_role_for(slug),
-        region_default=service.get("region", DEFAULT_REGION),
-        recovery_window=service.get("recovery_window", DEFAULT_RECOVERY_WINDOW),
-    )

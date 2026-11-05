@@ -7,8 +7,14 @@ import tomllib
 import pytest
 
 from conftest import DP, DP_TOML
-from app import config
-from app.config import DeclarationError
+from app.declaration.loader import DeclarationError, load
+from app.declaration.locate import workspace_for
+from app.declaration.model import (
+    DEFAULT_RECOVERY_WINDOW,
+    DEFAULT_REGION,
+    state_bucket_for,
+)
+from app.stack.inputs import PLANE_ROOT
 
 pytestmark = pytest.mark.unit
 
@@ -16,25 +22,25 @@ pytestmark = pytest.mark.unit
 def test_document_parser_declaration_matches_the_committed_schema(tmp_path):
     toml = tmp_path / "secrets.toml"
     toml.write_text(DP_TOML)
-    assert config.load(toml) == DP
+    assert load(toml) == DP
 
 
 def test_derived_names_use_the_slug(tmp_path):
     toml = tmp_path / "secrets.toml"
     toml.write_text('[service]\nslug = "chats"\n\n[secrets]\nkeys = ["API_KEY"]\n')
-    declaration = config.load(toml)
+    declaration = load(toml)
     assert declaration.secret_name == "detectai/chats/secrets"
     assert declaration.ssm_prefix == "/detectai/chats/"
     assert declaration.seeder_role_name == "detectai-chats-seeder"
-    assert config.state_bucket_for(declaration.slug, "123456789012") == (
+    assert state_bucket_for(declaration.slug, "123456789012") == (
         "detectai-chats-tfstate-123456789012"
     )
     assert declaration.blob_keys == ("API_KEY",)
     assert declaration.ssm_keys == ()
     assert declaration.min_lengths == {}
     assert declaration.requires == {}
-    assert declaration.region_default == config.DEFAULT_REGION
-    assert declaration.recovery_window == config.DEFAULT_RECOVERY_WINDOW
+    assert declaration.region_default == DEFAULT_REGION
+    assert declaration.recovery_window == DEFAULT_RECOVERY_WINDOW
 
 
 def test_the_state_table_is_retired_not_honored(tmp_path):
@@ -44,7 +50,7 @@ def test_the_state_table_is_retired_not_honored(tmp_path):
         '\n[secrets]\nkeys = ["API_KEY"]\n'
     )
     with pytest.raises(DeclarationError) as excinfo:
-        config.load(toml)
+        load(toml)
     assert "unknown section(s) ['state']" in str(excinfo.value)
 
 
@@ -54,7 +60,7 @@ def test_defaults_are_taken_from_the_declaration(tmp_path):
         '[service]\nslug = "chats"\nregion = "us-east-1"\nrecovery_window = 14\n'
         '\n[secrets]\nkeys = ["API_KEY"]\n'
     )
-    declaration = config.load(toml)
+    declaration = load(toml)
     assert declaration.region_default == "us-east-1"
     assert declaration.recovery_window == 14
 
@@ -85,7 +91,7 @@ def test_schema_errors_are_reported_with_the_field(tmp_path, text):
     toml = tmp_path / "secrets.toml"
     toml.write_text(text)
     with pytest.raises(DeclarationError) as excinfo:
-        config.load(toml)
+        load(toml)
     assert "secrets.toml" in str(excinfo.value)
 
 
@@ -95,29 +101,29 @@ def test_unreadable_or_incomplete_toml_raises(tmp_path, text):
     if text:
         toml.write_text(text)
     with pytest.raises(DeclarationError):
-        config.load(tmp_path / "does-not-exist.toml")
+        load(tmp_path / "does-not-exist.toml")
     if text:
         with pytest.raises(DeclarationError):
             wrong = tmp_path / "missing-section.toml"
             wrong.write_text(text)
-            config.load(wrong)
+            load(wrong)
 
 
 def test_workspace_layout_follows_the_service_dir(tmp_path):
-    workspace = config.workspace_for(tmp_path)
+    workspace = workspace_for(tmp_path)
     assert workspace.values_file == tmp_path / "infra" / ".env"
     assert workspace.session_cache == tmp_path / "infra" / ".aws-session.json"
 
 
 def test_plane_root_is_the_shared_package_root():
-    assert config.PLANE_ROOT.name == "plane"
-    assert config.PLANE_ROOT.parent.name == "terraform"
-    assert (config.PLANE_ROOT / "main.tf").exists()
+    assert PLANE_ROOT.name == "plane"
+    assert PLANE_ROOT.parent.name == "terraform"
+    assert (PLANE_ROOT / "main.tf").exists()
 
 
 def test_workspace_values_file_override(tmp_path):
     central = tmp_path / "central.env"
-    workspace = config.workspace_for(tmp_path, central)
+    workspace = workspace_for(tmp_path, central)
     assert workspace.values_file == central
     assert workspace.session_cache == tmp_path / ".aws-session.json"
 
@@ -130,4 +136,4 @@ def test_toml_keys_are_plain_names(tmp_path):
     )
     data = tomllib.loads(toml.read_text())
     assert data["secrets"]["keys"] == ["W", "X", "Y", "Z"]
-    config.load(toml)  # the committed shape loads; nothing to derive from it here
+    load(toml)  # the committed shape loads; nothing to derive from it here

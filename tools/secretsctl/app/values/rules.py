@@ -1,72 +1,16 @@
-"""Values plane: .env parsing, plane resolution, and per-verb validation."""
+"""Per-verb validation rules over the parsed .env values."""
 
 from __future__ import annotations
 
-import os
 import re
-from app.config import Declaration
+
+from app.declaration.model import Declaration
 
 REGION_RE = re.compile(r"^[a-z]{2}-[a-z]+-[0-9]+$")
 URL_RE = re.compile(r"^https?://\S+$")
 ENV_TYPES = ("dev", "prod")
-EMULATOR_RECOVERY_WINDOW = 0
 RECOVERY_WINDOW_MIN = 7
 RECOVERY_WINDOW_MAX = 30
-
-DEFAULT_FLOCI_URL = "http://localhost:4566"
-
-
-def parse_env_file(path) -> dict[str, str]:
-    """KEY=value parser: strips inline comments, keeps the first duplicate."""
-    values: dict[str, str] = {}
-    for lineno, raw in enumerate(path.read_text().splitlines(), 1):
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = re.sub(r"\s+#.*$", "", value).strip()
-        if not key:
-            print(f"warning: {path.name}:{lineno}: empty key before '='; skipped")
-            continue
-        if key in values:
-            print(f"warning: {path.name}:{lineno}: duplicate {key}; keeping the first")
-            continue
-        values[key] = value
-    return values
-
-
-def resolve_floci_url() -> str:
-    """The emulator endpoint: an engine constant, overridable for exotic setups."""
-    return os.environ.get("SECRETSCTL_FLOCI_URL") or DEFAULT_FLOCI_URL
-
-
-def plane_display(is_emulator: bool) -> str:
-    if is_emulator:
-        return f"floci (emulator {resolve_floci_url()})"
-    return "real AWS"
-
-
-def resolve_plane(use_aws: bool) -> tuple[str, bool]:
-    """The --aws/--floci flag decides; the values file never selects the plane."""
-    is_emulator = not use_aws
-    return plane_display(is_emulator), is_emulator
-
-
-def resolve_region(declaration: Declaration, values: dict[str, str]) -> str:
-    return values.get("AWS_REGION") or declaration.region_default
-
-
-def resolve_recovery_window(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
-) -> int:
-    """Emulator plane: always 0. Real AWS: the .env override or the declaration default."""
-    if is_emulator:
-        return EMULATOR_RECOVERY_WINDOW
-    raw = values.get("SECRET_RECOVERY_WINDOW", "")
-    if not raw:
-        return declaration.recovery_window
-    return int(raw)
 
 
 def plane_errors(values: dict[str, str]) -> list[str]:
@@ -134,23 +78,3 @@ def validate(declaration: Declaration, values: dict[str, str], is_emulator: bool
             )
     errors.extend(plane_errors(values))
     return errors
-
-
-def plane_notes(declaration: Declaration, values: dict[str, str], is_emulator: bool) -> list[str]:
-    notes = []
-    if values.get("ENV_TYPE") == "prod" and is_emulator:
-        notes.append(
-            "note: ENV_TYPE=prod with the emulator — the local-testing shape for the prod pull path"
-        )
-    if values.get("ENV_TYPE") == "dev" and not is_emulator:
-        notes.append(
-            "warning: applying to real AWS while ENV_TYPE=dev (dev runtime reads .env, not SM)"
-        )
-    if values.get("SECRET_RECOVERY_WINDOW"):
-        if is_emulator:
-            notes.append("note: SECRET_RECOVERY_WINDOW ignored on the emulator plane (always 0)")
-        elif values["SECRET_RECOVERY_WINDOW"] == "0":
-            notes.append(
-                "warning: SECRET_RECOVERY_WINDOW=0 on real AWS — destroy deletes the secret immediately"
-            )
-    return notes

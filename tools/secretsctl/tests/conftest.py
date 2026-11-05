@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from app import config
+from app.declaration.locate import workspace_for
+from app.declaration.model import Declaration, Workspace
 
 DP_TOML = """\
 [service]
@@ -23,7 +24,7 @@ API_KEY = 16
 keys = ["UPLOAD_LIMIT_BYTES", "MAX_PDF_PAGES", "OTEL_TRACE_SAMPLE_RATIO", "OTEL_EXPORTER_OTLP_ENDPOINT"]
 """
 
-DP = config.Declaration(
+DP = Declaration(
     slug="document-parser",
     secret_name="detectai/document-parser/secrets",
     ssm_prefix="/detectai/document-parser/",
@@ -42,9 +43,9 @@ DP = config.Declaration(
 )
 
 
-def write_service(tmp_path, env_text: str, toml_text: str | None = None) -> config.Workspace:
+def write_service(tmp_path, env_text: str, toml_text: str | None = None) -> Workspace:
     (tmp_path / "secrets.toml").write_text(toml_text if toml_text is not None else DP_TOML)
-    workspace = config.workspace_for(tmp_path)
+    workspace = workspace_for(tmp_path)
     if env_text is not None:
         workspace.values_file.parent.mkdir(parents=True, exist_ok=True)
         workspace.values_file.write_text(env_text)
@@ -62,7 +63,7 @@ def ws_env(tmp_path):
 
 
 @pytest.fixture
-def dp() -> config.Declaration:
+def dp() -> Declaration:
     return DP
 
 
