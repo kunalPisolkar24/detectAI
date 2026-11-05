@@ -15,7 +15,7 @@ from app.values.plane import (
 
 # One shared terraform root for every service; the backend file and TF_VARs
 # select the service's plane at run time.
-PLANE_ROOT = Path(__file__).resolve().parents[2] / "terraform" / "plane"
+PLANE_ROOT = Path(__file__).resolve().parents[2] / "terraform"
 
 
 def state_key(declaration: Declaration, is_emulator: bool) -> str:

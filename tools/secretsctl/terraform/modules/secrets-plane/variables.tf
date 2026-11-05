@@ -8,17 +8,6 @@ variable "service_slug" {
   }
 }
 
-variable "aws_region" {
-  description = "AWS region (the emulator accepts any value)."
-  type        = string
-  default     = "ap-southeast-2"
-
-  validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[0-9]+$", var.aws_region))
-    error_message = "aws_region must be a valid AWS region (e.g. ap-southeast-2, us-east-1)."
-  }
-}
-
 variable "secret_recovery_window" {
   description = "Recovery window: 0 for emulator/dev cycles (destroy and reseed freely), 7-30 prod safety."
   type        = number
@@ -31,14 +20,14 @@ variable "secret_recovery_window" {
 }
 
 variable "blob" {
-  description = "Secret blob seeded as one JSON version; consumers pull the whole blob and pick names."
+  description = "Secret blob seeded as one JSON version; keys and length floors live in the service's secrets.toml."
   type        = map(string)
   default     = {}
   sensitive   = true
 }
 
 variable "ssm_parameters" {
-  description = "Non-secret runtime config; each key becomes /detectai/<slug>/<KEY>."
+  description = "Non-secret runtime config seeded from .env; each key becomes /detectai/<slug>/<KEY>."
   type        = map(string)
   default     = {}
 }

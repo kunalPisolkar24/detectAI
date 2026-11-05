@@ -115,8 +115,7 @@ def test_workspace_layout_follows_the_service_dir(tmp_path):
 
 
 def test_plane_root_is_the_shared_package_root():
-    assert PLANE_ROOT.name == "plane"
-    assert PLANE_ROOT.parent.name == "terraform"
+    assert PLANE_ROOT.name == "terraform"
     assert (PLANE_ROOT / "main.tf").exists()
 
 
