@@ -29,6 +29,7 @@ def test_destroy_only_flags_guard_every_other_verb(ws_env, capsys):
         ("plan", "--purge-state"),
         ("apply", "--force-delete"),
         ("verify", "--drop-seeder"),
+        ("auto-apply", "--purge-state"),
     ):
         with pytest.raises(SystemExit) as excinfo:
             cli.main([verb, flag], workspace=ws_env)
@@ -241,6 +242,119 @@ def test_apply_on_real_aws_uses_the_session_triplet(tmp_path, monkeypatch):
     session = fake_carrier_session(None, None, False, False)
     assert overlay["AWS_ACCESS_KEY_ID"] == session["access_key_id"]
     assert overlay["AWS_SESSION_TOKEN"] == session["session_token"]
+
+
+def test_auto_apply_runs_plan_apply_then_verify(tmp_path, monkeypatch, capsys):
+    workspace = ws_with(tmp_path, EMULATOR_ENV)
+    order = []
+
+    def fake_run_terraform(tf_dir, args, tf_vars, env_overlay=None):
+        order.append(args[0])
+        return 0
+
+    def fake_verify_flow(declaration, values, is_emulator, dry_run, session=None):
+        order.append("verify")
+        return 0
+
+    monkeypatch.setattr(stack_flow, "run_terraform", fake_run_terraform)
+    monkeypatch.setattr(
+        stack_flow,
+        "ensure_state_bucket",
+        lambda declaration, values, is_emulator, account, session=None: 0,
+    )
+    monkeypatch.setattr(verify_module, "verify_flow", fake_verify_flow)
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
+    assert cli.main(["auto-apply"], workspace=workspace) == 0
+    assert order == ["init", "plan", "init", "apply", "verify"]
+    out = capsys.readouterr().out
+    assert out.count("plane:   floci") == 2  # one banner per terraform step
+
+
+def test_auto_apply_stops_when_plan_fails(tmp_path, monkeypatch):
+    workspace = ws_with(tmp_path, EMULATOR_ENV)
+    commands = []
+
+    def fake_run_terraform(tf_dir, args, tf_vars, env_overlay=None):
+        commands.append(args[0])
+        return 0 if args[0] == "init" else 1
+
+    def boom(*arguments, **rest):
+        raise AssertionError("a failed plan must stop the chain before verify")
+
+    monkeypatch.setattr(stack_flow, "run_terraform", fake_run_terraform)
+    monkeypatch.setattr(verify_module, "verify_flow", boom)
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
+    assert cli.main(["auto-apply"], workspace=workspace) == 1
+    assert commands == ["init", "plan"]  # no second init, no apply, no verify
+
+
+def test_auto_apply_stops_when_apply_fails(tmp_path, monkeypatch):
+    workspace = ws_with(tmp_path, EMULATOR_ENV)
+    commands = []
+
+    def fake_run_terraform(tf_dir, args, tf_vars, env_overlay=None):
+        commands.append(args[0])
+        return 1 if args[0] == "apply" else 0
+
+    def boom(*arguments, **rest):
+        raise AssertionError("a failed apply must stop the chain before verify")
+
+    monkeypatch.setattr(stack_flow, "run_terraform", fake_run_terraform)
+    monkeypatch.setattr(verify_module, "verify_flow", boom)
+    monkeypatch.setattr(
+        stack_flow,
+        "ensure_state_bucket",
+        lambda declaration, values, is_emulator, account, session=None: 0,
+    )
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
+    assert cli.main(["auto-apply"], workspace=workspace) == 1
+    assert commands == ["init", "plan", "init", "apply"]
+
+
+def test_auto_apply_reports_drift_as_exit_1(tmp_path, monkeypatch, capsys):
+    workspace = ws_with(tmp_path, EMULATOR_ENV)
+    monkeypatch.setattr(
+        stack_flow, "run_terraform", lambda tf_dir, args, tf_vars, env_overlay=None: 0
+    )
+    monkeypatch.setattr(
+        stack_flow,
+        "ensure_state_bucket",
+        lambda declaration, values, is_emulator, account, session=None: 0,
+    )
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
+    monkeypatch.setattr(
+        verify_module,
+        "collect_ssm_parameters",
+        lambda declaration, values, is_emulator, session=None: {},
+    )
+    monkeypatch.setattr(
+        verify_module,
+        "collect_secret",
+        lambda declaration, values, is_emulator, session=None: ({"Status": "ACTIVE"}, None),
+    )
+    assert cli.main(["auto-apply"], workspace=workspace) == 1
+    out = capsys.readouterr().out
+    assert "problem:" in out
+    assert "does not match the .env values" in out
+
+
+def test_auto_apply_dry_run_renders_the_chain_once(tmp_path, monkeypatch, capsys):
+    workspace = ws_with(tmp_path, EMULATOR_ENV)
+
+    def boom(*arguments, **rest):
+        raise AssertionError("dry run must not run terraform or the collectors")
+
+    monkeypatch.setattr(stack_flow, "run_terraform", boom)
+    monkeypatch.setattr(stack_flow, "ensure_state_bucket", boom)
+    monkeypatch.setattr(verify_module, "verify_flow", boom)
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
+    assert cli.main(["auto-apply", "--dry-run"], workspace=workspace) == 0
+    out = capsys.readouterr().out
+    assert out.count("backend overrides (written to a temp .hcl at run time):") == 1
+    assert "terraform init -reconfigure -backend-config <backend.hcl>, then terraform plan" in out
+    assert "then apply:  terraform apply with the same backend overrides" in out
+    assert "then verify: the live SSM parameters and secret blob vs the values file" in out
+    assert out.count("(dry run: no terraform, no AWS writes)") == 1
 
 
 def test_destroy_chain_on_the_emulator_runs_purge_then_seeder_drop(tmp_path, monkeypatch):

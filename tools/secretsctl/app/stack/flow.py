@@ -34,6 +34,7 @@ def terraform_verb_flow(
     declaration: Declaration,
     values: dict[str, str],
     is_emulator: bool,
+    command: str,
     args: argparse.Namespace,
     session: dict[str, str] | None,
 ) -> int:
@@ -68,7 +69,6 @@ def terraform_verb_flow(
     for note in plane_notes(declaration, values, is_emulator):
         print(note)
 
-    command = args.command
     if args.dry_run:
         print("backend overrides (written to a temp .hcl at run time):")
         for line in backend_hcl.splitlines():

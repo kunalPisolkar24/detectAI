@@ -26,6 +26,7 @@ VERBS = (
     "plan",
     "apply",
     "verify",
+    "auto-apply",
     "destroy",
     "seeder-drop",
     "session-clear",
@@ -40,8 +41,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         choices=VERBS,
-        help="terraform plan/apply/destroy and verify, with the state bucket and seeder "
-        "role created on demand on both planes; seeder-drop detaches and deletes the "
+        help="terraform plan/apply/destroy, verify, and auto-apply (the whole seed: "
+        "the values check, terraform plan, apply, then verify of the live plane, "
+        "aborting at the first failure), with the state bucket and seeder role "
+        "created on demand on both planes; seeder-drop detaches and deletes the "
         "seeder role; session-clear drops the cached seeder session file",
     )
     parser.add_argument(
@@ -156,7 +159,25 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
     session = resolve_carrier_session(
         declaration, values, is_emulator, args.dry_run, workspace.session_cache
     )
-    return terraform_verb_flow(declaration, values, is_emulator, args, session)
+
+    if args.command == "auto-apply":
+        if args.dry_run:
+            terraform_verb_flow(declaration, values, is_emulator, "plan", args, session)
+            print(
+                "then apply:  terraform apply with the same backend overrides (auto on the "
+                "emulator, interactive confirm on real AWS)"
+            )
+            print(
+                "then verify: the live SSM parameters and secret blob vs the values file (exit 1 on drift)"
+            )
+            return 0
+        for step in ("plan", "apply"):
+            code = terraform_verb_flow(declaration, values, is_emulator, step, args, session)
+            if code != 0:
+                return code
+        return verify.verify_flow(declaration, values, is_emulator, False, session)
+
+    return terraform_verb_flow(declaration, values, is_emulator, args.command, args, session)
 
 
 def cli_main() -> int:

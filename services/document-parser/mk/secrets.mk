@@ -11,13 +11,14 @@ SECRETSCTL := poetry -C $(abspath ../../tools/secretsctl) run secretsctl --servi
 PLANE ?= floci
 PLANE_FLAG := $(if $(filter aws,$(PLANE)),--aws,)
 
-.PHONY: secrets-check secrets-plan secrets-apply secrets-verify secrets-clean secrets-destroy secrets-drop-seeder secrets-session-clear secrets-test help-secrets
+.PHONY: secrets-check secrets-plan secrets-auto-apply secrets-apply secrets-verify secrets-clean secrets-destroy secrets-drop-seeder secrets-session-clear secrets-test help-secrets
 
 help-secrets:
 	@echo "  Secrets pipeline (mk/secrets.mk):"
 	@echo "    secrets-check            validate infra/.env and preview the plane/vars (no terraform, no AWS)"
 	@echo "    secrets-plan             terraform plan against the selected plane"
 	@echo "    secrets-apply            terraform apply (auto on Floci, interactive confirm on real AWS)"
+	@echo "    secrets-auto-apply       one-shot seed: validate + terraform plan, apply, verify - stops at the first failure"
 	@echo "    secrets-verify           read the live plane and match it against infra/.env (fingerprints only)"
 	@echo "    secrets-drop-seeder      detach the seeder policy and delete the role (creator permissions)"
 	@echo "    secrets-clean            terraform destroy the secrets blob; keeps the state bucket and ledger"
@@ -38,6 +39,9 @@ secrets-plan:
 
 secrets-apply:
 	$(SECRETSCTL) $(PLANE_FLAG) apply
+
+secrets-auto-apply:
+	$(SECRETSCTL) $(PLANE_FLAG) auto-apply
 
 secrets-verify:
 	$(SECRETSCTL) $(PLANE_FLAG) verify
