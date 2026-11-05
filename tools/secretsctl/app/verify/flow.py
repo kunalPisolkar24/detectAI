@@ -4,52 +4,20 @@ from __future__ import annotations
 
 from app.carrier.session import session_remaining_text
 from app.declaration.model import Declaration
-from app.shell import aws_base
 from app.verify.audit import (
     compare_seeds,
     expected_blob,
     expected_ssm_seeds,
     fingerprint,
 )
-from app.verify.collect import collect_secret, collect_ssm_parameters
+from app.verify.collect import (
+    collect_secret,
+    collect_ssm_parameters,
+    secret_describe_command,
+    secret_value_command,
+    ssm_path_command,
+)
 from app.values.plane import plane_display, resolve_region
-
-
-def verify_commands(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
-) -> list[list[str]]:
-    """The three reads behind a verify run: parameter inventory, secret status, stored blob."""
-    base = aws_base(declaration, values, is_emulator)
-    return [
-        base
-        + [
-            "ssm",
-            "get-parameters-by-path",
-            "--path",
-            declaration.ssm_prefix,
-            "--with-decryption",
-            "--output",
-            "json",
-        ],
-        base
-        + [
-            "secretsmanager",
-            "describe-secret",
-            "--secret-id",
-            declaration.secret_name,
-            "--output",
-            "json",
-        ],
-        base
-        + [
-            "secretsmanager",
-            "get-secret-value",
-            "--secret-id",
-            declaration.secret_name,
-            "--output",
-            "json",
-        ],
-    ]
 
 
 def verify_flow(
@@ -61,7 +29,11 @@ def verify_flow(
 ) -> int:
     """Match the live plane against what the .env would seed. Values never
     surface: rows carry lengths and fingerprints; drift is exit code 1."""
-    commands = verify_commands(declaration, values, is_emulator)
+    commands = [
+        ssm_path_command(declaration, values, is_emulator),
+        secret_describe_command(declaration, values, is_emulator),
+        secret_value_command(declaration, values, is_emulator),
+    ]
     if dry_run:
         for command in commands:
             print(f"would run: {' '.join(command)}")

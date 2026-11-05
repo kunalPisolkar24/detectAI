@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
+REGION_RE = re.compile(r"^[a-z]{2}-[a-z]+-[0-9]+$")
 DEFAULT_REGION = "ap-southeast-2"
 DEFAULT_RECOVERY_WINDOW = 30
 

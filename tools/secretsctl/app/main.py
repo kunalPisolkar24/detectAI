@@ -11,7 +11,7 @@ import io
 import sys
 from pathlib import Path
 
-from app.carrier.role import drop_seeder_flow, validate_seeder_role
+from app.carrier.role import drop_seeder_flow
 from app.carrier.session import (
     clear_cached_session,
     clear_cached_session_files,
@@ -30,7 +30,7 @@ from app.shell import die
 from app.stack.flow import terraform_verb_flow
 from app.verify import flow as verify
 from app.values.parse import parse_env_file
-from app.values.plane import resolve_plane
+from app.values.plane import emulator_endpoint_note
 from app.values.rules import plane_errors, validate
 
 VERBS = (
@@ -44,6 +44,12 @@ VERBS = (
     "session-clear-all",
     "session-refresh-all",
 )
+
+
+def _print_errors(errors: list[str]) -> bool:
+    for error in errors:
+        print(error)
+    return bool(errors)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -139,7 +145,7 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
     if args.command == "session-refresh-all":
         return refresh_all_flow(
             ready_service_workspaces(REPO_ROOT),
-            resolve_plane(args.aws)[1],
+            not args.aws,
             args.force,
             args.dry_run,
         )
@@ -171,36 +177,24 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
             "create the service's infra/.env first (copy its committed .env.example)",
         )
     values = parse_env_file(workspace.values_file)
-    if "EMULATOR_ENDPOINT" in values:
-        print(
-            "note: EMULATOR_ENDPOINT in the values file is ignored; "
-            "the plane comes from --aws/--floci (default: floci)"
-        )
-    plane, is_emulator = resolve_plane(args.aws)
+    if (note := emulator_endpoint_note(values)) is not None:
+        print(note)
+    is_emulator = not args.aws
 
     if args.command == "seeder-drop":
-        errors = validate_seeder_role(declaration, values, is_emulator)
-        for error in errors:
-            print(error)
-        if errors:
+        if _print_errors(plane_errors(values)):
             return 1
         return drop_seeder_flow(declaration, values, is_emulator, args.dry_run)
 
     if args.command == "verify":
-        errors = plane_errors(values)
-        for error in errors:
-            print(error)
-        if errors:
+        if _print_errors(plane_errors(values)):
             return 1
         session = resolve_carrier_session(
             declaration, values, is_emulator, args.dry_run, session_cache_for(declaration)
         )
         return verify.verify_flow(declaration, values, is_emulator, args.dry_run, session)
 
-    errors = validate(declaration, values, is_emulator)
-    for error in errors:
-        print(error)
-    if errors:
+    if _print_errors(validate(declaration, values, is_emulator)):
         return 1
 
     session = resolve_carrier_session(

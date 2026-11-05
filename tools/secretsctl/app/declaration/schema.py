@@ -4,17 +4,35 @@ from __future__ import annotations
 
 import re
 
+from app.declaration.model import REGION_RE
+
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 PLANE_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
-REGION_RE = re.compile(r"^[a-z]{2}-[a-z]+-[0-9]+$")
 
 RECOVERY_WINDOW_MIN = 7
 RECOVERY_WINDOW_MAX = 30
 
 TOP_SECTIONS = {"service", "secrets", "ssm", "requires"}
-SERVICE_FIELDS = {"slug", "region", "recovery_window"}
 SECRETS_FIELDS = {"keys", "min_lengths"}
 SSM_FIELDS = {"keys"}
+SECTION_FIELDS = {"secrets": SECRETS_FIELDS, "ssm": SSM_FIELDS}
+SERVICE_FIELDS = {"slug", "region", "recovery_window"}
+
+
+def _sections_of(data: dict, fail) -> dict[str, dict]:
+    """The three optional tables, normalized: a non-table section earns one
+    error and reads as empty, so the rest of the schema check stays crash-free."""
+    sections: dict[str, dict] = {}
+    for section in ("secrets", "ssm", "requires"):
+        raw = data.get(section)
+        if raw is None:
+            sections[section] = {}
+        elif isinstance(raw, dict):
+            sections[section] = raw
+        else:
+            fail(f"[{section}] must be a table")
+            sections[section] = {}
+    return sections
 
 
 def declaration_errors(data: dict) -> list[str]:
@@ -31,15 +49,13 @@ def declaration_errors(data: dict) -> list[str]:
         fail("[service] is required")
         return errors
 
-    for section, allowed in (
-        ("secrets", SECRETS_FIELDS),
-        ("ssm", SSM_FIELDS),
-    ):
-        extra = set(data.get(section, {})) - allowed
+    sections = _sections_of(data, fail)
+    secrets = sections["secrets"]
+    ssm = sections["ssm"]
+    for section, allowed in SECTION_FIELDS.items():
+        extra = set(sections[section]) - allowed
         if extra:
             fail(f"[{section}] has unknown field(s) {sorted(extra)}; allowed: {sorted(allowed)}")
-    if "requires" in data and not isinstance(data["requires"], dict):
-        fail("[requires] must be a table")
     extra = set(service) - SERVICE_FIELDS
     if extra:
         fail(f"[service] has unknown field(s) {sorted(extra)}; allowed: {sorted(SERVICE_FIELDS)}")
@@ -63,7 +79,6 @@ def declaration_errors(data: dict) -> list[str]:
                 f"recovery_window must be 0 or between {RECOVERY_WINDOW_MIN} and {RECOVERY_WINDOW_MAX}"
             )
 
-    secrets = data.get("secrets", {})
     raw_keys = secrets.get("keys")
     if not isinstance(raw_keys, list) or not raw_keys:
         fail("[secrets] needs a non-empty keys list (the blob contract)")
@@ -76,7 +91,7 @@ def declaration_errors(data: dict) -> list[str]:
             fail(f"secret key {key!r} is listed twice")
         else:
             blob_keys.append(key)
-    for duplicate in set(blob_keys) & set(data.get("ssm", {}).get("keys", []) or []):
+    for duplicate in set(blob_keys) & set(ssm.get("keys", []) or []):
         fail(
             f"{duplicate} is seeded into both planes (Secrets blob and SSM); "
             "the planes are disjoint by design"
@@ -90,7 +105,7 @@ def declaration_errors(data: dict) -> list[str]:
             elif isinstance(floor, bool) or not isinstance(floor, int) or floor < 1:
                 fail(f"min_lengths[{key!r}] must be a positive whole number")
 
-    ssm_keys = data.get("ssm", {}).get("keys", [])
+    ssm_keys = ssm.get("keys", [])
     if not isinstance(ssm_keys, list):
         fail("[ssm] keys must be a list")
         ssm_keys = []
@@ -99,7 +114,7 @@ def declaration_errors(data: dict) -> list[str]:
             if not isinstance(key, str) or not PLANE_KEY_RE.fullmatch(key):
                 fail(f"ssm key {key!r} must be a plain env-style name, e.g. UPLOAD_LIMIT_BYTES")
 
-    for trigger, pair in (data.get("requires") or {}).items():
+    for trigger, pair in sections["requires"].items():
         target_key, floor = pair if isinstance(pair, list) and len(pair) == 2 else (None, None)
         if target_key not in blob_keys:
             fail(f"requires[{trigger!r}] must pair with a [secrets] key, got {target_key!r}")

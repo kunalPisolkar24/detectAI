@@ -25,7 +25,7 @@ from app.declaration.loader import DeclarationError, load
 from app.declaration.model import Declaration, Workspace
 from app.shell import die, run_aws_captured
 from app.values.parse import parse_env_file
-from app.values.plane import plane_display, resolve_floci_url
+from app.values.plane import emulator_endpoint_note, plane_display, resolve_floci_url
 from app.values.rules import validate
 
 MFA_CODE_RE = re.compile(r"^[0-9]{6}$")
@@ -197,7 +197,7 @@ def assume_seeder_session(
     except json.JSONDecodeError as exc:
         die(f"could not parse the assume-role output: {exc}", "rerun the verb")
     identity = (
-        payload.get("AssumedRoleUser", {}).get("Arn", "") if isinstance(payload, dict) else ""
+        (payload.get("AssumedRoleUser") or {}).get("Arn", "") if isinstance(payload, dict) else ""
     )
     mark = seeder_role_session_mark(declaration)
     if mark not in identity:
@@ -319,11 +319,8 @@ def refresh_all_flow(
         try:
             declaration = load(workspace.service_dir / "secrets.toml")
             values = parse_env_file(workspace.values_file)
-            if "EMULATOR_ENDPOINT" in values:
-                print(
-                    f"note: EMULATOR_ENDPOINT in {service}'s values file is ignored; "
-                    "the plane comes from --aws/--floci (default: floci)"
-                )
+            if (note := emulator_endpoint_note(values, f"{service}'s values file")) is not None:
+                print(note)
             errors = validate(declaration, values, is_emulator)
             if errors:
                 for error in errors:

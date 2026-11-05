@@ -9,6 +9,7 @@ import pytest
 
 from conftest import DP, DP_TOML, EMULATOR_ENV, REAL_ENV, ROLE_ARN, USER_ARN, render_env
 from app.carrier import identity, policy, role, session
+from app.values import rules
 from app.declaration.locate import workspace_for
 from app.declaration.model import Workspace
 
@@ -85,9 +86,9 @@ def test_mfa_serial_ladder():
     assert session.mfa_serial_for("arn:aws:iam::123456789012:role/OpsRole", "") is None
 
 
-def test_validate_seeder_role_scope():
-    assert role.validate_seeder_role(DP, EMULATOR_ENV, True) == []
-    errors = "\n".join(role.validate_seeder_role(DP, {"AWS_REGION": "Mars-1"}, True))
+def test_seeder_drop_validates_plane_inputs_only():
+    assert rules.plane_errors(EMULATOR_ENV) == []
+    errors = "\n".join(rules.plane_errors({"AWS_REGION": "Mars-1"}))
     assert "AWS_REGION" in errors
 
 

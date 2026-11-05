@@ -90,13 +90,9 @@ def test_the_state_bucket_is_always_derived_from_slug_and_account(dp):
     )
 
 
-def test_resolve_plane_follows_the_flag_and_defaults_to_floci(monkeypatch):
-    monkeypatch.delenv("SECRETSCTL_FLOCI_URL", raising=False)
-    display, is_emulator = plane.resolve_plane(False)
-    assert display == "floci (emulator http://localhost:4566)" and is_emulator
-
-    display, is_emulator = plane.resolve_plane(True)
-    assert display == "real AWS" and not is_emulator
+def test_an_empty_region_line_reads_as_unset():
+    values = {key: value for key, value in EMULATOR_ENV.items() if key != "AWS_REGION"}
+    assert rules.plane_errors({**values, "AWS_REGION": ""}) == []
 
 
 def test_resolve_floci_url_overrides_from_the_environment(monkeypatch):

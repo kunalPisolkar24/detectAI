@@ -14,16 +14,8 @@ from app.carrier.policy import (
 )
 from app.declaration.model import Declaration
 from app.shell import aws_base, die, run_aws, run_aws_captured
-from app.values.rules import plane_errors
 
 SEEDER_POLICY_NAME = "seeder-policy"
-
-
-def validate_seeder_role(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
-) -> list[str]:
-    """Only what role drop/delete consumes: region and endpoint."""
-    return plane_errors(values)
 
 
 def seeder_role_payload(
@@ -64,74 +56,112 @@ def _document_of(raw: Any) -> dict[str, Any] | None:
     return None
 
 
-def _ensure_seeder_role(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
-) -> None:
-    """Create-on-demand with convergence, before every fresh assume: the
-    emulator loses IAM on restart, a fresh real account starts empty, and an
-    old role's trust, session cap, or policy may lag the code. A converged role
-    passes silently; consistent output never blocks the verb."""
-    base = aws_base(declaration, values, is_emulator)
-    role_name = declaration.seeder_role_name
-    principal = resolve_trust_principal(declaration, is_emulator)
-    desired_trust = seeder_trust_document(principal)
-    desired_policy = seeder_policy_document(declaration, values, is_emulator, principal)
-
-    payload = seeder_role_payload(declaration, values, is_emulator)
-    if payload is None:
-        print(f"note: seeder role {role_name} is missing; creating it")
-        code, _, stderr = run_aws_captured(
+def _put_role_policy(base: list[str], role_name: str, policy: dict, is_emulator: bool) -> bool:
+    return (
+        run_aws(
             base
             + [
                 "iam",
-                "create-role",
+                "put-role-policy",
                 "--role-name",
                 role_name,
-                "--assume-role-policy-document",
-                json.dumps(desired_trust),
-                "--max-session-duration",
-                str(SESSION_DURATION_SECONDS),
+                "--policy-name",
+                SEEDER_POLICY_NAME,
+                "--policy-document",
+                json.dumps(policy),
             ],
             is_emulator,
         )
-        if code != 0 and "EntityAlreadyExists" not in (stderr or ""):
-            print("error: create-role failed")
-            print((stderr or "").strip())
-            die(
-                "could not create the seeder role",
-                "confirm your credentials may create IAM roles, then rerun the verb",
-            )
-        print(
-            f"created: {role_name} (12h session cap)"
-            if code == 0
-            else f"ok: role {role_name} already exists"
-        )
-        if (
-            run_aws(
-                base
-                + [
-                    "iam",
-                    "put-role-policy",
-                    "--role-name",
-                    role_name,
-                    "--policy-name",
-                    SEEDER_POLICY_NAME,
-                    "--policy-document",
-                    json.dumps(desired_policy),
-                ],
-                is_emulator,
-            )
-            != 0
-        ):
-            die(
-                f"could not attach {SEEDER_POLICY_NAME}",
-                f"attach {SEEDER_POLICY_NAME} manually, then rerun the verb",
-            )
-        scopes = ", ".join(statement["Sid"] for statement in desired_policy["Statement"])
-        print(f"policy: {SEEDER_POLICY_NAME} attached ({scopes})")
-        return
+        == 0
+    )
 
-    role = payload["Role"]
+
+def _attached_policy_document(
+    base: list[str], role_name: str, is_emulator: bool
+) -> dict[str, Any] | None:
+    """The attached inline policy document, or None when missing (or unreadable)."""
+    code, stdout, _ = run_aws_captured(
+        base
+        + [
+            "iam",
+            "get-role-policy",
+            "--role-name",
+            role_name,
+            "--policy-name",
+            SEEDER_POLICY_NAME,
+            "--output",
+            "json",
+        ],
+        is_emulator,
+    )
+    if code != 0:
+        return None
+    try:
+        return _document_of(json.loads(stdout).get("PolicyDocument"))
+    except (json.JSONDecodeError, AttributeError):
+        return None
+
+
+def _create_seeder_role(
+    base: list[str],
+    declaration: Declaration,
+    is_emulator: bool,
+    desired_trust: dict[str, Any],
+    desired_policy: dict[str, Any],
+) -> None:
+    """The role is absent (or unreadable) on a fresh plane: create it with the
+    desired trust and policy. An existing role whose payload dropped races the
+    create and is tolerated."""
+    role_name = declaration.seeder_role_name
+    print(f"note: seeder role {role_name} is missing; creating it")
+    code, _, stderr = run_aws_captured(
+        base
+        + [
+            "iam",
+            "create-role",
+            "--role-name",
+            role_name,
+            "--assume-role-policy-document",
+            json.dumps(desired_trust),
+            "--max-session-duration",
+            str(SESSION_DURATION_SECONDS),
+        ],
+        is_emulator,
+    )
+    if code != 0 and "EntityAlreadyExists" not in (stderr or ""):
+        print("error: create-role failed")
+        print((stderr or "").strip())
+        die(
+            "could not create the seeder role",
+            "confirm your credentials may create IAM roles, then rerun the verb",
+        )
+    print(
+        f"created: {role_name} (12h session cap)"
+        if code == 0
+        else f"ok: role {role_name} already exists"
+    )
+    if not _put_role_policy(base, role_name, desired_policy, is_emulator):
+        die(
+            f"could not attach {SEEDER_POLICY_NAME}",
+            f"attach {SEEDER_POLICY_NAME} manually, then rerun the verb",
+        )
+    scopes = ", ".join(statement["Sid"] for statement in desired_policy["Statement"])
+    print(f"policy: {SEEDER_POLICY_NAME} attached ({scopes})")
+
+
+def _converge_seeder_role(
+    base: list[str],
+    declaration: Declaration,
+    values: dict[str, str],
+    is_emulator: bool,
+    principal: str,
+    role: dict[str, Any],
+    desired_trust: dict[str, Any],
+    desired_policy: dict[str, Any],
+) -> None:
+    """Bring an existing role's trust, session cap, and inline policy in line
+    with the code's pin: only the drifted parts are repaired."""
+    role_name = declaration.seeder_role_name
     trust = _document_of(role.get("AssumeRolePolicyDocument"))
     if trust is None or trust != desired_trust:
         print(f"note: re-anchoring {role_name}'s trust to the caller ({principal})")
@@ -175,49 +205,41 @@ def _ensure_seeder_role(
             # A stale cap is non-fatal: a 1h-capped role still assumes, and the
             # assume itself fails loudly with the manual fix when it matters.
             print(f"warning: could not raise {role_name}'s session cap")
-    code, stdout, _ = run_aws_captured(
-        base
-        + [
-            "iam",
-            "get-role-policy",
-            "--role-name",
-            role_name,
-            "--policy-name",
-            SEEDER_POLICY_NAME,
-            "--output",
-            "json",
-        ],
-        is_emulator,
-    )
-    attached = None
-    if code == 0:
-        try:
-            attached = _document_of(json.loads(stdout).get("PolicyDocument"))
-        except (json.JSONDecodeError, AttributeError):
-            attached = None
-    if attached != desired_policy:
+    if _attached_policy_document(base, role_name, is_emulator) != desired_policy:
         print(f"note: re-attaching {SEEDER_POLICY_NAME} (drifted from the code's pin)")
-        if (
-            run_aws(
-                base
-                + [
-                    "iam",
-                    "put-role-policy",
-                    "--role-name",
-                    role_name,
-                    "--policy-name",
-                    SEEDER_POLICY_NAME,
-                    "--policy-document",
-                    json.dumps(desired_policy),
-                ],
-                is_emulator,
-            )
-            != 0
-        ):
+        if not _put_role_policy(base, role_name, desired_policy, is_emulator):
             die(
                 f"could not re-attach {SEEDER_POLICY_NAME}",
                 f"attach {SEEDER_POLICY_NAME} manually, then rerun the verb",
             )
+
+
+def _ensure_seeder_role(
+    declaration: Declaration, values: dict[str, str], is_emulator: bool
+) -> None:
+    """Create-on-demand with convergence, before every fresh assume: the
+    emulator loses IAM on restart, a fresh real account starts empty, and an
+    old role's trust, session cap, or policy may lag the code. A converged role
+    passes silently; consistent output never blocks the verb."""
+    base = aws_base(declaration, values, is_emulator)
+    principal = resolve_trust_principal(declaration, is_emulator)
+    desired_trust = seeder_trust_document(principal)
+    desired_policy = seeder_policy_document(declaration, values, is_emulator, principal)
+
+    payload = seeder_role_payload(declaration, values, is_emulator)
+    if payload is None:
+        _create_seeder_role(base, declaration, is_emulator, desired_trust, desired_policy)
+        return
+    _converge_seeder_role(
+        base,
+        declaration,
+        values,
+        is_emulator,
+        principal,
+        payload["Role"],
+        desired_trust,
+        desired_policy,
+    )
 
 
 def drop_seeder_commands(

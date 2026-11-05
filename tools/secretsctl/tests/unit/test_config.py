@@ -95,6 +95,22 @@ def test_schema_errors_are_reported_with_the_field(tmp_path, text):
     assert "secrets.toml" in str(excinfo.value)
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        'ssm = "junk"\n[service]\nslug = "x"\n\n[secrets]\nkeys = ["A"]\n',
+        "requires = 3\n[service]\nslug = \"x\"\n\n[secrets]\nkeys = [\"A\"]\n",
+        'secrets = "junk"\n[service]\nslug = "x"\n',
+    ],
+)
+def test_non_table_sections_fail_cleanly(tmp_path, text):
+    toml = tmp_path / "secrets.toml"
+    toml.write_text(text)
+    with pytest.raises(DeclarationError) as excinfo:
+        load(toml)
+    assert "must be a table" in str(excinfo.value)
+
+
 @pytest.mark.parametrize("text", ['[service]\nslug = "x"\n', ""])
 def test_unreadable_or_incomplete_toml_raises(tmp_path, text):
     toml = tmp_path / "secrets.toml"

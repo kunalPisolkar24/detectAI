@@ -9,6 +9,47 @@ from app.declaration.model import Declaration
 from app.shell import aws_base, run_aws_captured
 
 
+def ssm_path_command(
+    declaration: Declaration, values: dict[str, str], is_emulator: bool
+) -> list[str]:
+    """The paged SSM inventory read (pagers add --next-token themselves)."""
+    return aws_base(declaration, values, is_emulator) + [
+        "ssm",
+        "get-parameters-by-path",
+        "--path",
+        declaration.ssm_prefix,
+        "--with-decryption",
+        "--output",
+        "json",
+    ]
+
+
+def secret_describe_command(
+    declaration: Declaration, values: dict[str, str], is_emulator: bool
+) -> list[str]:
+    return aws_base(declaration, values, is_emulator) + [
+        "secretsmanager",
+        "describe-secret",
+        "--secret-id",
+        declaration.secret_name,
+        "--output",
+        "json",
+    ]
+
+
+def secret_value_command(
+    declaration: Declaration, values: dict[str, str], is_emulator: bool
+) -> list[str]:
+    return aws_base(declaration, values, is_emulator) + [
+        "secretsmanager",
+        "get-secret-value",
+        "--secret-id",
+        declaration.secret_name,
+        "--output",
+        "json",
+    ]
+
+
 def collect_ssm_parameters(
     declaration: Declaration,
     values: dict[str, str],
@@ -18,19 +59,10 @@ def collect_ssm_parameters(
     """Live parameter inventory keyed by full name: {name: {type, value}}; the
     CLI paginates, so the loop pulls page after page on NextToken."""
     prefix = declaration.ssm_prefix
-    base = aws_base(declaration, values, is_emulator)
     parameters: dict[str, dict[str, str]] = {}
     next_token: str | None = None
     for _ in range(100):  # seatbelt: the plane seeds at most a handful of pages
-        command = base + [
-            "ssm",
-            "get-parameters-by-path",
-            "--path",
-            prefix,
-            "--with-decryption",
-            "--output",
-            "json",
-        ]
+        command = ssm_path_command(declaration, values, is_emulator)
         if next_token:
             command += ["--next-token", next_token]
         code, stdout, stderr = run_aws_captured(command, is_emulator, session)
@@ -70,17 +102,8 @@ def collect_secret(
     """(describe payload, stored blob keys). stored is None when the secret has
     no version yet or the value read failed; None describe means the secret is
     unreachable and the caller's checklist must abort."""
-    base = aws_base(declaration, values, is_emulator)
     code, stdout, stderr = run_aws_captured(
-        base
-        + [
-            "secretsmanager",
-            "describe-secret",
-            "--secret-id",
-            declaration.secret_name,
-            "--output",
-            "json",
-        ],
+        secret_describe_command(declaration, values, is_emulator),
         is_emulator,
         session,
     )
@@ -97,15 +120,7 @@ def collect_secret(
         print(f"error: describe-secret returned unparseable output: {exc}")
         return None, None
     code, stdout, stderr = run_aws_captured(
-        base
-        + [
-            "secretsmanager",
-            "get-secret-value",
-            "--secret-id",
-            declaration.secret_name,
-            "--output",
-            "json",
-        ],
+        secret_value_command(declaration, values, is_emulator),
         is_emulator,
         session,
     )

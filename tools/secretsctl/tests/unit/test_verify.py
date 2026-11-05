@@ -36,8 +36,12 @@ def test_compare_seeds_splits_matched_mismatched_missing():
     assert missing == ["C"]
 
 
-def test_verify_commands_shape(dp):
-    commands = flow_module.verify_commands(dp, EMULATOR_ENV, True)
+def test_verify_reads_three_collector_commands(dp):
+    commands = [
+        collect.ssm_path_command(dp, EMULATOR_ENV, True),
+        collect.secret_describe_command(dp, EMULATOR_ENV, True),
+        collect.secret_value_command(dp, EMULATOR_ENV, True),
+    ]
     assert len(commands) == 3
     assert "--path /detectai/document-parser/" in " ".join(commands[0])
     assert "--secret-id detectai/document-parser/secrets" in " ".join(commands[1])

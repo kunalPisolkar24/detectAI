@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import re
 
-from app.declaration.model import Declaration
+from app.declaration.model import Declaration, REGION_RE
 
-REGION_RE = re.compile(r"^[a-z]{2}-[a-z]+-[0-9]+$")
 URL_RE = re.compile(r"^https?://\S+$")
 ENV_TYPES = ("dev", "prod")
 RECOVERY_WINDOW_MIN = 7
@@ -20,7 +19,7 @@ def plane_errors(values: dict[str, str]) -> list[str]:
     def fail(message: str, fix: str) -> None:
         errors.append(f"error: {message}\nfix:   {fix}")
 
-    if (region := values.get("AWS_REGION")) is not None and not REGION_RE.fullmatch(region):
+    if (region := values.get("AWS_REGION")) and not REGION_RE.fullmatch(region):
         fail(
             f"AWS_REGION is not a valid region: {region!r}",
             "use a plain region code, e.g. ap-southeast-2",
