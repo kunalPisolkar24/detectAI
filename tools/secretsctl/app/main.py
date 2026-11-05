@@ -15,11 +15,17 @@ from app.carrier.role import drop_seeder_flow, validate_seeder_role
 from app.carrier.session import (
     clear_cached_session,
     clear_cached_session_files,
+    refresh_all_flow,
     resolve_carrier_session,
     session_cache_for,
 )
 from app.declaration.loader import DeclarationError, load
-from app.declaration.locate import REPO_ROOT, find_service_workspace, workspace_for
+from app.declaration.locate import (
+    REPO_ROOT,
+    find_service_workspace,
+    ready_service_workspaces,
+    workspace_for,
+)
 from app.shell import die
 from app.stack.flow import terraform_verb_flow
 from app.verify import flow as verify
@@ -36,6 +42,7 @@ VERBS = (
     "seeder-drop",
     "session-clear",
     "session-clear-all",
+    "session-refresh-all",
 )
 
 
@@ -52,7 +59,8 @@ def build_parser() -> argparse.ArgumentParser:
         "aborting at the first failure), with the state bucket and seeder role "
         "created on demand on both planes; seeder-drop detaches and deletes the "
         "seeder role; session-clear drops the targeted service's cached seeder "
-        "session and session-clear-all drops every cached one",
+        "session and session-clear-all drops every cached one; session-refresh-all "
+        "mints every ready service's seeder session in one run (one shared MFA code on real AWS)",
     )
     parser.add_argument(
         "--service",
@@ -68,6 +76,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--aws",
         action="store_true",
         help="run against real AWS (the seeder role session, MFA-gated)",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="session-refresh-all only: re-mint every ready service's seeder session "
+        "even when a cached one is still valid",
     )
     parser.add_argument(
         "--values-file", help="alternate values file (default: the service's infra/.env)"
@@ -108,6 +122,11 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
         die("--force-delete only applies to the destroy command", "run it with destroy")
     if args.drop_seeder and args.command != "destroy":
         die("--drop-seeder only applies to the destroy command", "run it with destroy")
+    if args.force and args.command != "session-refresh-all":
+        die(
+            "--force only applies to the session-refresh-all command",
+            "run it with session-refresh-all",
+        )
 
     if args.command == "session-clear-all":
         removed = clear_cached_session_files()
@@ -116,6 +135,14 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
         if not removed:
             print("nothing to clear (no cached seeder sessions)")
         return 0
+
+    if args.command == "session-refresh-all":
+        return refresh_all_flow(
+            ready_service_workspaces(REPO_ROOT),
+            resolve_plane(args.aws)[1],
+            args.force,
+            args.dry_run,
+        )
 
     if workspace is None:
         workspace = find_service_workspace(REPO_ROOT, args.service)

@@ -73,6 +73,56 @@ def test_session_clear_all_removes_every_cached_session(tmp_path, monkeypatch, c
     assert "nothing to clear (no cached seeder sessions)" in capsys.readouterr().out
 
 
+def test_session_refresh_all_wiring(monkeypatch, tmp_path):
+    workspace = write_service(tmp_path, "")
+    workspaces = [workspace]
+    seen = {}
+    monkeypatch.setattr(cli, "ready_service_workspaces", lambda repo_root: workspaces)
+    monkeypatch.setattr(
+        cli,
+        "refresh_all_flow",
+        lambda ws, is_emulator, force, dry_run: seen.update(
+            ws=ws, is_emulator=is_emulator, force=force, dry_run=dry_run
+        )
+        or 7,
+    )
+
+    # the batch is cross-service: --service-style targeting has no say here
+    assert cli.main(["session-refresh-all", "--aws", "--force", "--dry-run"]) == 7
+    assert seen == {"ws": workspaces, "is_emulator": False, "force": True, "dry_run": True}
+
+    assert cli.main(["session-refresh-all"]) == 7
+    assert seen["is_emulator"] is True and seen["force"] is False and seen["dry_run"] is False
+
+
+def test_force_flag_only_applies_to_session_refresh_all(ws_env, capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(["plan", "--force"], workspace=ws_env)
+    assert excinfo.value.code == 1
+    assert "only applies to the session-refresh-all command" in capsys.readouterr().out
+
+
+def test_ready_service_workspaces_needs_the_declaration_and_the_values(tmp_path):
+    services = tmp_path / "services"
+    ready = services / "ready"
+    (ready / "infra").mkdir(parents=True)
+    (ready / "secrets.toml").write_text("[nonsense]\n")
+    (ready / "infra" / ".env").write_text("")
+    no_toml = services / "no-toml"
+    no_toml.mkdir()
+    (no_toml / "infra").mkdir()
+    (no_toml / "infra" / ".env").write_text("")
+    no_env = services / "no-env"
+    no_env.mkdir()
+    (no_env / "secrets.toml").write_text("[nonsense]\n")
+
+    ready_workspaces = cli.ready_service_workspaces(tmp_path)
+    assert [workspace.service_dir.name for workspace in ready_workspaces] == ["ready"]
+    assert ready_workspaces[0].values_file == ready / "infra" / ".env"
+
+    assert cli.ready_service_workspaces(tmp_path / "no-services-dir") == []
+
+
 def test_session_clear_needs_a_service_context(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)  # no secrets.toml anywhere upward
     with pytest.raises(SystemExit) as excinfo:
@@ -436,7 +486,9 @@ def test_destroy_chain_on_the_emulator_runs_purge_then_seeder_drop(tmp_path, mon
 def test_destroy_refused_purge_aborts_before_terraform(tmp_path, monkeypatch):
     workspace = ws_with(tmp_path, EMULATOR_ENV)
     monkeypatch.setattr(
-        stack_flow, "confirm_purge", lambda declaration, values, is_emulator, account, session=None: False
+        stack_flow,
+        "confirm_purge",
+        lambda declaration, values, is_emulator, account, session=None: False,
     )
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
 
@@ -457,7 +509,9 @@ def test_destroy_force_delete_on_real_aws_runs_the_cli_delete(tmp_path, monkeypa
         return 0
 
     monkeypatch.setattr(stack_flow, "run_aws", fake_run_aws)
-    monkeypatch.setattr(stack_flow, "run_terraform", lambda tf_dir, args, tf_vars, env_overlay=None: 0)
+    monkeypatch.setattr(
+        stack_flow, "run_terraform", lambda tf_dir, args, tf_vars, env_overlay=None: 0
+    )
     monkeypatch.setattr(
         stack_flow,
         "ensure_state_bucket",
@@ -474,9 +528,13 @@ def test_destroy_force_delete_on_real_aws_runs_the_cli_delete(tmp_path, monkeypa
 def test_destroy_purge_failure_aborts_before_the_seeder_drop(tmp_path, monkeypatch):
     workspace = ws_with(tmp_path, EMULATOR_ENV)
     monkeypatch.setattr(
-        stack_flow, "confirm_purge", lambda declaration, values, is_emulator, account, session=None: True
+        stack_flow,
+        "confirm_purge",
+        lambda declaration, values, is_emulator, account, session=None: True,
     )
-    monkeypatch.setattr(stack_flow, "run_terraform", lambda tf_dir, args, tf_vars, env_overlay=None: 0)
+    monkeypatch.setattr(
+        stack_flow, "run_terraform", lambda tf_dir, args, tf_vars, env_overlay=None: 0
+    )
     monkeypatch.setattr(
         stack_flow, "purge_state", lambda declaration, values, is_emulator, account, session=None: 1
     )

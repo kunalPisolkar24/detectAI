@@ -34,3 +34,23 @@ def find_service_workspace(repo_root: Path, service: str | None) -> Workspace:
         "no secrets.toml found from the current directory upward",
         "run the tool inside a service directory or pass --service <name>",
     )
+
+
+def ready_service_workspaces(repo_root: Path) -> list[Workspace]:
+    """Every service runnable right now: a committed secrets.toml plus its
+    infra/.env. Services missing either are not batch candidates (the
+    single-service verbs die with their own hints). Sorted by service name."""
+    services_root = repo_root / "services"
+    if not services_root.is_dir():
+        return []
+    declared = sorted(
+        (
+            candidate
+            for candidate in services_root.iterdir()
+            if (candidate / "secrets.toml").exists()
+        ),
+        key=lambda service_dir: service_dir.name,
+    )
+    return [
+        workspace for workspace in map(workspace_for, declared) if workspace.values_file.exists()
+    ]

@@ -7,8 +7,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from conftest import DP, EMULATOR_ENV, REAL_ENV, ROLE_ARN, USER_ARN
+from conftest import DP, DP_TOML, EMULATOR_ENV, REAL_ENV, ROLE_ARN, USER_ARN, render_env
 from app.carrier import identity, policy, role, session
+from app.declaration.locate import workspace_for
+from app.declaration.model import Workspace
 
 pytestmark = pytest.mark.unit
 
@@ -765,3 +767,298 @@ def test_resolve_carrier_session_dies_without_an_mfa_serial(tmp_path, monkeypatc
     assert excinfo.value.code == 1
     out = capsys.readouterr().out
     assert "cannot derive" in out and "SEEDER_MFA_SERIAL" in out
+
+
+# --- session-refresh-all: one assume batch behind one lazily entered MFA code ---
+
+
+def toml_for(slug: str) -> str:
+    return DP_TOML.replace("document-parser", slug)
+
+
+def ready_workspace(tmp_path, slug: str, env_text: str) -> Workspace:
+    service_dir = tmp_path / slug
+    service_dir.mkdir()
+    (service_dir / "secrets.toml").write_text(toml_for(slug))
+    infra = service_dir / "infra"
+    infra.mkdir()
+    (infra / ".env").write_text(env_text)
+    return workspace_for(service_dir)
+
+
+def assume_payload(slug: str) -> dict:
+    return {
+        "Credentials": {
+            "AccessKeyId": "A",
+            "SecretAccessKey": "B",
+            "SessionToken": "C",
+            "Expiration": "2086-01-01T00:00:00Z",
+        },
+        "AssumedRoleUser": {
+            "Arn": f"arn:aws:sts::123456789012:assumed-role/detectai-{slug}-seeder/batch"
+        },
+    }
+
+
+def cached_triplet(slug: str) -> dict:
+    return {
+        "role_arn": f"arn:aws:iam::000000000000:role/detectai-{slug}-seeder",
+        "access_key_id": "A",
+        "secret_access_key": "B",
+        "session_token": "C",
+        "expires_at": "2086-01-01T00:00:00Z",
+    }
+
+
+def real_plane_ident(monkeypatch):
+    monkeypatch.setattr(policy, "sts_caller_identity", lambda: ("123456789012", USER_ARN))
+
+
+def assume_slug_of(command) -> str:
+    role_arn = command[command.index("--role-arn") + 1]
+    return role_arn.split("detectai-")[1][: -len("-seeder")]
+
+
+def test_refresh_all_runs_the_whole_batch_behind_one_mfa_code(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
+    real_plane_ident(monkeypatch)
+    ensured: list[str] = []
+    monkeypatch.setattr(session, "_ensure_seeder_role", lambda d, v, e: ensured.append(d.slug))
+    prompts: list[str] = []
+    monkeypatch.setattr(
+        session, "prompt_mfa_code", lambda serial: prompts.append(serial) or "654321"
+    )
+    tokens: dict[str, str] = {}
+
+    def captured(command, is_emulator, session=None):
+        slug = assume_slug_of(command)
+        tokens[slug] = command[command.index("--token-code") + 1]
+        return 0, json.dumps(assume_payload(slug)), ""
+
+    monkeypatch.setattr(session, "run_aws_captured", captured)
+    workspaces = [
+        ready_workspace(tmp_path, "chats", render_env(REAL_ENV)),
+        ready_workspace(tmp_path, "teams", render_env(REAL_ENV)),
+    ]
+
+    assert session.refresh_all_flow(workspaces, False, False, False) == 0
+
+    out = capsys.readouterr().out
+    assert "refresh-all: 2 ready services on real AWS" in out
+    assert prompts == ["arn:aws:iam::123456789012:mfa/kunalpisolkar"]  # one code, both assumes
+    assert set(tokens.values()) == {"654321"}
+    assert sorted(ensured) == ["chats", "teams"]  # both roles converge before the assume batch
+    assert "refreshed: chats" in out and "refreshed: teams" in out
+    assert "summary: 2 refreshed, 0 valid, 0 skipped, 0 failed" in out
+    caches = sorted(path.name for path in (tmp_path / "cache").glob("*.json"))
+    assert caches == ["chats.json", "teams.json"]
+
+
+def test_refresh_all_prompts_again_for_a_second_mfa_device(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
+    real_plane_ident(monkeypatch)
+    monkeypatch.setattr(session, "_ensure_seeder_role", lambda d, v, e: None)
+    prompts: list[str] = []
+
+    def prompt(serial):
+        prompts.append(serial)
+        return "111111" if serial.endswith("alpha") else "222222"
+
+    monkeypatch.setattr(session, "prompt_mfa_code", prompt)
+    tokens: dict[str, str] = {}
+
+    def captured(command, is_emulator, session=None):
+        slug = assume_slug_of(command)
+        tokens[slug] = command[command.index("--token-code") + 1]
+        return 0, json.dumps(assume_payload(slug)), ""
+
+    monkeypatch.setattr(session, "run_aws_captured", captured)
+    workspaces = [
+        ready_workspace(
+            tmp_path,
+            "chats",
+            render_env(
+                {
+                    "SEEDER_MFA_SERIAL": "arn:aws:iam::123456789012:mfa/alpha",
+                    "API_KEY": "a" * 20,
+                }
+            ),
+        ),
+        ready_workspace(
+            tmp_path,
+            "teams",
+            render_env(
+                {
+                    "SEEDER_MFA_SERIAL": "arn:aws:iam::123456789012:mfa/beta",
+                    "API_KEY": "a" * 20,
+                }
+            ),
+        ),
+    ]
+
+    assert session.refresh_all_flow(workspaces, False, False, False) == 0
+
+    assert prompts == [
+        "arn:aws:iam::123456789012:mfa/alpha",
+        "arn:aws:iam::123456789012:mfa/beta",
+    ]  # each device is prompted lazily, in service order
+    assert tokens == {"chats": "111111", "teams": "222222"}  # each device rides its own code
+
+
+def test_refresh_all_retries_a_failed_assume_with_a_fresh_code(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
+    real_plane_ident(monkeypatch)
+    monkeypatch.setattr(session, "_ensure_seeder_role", lambda d, v, e: None)
+    attempts: list[str] = []
+    codes = iter(["111111", "222222"])
+
+    def prompt(serial):
+        return next(codes)
+
+    monkeypatch.setattr(session, "prompt_mfa_code", prompt)
+
+    def captured(command, is_emulator, session=None):
+        slug = assume_slug_of(command)
+        attempts.append(f"{slug}:{command[command.index('--token-code') + 1]}")
+        if len(attempts) == 1:
+            return 1, "", "AccessDenied: the token rolled over"
+        return 0, json.dumps(assume_payload(slug)), ""
+
+    monkeypatch.setattr(session, "run_aws_captured", captured)
+    workspaces = [ready_workspace(tmp_path, "chats", render_env(REAL_ENV))]
+
+    assert session.refresh_all_flow(workspaces, False, False, False) == 0
+
+    assert attempts == ["chats:111111", "chats:222222"]  # exactly one fresh-code retry
+    out = capsys.readouterr().out
+    assert "note: re-assuming chats with a fresh MFA code" in out
+    assert "refreshed: chats" in out
+    assert "summary: 1 refreshed, 0 valid, 0 skipped, 0 failed" in out
+
+
+def test_refresh_all_reports_a_failed_service_and_keeps_the_batch_going(
+    monkeypatch, capsys, tmp_path
+):
+    monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
+    real_plane_ident(monkeypatch)
+    monkeypatch.setattr(session, "_ensure_seeder_role", lambda d, v, e: None)
+    codes = iter(["111111", "222222", "333333"])
+    monkeypatch.setattr(session, "prompt_mfa_code", lambda serial: next(codes))
+
+    def captured(command, is_emulator, session=None):
+        slug = assume_slug_of(command)
+        if slug == "chats":
+            return 1, "", "AccessDenied: the token rolled over again"
+        return 0, json.dumps(assume_payload(slug)), ""
+
+    monkeypatch.setattr(session, "run_aws_captured", captured)
+    workspaces = [
+        ready_workspace(tmp_path, "chats", render_env(REAL_ENV)),
+        ready_workspace(tmp_path, "teams", render_env(REAL_ENV)),
+    ]
+
+    assert session.refresh_all_flow(workspaces, False, False, False) == 1
+
+    out = capsys.readouterr().out
+    assert "failed: chats (see its assume error above)" in out
+    assert "refreshed: teams" in out  # the failure does not stop the batch
+    assert "summary: 1 refreshed, 0 valid, 0 skipped, 1 failed" in out
+    assert (tmp_path / "cache" / "chats.json").exists() is False
+    assert (tmp_path / "cache" / "teams.json").exists() is True
+
+
+def test_refresh_all_dry_run_plans_without_converging_or_assuming(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
+    real_plane_ident(monkeypatch)
+
+    def boom(*arguments, **rest):
+        raise AssertionError("dry run must not converge a role or assume it")
+
+    monkeypatch.setattr(session, "_ensure_seeder_role", boom)
+    monkeypatch.setattr(session, "run_aws_captured", boom)
+    workspaces = [ready_workspace(tmp_path, "chats", render_env(REAL_ENV))]
+
+    assert session.refresh_all_flow(workspaces, False, False, True) == 0
+
+    out = capsys.readouterr().out
+    assert "would refresh: chats" in out
+    assert "(dry run: no assumes, no MFA)" in out
+    assert not (tmp_path / "cache" / "chats.json").exists()
+
+
+def test_refresh_all_rides_a_still_valid_cached_triplet(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
+    cache = tmp_path / "cache" / "chats.json"
+    cache.parent.mkdir(parents=True)
+    cache.write_text(json.dumps(cached_triplet("chats")))
+
+    def boom(*arguments, **rest):
+        raise AssertionError("a valid cached triplet must not converge or assume")
+
+    monkeypatch.setattr(session, "run_aws_captured", boom)
+    monkeypatch.setattr(session, "_ensure_seeder_role", boom)
+    workspaces = [ready_workspace(tmp_path, "chats", render_env(EMULATOR_ENV))]
+
+    assert session.refresh_all_flow(workspaces, True, False, False) == 0
+
+    out = capsys.readouterr().out
+    assert "valid: chats (cached triplet rides" in out
+    assert "summary: 0 refreshed, 1 valid, 0 skipped, 0 failed" in out
+
+
+def test_refresh_all_force_re_mints_a_valid_triplet(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
+    cache = tmp_path / "cache" / "chats.json"
+    cache.parent.mkdir(parents=True)
+    cache.write_text(json.dumps(cached_triplet("chats")))
+    monkeypatch.setattr(session, "_ensure_seeder_role", lambda d, v, e: None)
+
+    def captured(command, is_emulator, session=None):
+        return 0, json.dumps(assume_payload("chats")), ""
+
+    monkeypatch.setattr(session, "run_aws_captured", captured)
+    workspaces = [ready_workspace(tmp_path, "chats", render_env(EMULATOR_ENV))]
+
+    assert session.refresh_all_flow(workspaces, True, True, False) == 0
+
+    out = capsys.readouterr().out
+    assert "refreshed: chats" in out and "valid: chats" not in out
+
+
+def test_refresh_all_skips_a_service_with_value_errors(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
+
+    def boom(*arguments, **rest):
+        raise AssertionError("a skipped service must not converge or assume")
+
+    monkeypatch.setattr(session, "run_aws_captured", boom)
+    monkeypatch.setattr(session, "_ensure_seeder_role", boom)
+    workspaces = [ready_workspace(tmp_path, "chats", "API_KEY=abc\n")]
+
+    assert session.refresh_all_flow(workspaces, True, False, False) == 1
+
+    out = capsys.readouterr().out
+    assert "API_KEY missing or shorter than 16 chars" in out
+    assert "skipped: chats (fix the value errors above)" in out
+
+
+def test_refresh_all_reports_a_broken_declaration(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
+    service_dir = tmp_path / "chats"
+    service_dir.mkdir()
+    (service_dir / "secrets.toml").write_text("[nonsense]\n")
+    infra = service_dir / "infra"
+    infra.mkdir()
+    (infra / ".env").write_text(render_env(EMULATOR_ENV))
+
+    assert session.refresh_all_flow([workspace_for(service_dir)], True, False, False) == 1
+
+    out = capsys.readouterr().out
+    assert "failed: chats (see its declaration error above)" in out
+    assert "summary: 0 refreshed, 0 valid, 0 skipped, 1 failed" in out
+
+
+def test_refresh_all_without_candidates_hints_at_the_opt_in(capsys):
+    assert session.refresh_all_flow([], True, False, False) == 0
+    out = capsys.readouterr().out
+    assert "nothing to refresh" in out and "secrets.toml and infra/.env" in out

@@ -339,3 +339,23 @@ def test_destroy_leaves_the_role_and_state_intact_without_flags(service):
     assert head.returncode == 0  # no --purge-state: the bucket survives until teardown
     role = aws("iam", "get-role", "--role-name", f"detectai-{slug}-seeder")
     assert role.returncode == 0  # no --drop-seeder: the carrier survives until teardown
+
+
+def test_session_refresh_all_mints_and_then_rides_the_cache(floci):
+    """The batch verb runs against the whole repo (candidates = ready services),
+    not the throwaway service: on floci it mints promptlessly with --force and
+    the rerun rides the fresh cache."""
+    force = run_cli(PACKAGE_ROOT, "session-refresh-all", "--force")
+    if "nothing to refresh" in force.stdout:
+        pytest.skip("no ready service on this machine (secrets.toml plus infra/.env)")
+    assert force.returncode == 0, force.stdout + force.stderr
+    assert "refreshed: document-parser" in force.stdout
+    cache = PACKAGE_ROOT / ".session-cache" / "document-parser.json"
+    assert json.loads(cache.read_text())["role_arn"] == (
+        "arn:aws:iam::000000000000:role/detectai-document-parser-seeder"
+    )
+
+    rerun = run_cli(PACKAGE_ROOT, "session-refresh-all")
+    assert rerun.returncode == 0, rerun.stdout + rerun.stderr
+    assert "valid: document-parser" in rerun.stdout
+    assert "carrier: assuming" not in rerun.stdout  # the fresh triplet rides untouched

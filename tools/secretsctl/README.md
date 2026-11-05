@@ -32,7 +32,14 @@ Every verb on both planes rides the service's out-of-stack seeder role
 (`detectai-<service>-seeder`) through an STS assume-role; the 12-hour triplet
 caches in the tool tree's `.session-cache/<service>.json` — sessions are the
 engine's job, never the service's — and `session-clear` drops the targeted
-service's file while `session-clear-all` drops every cached one. The role
+service's file while `session-clear-all` drops every cached one.
+`session-refresh-all` mints fresh triplets for every ready service (a
+`secrets.toml` plus an `infra/.env`) in one run: services riding a still-valid
+cached triplet are left alone unless `--force`, the roles converge before the
+prompt, and one MFA code shared per device drives every assume on real AWS
+(the emulator needs no code) — a failing service reports and the run
+continues, exiting 1 when anything ended neither refreshed nor valid.
+`--dry-run` lists what would refresh. The role
 trusts whoever runs the tool (the ambient caller; the emulator uses a
 structural placeholder) and is created or re-converged — trust, session cap,
 inline policy — whenever a verb resolves a fresh session, with a cached one
