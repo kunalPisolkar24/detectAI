@@ -1,6 +1,6 @@
 # Make targets
 
-`make help` (the default goal) prints the raw index; this page is that index plus a purpose and a "reach for it when" for each target. The targets live in two fragments under `mk/` and run everything inside the tool's Poetry environment (`poetry -C <tool dir>`).
+`make help` (the default goal) prints the raw index; this page is that index plus a purpose and a "reach for it when" for each target. The targets live in three fragments under `mk/` — `local.mk` (install, lint, format), `secrets.mk` (the secrets-verb wrappers), and `tests.mk` — and run everything inside the tool's Poetry environment (`poetry -C <tool dir>`).
 
 ## Local — `mk/local.mk`
 
@@ -23,9 +23,34 @@
 
 Both tiers and what each proves are described in the [testing guide](../guides/testing.md).
 
-## No make targets exist for the secrets verbs — deliberately
+## Secrets verbs — `mk/secrets.mk`
 
-The engine's verb surface (`plan`, `apply`, `verify`, …) is the [CLI](cli.md), not make. Services that want one-command ergonomics wrap the CLI in their own `mk/secrets.mk` — document-parser's is the reference example: `make secrets-check | plan | apply | auto-apply | verify | clean | destroy | …` with `PLANE=floci|aws`, `DRY_RUN=1` and friends as switches. Those wrappers accept the same named switches because they exist, but nothing here generates or maintains them; a new service onboards by [writing its two files](../guides/onboarding-a-service.md), not a make fragment.
+The tool tree wraps all nine verbs so the `poetry -C …` incantation never needs typing:
+
+```sh
+make -C tools/secretsctl secrets-apply SERVICE=web
+make -C tools/secretsctl secrets-destroy SERVICE=web PURGE_STATE=1 DROP_SEEDER=1
+```
+
+| Target | Verb it runs | Switches |
+|--------|--------------|----------|
+| `secrets-plan` | [plan](../guides/terraform-lifecycle.md) | `SERVICE`, `PLANE`, `DRY_RUN` |
+| `secrets-apply` | [apply](../guides/terraform-lifecycle.md) | `SERVICE`, `PLANE`, `DRY_RUN` |
+| `secrets-auto-apply` | [auto-apply](../guides/terraform-lifecycle.md) | `SERVICE`, `PLANE`, `DRY_RUN` |
+| `secrets-verify` | [verify](../guides/verifying.md) | `SERVICE`, `PLANE`, `DRY_RUN` |
+| `secrets-destroy` | [destroy](../guides/terraform-lifecycle.md) | `SERVICE`, `PLANE`, `DRY_RUN`, `PURGE_STATE`, `FORCE_DELETE`, `DROP_SEEDER` |
+| `secrets-drop-seeder` | [seeder-drop](../concepts/carrier.md#dropping-the-carrier) | `SERVICE`, `PLANE` |
+| `secrets-session-clear` | [session-clear](../concepts/carrier.md#the-session-verbs) | `SERVICE`, `PLANE` |
+| `secrets-session-clear-all` | [session-clear-all](../concepts/carrier.md#the-session-verbs) | — |
+| `secrets-session-refresh-all` | [session-refresh-all](../concepts/carrier.md#the-session-verbs) | `FORCE`, `DRY_RUN` |
+
+The wrappers are thin and convention-following rather than clever:
+
+- `SERVICE=<name>` is required for the single-service verbs — the engine starts in the tool tree, where a nearest-`secrets.toml` walk upward finds nothing — and unused (silently ignored) by the two `session-*-all` batch verbs, which the [engine's own guards](cli.md) also protect.
+- Every switch validates before anything runs (`Invalid PLANE 'x'. Use PLANE=floci or PLANE=aws.`, `Invalid DRY_RUN '2'. Use 0 or 1.`), and each `0|1` switch appends its flag only when `1`.
+- `PLANE=floci|aws` flips the default to the emulator; `DRY_RUN=1` turns any verb into its printed stakeout.
+
+Services that want per-service ergonomics still wrap the CLI in their own `mk/secrets.mk` — document-parser's is the reference example, hardwired to its slug with the same switch names. A new service onboards by [writing its two files](../guides/onboarding-a-service.md), not a make fragment.
 
 ## Next Steps
 

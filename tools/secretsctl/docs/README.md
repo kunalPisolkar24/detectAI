@@ -37,7 +37,7 @@ Start here:
 | Document | What You'll Learn | When to Read |
 |----------|-------------------|--------------|
 | [CLI reference](reference/cli.md) | Every verb, flag, guard rule, exit code, scriptable receipt | Any command-line work |
-| [Make targets](reference/make.md) | The tool-tree's own make layer | Building, linting, testing the engine |
+| [Make targets](reference/make.md) | The tool-tree's make layer, including the secrets-verb wrappers | Building, linting, testing, or driving the engine |
 
 ## The engine at a glance
 

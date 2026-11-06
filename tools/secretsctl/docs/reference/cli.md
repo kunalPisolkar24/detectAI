@@ -7,6 +7,7 @@ Every verb and flag of `secretsctl`, the guard rules that stop misplaced ones, a
 ```sh
 secretsctl --service <name> plan                                # after: make -C tools/secretsctl install
 poetry -C tools/secretsctl run secretsctl --service <name> apply # anywhere in the repo, no global install
+make -C tools/secretsctl secrets-verify SERVICE=<name>          # the tool tree's make wrappers in reference/make.md
 python -m app verify                                            # inside tools/secretsctl
 ```
 
