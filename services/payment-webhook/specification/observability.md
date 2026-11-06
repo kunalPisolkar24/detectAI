@@ -106,3 +106,7 @@ The existing assets move with the rebuild; nothing is silently half-migrated:
 | recommended additions | conditions on `payment_webhook_signatures_invalid_total` above baseline rates — tamper/replay and brute-force signals the old policy never carried; thresholds set when wiring lands |
 | `alerts/workers.tf` — `rabbitmq_connection_status` | retires with the broker at the worker cutover (not this service's PR) |
 | overview board | `payment-gateway` entries in the services list re-name |
+
+## Go LLD (skeleton landed)
+
+`internal/observability` mirrors document-parser's module, Go-shaped: `interfaces.go` declares the app-facing `Telemetry` seam with the attribution vocabularies (`Reason`, `AdvisoryReason`, `PublishStatus`) — no OTel imports in the seam; `null.go` carries the disabled boot's realization; `service.go` holds the frozen instrument names; `boot.go` (the endpoint gate then adapters then instrumentation), `otlp.go` (signal paths + api-key header), `resource.go` (deployment labels), and `adapters/` (one SDK provider per signal) are shaped and land with the OTel SDK wiring. Resolved with the skeleton: logging rides the process-wide slog bridge set at boot (`slog.SetDefault`; stdout stays), otelgin joins the engine inside the boot (document-parser's `instrument_app` moment), and the SDK dependencies arrive with the build, not before.
