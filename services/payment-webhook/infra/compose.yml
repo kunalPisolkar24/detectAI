@@ -18,8 +18,6 @@ services:
       QUEUE_URL: http://${QUEUE_HOST:-host.docker.internal}:${ELASTICMQ_PORT:-9324}${QUEUE_PATH:-/000000000000/payment_events.fifo}
       AWS_ENDPOINT_URL_SQS: http://${QUEUE_HOST:-host.docker.internal}:${ELASTICMQ_PORT:-9324}
       ENV_TYPE: ${ENV_TYPE:-dev}
-      AWS_ENDPOINT_URL_SECRETS_MANAGER: http://${FLOCI_HOST:-host.docker.internal}:4566
-      AWS_ENDPOINT_URL_SSM: http://${FLOCI_HOST:-host.docker.internal}:4566
     healthcheck:
       test: ["CMD", "bash", "-c", "</dev/tcp/127.0.0.1/8080"]
       interval: 30s
