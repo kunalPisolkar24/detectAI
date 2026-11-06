@@ -72,4 +72,8 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 
 ## Non-goals
 
-No polling/TTL or reload (a config change means a restart), no caching layer, no per-key reads, no AppConfig/feature flags, no dotenv files in prod images, no `DOTENV_PATH` knob until a caller exists, and no compose wiring before the deployment build (document-parser's compose is the model).
+No polling/TTL or reload (a config change means a restart), no caching layer, no per-key reads, no AppConfig/feature flags, no dotenv files in prod images, no `DOTENV_PATH` knob until a caller exists, and no seeding contract changes (infra/.env stays the one seed source on both planes via secretsctl).
+
+## Compose
+
+`infra/compose.yml` serves both flicks in one file through interpolation, never branching: `ENV_TYPE` defaults to dev (`environment: ENV_TYPE: ${ENV_TYPE:-dev}`) and the SM/SSM endpoint overrides ride the same `host.docker.internal` repaint the SQS endpoint already uses — one container shape, two boots (`make up`, `make prod-up`). The block only ever carries bootstrap variables (flick, region, endpoints, ambient creds); config values stay plane-owned: dev carries them via `env_file`, prod re-reads them from the SM/SSM trees and ignores process env by contract. `QUEUE_URL` in `infra/.env` carries the container shape (`host.docker.internal:9324`) so the seeded SSM tree is deployment-correct, and `make run` repaints it for the host so one file serves seeding, containers, and host runs without flips.
