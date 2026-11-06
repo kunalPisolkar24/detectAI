@@ -13,6 +13,7 @@ import (
 
 const testPaddleSecret = "paddle-change-me-16-chars"
 const testQueueURL = "https://sqs.eu-central-1.amazonaws.com/123456789012/payment_events.fifo"
+const testOTelEndpoint = "https://otlp.eu01.nr-data.net"
 
 type mapSource map[string]string
 
@@ -274,12 +275,101 @@ func TestResolveContracts(t *testing.T) {
 	})
 
 	t.Run("unknown plane keys ride along ignored", func(t *testing.T) {
-		cfg, err := config.Resolve(withkey(map[string]string{"OTEL_SERVICE_NAME": "payment-webhook", "OLD_API_KEY": "legacy-secret-16"}))
+		cfg, err := config.Resolve(withkey(map[string]string{"LEGACY_GATEWAY_URL": "amqp://old", "OLD_API_KEY": "legacy-secret-16"}))
 		if err != nil {
 			t.Fatal(err)
 		}
 		if cfg.Port != 8080 {
 			t.Errorf("Port = %d, want 8080; unknown keys must not touch the contract", cfg.Port)
+		}
+	})
+
+	t.Run("the OTel keys keep defaults with the endpoint unset", func(t *testing.T) {
+		cfg, err := config.Resolve(withkey(nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.OTelEndpoint != "" {
+			t.Errorf("OTelEndpoint = %q, want the unset gate", cfg.OTelEndpoint)
+		}
+		if cfg.NewRelicKey != "" {
+			t.Errorf("NewRelicKey = non-empty; without an endpoint the boot stays credential-free")
+		}
+		if cfg.OTelName != "payment-webhook" {
+			t.Errorf("OTelName = %q, want the default", cfg.OTelName)
+		}
+		if cfg.OTelVersion != "dev" {
+			t.Errorf("OTelVersion = %q, want the dev fallback", cfg.OTelVersion)
+		}
+		if cfg.OTelSampleRatio != 1.0 {
+			t.Errorf("OTelSampleRatio = %v, want the unsampled-full default", cfg.OTelSampleRatio)
+		}
+	})
+
+	t.Run("a blank endpoint is an unset one", func(t *testing.T) {
+		cfg, err := config.Resolve(withkey(map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "   "}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.OTelEndpoint != "" {
+			t.Errorf("OTelEndpoint = %q, want blank normalized to the disabled gate", cfg.OTelEndpoint)
+		}
+	})
+
+	t.Run("a set endpoint demands the license key", func(t *testing.T) {
+		_, err := config.Resolve(withkey(map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": testOTelEndpoint}))
+		if err == nil || !strings.Contains(err.Error(), "NEW_RELIC_LICENSE_KEY must be at least 16 characters") {
+			t.Errorf("err = %v, want the endpoint-gate failure", err)
+		}
+	})
+
+	t.Run("the endpoint-gated credential holds at its floor, trimmed", func(t *testing.T) {
+		cfg, err := config.Resolve(withkey(map[string]string{
+			"OTEL_EXPORTER_OTLP_ENDPOINT": " " + testOTelEndpoint + " ",
+			"NEW_RELIC_LICENSE_KEY":       " lic-0123456789abcdef79 ",
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.OTelEndpoint != testOTelEndpoint {
+			t.Errorf("OTelEndpoint = %q, want the trimmed endpoint", cfg.OTelEndpoint)
+		}
+		if cfg.NewRelicKey != "lic-0123456789abcdef79" {
+			t.Errorf("NewRelicKey = %q, want the trimmed key", cfg.NewRelicKey)
+		}
+	})
+
+	for caseName, bad := range map[string]string{
+		"garbage":  "junks",
+		"zero":     "0",
+		"negative": "-0.5",
+		"over one": "1.01",
+	} {
+		t.Run("OTEL_TRACE_SAMPLE_RATIO "+caseName+" fails loud naming the var", func(t *testing.T) {
+			_, err := config.Resolve(withkey(map[string]string{"OTEL_TRACE_SAMPLE_RATIO": bad}))
+			if err == nil || !strings.Contains(err.Error(), "OTEL_TRACE_SAMPLE_RATIO must lie in the interval (0, 1]") {
+				t.Errorf("err = %v, want the sample-ratio failure", err)
+			}
+		})
+	}
+
+	t.Run("OTEL_TRACE_SAMPLE_RATIO inside the interval serves", func(t *testing.T) {
+		cfg, err := config.Resolve(withkey(map[string]string{
+			"OTEL_TRACE_SAMPLE_RATIO": "0.25",
+			"OTEL_SERVICE_NAME":       "   ",
+			"OTEL_SERVICE_VERSION":    "1.2.3",
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.OTelSampleRatio != 0.25 {
+			t.Errorf("OTelSampleRatio = %v, want 0.25", cfg.OTelSampleRatio)
+		}
+		if cfg.OTelName != "payment-webhook" {
+			t.Errorf("OTelName = %q, want the blank value dropping out to the default", cfg.OTelName)
+		}
+		if cfg.OTelVersion != "1.2.3" {
+			t.Errorf("OTelVersion = %q, want the explicit version", cfg.OTelVersion)
 		}
 	})
 }
@@ -305,6 +395,9 @@ func TestLoadEndToEnd(t *testing.T) {
 		}
 		if cfg.QueueURL != testQueueURL || cfg.PublishBudget != 7*time.Second {
 			t.Errorf("cfg = %+v, want the plane queue URL and a 7s budget from infra/.env", cfg)
+		}
+		if cfg.OTelSampleRatio != 0.5 || cfg.OTelEndpoint != "" {
+			t.Errorf("cfg = %+v, want the plane's half sampling with the endpoint gate still unset", cfg)
 		}
 	})
 
@@ -385,7 +478,8 @@ func writeEnvPlane(t *testing.T) {
 	}
 	plane := "PORT=9137\nDRAIN_TIMEOUT=12s\nPADDLE_WEBHOOK_SECRET=" + testPaddleSecret +
 		"\nMAX_BODY_BYTES=2048" +
-		"\nQUEUE_URL=" + testQueueURL + "\nPUBLISH_BUDGET=7s\n"
+		"\nQUEUE_URL=" + testQueueURL + "\nPUBLISH_BUDGET=7s" +
+		"\nOTEL_TRACE_SAMPLE_RATIO=0.5\n"
 	if err := os.WriteFile(filepath.Join("infra", ".env"), []byte(plane), 0o600); err != nil {
 		t.Fatal(err)
 	}

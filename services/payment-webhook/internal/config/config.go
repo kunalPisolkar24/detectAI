@@ -10,12 +10,17 @@ import (
 
 // Config is the typed boot contract; plane keys without a field are ignored.
 type Config struct {
-	Port          int
-	DrainTimeout  time.Duration
-	PaddleSecret  string
-	MaxBodyBytes  int64
-	QueueURL      string
-	PublishBudget time.Duration
+	Port            int
+	DrainTimeout    time.Duration
+	PaddleSecret    string
+	MaxBodyBytes    int64
+	QueueURL        string
+	PublishBudget   time.Duration
+	OTelEndpoint    string
+	NewRelicKey     string
+	OTelName        string
+	OTelVersion     string
+	OTelSampleRatio float64
 }
 
 const (
@@ -25,12 +30,24 @@ const (
 	defaultBudget      = 5 * time.Second
 	drainSlack         = 5 * time.Second
 	minCredentialChars = 16
+	defaultOTelName    = "payment-webhook"
+	defaultOTelVersion = "dev"
+	defaultSampleRatio = 1.0
 )
 
 // Resolve reads one plane source: PORT fails the boot on bad values, every other
-// field fails closed to its default, and the secret and queue URL are mandatory.
+// field fails closed to its default, and the secret and queue URL are mandatory;
+// a set OTel endpoint demands the license key while the sample ratio fails loud.
 func Resolve(source Source) (Config, error) {
-	cfg := Config{Port: defaultPort, DrainTimeout: defaultDrain, MaxBodyBytes: defaultBodyBound, PublishBudget: defaultBudget}
+	cfg := Config{
+		Port:            defaultPort,
+		DrainTimeout:    defaultDrain,
+		MaxBodyBytes:    defaultBodyBound,
+		PublishBudget:   defaultBudget,
+		OTelName:        defaultOTelName,
+		OTelVersion:     defaultOTelVersion,
+		OTelSampleRatio: defaultSampleRatio,
+	}
 	if raw, ok := source.Get("PORT"); ok {
 		port, err := strconv.Atoi(strings.TrimSpace(raw))
 		if err != nil || port < 1 || port > 65535 {
@@ -71,7 +88,50 @@ func Resolve(source Source) (Config, error) {
 	if floor := cfg.PublishBudget + drainSlack; cfg.DrainTimeout < floor {
 		cfg.DrainTimeout = floor
 	}
+	if err := resolveObservability(source, &cfg); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// resolveObservability reads the NFR-5 keys: the endpoint is the gate — blank
+// is a disabled boot — and a set endpoint demands the license key at the
+// credential floor; the identity fields fail closed to their defaults while
+// the sample ratio fails loud, where document-parser's validator raises too.
+func resolveObservability(source Source, cfg *Config) error {
+	if raw, ok := source.Get("OTEL_EXPORTER_OTLP_ENDPOINT"); ok {
+		endpoint := strings.TrimSpace(raw)
+		if endpoint != "" {
+			key, _ := source.Get("NEW_RELIC_LICENSE_KEY")
+			key = strings.TrimSpace(key)
+			if len(key) < minCredentialChars {
+				return fmt.Errorf(
+					"config: OTEL_EXPORTER_OTLP_ENDPOINT is set, so NEW_RELIC_LICENSE_KEY must be at least %d characters (the ingest license key)",
+					minCredentialChars)
+			}
+			cfg.OTelEndpoint = endpoint
+			cfg.NewRelicKey = key
+		}
+	}
+	if raw, ok := source.Get("OTEL_SERVICE_NAME"); ok {
+		if name := strings.TrimSpace(raw); name != "" {
+			cfg.OTelName = name
+		}
+	}
+	if raw, ok := source.Get("OTEL_SERVICE_VERSION"); ok {
+		if version := strings.TrimSpace(raw); version != "" {
+			cfg.OTelVersion = version
+		}
+	}
+	if raw, ok := source.Get("OTEL_TRACE_SAMPLE_RATIO"); ok {
+		trimmed := strings.TrimSpace(raw)
+		ratio, err := strconv.ParseFloat(trimmed, 64)
+		if err != nil || ratio <= 0 || ratio > 1 {
+			return fmt.Errorf("config: OTEL_TRACE_SAMPLE_RATIO must lie in the interval (0, 1]; got %q", trimmed)
+		}
+		cfg.OTelSampleRatio = ratio
+	}
+	return nil
 }
 
 // sqsURL accepts real SQS and emulator endpoints alike; malformed or missing fails the boot.

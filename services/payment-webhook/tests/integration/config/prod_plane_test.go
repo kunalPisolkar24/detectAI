@@ -87,4 +87,25 @@ func TestProdLoadBranchesOnTheSeededFlociPlanes(t *testing.T) {
 			t.Errorf("PublishBudget = %v, want the seeded %v", cfg.PublishBudget, budget)
 		}
 	}
+	if cfg.OTelEndpoint != env["OTEL_EXPORTER_OTLP_ENDPOINT"] {
+		t.Errorf("OTelEndpoint = %q, want the seeded gate %q", cfg.OTelEndpoint, env["OTEL_EXPORTER_OTLP_ENDPOINT"])
+	}
+	if cfg.NewRelicKey != env["NEW_RELIC_LICENSE_KEY"] {
+		t.Errorf("NewRelicKey did not come off the seeded secrets blob")
+	}
+	if cfg.OTelName != env["OTEL_SERVICE_NAME"] {
+		t.Errorf("OTelName = %q, want the seeded %q", cfg.OTelName, env["OTEL_SERVICE_NAME"])
+	}
+	if env["OTEL_SERVICE_VERSION"] != "" {
+		if cfg.OTelVersion != env["OTEL_SERVICE_VERSION"] {
+			t.Errorf("OTelVersion = %q, want the seeded %q", cfg.OTelVersion, env["OTEL_SERVICE_VERSION"])
+		}
+	} else if cfg.OTelVersion != "dev" {
+		t.Errorf("OTelVersion = %q, want the seeded blank falling back to dev", cfg.OTelVersion)
+	}
+	if env["OTEL_TRACE_SAMPLE_RATIO"] != "" {
+		if ratio, _ := strconv.ParseFloat(env["OTEL_TRACE_SAMPLE_RATIO"], 64); cfg.OTelSampleRatio != ratio {
+			t.Errorf("OTelSampleRatio = %v, want the seeded %v", cfg.OTelSampleRatio, ratio)
+		}
+	}
 }

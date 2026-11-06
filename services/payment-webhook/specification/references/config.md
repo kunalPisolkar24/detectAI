@@ -6,7 +6,7 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 
 ## Source model
 
-`Config` is the single typed contract — today the six consumed fields (`Port`, `DrainTimeout`, `PADDLE_WEBHOOK_SECRET`, `MAX_BODY_BYTES`, `QUEUE_URL`, `PUBLISH_BUDGET`); the OTel keys land with their consuming build (consume-first: fields exist only when runtime code reads them; plane keys without a field are ignored). *Where values come from* is selected once at boot by the `ENV_TYPE` flick and composed through the factories:
+`Config` is the single typed contract — today the eleven consumed fields (`Port`, `DrainTimeout`, `PADDLE_WEBHOOK_SECRET`, `MAX_BODY_BYTES`, `QUEUE_URL`, `PUBLISH_BUDGET`, plus the OTel five: `OTEL_EXPORTER_OTLP_ENDPOINT`, `NEW_RELIC_LICENSE_KEY`, `OTEL_SERVICE_NAME`, `OTEL_SERVICE_VERSION`, `OTEL_TRACE_SAMPLE_RATIO`, landed with their consuming observability build); *where values come from* is selected once at boot by the `ENV_TYPE` flick and composed through the factories:
 
 - **dev** (flick `dev`): `DevSource` — the process environment over the parsed `infra/.env`. Env wins because a container ships no dotenv file and receives its values injected (compose `env_file`); locally `make run` seeds the shell from the same file before the boot, so the two sources agree and the in-process merge is a no-op at launch.
 - **prod** (flick `prod`): `ProdSource` — **AWS exact**. The secrets blob fills first and the prefix-stripped SSM tree completes the plane; process env and dotenv never reach this path, so a stray variable cannot leak a value in. The two AWS planes are disjoint by seeding contract, and the merge enforces it: a case-insensitive key collision fails the boot loud.
@@ -33,6 +33,10 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 | prod: key seeded in both the blob and SSM | **boot fails** — disjoint by seeding contract; remove the duplicates and re-apply |
 | prod: blob fetch failure, or a bad blob shape (no SecretString, non-JSON, non-string entry) | **boot fails** naming the secret and the fix (`make secrets-apply`) |
 | prod: SSM path read failure, or a SecureString parameter under the prefix | **boot fails** naming the path or the parameter |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` blank | normalized to unset — a legitimate disabled boot in every plane |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` set without `NEW_RELIC_LICENSE_KEY` at ≥ 16 characters | **boot fails** naming the pair and the floor — the ingest license key, same path as `PADDLE_WEBHOOK_SECRET`'s minimum length |
+| `OTEL_TRACE_SAMPLE_RATIO` unreadable or outside (0, 1] | **boot fails** naming the var — document-parser's ratio voice; nothing fail-closes a bad sample |
+| `OTEL_SERVICE_NAME`/`OTEL_SERVICE_VERSION` blank | fail closed to the `payment-webhook` / `dev` defaults |
 
 ## File layout
 
@@ -69,6 +73,8 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 - **The reader bound clamps at the wiring**: the face reads `min(MAX_BODY_BYTES, 262144)` — SQS cannot carry more per message, so an over-ceiling body answers the 413 naming the ceiling instead of surfacing mid-budget as a send fault.
 
 - **Blob entries must be strings**: a non-string value fails the boot naming the key — sharper than document-parser's `str()` coercion, consistent with the strict flick precedent.
+
+- **The OTel endpoint is the sole observability gate**: blank normalizes to unset and nothing demands anything; a set endpoint demands the ingest license key at the same 16-character floor as `PADDLE_WEBHOOK_SECRET` (`secrets.toml`'s `[requires]` mirrors the gate for seeding — the same pair or none). The sample ratio fails loud on any `(0, 1]` violation; the identity fields fail closed to `payment-webhook`/`dev`. Survival is document-parser's settings gate, field-for-field.
 
 ## Non-goals
 
