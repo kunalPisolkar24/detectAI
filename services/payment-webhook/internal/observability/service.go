@@ -1,8 +1,24 @@
 package observability
 
-// The frozen instrument names: the New Relic dashboards and terraform alerts
-// depend on them, so renaming is a dashboard/alert migration, not an edit
-// (specification/observability.md's naming-stability contract).
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	otelgin "go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel/attribute"
+	otelmetric "go.opentelemetry.io/otel/metric"
+	oteltrace "go.opentelemetry.io/otel/trace"
+
+	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/observability/adapters"
+)
+
+// Instrument names are frozen — the NRQL surface boards and alerts filter on;
+// any rename ships with a dashboard/alert migration in the same PR.
 const (
 	InstrumentReceived           = "payment_webhooks_received_total"
 	InstrumentPublished          = "payment_events_published_total"
@@ -13,3 +29,118 @@ const (
 	InstrumentEnvelopeAdvisories = "payment_webhook_envelope_advisories_total"
 	InstrumentEnqueueDuration    = "payment_events_enqueue_duration_seconds"
 )
+
+// TelemetryService realizes the seam on the started SDK: instruments build
+// from the adapters' providers, never OTel globals — document-parser's
+// ObservabilityService, one struct.
+type TelemetryService struct {
+	serviceName string
+	traces      *adapters.TracesAdapter
+	metrics     *adapters.MetricsAdapter
+	logs        *adapters.LogsAdapter
+
+	tracer             oteltrace.Tracer
+	received           otelmetric.Int64Counter
+	published          otelmetric.Int64Counter
+	invalidSignatures  otelmetric.Int64Counter
+	unknownEventType   otelmetric.Int64Counter
+	bodyErrors         otelmetric.Int64Counter
+	envelopeRejections otelmetric.Int64Counter
+	envelopeAdvisories otelmetric.Int64Counter
+	enqueueDuration    otelmetric.Float64Histogram
+}
+
+var _ Telemetry = (*TelemetryService)(nil)
+
+// newTelemetryService builds the instruments off the started meter; Boot is
+// the sole composition point and starts every adapter first.
+func newTelemetryService(serviceName string, traces *adapters.TracesAdapter, metrics *adapters.MetricsAdapter, logs *adapters.LogsAdapter) (*TelemetryService, error) {
+	meter, err := metrics.Meter()
+	if err != nil {
+		return nil, err
+	}
+	s := &TelemetryService{serviceName: serviceName, traces: traces, metrics: metrics, logs: logs}
+	counters := map[string]*otelmetric.Int64Counter{
+		InstrumentReceived:           &s.received,
+		InstrumentPublished:          &s.published,
+		InstrumentInvalidSignatures:  &s.invalidSignatures,
+		InstrumentUnknownEventType:   &s.unknownEventType,
+		InstrumentBodyErrors:         &s.bodyErrors,
+		InstrumentEnvelopeRejections: &s.envelopeRejections,
+		InstrumentEnvelopeAdvisories: &s.envelopeAdvisories,
+	}
+	for name, counter := range counters {
+		if *counter, err = meter.Int64Counter(name); err != nil {
+			return nil, fmt.Errorf("observability: %s: %w", name, err)
+		}
+	}
+	if s.enqueueDuration, err = meter.Float64Histogram(InstrumentEnqueueDuration); err != nil {
+		return nil, fmt.Errorf("observability: %s: %w", InstrumentEnqueueDuration, err)
+	}
+	s.tracer = s.traces.Provider().Tracer(s.serviceName)
+	return s, nil
+}
+
+// TrackProcessing opens the application span under the otelgin route span and
+// brackets the handler body that follows.
+func (s *TelemetryService) TrackProcessing(ctx context.Context, eventType, eventID string) (context.Context, func()) {
+	ctx, span := s.tracer.Start(ctx, "process", oteltrace.WithAttributes(
+		attribute.String("event_type", eventType),
+		attribute.String("event_id", eventID),
+	))
+	return ctx, func() { span.End() }
+}
+
+func (s *TelemetryService) RecordBodyError(reason Reason) {
+	s.bodyErrors.Add(context.Background(), 1,
+		otelmetric.WithAttributes(attribute.String("reason", string(reason))))
+}
+
+func (s *TelemetryService) RecordInvalidSignature() {
+	s.invalidSignatures.Add(context.Background(), 1)
+}
+
+func (s *TelemetryService) RecordEnvelopeRejection(reason string) {
+	s.envelopeRejections.Add(context.Background(), 1,
+		otelmetric.WithAttributes(attribute.String("reason", reason)))
+}
+
+func (s *TelemetryService) RecordEnvelopeAdvisory(reason AdvisoryReason) {
+	s.envelopeAdvisories.Add(context.Background(), 1,
+		otelmetric.WithAttributes(attribute.String("reason", string(reason))))
+}
+
+func (s *TelemetryService) RecordReceived(eventType string) {
+	s.received.Add(context.Background(), 1,
+		otelmetric.WithAttributes(attribute.String("event_type", eventType)))
+}
+
+func (s *TelemetryService) RecordUnknownEventType() {
+	s.unknownEventType.Add(context.Background(), 1)
+}
+
+// RecordPublish closes the enqueue site: the counter partitions the outcome
+// and the histogram times it under the same status label.
+func (s *TelemetryService) RecordPublish(eventType string, status PublishStatus, duration time.Duration) {
+	labels := otelmetric.WithAttributes(
+		attribute.String("event_type", eventType),
+		attribute.String("status", string(status)),
+	)
+	s.published.Add(context.Background(), 1, labels)
+	s.enqueueDuration.Record(context.Background(), duration.Seconds(), labels)
+}
+
+// Shutdown drains spans, then metrics, then logs, and restores the plain
+// stdout handler; export leftovers never fail the process it rides on.
+func (s *TelemetryService) Shutdown(ctx context.Context) error {
+	err := errors.Join(s.traces.Shutdown(ctx), s.metrics.Shutdown(ctx), s.logs.Shutdown(ctx))
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
+	return err
+}
+
+// instrumentEngine joins otelgin on the serving path — its route spans frame
+// every verdict below, and the request-span trace context flows into
+// TrackProcessing.
+func (s *TelemetryService) instrumentEngine(engine *gin.Engine) {
+	engine.Use(otelgin.Middleware(s.serviceName, otelgin.WithTracerProvider(s.traces.Provider())))
+}
