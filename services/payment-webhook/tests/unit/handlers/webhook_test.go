@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/handlers"
+	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/queue"
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/validator"
 )
@@ -43,7 +44,7 @@ func (f *fakeQueue) Publish(_ context.Context, message queue.Message) error {
 
 func newHandler(target queue.Queue) gin.HandlerFunc {
 	gin.SetMode(gin.TestMode)
-	return handlers.NewPaddleWebhook(validator.NewPaddle(testSecret), max, queue.NewService(target, testBudget))
+	return handlers.NewPaddleWebhook(validator.NewPaddle(testSecret), max, queue.NewService(target, testBudget), observability.NullTelemetry{})
 }
 
 func serve(t *testing.T, w *httptest.ResponseRecorder, req *http.Request, handler gin.HandlerFunc) {

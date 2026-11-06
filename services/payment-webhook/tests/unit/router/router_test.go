@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config"
+	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/queue"
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/router"
 )
@@ -41,7 +42,7 @@ func newEngine(t *testing.T, target queue.Queue) *gin.Engine {
 	return router.New(config.Config{
 		PaddleSecret: paddleSecret,
 		MaxBodyBytes: 1 << 20,
-	}, queue.NewService(target, 1500*time.Millisecond))
+	}, queue.NewService(target, 1500*time.Millisecond), observability.NullTelemetry{})
 }
 
 func TestPaddleFacePublishesASignedBody(t *testing.T) {

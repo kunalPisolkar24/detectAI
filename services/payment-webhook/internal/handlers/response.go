@@ -3,24 +3,30 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/queue"
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/validator"
 )
 
 // respondReadError maps bounded-read failures to 413/400; it reports whether a response was written.
-func respondReadError(c *gin.Context, err error, maxBody int64) bool {
+func respondReadError(c *gin.Context, obs observability.Telemetry, err error, maxBody int64) bool {
 	switch {
 	case errors.Is(err, validator.ErrBodyTooLarge):
+		obs.RecordBodyError(observability.ReasonTooLarge)
+		slog.Warn("paddle webhook body beyond the read bound")
 		c.JSON(http.StatusRequestEntityTooLarge,
 			gin.H{"error": fmt.Sprintf("request body exceeds %d bytes", maxBody)})
 		return true
 	case errors.Is(err, validator.ErrBodyMalformed):
+		obs.RecordBodyError(observability.ReasonUnreadable)
+		slog.Warn("paddle webhook body unreadable")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "request body is unreadable"})
 		return true
 	default:
