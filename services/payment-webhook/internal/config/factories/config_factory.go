@@ -2,6 +2,7 @@
 package factories
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -21,7 +22,12 @@ func (ConfigFactory) Create(flick string) (planes.Source, error) {
 		}
 		return planes.NewDevSource(dotenv, os.Environ())
 	case "prod":
-		return nil, fmt.Errorf("config: the prod plane refuses before the AWS build; there is no env-file fallback")
+		awsFactory, err := NewAWSClientFactory(context.Background())
+		if err != nil {
+			return nil, err
+		}
+		secrets := awsFactory.NewSecretsManagerAdapter()
+		return planes.NewProdSource(awsFactory.NewParameterStoreAdapter(), secrets)
 	default:
 		return nil, fmt.Errorf("config: unknown flick %q reached the factory", flick)
 	}

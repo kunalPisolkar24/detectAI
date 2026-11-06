@@ -2,7 +2,7 @@
 
 How payment-webhook resolves its config values per plane. Requirements live in [requirements.md](../requirements.md) (NFR-3/NFR-9 bounds, NFR-5 gate); the runtime contract is [design.md](../design.md)'s config planes. document-parser's config LLD is the model this follows.
 
-**Status: the dev plane is landed.** The dotenv reader, the flick, the factory, `Resolve`, and the service boot run the dev path today: `ENV_TYPE=dev` boots on the file-under-environment plane, a missing default `.env` is an empty plane, a malformed one fails the boot, and unknown flicks never serve. The prod side stays declared until the AWS build — `ParameterStoreAdapter`, `SecretsManagerAdapter`, `AWSClientFactory`, and `ProdSource` answer loud skeleton errors, and `ENV_TYPE=prod` boots fail loudly on the refusal rather than half-serving.
+**Status: both planes are landed.** The dotenv reader, the flick, the factory, `Resolve`, and the service boot run the dev path today: `ENV_TYPE=dev` boots on the file-under-environment plane, a missing default `.env` is an empty plane, a malformed one fails the boot, and unknown flicks never serve. `ENV_TYPE=prod` boots the AWS planes — the Secrets Manager blob (`detectai/payment-webhook/secrets`) and the SSM prefix tree (`/detectai/payment-webhook/`) — fail loud on every named defect below, and the merge refuses key collisions across the planes.
 
 ## Source model
 
@@ -11,14 +11,14 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 - **dev** (flick `dev`): `DevSource` — the process environment over the parsed `infra/.env`. Env wins because a container ships no dotenv file and receives its values injected (compose `env_file`); locally `make run` seeds the shell from the same file before the boot, so the two sources agree and the in-process merge is a no-op at launch.
 - **prod** (flick `prod`): `ProdSource` — **AWS exact**. The secrets blob fills first and the prefix-stripped SSM tree completes the plane; process env and dotenv never reach this path, so a stray variable cannot leak a value in. The two AWS planes are disjoint by seeding contract, and the merge enforces it: a case-insensitive key collision fails the boot loud.
 
-`AWS_REGION` and the endpoint override are bootstrap variables, not config: the publisher composition reads them from the process environment once through the SDK's default chain; credentials ride the ambient provider chain — never the planes. Locally, `make run` seeds the launch shell from the same file (`set -a`, source, `set +a`): the dev merge re-reads the file as before (env still wins in-process), and the SDK's bootstrap trio reaches the process environment, so one file carries every local value and a later container receives the same keys through compose `env_file` with no file parse.
+`AWS_REGION` and the endpoint overrides (`AWS_ENDPOINT_URL_SECRETS_MANAGER`, `AWS_ENDPOINT_URL_SSM` — the SDK's native service-level endpoints, the Go analog of document-parser's `EMULATOR_ENDPOINT`) are bootstrap variables, not config: every AWS composition reads them from the process environment exactly once through the SDK's default chain; credentials ride the ambient provider chain — never the planes. `infra/.env.example` ships all three so `set -a` sourcing and compose `env_file` carry them along. Locally, `make run` seeds the launch shell from the same file (`set -a`, source, `set +a`): the dev merge re-reads the file as before (env still wins in-process), and the SDK's bootstrap trio reaches the process environment, so one file carries every local value and a later container receives the same keys through compose `env_file` with no file parse.
 
 ## Resolution and failure contract
 
 | Case | Result |
 |---|---|
 | `ENV_TYPE` unset, unknown, or anything but exact dev/prod | **boot fails** — the flick is strict here, a deliberate strengthening of document-parser's warn-to-dev precedent |
-| `ENV_TYPE=prod` before the AWS build | **boot fails loudly** — the prod plane refuses rather than half-serving (no env-file fallback exists) |
+| `ENV_TYPE=prod` without a resolvable `AWS_REGION` | **boot fails** before any client exists, naming the region and the fix |
 | dev: `.env` missing at the default path | empty file plane; values come from the process environment |
 | dev: `.env` malformed, or an explicitly missing default | **boot fails** naming the path and the fix (`make env`) |
 | dev: blank `KEY=` entry in the file | dropped — an empty value can never win over the default |
@@ -31,7 +31,8 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 | `PUBLISH_BUDGET` unreadable or non-positive | fail closed to the 5 s budget (NFR-3), never fail the boot |
 | `DRAIN_TIMEOUT` missing, blank, unreadable, or ≤ 0 | fail closed to 10 s, then clamped up to never serve shorter than `PUBLISH_BUDGET` + slack (NFR-9) |
 | prod: key seeded in both the blob and SSM | **boot fails** — disjoint by seeding contract; remove the duplicates and re-apply |
-| prod: fetch failure, access denied, or bad blob shape | **boot fails** naming the stack and the fix |
+| prod: blob fetch failure, or a bad blob shape (no SecretString, non-JSON, non-string entry) | **boot fails** naming the secret and the fix (`make secrets-apply`) |
+| prod: SSM path read failure, or a SecureString parameter under the prefix | **boot fails** naming the path or the parameter |
 
 ## File layout
 
@@ -49,7 +50,8 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 | `internal/config/planes/prod_source.go` | the prod merge: blob + SSM with the disjointness check |
 | `internal/config/factories/config_factory.go` | the flick wiring: the `ENV_TYPE` selection and each plane's adapter construction |
 | `internal/config/factories/aws_client_factory.go` | region/endpoint decided once; clients stay method-local |
-| `tests/unit/config/` | the config tests as one black-box package: the dotenv grammar, the dev merge, the flick wiring, `Resolve`, and `Load` |
+| `tests/unit/config/` | the config tests as one black-box package: the dotenv grammar, the dev merge, the flick wiring, `Resolve`, `Load`, and the prod planes through fakes |
+| `tests/integration/config/` | the prod pull path through the real floci endpoint, skipped when the emulator is down |
 
 ## Settled decisions
 
@@ -61,9 +63,13 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 - **One error vocabulary at the `Load` boundary**: factories/adapters return plain descriptive errors and never values; `Load` wraps once into `ConfigError` (`Unwrap` readable).
 - **No environ writes**: the dotenv reader parses in memory; the merge in `DevSource` owns precedence.
 - **`DRAIN_TIMEOUT` follows the budget**: 10 s default while the budget is the in-code 5 s; with `PUBLISH_BUDGET` configurable, `Resolve` clamps the drain up to budget + slack at the end (NFR-9).
-- **Bootstrap stays out of config**: region, endpoint, and credentials are deployment variables read once by the publisher composition through the SDK's default chain — never `Config` fields, never plane keys (the prod `aws_client_factory` keeps its skeleton until the AWS build).
+- **Bootstrap stays out of config**: region, endpoint, and credentials are deployment variables read once by each AWS composition through the SDK's default chain — never `Config` fields, never plane keys.
+- **The prod merge fetches exactly once, at `NewProdSource`**: the AWS adapters stay stateless one-call readers, secrets fetch before any SSM work, and keys seeded after boot stay invisible until a restart.
+- **The two AWS readers live behind the `Plane` seam** declared in `planes` — document-parser's `AwsPlane` protocol with the same word, satisfied structurally by both adapters and filled with fakes in the tests.
 - **The reader bound clamps at the wiring**: the face reads `min(MAX_BODY_BYTES, 262144)` — SQS cannot carry more per message, so an over-ceiling body answers the 413 naming the ceiling instead of surfacing mid-budget as a send fault.
+
+- **Blob entries must be strings**: a non-string value fails the boot naming the key — sharper than document-parser's `str()` coercion, consistent with the strict flick precedent.
 
 ## Non-goals
 
-No polling/TTL or reload (a config change means a restart), no caching layer, no per-key reads, no AppConfig/feature flags, no dotenv files in prod images, no `DOTENV_PATH` knob until a caller exists, no AWS SDK dependency before the AWS build, and no compose wiring before the deployment build (document-parser's compose is the model).
+No polling/TTL or reload (a config change means a restart), no caching layer, no per-key reads, no AppConfig/feature flags, no dotenv files in prod images, no `DOTENV_PATH` knob until a caller exists, and no compose wiring before the deployment build (document-parser's compose is the model).

@@ -30,3 +30,18 @@ func readEnvPlane(t *testing.T, dir, content string) *adapters.DotEnvAdapter {
 	}
 	return adapter
 }
+
+// offlineProd pins the SDK's chain away from every real AWS surface: the shared
+// config files vanish, IMDS is disabled, credentials are static dummies, and a
+// region comes only from the caller's choice (empty string fails the resolution).
+func offlineProd(t *testing.T, region string) {
+	t.Helper()
+	isolated := t.TempDir()
+	t.Setenv("AWS_CONFIG_FILE", filepath.Join(isolated, "config"))
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(isolated, "credentials"))
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	t.Setenv("AWS_ACCESS_KEY_ID", "x")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "x")
+	t.Setenv("AWS_REGION", region)
+	t.Setenv("AWS_DEFAULT_REGION", region)
+}

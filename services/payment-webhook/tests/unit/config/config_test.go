@@ -341,14 +341,15 @@ func TestLoadEndToEnd(t *testing.T) {
 		}
 	})
 
-	t.Run("prod flick refuses wrapped once", func(t *testing.T) {
+	t.Run("prod boot fails wrapped once when the region is unresolvable", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "prod")
+		offlineProd(t, "")
 		t.Chdir(t.TempDir())
 
 		_, err := config.Load()
 		var cfgErr *config.ConfigError
-		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "refuses") {
-			t.Errorf("err = %v, want a *ConfigError carrying the prod refusal", err)
+		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "needs AWS_REGION") {
+			t.Errorf("err = %v, want a *ConfigError naming the missing region", err)
 		}
 	})
 

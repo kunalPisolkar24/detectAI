@@ -2,22 +2,57 @@ package planes
 
 import (
 	"fmt"
-
-	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config/adapters"
+	"sort"
+	"strings"
 )
+
+// Plane is a prod plane reader the adapters satisfy structurally; tests inject fakes.
+type Plane interface {
+	Fetch() (map[string]string, error)
+}
 
 // ProdSource merges the Secrets Manager blob with the SSM tree; the process env
 // never reaches it, so a stray environment variable cannot leak a value in.
 type ProdSource struct {
-	parameters *adapters.ParameterStoreAdapter
-	secrets    *adapters.SecretsManagerAdapter
-	values     map[string]string
+	values map[string]string
 }
 
-// NewProdSource fetches both AWS planes once; keys seeded after boot are
-// invisible until a restart.
-func NewProdSource(parameters *adapters.ParameterStoreAdapter, secrets *adapters.SecretsManagerAdapter) (*ProdSource, error) {
-	return nil, fmt.Errorf("config: NewProdSource is a skeleton; lands with the AWS build")
+// NewProdSource fetches both AWS planes once — secrets first, so a secrets
+// failure lands before any SSM work — and merges them; keys seeded after boot
+// are invisible until a restart.
+func NewProdSource(parameters, secrets Plane) (*ProdSource, error) {
+	blob, err := secrets.Fetch()
+	if err != nil {
+		return nil, err
+	}
+	tree, err := parameters.Fetch()
+	if err != nil {
+		return nil, err
+	}
+	seeded := make(map[string]struct{}, len(blob))
+	for key := range blob {
+		seeded[strings.ToLower(key)] = struct{}{}
+	}
+	var overlap []string
+	for key := range tree {
+		if _, collision := seeded[strings.ToLower(key)]; collision {
+			overlap = append(overlap, strings.ToLower(key))
+		}
+	}
+	if len(overlap) > 0 {
+		sort.Strings(overlap)
+		return nil, fmt.Errorf(
+			"config: key(s) seeded on both planes: %s; the secrets blob and the SSM prefix are disjoint by contract — remove the duplicates and re-apply (make secrets-apply)",
+			strings.Join(overlap, ", "))
+	}
+	values := make(map[string]string, len(blob)+len(tree))
+	for key, value := range blob {
+		values[key] = value
+	}
+	for key, value := range tree {
+		values[key] = value
+	}
+	return &ProdSource{values: values}, nil
 }
 
 func (s *ProdSource) Get(key string) (string, bool) {

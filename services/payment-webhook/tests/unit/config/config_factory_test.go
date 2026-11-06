@@ -20,10 +20,21 @@ func TestCreateDevWiresTheDotenvPlane(t *testing.T) {
 	}
 }
 
-func TestCreateProdRefusesBeforeTheAWSBuild(t *testing.T) {
+func TestCreateProdNeedsTheRegion(t *testing.T) {
+	offlineProd(t, "")
 	_, err := factories.ConfigFactory{}.Create("prod")
-	if err == nil || !strings.Contains(err.Error(), "refuses") {
-		t.Errorf("err = %v, want the prod plane refusal", err)
+	if err == nil || !strings.Contains(err.Error(), "needs AWS_REGION") {
+		t.Errorf("err = %v, want the missing-region refusal", err)
+	}
+}
+
+func TestCreateProdFetchesTheSecretsPlaneFirst(t *testing.T) {
+	offlineProd(t, "ap-southeast-2")
+	t.Setenv("AWS_ENDPOINT_URL_SECRETS_MANAGER", "http://127.0.0.1:1")
+	t.Setenv("AWS_ENDPOINT_URL_SSM", "http://127.0.0.1:1")
+	_, err := factories.ConfigFactory{}.Create("prod")
+	if err == nil || !strings.Contains(err.Error(), `could not fetch secret "detectai/payment-webhook/secrets"`) {
+		t.Errorf("err = %v, want the secrets fetch failure", err)
 	}
 }
 
