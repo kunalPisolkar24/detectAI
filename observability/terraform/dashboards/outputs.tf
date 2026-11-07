@@ -6,8 +6,8 @@ locals {
     datastores            = module.datastores
     web                   = module.web
     "web-dev"             = module.web_dev
-    "payment-gateway"     = module.payment_gateway
-    "payment-gateway-dev" = module.payment_gateway_dev
+    "payment-webhook"     = module.payment_webhook
+    "payment-webhook-dev" = module.payment_webhook_dev
     workers               = module.workers
     "workers-dev"         = module.workers_dev
     inference             = module.inference

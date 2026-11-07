@@ -12,7 +12,7 @@
           "layout": { "column": 1, "row": 1, "height": 3, "width": 12 },
           "visualization": { "id": "viz.markdown" },
           "rawConfiguration": {
-            "text": "## DetectAI overview (${environment})\n**Sources:** OTEL spans/metrics/logs via otel-collector to EU (`otlp.eu01.nr-data.net`). Floci infra = exporter sidecars, prod infra = CloudWatch (see datastores dashboard). **Filters:** `deployment.environment = ${environment}`. Services: `web`, `payment-gateway`, `worker-analytics`, `worker-payments`, `worker-cron`, `inference`, `document-parser`, `chat-service`, `chat-worker`."
+            "text": "## DetectAI overview (${environment})\n**Sources:** OTEL spans/metrics/logs via otel-collector to EU (`otlp.eu01.nr-data.net`). Floci infra = exporter sidecars, prod infra = CloudWatch (see datastores dashboard). **Filters:** `deployment.environment = ${environment}`. Services: `web`, `payment-webhook`, `worker-analytics`, `worker-payments`, `worker-cron`, `inference`, `document-parser`, `chat-service`, `chat-worker`."
           }
         },
         {
@@ -142,7 +142,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `spans/min` WHERE deployment.environment = '${environment}' AND service.name IN ('payment-gateway', 'worker-analytics', 'worker-payments', 'worker-cron') FACET service.name TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `spans/min` WHERE deployment.environment = '${environment}' AND service.name IN ('payment-webhook', 'worker-analytics', 'worker-payments', 'worker-cron') FACET service.name TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true }
           }

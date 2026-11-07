@@ -1,11 +1,11 @@
 {
-  "name": "detectai-payment-gateway (${environment})",
-  "description": "Go/Gin Paddle webhook gateway: HMAC validation, MQ publish. service.name = payment-gateway. Kept widget-for-widget in sync with payment-gateway (dev) (only the deployment.environment filter differs).",
+  "name": "detectai-payment-webhook (${environment})",
+  "description": "Go/Gin Paddle webhook service: HMAC validation, SQS enqueue. service.name = payment-webhook. Kept widget-for-widget in sync with payment-webhook (dev) (only the deployment.environment filter differs).",
   "permissions": "PUBLIC_READ_WRITE",
   "pages": [
     {
-      "name": "Payment gateway",
-      "description": "Webhook RED, HMAC validation, MQ publish, Go runtime, containers",
+      "name": "Payment webhook",
+      "description": "Webhook RED, HMAC validation, SQS enqueue, Go runtime, containers",
       "widgets": [
         {
           "title": "Webhooks/min",
@@ -13,7 +13,7 @@
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `http.route` = '/webhook/paddle'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` = '/api/v1/webhook/paddle'" }
             ],
             "limit": 200
           }
@@ -24,7 +24,7 @@
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `http.route` = '/webhook/paddle'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` = '/api/v1/webhook/paddle'" }
             ],
             "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } },
             "limit": 2
@@ -36,7 +36,7 @@
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `http.route` = '/webhook/paddle'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` = '/api/v1/webhook/paddle'" }
             ],
             "limit": 500
           }
@@ -47,7 +47,7 @@
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) AS `p99 ms` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `http.route` = '/webhook/paddle'" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) AS `p99 ms` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` = '/api/v1/webhook/paddle'" }
             ],
             "limit": 1000
           }
@@ -59,7 +59,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `http.route` NOT IN ('/readyz', '/healthz') FACET `http.route` TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` NOT IN ('/api/v1/health', '/api/v1/ready') FACET `http.route` TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
@@ -72,7 +72,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `http.route` = '/webhook/paddle' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` = '/api/v1/webhook/paddle' TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
@@ -85,7 +85,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `http.route` NOT IN ('/readyz', '/healthz') FACET `http.status_code` TIMESERIES AUTO LIMIT 10" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` NOT IN ('/api/v1/health', '/api/v1/ready') FACET `http.response.status_code` TIMESERIES AUTO LIMIT 10" }
             ],
             "facet": { "showOtherSeries": false },
             "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
@@ -139,60 +139,60 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`go_goroutines`) AS goroutines WHERE service = 'payment-gateway' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`go_goroutines`) AS goroutines WHERE service = 'payment-webhook' AND deployment.environment = '${environment}' TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
-          "title": "Gateway container CPU %",
+          "title": "Webhook container CPU %",
           "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-gateway%' TIMESERIES 1 minute" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.cpu.utilization`) AS `cpu` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-webhook%' TIMESERIES 1 minute" }
             ],
             "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
-          "title": "Gateway container memory %",
+          "title": "Webhook container memory %",
           "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-gateway%' TIMESERIES 1 minute" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(`container.memory.percent`) AS `mem` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-webhook%' TIMESERIES 1 minute" }
             ],
             "yAxisLeft": { "zero": true, "min": 0, "max": 100 },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
-          "title": "Gateway container network rx/tx",
+          "title": "Webhook container network rx/tx",
           "layout": { "column": 1, "row": 8, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-gateway%' TIMESERIES 1 minute" },
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-gateway%' TIMESERIES 1 minute" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.rx_bytes`), 1 minute) AS rx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-webhook%' TIMESERIES 1 minute" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.network.io.usage.tx_bytes`), 1 minute) AS tx WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-webhook%' TIMESERIES 1 minute" }
             ],
             "yAxisLeft": { "zero": true, "min": 0 },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
           }
         },
         {
-          "title": "Gateway container CPU throttled",
+          "title": "Webhook container CPU throttled",
           "layout": { "column": 7, "row": 8, "height": 3, "width": 6 },
           "visualization": { "id": "viz.area" },
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-gateway%' TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`container.cpu.throttling_data.throttled_time`), 1 minute) AS `throttled ns/s` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-webhook%' TIMESERIES AUTO" }
             ],
             "yAxisLeft": { "zero": true, "min": 0 },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
@@ -204,7 +204,7 @@
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(`container.cpu.utilization`) AS `cpu %` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-gateway%'" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(`container.cpu.utilization`) AS `cpu %` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-webhook%'" }
             ],
             "thresholds": { "alert": { "value": 85 }, "warning": { "value": 70 } },
             "limit": 100
@@ -216,7 +216,7 @@
           "visualization": { "id": "viz.gauge" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(`container.memory.percent`) AS `mem %` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-gateway%'" }
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT latest(`container.memory.percent`) AS `mem %` WHERE deployment.environment = '${environment}' AND `container.name` LIKE '%payment-webhook%'" }
             ],
             "thresholds": { "alert": { "value": 85 }, "warning": { "value": 70 } },
             "limit": 100
@@ -240,7 +240,7 @@
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `http.route` NOT IN ('/readyz', '/healthz') FACET `http.route` LIMIT 20" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` NOT IN ('/api/v1/health', '/api/v1/ready') FACET `http.route` LIMIT 20" }
             ]
           }
         },
@@ -250,7 +250,7 @@
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS spans FACET service.name, service.version WHERE deployment.environment = '${environment}' AND service.name = 'payment-gateway' LIMIT 20" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS spans FACET service.name, service.version WHERE deployment.environment = '${environment}' AND service.name = 'payment-webhook' LIMIT 20" }
             ]
           }
         }
@@ -266,7 +266,7 @@
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, `severity.text`, message, `http.route`, `trace.id` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' LIMIT 100" }
+              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, `severity.text`, message, `http.route`, `trace.id` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' LIMIT 100" }
             ]
           }
         },
@@ -277,7 +277,7 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' FACET `severity.text` TIMESERIES AUTO LIMIT 10" }
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' FACET `severity.text` TIMESERIES AUTO LIMIT 10" }
             ],
             "yAxisLeft": { "zero": true },
             "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
@@ -290,19 +290,19 @@
           "rawConfiguration": {
             "legend": { "enabled": true },
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message TIMESERIES AUTO" }
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message TIMESERIES AUTO" }
             ],
             "facet": { "showOtherSeries": false },
             "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
           }
         },
         {
-          "title": "Recent gateway errors",
+          "title": "Recent webhook errors",
           "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(`trace.id`) AS `sample trace` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message LIMIT 20" }
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(`trace.id`) AS `sample trace` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message LIMIT 20" }
             ]
           }
         },
@@ -312,7 +312,7 @@
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
             "nrqlQueries": [
-              { "accountId": ${account_id}, "query": "FROM Span SELECT timestamp, name, `http.route`, duration.ms, `http.status_code`, `trace.id` WHERE service.name = 'payment-gateway' AND deployment.environment = '${environment}' AND span.kind = 'SERVER' AND duration.ms > 500 LIMIT 100" }
+              { "accountId": ${account_id}, "query": "FROM Span SELECT timestamp, name, `http.route`, duration.ms, `http.response.status_code`, `trace.id` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND span.kind = 'server' AND duration.ms > 500 LIMIT 100" }
             ]
           }
         }
