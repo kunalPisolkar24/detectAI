@@ -1,6 +1,6 @@
 # Declaration
 
-The declaration is a service's committed `secrets.toml` at the service root. It declares the **shape** of the service's secrets plane — which keys are secret, which are plain config, how long a secret must be — and never a single value. Values live somewhere else entirely, in the gitignored `infra/.env` ([Values](values.md)).
+The declaration is a stack's committed toml file that opts it into the engine. The secrets kind's is a service's committed `secrets.toml` at the service root ([Kinds](kinds.md) covers both kinds' files). It declares the **shape** of the service's secrets plane — which keys are secret, which are plain config, how long a secret must be — and never a single value. Values live somewhere else entirely, in the gitignored `infra/.env` ([Values](values.md)).
 
 That split is the tool's founding law:
 

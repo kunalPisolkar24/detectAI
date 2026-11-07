@@ -214,6 +214,34 @@ def test_ensure_seeder_role_creates_a_missing_role(monkeypatch, capsys):
     assert not any("update-role" in command for command in calls)  # the create carries the cap
 
 
+def test_ensure_seeder_role_prints_scopes_for_a_sid_less_policy(monkeypatch, capsys):
+    """A kind's policy statements may omit Sids: the create path must not
+    assume them (the observability kind once crashed here on a fresh plane)."""
+    emulator_trust(monkeypatch)
+    sid_less_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {"Effect": "Allow", "Action": ["s3:CreateBucket"], "Resource": ["arn:aws:s3:::b"]},
+            {"Effect": "Allow", "Action": ["s3:GetObject"], "Resource": ["arn:aws:s3:::b/*"]},
+        ],
+    }
+    monkeypatch.setattr(role, "seeder_role_payload", lambda declaration, values, is_em: None)
+    monkeypatch.setattr(role, "run_aws_captured", lambda command, is_emulator, session=None: (0, "", ""))
+    monkeypatch.setattr(role, "run_aws", lambda command, is_emulator, session=None: 0)
+    role._ensure_seeder_role(DP, EMULATOR_ENV, True, lambda d, v, e, u: sid_less_policy)
+    out = capsys.readouterr().out
+    assert "policy: seeder-policy attached (s3:CreateBucket, s3:GetObject)" in out
+
+
+def test_policy_scopes_prefers_sids_and_survives_actionless_statements():
+    assert role._policy_scopes({"Statement": [{"Sid": "Named", "Effect": "Allow"}]}) == "Named"
+    assert role._policy_scopes({"Statement": [{"Effect": "Allow", "Action": ["a", "b"]}]}) == "a"
+    assert role._policy_scopes({"Statement": [{"Effect": "Allow", "Action": "s3:ListBucket"}]}) == (
+        "s3:ListBucket"
+    )
+    assert role._policy_scopes({"Statement": [{"Effect": "Allow"}]}) == "unnamed-statement"
+
+
 def test_ensure_seeder_role_passes_a_converged_role_silently(monkeypatch, capsys):
     emulator_trust(monkeypatch)
     desired_policy = secrets_policy.seeder_policy_document(

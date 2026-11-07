@@ -45,7 +45,7 @@ graph TB
 
 ## Who reads this file
 
-`tools/newrelic.py` is the only brain: it parses `envs/.env`, rejects an ingest-license-shaped API key, and drives every live Terraform command. `make check` additionally resolves the account name over GraphQL to catch a key from the wrong account.
+`tfctl` is the only brain: it parses `envs/.env`, rejects an ingest-license-shaped API key, and drives every live Terraform command (its observability kind lives in `tools/tfctl`). `make check` additionally resolves the account name over GraphQL to catch a key from the wrong account.
 
 ## Also relevant
 

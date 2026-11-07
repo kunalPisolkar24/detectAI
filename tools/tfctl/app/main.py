@@ -27,12 +27,18 @@ from app.engine.values.parse import parse_env_file
 from app.engine.values.plane import emulator_endpoint_note
 from app.engine.values.rules import plane_errors
 from app.kinds import KINDS, register
-from app.kinds.locate import REPO_ROOT, find_service_workspace, ready_service_workspaces
+from app.kinds.locate import (
+    REPO_ROOT,
+    find_service_workspace,
+    ready_service_workspaces,
+    stack_dir_workspace,
+)
+from app.kinds.observability import kind as observability_kind
 from app.kinds.secrets import kind as secrets_kind
 from app.kinds.secrets.batch import refresh_all_flow
-from app.kinds.secrets.verify import flow as verify
 
 register(secrets_kind())
+register(observability_kind())
 
 VERBS = tuple(dict.fromkeys(verb for kind in KINDS.values() for verb in kind.my_verbs))
 
@@ -43,10 +49,19 @@ def _print_errors(errors: list[str]) -> bool:
     return bool(errors)
 
 
+def _verify_flow(kind, declaration, values: dict[str, str], is_emulator: bool, dry_run: bool, session) -> int:
+    if kind.verify is None:
+        die(
+            f"the {kind.name} kind declares the verify verb but supplies no verify flow",
+            "wire the kind's verify flow in its app/kinds/<kind>/__init__.py, or drop the verb",
+        )
+    return kind.verify(declaration, values, is_emulator, dry_run, session)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tfctl",
-        description="Validate a service's .env against its secrets.toml and drive the secrets stack.",
+        description="Validate a stack's values file and drive its terraform verbs, kind by kind.",
     )
     parser.add_argument(
         "command",
@@ -57,11 +72,18 @@ def build_parser() -> argparse.ArgumentParser:
         "created on demand on both planes; seeder-drop detaches and deletes the "
         "seeder role; session-clear drops the targeted service's cached seeder "
         "session and session-clear-all drops every cached one; session-refresh-all "
-        "mints every ready service's seeder session in one run (one shared MFA code on real AWS)",
+        "mints every ready service's seeder session in one run (one shared MFA code "
+        "on real AWS); check and bootstrap drive the observability stack's "
+        "credential and state plane (envs/.env)",
     )
     parser.add_argument(
         "--service",
         help="service name under <repo root>/services (default: nearest secrets.toml upward)",
+    )
+    parser.add_argument(
+        "--stack-dir",
+        help="explicit stack directory that holds a declaration file "
+        "(e.g. observability/terraform; skips the service/cwd discovery)",
     )
     plane_group = parser.add_mutually_exclusive_group()
     plane_group.add_argument(
@@ -129,6 +151,16 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
             f"--service does not apply to the {args.command} command (it runs across every service)",
             "run a single-service verb without --service",
         )
+    if args.service and args.stack_dir:
+        die(
+            "--service and --stack-dir name two different stacks; pass only one",
+            "point --stack-dir at a directory holding a declaration file, or use --service",
+        )
+    if args.stack_dir and args.command in ("session-clear-all", "session-refresh-all"):
+        die(
+            f"--stack-dir does not apply to the {args.command} command (it runs across every service)",
+            "run a single-service verb without --stack-dir",
+        )
     if args.values_file and args.command in ("session-clear-all", "session-refresh-all"):
         die(
             f"--values-file does not apply to the {args.command} command (each service rides its own infra/.env)",
@@ -152,7 +184,11 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
         )
 
     if workspace is None:
-        workspace = find_service_workspace(REPO_ROOT, args.service)
+        workspace = (
+            stack_dir_workspace(Path(args.stack_dir))
+            if args.stack_dir
+            else find_service_workspace(REPO_ROOT, args.service)
+        )
     if args.values_file:
         workspace = replace(workspace, values_file=Path(args.values_file))
     kind = workspace.kind
@@ -163,6 +199,12 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
         if args.command == "session-clear":
             fix = "run session-clear-all to drop every cached seeder session, or fix the service's secrets.toml"
         die(str(exc), fix)
+
+    if args.command not in kind.my_verbs:
+        die(
+            f"{args.command} is not a verb of the {kind.name} kind",
+            "see the kind's verbs in the tool's README",
+        )
 
     if args.command == "session-clear":
         cache = session_cache_for(declaration)
@@ -175,12 +217,12 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
     if not workspace.values_file.exists():
         die(
             f"{workspace.values_file} not found",
-            "create the service's infra/.env first (copy its committed .env.example)",
+            kind.values_hint,
         )
     values = parse_env_file(workspace.values_file)
-    if (note := emulator_endpoint_note(values)) is not None:
+    if kind.legacy_endpoint_note and (note := emulator_endpoint_note(values)) is not None:
         print(note)
-    is_emulator = not args.aws
+    is_emulator = kind.resolve_plane(values, args.aws, args.floci)
 
     if args.command == "seeder-drop":
         if _print_errors(plane_errors(values)):
@@ -198,19 +240,21 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
             session_cache_for(declaration),
             kind.seeder_policy,
         )
-        return verify.verify_flow(declaration, values, is_emulator, args.dry_run, session)
+        return _verify_flow(kind, declaration, values, is_emulator, args.dry_run, session)
 
     if _print_errors(kind.validate(declaration, values, is_emulator)):
         return 1
 
-    session = resolve_carrier_session(
-        declaration,
-        values,
-        is_emulator,
-        args.dry_run,
-        session_cache_for(declaration),
-        kind.seeder_policy,
-    )
+    session = None
+    if args.command in kind.carried_verbs:
+        session = resolve_carrier_session(
+            declaration,
+            values,
+            is_emulator,
+            args.dry_run,
+            session_cache_for(declaration),
+            kind.seeder_policy,
+        )
 
     if args.command == "auto-apply":
         if args.dry_run:
@@ -227,10 +271,12 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
             code = kind.terraform_flow(declaration, values, is_emulator, step, args, session)
             if code != 0:
                 return code
-        return verify.verify_flow(declaration, values, is_emulator, False, session)
+        return _verify_flow(kind, declaration, values, is_emulator, False, session)
 
     if args.command in ("plan", "apply", "destroy"):
         return kind.terraform_flow(declaration, values, is_emulator, args.command, args, session)
+    if kind.verb_flow is not None:
+        return kind.verb_flow(declaration, values, is_emulator, args.command, args, session)
     die(
         f"{args.command} is not a single-service verb for the {kind.name} kind",
         "see the kind's verbs in the tool's README",

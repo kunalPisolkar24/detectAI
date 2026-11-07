@@ -15,6 +15,12 @@ RECOVERY_WINDOW_MAX = 30
 EMULATOR_RECOVERY_WINDOW = 0
 
 
+def resolve_plane(values: dict[str, str], aws: bool, floci: bool) -> bool:
+    """The secrets plane follows the plane flags only: --aws rides real AWS,
+    floci stays the default any other way."""
+    return not aws
+
+
 def validate(secrets: SecretsDeclaration, values: dict[str, str], is_emulator: bool) -> list[str]:
     errors: list[str] = []
 

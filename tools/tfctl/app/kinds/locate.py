@@ -65,6 +65,19 @@ def find_service_workspace(repo_root: Path, service: str | None) -> Workspace:
     )
 
 
+def stack_dir_workspace(stack_dir: Path) -> Workspace:
+    """An explicitly given stack directory: scan the registry's declaration
+    filenames instead of walking upward, so any stack can be driven from any
+    cwd (the make targets pass --stack-dir $(CURDIR))."""
+    declared = [kind for kind in KINDS.values() if (stack_dir / kind.declaration_filename).exists()]
+    if not declared:
+        die(
+            f"no {_known_names()[0]} found in {stack_dir}",
+            f"place a {_known_names()[0]} in the directory or run the tool inside a stack directory",
+        )
+    return workspace_for(declared[0], stack_dir)
+
+
 def _known_names() -> list[str]:
     return [kind.declaration_filename for kind in KINDS.values()]
 

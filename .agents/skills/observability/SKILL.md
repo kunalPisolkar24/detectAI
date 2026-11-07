@@ -21,7 +21,7 @@ observability/terraform/
 ├── modules/dashboard/       one board + its entity tags
 ├── modules/alert-condition/ one NRQL condition
 ├── envs/                    .env (gitignored, from .env.example) + prod.tfvars
-├── tools/newrelic.py        credentials brain + terraform driver
+├── observability.toml       tfctl's declaration — the tfctl engine drives every live verb
 ├── tests/                   mocked terraform tests — the same gate CI runs
 └── docs/                    canonical reference: quickstart, configuration, architecture, per-board tours
 ```
@@ -93,6 +93,12 @@ make bootstrap                    # state bucket for the selected plane (no key 
 make plan && make apply           # auto-approves on Floci, interactive on real AWS
 ```
 
+tfctl (installed from `tools/tfctl`) is the driver — the make targets wrap its
+observability kind. `PLANE` overrides the .env-chosen plane for one run:
+`make plan PLANE=aws`. On real AWS every state-plane step rides the
+`detectai-observability-seeder` role (created on demand, MFA-gated, cached 12
+hours); `SEEDER_MFA_SERIAL` in `envs/.env` overrides the derived MFA device.
+
 `NEW_RELIC_API_KEY` must be a **User** key (`NRAK-...`) — the ingest license
 key is rejected. Secrets live only in `envs/.env` or the shell, never
 committed.
@@ -101,8 +107,9 @@ Planes, precedence, failure modes: [references/publishing.md](references/publish
 
 ## Guardrails
 
-- Run everything from `observability/terraform`. The root `Makefile`'s
-  `obs-*` targets point at a removed `infra/observability` path — dead today.
+- Run everything from `observability/terraform`. The root `Makefile` has no
+  obs targets; the make targets here (`check`/`bootstrap`/`plan`/`apply`)
+  drive tfctl directly.
 - This root is pure New Relic: no AWS provider, and no edits reaching into
   `infra/terraform` or service code from here.
 - A widget is only as real as its telemetry: confirm the span/metric/log

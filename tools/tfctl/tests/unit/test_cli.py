@@ -174,6 +174,17 @@ def test_bad_declaration_dies_with_a_fix_hint(tmp_path):
     assert excinfo.value.code == 1
 
 
+def test_a_declared_verify_without_a_flow_dies_typed(tmp_path, monkeypatch, capsys):
+    from dataclasses import replace
+
+    workspace = replace(write_service(tmp_path, ""), kind=replace(KIND, verify=None))
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(["verify"], workspace=workspace)
+    assert excinfo.value.code == 1
+    assert "declares the verify verb but supplies no verify flow" in capsys.readouterr().out
+
+
 def test_verify_wiring(dp, tmp_path, monkeypatch):
     workspace = ws_with(tmp_path, EMULATOR_ENV)
     seen = {}
@@ -182,7 +193,7 @@ def test_verify_wiring(dp, tmp_path, monkeypatch):
         seen["call"] = (declaration, values, is_emulator, dry_run, session)
         return 0
 
-    monkeypatch.setattr(verify_module, "verify_flow", fake_flow)
+    monkeypatch.setattr(KIND, "verify", fake_flow)
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["verify"], workspace=workspace) == 0
     declaration, values, is_emulator, dry_run, session = seen["call"]
@@ -198,7 +209,7 @@ def test_verify_validation_failure_short_circuits(tmp_path, monkeypatch):
     def boom(*arguments, **rest):
         raise AssertionError("a failed validation must not reach the flow")
 
-    monkeypatch.setattr(verify_module, "verify_flow", boom)
+    monkeypatch.setattr(KIND, "verify", boom)
     assert cli.main(["verify"], workspace=workspace) == 1
 
 
@@ -227,7 +238,7 @@ def test_plane_selection_defaults_to_floci_and_follows_the_flags(tmp_path, monke
         seen["is_emulator"] = is_emulator
         return 0
 
-    monkeypatch.setattr(verify_module, "verify_flow", fake_flow)
+    monkeypatch.setattr(KIND, "verify", fake_flow)
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["verify"], workspace=workspace) == 0
     assert seen["is_emulator"] is True  # the default plane
@@ -253,7 +264,7 @@ def test_legacy_emulator_endpoint_key_is_ignored_with_a_note(tmp_path, monkeypat
         seen["is_emulator"] = is_emulator
         return 0
 
-    monkeypatch.setattr(verify_module, "verify_flow", fake_flow)
+    monkeypatch.setattr(KIND, "verify", fake_flow)
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["verify"], workspace=workspace) == 0
     assert seen["is_emulator"] is True  # the flag decides, never the file
@@ -361,7 +372,7 @@ def test_auto_apply_runs_plan_apply_then_verify(tmp_path, monkeypatch, capsys):
         "ensure_state_bucket",
         lambda declaration, values, is_emulator, account, session=None: 0,
     )
-    monkeypatch.setattr(verify_module, "verify_flow", fake_verify_flow)
+    monkeypatch.setattr(KIND, "verify", fake_verify_flow)
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["auto-apply"], workspace=workspace) == 0
     assert order == ["init", "plan", "init", "apply", "verify"]
@@ -386,7 +397,7 @@ def test_auto_apply_stops_when_plan_fails(tmp_path, monkeypatch):
         "ensure_state_bucket",
         lambda declaration, values, is_emulator, account, session=None: 0,
     )
-    monkeypatch.setattr(verify_module, "verify_flow", boom)
+    monkeypatch.setattr(KIND, "verify", boom)
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["auto-apply"], workspace=workspace) == 1
     assert commands == ["init", "plan"]  # no second init, no apply, no verify
@@ -404,7 +415,7 @@ def test_auto_apply_stops_when_apply_fails(tmp_path, monkeypatch):
         raise AssertionError("a failed apply must stop the chain before verify")
 
     monkeypatch.setattr(stack_flow, "run_terraform", fake_run_terraform)
-    monkeypatch.setattr(verify_module, "verify_flow", boom)
+    monkeypatch.setattr(KIND, "verify", boom)
     monkeypatch.setattr(
         stack_flow,
         "ensure_state_bucket",
@@ -450,7 +461,7 @@ def test_auto_apply_dry_run_renders_the_chain_once(tmp_path, monkeypatch, capsys
 
     monkeypatch.setattr(stack_flow, "run_terraform", boom)
     monkeypatch.setattr(stack_flow, "ensure_state_bucket", boom)
-    monkeypatch.setattr(verify_module, "verify_flow", boom)
+    monkeypatch.setattr(KIND, "verify", boom)
     monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
     assert cli.main(["auto-apply", "--dry-run"], workspace=workspace) == 0
     out = capsys.readouterr().out

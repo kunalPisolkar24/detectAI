@@ -30,9 +30,12 @@ conditions and notification names.
 | Bucket | `detectai-observability-tfstate`, self-heals if missing | required, created versioned |
 | Apply | auto-approves | interactive confirm |
 | State key | `observability/floci/terraform.tfstate` | `observability/terraform.tfstate` |
+| Run identity | the emulator's fake credentials | the `detectai-observability-seeder` role (created on demand, MFA-gated, cached 12 h) |
 
-Floci needs `make floci-up` from the repo root. `bootstrap` is idempotent and
-keyless — the AWS CLI appears only there, for the state bucket.
+Floci needs `make floci-up` from the repo root. `bootstrap` is idempotent;
+`SEEDER_MFA_SERIAL` in `envs/.env` overrides the MFA device derived from your
+IAM user. `PLANE=aws|floci` on any make target overrides the .env-selected
+plane for one run.
 
 ## Command flow
 
@@ -42,9 +45,9 @@ From `observability/terraform`:
 2. `make fmt init validate test` — the offline gate; CI
    (`.github/workflows/observability.yaml`) runs exactly this on PRs to
    `main`/`staging` and pushes touching `observability/**`.
-3. `make check` — `tools/newrelic.py` validates `envs/.env`, previews the
-   plane, and resolves the account name over GraphQL, so a valid key from the
-   wrong account fails before any plan.
+3. `make check` — tfctl validates `envs/.env`, previews the plane, and
+   resolves the account name over GraphQL, so a valid key from the wrong
+   account fails before any plan.
 4. `make bootstrap`
 5. `make plan && make apply`
 

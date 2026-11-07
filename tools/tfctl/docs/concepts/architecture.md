@@ -4,24 +4,24 @@ This document explains how one `tfctl` invocation becomes a governed AWS change.
 
 ## What this engine is
 
-A service-agnostic CLI that drives any service's AWS secrets plane: validate its `.env`, terraform-plan/apply/destroy its stack, verify the live plane against the values, and tear it all down. One shared terraform root serves every service; the two files per service — the declared `secrets.toml` and the values `infra/.env` ([Declaration](declaration.md), [Values](values.md)) — are the only thing a service contributes.
+A stack-agnostic CLI that drives any declared stack kind by kind: validate its values file, terraform-plan/apply its stack, and tear it down. Two kinds are registered today — **secrets** (per service: a declared `secrets.toml` plus values in `infra/.env`, verified against the live plane) and **observability** (per stack dir: an `observability.toml` plus values in `envs/.env`, the New Relic-as-code root) — and the registry is the only seam between the engine and them ([Kinds](kinds.md)). The engine contributes everything else: verb dispatch, the carrier, the state machinery, the shell runners.
 
-Both out-of-stack prerequisites are created on demand and converged every run: the state bucket (terraform's ledger) and the seeder carrier role every verb rides ([Carrier](carrier.md)). There is no bootstrap command to run first — there is nothing to bootstrap to.
+Both out-of-stack prerequisites are created on demand and converged every run: the state bucket (terraform's ledger) and the seeder carrier role every verb rides ([Carrier](carrier.md)). There is no bootstrap command to run first for the secrets kind — there is nothing to bootstrap to; the observability kind's `bootstrap` verb heals the same ledger for its stack-dir plane.
 
 ## The module map
 
 ```
 tools/tfctl/
 ├── app/
-│   ├── main.py          verb dispatch: flag guards, service resolution, kind wiring
+│   ├── main.py          verb dispatch: flag guards, stack resolution, kind wiring
 │   ├── engine/          kind-agnostic machinery: carrier, stack, values, shell runners
-│   ├── kinds/           the registry; the secrets kind (declaration schema, verb flows, vendored stack)
+│   ├── kinds/           the registry; the secrets and observability kinds (declaration schemas, verb flows)
 │   └── __main__.py      python -m app
 ├── tests/               unit (default) + integration (live Floci)
 └── mk/                  make fragments: install, lint, test tiers
 ```
 
-Shape in toml, values in the `.env`, secrets in gitignored files, engine in one package: `main.py` is the composition root *by being the caller* — every verb's mechanics live in its own subpackage and nothing is wired anywhere else.
+Shape in toml, values in the `.env`, engine in one package: `main.py` is the composition root *by being the caller* — every kind registers its slot there, and each verb's mechanics live in its own subpackage.
 
 ## How one invocation flows
 
@@ -32,13 +32,14 @@ graph LR
     GUARD -->|"clean"| WHICH{"which verb?"}
     WHICH -->|"session-clear-all"| CLEARALL["delete every cached<br/>session file"] --> DONE(["end: exit 0"])
     WHICH -->|"session-refresh-all"| REFRESH["the batch verb:<br/>every ready service"] --> DONE
-    WHICH -->|"session-clear"| CLEARS["delete this service's<br/>cache file"] --> DONE
-    WHICH -->|"single-service"| FIND{"--service<br/>given?"}
-    FIND -->|"yes"| DIR["the named service dir,<br/>anchored to the repo root"]
-    FIND -->|"no"| NEAR["nearest secrets.toml<br/>upward from cwd"]
-    DIR --> LOAD{"secrets.toml<br/>loads?"}
+    WHICH -->|"session-clear"| CLEARS["delete this stack's<br/>cache file"] --> DONE
+    WHICH -->|"single-stack"| FIND{"--service or --stack-dir?"}
+    FIND -->|"--stack-dir"| DIR["the named stack dir,<br/>taken as given"]
+    FIND -->|"--service"| DIR["the named service dir,<br/>anchored to the repo root"]
+    FIND -->|"neither"| NEAR["nearest declaration file<br/>upward from cwd"]
+    DIR --> LOAD{"declaration<br/>loads?"}
     NEAR --> LOAD
-    LOAD -->|"no"| TOMLERR["error: secrets.toml — …<br/>fix the service's declaration"] --> HALT
+    LOAD -->|"no"| TOMLERR["error: <declaration> — …<br/>fix the declaration"] --> HALT
     LOAD -->|"yes"| ENV{"env file present,<br/>valid for this verb?"}
     ENV -->|"no"| ENVERR["named error + fix line"] --> HALT
     ENV -->|"yes"| VERB{"verb"}
@@ -47,14 +48,16 @@ graph LR
     CAR2 --> VERIFY["fingerprint audit flow"] --> DONE
     VERB -->|"plan / apply / destroy"| CAR1["carrier resolve:<br/>converge role,<br/>cached or assumed"]
     VERB -->|"auto-apply"| CAR1
+    VERB -->|"check"| DIRECT["no state, no terraform:<br/>the kind's own flow"] --> DONE
     CAR1 --> TF["terraform verb flow<br/>auto-apply: plan → apply → verify"] --> DONE
 ```
 
 Three details the flow hides:
 
-- **Verb families.** Two verbs never touch a service at all (`session-clear-all`, `session-refresh-all` — they walk all services), one verb needs only the declaration (`session-clear` deletes its service's cache file without touching any values), and the rest are single-service verbs.
+- **Verb families.** Two verbs never touch a stack at all (`session-clear-all`, `session-refresh-all` — they walk all services), one verb needs only the declaration (`session-clear` deletes its stack's cache file without touching any values), and the rest are single-stack verbs.
 - **Validation depth varies by verb.** Terraform-writing verbs run the [full value ladder](values.md); verify and `seeder-drop` run only the region check, because they must be able to comment on a plane even when a value is misedited.
 - **Dry runs are stakeouts, not executions.** `--dry-run` resolves no carrier session, prompts for nothing, runs no terraform. What it prints is verb-shaped: the full banner plus backend overrides and exact commands on the terraform verbs, the three read-only aws commands on `verify`, the would-refresh list on the batch verb.
+- **Each kind owns its verb shapes.** `check`/`bootstrap` are the observability kind's own flows (no terraform for check, the state bucket alone for bootstrap); the terraform verbs and `verify`/`auto-apply` are the secrets kind's shapes. The registry decides which shapes a stack gets.
 
 ## What a verb run looks like end to end
 

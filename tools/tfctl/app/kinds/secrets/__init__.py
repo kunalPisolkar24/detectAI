@@ -27,18 +27,24 @@ def kind() -> Kind:
     from app.kinds.secrets.flow import terraform_verb_flow
     from app.kinds.secrets.policy import seeder_policy_document
     from app.kinds.secrets.tfvars import build_tf_vars
-    from app.kinds.secrets.values import validate
+    from app.kinds.secrets.values import resolve_plane, validate
+    from app.kinds.secrets.verify.flow import verify_flow
 
     return Kind(
         name="secrets",
         declaration_filename="secrets.toml",
         values_relpath="infra/.env",
         stack_root=STACK_ROOT,
+        values_hint="create the service's infra/.env first (copy its committed .env.example)",
         load=load,
         build_tf_vars=build_tf_vars,
         seeder_policy=seeder_policy_document,
         validate=validate,
+        resolve_plane=resolve_plane,
         my_verbs=VERBS,
         service_scoped=True,
         terraform_flow=terraform_verb_flow,
+        carried_verbs=("plan", "apply", "destroy", "auto-apply"),
+        legacy_endpoint_note=True,
+        verify=verify_flow,
     )

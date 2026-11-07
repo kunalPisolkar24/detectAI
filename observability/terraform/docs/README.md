@@ -48,7 +48,7 @@ observability/
     ├── alerts/             alert layer — policies, conditions, email routing
     ├── modules/            building blocks: dashboard + alert-condition
     ├── envs/               .env templates (credentials, plane selection)
-    ├── tools/newrelic.py   .env validator + terraform driver
+    ├── observability.toml  tfctl's declaration: opts this root into the tfctl engine
     ├── mk/                 make fragments: offline tests + New Relic flows
     ├── tests/              mocked terraform tests (no key, no network)
     └── docs/               this documentation

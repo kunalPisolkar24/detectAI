@@ -5,7 +5,7 @@ This guide deploys every New Relic dashboard and alert from a fresh checkout. It
 ## Prerequisites
 
 - **Terraform 1.9+** — `terraform -version`
-- **Python 3** — `tools/newrelic.py` drives every live command
+- **tfctl installed** (`make -C tools/tfctl install`) — it drives every live command from this root
 - **AWS CLI** — used only for the S3 state bucket
 - **A New Relic User API key** (`NRAK-...`) — from New Relic under *API keys*. The ingest license key that apps send telemetry with is a different credential and will be rejected
 - **Floci running** (`make floci-up` in the repo root) — only if you apply against the emulator plane
@@ -39,7 +39,7 @@ All four targets are local: formatting, validation, and the mocked Terraform tes
 make check
 ```
 
-`tools/newrelic.py` validates `envs/.env`, shows which state plane it selected, and resolves the account name over New Relic's GraphQL. A valid-looking key from the wrong account fails here instead of poisoning a plan.
+`tfctl` validates `envs/.env`, shows which state plane it selected, and resolves the account name over New Relic's GraphQL. A valid-looking key from the wrong account fails here instead of poisoning a plan. On real AWS, tfctl rides the stack's seeder role (`detectai-observability-seeder`, created on demand) so the commands never use your personal keys to write state.
 
 ## Step 4: Bootstrap the state bucket
 

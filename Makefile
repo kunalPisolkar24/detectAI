@@ -61,7 +61,6 @@ DETECT_AI_NETWORK := $(if $(DETECT_AI_NETWORK),$(DETECT_AI_NETWORK),detect-ai-ne
 	prod-up-floci prod-config-floci \
 	local-up local-down local-logs local-clean local-build local-rebuild local-config local-ps \
 	tf-fmt tf-validate tf-test tf-plan tf-apply tf-destroy tf-plan-local tf-apply-local tf-destroy-local floci-verify floci-up floci-down floci-clean \
-	obs-fmt obs-validate obs-test obs-plan obs-apply obs-destroy \
 	prod-floci-bootstrap
 
 help:
@@ -346,41 +345,6 @@ tf-apply-local:
 
 tf-destroy-local:
 	@$(MAKE) --no-print-directory tf-destroy ENV=floci
-
-# ---------------------------------------------------------------------------
-# Observability (New Relic dashboards + alerts, EU) — separate Terraform root
-# ---------------------------------------------------------------------------
-# Secrets via env only: TF_VAR_newrelic_api_key or NEW_RELIC_API_KEY (NRAK-...).
-# Two dashboard statuses only: prod + loadtest. State currently lives in the
-# local emulator S3 backend; see infra/observability/README.md.
-#   make obs-plan  -> plan with infra/observability/envs/prod.tfvars
-#   make obs-apply -> publish dashboards + alerts
-OBS_DIR := infra/observability
-OBS_VARS := envs/prod.tfvars
-OBS_BACKEND := backend.local-s3.hcl
-
-obs-fmt:
-	terraform -chdir=$(OBS_DIR) fmt -check -recursive -diff
-
-obs-validate:
-	terraform -chdir=$(OBS_DIR) init -backend=false
-	terraform -chdir=$(OBS_DIR) validate
-	terraform -chdir=$(OBS_DIR) test
-
-obs-test:
-	terraform -chdir=$(OBS_DIR) test
-
-obs-plan:
-	terraform -chdir=$(OBS_DIR) init -reconfigure -backend-config=$(OBS_BACKEND)
-	terraform -chdir=$(OBS_DIR) plan -var-file=$(OBS_VARS)
-
-obs-apply:
-	terraform -chdir=$(OBS_DIR) init -reconfigure -backend-config=$(OBS_BACKEND)
-	terraform -chdir=$(OBS_DIR) apply -var-file=$(OBS_VARS)
-
-obs-destroy:
-	terraform -chdir=$(OBS_DIR) init -reconfigure -backend-config=$(OBS_BACKEND)
-	terraform -chdir=$(OBS_DIR) destroy -var-file=$(OBS_VARS)
 
 prod-floci-bootstrap: tf-apply-local
 	@echo ""

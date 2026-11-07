@@ -1,6 +1,6 @@
 # Values
 
-The values file is a service's gitignored `infra/.env` — the only place real secret values are allowed to live. The engine reads it start to finish on every verb: parse, validate against the [declaration](declaration.md), then decide what reaches the plane and what mood to run in. It never writes to it and never prints it.
+The values file is a stack's gitignored `.env` beside its declaration — the secrets kind's is the service's `infra/.env` (the observability kind rides `envs/.env`; see [Kinds](kinds.md)). This page is the secrets kind's law. The engine reads it start to finish on every verb: parse, validate against the [declaration](declaration.md), then decide what reaches the plane and what mood to run in. It never writes to it and never prints it.
 
 | File | Role |
 |------|------|

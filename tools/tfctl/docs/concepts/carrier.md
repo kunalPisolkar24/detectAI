@@ -1,6 +1,6 @@
 # Carrier
 
-Every verb that works the plane — on both planes — rides the service's **seeder carrier role**: a small IAM role named `detectai-<slug>-seeder` that sits *outside* the terraform stack on purpose. Whatever such a verb does to AWS, it does it as an assumed seeder session, never with your personal keys.
+Every verb that works the plane — on both planes — rides the stack's **seeder carrier role**: a small IAM role named `detectai-<slug>-seeder` that sits *outside* the terraform stack on purpose. Whatever such a verb does to AWS, it does it as an assumed seeder session, never with your personal keys.
 
 | Concept | Value |
 |---------|-------|

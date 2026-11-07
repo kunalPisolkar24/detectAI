@@ -1,0 +1,7 @@
+# The observability stack declaration: this file opts the New Relic-as-code
+# root into tfctl's observability kind. The credential triple and the state
+# plane live in envs/.env (gitignored — run `make env` here first).
+
+[service]
+slug = "observability"
+region = "ap-south-1"

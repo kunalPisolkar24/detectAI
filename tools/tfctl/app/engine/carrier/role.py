@@ -39,6 +39,21 @@ def seeder_role_payload(
     return payload if isinstance(payload, dict) and payload.get("Role") else None
 
 
+def _policy_scopes(desired_policy: dict[str, Any]) -> str:
+    """One scope name per statement: its Sid when it carries one, else its
+    leading action (a kind's policy may omit Sids — the engine must not
+    assume them)."""
+    scopes = []
+    for statement in desired_policy["Statement"]:
+        sid = statement.get("Sid")
+        if sid:
+            scopes.append(str(sid))
+            continue
+        action = statement.get("Action", "unnamed-statement")
+        scopes.append(str(action[0]) if isinstance(action, list) and action else str(action))
+    return ", ".join(scopes)
+
+
 def _document_of(raw: Any) -> dict[str, Any] | None:
     """An IAM payload's embedded policy document: already-JSON dict or URL-encoded string."""
     if isinstance(raw, dict):
@@ -141,7 +156,7 @@ def _create_seeder_role(
             f"could not attach {SEEDER_POLICY_NAME}",
             f"attach {SEEDER_POLICY_NAME} manually, then rerun the verb",
         )
-    scopes = ", ".join(statement["Sid"] for statement in desired_policy["Statement"])
+    scopes = _policy_scopes(desired_policy)
     print(f"policy: {SEEDER_POLICY_NAME} attached ({scopes})")
 
 
