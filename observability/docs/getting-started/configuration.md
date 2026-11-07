@@ -1,6 +1,6 @@
 # Configuration
 
-This document explains how `observability/terraform` is configured: the `.env` file, what each key feeds, and how the Terraform state plane is chosen.
+This document explains how `observability` is configured: the `.env` file, what each key feeds, and how the Terraform state plane is chosen.
 
 ## The env file
 
@@ -49,5 +49,5 @@ graph TB
 
 ## Also relevant
 
-- `envs/prod.tfvars` — environment values for prod applies.
-- CI runs the same offline gate as `make fmt init validate test` — see [.github/workflows/observability.yaml](../../../../.github/workflows/observability.yaml).
+- `envs/.env.example` — the committed shape of the values file; `make env` copies it to `envs/.env`.
+- CI runs the same offline gate as `make fmt init validate test` — see [.github/workflows/observability.yaml](../../../.github/workflows/observability.yaml).

@@ -4,6 +4,8 @@
 
 .PHONY: env fmt init validate test help-tests
 
+TF_DIR := terraform
+
 help-tests:
 	@echo "  Tests (mk/tests.mk):"
 	@echo "    env        create envs/.env from envs/.env.example if missing"
@@ -18,14 +20,14 @@ env:
 	@echo "envs/.env ready (edit envs/.env to fill NEW_RELIC_API_KEY)"
 
 fmt:
-	terraform fmt -check -recursive -diff
+	terraform -chdir=$(TF_DIR) fmt -check -recursive -diff
 
 init:
-	rm -f .terraform/terraform.tfstate
-	terraform init -backend=false -input=false
+	rm -f $(TF_DIR)/.terraform/terraform.tfstate
+	terraform -chdir=$(TF_DIR) init -backend=false -input=false
 
 validate:
-	terraform validate
+	terraform -chdir=$(TF_DIR) validate
 
 test:
-	terraform test
+	terraform -chdir=$(TF_DIR) test

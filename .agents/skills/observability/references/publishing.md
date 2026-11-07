@@ -19,9 +19,9 @@ keys (`TF_STATE_BUCKET`, `EMULATOR_ENDPOINT`, `AWS_REGION`) — `envs/.env`
 wins, a conflicting shell export warns and loses, so a plane stays
 reproducible.
 
-`envs/prod.tfvars` pins `newrelic_region = "EU"`; `var.environment` keeps its
-`prod` default, which is the label baked into prod-board NRQL, alert
-conditions and notification names.
+`var.newrelic_region` keeps its `EU` default in the HCL and `var.environment`
+keeps its `prod` default, which is the label baked into prod-board NRQL,
+alert conditions and notification names.
 
 ## State planes
 
@@ -39,7 +39,7 @@ plane for one run.
 
 ## Command flow
 
-From `observability/terraform`:
+From `observability`:
 
 1. `make env` — once per machine.
 2. `make fmt init validate test` — the offline gate; CI

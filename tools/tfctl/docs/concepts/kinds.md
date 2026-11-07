@@ -9,7 +9,7 @@ Which file a stack directory holds decides which kind drives the run:
 | Kind | Declaration (committed) | Values (gitignored) | Discovery |
 |------|-------------------------|---------------------|-----------|
 | **secrets** | `secrets.toml` at the service root — per-service stacks under `services/<name>` ([Declaration](declaration.md)) | `infra/.env` | `--service <name>`, or nearest declaration upward from cwd |
-| **observability** | `observability.toml` at the stack root — the New Relic-as-code root in `observability/terraform` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
+| **observability** | `observability.toml` at the stack root — the New Relic-as-code stack in `observability` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
 
 Both reach for the same two out-of-stack prerequisites — the state bucket and the seeder carrier role ([Carrier](carrier.md)) — created on demand and converged per run, on either plane. What differs is what the stack *is*: secrets turns `infra/.env` into Secrets Manager + SSM; observability terraform-drives the dashboards and alerts root and adds provider-only credentials (New Relic's NRAK triple, never AWS personal keys).
 
@@ -20,7 +20,7 @@ Every `Kind` is a slot table the engine calls; a kind never edits the engine.
 | Slot | What it answers |
 |------|-----------------|
 | `name`, `declaration_filename`, `values_relpath` | the identity: the file pair and the registry key |
-| `stack_root` | the terraform root the kind vendors (secrets: the shared engine root; observability: `None`, the declaration's own directory) |
+| `stack_root` | the terraform root the kind drives (secrets: the vendored engine stack; observability: `terraform/` under the declaration's directory) |
 | `values_hint` | the `fix:` line when the values file is missing |
 | `load` | declaration → engine `Declaration` (schema shape-checks live here) |
 | `validate` | the values law for verb-wide gating |

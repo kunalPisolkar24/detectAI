@@ -68,7 +68,7 @@ def test_declaration_matches_the_committed_schema(tmp_path):
     assert obs.kind == "observability"
     assert obs.seeder_role_name == "detectai-observability-seeder"
     assert obs.region_default == "ap-south-1"
-    assert obs.stack_root == tmp_path
+    assert obs.stack_root == tmp_path / "terraform"
 
 
 @pytest.mark.parametrize(
@@ -278,7 +278,8 @@ def test_stack_verb_flow_dry_run_prints_the_backend_and_commands(
     assert "carrier: role session (promoted when the command runs)" in out
     assert "state:  detectai-observability-tfstate / observability/floci/terraform.tfstate" in out
     assert "endpoints = {" in out
-    assert "then terraform plan -var-file=envs/prod.tfvars" in out
+    assert "then terraform plan" in out
+    assert "-var-file" not in out
     assert "(dry run: no terraform, no AWS writes)" in out
 
 
@@ -307,9 +308,7 @@ def test_stack_verb_flow_runs_init_then_the_verb_on_the_carrier_triplet(
     assert any(
         arg.startswith("-backend-config=") or arg == "-backend-config" for arg in init_call[1]
     )
-    assert verb_call[1][0] == "apply"
-    assert verb_call[1][1].startswith("-var-file=") and verb_call[1][1].endswith("envs/prod.tfvars")
-    assert "-auto-approve" in verb_call[1] and "-input=false" in verb_call[1]
+    assert verb_call[1] == ["apply", "-input=false", "-auto-approve"]
     assert verb_call[3] == {
         "AWS_ACCESS_KEY_ID": "ASIAFAKE",
         "AWS_SECRET_ACCESS_KEY": "fake-secret",
@@ -438,7 +437,7 @@ def test_cli_missing_values_file_demands_the_make_env_step(tmp_path, capsys):
     with pytest.raises(SystemExit) as excinfo:
         cli.main(["check"], workspace=workspace)
     assert excinfo.value.code == 1
-    assert "make env` in observability/terraform" in capsys.readouterr().out
+    assert "make env` in observability" in capsys.readouterr().out
 
 
 def test_cli_seeder_drop_is_available_to_the_observability_kind(tmp_path, capsys):
@@ -461,6 +460,23 @@ def test_cli_stack_dir_drives_a_stack_from_a_foreign_cwd(
     monkeypatch.chdir(elsewhere)
     monkeypatch.setattr(flow_module, "live_check", lambda config: print("live: ok"))
     assert cli.main(["check", "--stack-dir", str(stack_dir)]) == 0
+    out = capsys.readouterr().out
+    assert "NEW_RELIC_API_KEY     NRAK...MNOP" in out
+    assert "plane:  floci (emulator http://localhost:4566)" in out
+
+
+def test_cli_stack_dir_resolves_a_relative_name_against_the_repo_root(
+    tmp_path, monkeypatch, capsys, clean_nr_env
+):
+    stack_dir = tmp_path / "observability"
+    stack_dir.mkdir()
+    write_stack(stack_dir)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(flow_module, "live_check", lambda config: print("live: ok"))
+    assert cli.main(["check", "--stack-dir", "observability"]) == 0
     out = capsys.readouterr().out
     assert "NEW_RELIC_API_KEY     NRAK...MNOP" in out
     assert "plane:  floci (emulator http://localhost:4566)" in out

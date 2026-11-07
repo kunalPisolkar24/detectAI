@@ -41,17 +41,17 @@ Start here:
 ## Project Structure
 
 ```
-observability/
-└── terraform/              the Terraform root (this component)
-    ├── main.tf             wiring only: the two layers below
-    ├── dashboards/         board layer — one wiring file per board
-    ├── alerts/             alert layer — policies, conditions, email routing
-    ├── modules/            building blocks: dashboard + alert-condition
-    ├── envs/               .env templates (credentials, plane selection)
-    ├── observability.toml  tfctl's declaration: opts this root into the tfctl engine
-    ├── mk/                 make fragments: offline tests + New Relic flows
-    ├── tests/              mocked terraform tests (no key, no network)
-    └── docs/               this documentation
+observability/             the stack root (this component)
+├── observability.toml  tfctl's declaration: opts the stack into the tfctl engine
+├── Makefile + mk/      make targets: offline tests + New Relic flows (terraform ones -chdir into terraform/)
+├── envs/               .env values file (template in .env.example)
+├── docs/               this documentation
+└── terraform/          the Terraform root
+    ├── main.tf         wiring only: the two layers below
+    ├── dashboards/     board layer — one wiring file per board
+    ├── alerts/         alert layer — policies, conditions, email routing
+    ├── modules/        building blocks: dashboard + alert-condition
+    └── tests/          mocked terraform tests (no key, no network)
 ```
 
 ## Quick Reference
@@ -70,4 +70,4 @@ make apply        # terraform apply (auto-approves on the emulator plane)
 ## Related Files
 
 - **Entry point**: [`../README.md`](../README.md) — what this component is
-- **CI gate**: [`../../../.github/workflows/observability.yaml`](../../../.github/workflows/observability.yaml) — runs the offline checks
+- **CI gate**: [`../../.github/workflows/observability.yaml`](../../.github/workflows/observability.yaml) — runs the offline checks

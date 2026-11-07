@@ -19,7 +19,7 @@ from app.kinds.locate import REPO_ROOT
 
 FLOCI_URL = os.environ.get("TFCTL_FLOCI", "http://localhost:4566")
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
-OBS_DIR = REPO_ROOT / "observability" / "terraform"
+OBS_DIR = REPO_ROOT / "observability"
 
 pytestmark = pytest.mark.integration
 
@@ -44,7 +44,7 @@ def values_ready() -> None:
         pytest.skip(f"no Floci reachable at {FLOCI_URL} (set TFCTL_FLOCI to override)")
     env_file = OBS_DIR / "envs" / ".env"
     if not env_file.exists() or "NRAK-" not in env_file.read_text():
-        pytest.skip(f"no configured env file at {env_file} (run `make env` in observability/terraform)")
+        pytest.skip(f"no configured env file at {env_file} (run `make env` in observability)")
 
 
 def run_cli(*arguments: str) -> subprocess.CompletedProcess:

@@ -9,10 +9,10 @@ tfctl --service <name> plan                                # after: make -C tool
 poetry -C tools/tfctl run tfctl --service <name> apply     # anywhere in the repo, no global install
 make -C tools/tfctl secrets-verify SERVICE=<name>          # the tool tree's make wrappers in reference/make.md
 python -m app verify                                       # inside tools/tfctl
-poetry -C tools/tfctl run tfctl --stack-dir observability/terraform plan   # a stack outside services/
+poetry -C tools/tfctl run tfctl --stack-dir observability plan   # a stack outside services/
 ```
 
-`--service` can be omitted when the current directory (or any parent) holds a declaration file — the engine resolves the nearest one. `--stack-dir` anchors to an explicit directory instead of walking: that is how the stack-dir kinds are driven (e.g. `observability/terraform`). Passing either flag runs the verb identically from any directory.
+`--service` can be omitted when the current directory (or any parent) holds a declaration file — the engine resolves the nearest one. `--stack-dir` anchors to an explicit directory instead of walking: that is how the stack-dir kinds are driven (e.g. `observability`). Passing either flag runs the verb identically from any directory.
 
 ## The verbs
 
@@ -35,7 +35,7 @@ poetry -C tools/tfctl run tfctl --stack-dir observability/terraform plan   # a s
 | Flag | Verbs | Effect |
 |------|-------|--------|
 | `--service <name>` | every single-service verb | target `services/<name>` explicitly (anchored to the repo root) |
-| `--stack-dir <path>` | every single-stack verb | drive an explicit stack directory that holds a declaration file (e.g. `observability/terraform`); skips the service/cwd discovery |
+| `--stack-dir <path>` | every single-stack verb | drive an explicit stack directory that holds a declaration file (e.g. `observability`); skips the service/cwd discovery |
 | `--aws` / `--floci` | all but the batch verbs | choose the plane; mutually exclusive; `--floci` is the default (the emulator on `http://localhost:4566`, override `TFCTL_FLOCI_URL`) |
 | `--values-file <path>` | single-service verbs | an alternate values file instead of the stack's own |
 | `--dry-run` | all | print what would run — banner, backend overrides, and exact commands on the terraform verbs; the three read-only aws commands on `verify`; the would-refresh list on the batch verb. Resolves no session, prompts for nothing |

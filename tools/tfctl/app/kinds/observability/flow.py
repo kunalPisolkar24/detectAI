@@ -169,7 +169,7 @@ def stack_verb_flow(
             print(f"  {line}")
         print(
             f"commands: terraform init -reconfigure -backend-config <backend.hcl>, "
-            f"then terraform {command} -var-file=envs/prod.tfvars"
+            f"then terraform {command}"
         )
         print("(dry run: no terraform, no AWS writes)")
         return 0
@@ -186,7 +186,7 @@ def stack_verb_flow(
         init_args = ["init", "-reconfigure", "-backend-config", str(backend_file)]
         # -input=false disables ALL prompts, including the apply approval; real
         # AWS must keep its confirm prompt, so it applies without the flag.
-        verb_args = [command, f"-var-file={declaration.stack_root / 'envs' / 'prod.tfvars'}"]
+        verb_args = [command]
         if command == "plan" or is_emulator:
             verb_args.append("-input=false")
         if command == "apply" and is_emulator:

@@ -21,7 +21,7 @@ def kind() -> Kind:
         values_relpath="envs/.env",
         # The terraform root is the declaration's own directory, not vendored.
         stack_root=None,
-        values_hint="run `make env` in observability/terraform, then fill NEW_RELIC_API_KEY",
+        values_hint="run `make env` in observability, then fill NEW_RELIC_API_KEY",
         load=load,
         build_tf_vars=build_tf_vars,
         seeder_policy=seeder_policy_document,

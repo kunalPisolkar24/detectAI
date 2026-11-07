@@ -84,7 +84,7 @@ make -C tools/tfctl install && make -C tools/tfctl test   # ready to drive
 poetry -C tools/tfctl run tfctl --service document-parser plan --dry-run
 poetry -C tools/tfctl run tfctl --service document-parser auto-apply   # on floci
 poetry -C tools/tfctl run tfctl --service document-parser destroy --purge-state --drop-seeder
-poetry -C tools/tfctl run tfctl --stack-dir observability/terraform check
+poetry -C tools/tfctl run tfctl --stack-dir observability check
 ```
 
 Per-service one-command ergonomics (document-parser's `make secrets-*`) are thin wrappers over this CLI; the [CLI reference](reference/cli.md) is the canonical surface.

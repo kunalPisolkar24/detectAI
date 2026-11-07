@@ -14,7 +14,7 @@ architecture, and one page per dashboard explaining what its charts and alerts m
 ## The 60-second version
 
 ```bash
-cd observability/terraform
+cd observability
 
 make env                    # create envs/.env (never overwrites) — put a real NRAK- key in it
 make fmt init validate test # offline gate: format, validate, mocked tests — no key needed

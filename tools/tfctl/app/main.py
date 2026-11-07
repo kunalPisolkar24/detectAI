@@ -83,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--stack-dir",
         help="explicit stack directory that holds a declaration file "
-        "(e.g. observability/terraform; skips the service/cwd discovery)",
+        "(e.g. observability; skips the service/cwd discovery)",
     )
     plane_group = parser.add_mutually_exclusive_group()
     plane_group.add_argument(
@@ -184,11 +184,15 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
         )
 
     if workspace is None:
-        workspace = (
-            stack_dir_workspace(Path(args.stack_dir))
-            if args.stack_dir
-            else find_service_workspace(REPO_ROOT, args.service)
-        )
+        if args.stack_dir:
+            stack_dir = Path(args.stack_dir)
+            if not stack_dir.is_absolute():
+                # Stack dirs name repo locations; poetry -C and friends shift
+                # the cwd, so a relative name anchors where --service does.
+                stack_dir = REPO_ROOT / stack_dir
+            workspace = stack_dir_workspace(stack_dir)
+        else:
+            workspace = find_service_workspace(REPO_ROOT, args.service)
     if args.values_file:
         workspace = replace(workspace, values_file=Path(args.values_file))
     kind = workspace.kind

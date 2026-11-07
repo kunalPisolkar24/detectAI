@@ -77,17 +77,19 @@ Each service page under [services/](../services/web.md) lists exactly what its c
 ## Directory layout
 
 ```
-observability/terraform/
-├── main.tf             wiring: module "dashboards" + module "alerts"
-├── variables.tf        account, api key, region, alert email, environment
-├── dashboards/         board layer: wiring file + JSON template(s) per board
-├── alerts/             alert layer: policies, per-service conditions, email routing
-├── modules/            dashboard + alert-condition building blocks
-├── envs/               .env templates and prod.tfvars
-├── observability.toml  tfctl's declaration: opts this root into the tfctl engine
-├── mk/                 make fragments (offline tests + New Relic flows)
-├── tests/              mocked terraform tests: board counts, twin parity, names
-└── docs/               this documentation
+observability/
+├── observability.toml  tfctl's declaration: opts this stack into the tfctl engine
+├── Makefile + mk/      make targets (offline tests + New Relic flows); terraform ones -chdir into terraform/
+├── envs/               .env template; make env copies it to the gitignored .env
+├── docs/               this documentation
+├── README.md           stack overview
+└── terraform/          the New Relic-as-code HCL
+    ├── main.tf             wiring: module "dashboards" + module "alerts"
+    ├── variables.tf        account, api key, region, alert email, environment
+    ├── dashboards/         board layer: wiring file + JSON template(s) per board
+    ├── alerts/             alert layer: policies, per-service conditions, email routing
+    ├── modules/            dashboard + alert-condition building blocks
+    └── tests/              mocked terraform tests: board counts, twin parity, names
 ```
 
 ## Prod and dev boards

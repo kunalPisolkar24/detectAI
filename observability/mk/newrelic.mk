@@ -6,7 +6,7 @@
 
 .PHONY: validate-plane check bootstrap plan apply help-newrelic
 
-TFCTL := poetry -C $(abspath ../../tools/tfctl) run tfctl
+TFCTL := poetry -C $(abspath ../tools/tfctl) run tfctl
 PLANE ?=
 PLANE_FLAG := $(if $(filter aws,$(PLANE)),--aws,$(if $(filter floci,$(PLANE)),--floci,))
 

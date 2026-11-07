@@ -13,7 +13,7 @@ This guide deploys every New Relic dashboard and alert from a fresh checkout. It
 ## Step 1: Create the env file
 
 ```bash
-cd observability/terraform
+cd observability
 make env
 ```
 

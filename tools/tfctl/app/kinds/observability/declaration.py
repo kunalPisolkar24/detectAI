@@ -67,5 +67,5 @@ def load(toml_path: Path) -> ObservabilityDeclaration:
         slug=SLUG,
         seeder_role_name=seeder_role_for(SLUG),
         region_default=service.get("region", STATE_REGION_DEFAULT),
-        stack_root=toml_path.resolve().parent,
+        stack_root=toml_path.resolve().parent / "terraform",
     )
