@@ -110,7 +110,7 @@ help:
 	@printf "  make tf-destroy-local  alias: tf-destroy ENV=floci\n\n"
 	@printf "Floci (FLOCI_ENDPOINT=$(FLOCI_ENDPOINT))\n"
 	@printf "  make floci-verify      Check emulator APIs + secrets exist\n"
-	@printf "  make prod-floci-bootstrap Bootstrap: tf-apply ENV=floci + verify + DATABASE_URL hint (seed service planes with secretsctl)\n"
+	@printf "  make prod-floci-bootstrap Bootstrap: tf-apply ENV=floci + verify + DATABASE_URL hint (seed service planes with tfctl)\n"
 	@printf "  make prod-up-floci     Alias: prod-up ENV=floci (attached to FLOCI_NETWORK)\n"
 	@printf "  make prod-config-floci Alias: prod-config ENV=floci\n"
 	@printf "  make floci-up          Start emulator daemon (named volume, standalone, not part of prod)\n"
@@ -226,7 +226,7 @@ prod-up: validate-env ensure-prod-env guard-prod network check-database-url
 		for declared in $$(ls services/*/secrets.toml); do \
 			svc=$$(basename $$(dirname "$$declared")); \
 			[ -f "services/$$svc/infra/.env" ] || continue; \
-			poetry -C tools/secretsctl run secretsctl --service "$$svc" auto-apply || exit $$?; \
+			poetry -C tools/tfctl run tfctl --service "$$svc" auto-apply || exit $$?; \
 		done; \
 	fi
 	@echo "ai-service mode: $(GPU_MODE) (GPU=1 force GPU, GPU=0 force CPU) ENV=$(ENV)"
@@ -456,6 +456,6 @@ floci-verify:
 		if aws --endpoint-url "$$EP" --region "$$R" secretsmanager describe-secret --secret-id "$$s" >/dev/null 2>&1; then \
 			echo "  ok  $$s"; \
 		else \
-			echo "  MISSING $$s  (seed via secretsctl — tools/secretsctl/README.md)"; \
+			echo "  MISSING $$s  (seed via tfctl — tools/tfctl/README.md)"; \
 		fi; \
 	done

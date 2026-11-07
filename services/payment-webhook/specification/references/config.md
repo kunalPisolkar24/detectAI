@@ -78,7 +78,7 @@ How payment-webhook resolves its config values per plane. Requirements live in [
 
 ## Non-goals
 
-No polling/TTL or reload (a config change means a restart), no caching layer, no per-key reads, no AppConfig/feature flags, no dotenv files in prod images, no `DOTENV_PATH` knob until a caller exists, and no seeding contract changes (infra/.env stays the one seed source on both planes via secretsctl).
+No polling/TTL or reload (a config change means a restart), no caching layer, no per-key reads, no AppConfig/feature flags, no dotenv files in prod images, no `DOTENV_PATH` knob until a caller exists, and no seeding contract changes (infra/.env stays the one seed source on both planes via tfctl).
 
 ## Compose
 

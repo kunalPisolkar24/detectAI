@@ -1,6 +1,6 @@
 # Infrastructure
 
-How this service's app-side AWS slice gets provisioned: the credential store and the non-secret config parameters — and no IAM of any kind. Driven by make targets at the service root; the engine behind them is [`secretsctl`](../../../tools/secretsctl/docs/README.md), whose one shared terraform stack lives in `tools/secretsctl/terraform/`. Read the [secrets guide](secrets.md) first if you are here for how the key is handled at runtime — this page is about provisioning it. The stack does not deploy the app: terraform manages only what the app *reads*.
+How this service's app-side AWS slice gets provisioned: the credential store and the non-secret config parameters — and no IAM of any kind. Driven by make targets at the service root; the engine behind them is [`tfctl`](../../../tools/tfctl/docs/README.md), whose one shared terraform stack lives in `tools/tfctl/app/kinds/secrets/stack/`. Read the [secrets guide](secrets.md) first if you are here for how the key is handled at runtime — this page is about provisioning it. The stack does not deploy the app: terraform manages only what the app *reads*.
 
 ## What the stack creates
 
@@ -29,7 +29,7 @@ graph LR
 
 - Trust: **your ambient caller, auto-detected** (`aws sts get-caller-identity` under personal credentials — an assumed-role session strips down to its base role).
 - Carrier verbs assume the seeder role with your MFA code for a **12-hour session** — the STS role-session ceiling — and inject that temporary triplet as env credentials: they outrank any local profile, so nothing is written to `~/.aws`.
-- The triplet is cached in gitignored `tools/secretsctl/.session-cache/<service>.json` (`make secrets-session-clear` drops the service's entry, `secretsctl session-clear-all` drops every one, and `secretsctl session-refresh-all` mints every ready service's triplet in one run behind a single MFA code — `--force` re-mints, `--dry-run` just lists), so a plan → apply stretch prompts for the code once. The driver prints `carrier: role session (…, valid mm:ss)` on every run, and refuses to run when the ambient identity already *is* a seeder session (stale exported `AWS_*` triplets fail loudly instead of bypassing the role).
+- The triplet is cached in gitignored `tools/tfctl/.session-cache/<service>.json` (`make secrets-session-clear` drops the service's entry, `tfctl session-clear-all` drops every one, and `tfctl session-refresh-all` mints every ready service's triplet in one run behind a single MFA code — `--force` re-mints, `--dry-run` just lists), so a plan → apply stretch prompts for the code once. The driver prints `carrier: role session (…, valid mm:ss)` on every run, and refuses to run when the ambient identity already *is* a seeder session (stale exported `AWS_*` triplets fail loudly instead of bypassing the role).
 - An assumed-role caller cannot derive an MFA device — pin `SEEDER_MFA_SERIAL` in `.env`, or the verb dies asking for one.
 - Before every session resolve — cached or fresh — the role is created when missing — true right after a full wipe, or whenever the emulator restart lost it — and an existing one is reconciled: trust re-anchored to the caller, 12-hour cap raised, `seeder-policy` re-attached on drift. Convergence is what keeps a policy change from outliving a still-valid cached triplet; a converged role passes silently, and a cached session only skips the assume and its MFA prompt.
 - The role teardown (`--drop-seeder`) is the one step outside the carrier session: a role cannot assume itself, so it runs on your personal credentials.
@@ -59,19 +59,19 @@ The provider block adapts itself (`providers.tf`): the emulator plane gets `test
 
 ## The provisioning pipeline
 
-`infra/.env` → `secretsctl` (parse → validate → `TF_VAR_*`) → terraform → the selected plane. Terraform never reads `.env`; the engine is the only bridge, and it prints secrets only as lengths and fingerprints, never values.
+`infra/.env` → `tfctl` (parse → validate → `TF_VAR_*`) → terraform → the selected plane. Terraform never reads `.env`; the engine is the only bridge, and it prints secrets only as lengths and fingerprints, never values.
 
 ```mermaid
 graph LR
     START(["start"]) --> ENV["infra/.env<br/>(make env from .env.example)"]
-    ENV --> VAL{"secretsctl<br/>parse + validate"}
+    ENV --> VAL{"tfctl<br/>parse + validate"}
     VAL -->|"invalid"| FAIL["named config error<br/>terraform never touched"] --> END(["end"])
     VAL -->|"valid"| TF["backend config composed per plane<br/>init -reconfigure · plan · apply"]
     TF --> LIVE["secret blob + SSM parameters<br/>in the selected plane"]
     LIVE --> END
 ```
 
-Validation repeats at three layers on purpose (defense-in-depth, not duplication): the engine checks human input before terraform runs, `tools/secretsctl/terraform/variables.tf` protects the stack, and `terraform/modules/secrets-plane/variables.tf` protects the contract for any caller. There are no `backend.*.hcl` files — the engine composes the backend config (bucket, key, region, per-plane flags) into a temp file and feeds `init -reconfigure`; bare `terraform init` is never valid in `tools/secretsctl/terraform`.
+Validation repeats at three layers on purpose (defense-in-depth, not duplication): the engine checks human input before terraform runs, `tools/tfctl/app/kinds/secrets/stack/variables.tf` protects the stack, and `app/kinds/secrets/stack/modules/secrets-plane/variables.tf` protects the contract for any caller. There are no `backend.*.hcl` files — the engine composes the backend config (bucket, key, region, per-plane flags) into a temp file and feeds `init -reconfigure`; bare `terraform init` is never valid in `tools/tfctl/app/kinds/secrets/stack`.
 
 ## First-time setup
 
@@ -115,7 +115,7 @@ Anything on the plane that `.env` does not seed is flagged `extra` and listed as
 | `make secrets-drop-seeder` | the seeder policy and role only (your personal credentials — the role cannot delete itself) | state bucket, ledger, stack resources |
 
 - `terraform destroy` never touches the state bucket — only `secrets-destroy` deletes it, and only after destroy succeeded. Teardown runs unattended: destroy auto-approves, and the purge prints its summary — warning when the bucket holds objects outside `document-parser/` (wiping a shared sandbox bucket takes sibling stacks' state with it) — before the run.
-- Destroy schedules the secret into the recovery window (30 days, or whatever `SECRET_RECOVERY_WINDOW` seeded); `0` in `.env` means no window at all. Skipping an existing window needs `--force-delete`: `make secrets-clean FORCE_DELETE=1`, or directly, `poetry -C ../../tools/secretsctl run secretsctl --service document-parser destroy --force-delete`.
+- Destroy schedules the secret into the recovery window (30 days, or whatever `SECRET_RECOVERY_WINDOW` seeded); `0` in `.env` means no window at all. Skipping an existing window needs `--force-delete`: `make secrets-clean FORCE_DELETE=1`, or directly, `poetry -C ../../tools/tfctl run tfctl --service document-parser destroy --force-delete`.
 - After `secrets-clean`, re-applying is just `make secrets-apply` — init reuses the kept ledger, which now holds empty state.
 
 ## Good to know
@@ -124,15 +124,15 @@ Anything on the plane that `.env` does not seed is flagged `extra` and listed as
 - The emulator's S3 and Secrets data is in-memory: a container restart can drop it. Any terraform verb recreates the bucket, so a bare `make secrets-apply` rebuilds the whole plane.
 - Real AWS needs Terraform ≥ 1.10 for the `use_lockfile` backend flag.
 - The state file stores `secret_string` in plaintext — keep the prod bucket versioned, encrypted, and access-restricted.
-- The full command surface (including `--dry-run` previews) is `secretsctl`; the make targets are the thin wrappers listed in [Make Commands](../reference/make.md).
+- The full command surface (including `--dry-run` previews) is `tfctl`; the make targets are the thin wrappers listed in [Make Commands](../reference/make.md).
 
 ## Testing
 
-- `terraform test` (from `tools/secretsctl/terraform/`, mocked AWS provider, no emulator or real AWS) asserts the slug drives every name at the stack level: the secret contract name and the `/detectai/<slug>/` SSM prefix are outputs of the slug, seeded parameters land on the service prefix, and an unset SSM map seeds nothing.
-- `make secrets-test` — pytest for the secretsctl engine (the unit tier); the tier-by-tier story is [secretsctl's testing guide](../../../tools/secretsctl/docs/guides/testing.md).
+- `terraform test` (from `tools/tfctl/app/kinds/secrets/stack/`, mocked AWS provider, no emulator or real AWS) asserts the slug drives every name at the stack level: the secret contract name and the `/detectai/<slug>/` SSM prefix are outputs of the slug, seeded parameters land on the service prefix, and an unset SSM map seeds nothing.
+- `make secrets-test` — pytest for the tfctl engine (the unit tier); the tier-by-tier story is [tfctl's testing guide](../../../tools/tfctl/docs/guides/testing.md).
 
 ## Next Steps
 
 - **[Secrets](secrets.md)** — where the credential lives per plane and how the runtime resolves it
 - **[Make Commands](../reference/make.md)** — every make target, annotated
-- **[secretsctl documentation](../../../tools/secretsctl/docs/README.md)** — the engine behind all of this, from quick start to CLI reference
+- **[tfctl documentation](../../../tools/tfctl/docs/README.md)** — the engine behind all of this, from quick start to CLI reference

@@ -1,0 +1,48 @@
+[tool.poetry]
+name = "detectai-tfctl"
+version = "0.1.0"
+description = "Service-agnostic driver for the per-service secrets stacks: env validation, terraform plan/apply, bootstrap, verify, teardown"
+authors = ["DetectAI <hello@detectai.com>"]
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "9.0.2"
+pytest-cov = "4.1.0"
+ruff = "0.1.15"
+
+[tool.poetry.scripts]
+tfctl = "app.main:cli_main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["tests", "."]
+addopts = "--cov=app --cov-report=term-missing -m 'not integration'"
+markers = [
+    "unit: fast tests with no external calls (the default selection)",
+    "integration: black-box tests against a live Floci/LocalStack (run with '-m integration')",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["*/__pycache__/*", "*/tests/*"]
+
+[tool.coverage.report]
+fail_under = 65
+show_missing = true
+skip_covered = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["F", "E"]
+ignore = ["E501"]

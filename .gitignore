@@ -4,8 +4,8 @@
 **/.env
 **/.env.*
 
-# Local derived seeder sessions (secretsctl's carrier cache)
-tools/secretsctl/.session-cache/
+# Local derived seeder sessions (tfctl's carrier cache)
+tools/tfctl/.session-cache/
 
 # Python
 .pytest_cache/

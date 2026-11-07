@@ -68,15 +68,15 @@ One `infra/.env.load` configures everything, `SCENARIO` included (`smoke` or `lo
 | `make secrets-apply` | terraform apply — auto-approved on the emulator, interactive confirm on real AWS | making it real |
 | `make secrets-verify` | reads the live plane (SSM + secret) and matches it against `infra/.env`; values appear as lengths and fingerprints only | after apply, or whenever "is the seed actually right?" nags |
 | `make secrets-drop-seeder` | detaches `seeder-policy` and deletes the role (personal credentials) | leaving an account clean |
-| `make secrets-session-clear` | removes the service's cached seeder session (`tools/secretsctl/.session-cache/<service>.json`) | after a stale/failed MFA window; the next verb re-prompts |
+| `make secrets-session-clear` | removes the service's cached seeder session (`tools/tfctl/.session-cache/<service>.json`) | after a stale/failed MFA window; the next verb re-prompts |
 | `make secrets-session-refresh-all` | mints fresh seeder sessions for every ready service in one run — one shared MFA code on real AWS (`FORCE=1` re-mints still-valid triplets) | the 12-hour window lapsed across several services and re-typing the code per service |
 | `make secrets-clean` | terraform destroy; keeps the state bucket and ledger | wiping resources, keeping your place |
 | `make secrets-destroy` | full teardown: destroy, the state bucket purge, and the seeder role | leaving no trace |
-| `make secrets-test` | pytest for the pipeline driver `tools/secretsctl` | the parse/validation layer changed |
+| `make secrets-test` | pytest for the pipeline driver `tools/tfctl` | the parse/validation layer changed |
 
 Every target takes `PLANE=floci|aws` (default floci), plus `DRY_RUN=1` to preview
 any verb; `FORCE=1` applies to session-refresh-all and `FORCE_DELETE=1` to
-destroy. Rare extras (an alternate values file) run `secretsctl` directly.
+destroy. Rare extras (an alternate values file) run `tfctl` directly.
 
 The order, the two planes, state handling, and the teardown rules are the [infrastructure guide](../guides/infrastructure.md)'s subject — this page only lists the levers.
 

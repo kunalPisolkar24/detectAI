@@ -1,9 +1,9 @@
-# secretsctl runs this service's whole secrets plane: validate infra/.env, then
+# tfctl runs this service's whole secrets plane: validate infra/.env, then
 # terraform plan/apply/verify. Nothing to set up first — the state bucket and
 # the seeder carrier role are created on demand; sessions cache ~12h per service
-# in the secretsctl tree (.session-cache/<service>.json).
+# in the tfctl tree (.session-cache/<service>.json).
 # The switches below are the whole interface; a rare one-off (an alternate
-# values file) runs secretsctl directly: poetry -C ../../tools/secretsctl run secretsctl.
+# values file) runs tfctl directly: poetry -C ../../tools/tfctl run tfctl.
 
 PLANE ?= floci
 DRY_RUN ?= 0
@@ -27,7 +27,7 @@ ifneq ($(filter 0 1,$(FORCE_DELETE)),$(FORCE_DELETE))
 $(error FORCE_DELETE must be 0 or 1)
 endif
 
-SECRETSCTL := poetry -C $(abspath ../../tools/secretsctl) run secretsctl --service payment-webhook
+TFCTL := poetry -C $(abspath ../../tools/tfctl) run tfctl --service payment-webhook
 FLAGS := $(PLANE_FLAG) $(if $(filter 1,$(DRY_RUN)),--dry-run) $(if $(filter 1,$(FORCE)),--force) $(if $(filter 1,$(FORCE_DELETE)),--force-delete)
 
 .PHONY: secrets-check secrets-plan secrets-auto-apply secrets-apply secrets-verify secrets-clean secrets-destroy secrets-drop-seeder secrets-session-clear secrets-session-clear-all secrets-session-refresh-all secrets-test help-secrets
@@ -45,42 +45,42 @@ help-secrets:
 	@echo "    secrets-session-clear    drop the cached seeder session (the next verb assumes the carrier role again)"
 	@echo "    secrets-session-clear-all drop every cached seeder session across all services"
 	@echo "    secrets-session-refresh-all mint fresh seeder sessions for every ready service in one run"
-	@echo "    secrets-test             run the secretsctl engine test suite"
+	@echo "    secrets-test             run the tfctl engine test suite"
 	@echo "  Switches: PLANE=floci|aws (default floci) DRY_RUN=0|1 FORCE=0|1 (refresh-all) FORCE_DELETE=0|1 (destroy)"
 	@echo ""
 
 secrets-test:
-	make -C ../../tools/secretsctl test
+	make -C ../../tools/tfctl test
 
 secrets-check:
-	$(SECRETSCTL) plan --dry-run $(PLANE_FLAG)
+	$(TFCTL) plan --dry-run $(PLANE_FLAG)
 
 secrets-plan:
-	$(SECRETSCTL) plan $(FLAGS)
+	$(TFCTL) plan $(FLAGS)
 
 secrets-apply:
-	$(SECRETSCTL) apply $(FLAGS)
+	$(TFCTL) apply $(FLAGS)
 
 secrets-auto-apply:
-	$(SECRETSCTL) auto-apply $(FLAGS)
+	$(TFCTL) auto-apply $(FLAGS)
 
 secrets-verify:
-	$(SECRETSCTL) verify $(FLAGS)
+	$(TFCTL) verify $(FLAGS)
 
 secrets-drop-seeder:
-	$(SECRETSCTL) seeder-drop $(FLAGS)
+	$(TFCTL) seeder-drop $(FLAGS)
 
 secrets-clean:
-	$(SECRETSCTL) destroy $(FLAGS)
+	$(TFCTL) destroy $(FLAGS)
 
 secrets-destroy:
-	$(SECRETSCTL) destroy --purge-state --drop-seeder $(FLAGS)
+	$(TFCTL) destroy --purge-state --drop-seeder $(FLAGS)
 
 secrets-session-clear:
-	$(SECRETSCTL) session-clear $(FLAGS)
+	$(TFCTL) session-clear $(FLAGS)
 
 secrets-session-clear-all:
-	$(SECRETSCTL) session-clear-all
+	$(TFCTL) session-clear-all
 
 secrets-session-refresh-all:
-	$(SECRETSCTL) session-refresh-all $(FLAGS)
+	$(TFCTL) session-refresh-all $(FLAGS)
