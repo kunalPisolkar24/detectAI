@@ -1,32 +1,30 @@
 # Payment Gateway Dashboard
 
-This page documents the **detectai-payment-gateway** board: what it shows and which alerts page the team.
+This page documents the **detectai-payment-webhook** board: what it shows and which alerts page the team.
 
 | | |
 |---|---|
-| Watches | `services/payments/gateway` — the service that receives Paddle webhooks |
-| Service name | `payment-gateway` |
-| Board | `detectai-payment-gateway`, 2 pages: Payment gateway, Logs |
+| Watches | `services/payment-webhook` — the service that receives Paddle webhooks |
+| Service name | `payment-webhook` |
+| Board | `detectai-payment-webhook` (prod / floci), 2 pages: Payment webhook, Logs |
 | Dev twin | yes — same pages, ` (dev)` on every title |
-| Built from | `dashboards/payment-gateway/{prod,dev}.tftpl` · `alerts/gateway.tf` |
+| Built from | `dashboards/payment-webhook/{prod,dev}.tftpl` · `alerts/gateway.tf` |
 
 ## How data gets here
 
-- **Traces and logs** — pushed over OTLP through the collector.
-- **Metrics** — broker and connection panels read `rabbitmq_connection_status`, which arrives via the collector's Prometheus scrape.
+- **Traces, metrics, and logs** — the app's own OTel SDK pushes all three signals straight to New Relic EU over OTLP (the direct-push path document-parser established for Lambda): no collector hop, and the app stamps `deployment.environment` itself.
 
-## Payment gateway — one page, end to end
+## Payment webhook — one page, end to end
 
 | Panel | What it tells you |
 |-------|-------------------|
 | Webhooks/min · Error share | Arrival rate and failure share at a glance |
 | Webhook p95 · Webhook p99 | The fast and the very slow tail |
+| SQS enqueue errors/min · SQS enqueue latency | Enqueue failures creeping in; how long a successful SQS send takes |
 | Server latency p50/p95/p99 by route | Route-level breakdown |
-| Status codes | The 2xx/4xx/5xx split |
+| Status codes | The 2xx/4xx/5xx split over time |
 | Signature / validation failures | Paddle payloads that failed verification or parsing |
-| Events published | Accepted webhooks that turned into broker events |
-| MQ connection + publish latency · MQ connected | Whether the broker link is healthy and how long publishing takes |
-| Go runtime · container CPU/memory/network/throttling | The process and its headroom |
+| Events published | Accepted webhooks that turned into SQS messages, split by outcome |
 | Slowest routes · Service versions reporting | Ranked worst routes; which builds are live |
 
 ## Logs
@@ -35,7 +33,7 @@ This page documents the **detectai-payment-gateway** board: what it shows and wh
 |-------|-------------------|
 | Error log stream (latest 100) | Raw errors, newest first |
 | Log volume by level | Health drift |
-| Errors by message · Recent gateway errors | Which messages dominate |
+| Errors by message · Recent webhook errors | Which messages dominate |
 | Slow requests over 500 ms | Requests whose spans outlasted the p95 |
 
 ## Alerts
