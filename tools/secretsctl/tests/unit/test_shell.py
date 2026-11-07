@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from conftest import EMULATOR_ENV, REAL_ENV
-from app import shell
+from app.engine import shell
 
 pytestmark = pytest.mark.unit
 

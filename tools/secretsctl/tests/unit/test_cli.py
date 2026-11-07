@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import EMULATOR_ENV, REAL_ENV, fake_carrier_session, render_env, write_service
+from conftest import EMULATOR_ENV, KIND, REAL_ENV, fake_carrier_session, render_env, write_service
 from app import main as cli
-from app.carrier import session as carrier_session
-from app.declaration.locate import workspace_for
-from app.stack import flow as stack_flow
-from app.verify import flow as verify_module
+from app.engine.carrier import session as carrier_session
+from app.kinds.locate import workspace_for
+from app.kinds.secrets import flow as stack_flow
+from app.kinds.secrets.verify import flow as verify_module
 
 pytestmark = pytest.mark.unit
 
@@ -106,10 +106,7 @@ def test_session_cache_verbs_reject_service_targeting(capsys):
     with pytest.raises(SystemExit) as excinfo:
         cli.main(["session-refresh-all", "--service", "web"])
     assert excinfo.value.code == 1
-    assert (
-        "--service does not apply to the session-refresh-all command"
-        in capsys.readouterr().out
-    )
+    assert "--service does not apply to the session-refresh-all command" in capsys.readouterr().out
 
 
 def test_session_cache_verbs_reject_values_files(capsys):
@@ -117,8 +114,7 @@ def test_session_cache_verbs_reject_values_files(capsys):
         cli.main(["session-clear-all", "--values-file", "central.env"])
     assert excinfo.value.code == 1
     assert (
-        "--values-file does not apply to the session-clear-all command"
-        in capsys.readouterr().out
+        "--values-file does not apply to the session-clear-all command" in capsys.readouterr().out
     )
 
 
@@ -137,7 +133,7 @@ def test_ready_service_workspaces_needs_the_declaration_and_the_values(tmp_path)
     (no_env / "secrets.toml").write_text("[nonsense]\n")
 
     ready_workspaces = cli.ready_service_workspaces(tmp_path)
-    assert [workspace.service_dir.name for workspace in ready_workspaces] == ["ready"]
+    assert [workspace.stack_dir.name for workspace in ready_workspaces] == ["ready"]
     assert ready_workspaces[0].values_file == ready / "infra" / ".env"
 
     assert cli.ready_service_workspaces(tmp_path / "no-services-dir") == []
@@ -153,7 +149,7 @@ def test_session_clear_needs_a_service_context(tmp_path, monkeypatch, capsys):
 
 def test_session_clear_with_a_broken_declaration_points_at_clear_all(tmp_path, capsys):
     (tmp_path / "secrets.toml").write_text("[nonsense]\n")
-    workspace = workspace_for(tmp_path)  # no values file: session-clear needs none
+    workspace = workspace_for(KIND, tmp_path)  # no values file: session-clear needs none
     with pytest.raises(SystemExit) as excinfo:
         cli.main(["session-clear"], workspace=workspace)
     assert excinfo.value.code == 1
@@ -170,7 +166,7 @@ def test_missing_values_file_dies(tmp_path, capsys):
 
 def test_bad_declaration_dies_with_a_fix_hint(tmp_path):
     (tmp_path / "secrets.toml").write_text("[nonsense]\n")
-    workspace = workspace_for(tmp_path)
+    workspace = workspace_for(KIND, tmp_path)
     (workspace.values_file.parent).mkdir(parents=True, exist_ok=True)
     workspace.values_file.write_text("")
     with pytest.raises(SystemExit) as excinfo:
@@ -606,12 +602,12 @@ def test_cli_main_translates_interrupt_and_eof(monkeypatch):
 
 def test_find_service_workspace_resolves_by_name_and_walks_up(monkeypatch):
     workspace = cli.find_service_workspace(cli.REPO_ROOT, "document-parser")
-    assert workspace.service_dir.name == "document-parser"
-    assert workspace.values_file == workspace.service_dir / "infra" / ".env"
+    assert workspace.stack_dir.name == "document-parser"
+    assert workspace.values_file == workspace.stack_dir / "infra" / ".env"
 
     monkeypatch.chdir(cli.REPO_ROOT / "services" / "document-parser" / "infra")
     walked = cli.find_service_workspace(cli.REPO_ROOT, None)
-    assert walked.service_dir.name == "document-parser"
+    assert walked.stack_dir.name == "document-parser"
 
 
 def test_find_service_workspace_dies_on_an_unknown_service():

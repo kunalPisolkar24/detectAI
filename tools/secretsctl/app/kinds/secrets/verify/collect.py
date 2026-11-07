@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.declaration.model import Declaration
-from app.shell import aws_base, run_aws_captured
+from app.kinds.secrets.declaration import SecretsDeclaration
+from app.engine.shell import aws_base, run_aws_captured
 
 
 def ssm_path_command(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
+    declaration: SecretsDeclaration, values: dict[str, str], is_emulator: bool
 ) -> list[str]:
     """The paged SSM inventory read (pagers add --next-token themselves)."""
     return aws_base(declaration, values, is_emulator) + [
@@ -25,7 +25,7 @@ def ssm_path_command(
 
 
 def secret_describe_command(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
+    declaration: SecretsDeclaration, values: dict[str, str], is_emulator: bool
 ) -> list[str]:
     return aws_base(declaration, values, is_emulator) + [
         "secretsmanager",
@@ -38,7 +38,7 @@ def secret_describe_command(
 
 
 def secret_value_command(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
+    declaration: SecretsDeclaration, values: dict[str, str], is_emulator: bool
 ) -> list[str]:
     return aws_base(declaration, values, is_emulator) + [
         "secretsmanager",
@@ -51,7 +51,7 @@ def secret_value_command(
 
 
 def collect_ssm_parameters(
-    declaration: Declaration,
+    declaration: SecretsDeclaration,
     values: dict[str, str],
     is_emulator: bool,
     session: dict[str, str] | None = None,
@@ -94,7 +94,7 @@ def collect_ssm_parameters(
 
 
 def collect_secret(
-    declaration: Declaration,
+    declaration: SecretsDeclaration,
     values: dict[str, str],
     is_emulator: bool,
     session: dict[str, str] | None = None,

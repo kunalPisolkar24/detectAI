@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 
-from app.declaration.model import Declaration
+from app.kinds.secrets.declaration import SecretsDeclaration
 
 
 def fingerprint(value: str) -> str:
@@ -12,12 +12,12 @@ def fingerprint(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()[:12]
 
 
-def expected_ssm_seeds(declaration: Declaration, values: dict[str, str]) -> dict[str, str]:
+def expected_ssm_seeds(declaration: SecretsDeclaration, values: dict[str, str]) -> dict[str, str]:
     """The SSM map the stack would seed: the .env-populated allowlist subset."""
     return {key: values[key] for key in declaration.ssm_keys if values.get(key, "") != ""}
 
 
-def expected_blob(declaration: Declaration, values: dict[str, str]) -> dict[str, str]:
+def expected_blob(declaration: SecretsDeclaration, values: dict[str, str]) -> dict[str, str]:
     """The blob contract rebuilt from .env: every declared key rides the blob when set."""
     return {key: values[key] for key in declaration.blob_keys if values.get(key, "") != ""}
 

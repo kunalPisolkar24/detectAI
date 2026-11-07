@@ -1,21 +1,12 @@
-"""Terraform inputs: the TF_VAR map and the per-plane backend file."""
+"""Terraform inputs: the per-plane backend file and the temp-file landing."""
 
 from __future__ import annotations
 
-import json
 import tempfile
 from pathlib import Path
 
-from app.declaration.model import Declaration, state_bucket_for
-from app.values.plane import (
-    resolve_floci_url,
-    resolve_recovery_window,
-    resolve_region,
-)
-
-# One shared terraform root for every service; the backend file and TF_VARs
-# select the service's plane at run time.
-PLANE_ROOT = Path(__file__).resolve().parents[2] / "terraform"
+from app.engine.declaration.model import Declaration, state_bucket_for
+from app.engine.values.plane import resolve_floci_url, resolve_region
 
 
 def state_key(declaration: Declaration, is_emulator: bool) -> str:
@@ -23,34 +14,22 @@ def state_key(declaration: Declaration, is_emulator: bool) -> str:
     return f"{declaration.slug}/{segment}terraform.tfstate"
 
 
-def build_tf_vars(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
-) -> dict[str, str]:
-    tf_vars = {
-        "TF_VAR_aws_region": resolve_region(declaration, values),
-        "TF_VAR_service_slug": declaration.slug,
-        "TF_VAR_secret_recovery_window": str(
-            resolve_recovery_window(declaration, values, is_emulator)
-        ),
-    }
-    # Non-empty blob keys ride the secrets blob: the whole map is the contract.
-    blob = {key: values[key] for key in declaration.blob_keys if values.get(key, "") != ""}
-    if blob:
-        tf_vars["TF_VAR_blob"] = json.dumps(blob)
-    # Non-secret config rides the SSM map; absent or empty seeds nothing.
-    config = {key: values[key] for key in declaration.ssm_keys if values.get(key, "") != ""}
-    if config:
-        tf_vars["TF_VAR_ssm_parameters"] = json.dumps(config)
-    if is_emulator:
-        tf_vars["TF_VAR_emulator_endpoint"] = resolve_floci_url()
-    return tf_vars
+def state_bucket(
+    declaration: Declaration, values: dict[str, str], is_emulator: bool, account: str
+) -> str:
+    """The kind's bucket law: the account-suffixed derived name, unguessable."""
+    return state_bucket_for(declaration.slug, account)
 
 
 def build_backend_hcl(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool, account: str
+    declaration: Declaration,
+    values: dict[str, str],
+    is_emulator: bool,
+    account: str,
+    bucket: str | None = None,
 ) -> str:
     region = resolve_region(declaration, values)
-    bucket = state_bucket_for(declaration.slug, account)
+    bucket = bucket or state_bucket(declaration, values, is_emulator, account)
     key = state_key(declaration, is_emulator)
     if is_emulator:
         lines = [

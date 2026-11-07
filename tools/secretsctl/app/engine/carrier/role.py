@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import unquote
 
-from app.carrier.identity import SESSION_DURATION_SECONDS
-from app.carrier.policy import (
-    resolve_trust_principal,
-    seeder_policy_document,
-    seeder_trust_document,
-)
-from app.declaration.model import Declaration
-from app.shell import aws_base, die, run_aws, run_aws_captured
+from app.engine.carrier.identity import SESSION_DURATION_SECONDS
+from app.engine.carrier.policy import resolve_trust_principal, seeder_trust_document
+from app.engine.declaration.model import Declaration
+from app.engine.shell import aws_base, die, run_aws, run_aws_captured
 
 SEEDER_POLICY_NAME = "seeder-policy"
 
@@ -215,7 +211,10 @@ def _converge_seeder_role(
 
 
 def _ensure_seeder_role(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
+    declaration: Declaration,
+    values: dict[str, str],
+    is_emulator: bool,
+    seeder_policy: Callable[[Declaration, dict[str, str], bool, str], dict],
 ) -> None:
     """Create-on-demand with convergence, before every carrier resolve: the
     emulator loses IAM on restart, a fresh real account starts empty, and an
@@ -224,7 +223,7 @@ def _ensure_seeder_role(
     base = aws_base(declaration, values, is_emulator)
     principal = resolve_trust_principal(declaration, is_emulator)
     desired_trust = seeder_trust_document(principal)
-    desired_policy = seeder_policy_document(declaration, values, is_emulator, principal)
+    desired_policy = seeder_policy(declaration, values, is_emulator, principal)
 
     payload = seeder_role_payload(declaration, values, is_emulator)
     if payload is None:

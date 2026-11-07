@@ -1,39 +1,27 @@
-"""Per-verb validation rules over the parsed .env values."""
+"""Per-verb validation rules over the parsed .env values, and the secrets-only plane knobs."""
 
 from __future__ import annotations
 
 import re
 
-from app.declaration.model import Declaration, REGION_RE
+from app.engine.values.rules import plane_errors
+from app.kinds.secrets.declaration import SecretsDeclaration
 
 URL_RE = re.compile(r"^https?://\S+$")
 ENV_TYPES = ("dev", "prod")
 RECOVERY_WINDOW_MIN = 7
 RECOVERY_WINDOW_MAX = 30
 
+EMULATOR_RECOVERY_WINDOW = 0
 
-def plane_errors(values: dict[str, str]) -> list[str]:
-    """Region checks shared by every verb validator."""
+
+def validate(secrets: SecretsDeclaration, values: dict[str, str], is_emulator: bool) -> list[str]:
     errors: list[str] = []
 
     def fail(message: str, fix: str) -> None:
         errors.append(f"error: {message}\nfix:   {fix}")
 
-    if (region := values.get("AWS_REGION")) and not REGION_RE.fullmatch(region):
-        fail(
-            f"AWS_REGION is not a valid region: {region!r}",
-            "use a plain region code, e.g. ap-southeast-2",
-        )
-    return errors
-
-
-def validate(declaration: Declaration, values: dict[str, str], is_emulator: bool) -> list[str]:
-    errors: list[str] = []
-
-    def fail(message: str, fix: str) -> None:
-        errors.append(f"error: {message}\nfix:   {fix}")
-
-    for key, floor in declaration.min_lengths.items():
+    for key, floor in secrets.min_lengths.items():
         if len(values.get(key, "")) < floor:
             fail(
                 f"{key} missing or shorter than {floor} chars in the service .env",
@@ -59,7 +47,7 @@ def validate(declaration: Declaration, values: dict[str, str], is_emulator: bool
                 f"Secrets Manager accepts 0 or {RECOVERY_WINDOW_MIN}-{RECOVERY_WINDOW_MAX}; "
                 "the terraform variable enforces the same rule",
             )
-    for trigger, (required_key, floor) in declaration.requires.items():
+    for trigger, (required_key, floor) in secrets.requires.items():
         if not values.get(trigger, ""):
             continue
         if len(values.get(required_key, "")) < floor:
@@ -77,3 +65,37 @@ def validate(declaration: Declaration, values: dict[str, str], is_emulator: bool
             )
     errors.extend(plane_errors(values))
     return errors
+
+
+def resolve_recovery_window(
+    declaration: SecretsDeclaration, values: dict[str, str], is_emulator: bool
+) -> int:
+    """Emulator plane: always 0. Real AWS: the .env override or the declaration default."""
+    if is_emulator:
+        return EMULATOR_RECOVERY_WINDOW
+    raw = values.get("SECRET_RECOVERY_WINDOW", "")
+    if not raw:
+        return declaration.recovery_window
+    return int(raw)
+
+
+def plane_notes(
+    declaration: SecretsDeclaration, values: dict[str, str], is_emulator: bool
+) -> list[str]:
+    notes = []
+    if values.get("ENV_TYPE") == "prod" and is_emulator:
+        notes.append(
+            "note: ENV_TYPE=prod with the emulator — the local-testing shape for the prod pull path"
+        )
+    if values.get("ENV_TYPE") == "dev" and not is_emulator:
+        notes.append(
+            "warning: applying to real AWS while ENV_TYPE=dev (dev runtime reads .env, not SM)"
+        )
+    if values.get("SECRET_RECOVERY_WINDOW"):
+        if is_emulator:
+            notes.append("note: SECRET_RECOVERY_WINDOW ignored on the emulator plane (always 0)")
+        elif values["SECRET_RECOVERY_WINDOW"] == "0":
+            notes.append(
+                "warning: SECRET_RECOVERY_WINDOW=0 on real AWS — destroy deletes the secret immediately"
+            )
+    return notes

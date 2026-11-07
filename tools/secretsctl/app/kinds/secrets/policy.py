@@ -1,67 +1,17 @@
-"""IAM trust and policy documents for the seeder role, and the trust principal."""
+"""The secrets plane's seeder policy: least privilege on service-pinned ARNs."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from app.carrier.identity import (
-    DEFAULT_ACCOUNT_ID,
-    iam_account_id,
-    role_arn_of_session,
-    seeder_role_session_mark,
-    sts_caller_identity,
-)
-from app.declaration.model import Declaration, state_bucket_for
-from app.shell import die
-from app.values.plane import resolve_region
-
-
-def resolve_trust_principal(declaration: Declaration, is_emulator: bool) -> str:
-    """The IAM principal the seeder role trusts: whoever runs the tool. The
-    emulator gets a structural placeholder (it enforces no trust conditions);
-    real AWS gets the ambient caller, so the verb runner is the trusted identity."""
-    if is_emulator:
-        return f"arn:aws:iam::{DEFAULT_ACCOUNT_ID}:user/{declaration.seeder_role_name}"
-    _, caller_arn = sts_caller_identity()
-    mark = seeder_role_session_mark(declaration)
-    if mark in caller_arn:
-        die(
-            f"the ambient credentials are already a {declaration.seeder_role_name} session ({caller_arn})",
-            "unset the exported AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN and run "
-            "under your personal credentials (the session-clear verb drops the local cache)",
-        )
-    if caller_arn.endswith(":root"):
-        die(
-            f"the caller is the account root ({caller_arn}); root sessions cannot satisfy an "
-            "MFA-gated assume-role",
-            "run the verb under an IAM user's credentials",
-        )
-    if ":assumed-role/" in caller_arn:
-        stripped = role_arn_of_session(caller_arn)
-        print(
-            f"note: caller is a role session ({caller_arn}); its base role becomes the trust principal: {stripped}"
-        )
-        return stripped
-    return caller_arn
-
-
-def seeder_trust_document(user_arn: str) -> dict[str, Any]:
-    """The seeding runs under this role with MFA, never personal keys."""
-    return {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": {"AWS": user_arn},
-                "Action": "sts:AssumeRole",
-                "Condition": {"Bool": {"aws:MultiFactorAuthPresent": "true"}},
-            }
-        ],
-    }
+from app.engine.carrier.identity import DEFAULT_ACCOUNT_ID, iam_account_id
+from app.engine.declaration.model import state_bucket_for
+from app.engine.values.plane import resolve_region
+from app.kinds.secrets.declaration import SecretsDeclaration
 
 
 def seeder_policy_document(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool, user_arn: str
+    declaration: SecretsDeclaration, values: dict[str, str], is_emulator: bool, user_arn: str
 ) -> dict[str, Any]:
     """Least privilege on service-pinned ARNs; DescribeParameters alone takes a wildcard."""
     region = resolve_region(declaration, values)

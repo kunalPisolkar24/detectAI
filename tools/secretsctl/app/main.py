@@ -1,49 +1,40 @@
-"""Verb entry point: argument parsing, service resolution, and verb dispatch.
+"""Verb entry point: argument parsing, kind resolution, and verb dispatch.
 
-main.py is the composition root by being the caller: every flow gets wired
-here, while each verb's mechanics live in its own subpackage.
-"""
+main.py is the composition root by being the caller: every kind registers its
+slot here, and each verb's mechanics live in its own subpackage. The registry
+is what makes the engine stack-agnostic: which declaration file a directory
+holds decides which Kind drives the run, while the engine's verbs behave the
+same against either."""
 
 from __future__ import annotations
 
 import argparse
 import io
 import sys
+from dataclasses import replace
 from pathlib import Path
 
-from app.carrier.role import drop_seeder_flow
-from app.carrier.session import (
+from app.engine.carrier.role import drop_seeder_flow
+from app.engine.carrier.session import (
     clear_cached_session,
     clear_cached_session_files,
-    refresh_all_flow,
     resolve_carrier_session,
     session_cache_for,
 )
-from app.declaration.loader import DeclarationError, load
-from app.declaration.locate import (
-    REPO_ROOT,
-    find_service_workspace,
-    ready_service_workspaces,
-    workspace_for,
-)
-from app.shell import die
-from app.stack.flow import terraform_verb_flow
-from app.verify import flow as verify
-from app.values.parse import parse_env_file
-from app.values.plane import emulator_endpoint_note
-from app.values.rules import plane_errors, validate
+from app.engine.declaration.model import DeclarationError
+from app.engine.shell import die
+from app.engine.values.parse import parse_env_file
+from app.engine.values.plane import emulator_endpoint_note
+from app.engine.values.rules import plane_errors
+from app.kinds import KINDS, register
+from app.kinds.locate import REPO_ROOT, find_service_workspace, ready_service_workspaces
+from app.kinds.secrets import kind as secrets_kind
+from app.kinds.secrets.batch import refresh_all_flow
+from app.kinds.secrets.verify import flow as verify
 
-VERBS = (
-    "plan",
-    "apply",
-    "verify",
-    "auto-apply",
-    "destroy",
-    "seeder-drop",
-    "session-clear",
-    "session-clear-all",
-    "session-refresh-all",
-)
+register(secrets_kind())
+
+VERBS = tuple(dict.fromkeys(verb for kind in KINDS.values() for verb in kind.my_verbs))
 
 
 def _print_errors(errors: list[str]) -> bool:
@@ -163,10 +154,10 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
     if workspace is None:
         workspace = find_service_workspace(REPO_ROOT, args.service)
     if args.values_file:
-        workspace = workspace_for(workspace.service_dir, Path(args.values_file))
-
+        workspace = replace(workspace, values_file=Path(args.values_file))
+    kind = workspace.kind
     try:
-        declaration = load(workspace.service_dir / "secrets.toml")
+        declaration = kind.load(workspace.declaration_file)
     except DeclarationError as exc:
         fix = "fix the service's secrets.toml"
         if args.command == "session-clear":
@@ -200,20 +191,30 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
         if _print_errors(plane_errors(values)):
             return 1
         session = resolve_carrier_session(
-            declaration, values, is_emulator, args.dry_run, session_cache_for(declaration)
+            declaration,
+            values,
+            is_emulator,
+            args.dry_run,
+            session_cache_for(declaration),
+            kind.seeder_policy,
         )
         return verify.verify_flow(declaration, values, is_emulator, args.dry_run, session)
 
-    if _print_errors(validate(declaration, values, is_emulator)):
+    if _print_errors(kind.validate(declaration, values, is_emulator)):
         return 1
 
     session = resolve_carrier_session(
-        declaration, values, is_emulator, args.dry_run, session_cache_for(declaration)
+        declaration,
+        values,
+        is_emulator,
+        args.dry_run,
+        session_cache_for(declaration),
+        kind.seeder_policy,
     )
 
     if args.command == "auto-apply":
         if args.dry_run:
-            terraform_verb_flow(declaration, values, is_emulator, "plan", args, session)
+            kind.terraform_flow(declaration, values, is_emulator, "plan", args, session)
             print(
                 "then apply:  terraform apply with the same backend overrides (auto on the "
                 "emulator, interactive confirm on real AWS)"
@@ -223,12 +224,17 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
             )
             return 0
         for step in ("plan", "apply"):
-            code = terraform_verb_flow(declaration, values, is_emulator, step, args, session)
+            code = kind.terraform_flow(declaration, values, is_emulator, step, args, session)
             if code != 0:
                 return code
         return verify.verify_flow(declaration, values, is_emulator, False, session)
 
-    return terraform_verb_flow(declaration, values, is_emulator, args.command, args, session)
+    if args.command in ("plan", "apply", "destroy"):
+        return kind.terraform_flow(declaration, values, is_emulator, args.command, args, session)
+    die(
+        f"{args.command} is not a single-service verb for the {kind.name} kind",
+        "see the kind's verbs in the tool's README",
+    )
 
 
 def cli_main() -> int:

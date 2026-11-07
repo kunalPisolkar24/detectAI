@@ -7,8 +7,8 @@ import json
 import pytest
 
 from conftest import EMULATOR_ENV, REAL_ENV, ROLE_ARN
-from app.verify import audit, collect
-from app.verify import flow as flow_module
+from app.kinds.secrets.verify import audit, collect
+from app.kinds.secrets.verify import flow as flow_module
 
 pytestmark = pytest.mark.unit
 
@@ -158,7 +158,9 @@ def test_verify_flow_dry_run(dp, monkeypatch, capsys):
 
 def test_verify_flow_happy_path(dp, monkeypatch, capsys):
     monkeypatch.setattr(
-        flow_module, "collect_ssm_parameters", lambda declaration, values, is_emulator, session=None: {}
+        flow_module,
+        "collect_ssm_parameters",
+        lambda declaration, values, is_emulator, session=None: {},
     )
     monkeypatch.setattr(
         flow_module,
@@ -213,7 +215,9 @@ def test_verify_flow_reports_ssm_and_blob_drift(dp, monkeypatch, capsys):
 def test_verify_flow_reports_missing_and_extra(dp, monkeypatch, capsys):
     values = {**EMULATOR_ENV, "OTEL_TRACE_SAMPLE_RATIO": "0.5"}
     monkeypatch.setattr(
-        flow_module, "collect_ssm_parameters", lambda declaration, values, is_emulator, session=None: {}
+        flow_module,
+        "collect_ssm_parameters",
+        lambda declaration, values, is_emulator, session=None: {},
     )
     monkeypatch.setattr(
         flow_module,
@@ -231,7 +235,9 @@ def test_verify_flow_reports_missing_and_extra(dp, monkeypatch, capsys):
 
 def test_verify_flow_flags_a_pending_deletion(dp, monkeypatch, capsys):
     monkeypatch.setattr(
-        flow_module, "collect_ssm_parameters", lambda declaration, values, is_emulator, session=None: {}
+        flow_module,
+        "collect_ssm_parameters",
+        lambda declaration, values, is_emulator, session=None: {},
     )
     described = {
         "Name": dp.secret_name,
@@ -259,7 +265,9 @@ def test_verify_flow_carries_the_session_banner(dp, monkeypatch, capsys):
         "expires_at": "2086-01-01T00:00:00Z",
     }
     monkeypatch.setattr(
-        flow_module, "collect_ssm_parameters", lambda declaration, values, is_emulator, session=None: {}
+        flow_module,
+        "collect_ssm_parameters",
+        lambda declaration, values, is_emulator, session=None: {},
     )
     monkeypatch.setattr(
         flow_module,

@@ -6,15 +6,16 @@ import tomllib
 
 import pytest
 
-from conftest import DP, DP_TOML
-from app.declaration.loader import DeclarationError, load
-from app.declaration.locate import workspace_for
-from app.declaration.model import (
+from conftest import DP, DP_TOML, KIND
+from app.engine.declaration.model import state_bucket_for
+from app.kinds.locate import workspace_for
+from app.kinds.secrets import flow as stack_flow
+from app.kinds.secrets.declaration import (
     DEFAULT_RECOVERY_WINDOW,
     DEFAULT_REGION,
-    state_bucket_for,
+    DeclarationError,
+    load,
 )
-from app.stack.inputs import PLANE_ROOT
 
 pytestmark = pytest.mark.unit
 
@@ -99,7 +100,7 @@ def test_schema_errors_are_reported_with_the_field(tmp_path, text):
     "text",
     [
         'ssm = "junk"\n[service]\nslug = "x"\n\n[secrets]\nkeys = ["A"]\n',
-        "requires = 3\n[service]\nslug = \"x\"\n\n[secrets]\nkeys = [\"A\"]\n",
+        'requires = 3\n[service]\nslug = "x"\n\n[secrets]\nkeys = ["A"]\n',
         'secrets = "junk"\n[service]\nslug = "x"\n',
     ],
 )
@@ -126,18 +127,18 @@ def test_unreadable_or_incomplete_toml_raises(tmp_path, text):
 
 
 def test_workspace_layout_follows_the_service_dir(tmp_path):
-    workspace = workspace_for(tmp_path)
+    workspace = workspace_for(KIND, tmp_path)
     assert workspace.values_file == tmp_path / "infra" / ".env"
 
 
 def test_plane_root_is_the_shared_package_root():
-    assert PLANE_ROOT.name == "terraform"
-    assert (PLANE_ROOT / "main.tf").exists()
+    assert stack_flow.PLANE_ROOT.name == "stack"
+    assert (stack_flow.PLANE_ROOT / "main.tf").exists()
 
 
 def test_workspace_values_file_override(tmp_path):
     central = tmp_path / "central.env"
-    workspace = workspace_for(tmp_path, central)
+    workspace = workspace_for(KIND, tmp_path, central)
     assert workspace.values_file == central
 
 

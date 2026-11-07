@@ -6,8 +6,8 @@ import json
 import re
 from typing import Any
 
-from app.declaration.model import Declaration
-from app.shell import die, run_aws_captured
+from app.engine.declaration.model import Declaration
+from app.engine.shell import die, run_aws_captured
 
 DEFAULT_ACCOUNT_ID = "000000000000"
 SESSION_DURATION_SECONDS = 12 * 60 * 60

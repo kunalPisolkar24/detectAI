@@ -1,13 +1,19 @@
-"""secrets.toml schema rules: section and field allowlists and value shapes."""
+"""The secrets.toml flavor: schema rules, the extended declaration, and its loader."""
 
 from __future__ import annotations
 
 import re
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
 
-from app.declaration.model import REGION_RE
+from app.engine.declaration.model import DeclarationError, REGION_RE, Declaration, seeder_role_for
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 PLANE_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+
+DEFAULT_REGION = "ap-southeast-2"
+DEFAULT_RECOVERY_WINDOW = 30
 
 RECOVERY_WINDOW_MIN = 7
 RECOVERY_WINDOW_MAX = 30
@@ -17,6 +23,27 @@ SECRETS_FIELDS = {"keys", "min_lengths"}
 SSM_FIELDS = {"keys"}
 SECTION_FIELDS = {"secrets": SECRETS_FIELDS, "ssm": SSM_FIELDS}
 SERVICE_FIELDS = {"slug", "region", "recovery_window"}
+
+
+def secret_name_for(slug: str) -> str:
+    return f"detectai/{slug}/secrets"
+
+
+def ssm_prefix_for(slug: str) -> str:
+    return f"/detectai/{slug}/"
+
+
+@dataclass
+class SecretsDeclaration(Declaration):
+    """The secrets flavor's face on top of the engine core."""
+
+    secret_name: str
+    ssm_prefix: str
+    blob_keys: tuple[str, ...]
+    ssm_keys: tuple[str, ...]
+    min_lengths: dict[str, int]
+    requires: dict[str, tuple[str, int]]
+    recovery_window: int
 
 
 def _sections_of(data: dict, fail) -> dict[str, dict]:
@@ -123,3 +150,35 @@ def declaration_errors(data: dict) -> list[str]:
         if trigger not in set(blob_keys) | set(ssm_keys):
             fail(f"requires[{trigger!r}] triggers on {trigger!r} which is never seeded")
     return errors
+
+
+def load(toml_path: Path) -> SecretsDeclaration:
+    try:
+        data = tomllib.loads(toml_path.read_text())
+    except (tomllib.TOMLDecodeError, OSError) as exc:
+        raise DeclarationError(f"cannot read {toml_path}: {exc}") from exc
+    errors = declaration_errors(data)
+    if errors:
+        raise DeclarationError("\n".join(errors))
+
+    service = data["service"]
+    slug: str = service["slug"]
+    blob_keys = tuple(data.get("secrets", {}).get("keys", []))
+    min_lengths = dict(data.get("secrets", {}).get("min_lengths", {}))
+    requires = {
+        trigger: (pair[0], int(pair[1])) for trigger, pair in data.get("requires", {}).items()
+    }
+    return SecretsDeclaration(
+        kind="secrets",
+        slug=slug,
+        seeder_role_name=seeder_role_for(slug),
+        region_default=service.get("region", DEFAULT_REGION),
+        stack_root=Path(__file__).resolve().parent / "stack",
+        secret_name=secret_name_for(slug),
+        ssm_prefix=ssm_prefix_for(slug),
+        blob_keys=blob_keys,
+        ssm_keys=tuple(data.get("ssm", {}).get("keys", [])),
+        min_lengths=min_lengths,
+        requires=requires,
+        recovery_window=service.get("recovery_window", DEFAULT_RECOVERY_WINDOW),
+    )

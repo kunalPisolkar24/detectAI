@@ -3,35 +3,38 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
-from app.carrier.identity import plane_account
-from app.carrier.role import drop_seeder_flow
-from app.carrier.session import session_remaining_text
-from app.declaration.model import Declaration, state_bucket_for
-from app.shell import run_aws, run_terraform
-from app.stack.inputs import (
-    PLANE_ROOT,
-    build_backend_hcl,
-    build_tf_vars,
-    state_key,
-    write_backend_hcl,
-)
-from app.stack.state import (
-    ensure_state_bucket,
-    force_delete_command,
-    preview_purge,
-    purge_state,
-)
-from app.values.plane import (
-    plane_display,
-    plane_notes,
-    resolve_floci_url,
-    resolve_recovery_window,
-)
+from app.engine.carrier.identity import plane_account
+from app.engine.carrier.role import drop_seeder_flow
+from app.engine.carrier.session import session_remaining_text
+from app.engine.declaration.model import state_bucket_for
+from app.engine.shell import aws_base, run_aws, run_terraform
+from app.engine.stack.inputs import build_backend_hcl, state_key, write_backend_hcl
+from app.engine.stack.state import ensure_state_bucket, preview_purge, purge_state
+from app.engine.values.plane import plane_display, resolve_floci_url
+from app.kinds.secrets.declaration import SecretsDeclaration
+from app.kinds.secrets.tfvars import build_tf_vars
+from app.kinds.secrets.values import plane_notes, resolve_recovery_window
+
+STACK_ROOT = Path(__file__).resolve().parent / "stack"
+PLANE_ROOT = STACK_ROOT
+
+
+def force_delete_command(
+    declaration: SecretsDeclaration, values: dict[str, str], is_emulator: bool
+) -> list[str]:
+    return aws_base(declaration, values, is_emulator) + [
+        "secretsmanager",
+        "delete-secret",
+        "--secret-id",
+        declaration.secret_name,
+        "--force-delete-without-recovery",
+    ]
 
 
 def terraform_verb_flow(
-    declaration: Declaration,
+    declaration: SecretsDeclaration,
     values: dict[str, str],
     is_emulator: bool,
     command: str,
@@ -58,7 +61,7 @@ def terraform_verb_flow(
         print(
             f"carrier: role session ({declaration.seeder_role_name}, valid {session_remaining_text(session)})"
         )
-    print(f"stack:   {PLANE_ROOT}")
+    print(f"stack:   {STACK_ROOT}")
     print(f"secret: {declaration.secret_name}")
     print(f"keys:    {keys_desc}")
     print(f"state:  {state_bucket} / {state_key_value}")
@@ -117,7 +120,7 @@ def terraform_verb_flow(
             "AWS_SESSION_TOKEN": session["session_token"],
         }
 
-        if run_terraform(PLANE_ROOT, init_args, tf_vars, backend_creds) != 0:
+        if run_terraform(STACK_ROOT, init_args, tf_vars, backend_creds) != 0:
             print()
             if is_emulator:
                 print("fix: start floci and rerun; the state bucket recreates itself")
@@ -131,7 +134,7 @@ def terraform_verb_flow(
                     f"in region {declaration.region_default}"
                 )
             return 1
-        destroyed = run_terraform(PLANE_ROOT, verb_args, tf_vars, backend_creds)
+        destroyed = run_terraform(STACK_ROOT, verb_args, tf_vars, backend_creds)
         if command != "destroy" or destroyed != 0:
             return destroyed
         if args.force_delete:

@@ -4,8 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from app.declaration.locate import workspace_for
-from app.declaration.model import Declaration, Workspace
+from app.kinds.locate import Workspace, workspace_for
+from app.kinds.secrets import kind as secrets_kind
+from app.kinds.secrets.declaration import (
+    DEFAULT_RECOVERY_WINDOW,
+    DEFAULT_REGION,
+    SecretsDeclaration,
+)
+
+KIND = secrets_kind()
 
 DP_TOML = """\
 [service]
@@ -24,8 +31,12 @@ API_KEY = 16
 keys = ["UPLOAD_LIMIT_BYTES", "MAX_PDF_PAGES", "OTEL_TRACE_SAMPLE_RATIO", "OTEL_EXPORTER_OTLP_ENDPOINT"]
 """
 
-DP = Declaration(
+DP = SecretsDeclaration(
+    kind=KIND.name,
     slug="document-parser",
+    seeder_role_name="detectai-document-parser-seeder",
+    region_default=DEFAULT_REGION,
+    stack_root=KIND.stack_root,
     secret_name="detectai/document-parser/secrets",
     ssm_prefix="/detectai/document-parser/",
     blob_keys=("API_KEY", "NEW_RELIC_LICENSE_KEY"),
@@ -37,15 +48,15 @@ DP = Declaration(
     ),
     min_lengths={"API_KEY": 16},
     requires={"OTEL_EXPORTER_OTLP_ENDPOINT": ("NEW_RELIC_LICENSE_KEY", 16)},
-    seeder_role_name="detectai-document-parser-seeder",
-    region_default="ap-southeast-2",
-    recovery_window=30,
+    recovery_window=DEFAULT_RECOVERY_WINDOW,
 )
 
 
 def write_service(tmp_path, env_text: str, toml_text: str | None = None) -> Workspace:
-    (tmp_path / "secrets.toml").write_text(toml_text if toml_text is not None else DP_TOML)
-    workspace = workspace_for(tmp_path)
+    (tmp_path / KIND.declaration_filename).write_text(
+        toml_text if toml_text is not None else DP_TOML
+    )
+    workspace = workspace_for(KIND, tmp_path)
     if env_text is not None:
         workspace.values_file.parent.mkdir(parents=True, exist_ok=True)
         workspace.values_file.write_text(env_text)
@@ -63,7 +74,7 @@ def ws_env(tmp_path):
 
 
 @pytest.fixture
-def dp() -> Declaration:
+def dp() -> SecretsDeclaration:
     return DP
 
 
@@ -74,7 +85,7 @@ EMULATOR_ENV = {"API_KEY": "a" * 20}
 REAL_ENV = {"API_KEY": "a" * 20}
 
 
-def fake_carrier_session(declaration, values, is_emulator, dry_run, session_cache=None):
+def fake_carrier_session(declaration, values, is_emulator, dry_run, *rest):
     """Stand-in for resolve_carrier_session: None on a dry run, otherwise a
     far-future seeder triplet — both planes carry verbs through the session."""
     return (

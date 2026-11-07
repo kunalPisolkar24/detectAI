@@ -5,8 +5,11 @@ from __future__ import annotations
 import pytest
 
 from conftest import EMULATOR_ENV, REAL_ENV
-from app.declaration.model import state_bucket_for
-from app.values import parse, plane, rules
+from app.engine.declaration.model import state_bucket_for
+from app.engine.values import parse
+from app.engine.values import plane
+from app.engine.values import rules
+from app.kinds.secrets import values as secrets_values
 
 pytestmark = pytest.mark.unit
 
@@ -23,25 +26,27 @@ def test_parse_env_file_strips_comments_and_keeps_first_duplicate(tmp_path, caps
 
 
 def test_valid_common_checks(dp):
-    assert rules.validate(dp, EMULATOR_ENV, True) == []
-    assert rules.validate(dp, REAL_ENV, False) == []
+    assert secrets_values.validate(dp, EMULATOR_ENV, True) == []
+    assert secrets_values.validate(dp, REAL_ENV, False) == []
 
 
 def test_validate_rejects_short_api_key(dp):
     short = {**EMULATOR_ENV, "API_KEY": "short"}
-    text = "\n".join(rules.validate(dp, short, True))
+    text = "\n".join(secrets_values.validate(dp, short, True))
     assert "API_KEY" in text and "16" in text and "fix:" in text
 
 
 def test_validate_rejects_bad_region_and_env_type(dp):
     errors = "\n".join(
-        rules.validate(dp, {**EMULATOR_ENV, "AWS_REGION": "STATE-ONE", "ENV_TYPE": "staging"}, True)
+        secrets_values.validate(
+            dp, {**EMULATOR_ENV, "AWS_REGION": "STATE-ONE", "ENV_TYPE": "staging"}, True
+        )
     )
     assert "AWS_REGION" in errors and "ENV_TYPE" in errors
 
 
 def test_validate_rejects_an_endpoint_without_a_url_shape(dp):
-    errors = rules.validate(
+    errors = secrets_values.validate(
         dp, {**EMULATOR_ENV, "OTEL_EXPORTER_OTLP_ENDPOINT": "localhost:4318"}, True
     )
     text = "\n".join(errors)
@@ -49,13 +54,13 @@ def test_validate_rejects_an_endpoint_without_a_url_shape(dp):
 
 
 def test_validate_rejects_an_endpoint_without_a_license_key(dp):
-    errors = rules.validate(
+    errors = secrets_values.validate(
         dp, {**EMULATOR_ENV, "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"}, True
     )
     text = "\n".join(errors)
     assert "NEW_RELIC_LICENSE_KEY" in text and "16" in text and "fix:" in text
     # The unset endpoint is the legitimate disabled stack: no key is demanded.
-    assert rules.validate(dp, EMULATOR_ENV, True) == []
+    assert secrets_values.validate(dp, EMULATOR_ENV, True) == []
 
 
 def test_validate_accepts_a_set_endpoint_with_a_key_over_the_floor(dp):
@@ -64,20 +69,23 @@ def test_validate_accepts_a_set_endpoint_with_a_key_over_the_floor(dp):
         "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp.nr-data.net",
         "NEW_RELIC_LICENSE_KEY": "d" * 20,
     }
-    assert rules.validate(dp, values, False) == []
-    assert rules.validate(dp, values, True) == []
+    assert secrets_values.validate(dp, values, False) == []
+    assert secrets_values.validate(dp, values, True) == []
 
     short = {**values, "NEW_RELIC_LICENSE_KEY": "d" * 8}
-    assert "NEW_RELIC_LICENSE_KEY" in "\n".join(rules.validate(dp, short, False))
+    assert "NEW_RELIC_LICENSE_KEY" in "\n".join(secrets_values.validate(dp, short, False))
 
 
 def test_tf_state_bucket_is_not_a_concept_anywhere(dp):
     """A stray TF_STATE_BUCKET line is inert: no override, no note, no error
     — the derived bucket wins on every plane."""
     stray = {**EMULATOR_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"}
-    assert rules.validate(dp, stray, True) == []
-    assert rules.validate(dp, {**REAL_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"}, False) == []
-    for note in plane.plane_notes(dp, stray, True):
+    assert secrets_values.validate(dp, stray, True) == []
+    assert (
+        secrets_values.validate(dp, {**REAL_ENV, "TF_STATE_BUCKET": "dp-tester-sandbox"}, False)
+        == []
+    )
+    for note in secrets_values.plane_notes(dp, stray, True):
         assert "TF_STATE_BUCKET" not in note
 
 
@@ -105,27 +113,42 @@ def test_resolve_floci_url_overrides_from_the_environment(monkeypatch):
 
 def test_build_recovery_window_rules(dp):
     for raw in ("0", "7", "15", "30"):
-        assert rules.validate(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": raw}, False) == []
+        assert secrets_values.validate(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": raw}, False) == []
     for raw in ("3", "31", "abc", "-5", "1.5"):
-        errors = "\n".join(rules.validate(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": raw}, False))
+        errors = "\n".join(
+            secrets_values.validate(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": raw}, False)
+        )
         assert "SECRET_RECOVERY_WINDOW" in errors and "fix:" in errors, raw
-    sentences = "\n".join(rules.validate(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "abc"}, False))
+    sentences = "\n".join(
+        secrets_values.validate(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "abc"}, False)
+    )
     assert "not a whole number" in sentences
-    bounds = "\n".join(rules.validate(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "31"}, False))
+    bounds = "\n".join(
+        secrets_values.validate(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "31"}, False)
+    )
     assert "between 7 and 30" in bounds
     # On the emulator the knob is out of contract: ignored, never rejected.
-    assert rules.validate(dp, {**EMULATOR_ENV, "SECRET_RECOVERY_WINDOW": "junk"}, True) == []
+    assert (
+        secrets_values.validate(dp, {**EMULATOR_ENV, "SECRET_RECOVERY_WINDOW": "junk"}, True) == []
+    )
 
 
 def test_plane_notes_recovery_window_messaging(dp):
-    ignored = "\n".join(plane.plane_notes(dp, {**EMULATOR_ENV, "SECRET_RECOVERY_WINDOW": "30"}, True))
+    ignored = "\n".join(
+        secrets_values.plane_notes(dp, {**EMULATOR_ENV, "SECRET_RECOVERY_WINDOW": "30"}, True)
+    )
     assert "ignored on the emulator plane" in ignored
-    zero_real = "\n".join(plane.plane_notes(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "0"}, False))
+    zero_real = "\n".join(
+        secrets_values.plane_notes(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "0"}, False)
+    )
     assert "destroy deletes the secret immediately" in zero_real
     assert all(
         "SECRET_RECOVERY_WINDOW" not in note
-        for note in plane.plane_notes(dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "30"}, False)
+        for note in secrets_values.plane_notes(
+            dp, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "30"}, False
+        )
     )
     assert all(
-        "SECRET_RECOVERY_WINDOW" not in note for note in plane.plane_notes(dp, REAL_ENV, False)
+        "SECRET_RECOVERY_WINDOW" not in note
+        for note in secrets_values.plane_notes(dp, REAL_ENV, False)
     )

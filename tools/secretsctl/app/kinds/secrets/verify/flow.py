@@ -2,26 +2,26 @@
 
 from __future__ import annotations
 
-from app.carrier.session import session_remaining_text
-from app.declaration.model import Declaration
-from app.verify.audit import (
+from app.engine.carrier.session import session_remaining_text
+from app.kinds.secrets.declaration import SecretsDeclaration
+from app.kinds.secrets.verify.audit import (
     compare_seeds,
     expected_blob,
     expected_ssm_seeds,
     fingerprint,
 )
-from app.verify.collect import (
+from app.kinds.secrets.verify.collect import (
     collect_secret,
     collect_ssm_parameters,
     secret_describe_command,
     secret_value_command,
     ssm_path_command,
 )
-from app.values.plane import plane_display, resolve_region
+from app.engine.values.plane import plane_display, resolve_region
 
 
 def verify_flow(
-    declaration: Declaration,
+    declaration: SecretsDeclaration,
     values: dict[str, str],
     is_emulator: bool,
     dry_run: bool,

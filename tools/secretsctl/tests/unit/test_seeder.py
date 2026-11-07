@@ -7,11 +7,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from conftest import DP, DP_TOML, EMULATOR_ENV, REAL_ENV, ROLE_ARN, USER_ARN, render_env
-from app.carrier import identity, policy, role, session
-from app.values import rules
-from app.declaration.locate import workspace_for
-from app.declaration.model import Workspace
+from conftest import DP, DP_TOML, EMULATOR_ENV, KIND, REAL_ENV, ROLE_ARN, USER_ARN, render_env
+from app.engine.carrier import identity, policy, role, session
+from app.engine.values import rules
+from app.kinds.locate import Workspace, workspace_for
+from app.kinds.secrets import batch
+from app.kinds.secrets import policy as secrets_policy
 
 pytestmark = pytest.mark.unit
 
@@ -101,7 +102,7 @@ def test_trust_document_requires_mfa():
 
 
 def test_policy_document_scopes_every_service_pinned_arn():
-    document = policy.seeder_policy_document(DP, EMULATOR_ENV, True, USER_ARN)
+    document = secrets_policy.seeder_policy_document(DP, EMULATOR_ENV, True, USER_ARN)
     sids = [statement["Sid"] for statement in document["Statement"]]
     assert sids == [
         "RunTerraformStateBucket",
@@ -124,7 +125,7 @@ def test_policy_document_scopes_every_service_pinned_arn():
 
 def test_policy_bucket_pin_follows_the_plane_account():
     emulator_placeholder = policy.resolve_trust_principal(DP, True)
-    real = policy.seeder_policy_document(DP, REAL_ENV, False, USER_ARN)
+    real = secrets_policy.seeder_policy_document(DP, REAL_ENV, False, USER_ARN)
     assert real["Statement"][0]["Resource"] == [
         "arn:aws:s3:::detectai-document-parser-tfstate-123456789012"
     ]
@@ -197,7 +198,7 @@ def test_ensure_seeder_role_creates_a_missing_role(monkeypatch, capsys):
         return 0
 
     monkeypatch.setattr(role, "run_aws", fake_run)
-    role._ensure_seeder_role(DP, EMULATOR_ENV, True)
+    role._ensure_seeder_role(DP, EMULATOR_ENV, True, secrets_policy.seeder_policy_document)
     out = capsys.readouterr().out
     assert f"note: seeder role {DP.seeder_role_name} is missing; creating it" in out
     assert f"created: {DP.seeder_role_name} (12h session cap)" in out
@@ -208,14 +209,16 @@ def test_ensure_seeder_role_creates_a_missing_role(monkeypatch, capsys):
     )
     put = next(command for command in calls if "put-role-policy" in command)
     assert json.loads(put[put.index("--policy-document") + 1]) == (
-        policy.seeder_policy_document(DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN)
+        secrets_policy.seeder_policy_document(DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN)
     )
     assert not any("update-role" in command for command in calls)  # the create carries the cap
 
 
 def test_ensure_seeder_role_passes_a_converged_role_silently(monkeypatch, capsys):
     emulator_trust(monkeypatch)
-    desired_policy = policy.seeder_policy_document(DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN)
+    desired_policy = secrets_policy.seeder_policy_document(
+        DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN
+    )
     converged = {
         "RoleName": DP.seeder_role_name,
         "MaxSessionDuration": identity.SESSION_DURATION_SECONDS,
@@ -232,13 +235,15 @@ def test_ensure_seeder_role_passes_a_converged_role_silently(monkeypatch, capsys
 
     monkeypatch.setattr(role, "run_aws_captured", captured)
     monkeypatch.setattr(role, "run_aws", boom)
-    role._ensure_seeder_role(DP, EMULATOR_ENV, True)
+    role._ensure_seeder_role(DP, EMULATOR_ENV, True, secrets_policy.seeder_policy_document)
     assert capsys.readouterr().out == ""
 
 
 def test_ensure_seeder_role_reanchors_drifted_trust(monkeypatch, capsys):
     emulator_trust(monkeypatch)
-    desired_policy = policy.seeder_policy_document(DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN)
+    desired_policy = secrets_policy.seeder_policy_document(
+        DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN
+    )
     stale = {
         "RoleName": DP.seeder_role_name,
         "MaxSessionDuration": identity.SESSION_DURATION_SECONDS,
@@ -260,7 +265,7 @@ def test_ensure_seeder_role_reanchors_drifted_trust(monkeypatch, capsys):
         return 0
 
     monkeypatch.setattr(role, "run_aws", fake_run)
-    role._ensure_seeder_role(DP, EMULATOR_ENV, True)
+    role._ensure_seeder_role(DP, EMULATOR_ENV, True, secrets_policy.seeder_policy_document)
     out = capsys.readouterr().out
     assert f"note: re-anchoring {DP.seeder_role_name}'s trust to the caller" in out
     re_anchor = next(command for command in calls if "update-assume-role-policy" in command)
@@ -272,7 +277,9 @@ def test_ensure_seeder_role_reanchors_drifted_trust(monkeypatch, capsys):
 
 def test_ensure_seeder_role_raises_a_legacy_cap(monkeypatch, capsys):
     emulator_trust(monkeypatch)
-    desired_policy = policy.seeder_policy_document(DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN)
+    desired_policy = secrets_policy.seeder_policy_document(
+        DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN
+    )
     legacy = {
         "RoleName": DP.seeder_role_name,
         "MaxSessionDuration": 3600,
@@ -292,7 +299,7 @@ def test_ensure_seeder_role_raises_a_legacy_cap(monkeypatch, capsys):
         return 0 if "--max-session-duration" not in command else 1
 
     monkeypatch.setattr(role, "run_aws", fake_run)
-    role._ensure_seeder_role(DP, EMULATOR_ENV, True)
+    role._ensure_seeder_role(DP, EMULATOR_ENV, True, secrets_policy.seeder_policy_document)
     out = capsys.readouterr().out
     assert f"note: raising {DP.seeder_role_name}'s session cap to 12h" in out
     assert f"warning: could not raise {DP.seeder_role_name}'s session cap" in out
@@ -321,12 +328,12 @@ def test_ensure_seeder_role_reputs_a_drifted_policy(monkeypatch, capsys):
         return 0
 
     monkeypatch.setattr(role, "run_aws", fake_run)
-    role._ensure_seeder_role(DP, EMULATOR_ENV, True)
+    role._ensure_seeder_role(DP, EMULATOR_ENV, True, secrets_policy.seeder_policy_document)
     out = capsys.readouterr().out
     assert f"note: re-attaching {role.SEEDER_POLICY_NAME} (drifted from the code's pin)" in out
     put = next(command for command in calls if "put-role-policy" in command)
     assert json.loads(put[put.index("--policy-document") + 1]) == (
-        policy.seeder_policy_document(DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN)
+        secrets_policy.seeder_policy_document(DP, EMULATOR_ENV, True, EMULATOR_TRUST_ARN)
     )
 
 
@@ -339,7 +346,7 @@ def test_ensure_seeder_role_dies_when_create_fails(monkeypatch, capsys):
         lambda command, is_emulator, session=None: (1, "", "AccessDenied"),
     )
     with pytest.raises(SystemExit) as excinfo:
-        role._ensure_seeder_role(DP, EMULATOR_ENV, True)
+        role._ensure_seeder_role(DP, EMULATOR_ENV, True, secrets_policy.seeder_policy_document)
     assert excinfo.value.code == 1
     out = capsys.readouterr().out
     assert "error: create-role failed" in out and "AccessDenied" in out
@@ -359,7 +366,7 @@ def test_ensure_seeder_role_dies_when_the_policy_attach_fails(monkeypatch, capsy
     )
     monkeypatch.setattr(role, "run_aws", lambda command, is_emulator, session=None: 1)
     with pytest.raises(SystemExit) as excinfo:
-        role._ensure_seeder_role(DP, EMULATOR_ENV, True)
+        role._ensure_seeder_role(DP, EMULATOR_ENV, True, secrets_policy.seeder_policy_document)
     assert excinfo.value.code == 1
     assert "could not attach seeder-policy" in capsys.readouterr().out
 
@@ -650,15 +657,25 @@ def fresh_triplet():
 
 def test_resolve_carrier_session_is_dry_run_free_on_both_planes(tmp_path):
     cache = tmp_path / "c.json"
-    assert session.resolve_carrier_session(DP, EMULATOR_ENV, True, True, cache) is None
-    assert session.resolve_carrier_session(DP, REAL_ENV, False, True, cache) is None
+    assert (
+        session.resolve_carrier_session(
+            DP, EMULATOR_ENV, True, True, cache, secrets_policy.seeder_policy_document
+        )
+        is None
+    )
+    assert (
+        session.resolve_carrier_session(
+            DP, REAL_ENV, False, True, cache, secrets_policy.seeder_policy_document
+        )
+        is None
+    )
 
 
 def test_resolve_carrier_session_on_the_emulator_assumes_without_mfa(tmp_path, monkeypatch, capsys):
     emulator_trust(monkeypatch)
     healed = {}
 
-    def fake_heal(declaration, values, is_emulator):
+    def fake_heal(declaration, values, is_emulator, *rest):
         healed["plane"] = is_emulator
 
     monkeypatch.setattr(session, "_ensure_seeder_role", fake_heal)
@@ -672,7 +689,12 @@ def test_resolve_carrier_session_on_the_emulator_assumes_without_mfa(tmp_path, m
 
     monkeypatch.setattr(session, "assume_seeder_session", fake_assume)
     cache = tmp_path / "c.json"
-    assert session.resolve_carrier_session(DP, EMULATOR_ENV, True, False, cache) == fresh_triplet()
+    assert (
+        session.resolve_carrier_session(
+            DP, EMULATOR_ENV, True, False, cache, secrets_policy.seeder_policy_document
+        )
+        == fresh_triplet()
+    )
     assert healed["plane"] is True
     assert seen["role_arn"] == EMULATOR_ROLE_ARN
     assert seen["serial"] is None and seen["is_emulator"] is True
@@ -687,7 +709,7 @@ def test_resolve_carrier_session_on_the_emulator_reuses_a_cached_triplet(
     cache.write_text(json.dumps(fresh_triplet()))
     healed = []
 
-    def fake_heal(declaration, values, is_emulator):
+    def fake_heal(declaration, values, is_emulator, *rest):
         healed.append(is_emulator)
 
     monkeypatch.setattr(session, "_ensure_seeder_role", fake_heal)
@@ -696,7 +718,12 @@ def test_resolve_carrier_session_on_the_emulator_reuses_a_cached_triplet(
         raise AssertionError("a cached emulator session must not re-assume")
 
     monkeypatch.setattr(session, "assume_seeder_session", boom)
-    assert session.resolve_carrier_session(DP, EMULATOR_ENV, True, False, cache) == fresh_triplet()
+    assert (
+        session.resolve_carrier_session(
+            DP, EMULATOR_ENV, True, False, cache, secrets_policy.seeder_policy_document
+        )
+        == fresh_triplet()
+    )
     assert healed == [True]
 
 
@@ -706,7 +733,7 @@ def test_resolve_carrier_session_on_real_aws_converges_and_assumes_with_mfa(
     monkeypatch.setattr(policy, "sts_caller_identity", lambda: ("123456789012", USER_ARN))
     healed = {}
 
-    def fake_heal(declaration, values, is_emulator):
+    def fake_heal(declaration, values, is_emulator, *rest):
         healed["plane"] = is_emulator
 
     monkeypatch.setattr(session, "_ensure_seeder_role", fake_heal)
@@ -720,9 +747,9 @@ def test_resolve_carrier_session_on_real_aws_converges_and_assumes_with_mfa(
 
     monkeypatch.setattr(session, "assume_seeder_session", fake_assume)
     cache = tmp_path / "c.json"
-    assert session.resolve_carrier_session(DP, REAL_ENV, False, False, cache) == fake_triplet(
-        ROLE_ARN
-    )
+    assert session.resolve_carrier_session(
+        DP, REAL_ENV, False, False, cache, secrets_policy.seeder_policy_document
+    ) == fake_triplet(ROLE_ARN)
     assert healed["plane"] is False
     assert seen["role_arn"] == ROLE_ARN
     assert seen["is_emulator"] is False
@@ -744,7 +771,7 @@ def test_resolve_carrier_session_reuses_a_cached_triplet(tmp_path, monkeypatch):
     monkeypatch.setattr(policy, "sts_caller_identity", lambda: ("123456789012", USER_ARN))
     healed = []
 
-    def fake_heal(declaration, values, is_emulator):
+    def fake_heal(declaration, values, is_emulator, *rest):
         healed.append(is_emulator)
 
     monkeypatch.setattr(session, "_ensure_seeder_role", fake_heal)
@@ -753,14 +780,21 @@ def test_resolve_carrier_session_reuses_a_cached_triplet(tmp_path, monkeypatch):
         raise AssertionError("a live cache must not prompt")
 
     monkeypatch.setattr(session, "assume_seeder_session", boom)
-    assert session.resolve_carrier_session(DP, REAL_ENV, False, False, cache) == payload
+    assert (
+        session.resolve_carrier_session(
+            DP, REAL_ENV, False, False, cache, secrets_policy.seeder_policy_document
+        )
+        == payload
+    )
     assert healed == [False]
 
 
 def test_resolve_carrier_session_assumes_and_saves_when_uncached(tmp_path, monkeypatch):
     cache = tmp_path / "c.json"
     monkeypatch.setattr(policy, "sts_caller_identity", lambda: ("123456789012", USER_ARN))
-    monkeypatch.setattr(session, "_ensure_seeder_role", lambda declaration, values, is_em: None)
+    monkeypatch.setattr(
+        session, "_ensure_seeder_role", lambda declaration, values, is_em, *rest: None
+    )
     fresh = {
         "role_arn": ROLE_ARN,
         "access_key_id": "A",
@@ -773,7 +807,12 @@ def test_resolve_carrier_session_assumes_and_saves_when_uncached(tmp_path, monke
         "assume_seeder_session",
         lambda role_arn, serial, declaration, is_emulator: fresh,
     )
-    assert session.resolve_carrier_session(DP, REAL_ENV, False, False, cache) == fresh
+    assert (
+        session.resolve_carrier_session(
+            DP, REAL_ENV, False, False, cache, secrets_policy.seeder_policy_document
+        )
+        == fresh
+    )
     assert json.loads(cache.read_text())["role_arn"] == ROLE_ARN
 
 
@@ -784,7 +823,9 @@ def test_resolve_carrier_session_dies_without_an_mfa_serial(tmp_path, monkeypatc
         lambda: ("123456789012", "arn:aws:sts::123456789012:assumed-role/Ops/s"),
     )
     with pytest.raises(SystemExit) as excinfo:
-        session.resolve_carrier_session(DP, REAL_ENV, False, False, tmp_path / "c")
+        session.resolve_carrier_session(
+            DP, REAL_ENV, False, False, tmp_path / "c", secrets_policy.seeder_policy_document
+        )
     assert excinfo.value.code == 1
     out = capsys.readouterr().out
     assert "cannot derive" in out and "SEEDER_MFA_SERIAL" in out
@@ -804,7 +845,7 @@ def ready_workspace(tmp_path, slug: str, env_text: str) -> Workspace:
     infra = service_dir / "infra"
     infra.mkdir()
     (infra / ".env").write_text(env_text)
-    return workspace_for(service_dir)
+    return workspace_for(KIND, service_dir)
 
 
 def assume_payload(slug: str) -> dict:
@@ -844,11 +885,9 @@ def test_refresh_all_runs_the_whole_batch_behind_one_mfa_code(monkeypatch, capsy
     monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
     real_plane_ident(monkeypatch)
     ensured: list[str] = []
-    monkeypatch.setattr(session, "_ensure_seeder_role", lambda d, v, e: ensured.append(d.slug))
+    monkeypatch.setattr(batch, "_ensure_seeder_role", lambda d, v, e, *rest: ensured.append(d.slug))
     prompts: list[str] = []
-    monkeypatch.setattr(
-        session, "prompt_mfa_code", lambda serial: prompts.append(serial) or "654321"
-    )
+    monkeypatch.setattr(batch, "prompt_mfa_code", lambda serial: prompts.append(serial) or "654321")
     tokens: dict[str, str] = {}
 
     def captured(command, is_emulator, session=None):
@@ -862,7 +901,7 @@ def test_refresh_all_runs_the_whole_batch_behind_one_mfa_code(monkeypatch, capsy
         ready_workspace(tmp_path, "teams", render_env(REAL_ENV)),
     ]
 
-    assert session.refresh_all_flow(workspaces, False, False, False) == 0
+    assert batch.refresh_all_flow(workspaces, False, False, False) == 0
 
     out = capsys.readouterr().out
     assert "refresh-all: 2 ready services on real AWS" in out
@@ -878,14 +917,14 @@ def test_refresh_all_runs_the_whole_batch_behind_one_mfa_code(monkeypatch, capsy
 def test_refresh_all_prompts_again_for_a_second_mfa_device(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
     real_plane_ident(monkeypatch)
-    monkeypatch.setattr(session, "_ensure_seeder_role", lambda d, v, e: None)
+    monkeypatch.setattr(batch, "_ensure_seeder_role", lambda d, v, e, *rest: None)
     prompts: list[str] = []
 
     def prompt(serial):
         prompts.append(serial)
         return "111111" if serial.endswith("alpha") else "222222"
 
-    monkeypatch.setattr(session, "prompt_mfa_code", prompt)
+    monkeypatch.setattr(batch, "prompt_mfa_code", prompt)
     tokens: dict[str, str] = {}
 
     def captured(command, is_emulator, session=None):
@@ -917,7 +956,7 @@ def test_refresh_all_prompts_again_for_a_second_mfa_device(monkeypatch, capsys, 
         ),
     ]
 
-    assert session.refresh_all_flow(workspaces, False, False, False) == 0
+    assert batch.refresh_all_flow(workspaces, False, False, False) == 0
 
     assert prompts == [
         "arn:aws:iam::123456789012:mfa/alpha",
@@ -929,14 +968,14 @@ def test_refresh_all_prompts_again_for_a_second_mfa_device(monkeypatch, capsys, 
 def test_refresh_all_retries_a_failed_assume_with_a_fresh_code(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
     real_plane_ident(monkeypatch)
-    monkeypatch.setattr(session, "_ensure_seeder_role", lambda d, v, e: None)
+    monkeypatch.setattr(batch, "_ensure_seeder_role", lambda d, v, e, *rest: None)
     attempts: list[str] = []
     codes = iter(["111111", "222222"])
 
     def prompt(serial):
         return next(codes)
 
-    monkeypatch.setattr(session, "prompt_mfa_code", prompt)
+    monkeypatch.setattr(batch, "prompt_mfa_code", prompt)
 
     def captured(command, is_emulator, session=None):
         slug = assume_slug_of(command)
@@ -948,7 +987,7 @@ def test_refresh_all_retries_a_failed_assume_with_a_fresh_code(monkeypatch, caps
     monkeypatch.setattr(session, "run_aws_captured", captured)
     workspaces = [ready_workspace(tmp_path, "chats", render_env(REAL_ENV))]
 
-    assert session.refresh_all_flow(workspaces, False, False, False) == 0
+    assert batch.refresh_all_flow(workspaces, False, False, False) == 0
 
     assert attempts == ["chats:111111", "chats:222222"]  # exactly one fresh-code retry
     out = capsys.readouterr().out
@@ -962,9 +1001,9 @@ def test_refresh_all_reports_a_failed_service_and_keeps_the_batch_going(
 ):
     monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
     real_plane_ident(monkeypatch)
-    monkeypatch.setattr(session, "_ensure_seeder_role", lambda d, v, e: None)
+    monkeypatch.setattr(batch, "_ensure_seeder_role", lambda d, v, e, *rest: None)
     codes = iter(["111111", "222222", "333333"])
-    monkeypatch.setattr(session, "prompt_mfa_code", lambda serial: next(codes))
+    monkeypatch.setattr(batch, "prompt_mfa_code", lambda serial: next(codes))
 
     def captured(command, is_emulator, session=None):
         slug = assume_slug_of(command)
@@ -978,7 +1017,7 @@ def test_refresh_all_reports_a_failed_service_and_keeps_the_batch_going(
         ready_workspace(tmp_path, "teams", render_env(REAL_ENV)),
     ]
 
-    assert session.refresh_all_flow(workspaces, False, False, False) == 1
+    assert batch.refresh_all_flow(workspaces, False, False, False) == 1
 
     out = capsys.readouterr().out
     assert "failed: chats (see its assume error above)" in out
@@ -995,11 +1034,11 @@ def test_refresh_all_dry_run_plans_without_converging_or_assuming(monkeypatch, c
     def boom(*arguments, **rest):
         raise AssertionError("dry run must not converge a role or assume it")
 
-    monkeypatch.setattr(session, "_ensure_seeder_role", boom)
+    monkeypatch.setattr(batch, "_ensure_seeder_role", boom)
     monkeypatch.setattr(session, "run_aws_captured", boom)
     workspaces = [ready_workspace(tmp_path, "chats", render_env(REAL_ENV))]
 
-    assert session.refresh_all_flow(workspaces, False, False, True) == 0
+    assert batch.refresh_all_flow(workspaces, False, False, True) == 0
 
     out = capsys.readouterr().out
     assert "would refresh: chats" in out
@@ -1017,10 +1056,10 @@ def test_refresh_all_rides_a_still_valid_cached_triplet(tmp_path, monkeypatch, c
         raise AssertionError("a valid cached triplet must not converge or assume")
 
     monkeypatch.setattr(session, "run_aws_captured", boom)
-    monkeypatch.setattr(session, "_ensure_seeder_role", boom)
+    monkeypatch.setattr(batch, "_ensure_seeder_role", boom)
     workspaces = [ready_workspace(tmp_path, "chats", render_env(EMULATOR_ENV))]
 
-    assert session.refresh_all_flow(workspaces, True, False, False) == 0
+    assert batch.refresh_all_flow(workspaces, True, False, False) == 0
 
     out = capsys.readouterr().out
     assert "valid: chats (cached triplet rides" in out
@@ -1032,7 +1071,7 @@ def test_refresh_all_force_re_mints_a_valid_triplet(tmp_path, monkeypatch, capsy
     cache = tmp_path / "cache" / "chats.json"
     cache.parent.mkdir(parents=True)
     cache.write_text(json.dumps(cached_triplet("chats")))
-    monkeypatch.setattr(session, "_ensure_seeder_role", lambda d, v, e: None)
+    monkeypatch.setattr(batch, "_ensure_seeder_role", lambda d, v, e, *rest: None)
 
     def captured(command, is_emulator, session=None):
         return 0, json.dumps(assume_payload("chats")), ""
@@ -1040,7 +1079,7 @@ def test_refresh_all_force_re_mints_a_valid_triplet(tmp_path, monkeypatch, capsy
     monkeypatch.setattr(session, "run_aws_captured", captured)
     workspaces = [ready_workspace(tmp_path, "chats", render_env(EMULATOR_ENV))]
 
-    assert session.refresh_all_flow(workspaces, True, True, False) == 0
+    assert batch.refresh_all_flow(workspaces, True, True, False) == 0
 
     out = capsys.readouterr().out
     assert "refreshed: chats" in out and "valid: chats" not in out
@@ -1053,10 +1092,10 @@ def test_refresh_all_skips_a_service_with_value_errors(tmp_path, monkeypatch, ca
         raise AssertionError("a skipped service must not converge or assume")
 
     monkeypatch.setattr(session, "run_aws_captured", boom)
-    monkeypatch.setattr(session, "_ensure_seeder_role", boom)
+    monkeypatch.setattr(batch, "_ensure_seeder_role", boom)
     workspaces = [ready_workspace(tmp_path, "chats", "API_KEY=abc\n")]
 
-    assert session.refresh_all_flow(workspaces, True, False, False) == 1
+    assert batch.refresh_all_flow(workspaces, True, False, False) == 1
 
     out = capsys.readouterr().out
     assert "API_KEY missing or shorter than 16 chars" in out
@@ -1072,7 +1111,7 @@ def test_refresh_all_reports_a_broken_declaration(tmp_path, monkeypatch, capsys)
     infra.mkdir()
     (infra / ".env").write_text(render_env(EMULATOR_ENV))
 
-    assert session.refresh_all_flow([workspace_for(service_dir)], True, False, False) == 1
+    assert batch.refresh_all_flow([workspace_for(KIND, service_dir)], True, False, False) == 1
 
     out = capsys.readouterr().out
     assert "failed: chats (see its declaration error above)" in out
@@ -1080,6 +1119,6 @@ def test_refresh_all_reports_a_broken_declaration(tmp_path, monkeypatch, capsys)
 
 
 def test_refresh_all_without_candidates_hints_at_the_opt_in(capsys):
-    assert session.refresh_all_flow([], True, False, False) == 0
+    assert batch.refresh_all_flow([], True, False, False) == 0
     out = capsys.readouterr().out
     assert "nothing to refresh" in out and "secrets.toml and infra/.env" in out

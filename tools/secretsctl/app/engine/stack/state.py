@@ -4,9 +4,19 @@ from __future__ import annotations
 
 import json
 
-from app.declaration.model import Declaration, state_bucket_for
-from app.shell import aws_base, run_aws, run_aws_captured
-from app.values.plane import resolve_floci_url
+from app.engine.declaration.model import Declaration, state_bucket_for
+from app.engine.shell import aws_base, run_aws, run_aws_captured
+from app.engine.values.plane import resolve_floci_url
+
+
+def _bucket(
+    declaration: Declaration,
+    values: dict[str, str],
+    is_emulator: bool,
+    account: str,
+    bucket: str | None,
+) -> str:
+    return bucket if bucket is not None else state_bucket_for(declaration.slug, account)
 
 
 def ensure_state_bucket(
@@ -15,12 +25,13 @@ def ensure_state_bucket(
     is_emulator: bool,
     account: str,
     session: dict[str, str] | None = None,
+    bucket: str | None = None,
 ) -> int:
     """Create-on-demand: terraform owns nothing about the state bucket, so any
     acting verb may find it missing (the emulator loses S3 data on restart; a
     fresh real plane starts empty) and heal it under the carrier session."""
     base = aws_base(declaration, values, is_emulator)
-    bucket = state_bucket_for(declaration.slug, account)
+    bucket = _bucket(declaration, values, is_emulator, account, bucket)
     # The head rides captured streams: an existing bucket stays silent, and a
     # missing one reports through the note instead of a raw SDK error.
     head = run_aws_captured(
@@ -60,28 +71,17 @@ def ensure_state_bucket(
     return 0
 
 
-def force_delete_command(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
-) -> list[str]:
-    return aws_base(declaration, values, is_emulator) + [
-        "secretsmanager",
-        "delete-secret",
-        "--secret-id",
-        declaration.secret_name,
-        "--force-delete-without-recovery",
-    ]
-
-
 def list_bucket_versions(
     declaration: Declaration,
     values: dict[str, str],
     is_emulator: bool,
     account: str,
     session: dict[str, str] | None = None,
+    bucket: str | None = None,
 ) -> list[tuple[str, str]] | None:
     """Every (key, version id) in the plane's state bucket, None when listing failed;
     the CLI paginates, so one call spans the bucket."""
-    bucket = state_bucket_for(declaration.slug, account)
+    bucket = _bucket(declaration, values, is_emulator, account, bucket)
     code, stdout, stderr = run_aws_captured(
         aws_base(declaration, values, is_emulator)
         + ["s3api", "list-object-versions", "--bucket", bucket, "--output", "json"],
@@ -111,9 +111,10 @@ def preview_purge(
     is_emulator: bool,
     account: str,
     session: dict[str, str] | None = None,
+    bucket: str | None = None,
 ) -> None:
     """Prints what the post-destroy purge will wipe; destroy proceeds without a confirmation."""
-    bucket = state_bucket_for(declaration.slug, account)
+    bucket = _bucket(declaration, values, is_emulator, account, bucket)
     if (
         run_aws(
             aws_base(declaration, values, is_emulator)
@@ -125,7 +126,7 @@ def preview_purge(
     ):
         print(f"note: bucket {bucket} does not exist; the purge step will be a no-op")
         return
-    items = list_bucket_versions(declaration, values, is_emulator, account, session) or []
+    items = list_bucket_versions(declaration, values, is_emulator, account, session, bucket) or []
     if items:
         print(f"purge will wipe {len(items)} object version(s) in {bucket}")
         prefixes = sorted({key.split("/", 1)[0] for key, _ in items})
@@ -143,14 +144,15 @@ def purge_state(
     is_emulator: bool,
     account: str,
     session: dict[str, str] | None = None,
+    bucket: str | None = None,
 ) -> int:
     """Wipe + delete the state bucket, only after terraform destroy succeeded; rerunnable."""
-    bucket = state_bucket_for(declaration.slug, account)
+    bucket = _bucket(declaration, values, is_emulator, account, bucket)
     base = aws_base(declaration, values, is_emulator)
     if run_aws(base + ["s3api", "head-bucket", "--bucket", bucket], is_emulator, session) != 0:
         print(f"note: bucket {bucket} is already gone; nothing to purge")
         return 0
-    items = list_bucket_versions(declaration, values, is_emulator, account, session)
+    items = list_bucket_versions(declaration, values, is_emulator, account, session, bucket)
     if items is None:
         return 1
     if not items:
