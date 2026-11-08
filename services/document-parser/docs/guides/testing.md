@@ -42,7 +42,6 @@ The client runs the production app's **real lifespan boot** — same config reso
 
 | Suite | What it pins |
 |-------|--------------|
-| `config/test_emulator_plane` | the prod plane resolved through the actual boot path against the local AWS emulator (skips politely when it isn't up) |
 | `extract/test_gate` | what a caller gets for every credential outcome — 401s, generic detail, nothing leaked |
 | `extract/test_input` | the full-path matrix: bounded read, multipart forms, sniffed-vs-declared types, each verdict's exact wire shape |
 | `extract/test_document_bounds` | admission verdicts end to end with shrunken bounds — 413 names its limit, 422 stays generic |

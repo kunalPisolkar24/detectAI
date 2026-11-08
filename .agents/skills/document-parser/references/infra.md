@@ -30,14 +30,15 @@ by design (terraform never manages its own carrier):
   (stale exported `AWS_*` triplets) — `make secrets-session-clear` drops the
   cache and unsets the exports.
 
-## Two planes, flipped by one line
+## Two planes, flipped by one flag
 
-`EMULATOR_ENDPOINT` in `infra/.env` selects everything: set → Floci/LocalStack
-emulator (dummy `test` credentials, auto-approved apply, in-memory state,
-0-day secret deletion); empty → real AWS (ambient personal creds + the
-MFA-gated seeder session, interactive confirm, 30-day recovery window,
-`TF_STATE_BUCKET` required). The provider block adapts itself; nothing in
-the stack reads an account id.
+`make secrets-<verb> PLANE=floci|aws` selects everything: `floci` → the
+Floci/LocalStack emulator (dummy `test` credentials, auto-approved apply,
+in-memory state, 0-day secret deletion); `aws` → real AWS (ambient personal
+creds + the MFA-gated seeder session, interactive confirm, 30-day recovery
+window, `TF_STATE_BUCKET` required). The provider block adapts itself; nothing
+in the stack reads an account id. The app runtime carries no endpoint knob —
+its credentials ride boto3's default chain from the deployment environment.
 
 The emulator accepts every IAM call but never enforces IAM policies — a
 green apply there proves structure only; enforcement bites on real AWS.

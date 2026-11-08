@@ -28,6 +28,8 @@ A missing file at the default location is fine (values then come from the enviro
 - **Secrets Manager** — one JSON blob of env-named keys (secrets: the API key, license key)
 - **SSM parameters** — plain settings under a reserved prefix
 
+The clients build against the process environment's `AWS_REGION` and ride boto3's default credential chain — for containers, compose passes the region and the standard `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN` through from `infra/.env` (`env_file`, overridable by the compose `environment:` block). Pointing a prod fetch elsewhere is deployment territory through the SDK's native `AWS_ENDPOINT_URL_*` variables; the app defines no endpoint knob.
+
 The two planes are disjoint by contract; a key found on both fails the boot with an operator-facing error. A key seeded after boot stays invisible until restart. Seeding and rotation are the [secrets guide's](../guides/secrets.md) `make secrets-*` flow.
 
 ## Every key
@@ -109,7 +111,7 @@ classDiagram
 
 ### The adapters behind the planes
 
-Every adapter follows one contract: fetch **once at construction**, cache the values in memory, hand out copies via `fetch()`/`get()`. Neither plane ever refetches. The AWS adapters receive injected clients — `AWSClientFactory` reads `AWS_REGION` (plus an optional emulator endpoint) and hands out boto3 clients; tests inject fakes instead, which is why `ConfigProvider` stays importable without AWS.
+Every adapter follows one contract: fetch **once at construction**, cache the values in memory, hand out copies via `fetch()`/`get()`. Neither plane ever refetches. The AWS adapters receive injected clients — `AWSClientFactory` reads `AWS_REGION` and hands out boto3 clients, with credentials riding boto3's default chain; tests inject fakes instead, which is why `ConfigProvider` stays importable without AWS.
 
 ```mermaid
 classDiagram
@@ -146,7 +148,6 @@ classDiagram
     }
     class AWSClientFactory {
         -region
-        -endpoint_url
         +from_env()$
         +create_client(service)
     }
