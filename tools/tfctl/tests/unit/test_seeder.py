@@ -81,10 +81,8 @@ def test_resolve_trust_principal_rejects_an_existing_seeder_session(monkeypatch,
 
 
 def test_mfa_serial_ladder():
-    assert session.mfa_serial_for(USER_ARN, "") == "arn:aws:iam::123456789012:mfa/kunalpisolkar"
-    override = "arn:aws:iam::123456789012:mfa/custom-device"
-    assert session.mfa_serial_for(USER_ARN, override) == override
-    assert session.mfa_serial_for("arn:aws:iam::123456789012:role/OpsRole", "") is None
+    assert session.mfa_serial_for(USER_ARN) == "arn:aws:iam::123456789012:mfa/kunalpisolkar"
+    assert session.mfa_serial_for("arn:aws:iam::123456789012:role/OpsRole") is None
 
 
 def test_seeder_drop_validates_plane_inputs_only():
@@ -856,7 +854,7 @@ def test_resolve_carrier_session_dies_without_an_mfa_serial(tmp_path, monkeypatc
         )
     assert excinfo.value.code == 1
     out = capsys.readouterr().out
-    assert "cannot derive" in out and "SEEDER_MFA_SERIAL" in out
+    assert "cannot derive" in out and "IAM user" in out
 
 
 # --- session-refresh-all: one assume batch behind one lazily entered MFA code ---
@@ -940,57 +938,6 @@ def test_refresh_all_runs_the_whole_batch_behind_one_mfa_code(monkeypatch, capsy
     assert "summary: 2 refreshed, 0 valid, 0 skipped, 0 failed" in out
     caches = sorted(path.name for path in (tmp_path / "cache").glob("*.json"))
     assert caches == ["chats.json", "teams.json"]
-
-
-def test_refresh_all_prompts_again_for_a_second_mfa_device(monkeypatch, capsys, tmp_path):
-    monkeypatch.setattr(session, "CACHE_ROOT", tmp_path / "cache")
-    real_plane_ident(monkeypatch)
-    monkeypatch.setattr(batch, "_ensure_seeder_role", lambda d, v, e, *rest: None)
-    prompts: list[str] = []
-
-    def prompt(serial):
-        prompts.append(serial)
-        return "111111" if serial.endswith("alpha") else "222222"
-
-    monkeypatch.setattr(batch, "prompt_mfa_code", prompt)
-    tokens: dict[str, str] = {}
-
-    def captured(command, is_emulator, session=None):
-        slug = assume_slug_of(command)
-        tokens[slug] = command[command.index("--token-code") + 1]
-        return 0, json.dumps(assume_payload(slug)), ""
-
-    monkeypatch.setattr(session, "run_aws_captured", captured)
-    workspaces = [
-        ready_workspace(
-            tmp_path,
-            "chats",
-            render_env(
-                {
-                    "SEEDER_MFA_SERIAL": "arn:aws:iam::123456789012:mfa/alpha",
-                    "API_KEY": "a" * 20,
-                }
-            ),
-        ),
-        ready_workspace(
-            tmp_path,
-            "teams",
-            render_env(
-                {
-                    "SEEDER_MFA_SERIAL": "arn:aws:iam::123456789012:mfa/beta",
-                    "API_KEY": "a" * 20,
-                }
-            ),
-        ),
-    ]
-
-    assert batch.refresh_all_flow(workspaces, False, False, False) == 0
-
-    assert prompts == [
-        "arn:aws:iam::123456789012:mfa/alpha",
-        "arn:aws:iam::123456789012:mfa/beta",
-    ]  # each device is prompted lazily, in service order
-    assert tokens == {"chats": "111111", "teams": "222222"}  # each device rides its own code
 
 
 def test_refresh_all_retries_a_failed_assume_with_a_fresh_code(monkeypatch, capsys, tmp_path):

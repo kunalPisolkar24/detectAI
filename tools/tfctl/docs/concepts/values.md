@@ -22,7 +22,7 @@ Every line lands in exactly one bucket, decided by the declaration:
 |--------|------------|-------------|
 | **Secret blob** | the `[secrets] keys` of `secrets.toml` | one JSON version on Secrets Manager at `detectai/<slug>/secrets` |
 | **SSM config** | the `[ssm] keys` of `secrets.toml` | plain `String` parameters under `/detectai/<slug>/<KEY>` |
-| **Engine controls** | `AWS_REGION`, `ENV_TYPE`, `SECRET_RECOVERY_WINDOW`, `SEEDER_MFA_SERIAL` | never seeded anywhere — they steer the run itself |
+| **Engine controls** | `AWS_REGION`, `ENV_TYPE`, `SECRET_RECOVERY_WINDOW` | never seeded anywhere — they steer the run itself |
 
 Empty or absent lines seed nothing: a commented-out `# NEW_RELIC_LICENSE_KEY=...` line in `.env` seeds nothing for that key. And the allowlist cuts both ways — a `.env` line like `PORT=8000` that no declaration section lists is local-only; it never rides the plane.
 
@@ -31,7 +31,6 @@ This is the full anatomy in practice (from `services/document-parser/infra/.env.
 ```ini
 AWS_REGION=ap-southeast-2            # control: the region the verbs act in
 # SECRET_RECOVERY_WINDOW=30          # control: real-AWS only (see below)
-# SEEDER_MFA_SERIAL=arn:...          # control: real-AWS MFA pin (see carrier)
 
 API_KEY=change-me-min-16-chars       # [secrets] -> the blob
 
@@ -121,6 +120,6 @@ Validation passes but something looks contradictory? The run says so instead of 
 
 ## Next Steps
 
-- **[Carrier](carrier.md)** — the role session these verbs ride and why `SEEDER_MFA_SERIAL` exists
+- **[Carrier](carrier.md)** — the role session these verbs ride, gated by your derived MFA device
 - **[Verification](../guides/verifying.md)** — how the live plane is compared against these values without printing them
 - **[CLI reference](../reference/cli.md)** — which verbs run the full ladder and which run only the region check

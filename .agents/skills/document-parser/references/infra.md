@@ -14,7 +14,8 @@ The stack never deploys the app and creates no IAM. The seeder role
 by design (terraform never manages its own carrier):
 
 - Trust: the **auto-detected ambient caller**; an assumed-role caller strips to
-  its base role but then needs `SEEDER_MFA_SERIAL` pinned in `.env`.
+  its base role, and with no derivable device the verb refuses — ride your IAM
+  user instead.
 - Carrier verbs assume the role with your MFA for a **12-hour session** (the
   STS ceiling); the triplet rides as env credentials — outranks any profile,
   nothing written to `~/.aws` — and is cached gitignored in

@@ -34,8 +34,8 @@ alert conditions and notification names.
 | Run identity | the emulator's fake credentials | the `detectai-observability-seeder` role (created on demand, MFA-gated, cached 12 h) |
 
 Floci needs `make floci-up` from the repo root. `bootstrap` is idempotent;
-`SEEDER_MFA_SERIAL` in `envs/.env` overrides the MFA device derived from your
-IAM user. `PLANE=floci|aws` (default floci) selects the plane on any make
+the real-plane MFA device is derived from your IAM user, with no override.
+`PLANE=floci|aws` (default floci) selects the plane on any make
 target.
 
 ## Command flow

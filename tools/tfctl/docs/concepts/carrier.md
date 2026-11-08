@@ -40,7 +40,7 @@ graph LR
     STRIP --> SERIAL{"MFA serial needed<br/>(real AWS)"}
     USER --> SERIAL
     SERIAL -->|"derivable"| OK["trust the role<br/>to that principal"]
-    SERIAL -->|"not derivable"| PIN["die: pin<br/>SEEDER_MFA_SERIAL in .env"] --> END
+    SERIAL -->|"not derivable"| DIE["die: ride your IAM user<br/>with a matching device"] --> END
     OK --> END
 ```
 
@@ -128,5 +128,5 @@ The one-code-per-device trick: real AWS gates each assume behind an MFA prompt, 
 ## Next Steps
 
 - **[The terraform lifecycle](../guides/terraform-lifecycle.md)** — what the carrier session is spent on
-- **[Values](values.md)** — the only `.env` control the carrier reads: `SEEDER_MFA_SERIAL`
+- **[Values](values.md)** — what the `.env` values plane seeds and steers
 - **[CLI reference](../reference/cli.md)** — exact flags and guard rules for the session verbs

@@ -26,7 +26,6 @@ from app.engine.shell import die, run_aws_captured
 from app.engine.values.plane import resolve_floci_url
 
 MFA_CODE_RE = re.compile(r"^[0-9]{6}$")
-SEEDER_MFA_SERIAL_KEY = "SEEDER_MFA_SERIAL"
 
 SESSION_RENEWAL_MARGIN_SECONDS = 10 * 60
 
@@ -46,11 +45,9 @@ def role_session_name(declaration: Declaration) -> str:
     return re.sub(r"[^A-Za-z0-9=_,.@-]", ".", raw)
 
 
-def mfa_serial_for(principal: str, override: str) -> str | None:
-    """The caller's MFA device: the override, else derived from a plain user
-    ARN. None when the principal is not an MFA-capable IAM user."""
-    if override:
-        return override
+def mfa_serial_for(principal: str) -> str | None:
+    """The caller's MFA device, derived from a plain user ARN. None when the
+    principal is not an MFA-capable IAM user."""
     if USER_ARN_RE.fullmatch(principal):
         account_id = principal.split(":")[4]
         return f"arn:aws:iam::{account_id}:mfa/{principal.split(':user/', 1)[1]}"
@@ -214,21 +211,19 @@ def assume_seeder_session(
     return {"role_arn": role_arn, **triplet}
 
 
-def _carrier_target(
-    declaration: Declaration, values: dict[str, str], is_emulator: bool
-) -> tuple[str, str | None]:
+def _carrier_target(declaration: Declaration, is_emulator: bool) -> tuple[str, str | None]:
     """The seeder role to ride and the MFA gate in front of it. The ambient
     caller's trust ladder runs per stack, so a batch validates each one the
     same way a single verb run would."""
     principal = resolve_trust_principal(declaration, is_emulator)
     serial = None
     if not is_emulator:
-        serial = mfa_serial_for(principal, values.get(SEEDER_MFA_SERIAL_KEY, ""))
+        serial = mfa_serial_for(principal)
         if serial is None:
             die(
                 f"cannot derive the caller's MFA device (trust principal: {principal})",
-                "run the verb under your IAM user credentials, or set "
-                f"{SEEDER_MFA_SERIAL_KEY}=arn:aws:iam::<account-id>:mfa/<your-user> in .env",
+                "run the verb under your IAM user credentials, with the MFA "
+                "device named after the user",
             )
     return seeder_role_arn(declaration, iam_account_id(principal)), serial
 
@@ -248,7 +243,7 @@ def resolve_carrier_session(
     stay session-free."""
     if dry_run:
         return None
-    role_arn, serial = _carrier_target(declaration, values, is_emulator)
+    role_arn, serial = _carrier_target(declaration, is_emulator)
     _ensure_seeder_role(declaration, values, is_emulator, seeder_policy)
     session = cached_session(role_arn, session_cache)
     if session is None:

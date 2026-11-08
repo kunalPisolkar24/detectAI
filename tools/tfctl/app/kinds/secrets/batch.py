@@ -91,7 +91,7 @@ def refresh_all_flow(
                 print(f"skipped: {declaration.slug} (fix the value errors above)")
                 skipped += 1
                 continue
-            role_arn, serial = _carrier_target(declaration, values, is_emulator)
+            role_arn, serial = _carrier_target(declaration, is_emulator)
             cached = None if force else cached_session(role_arn, session_cache_for(declaration))
             if cached is not None:
                 valid += 1

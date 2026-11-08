@@ -102,7 +102,7 @@ observability kind. The plane follows `PLANE=floci|aws` (**floci** is the
 default): `make plan PLANE=aws` rides the real plane. On real AWS every
 state-plane step rides the
 `detectai-observability-seeder` role (created on demand, MFA-gated, cached 12
-hours); `SEEDER_MFA_SERIAL` in `envs/.env` overrides the derived MFA device.
+hours); the MFA device is derived from your caller identity, with no override.
 
 `NEW_RELIC_API_KEY` must be a **User** key (`NRAK-...`) — the ingest license
 key is rejected. Secrets live only in `envs/.env` or the shell, never
