@@ -28,7 +28,7 @@ A missing file at the default location is fine (values then come from the enviro
 - **Secrets Manager** — one JSON blob of env-named keys (secrets: the API key, license key)
 - **SSM parameters** — plain settings under a reserved prefix
 
-The clients build against the process environment's `AWS_REGION` and ride boto3's default credential chain — for containers, compose passes the region and the standard `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN` through from `infra/.env` (`env_file`, overridable by the compose `environment:` block). Pointing a prod fetch elsewhere is deployment territory through the SDK's native `AWS_ENDPOINT_URL_*` variables; the app defines no endpoint knob.
+The clients build against the process environment's `AWS_REGION` and ride boto3's default credential chain — for containers, compose injects the region and the credential trio from `infra/.env` (`env_file`), and the compose `environment:` block carries just the trio so one run's credentials can be overridden by the shell. Pointing a prod fetch elsewhere is deployment territory through the SDK's native `AWS_ENDPOINT_URL_*` variables; the app defines no endpoint knob.
 
 The two planes are disjoint by contract; a key found on both fails the boot with an operator-facing error. A key seeded after boot stays invisible until restart. Seeding and rotation are the [secrets guide's](../guides/secrets.md) `make secrets-*` flow.
 

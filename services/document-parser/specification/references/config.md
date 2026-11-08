@@ -32,10 +32,11 @@ factories:
 
 `AWS_REGION` is a bootstrap variable, not config: `AWSClientFactory.from_env()`
 reads it from the process environment once (required — compose injects it from
-`infra/.env`, ECS injects it in real prod). Credentials ride boto3's default
-chain (the task role), never the config; compose passes the standard
-`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN` through from
-`infra/.env`, and the SDK's native `AWS_ENDPOINT_URL_*` variables remain the
+`infra/.env` via `env_file`, ECS injects it in real prod). Credentials ride
+boto3's default chain (the task role), never the config; compose carries the
+credential trio in from `infra/.env` the same way, and its `environment:` block
+exists only so the host shell can override one run's credentials without
+touching the file. The SDK's native `AWS_ENDPOINT_URL_*` variables remain the
 deployment-level endpoint choice — the app defines no knob of its own.
 
 The config classes split cleanly in two: the boot shell — who builds what
