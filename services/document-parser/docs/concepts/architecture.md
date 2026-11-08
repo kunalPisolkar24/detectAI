@@ -94,4 +94,4 @@ Nothing is re-resolved per request: both services and the settings hang off `app
 | `GET /api/v1/health` | 200 `{"status":"ok"}` |
 | `GET /api/v1/ready` | 200 `{"status":"ready"}` |
 
-Both are open endpoints and stay identical across runtimes, so callers can rely on them.
+Both are open endpoints and stay identical across runtimes, so callers can rely on them. The Docker HEALTHCHECK wiring lives in the compose files rather than the image (Lambda ignores it), and the load rig overrides the thresholds for k6.

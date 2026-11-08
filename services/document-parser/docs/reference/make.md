@@ -59,6 +59,8 @@ One `infra/.env.load` configures everything, `SCENARIO` included (`smoke` or `lo
 | `make load-e2e` | k6 alone, against whatever the file's `API_URL` names | a specific target — local, docker, or prod |
 | `make load-down` | removes the rig and any e2e leftovers | cleaning up after either run |
 
+The rig pins the parser's restart policy to `no`: a crashed parser stays down mid-run, so the thresholds and assertions see the real failure instead of a resurrected instance.
+
 ## Secrets and AWS — `mk/secrets.mk`
 
 | Target | What it does | Reach for it when |

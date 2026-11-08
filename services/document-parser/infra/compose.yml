@@ -1,4 +1,3 @@
-# Standalone stack on its default network.
 name: document-parser
 
 services:
@@ -9,15 +8,12 @@ services:
       context: ..
       dockerfile: Dockerfile
     restart: unless-stopped
-    # Probe policy lives here, not in the image: Lambda ignores Docker
-    # HEALTHCHECK, and the load rig overrides these thresholds for k6.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
       interval: 30s
       timeout: 10s
       start_period: 5s
       retries: 3
-    # Outlasts the 12 s graceful-drain bound in the Dockerfile CMD.
     stop_grace_period: 15s
     env_file:
       - .env
