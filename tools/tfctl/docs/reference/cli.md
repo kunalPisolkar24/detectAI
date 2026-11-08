@@ -26,6 +26,7 @@ poetry -C tools/tfctl run tfctl --stack-dir observability plan   # a stack outsi
 | `destroy` | terraform destroy, auto-approved on both planes; optional teardown tail via flags | [Lifecycle](../guides/terraform-lifecycle.md) |
 | `seeder-drop` | detach `seeder-policy` and delete the seeder role (no confirmations) | [Carrier](../concepts/carrier.md#dropping-the-carrier) |
 | `session-clear` | remove the stack's cached carrier triplet | [Carrier](../concepts/carrier.md#the-session-verbs) |
+| `session-refresh` | drop and re-mint the stack's cached carrier triplet | [Carrier](../concepts/carrier.md#the-session-verbs) |
 | `session-clear-all` | remove every cached carrier triplet (all stacks) | [Carrier](../concepts/carrier.md#the-session-verbs) |
 | `session-refresh-all` | mint every ready service's triplet in one run — one MFA code per device on real AWS | [Carrier](../concepts/carrier.md#the-session-verbs) |
 
@@ -58,7 +59,7 @@ fix:   run a single-service verb without --service
 | `--force` accepted only by `session-refresh-all` | re-minting is a batch decision |
 | `--service` refused by `session-clear-all` / `session-refresh-all` | these verbs walk every service by design — target a single service with `session-clear` instead |
 | `--service` and `--stack-dir` never together | they name two different stacks; pass one |
-| `--stack-dir` refused by `session-clear-all` / `session-refresh-all` | the batch verbs walk the services namespaces — target a single stack with `session-clear` |
+| `--stack-dir` refused by `session-clear-all` / `session-refresh-all` | the batch verbs walk the services namespaces — target a single stack with `session-clear` / `session-refresh` |
 
 ## Exit codes
 

@@ -69,8 +69,9 @@ def build_parser() -> argparse.ArgumentParser:
         "kind's live audit when it supplies one, aborting at the first failure), with the "
         "state bucket and seeder role "
         "created on demand on both planes; seeder-drop detaches and deletes the "
-        "seeder role; session-clear drops the targeted service's cached seeder "
-        "session and session-clear-all drops every cached one; session-refresh-all "
+        "seeder role; session-clear drops the targeted stack's cached seeder "
+        "session, session-refresh drops and re-mints it, session-clear-all "
+        "drops every cached one, and session-refresh-all "
         "mints every ready service's seeder session in one run (one shared MFA code "
         "on real AWS); check drives the observability stack's credential "
         "round-trip (envs/.env)",
@@ -224,6 +225,24 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
         )
     values = parse_env_file(workspace.values_file)
     is_emulator = kind.resolve_plane(values, args.aws, args.floci)
+
+    if args.command == "session-refresh":
+        cache = session_cache_for(declaration)
+        if args.dry_run:
+            print(f"would clear: {cache}")
+            print("then mint: a fresh carrier triplet (assumes the seeder role; MFA on real AWS)")
+            return 0
+        if clear_cached_session(cache):
+            print(f"removed: {cache}")
+        resolve_carrier_session(
+            declaration,
+            values,
+            is_emulator,
+            args.dry_run,
+            cache,
+            kind.seeder_policy,
+        )
+        return 0
 
     if args.command == "seeder-drop":
         if _print_errors(plane_errors(values)):

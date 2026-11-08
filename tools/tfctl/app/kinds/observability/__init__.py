@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.kinds import Kind
 
-VERBS = ("check", "plan", "apply", "auto-apply", "destroy", "seeder-drop")
+VERBS = ("check", "plan", "apply", "auto-apply", "destroy", "seeder-drop", "session-clear", "session-refresh")
 
 
 def kind() -> Kind:

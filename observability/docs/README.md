@@ -66,6 +66,10 @@ make plan         # terraform plan
 make apply        # terraform apply (auto-approves on the emulator plane)
 make auto-apply   # plan then apply in one run, stopping at the first failure
 make destroy      # terraform destroy, auto-approved on both planes
+
+# Session upkeep — scoped to this stack, other stacks' sessions untouched
+make session-clear    # drop the cached carrier triplet
+make session-refresh  # drop and re-mint it (MFA on real AWS)
 ```
 
 ## Related Files

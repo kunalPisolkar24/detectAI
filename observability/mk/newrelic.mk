@@ -2,7 +2,7 @@
 # envs/.env, resolves the state plane (PLANE=floci|aws, default floci — the
 # same contract as document-parser) and drives terraform.
 
-.PHONY: check plan apply auto-apply destroy help-newrelic
+.PHONY: check plan apply auto-apply destroy session-clear session-refresh help-newrelic
 
 TFCTL := poetry -C $(abspath ../tools/tfctl) run tfctl
 PLANE ?= floci
@@ -21,6 +21,8 @@ help-newrelic:
 	@echo "    apply        terraform apply (auto on Floci, interactive confirm on real AWS; PLANE=aws rides real AWS)"
 	@echo "    auto-apply   plan then apply in one run, stopping at the first failure"
 	@echo "    destroy      terraform destroy, auto-approved on both planes (tfctl --purge-state/--drop-seeder add teardown tails)"
+	@echo "    session-clear    drop this stack's cached carrier session (other stacks untouched)"
+	@echo "    session-refresh  drop and re-mint this stack's carrier session (MFA on real AWS)"
 	@echo ""
 
 check:
@@ -37,3 +39,9 @@ auto-apply:
 
 destroy:
 	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) destroy
+
+session-clear:
+	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) session-clear
+
+session-refresh:
+	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) session-refresh

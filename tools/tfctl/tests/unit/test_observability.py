@@ -10,6 +10,7 @@ import pytest
 
 from conftest import fake_carrier_session
 from app import main as cli
+from app.engine.carrier import session as carrier_session
 from app.kinds.locate import workspace_for
 from app.kinds.observability import kind as observability_kind
 from app.kinds.observability import account, policy, values
@@ -531,6 +532,65 @@ def test_cli_auto_apply_dry_run_has_no_verify_tail(tmp_path, monkeypatch, capsys
     out = capsys.readouterr().out
     assert "then apply:  terraform apply with the same backend overrides" in out
     assert "then verify" not in out
+
+
+def test_cli_session_clear_targets_only_the_observability_cache(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(carrier_session, "CACHE_ROOT", tmp_path / "cache")
+    workspace = write_stack(tmp_path)
+    cache = tmp_path / "cache" / "observability.json"
+    other = tmp_path / "cache" / "document-parser.json"
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text("{}")
+    other.write_text("{}")
+
+    assert cli.main(["session-clear"], workspace=workspace) == 0
+    assert not cache.exists()
+    assert other.exists()  # scoped: another stack's cached triplet stays
+    assert f"removed: {cache}" in capsys.readouterr().out
+
+    assert cli.main(["session-clear"], workspace=workspace) == 0  # rerun is a no-op
+    assert "nothing to clear (no cached seeder session for observability)" in (
+        capsys.readouterr().out
+    )
+
+
+def test_cli_session_refresh_clears_then_mints_in_order(monkeypatch, tmp_path, capsys, clean_nr_env):
+    monkeypatch.setattr(carrier_session, "CACHE_ROOT", tmp_path / "cache")
+    workspace = write_stack(tmp_path)
+    cache = tmp_path / "cache" / "observability.json"
+    other = tmp_path / "cache" / "document-parser.json"
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text("{}")
+    other.write_text("{}")
+    order = []
+
+    def fake_resolve(declaration, values, is_emulator, dry_run, cache_path, policy):
+        order.append(("mint", cache_path.name, not cache_path.exists(), is_emulator))
+        return SESSION
+
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_resolve)
+    assert cli.main(["session-refresh"], workspace=workspace) == 0
+    assert order == [("mint", "observability.json", True, True)]
+    assert other.exists()  # scoped: another stack's cached triplet stays
+    assert f"removed: {cache}" in capsys.readouterr().out
+
+
+def test_cli_session_refresh_dry_run_deletes_nothing(monkeypatch, tmp_path, capsys, clean_nr_env):
+    monkeypatch.setattr(carrier_session, "CACHE_ROOT", tmp_path / "cache")
+    workspace = write_stack(tmp_path)
+    cache = tmp_path / "cache" / "observability.json"
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text("{}")
+
+    def boom(*a, **k):
+        raise AssertionError("dry run must not mint a session")
+
+    monkeypatch.setattr(cli, "resolve_carrier_session", boom)
+    assert cli.main(["session-refresh", "--dry-run"], workspace=workspace) == 0
+    assert cache.exists()
+    out = capsys.readouterr().out
+    assert f"would clear: {cache}" in out
+    assert "then mint: a fresh carrier triplet" in out
 
 
 def test_cli_destroy_dry_run_previews_the_tail(tmp_path, monkeypatch, capsys, clean_nr_env):

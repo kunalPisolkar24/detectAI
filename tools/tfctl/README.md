@@ -20,7 +20,7 @@ make -C tools/tfctl install && make -C tools/tfctl test
 poetry -C tools/tfctl run tfctl --service document-parser plan --dry-run
 ```
 
-The full command surface is the [CLI reference](docs/reference/cli.md): ten verbs (`plan`, `apply`, `auto-apply`, `verify`, `check`, `destroy`, `seeder-drop`, `session-clear`, `session-clear-all`, `session-refresh-all` — `verify` is secrets-only), plane flags (`--floci` default / `--aws` MFA-gated), and typed-guarded extras (`--dry-run`, `--purge-state`, `--force-delete`, `--drop-seeder` on destroy; `--force` on `session-refresh-all`). Secret values never print — keys appear as lengths and fingerprints only.
+The full command surface is the [CLI reference](docs/reference/cli.md): eleven verbs (`plan`, `apply`, `auto-apply`, `verify`, `check`, `destroy`, `seeder-drop`, `session-clear`, `session-refresh`, `session-clear-all`, `session-refresh-all` — `verify` is secrets-only), plane flags (`--floci` default / `--aws` MFA-gated), and typed-guarded extras (`--dry-run`, `--purge-state`, `--force-delete`, `--drop-seeder` on destroy; `--force` on `session-refresh-all`). Secret values never print — keys appear as lengths and fingerprints only.
 
 ## Documentation
 
