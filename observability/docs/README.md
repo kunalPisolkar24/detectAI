@@ -32,7 +32,7 @@ Start here:
 | [Overview](services/overview.md) | Golden signals across every service on one page | "Is anything down?" |
 | [Datastores](services/datastores.md) | Datastore latency and the collector pipeline | Everything looks slow |
 | [Web](services/web.md) | `apps/web` charts and alerts | Something looks off in the app |
-| [Payment Gateway](services/payment-gateway.md) | Paddle webhook health and MQ publishing | Webhook or broker problems |
+| [Payment webhook](services/payment-webhook.md) | Paddle webhook health and SQS publishing | Webhook or broker problems |
 | [Workers](services/workers.md) | The three background workers on one board | Jobs lag, retry or dead-letter |
 | [Inference](services/inference.md) | The AI model-serving service | AI answers are slow or failing |
 | [Document Parser](services/document-parser.md) | Upload and extraction pipeline | Uploads fail or extraction lags |

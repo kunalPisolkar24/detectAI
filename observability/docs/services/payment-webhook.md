@@ -1,4 +1,4 @@
-# Payment Gateway Dashboard
+# Payment Webhook Dashboard
 
 This page documents the **detectai-payment-webhook** board: what it shows and which alerts page the team.
 
@@ -8,7 +8,7 @@ This page documents the **detectai-payment-webhook** board: what it shows and wh
 | Service name | `payment-webhook` |
 | Board | `detectai-payment-webhook` (prod / floci), 2 pages: Payment webhook, Logs |
 | Dev twin | yes — same pages, ` (dev)` on every title |
-| Built from | `dashboards/payment-webhook/{prod,dev}.tftpl` · `alerts/gateway.tf` |
+| Built from | `dashboards/payment-webhook/{prod,dev}.tftpl` · `alerts/payment-webhook.tf` |
 
 ## How data gets here
 
@@ -40,7 +40,7 @@ This page documents the **detectai-payment-webhook** board: what it shows and wh
 
 | Alert | Fires when | Why you care |
 |-------|------------|--------------|
-| **Gateway 5xx share high** | 5xx share above 1% for 5 minutes | Paddle is getting error responses |
-| **Gateway MQ publish failures** | Any `mq publish fail`-shaped log within 5 minutes | Accepted webhooks are not reaching the workers |
+| **Payment webhook 5xx share high** | 5xx share above 1% for 5 minutes | Paddle is getting error responses |
+| **Payment webhook publish failures** | Any failed or timed-out SQS enqueue within 5 minutes | Accepted webhooks are not reaching the workers |
 
-Source: `alerts/gateway.tf`. The publish-failure alert is log-based — it still fires even if the span data is fine, because a failed publish is a log event before it is anything else.
+Source: `alerts/payment-webhook.tf`. The publish-failure alert is counter-based (`payment_events_published_total` partitioned by `status`) — it still fires even if the span data is fine, because a failed enqueue is counted before it is anything else.

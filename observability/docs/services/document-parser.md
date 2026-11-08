@@ -8,7 +8,7 @@ This page documents the **detectai-document-parser** board: what each page shows
 | Service name | `document-parser` |
 | Board | `detectai-document-parser`, 2 pages: Document parser, Logs |
 | Dev twin | yes — same pages, ` (dev)` on every title |
-| Built from | `dashboards/document-parser/{prod,dev}.tftpl` · `alerts/parser.tf` |
+| Built from | `dashboards/document-parser/{prod,dev}.tftpl` · `alerts/document-parser.tf` |
 
 ## How data gets here
 
@@ -46,4 +46,4 @@ This page documents the **detectai-document-parser** board: what each page shows
 | **Parser extraction failures** | More than 5 failed extraction spans within 5 minutes | Corrupt or unsupported documents are piling up |
 | **Parser rejections spike** | More than 10 rejected uploads/min for 5 minutes | Usually a size or type policy hitting users |
 
-Source: `alerts/parser.tf` — four conditions, one of which is a warning-level early signal (p95 warning).
+Source: `alerts/document-parser.tf` — four conditions, one of which is a warning-level early signal (p95 warning).

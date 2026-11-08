@@ -1,6 +1,6 @@
 # Document parser: server-span error share, extract p95, failed extractions
 # and upload rejections.
-module "parser_error_rate" {
+module "document_parser_error_rate" {
   source = "../modules/alert-condition"
 
   account_id  = var.account_id
@@ -17,7 +17,7 @@ module "parser_error_rate" {
   }
 }
 
-module "parser_p95" {
+module "document_parser_p95" {
   source = "../modules/alert-condition"
 
   account_id  = var.account_id
@@ -41,7 +41,7 @@ module "parser_p95" {
   }
 }
 
-module "parser_extraction_errors" {
+module "document_parser_extraction_errors" {
   source = "../modules/alert-condition"
 
   account_id  = var.account_id
@@ -58,7 +58,7 @@ module "parser_extraction_errors" {
   }
 }
 
-module "parser_rejections_spike" {
+module "document_parser_rejections_spike" {
   source = "../modules/alert-condition"
 
   account_id  = var.account_id

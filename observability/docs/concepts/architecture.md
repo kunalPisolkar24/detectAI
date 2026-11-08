@@ -19,7 +19,7 @@ graph LR
     START(["start"]) --> PROD
 
     subgraph PROD["prod stack"]
-        APPS["web, gateway,<br/>workers, chats, inference"] -->|OTLP traces + logs| COL["otel-collector"]
+        APPS["web, payment-webhook,<br/>workers, chats, inference"] -->|OTLP traces + logs| COL["otel-collector"]
         WEBM["frontend :3000/api/metrics"] -->|Prometheus scrape| COL
         WMET["workers :7001-7003"] -->|Prometheus scrape| COL
         EXP["datastore exporters"] -->|Prometheus scrape| COL
@@ -60,7 +60,7 @@ graph TB
 ```
 
 - `dashboards/` renders one board per service plus the platform pair (`overview`, `datastores`), each call site backed by a JSON template: `web/prod.tftpl`, `web/dev.tftpl`, and so on.
-- `alerts/` holds one policy per area and the conditions in per-service files (`web.tf`, `gateway.tf`, `workers.tf`, `inference.tf`, `parser.tf`, `chats.tf`, `pipeline.tf`) — the same split the dashboards use.
+- `alerts/` holds one policy per area and the conditions in per-service files (`web.tf`, `payment-webhook.tf`, `workers.tf`, `inference.tf`, `document-parser.tf`, `chats.tf`, `pipeline.tf`) — the same split the dashboards use.
 - `modules/` keeps the two reusable building blocks: `dashboard` (one board + its tags) and `alert-condition` (one NRQL condition).
 
 ## How an alert pages you
@@ -96,7 +96,7 @@ observability/
 
 | | Prod boards (8) | Dev twins (5) |
 |---|---|---|
-| Covers | `overview`, `datastores`, and one per service | `web`, `payment-gateway`, `workers`, `document-parser`, `chats` |
+| Covers | `overview`, `datastores`, and one per service | `web`, `payment-webhook`, `workers`, `document-parser`, `chats` |
 | Board JSON | `account_id` + `environment` templated | `prod` values hardcoded to `dev` |
 | Wording | plain titles | identical pages, ` (dev)` on every title |
 | Prod-only pair | `inference`, `overview`, `datastores` have no twin — the load rigs never run the AI service | — |
