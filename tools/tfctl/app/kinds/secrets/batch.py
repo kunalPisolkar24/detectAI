@@ -15,7 +15,7 @@ from app.engine.carrier.session import (
     session_remaining_text,
 )
 from app.engine.values.parse import parse_env_file
-from app.engine.values.plane import emulator_endpoint_note, plane_display
+from app.engine.values.plane import plane_display
 from app.kinds.locate import Workspace
 from app.kinds.secrets.declaration import Declaration, DeclarationError, load
 from app.kinds.secrets.policy import seeder_policy_document
@@ -84,8 +84,6 @@ def refresh_all_flow(
         try:
             declaration = load(workspace.declaration_file)
             values = parse_env_file(workspace.values_file)
-            if (note := emulator_endpoint_note(values, f"{service}'s values file")) is not None:
-                print(note)
             errors = validate(declaration, values, is_emulator)
             if errors:
                 for error in errors:

@@ -20,15 +20,5 @@ def plane_display(is_emulator: bool) -> str:
     return "real AWS"
 
 
-def emulator_endpoint_note(values: dict[str, str], where: str = "the values file") -> str | None:
-    """A legacy EMULATOR_ENDPOINT line rates one note; the plane never reads it."""
-    if "EMULATOR_ENDPOINT" not in values:
-        return None
-    return (
-        f"note: EMULATOR_ENDPOINT in {where} is ignored; "
-        "the plane comes from --aws/--floci (default: floci)"
-    )
-
-
 def resolve_region(declaration: Declaration, values: dict[str, str]) -> str:
     return values.get("AWS_REGION") or declaration.region_default

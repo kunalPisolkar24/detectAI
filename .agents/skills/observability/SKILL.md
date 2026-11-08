@@ -98,8 +98,9 @@ make plan && make apply           # auto-approves on Floci, interactive on real 
 ```
 
 tfctl (installed from `tools/tfctl`) is the driver — the make targets wrap its
-observability kind. `PLANE` overrides the .env-chosen plane for one run:
-`make plan PLANE=aws`. On real AWS every state-plane step rides the
+observability kind. The plane follows `PLANE=floci|aws` (**floci** is the
+default): `make plan PLANE=aws` rides the real plane. On real AWS every
+state-plane step rides the
 `detectai-observability-seeder` role (created on demand, MFA-gated, cached 12
 hours); `SEEDER_MFA_SERIAL` in `envs/.env` overrides the derived MFA device.
 

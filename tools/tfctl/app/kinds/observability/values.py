@@ -11,7 +11,6 @@ API_KEY_RE = "NRAK-"
 REGIONS = ("US", "EU", "JP")
 API_KEY_MIN_LENGTH = 20
 
-URL_RE = re.compile(r"^https?://\S+$")
 # S3 naming minus dots: exactly 3-63 lowercase/digits/hyphens, alnum boundaries.
 BUCKET_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
 
@@ -22,8 +21,8 @@ BUCKET_MISSING_ERROR = (
 )
 BUCKET_MISSING_FIX = (
     "add TF_STATE_BUCKET=<unique 3-63 char lowercase bucket> to envs/.env "
-    "(the bootstrap verb creates it), or set EMULATOR_ENDPOINT=http://localhost:4566 "
-    "for the Floci plane"
+    "(the bootstrap verb creates it), or run with --floci for the emulator plane "
+    "(its bucket defaults and no key is needed)"
 )
 
 
@@ -81,14 +80,9 @@ def validate_config(config: dict[str, str | None]) -> list[str]:
 
 
 def resolve_plane(values: dict[str, str], aws: bool, floci: bool) -> bool:
-    """--aws forces real AWS, --floci forces Floci; otherwise envs/.env decides:
-    an EMULATOR_ENDPOINT line selects the Floci plane (the state plane stays
-    reproducible, not per-invocation)."""
-    if aws:
-        return False
-    if floci:
-        return True
-    return bool(values.get("EMULATOR_ENDPOINT"))
+    """The plane follows the flags only: --aws rides real AWS, floci is the
+    default any other way."""
+    return not aws
 
 
 def resolve_state_bucket(values: dict[str, str], is_emulator: bool) -> str | None:
@@ -109,8 +103,8 @@ def warn_shell_conflicts(values: dict[str, str]) -> None:
         )
 
 
-def validate_state(is_emulator: bool, values: dict[str, str]) -> list[str]:
-    """Shape checks only: what the resolved plane, region and URL consume.
+def validate_state(values: dict[str, str]) -> list[str]:
+    """Shape checks only: what the region and the bucket consume.
     A missing TF_STATE_BUCKET is not an error here — it defaults on the
     Floci plane and is demanded once a real-AWS terraform verb runs."""
     errors: list[str] = []
@@ -123,12 +117,6 @@ def validate_state(is_emulator: bool, values: dict[str, str]) -> list[str]:
             f"AWS_REGION is not a valid state-bucket region: {region!r}",
             "use a plain region code, e.g. ap-south-1 (this is not NEW_RELIC_REGION)",
         )
-    if is_emulator and (endpoint := values.get("EMULATOR_ENDPOINT")) is not None:
-        if not URL_RE.fullmatch(endpoint):
-            fail(
-                f"EMULATOR_ENDPOINT is not a valid http(s) URL: {endpoint!r}",
-                "set it to the Floci URL (http://localhost:4566) or remove the line for real AWS",
-            )
     if (bucket := values.get("TF_STATE_BUCKET", "")) and not BUCKET_RE.fullmatch(bucket):
         fail(
             f"TF_STATE_BUCKET is not a valid S3 bucket name: {bucket!r}",
@@ -140,4 +128,4 @@ def validate_state(is_emulator: bool, values: dict[str, str]) -> list[str]:
 def validate(declaration: Declaration, values: dict[str, str], is_emulator: bool) -> list[str]:
     """The kind's verb-wide validation: the values file's state-plane shapes.
     The credential triple is validated by the verbs that consume it."""
-    return validate_state(is_emulator, values)
+    return validate_state(values)

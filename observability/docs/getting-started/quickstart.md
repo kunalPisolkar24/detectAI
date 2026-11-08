@@ -56,7 +56,7 @@ make plan
 make apply
 ```
 
-> **Tip**: On the Floci (emulator) plane, apply auto-approves; on real AWS, Terraform asks you to confirm. The plane is decided by `EMULATOR_ENDPOINT` in `envs/.env`.
+> **Tip**: On the Floci (emulator) plane, apply auto-approves; on real AWS, Terraform asks you to confirm. The plane follows `PLANE=floci|aws` (default floci) — pass `PLANE=aws` to ride the real plane.
 
 ## What you just published
 

@@ -256,21 +256,6 @@ def test_floci_and_aws_flags_are_mutually_exclusive(ws_env):
     assert excinfo.value.code == 2
 
 
-def test_legacy_emulator_endpoint_key_is_ignored_with_a_note(tmp_path, monkeypatch, capsys):
-    workspace = ws_with(tmp_path, {**EMULATOR_ENV, "EMULATOR_ENDPOINT": "http://elsewhere:4566"})
-    seen = {}
-
-    def fake_flow(declaration, values, is_emulator, dry_run, session=None):
-        seen["is_emulator"] = is_emulator
-        return 0
-
-    monkeypatch.setattr(KIND, "verify", fake_flow)
-    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
-    assert cli.main(["verify"], workspace=workspace) == 0
-    assert seen["is_emulator"] is True  # the flag decides, never the file
-    assert "EMULATOR_ENDPOINT in the values file is ignored" in capsys.readouterr().out
-
-
 def test_plan_dry_run_prints_the_backend_and_never_runs_terraform(tmp_path, monkeypatch, capsys):
     workspace = ws_with(tmp_path, EMULATOR_ENV)
 

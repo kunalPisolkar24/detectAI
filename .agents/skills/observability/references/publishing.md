@@ -11,13 +11,14 @@ overwrites). Keys:
 | `NEW_RELIC_ACCOUNT_ID` | no | `123456` (mock) | target account |
 | `NEW_RELIC_REGION` | no | `EU` | datacenter |
 | `TF_STATE_BUCKET` | yes on real AWS | `detectai-observability-tfstate` | Terraform state bucket |
-| `EMULATOR_ENDPOINT` | no | empty | set → Floci plane; empty → real AWS |
 | `AWS_REGION` | no | `ap-south-1` | the **state bucket's** region, not New Relic's |
 
 Precedence: New Relic credentials — a shell export wins for one run; state
-keys (`TF_STATE_BUCKET`, `EMULATOR_ENDPOINT`, `AWS_REGION`) — `envs/.env`
-wins, a conflicting shell export warns and loses, so a plane stays
-reproducible.
+keys (`TF_STATE_BUCKET`, `AWS_REGION`) — `envs/.env` wins, a conflicting
+shell export warns and loses, so a run stays reproducible.
+
+The plane itself never comes from this file: `--aws` rides real AWS, floci is
+the default (`make ... PLANE=floci|aws`).
 
 `var.newrelic_region` keeps its `EU` default in the HCL and `var.environment`
 keeps its `prod` default, which is the label baked into prod-board NRQL,
@@ -25,7 +26,7 @@ alert conditions and notification names.
 
 ## State planes
 
-| | Floci (`EMULATOR_ENDPOINT` set) | Real AWS (empty) |
+| | Floci (default) | Real AWS (`PLANE=aws`) |
 |---|---|---|
 | Bucket | `detectai-observability-tfstate`, self-heals if missing | required, created versioned |
 | Apply | auto-approves | interactive confirm |
@@ -34,8 +35,8 @@ alert conditions and notification names.
 
 Floci needs `make floci-up` from the repo root. `bootstrap` is idempotent;
 `SEEDER_MFA_SERIAL` in `envs/.env` overrides the MFA device derived from your
-IAM user. `PLANE=aws|floci` on any make target overrides the .env-selected
-plane for one run.
+IAM user. `PLANE=floci|aws` (default floci) selects the plane on any make
+target.
 
 ## Command flow
 

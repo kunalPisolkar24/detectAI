@@ -95,12 +95,11 @@ graph LR
     FLAG -->|"yes"| REAL["real AWS plane<br/>MFA-gated seeder session<br/>interactive apply confirm"]
     FLOCI --> END(["end: one plane, one stack"])
     REAL --> END
-    NOTE["legacy EMULATOR_ENDPOINT<br/>line in .env"] -.->|"ignored, one printed note"| START
 ```
 
 Two rules worth burning in:
 
-- **The plane is a property of the invocation, not the file.** `--aws` and its default (`--floci`) are mutually exclusive CLI flags; no `.env` key can flip the destination. A legacy `EMULATOR_ENDPOINT` line from the old service-local drivers is ignored — the run prints one `note:` reminding you of that and moves on.
+- **The plane is a property of the invocation, not the file.** `--aws` and its default (`--floci`) are mutually exclusive CLI flags; no `.env` key can flip the destination — the values file makes no plane claim at all.
 - **The endpoint is an engine constant.** The emulator always sits at `http://localhost:4566`; `TFCTL_FLOCI_URL` overrides it if you ever need to point at a differently-placed Floci.
 
 ## Posture notes the engine volunteers

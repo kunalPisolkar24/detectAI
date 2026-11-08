@@ -58,8 +58,8 @@ def describe_plane(
     else:
         print("state:  unset -> TF_STATE_BUCKET is required before plan/apply/bootstrap run")
         print(
-            "note:   add TF_STATE_BUCKET to envs/.env, or set EMULATOR_ENDPOINT "
-            f"for the Floci plane (default {DEFAULT_STATE_BUCKET})"
+            "note:   add TF_STATE_BUCKET to envs/.env, or run with --floci "
+            f"(the bucket then defaults to {DEFAULT_STATE_BUCKET})"
         )
 
 

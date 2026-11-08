@@ -26,7 +26,6 @@ OBS_ENV = {
     "NEW_RELIC_ACCOUNT_ID": "123456",
     "NEW_RELIC_REGION": "EU",
     "TF_STATE_BUCKET": "detectai-observability-tfstate",
-    "EMULATOR_ENDPOINT": "http://localhost:4566",
     "AWS_REGION": "ap-south-1",
 }
 
@@ -89,12 +88,24 @@ def test_declaration_errors(tmp_path, toml_text, message):
     assert message in str(excinfo.value)
 
 
-def test_plane_choice_moves_with_the_flags_and_the_values_file():
-    set_env = {"EMULATOR_ENDPOINT": "http://localhost:4566"}
-    assert values.resolve_plane(set_env, True, False) is False
+def test_plane_choice_follows_the_flags_only():
+    stale_line = {"EMULATOR_ENDPOINT": "http://localhost:4566"}
+    assert values.resolve_plane(stale_line, True, False) is False
     assert values.resolve_plane({}, False, True) is True
-    assert values.resolve_plane(set_env, False, False) is True
-    assert values.resolve_plane({}, False, False) is False
+    assert values.resolve_plane(stale_line, False, False) is True
+    assert values.resolve_plane({}, False, False) is True
+
+
+def test_a_leftover_emulator_line_prints_nowhere(tmp_path, monkeypatch, capsys, clean_nr_env):
+    (tmp_path / "observability.toml").write_text(OBS_TOML)
+    obs = load(tmp_path / "observability.toml")
+    monkeypatch.setattr(flow_module, "live_check", lambda config: None)
+    assert flow_module.check_flow(
+        obs, {**OBS_ENV, "EMULATOR_ENDPOINT": "http://localhost:4566"}, True
+    ) == 0
+    out = capsys.readouterr().out
+    assert "EMULATOR_ENDPOINT" not in out
+    assert "plane:  floci (emulator http://localhost:4566)" in out
 
 
 def test_state_bucket_law_follows_the_plane(tmp_path, clean_nr_env):
@@ -107,12 +118,10 @@ def test_state_bucket_law_follows_the_plane(tmp_path, clean_nr_env):
 
 def test_state_shape_errors_name_the_line_and_the_fix():
     errors = values.validate_state(
-        True,
-        {"AWS_REGION": "eu-west", "EMULATOR_ENDPOINT": "localhost:4566", "TF_STATE_BUCKET": "B!AD"},
+        {"AWS_REGION": "eu-west", "TF_STATE_BUCKET": "B!AD"},
     )
     text = "\n".join(errors)
     assert "AWS_REGION is not a valid state-bucket region: 'eu-west'" in text
-    assert "EMULATOR_ENDPOINT is not a valid http(s) URL" in text
     assert "TF_STATE_BUCKET is not a valid S3 bucket name: 'B!AD'" in text
 
 
@@ -230,7 +239,6 @@ def test_check_flow_reports_bad_credentials_before_describing(tmp_path, capsys, 
     (tmp_path / "observability.toml").write_text(OBS_TOML)
     obs = load(tmp_path / "observability.toml")
     environment = {**OBS_ENV, "NEW_RELIC_API_KEY": "eu01-license-key"}
-    environment.pop("EMULATOR_ENDPOINT")
     assert flow_module.check_flow(obs, environment, False) == 1
     out = capsys.readouterr().out
     assert "not a User API key" in out

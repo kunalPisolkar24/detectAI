@@ -24,7 +24,6 @@ from app.engine.carrier.session import (
 from app.engine.declaration.model import DeclarationError
 from app.engine.shell import die
 from app.engine.values.parse import parse_env_file
-from app.engine.values.plane import emulator_endpoint_note
 from app.engine.values.rules import plane_errors
 from app.kinds import KINDS, register
 from app.kinds.locate import (
@@ -224,8 +223,6 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
             kind.values_hint,
         )
     values = parse_env_file(workspace.values_file)
-    if kind.legacy_endpoint_note and (note := emulator_endpoint_note(values)) is not None:
-        print(note)
     is_emulator = kind.resolve_plane(values, args.aws, args.floci)
 
     if args.command == "seeder-drop":

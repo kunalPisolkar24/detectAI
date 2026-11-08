@@ -35,7 +35,6 @@ class Kind:
     terraform_flow: Callable[..., int] | None = None
     verb_flow: Callable[..., int] | None = None
     carried_verbs: tuple[str, ...] = ()
-    legacy_endpoint_note: bool = False
     # The live-drift audit behind the verify verb; a kind that declares the
     # verb must also supply this (main.py routes both verify and auto-apply's
     # last step through it).

@@ -45,6 +45,5 @@ def kind() -> Kind:
         service_scoped=True,
         terraform_flow=terraform_verb_flow,
         carried_verbs=("plan", "apply", "destroy", "auto-apply"),
-        legacy_endpoint_note=True,
         verify=verify_flow,
     )
