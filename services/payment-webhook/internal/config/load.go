@@ -24,11 +24,11 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-// DeploymentFlick reads ENV_TYPE and fails closed: only dev or prod is accepted.
+// DeploymentFlick defaults the unset flick to dev; only exact dev or prod serve.
 func DeploymentFlick() (string, error) {
 	flick := os.Getenv("ENV_TYPE")
 	if flick == "" {
-		return "", fmt.Errorf(`config: ENV_TYPE is unset; export it to "dev" or "prod" before the boot`)
+		return "dev", nil
 	}
 	if flick != "dev" && flick != "prod" {
 		return "", fmt.Errorf(`config: ENV_TYPE %q is not a flick; only exactly "dev" or "prod" serve`, flick)

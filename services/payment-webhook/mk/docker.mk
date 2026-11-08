@@ -10,7 +10,7 @@ PROJECT := detectai-payment-webhook
 help-docker:
 	@echo "Docker commands (mk/docker.mk):"
 	@echo "  build       build the Docker image ($(PROJECT))"
-	@echo "  up          queue-up, then compose up --build -d (dev default; ENV_TYPE=prod boots the AWS planes)"
+	@echo "  up          queue-up, then compose up --build -d (the flick rides infra/.env; compose run -e for one-offs)"
 	@echo "  down        compose down; the emulator keeps running under its own verbs"
 	@echo "  queue-up    start the emulator (a running elasticmq is left untouched)"
 	@echo "  queue-down  emulator compose down (its in-memory state goes with it)"

@@ -21,4 +21,4 @@ env:
 run:
 	@set -a; if [ -f infra/.env ]; then . infra/.env; fi; set +a; \
 	QUEUE_URL=`echo "$$QUEUE_URL" | sed 's/host\.docker\.internal/localhost/'`; \
-	ENV_TYPE=dev go run ./cmd/api
+	go run ./cmd/api

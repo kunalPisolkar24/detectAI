@@ -37,8 +37,8 @@ func TestDeploymentFlick(t *testing.T) {
 		wantErr string
 		wantOwn string
 	}{
-		"unset fails":      {wantErr: "ENV_TYPE is unset"},
-		"empty fails":      {value: "", wantErr: "ENV_TYPE is unset"},
+		"unset serves dev": {wantOwn: "dev"},
+		"empty serves dev": {value: "", wantOwn: "dev"},
 		"wrong case fails": {value: "DEV", wantErr: `ENV_TYPE "DEV" is not a flick`},
 		"unknown fails":    {value: "qa", wantErr: `ENV_TYPE "qa" is not a flick`},
 		"dev serves":       {value: "dev", wantOwn: "dev"},

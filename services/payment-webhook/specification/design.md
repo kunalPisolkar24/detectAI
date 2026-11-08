@@ -109,7 +109,7 @@ Same double-plane shape document-parser landed; this service's own LLD lives in 
 
 - **Dev (`ENV_TYPE=dev`)** — env-over-file: process env first, `.env` via godotenv second. Bare keys, no comments — repository convention. Plane values: `PADDLE_WEBHOOK_SECRET`, `QUEUE_URL`, the body bound, the publish budget.
 - **Prod (`ENV_TYPE=prod`)** — AWS-exact: no env-file fallback. The license key reads from the service's Secrets Manager blob; `PADDLE_WEBHOOK_SECRET` rides the same blob; `QUEUE_URL` and region from SSM/env as IaC decides. The ~100 ms cold-start cost is accepted in [requirements.md](requirements.md).
-- **Validation** — `ENV_TYPE` ∈ {dev, prod} mandatory; mandatory values non-empty and ≥ 16 chars (the webhook secret); `QUEUE_URL` a valid SQS URL; bounds parse and fail closed to safe defaults, never partial. Boot fails fast on violation — a mis-provisioned instance never serves.
+- **Validation** — `ENV_TYPE` unset resolves to dev; an unknown flick fails the boot; mandatory values non-empty and ≥ 16 chars (the webhook secret); `QUEUE_URL` a valid SQS URL; bounds parse and fail closed to safe defaults, never partial. Boot fails fast on violation — a mis-provisioned instance never serves.
 - **Naming note** — `INTERNAL_API_KEY` and the service-side `API_KEY` both retire with the internal face, which takes its document-parser-inherited credential scheme with it; the caller-side web env name `PAYMENT_GATEWAY_API_KEY` never ships ([requirements.md](requirements.md) knock-ons).
 
 ## Packaging (Lambda)
