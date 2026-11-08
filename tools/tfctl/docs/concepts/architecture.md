@@ -6,7 +6,7 @@ This document explains how one `tfctl` invocation becomes a governed AWS change.
 
 A stack-agnostic CLI that drives any declared stack kind by kind: validate its values file, terraform-plan/apply its stack, and tear it down. Two kinds are registered today — **secrets** (per service: a declared `secrets.toml` plus values in `infra/.env`, verified against the live plane) and **observability** (per stack dir: an `observability.toml` plus values in `envs/.env`, the New Relic-as-code root) — and the registry is the only seam between the engine and them ([Kinds](kinds.md)). The engine contributes everything else: verb dispatch, the carrier, the state machinery, the shell runners.
 
-Both out-of-stack prerequisites are created on demand and converged every run: the state bucket (terraform's ledger) and the seeder carrier role every verb rides ([Carrier](carrier.md)). There is no bootstrap command to run first for the secrets kind — there is nothing to bootstrap to; the observability kind's `bootstrap` verb heals the same ledger for its stack-dir plane.
+Both out-of-stack prerequisites are created on demand and converged every run: the state bucket (terraform's ledger) and the seeder carrier role every verb rides ([Carrier](carrier.md)). There is no bootstrap command to run first in either kind — there is nothing to bootstrap to; every acting verb heals the ledger it needs.
 
 ## The module map
 
@@ -57,7 +57,7 @@ Three details the flow hides:
 - **Verb families.** Two verbs never touch a stack at all (`session-clear-all`, `session-refresh-all` — they walk all services), one verb needs only the declaration (`session-clear` deletes its stack's cache file without touching any values), and the rest are single-stack verbs.
 - **Validation depth varies by verb.** Terraform-writing verbs run the [full value ladder](values.md); verify and `seeder-drop` run only the region check, because they must be able to comment on a plane even when a value is misedited.
 - **Dry runs are stakeouts, not executions.** `--dry-run` resolves no carrier session, prompts for nothing, runs no terraform. What it prints is verb-shaped: the full banner plus backend overrides and exact commands on the terraform verbs, the three read-only aws commands on `verify`, the would-refresh list on the batch verb.
-- **Each kind owns its verb shapes.** `check`/`bootstrap` are the observability kind's own flows (no terraform for check, the state bucket alone for bootstrap); the terraform verbs and `verify`/`auto-apply` are the secrets kind's shapes. The registry decides which shapes a stack gets.
+- **Each kind owns its verb shapes.** `check` is the observability kind's own flow (no terraform); the terraform verbs and `verify`/`auto-apply` are the secrets kind's shapes. The registry decides which shapes a stack gets.
 
 ## What a verb run looks like end to end
 

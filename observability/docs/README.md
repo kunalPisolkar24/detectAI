@@ -62,7 +62,6 @@ make env && make fmt init validate test
 
 # Against New Relic
 make check        # validate envs/.env, preview the plane, resolve the account live
-make bootstrap    # create the state bucket for the selected plane (idempotent)
 make plan         # terraform plan
 make apply        # terraform apply (auto-approves on the emulator plane)
 ```

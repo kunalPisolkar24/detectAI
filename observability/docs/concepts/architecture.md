@@ -7,7 +7,7 @@ This document explains how the observability root is structured, how telemetry r
 A standalone Terraform root that publishes New Relic boards, policies and notifications. Three deliberate choices:
 
 - **Separate from `infra/terraform`** — a datastore `destroy` must not take the dashboards with it.
-- **Pure New Relic** — no AWS provider at all; AWS appears only through the state bucket bootstrap.
+- **Pure New Relic** — no AWS provider at all; AWS appears only through the self-healed state bucket.
 - **EU datacenter** — everything lives at `one.eu.newrelic.com`, fed by `https://otlp.eu01.nr-data.net:443`.
 
 ## How telemetry reaches New Relic

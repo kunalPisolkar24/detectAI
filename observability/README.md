@@ -19,7 +19,6 @@ cd observability
 make env                    # create envs/.env (never overwrites) — put a real NRAK- key in it
 make fmt init validate test # offline gate: format, validate, mocked tests — no key needed
 make check                  # validate the key, preview the plane, resolve the account live
-make bootstrap              # create the state bucket for the selected plane
 make plan && make apply     # publish to New Relic
 ```
 

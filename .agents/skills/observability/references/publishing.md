@@ -33,8 +33,8 @@ alert conditions and notification names.
 | State key | `observability/floci/terraform.tfstate` | `observability/terraform.tfstate` |
 | Run identity | the emulator's fake credentials | the `detectai-observability-seeder` role (created on demand, MFA-gated, cached 12 h) |
 
-Floci needs `make floci-up` from the repo root. `bootstrap` is idempotent;
-the real-plane MFA device is derived from your IAM user, with no override.
+Floci needs `make floci-up` from the repo root; the real-plane MFA
+device is derived from your IAM user, with no override.
 `PLANE=floci|aws` (default floci) selects the plane on any make
 target.
 
@@ -49,8 +49,8 @@ From `observability`:
 3. `make check` — tfctl validates `envs/.env`, previews the plane, and
    resolves the account name over GraphQL, so a valid key from the wrong
    account fails before any plan.
-4. `make bootstrap`
-5. `make plan && make apply`
+4. `make plan && make apply` — the plane's state bucket is
+   created on demand on the first run
 
 ## Failure modes
 
@@ -59,7 +59,7 @@ From `observability`:
 | `envs/.env is missing` | no `make env` yet | run it, fill the `NRAK-` key |
 | key rejected as ingest-shaped | license key pasted instead of user key | copy the `NRAK-` key from NR *API keys* |
 | wrong account resolved | key belongs to another NR account | `make check` fails pre-plan — swap the key |
-| state bucket missing on real AWS | no `bootstrap` / wrong `TF_STATE_BUCKET` | `make bootstrap` |
+| state bucket missing on real AWS | `TF_STATE_BUCKET` unset or renamed | set it in `envs/.env` — the next plan/apply creates it on demand |
 | apply pauses for confirmation | real AWS plane is interactive | confirm, or use the Floci plane for auto-approve |
 
 ## CI parity

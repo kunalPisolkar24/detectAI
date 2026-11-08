@@ -21,8 +21,8 @@ BUCKET_MISSING_ERROR = (
 )
 BUCKET_MISSING_FIX = (
     "add TF_STATE_BUCKET=<unique 3-63 char lowercase bucket> to envs/.env "
-    "(the bootstrap verb creates it), or run with --floci for the emulator plane "
-    "(its bucket defaults and no key is needed)"
+    "(the first plan/apply creates it on demand), or run with --floci for the "
+    "emulator plane (its bucket defaults and no key is needed)"
 )
 
 

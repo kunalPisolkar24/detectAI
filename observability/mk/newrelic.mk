@@ -2,7 +2,7 @@
 # envs/.env, resolves the state plane (PLANE=floci|aws, default floci — the
 # same contract as document-parser) and drives terraform.
 
-.PHONY: check bootstrap plan apply help-newrelic
+.PHONY: check plan apply help-newrelic
 
 TFCTL := poetry -C $(abspath ../tools/tfctl) run tfctl
 PLANE ?= floci
@@ -17,16 +17,12 @@ endif
 help-newrelic:
 	@echo "  New Relic (mk/newrelic.mk):"
 	@echo "    check        validate envs/.env, preview the plane and resolve the account live"
-	@echo "    bootstrap    create the state bucket for the PLANE (floci|aws, default floci; idempotent, no key needed)"
 	@echo "    plan         terraform plan on the PLANE (floci by default; PLANE=aws rides real AWS)"
 	@echo "    apply        terraform apply (auto on Floci, interactive confirm on real AWS; PLANE=aws rides real AWS)"
 	@echo ""
 
 check:
 	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) check
-
-bootstrap:
-	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) bootstrap
 
 plan:
 	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) plan

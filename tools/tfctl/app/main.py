@@ -72,8 +72,8 @@ def build_parser() -> argparse.ArgumentParser:
         "seeder role; session-clear drops the targeted service's cached seeder "
         "session and session-clear-all drops every cached one; session-refresh-all "
         "mints every ready service's seeder session in one run (one shared MFA code "
-        "on real AWS); check and bootstrap drive the observability stack's "
-        "credential and state plane (envs/.env)",
+        "on real AWS); check drives the observability stack's credential "
+        "round-trip (envs/.env)",
     )
     parser.add_argument(
         "--service",

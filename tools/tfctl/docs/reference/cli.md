@@ -23,7 +23,6 @@ poetry -C tools/tfctl run tfctl --stack-dir observability plan   # a stack outsi
 | `auto-apply` | plan → apply → verify in one verb, aborting at the first failure | [Lifecycle](../guides/terraform-lifecycle.md) |
 | `verify` | fingerprint audit of the live plane against `infra/.env`; drift exits 1 | [Verification](../guides/verifying.md) |
 | `check` | observability: validate the credential triple and resolve the account live over GraphQL (no state, no terraform) | [Kinds](../concepts/kinds.md) |
-| `bootstrap` | create-on-demand the plane's state bucket (versioned); no key needed | [Kinds](../concepts/kinds.md) |
 | `destroy` | terraform destroy, auto-approved on both planes; optional teardown tail via flags | [Lifecycle](../guides/terraform-lifecycle.md) |
 | `seeder-drop` | detach `seeder-policy` and delete the seeder role (no confirmations) | [Carrier](../concepts/carrier.md#dropping-the-carrier) |
 | `session-clear` | remove the stack's cached carrier triplet | [Carrier](../concepts/carrier.md#the-session-verbs) |

@@ -93,8 +93,7 @@ cd observability                    # never the root Makefile's obs-* targets
 make env                          # creates envs/.env — put a real NRAK- key in it
 make fmt init validate test       # offline gate — exactly what CI runs
 make check                        # validates .env, previews the plane, resolves the account live
-make bootstrap                    # state bucket for the selected plane (no key needed)
-make plan && make apply           # auto-approves on Floci, interactive on real AWS
+make plan && make apply           # the bucket self-heals; auto-approves on Floci, interactive on real AWS
 ```
 
 tfctl (installed from `tools/tfctl`) is the driver — the make targets wrap its
@@ -113,7 +112,7 @@ Planes, precedence, failure modes: [references/publishing.md](references/publish
 ## Guardrails
 
 - Run everything from `observability`. The root `Makefile` has no
-  obs targets; the make targets here (`check`/`bootstrap`/`plan`/`apply`)
+  obs targets; the make targets here (`check`/`plan`/`apply`)
   drive tfctl directly.
 - This root is pure New Relic: no AWS provider, and no edits reaching into
   `infra/terraform` or service code from here.

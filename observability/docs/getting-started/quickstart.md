@@ -41,22 +41,14 @@ make check
 
 `tfctl` validates `envs/.env`, shows which state plane it selected, and resolves the account name over New Relic's GraphQL. A valid-looking key from the wrong account fails here instead of poisoning a plan. On real AWS, tfctl rides the stack's seeder role (`detectai-observability-seeder`, created on demand) so the commands never use your personal keys to write state.
 
-## Step 4: Bootstrap the state bucket
-
-```bash
-make bootstrap
-```
-
-Creates the bucket the selected plane needs to store Terraform state. It is idempotent and needs no New Relic key.
-
-## Step 5: Plan and apply
+## Step 4: Plan and apply
 
 ```bash
 make plan
 make apply
 ```
 
-> **Tip**: On the Floci (emulator) plane, apply auto-approves; on real AWS, Terraform asks you to confirm. The plane follows `PLANE=floci|aws` (default floci) — pass `PLANE=aws` to ride the real plane.
+> **Tip**: The first run creates the plane's state bucket on demand. On the Floci (emulator) plane, apply auto-approves; on real AWS, Terraform asks you to confirm. The plane follows `PLANE=floci|aws` (default floci) — pass `PLANE=aws` to ride the real plane.
 
 ## What you just published
 

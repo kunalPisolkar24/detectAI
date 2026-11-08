@@ -1,4 +1,4 @@
-"""The observability verbs: check, bootstrap, plan, and apply."""
+"""The observability verbs: check, plan, and apply."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def describe_plane(
                 f"note:   TF_STATE_BUCKET unset; the Floci plane defaults to {DEFAULT_STATE_BUCKET}"
             )
     else:
-        print("state:  unset -> TF_STATE_BUCKET is required before plan/apply/bootstrap run")
+        print("state:  unset -> TF_STATE_BUCKET is required before plan/apply run")
         print(
             "note:   add TF_STATE_BUCKET to envs/.env, or run with --floci "
             f"(the bucket then defaults to {DEFAULT_STATE_BUCKET})"
@@ -92,26 +92,12 @@ def check_flow(
     return 0
 
 
-def bootstrap_flow(
-    declaration: ObservabilityDeclaration, values: dict[str, str], is_emulator: bool, session
-) -> int:
-    """The state bucket, self-healed and idempotent on both planes; no key needed."""
-    bucket = resolve_state_bucket(values, is_emulator)
-    if bucket is None:
-        die(BUCKET_MISSING_ERROR, BUCKET_MISSING_FIX)
-    print(f"plane:  {plane_display(is_emulator)}")
-    if is_emulator:
-        probe_emulator(resolve_floci_url())
-    account = plane_account(session, is_emulator)
-    return ensure_state_bucket(declaration, values, is_emulator, account, session, bucket)
-
-
 def _init_failure_hints(
     is_emulator: bool, declaration: ObservabilityDeclaration, values: dict[str, str], bucket: str
 ) -> None:
     print()
     if is_emulator:
-        print("fix: create the emulator state bucket and retry (the bootstrap verb)")
+        print("fix: confirm the emulator is up and rerun (the bucket is created on demand)")
         print(
             f"fix: aws --endpoint-url {resolve_floci_url()} "
             f"s3 mb s3://{bucket} --region {resolve_region(declaration, values)}"
@@ -119,7 +105,7 @@ def _init_failure_hints(
     else:
         print(
             f"fix: confirm bucket {bucket} exists and your credentials allow access "
-            f"(region {resolve_region(declaration, values)}); the bootstrap verb can create it"
+            f"(region {resolve_region(declaration, values)}); plan/apply create it on demand"
         )
 
 
@@ -215,9 +201,7 @@ def verb_flow(
     args: argparse.Namespace,
     session,
 ) -> int:
-    """The two verbs that never touch terraform: check and bootstrap."""
+    """The verb that never touches terraform: check."""
     if command == "check":
         return check_flow(declaration, values, is_emulator)
-    if command == "bootstrap":
-        return bootstrap_flow(declaration, values, is_emulator, session)
     raise AssertionError(f"{command} is not an observability-kind verb")

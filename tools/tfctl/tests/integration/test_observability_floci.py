@@ -69,13 +69,6 @@ def test_check_resolves_the_account_live(values_ready):
     assert "live: region EU" in result.stdout
 
 
-def test_bootstrap_heals_the_state_plane(values_ready):
-    result = run_cli("bootstrap")
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "plane:  floci (emulator http://localhost:4566)" in result.stdout
-    assert "error:" not in result.stdout
-
-
 def test_plan_rides_the_persistent_state_plane(values_ready):
     result = run_cli("plan")
     assert result.returncode == 0, result.stdout + result.stderr

@@ -245,30 +245,6 @@ def test_check_flow_reports_bad_credentials_before_describing(tmp_path, capsys, 
     assert "credentials:" not in out
 
 
-def test_bootstrap_flow_heals_the_plane_bucket(tmp_path, monkeypatch, capsys, clean_nr_env):
-    (tmp_path / "observability.toml").write_text(OBS_TOML)
-    obs = load(tmp_path / "observability.toml")
-    monkeypatch.setattr(flow_module, "probe_emulator", lambda endpoint: None)
-    healing = {}
-    monkeypatch.setattr(
-        flow_module,
-        "ensure_state_bucket",
-        lambda declaration, values, is_emulator, account, session=None, bucket=None: (
-            healing.update(bucket=bucket, session=session) or 0
-        ),
-    )
-    assert flow_module.bootstrap_flow(obs, {}, True, SESSION) == 0
-    assert healing == {
-        "bucket": "detectai-observability-tfstate",
-        "session": SESSION,
-    }
-
-    with pytest.raises(SystemExit) as excinfo:
-        flow_module.bootstrap_flow(obs, {}, False, SESSION)
-    assert excinfo.value.code == 1
-    assert "TF_STATE_BUCKET is not set" in capsys.readouterr().out
-
-
 def test_stack_verb_flow_dry_run_prints_the_backend_and_commands(
     tmp_path, capsys, monkeypatch, clean_nr_env
 ):
@@ -345,7 +321,7 @@ def test_stack_verb_flow_hints_when_init_fails(tmp_path, capsys, monkeypatch, cl
         == 1
     )
     out = capsys.readouterr().out
-    assert "fix: create the emulator state bucket and retry" in out
+    assert "fix: confirm the emulator is up and rerun (the bucket is created on demand)" in out
     assert (
         "aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-observability-tfstate" in out
     )
