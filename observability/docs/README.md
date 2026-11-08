@@ -64,6 +64,8 @@ make env && make fmt init validate test
 make check        # validate envs/.env, preview the plane, resolve the account live
 make plan         # terraform plan
 make apply        # terraform apply (auto-approves on the emulator plane)
+make auto-apply   # plan then apply in one run, stopping at the first failure
+make destroy      # terraform destroy, auto-approved on both planes
 ```
 
 ## Related Files

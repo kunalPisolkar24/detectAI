@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.kinds import Kind
 
-VERBS = ("check", "plan", "apply", "seeder-drop")
+VERBS = ("check", "plan", "apply", "auto-apply", "destroy", "seeder-drop")
 
 
 def kind() -> Kind:
@@ -31,5 +31,5 @@ def kind() -> Kind:
         service_scoped=False,
         terraform_flow=stack_verb_flow,
         verb_flow=verb_flow,
-        carried_verbs=("plan", "apply"),
+        carried_verbs=("plan", "apply", "auto-apply", "destroy"),
     )

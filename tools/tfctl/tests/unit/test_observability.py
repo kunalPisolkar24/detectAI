@@ -8,6 +8,7 @@ from urllib.error import HTTPError
 
 import pytest
 
+from conftest import fake_carrier_session
 from app import main as cli
 from app.kinds.locate import workspace_for
 from app.kinds.observability import kind as observability_kind
@@ -327,6 +328,75 @@ def test_stack_verb_flow_hints_when_init_fails(tmp_path, capsys, monkeypatch, cl
     )
 
 
+def test_destroy_auto_approves_on_both_planes(tmp_path, monkeypatch, clean_nr_env):
+    (tmp_path / "observability.toml").write_text(OBS_TOML)
+    obs = load(tmp_path / "observability.toml")
+    monkeypatch.setattr(flow_module, "probe_emulator", lambda endpoint: None)
+    monkeypatch.setattr(flow_module, "ensure_state_bucket", lambda *a, **k: 0)
+    calls = []
+
+    def fake_terraform(tf_dir, tf_args, tf_vars, overlay):
+        calls.append(tf_args)
+        return 0
+
+    monkeypatch.setattr(flow_module, "run_terraform", fake_terraform)
+    args = SimpleNamespace(dry_run=False, force_delete=False, purge_state=False, drop_seeder=False)
+    assert flow_module.stack_verb_flow(obs, OBS_ENV, True, "destroy", args, SESSION) == 0
+    assert calls[-1] == ["destroy", "-input=false", "-auto-approve"]
+    assert flow_module.stack_verb_flow(obs, OBS_ENV, False, "destroy", args, SESSION) == 0
+    assert calls[-1] == ["destroy", "-input=false", "-auto-approve"]
+
+
+def test_destroy_tail_waits_for_a_succeeded_destroy(tmp_path, monkeypatch, clean_nr_env):
+    (tmp_path / "observability.toml").write_text(OBS_TOML)
+    obs = load(tmp_path / "observability.toml")
+    monkeypatch.setattr(flow_module, "probe_emulator", lambda endpoint: None)
+    monkeypatch.setattr(flow_module, "ensure_state_bucket", lambda *a, **k: 0)
+    order = []
+    codes = []
+
+    def fake_preview(declaration, values, is_emulator, account, session, bucket):
+        order.append("preview")
+
+    def fake_terraform(tf_dir, tf_args, tf_vars, overlay):
+        order.append(tf_args[0])
+        return codes.pop(0)
+
+    def fake_purge(declaration, values, is_emulator, account, session, bucket):
+        order.append("purge")
+        return 0
+
+    def fake_drop(declaration, values, is_emulator, dry_run):
+        order.append("drop")
+        return 0
+
+    monkeypatch.setattr(flow_module, "preview_purge", fake_preview)
+    monkeypatch.setattr(flow_module, "run_terraform", fake_terraform)
+    monkeypatch.setattr(flow_module, "purge_state", fake_purge)
+    monkeypatch.setattr(flow_module, "drop_seeder_flow", fake_drop)
+    args = SimpleNamespace(dry_run=False, force_delete=False, purge_state=True, drop_seeder=True)
+
+    codes = [0, 1]  # init ok, destroy fails
+    assert flow_module.stack_verb_flow(obs, OBS_ENV, True, "destroy", args, SESSION) == 1
+    assert order == ["preview", "init", "destroy"]
+
+    order.clear()
+    codes = [0, 0]
+    assert flow_module.stack_verb_flow(obs, OBS_ENV, True, "destroy", args, SESSION) == 0
+    assert order == ["preview", "init", "destroy", "purge", "drop"]
+
+
+def test_destroy_notes_when_force_delete_is_set(tmp_path, monkeypatch, capsys, clean_nr_env):
+    (tmp_path / "observability.toml").write_text(OBS_TOML)
+    obs = load(tmp_path / "observability.toml")
+    monkeypatch.setattr(flow_module, "probe_emulator", lambda endpoint: None)
+    monkeypatch.setattr(flow_module, "ensure_state_bucket", lambda *a, **k: 0)
+    monkeypatch.setattr(flow_module, "run_terraform", lambda tf_dir, tf_args, tf_vars, overlay: 0)
+    args = SimpleNamespace(dry_run=False, force_delete=True, purge_state=False, drop_seeder=False)
+    assert flow_module.stack_verb_flow(obs, OBS_ENV, True, "destroy", args, SESSION) == 0
+    assert "--force-delete is secrets-only" in capsys.readouterr().out
+
+
 def test_live_check_resolves_the_account_name(monkeypatch, capsys, tmp_path, clean_nr_env):
     (tmp_path / "observability.toml").write_text(OBS_TOML)
 
@@ -431,6 +501,52 @@ def test_cli_seeder_drop_is_available_to_the_observability_kind(tmp_path, capsys
     assert "would run: aws --region ap-south-1 --endpoint-url http://localhost:4566 iam" in out
     assert "--role-name detectai-observability-seeder" in out
     assert "deleted: detectai-observability-seeder" not in out
+
+
+def test_cli_auto_apply_runs_plan_apply_and_stops(tmp_path, monkeypatch, capsys, clean_nr_env):
+    workspace = write_stack(tmp_path)
+    order = []
+
+    def fake_terraform(tf_dir, tf_args, tf_vars, overlay=None):
+        order.append(tf_args[0])
+        return 0
+
+    monkeypatch.setattr(flow_module, "run_terraform", fake_terraform)
+    monkeypatch.setattr(flow_module, "probe_emulator", lambda endpoint: None)
+    monkeypatch.setattr(flow_module, "ensure_state_bucket", lambda *a, **k: 0)
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
+    assert cli.main(["auto-apply"], workspace=workspace) == 0
+    assert order == ["init", "plan", "init", "apply"]  # no verify: this kind supplies none
+
+
+def test_cli_auto_apply_dry_run_has_no_verify_tail(tmp_path, monkeypatch, capsys, clean_nr_env):
+    workspace = write_stack(tmp_path)
+
+    def boom(*a, **k):
+        raise AssertionError("dry run must not run terraform")
+
+    monkeypatch.setattr(flow_module, "run_terraform", boom)
+    monkeypatch.setattr(flow_module, "ensure_state_bucket", boom)
+    assert cli.main(["auto-apply", "--dry-run"], workspace=workspace) == 0
+    out = capsys.readouterr().out
+    assert "then apply:  terraform apply with the same backend overrides" in out
+    assert "then verify" not in out
+
+
+def test_cli_destroy_dry_run_previews_the_tail(tmp_path, monkeypatch, capsys, clean_nr_env):
+    workspace = write_stack(tmp_path)
+
+    def boom(*a, **k):
+        raise AssertionError("dry run must not run terraform")
+
+    monkeypatch.setattr(flow_module, "run_terraform", boom)
+    monkeypatch.setattr(flow_module, "ensure_state_bucket", boom)
+    arguments = ["destroy", "--purge-state", "--drop-seeder", "--dry-run"]
+    assert cli.main(arguments, workspace=workspace) == 0
+    out = capsys.readouterr().out
+    assert "then terraform destroy" in out
+    assert "then purge: every object version in detectai-observability-tfstate" in out
+    assert "then drop: detectai-observability-seeder inline policy and role" in out
 
 
 def test_cli_stack_dir_drives_a_stack_from_a_foreign_cwd(

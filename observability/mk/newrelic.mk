@@ -2,7 +2,7 @@
 # envs/.env, resolves the state plane (PLANE=floci|aws, default floci — the
 # same contract as document-parser) and drives terraform.
 
-.PHONY: check plan apply help-newrelic
+.PHONY: check plan apply auto-apply destroy help-newrelic
 
 TFCTL := poetry -C $(abspath ../tools/tfctl) run tfctl
 PLANE ?= floci
@@ -19,6 +19,8 @@ help-newrelic:
 	@echo "    check        validate envs/.env, preview the plane and resolve the account live"
 	@echo "    plan         terraform plan on the PLANE (floci by default; PLANE=aws rides real AWS)"
 	@echo "    apply        terraform apply (auto on Floci, interactive confirm on real AWS; PLANE=aws rides real AWS)"
+	@echo "    auto-apply   plan then apply in one run, stopping at the first failure"
+	@echo "    destroy      terraform destroy, auto-approved on both planes (tfctl --purge-state/--drop-seeder add teardown tails)"
 	@echo ""
 
 check:
@@ -29,3 +31,9 @@ plan:
 
 apply:
 	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) apply
+
+auto-apply:
+	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) auto-apply
+
+destroy:
+	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) destroy

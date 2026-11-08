@@ -112,8 +112,8 @@ Planes, precedence, failure modes: [references/publishing.md](references/publish
 ## Guardrails
 
 - Run everything from `observability`. The root `Makefile` has no
-  obs targets; the make targets here (`check`/`plan`/`apply`)
-  drive tfctl directly.
+  obs targets; the make targets here (`check`/`plan`/`apply`/
+  `auto-apply`/`destroy`) drive tfctl directly.
 - This root is pure New Relic: no AWS provider, and no edits reaching into
   `infra/terraform` or service code from here.
 - A widget is only as real as its telemetry: confirm the span/metric/log

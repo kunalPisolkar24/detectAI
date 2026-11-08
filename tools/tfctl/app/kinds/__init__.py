@@ -37,7 +37,8 @@ class Kind:
     carried_verbs: tuple[str, ...] = ()
     # The live-drift audit behind the verify verb; a kind that declares the
     # verb must also supply this (main.py routes both verify and auto-apply's
-    # last step through it).
+    # last step through it). A kind may omit it: its auto-apply then stops
+    # after apply.
     verify: Callable[..., int] | None = None
 
 

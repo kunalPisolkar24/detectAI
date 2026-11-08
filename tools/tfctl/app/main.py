@@ -65,9 +65,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         choices=VERBS,
-        help="terraform plan/apply/destroy, verify, and auto-apply (the whole seed: "
-        "the values check, terraform plan, apply, then verify of the live plane, "
-        "aborting at the first failure), with the state bucket and seeder role "
+        help="terraform plan/apply/destroy, verify, and auto-apply (plan, apply, then the "
+        "kind's live audit when it supplies one, aborting at the first failure), with the "
+        "state bucket and seeder role "
         "created on demand on both planes; seeder-drop detaches and deletes the "
         "seeder role; session-clear drops the targeted service's cached seeder "
         "session and session-clear-all drops every cached one; session-refresh-all "
@@ -264,14 +264,18 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
                 "then apply:  terraform apply with the same backend overrides (auto on the "
                 "emulator, interactive confirm on real AWS)"
             )
-            print(
-                "then verify: the live SSM parameters and secret blob vs the values file (exit 1 on drift)"
-            )
+            if kind.verify is not None:
+                print(
+                    "then verify: the live SSM parameters and secret blob vs the values file "
+                    "(exit 1 on drift)"
+                )
             return 0
         for step in ("plan", "apply"):
             code = kind.terraform_flow(declaration, values, is_emulator, step, args, session)
             if code != 0:
                 return code
+        if kind.verify is None:
+            return 0
         return _verify_flow(kind, declaration, values, is_emulator, False, session)
 
     if args.command in ("plan", "apply", "destroy"):

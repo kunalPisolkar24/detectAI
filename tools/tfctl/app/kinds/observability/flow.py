@@ -8,10 +8,11 @@ import os
 import urllib.request
 
 from app.engine.carrier.identity import plane_account
+from app.engine.carrier.role import drop_seeder_flow
 from app.engine.carrier.session import session_remaining_text
 from app.engine.shell import die, run_terraform
 from app.engine.stack.inputs import build_backend_hcl, state_key, write_backend_hcl
-from app.engine.stack.state import ensure_state_bucket
+from app.engine.stack.state import ensure_state_bucket, preview_purge, purge_state
 from app.engine.values.plane import plane_display, resolve_floci_url, resolve_region
 from app.kinds.observability.account import MOCK_ACCOUNT_ID, live_check
 from app.kinds.observability.declaration import ObservabilityDeclaration
@@ -157,8 +158,18 @@ def stack_verb_flow(
             f"commands: terraform init -reconfigure -backend-config <backend.hcl>, "
             f"then terraform {command}"
         )
+        if command == "destroy":
+            if args.force_delete:
+                print("then skip: --force-delete is secrets-only (nothing to delete here)")
+            if args.purge_state:
+                print(f"then purge: every object version in {bucket}, then delete the bucket")
+            if args.drop_seeder:
+                print(f"then drop: {declaration.seeder_role_name} inline policy and role")
         print("(dry run: no terraform, no AWS writes)")
         return 0
+
+    if command == "destroy" and args.purge_state:
+        preview_purge(declaration, values, is_emulator, account, session, bucket)
 
     if is_emulator:
         probe_emulator(resolve_floci_url())
@@ -170,12 +181,12 @@ def stack_verb_flow(
     )
     try:
         init_args = ["init", "-reconfigure", "-backend-config", str(backend_file)]
-        # -input=false disables ALL prompts, including the apply approval; real
-        # AWS must keep its confirm prompt, so it applies without the flag.
+        # -input=false kills every prompt; real-AWS apply keeps its approval
+        # prompt, while destroy auto-approves on both planes.
         verb_args = [command]
-        if command == "plan" or is_emulator:
+        if command == "plan" or is_emulator or command == "destroy":
             verb_args.append("-input=false")
-        if command == "apply" and is_emulator:
+        if command == "destroy" or (command == "apply" and is_emulator):
             verb_args.append("-auto-approve")
         # Terraform runs on the carrier session triplet; env creds outrank any
         # named profile downstream.
@@ -188,7 +199,23 @@ def stack_verb_flow(
         if run_terraform(declaration.stack_root, init_args, tf_vars, backend_creds) != 0:
             _init_failure_hints(is_emulator, declaration, values, bucket)
             return 1
-        return run_terraform(declaration.stack_root, verb_args, tf_vars, backend_creds)
+        destroyed = run_terraform(declaration.stack_root, verb_args, tf_vars, backend_creds)
+        if command != "destroy" or destroyed != 0:
+            return destroyed
+        if args.force_delete:
+            print(
+                "note: --force-delete is secrets-only (it skips a Secrets Manager "
+                "recovery window); nothing to delete here"
+            )
+        # Wipe chain runs only after terraform succeeded: purge, then the seeder role.
+        if (
+            args.purge_state
+            and purge_state(declaration, values, is_emulator, account, session, bucket) != 0
+        ):
+            return 1
+        if args.drop_seeder:
+            return drop_seeder_flow(declaration, values, is_emulator, args.dry_run)
+        return 0
     finally:
         backend_file.unlink(missing_ok=True)
 

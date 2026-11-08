@@ -64,3 +64,11 @@ graph LR
 ```
 
 Open `one.eu.newrelic.com` — every board named `detectai-...` is now live. Next, read [the architecture](../concepts/architecture.md) to see where the data comes from, then tour a board in [the web dashboard](../services/web.md).
+
+## Tear it down
+
+```bash
+make destroy
+```
+
+`destroy` is auto-approved on both planes and removes every board, policy, and workflow this root published. tfctl's `--purge-state` (wipe and delete the state bucket) and `--drop-seeder` (delete the carrier role) add teardown tails. Everything comes back with the next `make apply`.

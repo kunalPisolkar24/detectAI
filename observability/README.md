@@ -20,6 +20,7 @@ make env                    # create envs/.env (never overwrites) — put a real
 make fmt init validate test # offline gate: format, validate, mocked tests — no key needed
 make check                  # validate the key, preview the plane, resolve the account live
 make plan && make apply     # publish to New Relic
+make destroy                # tear it all down again (auto-approved on both planes)
 ```
 
 CI runs the offline gate on every pull request to `main`/`staging` (`.github/workflows/observability.yaml`).

@@ -20,7 +20,7 @@ poetry -C tools/tfctl run tfctl --stack-dir observability plan   # a stack outsi
 |------|--------------|-----|
 | `plan` | terraform plan of the stack on the selected plane | [Lifecycle](../guides/terraform-lifecycle.md) |
 | `apply` | terraform apply (auto-approve on the emulator; interactive confirm on real AWS) | [Lifecycle](../guides/terraform-lifecycle.md) |
-| `auto-apply` | plan → apply → verify in one verb, aborting at the first failure | [Lifecycle](../guides/terraform-lifecycle.md) |
+| `auto-apply` | plan → apply in one verb, aborting at the first failure, then the kind's live audit when it supplies one (secrets does; observability stops after apply) | [Lifecycle](../guides/terraform-lifecycle.md) |
 | `verify` | fingerprint audit of the live plane against `infra/.env`; drift exits 1 | [Verification](../guides/verifying.md) |
 | `check` | observability: validate the credential triple and resolve the account live over GraphQL (no state, no terraform) | [Kinds](../concepts/kinds.md) |
 | `destroy` | terraform destroy, auto-approved on both planes; optional teardown tail via flags | [Lifecycle](../guides/terraform-lifecycle.md) |
