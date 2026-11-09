@@ -34,7 +34,7 @@ sequenceDiagram
     participant Q as queue service
     participant S as SQS
 
-    P->>H: POST /api/v1/webhook/paddle<br/>Paddle-Signature: ts=…;h1=…
+    P->>H: POST /api/v1/webhook/paddle<br/>Paddle-Signature: ts=…, h1=…
     H->>V: ReadBounded — up to the bound + 1 byte
     V-->>H: the bytes, or a typed verdict
     H-->>P: 413 / 400 on a read verdict

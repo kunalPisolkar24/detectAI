@@ -21,7 +21,7 @@ graph LR
     DEV --> CHECK{"secret present<br/>and ≥ 16 chars?"}
     PROD --> CHECK
     CHECK -->|"no"| DIE["boot fails:<br/>named config error,<br/>the value never echoed"] --> END(["end"])
-    CHECK -->|"yes"| LOCKED["frozen for the process;<br/>rotation takes a restart"]
+    CHECK -->|"yes"| LOCKED["frozen for the process<br/>rotation takes a restart"]
     LOCKED --> END
 ```
 
