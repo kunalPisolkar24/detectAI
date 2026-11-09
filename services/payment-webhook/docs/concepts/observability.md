@@ -65,19 +65,128 @@ The handler folds each verdict onto the seam as it happens; every rejection also
 
 Every accepted body also opens an application span under the otelgin route span, carrying `event_type` and `event_id` — the basis of per-event tracing in New Relic.
 
+## One delivery, as signals
+
+The verdict table above, as one live conversation on the 200 path — the rejection calls are the same functions, whichever row fires.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant H as the paddle handler
+    participant T as the wired seam
+    participant M as the boot
+    note over H,T: the same calls on NullTelemetry are zero-cost no-ops
+    H->>T: RecordReceived(type) and RecordUnknownEventType() when blank
+    H->>T: RecordEnvelopeAdvisory(reason) per advisory
+    H->>T: TrackProcessing(ctx, type, eventID)
+    T-->>H: a request context and the span closer
+    note over H,T: the closer is deferred - the app span ends when the handler returns
+    H->>H: the one timed enqueue
+    H->>T: RecordPublish(type, status, elapsed)
+    opt any rejected verdict instead - 400, 413, 401, or 422
+        H->>T: RecordBodyError - RecordInvalidSignature - or RecordEnvelopeRejection
+    end
+    M->>T: Shutdown after the drain
+    T-->>T: traces, then metrics, then logs - each within the 5 s cap
+    T-->>M: a leftover drain error or nil
+    note over T,M: Shutdown also restores the plain stdout slog
+```
+
 ## Queue-side truth is not this service's
 
 DLQ depth, oldest-message age, and retention are queue-level quantities on resources Terraform owns; they surface as CloudWatch alarms ([Delivery](delivery.md)), never as app-instrumented counters. Publishing observability stops where the enqueue SDK call ends.
 
-## The Go surface
+## The shapes, small to large
 
-`internal/observability` is the one facade both runtimes mount:
+`internal/observability` is the one facade both runtimes mount. Five files sit behind the seam: `interfaces.go` carries the seam and the three vocabularies (diagrammed below), `null.go` is the disabled boot's realization, `service.go` holds the frozen instrument names and every recording method, `boot.go` builds the gate — three gzip'd exporters, the adapters, the slog tee (`Wire` joins otelgin on the gin engine and no-ops on the null boot) — and `otlp.go`/`resource.go` carry the signal paths and identity labels.
 
-- `interfaces.go` — the `Telemetry` seam and the three attribution vocabularies (`Reason`, `AdvisoryReason`, `PublishStatus`); no OTel imports cross it
-- `null.go` — the disabled boot's realization of the seam
-- `service.go` — the frozen instrument names and every recording method over the SDK
-- `boot.go` — the gate, then the three gzip'd exporters, the adapters, and the slog tee (stdout stays); `Wire` joins otelgin on the gin engine and no-ops on the null boot
-- `adapters/` — one provider per signal, each started once with a 5 s flush cap; `Shutdown` drains traces → metrics → logs
+### The seam, both realizations
+
+```mermaid
+classDiagram
+    class Telemetry {
+        <<interface>>
+        +TrackProcessing(ctx, eventType, eventID)
+        +RecordBodyError(reason)
+        +RecordInvalidSignature()
+        +RecordEnvelopeRejection(reason)
+        +RecordEnvelopeAdvisory(reason)
+        +RecordReceived(eventType)
+        +RecordUnknownEventType()
+        +RecordPublish(eventType, status, duration)
+        +Shutdown(ctx)
+    }
+    class Reason {
+        +ReasonUnreadable
+        +ReasonTooLarge
+    }
+    class AdvisoryReason {
+        +AdvisoryNotificationID
+        +AdvisoryAddressableID
+    }
+    class PublishStatus {
+        +PublishSuccess
+        +PublishError
+        +PublishTimeout
+    }
+    class TelemetryService {
+        -serviceName: string
+        -traces
+        -metrics
+        -logs
+        -tracer
+        -received
+        -published
+        -invalidSignatures
+        -unknownEventType
+        -bodyErrors
+        -envelopeRejections
+        -envelopeAdvisories
+        -enqueueDuration
+    }
+    class NullTelemetry
+    Telemetry <|.. TelemetryService
+    Telemetry <|.. NullTelemetry
+    note for Telemetry "the one interface the handler, the router, and the boot share - no OTel import crosses it"
+    note for Reason "the attribute vocabulary of payment_webhook_body_errors_total - reasons read unreadable and too_large"
+    note for AdvisoryReason "the advisory vocabulary - notification_id and addressable_id count, never reject"
+    note for PublishStatus "partitions the publish counter and the duration histogram - timeout is the deadline verdict alone, so sums never double count"
+    note for TelemetryService "the tracer and eight instruments build once off the wired meter - RecordPublish adds to the counter and records the histogram under one label set"
+    note for NullTelemetry "the disabled boot - same nine methods, zero cost, no endpoint branches anywhere"
+```
+
+### The adapters up close
+
+Three adapters, one shape: an injected exporter, a provider built exactly once in `Start` against the shared resource, and a 5-second flush cap on the drain — a second `Start` is a wiring bug, not a no-op, and `Shutdown` restores `provider` to nil so it cannot double-drain.
+
+```mermaid
+classDiagram
+    class TracesAdapter {
+        -exporter
+        -sampleRatio: float64
+        -provider
+        +Start(res)
+        +Provider()
+        +Shutdown(ctx)
+    }
+    class MetricsAdapter {
+        -exporter
+        -provider
+        +Start(res)
+        +Meter()
+        +Shutdown(ctx)
+    }
+    class LogsAdapter {
+        -exporter
+        -provider
+        +Start(res)
+        +Provider()
+        +Shutdown(ctx)
+    }
+    note for TracesAdapter "a batch span processor on a ParentBased trace-ratio sampler"
+    note for MetricsAdapter "a periodic reader on the 15 s export cadence - Meter feeds the seam's instruments, DeltaTemporality keeps the New Relic wire position"
+    note for LogsAdapter "a batch processor behind the boot's slog tee - stdout keeps its handler and OTLP gains the bridge"
+```
 
 ## Next Steps
 

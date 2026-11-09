@@ -74,6 +74,133 @@ graph TB
     READY --> END
 ```
 
+## The config shapes, small to large
+
+Four views over the same shapes, small to large: the composition root, the planes with their adapters, the typed fields, and the one error at the boundary. `Load`, `DeploymentFlick`, and `Resolve` are package-level functions — the `<<function>>` boxes — everything else is a real type.
+
+### The composition root
+
+```mermaid
+classDiagram
+    class Load {
+        <<function>>
+    }
+    class DeploymentFlick {
+        <<function>>
+    }
+    class ConfigFactory {
+        +Create(flick)
+    }
+    class Source {
+        <<interface>>
+        +Get(key)
+    }
+    class Resolve {
+        <<function>>
+    }
+    class Config
+    Load --> DeploymentFlick : reads the flick
+    Load --> ConfigFactory : Create selects the plane
+    Load --> Resolve : Resolve over the source
+    ConfigFactory ..> Source : hands the one plane back
+    Resolve ..> Config : field by field, frozen for the process
+    note for DeploymentFlick "unset resolves to dev - an unknown flick never serves"
+    note for ConfigFactory "dev builds DotEnv and DevSource - prod goes through the AWSClientFactory pair, with the secrets read happening before any SSM work"
+    note for Resolve "absence is a normal result on Source - Get never errors, parsing owns the verdict per field"
+```
+
+### The planes and their adapters
+
+```mermaid
+classDiagram
+    class Source {
+        <<interface>>
+        +Get(key)
+    }
+    class DevSource {
+        -values: map
+        +Get(key)
+    }
+    class ProdSource {
+        -values: map
+        +Get(key)
+    }
+    class Plane {
+        <<interface>>
+        +Fetch()
+    }
+    class DotEnvAdapter {
+        -values: map
+        +Fetch()
+    }
+    class SecretsManagerAdapter {
+        -client
+        -name: string
+        +Fetch()
+    }
+    class ParameterStoreAdapter {
+        -client
+        +Fetch()
+    }
+    class AWSClientFactory {
+        -base: aws.Config
+        +NewSecretsManagerAdapter()
+        +NewParameterStoreAdapter()
+    }
+    Source <|.. DevSource
+    Source <|.. ProdSource
+    Plane <|.. SecretsManagerAdapter
+    Plane <|.. ParameterStoreAdapter
+    DevSource o--> DotEnvAdapter : process env wins over the file
+    ProdSource o--> SecretsManagerAdapter : secrets fetched first
+    ProdSource o--> ParameterStoreAdapter : the SSM tree completes
+    AWSClientFactory ..> SecretsManagerAdapter : clients stay method-local
+    AWSClientFactory ..> ParameterStoreAdapter
+    note for DevSource "the file parses once in memory - nothing ever writes os.environ"
+    note for ProdSource "one fetch per plane at boot - keys seeded on both planes fail the boot, and an env stray cannot leak in"
+    note for SecretsManagerAdapter "one GetSecretValue on detectai/payment-webhook/secrets - a JSON blob of env-named keys, string values only"
+    note for ParameterStoreAdapter "paged GetParametersByPath under /detectai/payment-webhook/ - prefix-stripped, plain String entries only"
+    note for AWSClientFactory "the region resolves once through the SDK default chain - credentials stay ambient, never config fields"
+```
+
+### The typed fields
+
+```mermaid
+classDiagram
+    class Config {
+        +Port: int
+        +DrainTimeout: Duration
+        +PaddleSecret: string
+        +MaxBodyBytes: int64
+        +QueueURL: string
+        +PublishBudget: Duration
+        +OTelEndpoint: string
+        +NewRelicKey: string
+        +OTelName: string
+        +OTelVersion: string
+        +OTelSampleRatio: float64
+    }
+    note for Config "defaults - 8080, 10 s drain clamped over the budget, 1 MiB bound, 5 s budget, payment-webhook, dev, ratio 1"
+    note for Config "the observability gate lives in OTelEndpoint alone - blank is a disabled boot, a set endpoint demands NewRelicKey at the credential floor"
+```
+
+### The one error at the boundary
+
+```mermaid
+classDiagram
+    class Load {
+        <<function>>
+    }
+    class ConfigError {
+        -cause: error
+        +Error()
+        +Unwrap()
+    }
+    Load ..> ConfigError : the flick, the factory, and Resolve wrap here - nowhere else
+    note for ConfigError "errors.Is reaches the cause through Unwrap - the boot logs one typed error and exits, nothing half-configured ever serves"
+    note for Load "failures name their env key and the fix - the attempted secret is never echoed"
+```
+
 ## Bootstrap variables (config owns none of them)
 
 | Key | Role |

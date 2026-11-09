@@ -44,6 +44,40 @@ The body crosses verbatim — the Paddle JSON, byte-for-byte, never altered by t
 
 Blank optional ids **omit** their attribute — no empty string ever reaches SQS. Note: a body without `event_id` cannot pass the envelope gate, so the `sha256`-of-body dedup fallback only ever matters in the unit fakes — the real queue always dedups on an event id.
 
+### The shapes behind the table
+
+`Shape` and `GroupKey` are package-level functions — stateless, no boxes — so the diagram is the two data shapes they pass between: one `Event` parsed from the body, one `Message` leaving for SQS.
+
+```mermaid
+classDiagram
+    class Message {
+        +Body: []byte
+        +Source: string
+        +EventID: string
+        +EventType: string
+        +OccurredAt: string
+        +SubscriptionID: string
+        +TransactionID: string
+        +CustomerID: string
+        +UserID: string
+        +DedupID: string
+        +GroupID: string
+    }
+    class Event {
+        +ID: string
+        +Type: string
+        +Sub: string
+        +Customer: string
+        +TransactionID: string
+        +OccurredAt: string
+        +UserID: string
+    }
+    note for Message "the contract between shaping and transport - no SDK type crosses it, Source is always paddle, the body crosses verbatim"
+    note for Event "ParseEvent fills it in one pass over the body - envelope gate and shaping read the same parse, so they can never disagree about an id"
+    note for Message "DedupID is EventID when present, else the sha256 of the body - GroupID is the ladder's result"
+    Event ..> Message : Shape fills one message from one parse
+```
+
 ## The group-key ladder
 
 One parse, one resolution order — groups are **per-entity ordering domains**, not burst correlation:
@@ -71,6 +105,68 @@ Two properties worth holding in your head:
 ### What dedup does and does not buy
 
 Paddle's immediate retries collapse inside the 5-minute window; a retry spread across days re-reaches the worker — whose idempotency layer remains the ring-fenced backstop. The service never dedups itself.
+
+## One publish, in code
+
+The last hop as three shapes: the handler calls `Service`, which holds the transport behind a one-method seam.
+
+```mermaid
+classDiagram
+    class Service {
+        -queue: Queue
+        -budget: Duration
+        +Publish(ctx, body)
+        +Budget()
+    }
+    class Queue {
+        <<interface>>
+        +Publish(ctx, message)
+    }
+    class SQSAdapter {
+        -client
+        -url: string
+        +Publish(ctx, message)
+    }
+    class SQSClient {
+        <<interface>>
+        +SendMessage(ctx, params)
+    }
+    Queue <|.. SQSAdapter
+    SQSAdapter o--> SQSClient
+    note for Service "Publish shapes, wraps the one send in the budget context, then maps a crossed deadline or a cancel to ErrDeadlineExceeded"
+    note for SQSAdapter "ThrottlingException, InternalFailure, and ServiceUnavailable map to ErrEnqueueUnavailable - a crossed deadline passes through for Service to classify"
+    note for SQSClient "no SDK-wide interface exists, so the client satisfies this structurally - the unit fakes inject here"
+    note for Queue "one fake in the unit matrix - the adapter is its only real realization"
+```
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant H as the paddle handler
+    participant S as queue.Service
+    participant A as SQSAdapter
+    participant Q as SQS
+
+    H->>S: Publish(ctx, body)
+    S->>S: Shape - body verbatim, one ParseEvent, the ladder run
+    S->>S: budget context around the one send
+    S->>A: Publish(budgetCtx, message)
+    A->>Q: SendMessage - dedup id, group id, attributes
+    alt SQS accepts
+        Q-->>A: accepted - the durability point
+        A-->>S: nil
+        S-->>H: nil
+        note over H,S: 200 queued
+    else SQS throttles or faults
+        A-->>S: ErrEnqueueUnavailable
+        S-->>H: ErrEnqueueUnavailable
+        note over H,S: 503 with Retry-After at the budget's ceil
+    else the budget expires first
+        S-->>S: the deadline verdict wins - ErrDeadlineExceeded
+        S-->>H: ErrDeadlineExceeded
+        note over H,Q: if SQS did accept before the deadline, the dedup window collapses the ambiguity to nothing
+    end
+```
 
 ## The dead-letter fate
 

@@ -23,6 +23,52 @@ internal/
 
 The layering is strict and inward-facing: `router` orchestrates, `handlers` owns statuses, `validator`/`events`/`queue` own the three real jobs — checking, parsing, transporting — and `config`/`observability` serve them all. Nothing inside `queue` knows about HTTP.
 
+## The two seams
+
+The layering leaves exactly two seams between the request face and the outside world, each with one real realization per runtime and one fake in the unit matrix. The handler faces `Service` and `Telemetry` — never `Queue` internals or an SDK type.
+
+```mermaid
+classDiagram
+    class Queue {
+        <<interface>>
+        +Publish(ctx, message)
+    }
+    class Service {
+        -queue: Queue
+        -budget: Duration
+        +Publish(ctx, body)
+        +Budget()
+    }
+    class SQSAdapter {
+        -client
+        -url: string
+        +Publish(ctx, message)
+    }
+    class Telemetry {
+        <<interface>>
+        +TrackProcessing(ctx, eventType, eventID)
+        +RecordBodyError(reason)
+        +RecordInvalidSignature()
+        +RecordEnvelopeRejection(reason)
+        +RecordEnvelopeAdvisory(reason)
+        +RecordReceived(eventType)
+        +RecordUnknownEventType()
+        +RecordPublish(eventType, status, duration)
+        +Shutdown(ctx)
+    }
+    class TelemetryService
+    class NullTelemetry
+    Queue <|.. SQSAdapter
+    Telemetry <|.. TelemetryService : the wired boot
+    Telemetry <|.. NullTelemetry : the disabled boot
+    Service o--> Queue : the one transport
+    note for Service "the handler faces Service, never Queue - Shape and the budget live inside Publish"
+    note for Queue "one fake in the unit matrix - SendMessage over an injected structurally-satisfied client"
+    note for Telemetry "no OTel import crosses this file - reasons ride three frozen vocabularies, listed in observability"
+    note for TelemetryService "instrument fields built once off the adapters - its full shape is in observability"
+    note for NullTelemetry "the disabled boot on an unset endpoint - every call a no-op, one code path everywhere"
+```
+
 ## What happens on one delivery
 
 ```mermaid
@@ -57,6 +103,55 @@ Questions the map answers, page by page:
 - **Where do events go, and in what order?** → [Delivery](delivery.md)
 - **What does the boot read?** → [Configuration](../getting-started/configuration.md)
 - **Where do signals go?** → [Observability](observability.md)
+
+## How the boot wires it
+
+The boot composes five of the eight internal packages in one straight line; composition happens once, top to bottom, before anything serves. (`handlers` arrives via the router, not `main`.)
+
+```mermaid
+classDiagram
+    class main {
+        <<package>>
+        +main()
+        +newPublisher(cfg)
+    }
+    class config {
+        <<package>>
+        +Load()
+        +DeploymentFlick()
+    }
+    class queue {
+        <<package>>
+        +NewService(queue, budget)
+        +NewSQSAdapter(client, url)
+    }
+    class observability {
+        <<package>>
+        +Boot(cfg, flick)
+        +Wire(engine)
+    }
+    class router {
+        <<package>>
+        +New(cfg, publish, obs)
+    }
+    class handlers {
+        <<package>>
+        +NewPaddleWebhook(v, maxBody, publish, obs)
+    }
+    class server {
+        <<package>>
+        +Run(server, drain)
+    }
+    main --> config : Load names the Config
+    main --> queue : newPublisher binds the SQS transport
+    main --> observability : Boot, null or wired
+    main --> router : New with the bound Config, publisher and seam
+    main --> server : Run until a signal
+    observability ..> router : Wire joins otelgin on the engine
+    router --> handlers : the one face, composed
+    note for observability "Wire type-switches on an unexported instrumenter - the null boot installs nothing, the engine stays identical"
+    note for router "the read bound is clamped here - min of the env bound and the 256 KiB SQS ceiling"
+```
 
 ## The runtime model: sequential, deliberately
 

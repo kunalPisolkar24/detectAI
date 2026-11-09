@@ -63,6 +63,37 @@ graph TB
 
 The gate sits behind one handler method — the flow above is `NewPaddleWebhook` read top to bottom; there is no alternate ordering anywhere in the surface.
 
+## The admission conversation
+
+The flow above shows the verdicts; this is the same path as the calls the handler makes, in order. Any failure class exits the conversation mid-stream to its response row — there are no retries and no second questions.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant H as the paddle handler
+    participant V as the validator
+    participant E as events
+    participant T as telemetry
+    participant Q as queue.Service
+
+    H->>V: ReadBounded(body, max)
+    V-->>H: the bytes
+    H->>V: Verify(header, body)
+    V-->>H: nil
+    H->>V: CheckEnvelope(body)
+    V-->>H: Missing none, Advisory two counters
+    H->>E: ParseEvent(body)
+    E-->>H: the one Event
+    H->>T: RecordReceived(type) and RecordUnknownEventType() when blank
+    H->>T: RecordEnvelopeAdvisory(reason) per advisory
+    H->>T: TrackProcessing(ctx, type, eventID)
+    T-->>H: a request context and the span closer
+    H->>Q: Publish(ctx, body)
+    Q-->>H: nil or a typed error
+    H->>T: RecordPublish(type, status, elapsed)
+    note over H,V: too large, malformed, invalid, or missing here - the conversation ends at that row
+```
+
 ## The advisory check, apart
 
 Advisories see the same resolution the group ladder will run — envelope and shaping share one parse (`events.ParseEvent`), so they can never disagree about an id.
@@ -74,6 +105,40 @@ graph LR
     ADV -->|"no subscription id<br/>and no customer id resolved"| A2["addressable_id: +1"]
     A1 --> OK["the delivery stays 200 —<br/>advisories are counters"] --> END(["end"])
     A2 --> OK
+```
+
+## The gate's shapes, small to large
+
+No registry and no base type here — the gate is three plain functions (`ReadBounded`, `Verify` over `Paddle`, `CheckEnvelope`) plus one shared parse. The shapes worth diagramming are the verdicts they produce and the one place they meet:
+
+```mermaid
+classDiagram
+    class Paddle {
+        -secret: string
+        +Verify(header, body)
+    }
+    class ErrInvalid
+    class ErrBodyTooLarge
+    class ErrBodyMalformed
+    class EnvelopeIssues {
+        +Missing
+        +Advisory
+    }
+    class Event {
+        +ID: string
+        +Type: string
+        +Sub: string
+        +Customer: string
+        +TransactionID: string
+        +OccurredAt: string
+        +UserID: string
+    }
+    note for ErrBodyTooLarge "the bound + 1 read proved it - 413 naming the limit"
+    note for ErrBodyMalformed "the stream broke mid-read - 400, generic"
+    note for Paddle "HMAC over the raw ts framing, constant-time compared - missing, malformed, stale, and tampered all collapse into ErrInvalid, 401, generic"
+    note for EnvelopeIssues "CheckEnvelope fills it in one pass - Missing rejects (422 naming the fields), Advisory only counts"
+    note for Event "ParseEvent fills it from the same body - its Sub and Customer fields are what the addressability advisory checks, and shaping reuses the same parse"
+    EnvelopeIssues ..> Event : ParseEvent resolves the addressability advisory
 ```
 
 ## The bounds on this page
