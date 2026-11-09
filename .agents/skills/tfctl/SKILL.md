@@ -1,6 +1,6 @@
 ---
 name: tfctl
-description: DetectAI's tfctl — the stack-agnostic engine in tools/tfctl that drives a stack's AWS + provider plane kind by kind — the per-service secrets stacks (Secrets Manager + SSM from infra/.env) and the New Relic observability stack. Use when running or debugging tfctl verbs, seeding or verifying a service's secrets plane, working with the seeder carrier role, MFA prompts or cached sessions, onboarding a service's secrets.toml, or introducing a new kind.
+description: DetectAI's tfctl — the stack-agnostic engine in tools/tfctl that drives a stack's AWS + provider plane kind by kind — the per-service secrets stacks (Secrets Manager + SSM from infra/.env), the New Relic observability stack, and the shared SQS queue fabric (infra). Use when running or debugging tfctl verbs, seeding or verifying a service's secrets plane, working with the seeder carrier role, MFA prompts or cached sessions, onboarding a service's secrets.toml, or introducing a new kind.
 ---
 
 # tfctl — the stack driver
@@ -23,18 +23,20 @@ tools/tfctl/
 │   ├── engine/            kind-agnostic machinery: carrier, stack state, values, shell runners
 │   └── kinds/             the registry — the one seam between engine and stacks
 │       ├── secrets/       the secrets kind + the vendored terraform stack it drives
-│       └── observability/ the observability kind (stack-dir based, adds check)
+│       ├── observability/ the observability kind (stack-dir based, adds check)
+│       └── infra/         the infra kind — the shared queue fabric (stack-dir based)
 ├── tests/                 unit (default) + integration (live Floci)
 ├── mk/ + Makefile         install / lint / test tiers / the secrets-verb wrappers
 └── docs/                  the deep documentation tree
 ```
 
-Two kinds are registered today:
+Three kinds are registered today:
 
 | Kind | Declaration (committed) | Values (gitignored) | Discovery |
 |------|-------------------------|---------------------|-----------|
 | **secrets** | `secrets.toml` at the service root | `infra/.env` | `--service <name>`, or nearest declaration upward from cwd |
 | **observability** | `observability.toml` at the stack root | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
+| **infra** | `infra.toml` at the stack root — the shared queue fabric in `infra` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
 
 A kind never edits the engine — it fills one slot table (`load`, `validate`,
 `resolve_plane`, `build_tf_vars`, `seeder_policy`, the flows), and `main.py`
@@ -159,7 +161,7 @@ derived-name table: [references/onboarding.md](references/onboarding.md)
 |------|-------|
 | First end-to-end run, troubleshooting | `tools/tfctl/docs/getting-started/quickstart.md` |
 | Verb dispatch, credential precedence, output contract | `tools/tfctl/docs/concepts/architecture.md` |
-| The two kinds and introducing a third | `tools/tfctl/docs/concepts/kinds.md` |
+| The kinds and introducing a new one | `tools/tfctl/docs/concepts/kinds.md` |
 | Declaration schema and derived names | `tools/tfctl/docs/concepts/declaration.md` |
 | The values ladder (.env rules) | `tools/tfctl/docs/concepts/values.md` |
 | Trust ladder, MFA, cache rules, session verbs | [references/carrier.md](references/carrier.md) |
@@ -170,3 +172,4 @@ derived-name table: [references/onboarding.md](references/onboarding.md)
 | Test tiers | `tools/tfctl/docs/guides/testing.md` |
 | The service-side view of the secrets plane | the `payment-webhook` skill · the `document-parser` skill |
 | The observability stack this engine drives | the `observability` skill |
+| The queue fabric this engine drives | `infra/README.md` |

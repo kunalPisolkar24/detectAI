@@ -26,6 +26,7 @@ from app.engine.shell import die
 from app.engine.values.parse import parse_env_file
 from app.engine.values.rules import plane_errors
 from app.kinds import KINDS, register
+from app.kinds.infra import kind as infra_kind
 from app.kinds.locate import (
     REPO_ROOT,
     find_service_workspace,
@@ -38,6 +39,7 @@ from app.kinds.secrets.batch import refresh_all_flow
 
 register(secrets_kind())
 register(observability_kind())
+register(infra_kind())
 
 VERBS = tuple(dict.fromkeys(verb for kind in KINDS.values() for verb in kind.my_verbs))
 
@@ -48,7 +50,9 @@ def _print_errors(errors: list[str]) -> bool:
     return bool(errors)
 
 
-def _verify_flow(kind, declaration, values: dict[str, str], is_emulator: bool, dry_run: bool, session) -> int:
+def _verify_flow(
+    kind, declaration, values: dict[str, str], is_emulator: bool, dry_run: bool, session
+) -> int:
     if kind.verify is None:
         die(
             f"the {kind.name} kind declares the verify verb but supplies no verify flow",

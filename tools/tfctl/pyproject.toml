@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "detectai-tfctl"
 version = "0.1.0"
-description = "Stack-agnostic terraform driver for DetectAI's stacks (secrets, observability): values validation, plan/apply/destroy, carrier sessions, teardown"
+description = "Stack-agnostic terraform driver for DetectAI's stacks (secrets, observability, infra): values validation, plan/apply/destroy, carrier sessions, teardown"
 authors = ["DetectAI <hello@detectai.com>"]
 packages = [{ include = "app" }]
 

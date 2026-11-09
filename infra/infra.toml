@@ -1,0 +1,14 @@
+# tfctl's infra kind: the shared queue fabric. The [queues] list is the
+# exhaustive ledger — a queue outside it never enters a plane.
+
+[service]
+slug = "infra"
+region = "eu-central-1"
+
+[[queues]]
+name = "payment_events.fifo"
+dlq = "payment_events_dlq.fifo"
+max_receive_count = 5
+
+[[queues]]
+name = "payment_events_dlq.fifo"

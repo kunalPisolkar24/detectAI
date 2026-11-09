@@ -1,6 +1,6 @@
 # Kinds
 
-The engine is one machinery; a **kind** is one stack family. The unit files differ — secrets' `secrets.toml` vs observability's `observability.toml` — but the verbs, the carrier, and the receipts behave the same against either because `app/kinds/__init__.py` defines the single seam: a `Kind` record that names the machinery's callables for one family.
+The engine is one machinery; a **kind** is one stack family. The unit files differ — secrets' `secrets.toml`, observability's `observability.toml`, infra's `infra.toml` — but the verbs, the carrier, and the receipts behave the same against either because `app/kinds/__init__.py` defines the single seam: a `Kind` record that names the machinery's callables for one family.
 
 ## The declaration file is the registry switch
 
@@ -10,8 +10,9 @@ Which file a stack directory holds decides which kind drives the run:
 |------|-------------------------|---------------------|-----------|
 | **secrets** | `secrets.toml` at the service root — per-service stacks under `services/<name>` ([Declaration](declaration.md)) | `infra/.env` | `--service <name>`, or nearest declaration upward from cwd |
 | **observability** | `observability.toml` at the stack root — the New Relic-as-code stack in `observability` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
+| **infra** | `infra.toml` at the stack root — the shared queue fabric in `infra` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
 
-Both reach for the same two out-of-stack prerequisites — the state bucket and the seeder carrier role ([Carrier](carrier.md)) — created on demand and converged per run, on either plane. What differs is what the stack *is*: secrets turns `infra/.env` into Secrets Manager + SSM; observability terraform-drives the dashboards and alerts root and adds provider-only credentials (New Relic's NRAK triple, never AWS personal keys).
+All three reach for the same two out-of-stack prerequisites — the state bucket and the seeder carrier role ([Carrier](carrier.md)) — created on demand and converged per run, on either plane. What differs is what the stack *is*: secrets turns `infra/.env` into Secrets Manager + SSM; observability terraform-drives the dashboards and alerts root and adds provider-only credentials (New Relic's NRAK triple, never AWS personal keys); infra terraform-drives the shared AWS queue fabric — no credential law at all, only bucket and region shapes.
 
 ## What a Kind supplies
 
@@ -35,7 +36,7 @@ Every `Kind` is a slot table the engine calls; a kind never edits the engine.
 
 ## Introducing a kind
 
-The observability kind is the stack-dir template; a future stack (infra as code, say) follows the same mechanical path:
+The observability kind was the stack-dir template; the infra kind followed the same mechanical path, and the next stack does too:
 
 1. **Declare** — a `declaration.py` loader + a `dataclass(Declaration)` subclass with the kind's schema and `declaration_errors` naming every break.
 2. **Values** — a `values.py` law: what the values file must carry, shape-checked, plus `resolve_plane` (flags win; the file breaks ties on its own lines).
