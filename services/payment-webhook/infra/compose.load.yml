@@ -1,0 +1,28 @@
+name: payment-webhook-load
+
+include:
+  - compose.yml
+  - compose.k6.yml
+
+services:
+  payment-webhook:
+    # The rig must never collide with a dev stack's fixed container name.
+    container_name: payment-webhook-load
+    restart: "no"
+    ports: !override []
+    healthcheck:
+      test: ["CMD", "bash", "-c", "</dev/tcp/127.0.0.1/8080"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - loadnet
+
+  k6:
+    depends_on:
+      payment-webhook:
+        condition: service_healthy
+
+networks:
+  loadnet:

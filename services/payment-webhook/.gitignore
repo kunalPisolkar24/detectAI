@@ -15,3 +15,4 @@ payment-webhook
 # Local env
 infra/.env
 !infra/.env.example
+infra/.env.load
