@@ -10,12 +10,10 @@ overwrites). Keys:
 | `NEW_RELIC_API_KEY` | yes | — | **User** API key (`NRAK-...`); the ingest license key is rejected |
 | `NEW_RELIC_ACCOUNT_ID` | no | `123456` (mock) | target account |
 | `NEW_RELIC_REGION` | no | `EU` | datacenter |
-| `TF_STATE_BUCKET` | yes on real AWS | `detectai-observability-tfstate` | Terraform state bucket |
 | `AWS_REGION` | no | `ap-southeast-2` | the **state bucket's** region, not New Relic's |
 
-Precedence: New Relic credentials — a shell export wins for one run; state
-keys (`TF_STATE_BUCKET`, `AWS_REGION`) — `envs/.env` wins, a conflicting
-shell export warns and loses, so a run stays reproducible.
+Precedence: a shell export of `NEW_RELIC_API_KEY` wins for one run —
+everything else is plain file content, shape-checked.
 
 The plane itself never comes from this file: `--aws` rides real AWS, floci is
 the default (`make ... PLANE=floci|aws`).
@@ -28,7 +26,7 @@ alert conditions and notification names.
 
 | | Floci (default) | Real AWS (`PLANE=aws`) |
 |---|---|---|
-| Bucket | `detectai-observability-tfstate`, self-heals if missing | required, created versioned |
+| Bucket | `detectai-observability-tfstate-000000000000`, self-heals if missing | `detectai-observability-tfstate-<your account>`, created versioned |
 | Apply | auto-approves | interactive confirm |
 | State key | `observability/floci/terraform.tfstate` | `observability/terraform.tfstate` |
 | Run identity | the emulator's fake credentials | the `detectai-observability-seeder` role (created on demand, MFA-gated, cached 12 h) |
@@ -59,7 +57,7 @@ From `observability`:
 | `envs/.env is missing` | no `make env` yet | run it, fill the `NRAK-` key |
 | key rejected as ingest-shaped | license key pasted instead of user key | copy the `NRAK-` key from NR *API keys* |
 | wrong account resolved | key belongs to another NR account | `make check` fails pre-plan — swap the key |
-| state bucket missing on real AWS | `TF_STATE_BUCKET` unset or renamed | set it in `envs/.env` — the next plan/apply creates it on demand |
+| state bucket missing on real AWS | it self-heals; only a stale or wrong-region creds issue blocks it | rerun — the next plan/apply creates `detectai-observability-tfstate-<your account>` versioned on demand |
 | apply pauses for confirmation | real AWS plane is interactive | confirm, or use the Floci plane for auto-approve |
 
 ## CI parity

@@ -32,7 +32,7 @@ def kind() -> Kind:
         values_relpath="envs/.env",
         # The terraform root is the declaration's own directory, not vendored.
         stack_root=None,
-        values_hint="run `make env` in infra — no credentials; only the bucket and region shapes",
+        values_hint="run `make env` in infra — no credentials; only the region shape",
         load=load,
         build_tf_vars=build_tf_vars,
         seeder_policy=seeder_policy_document,

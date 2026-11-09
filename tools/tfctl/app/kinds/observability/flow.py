@@ -10,6 +10,7 @@ import urllib.request
 from app.engine.carrier.identity import plane_account
 from app.engine.carrier.role import drop_seeder_flow
 from app.engine.carrier.session import session_remaining_text
+from app.engine.declaration.model import state_bucket_for
 from app.engine.shell import die, run_terraform
 from app.engine.stack.inputs import build_backend_hcl, state_key, write_backend_hcl
 from app.engine.stack.state import ensure_state_bucket, preview_purge, purge_state
@@ -17,15 +18,7 @@ from app.engine.values.plane import plane_display, resolve_floci_url, resolve_re
 from app.kinds.observability.account import MOCK_ACCOUNT_ID, live_check
 from app.kinds.observability.declaration import ObservabilityDeclaration
 from app.kinds.observability.tfvars import build_tf_vars
-from app.kinds.observability.values import (
-    BUCKET_MISSING_ERROR,
-    BUCKET_MISSING_FIX,
-    DEFAULT_STATE_BUCKET,
-    build_config,
-    resolve_state_bucket,
-    validate_config,
-    warn_shell_conflicts,
-)
+from app.kinds.observability.values import build_config, validate_config
 
 
 def masked(api_key: str) -> str:
@@ -44,24 +37,11 @@ def describe_config(config: dict[str, str | None]) -> None:
     print(f"  NEW_RELIC_REGION      {region}")
 
 
-def describe_plane(
-    declaration: ObservabilityDeclaration, values: dict[str, str], is_emulator: bool
-) -> None:
-    bucket = resolve_state_bucket(values, is_emulator)
+def describe_plane(declaration: ObservabilityDeclaration, is_emulator: bool) -> None:
+    bucket = state_bucket_for(declaration.slug, plane_account(None, is_emulator))
     state_key_value = state_key(declaration, is_emulator)
     print(f"plane:  {plane_display(is_emulator)}")
-    if bucket:
-        print(f"state:  {bucket} / {state_key_value}")
-        if is_emulator and not values.get("TF_STATE_BUCKET"):
-            print(
-                f"note:   TF_STATE_BUCKET unset; the Floci plane defaults to {DEFAULT_STATE_BUCKET}"
-            )
-    else:
-        print("state:  unset -> TF_STATE_BUCKET is required before plan/apply run")
-        print(
-            "note:   add TF_STATE_BUCKET to envs/.env, or run with --floci "
-            f"(the bucket then defaults to {DEFAULT_STATE_BUCKET})"
-        )
+    print(f"state:  {bucket} / {state_key_value}")
 
 
 def probe_emulator(endpoint: str) -> None:
@@ -88,7 +68,7 @@ def check_flow(
     if errors:
         return 1
     describe_config(config)
-    describe_plane(declaration, values, is_emulator)
+    describe_plane(declaration, is_emulator)
     live_check(config)
     return 0
 
@@ -125,13 +105,10 @@ def stack_verb_flow(
         print(error)
     if errors:
         return 1
-    bucket = resolve_state_bucket(values, is_emulator)
-    if bucket is None:
-        die(BUCKET_MISSING_ERROR, BUCKET_MISSING_FIX)
     account = plane_account(session, is_emulator)
+    bucket = state_bucket_for(declaration.slug, account)
     tf_vars = build_tf_vars(declaration, values, is_emulator)
     state_key_value = state_key(declaration, is_emulator)
-    warn_shell_conflicts(values)
 
     print(f"plane:   {plane_display(is_emulator)}")
     if args.dry_run:
@@ -146,8 +123,6 @@ def stack_verb_flow(
     print(f"stack:   {declaration.stack_root}")
     print(f"key:     *** ({len(config['api_key'] or "")} chars, hidden)")
     print(f"state:  {bucket} / {state_key_value}")
-    if is_emulator and not values.get("TF_STATE_BUCKET"):
-        print(f"note:   TF_STATE_BUCKET unset; the Floci plane defaults to {DEFAULT_STATE_BUCKET}")
 
     if args.dry_run:
         backend_hcl = build_backend_hcl(declaration, values, is_emulator, account, bucket)

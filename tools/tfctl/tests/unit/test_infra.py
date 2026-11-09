@@ -10,6 +10,7 @@ import pytest
 from conftest import fake_carrier_session
 from app import main as cli
 from app.engine.carrier import session as carrier_session
+from app.engine.declaration.model import state_bucket_for
 from app.kinds.locate import workspace_for
 from app.kinds.infra import kind as infra_kind
 from app.kinds.infra import policy, tfvars, values
@@ -27,10 +28,7 @@ INFRA_TOML = (
     '[[queues]]\nname = "payment_events_dlq.fifo"\n'
 )
 
-INFRA_ENV = {
-    "AWS_REGION": "ap-southeast-2",
-    "TF_STATE_BUCKET": "detectai-infra-tfstate",
-}
+INFRA_ENV = {"AWS_REGION": "ap-southeast-2"}
 
 SESSION = {
     "role_arn": "arn:aws:iam::123456789012:role/detectai-infra-seeder",
@@ -43,8 +41,7 @@ SESSION = {
 
 @pytest.fixture
 def clean_tf_env(monkeypatch):
-    for key in ("TF_STATE_BUCKET", "AWS_REGION"):
-        monkeypatch.delenv(key, raising=False)
+    monkeypatch.delenv("AWS_REGION", raising=False)
 
 
 def write_stack(tmp_path, env_values=None, toml_text=INFRA_TOML):
@@ -144,21 +141,25 @@ def test_plane_choice_follows_the_flags_only():
     assert values.resolve_plane({}, False, False) is True
 
 
-def test_state_bucket_law_follows_the_plane(tmp_path, clean_tf_env):
-    assert (
-        values.resolve_state_bucket({"TF_STATE_BUCKET": "custom-bucket"}, True) == "custom-bucket"
-    )
-    assert values.resolve_state_bucket({}, True) == "detectai-infra-tfstate"
-    assert values.resolve_state_bucket({}, False) is None
+def test_the_state_bucket_is_derived_from_slug_and_account():
+    """No env override anywhere: the engine's derivation is the bucket law."""
+    assert state_bucket_for("infra", "000000000000") == "detectai-infra-tfstate-000000000000"
+    assert state_bucket_for("infra", "123456789012") == "detectai-infra-tfstate-123456789012"
 
 
 def test_state_shape_errors_name_the_line_and_the_fix():
-    errors = values.validate_state(
-        {"AWS_REGION": "eu-west", "TF_STATE_BUCKET": "B!AD"},
-    )
+    errors = values.validate_state({"AWS_REGION": "eu-west"})
     text = "\n".join(errors)
     assert "AWS_REGION is not a valid region: 'eu-west'" in text
-    assert "TF_STATE_BUCKET is not a valid S3 bucket name: 'B!AD'" in text
+    assert "fix:" in text
+
+
+def test_a_stray_tf_state_bucket_line_is_inert(tmp_path):
+    """A stray TF_STATE_BUCKET line validates clean on both planes: no
+    override, no note, no error — the derived bucket wins everywhere."""
+    stray = {**INFRA_ENV, "TF_STATE_BUCKET": "custom-tfstate"}
+    assert values.validate(declaration(tmp_path), stray, True) == []
+    assert values.validate(declaration(tmp_path), stray, False) == []
 
 
 def test_the_kind_validate_is_state_only(tmp_path):
@@ -188,20 +189,10 @@ def test_the_seeder_policy_scopes_the_state_plane_and_exactly_the_ledger(tmp_pat
     s3_resources = [
         resource for statement in document["Statement"][:2] for resource in statement["Resource"]
     ]
-    assert all(
-        resource.startswith("arn:aws:s3:::detectai-infra-tfstate") for resource in s3_resources
-    )
-
-
-def test_the_seeder_policy_pins_the_resolved_bucket_not_the_default_constant(tmp_path):
-    """Real AWS takes its bucket from TF_STATE_BUCKET; a policy pinned to the
-    default constant would lock the role out of the bucket the run uses."""
-    document = policy.seeder_policy_document(
-        declaration(tmp_path), {"TF_STATE_BUCKET": "custom-tfstate"}, False, "arn:aws:iam::1:user/u"
-    )
-    resources = [r for s in document["Statement"] for r in s["Resource"]]
-    assert "arn:aws:s3:::custom-tfstate" in resources
-    assert "arn:aws:s3:::custom-tfstate/*" in resources
+    assert s3_resources == [
+        "arn:aws:s3:::detectai-infra-tfstate-000000000000",
+        "arn:aws:s3:::detectai-infra-tfstate-000000000000/*",
+    ]
 
 
 def test_the_seeder_policy_locks_the_queues_to_the_stacks_region(tmp_path):
@@ -232,14 +223,6 @@ def test_tf_vars_carry_the_ledger_region_and_emulator(tmp_path, monkeypatch, cle
     assert "TF_VAR_emulator_endpoint" not in tfvars.build_tf_vars(infra, INFRA_ENV, False)
 
 
-def test_shell_state_conflicts_warn_and_lose(monkeypatch, capsys, tmp_path):
-    monkeypatch.setenv("TF_STATE_BUCKET", "shell-bucket")
-    values.warn_shell_conflicts({"TF_STATE_BUCKET": "envs-bucket"})
-    assert "the .env value wins" in capsys.readouterr().out
-    values.warn_shell_conflicts({"TF_STATE_BUCKET": "shell-bucket"})
-    assert capsys.readouterr().out == ""
-
-
 def test_stack_verb_flow_dry_run_prints_the_backend_and_commands(
     tmp_path, capsys, monkeypatch, clean_tf_env
 ):
@@ -255,7 +238,7 @@ def test_stack_verb_flow_dry_run_prints_the_backend_and_commands(
     out = capsys.readouterr().out
     assert "carrier: role session (promoted when the command runs)" in out
     assert "queues:  2 declared" in out
-    assert "state:  detectai-infra-tfstate / infra/floci/terraform.tfstate" in out
+    assert "state:  detectai-infra-tfstate-000000000000 / infra/floci/terraform.tfstate" in out
     assert "endpoints = {" in out
     assert "then terraform plan" in out
     assert "-var-file" not in out
@@ -313,7 +296,7 @@ def test_stack_verb_flow_hints_when_init_fails(tmp_path, capsys, monkeypatch, cl
     assert flow_module.stack_verb_flow(infra, INFRA_ENV, True, "plan", args, SESSION) == 1
     out = capsys.readouterr().out
     assert "fix: confirm the emulator is up and rerun (the bucket is created on demand)" in out
-    assert "aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-infra-tfstate" in out
+    assert "aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-infra-tfstate-000000000000" in out
 
 
 def test_destroy_auto_approves_on_both_planes(tmp_path, monkeypatch, clean_tf_env):
@@ -510,7 +493,7 @@ def test_cli_destroy_dry_run_previews_the_tail(tmp_path, monkeypatch, capsys, cl
     assert cli.main(arguments, workspace=workspace) == 0
     out = capsys.readouterr().out
     assert "then terraform destroy" in out
-    assert "then purge: every object version in detectai-infra-tfstate" in out
+    assert "then purge: every object version in detectai-infra-tfstate-000000000000" in out
     assert "then drop: detectai-infra-seeder inline policy and role" in out
 
 

@@ -1,7 +1,8 @@
 """Black-box runs of `python -m app` against live Floci for the observability kind.
 
-The shared persistent namespace (the `detectai-observability-tfstate` bucket,
-the `detectai-observability-seeder` role, the `observability/floci` state key)
+The shared persistent namespace (the
+`detectai-observability-tfstate-000000000000` bucket, the
+`detectai-observability-seeder` role, the `observability/floci` state key)
 is exercised in place — nothing here sweeps or destroys it, and nothing
 publishes to New Relic: a plan is read-only, so the test plan level stops
 there. Skipped without a live Floci or a configured `envs/.env`.
@@ -81,7 +82,7 @@ def test_plan_rides_the_persistent_state_plane(values_ready):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "plane:   floci" in result.stdout
     assert "detectai-observability-seeder" in result.stdout
-    assert "state:  detectai-observability-tfstate / observability/floci/terraform.tfstate" in (
+    assert "state:  detectai-observability-tfstate-000000000000 / observability/floci/terraform.tfstate" in (
         result.stdout
     )
 

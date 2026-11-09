@@ -29,9 +29,9 @@ make destroy                # tear it all down (auto-approved on both planes)
 ```
 
 `PLANE` picks the state plane in every tfctl target: `floci` (default, the
-emulator on :4566) or `aws` (real AWS — set `TF_STATE_BUCKET` in `envs/.env`
-first). The state bucket and the `detectai-infra-seeder` carrier role are
-created on demand by the first run that needs them.
+emulator on :4566) or `aws` (real AWS). The state bucket
+(`detectai-infra-tfstate-<account>`) and the `detectai-infra-seeder` carrier
+role are created on demand by the first run that needs them.
 
 ## Layout
 
@@ -46,8 +46,7 @@ infra/
 
 The offline gate never needs a plane: `terraform test` runs provider mocks
 (`terraform/tests/queues.tftest.hcl` asserts the ledger's contract shape).
-Beyond it, the fabric is proven on floci only — the integration
-(`poetry -C ../tools/tfctl run pytest -m integration`) applies an `itn_`-sandbox
-copy of the ledger to the emulator, asserts the live queue attributes, tags,
-and a message round-trip, then destroys with the state purge. Real AWS is
-reached only through an explicit `make PLANE=aws …`.
+Beyond it, the integration suite
+(`poetry -C ../tools/tfctl run pytest -m integration`) plans read-only against
+the shared persistent namespace on the emulator — nothing there applies or
+destroys. Real AWS is reached only through an explicit `make PLANE=aws …`.

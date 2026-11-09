@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from app.engine.carrier.identity import DEFAULT_ACCOUNT_ID, iam_account_id
+from app.engine.declaration.model import state_bucket_for
 from app.engine.values.plane import resolve_region
 from app.kinds.infra.declaration import InfraDeclaration
-from app.kinds.infra.values import DEFAULT_STATE_BUCKET, resolve_state_bucket
 
 # The management surface aws_sqs_queue exercises: create/read/update/redrive/
 # tags. ListQueues stays out — the provider never calls it for these resources.
@@ -32,7 +32,7 @@ def seeder_policy_document(
     # The queue/bucket ARNs ride the plane account: the emulator places every
     # resource in one account whatever the trust placeholder says.
     account = DEFAULT_ACCOUNT_ID if is_emulator else iam_account_id(user_arn)
-    bucket = resolve_state_bucket(values, is_emulator) or DEFAULT_STATE_BUCKET
+    bucket = state_bucket_for(declaration.slug, account)
     return {
         "Version": "2012-10-17",
         "Statement": [

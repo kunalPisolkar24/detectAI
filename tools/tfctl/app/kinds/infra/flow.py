@@ -9,19 +9,13 @@ import urllib.request
 from app.engine.carrier.identity import plane_account
 from app.engine.carrier.role import drop_seeder_flow
 from app.engine.carrier.session import session_remaining_text
+from app.engine.declaration.model import state_bucket_for
 from app.engine.shell import die, run_terraform
 from app.engine.stack.inputs import build_backend_hcl, state_key, write_backend_hcl
 from app.engine.stack.state import ensure_state_bucket, preview_purge, purge_state
 from app.engine.values.plane import plane_display, resolve_floci_url, resolve_region
 from app.kinds.infra.declaration import InfraDeclaration
 from app.kinds.infra.tfvars import build_tf_vars
-from app.kinds.infra.values import (
-    BUCKET_MISSING_ERROR,
-    BUCKET_MISSING_FIX,
-    DEFAULT_STATE_BUCKET,
-    resolve_state_bucket,
-    warn_shell_conflicts,
-)
 
 
 def probe_emulator(endpoint: str) -> None:
@@ -63,13 +57,10 @@ def stack_verb_flow(
     session,
 ) -> int:
     """plan/apply: the banner, the self-healed bucket, init -reconfigure, then the verb."""
-    bucket = resolve_state_bucket(values, is_emulator)
-    if bucket is None:
-        die(BUCKET_MISSING_ERROR, BUCKET_MISSING_FIX)
     account = plane_account(session, is_emulator)
+    bucket = state_bucket_for(declaration.slug, account)
     tf_vars = build_tf_vars(declaration, values, is_emulator)
     state_key_value = state_key(declaration, is_emulator)
-    warn_shell_conflicts(values)
 
     print(f"plane:   {plane_display(is_emulator)}")
     if args.dry_run:
@@ -84,8 +75,6 @@ def stack_verb_flow(
     print(f"stack:   {declaration.stack_root}")
     print(f"queues:  {len(declaration.queue_ledger)} declared")
     print(f"state:  {bucket} / {state_key_value}")
-    if is_emulator and not values.get("TF_STATE_BUCKET"):
-        print(f"note:   TF_STATE_BUCKET unset; the Floci plane defaults to {DEFAULT_STATE_BUCKET}")
 
     if args.dry_run:
         backend_hcl = build_backend_hcl(declaration, values, is_emulator, account, bucket)

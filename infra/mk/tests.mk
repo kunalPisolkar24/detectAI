@@ -17,7 +17,7 @@ help-tests:
 
 env:
 	@test -f envs/.env || cp envs/.env.example envs/.env
-	@echo "envs/.env ready (edit only TF_STATE_BUCKET or AWS_REGION as wanted)"
+	@echo "envs/.env ready (edit only AWS_REGION as wanted)"
 
 fmt:
 	terraform -chdir=$(TF_DIR) fmt -check -recursive -diff

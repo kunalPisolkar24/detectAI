@@ -11,6 +11,7 @@ import pytest
 from conftest import fake_carrier_session
 from app import main as cli
 from app.engine.carrier import session as carrier_session
+from app.engine.declaration.model import state_bucket_for
 from app.kinds.locate import workspace_for
 from app.kinds.observability import kind as observability_kind
 from app.kinds.observability import account, policy, values
@@ -27,7 +28,6 @@ OBS_ENV = {
     "NEW_RELIC_API_KEY": "NRAK-ABCDEFGHIJKLMNOP",
     "NEW_RELIC_ACCOUNT_ID": "123456",
     "NEW_RELIC_REGION": "EU",
-    "TF_STATE_BUCKET": "detectai-observability-tfstate",
     "AWS_REGION": "ap-southeast-2",
 }
 
@@ -42,7 +42,7 @@ SESSION = {
 
 @pytest.fixture
 def clean_nr_env(monkeypatch):
-    for key in ("NEW_RELIC_API_KEY", "NEW_RELIC_ACCOUNT_ID", "NEW_RELIC_REGION", "TF_STATE_BUCKET"):
+    for key in ("NEW_RELIC_API_KEY", "NEW_RELIC_ACCOUNT_ID", "NEW_RELIC_REGION"):
         monkeypatch.delenv(key, raising=False)
 
 
@@ -111,21 +111,29 @@ def test_a_leftover_emulator_line_prints_nowhere(tmp_path, monkeypatch, capsys, 
     assert "plane:  floci (emulator http://localhost:4566)" in out
 
 
-def test_state_bucket_law_follows_the_plane(tmp_path, clean_nr_env):
-    assert (
-        values.resolve_state_bucket({"TF_STATE_BUCKET": "custom-bucket"}, True) == "custom-bucket"
+def test_the_state_bucket_is_derived_from_slug_and_account():
+    """No env override anywhere: the engine's derivation is the bucket law."""
+    assert state_bucket_for("observability", "000000000000") == (
+        "detectai-observability-tfstate-000000000000"
     )
-    assert values.resolve_state_bucket({}, True) == "detectai-observability-tfstate"
-    assert values.resolve_state_bucket({}, False) is None
+    assert state_bucket_for("observability", "123456789012") == (
+        "detectai-observability-tfstate-123456789012"
+    )
 
 
 def test_state_shape_errors_name_the_line_and_the_fix():
-    errors = values.validate_state(
-        {"AWS_REGION": "eu-west", "TF_STATE_BUCKET": "B!AD"},
-    )
+    errors = values.validate_state({"AWS_REGION": "eu-west"})
     text = "\n".join(errors)
-    assert "AWS_REGION is not a valid state-bucket region: 'eu-west'" in text
-    assert "TF_STATE_BUCKET is not a valid S3 bucket name: 'B!AD'" in text
+    assert "AWS_REGION is not a valid region: 'eu-west'" in text
+    assert "fix:" in text
+
+
+def test_a_stray_tf_state_bucket_line_is_inert(tmp_path):
+    """A stray TF_STATE_BUCKET line validates clean on both planes: no
+    override, no note, no error — the derived bucket wins everywhere."""
+    stray = {**OBS_ENV, "TF_STATE_BUCKET": "custom-tfstate"}
+    assert values.validate(declaration(tmp_path), stray, True) == []
+    assert values.validate(declaration(tmp_path), stray, False) == []
 
 
 def test_credential_shape_errors_name_the_credential_class():
@@ -179,26 +187,26 @@ def test_the_seeder_policy_scopes_only_the_state_bucket_family(tmp_path):
         "RunTerraformStateBucket",
         "RunTerraformStateObjects",
     ]
-    actions = [action for statement in document["Statement"] for action in statement["Action"]]
-    assert all(action.startswith("s3:") for action in actions)
-    resources = [
-        resource for statement in document["Statement"] for resource in statement["Resource"]
+    bucket_statement, object_statement = document["Statement"]
+    assert bucket_statement["Action"] == [
+        "s3:CreateBucket",
+        "s3:PutBucketVersioning",
+        "s3:GetBucketVersioning",
+        "s3:ListBucket",
+        "s3:ListBucketVersions",
+        "s3:DeleteBucket",
     ]
-    assert all(
-        resource.startswith("arn:aws:s3:::detectai-observability-tfstate") for resource in resources
-    )
-    object_statement = next(s for s in document["Statement"] if "s3:GetObject" in s["Action"])
-    assert object_statement["Resource"] == ["arn:aws:s3:::detectai-observability-tfstate*/*"]
-
-
-def test_the_seeder_policy_pins_the_resolved_bucket_not_the_default_constant(tmp_path):
-    """Real AWS takes its bucket from TF_STATE_BUCKET; a policy pinned to the
-    default constant would lock the role out of the bucket the run uses."""
-    document = policy.seeder_policy_document(
-        declaration(tmp_path), {"TF_STATE_BUCKET": "custom-tfstate"}, False, "arn:aws:iam::1:user/u"
-    )
-    resources = [r for s in document["Statement"] for r in s["Resource"]]
-    assert resources == ["arn:aws:s3:::custom-tfstate*", "arn:aws:s3:::custom-tfstate*/*"]
+    assert bucket_statement["Resource"] == ["arn:aws:s3:::detectai-observability-tfstate-000000000000"]
+    assert object_statement["Action"] == [
+        "s3:GetObject",
+        "s3:GetObjectVersion",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion",
+    ]
+    assert object_statement["Resource"] == [
+        "arn:aws:s3:::detectai-observability-tfstate-000000000000/*"
+    ]
 
 
 def test_tf_vars_flow_the_provider_block(tmp_path, monkeypatch, clean_nr_env):
@@ -217,14 +225,6 @@ def test_tf_vars_flow_the_provider_block(tmp_path, monkeypatch, clean_nr_env):
     }
 
 
-def test_shell_state_conflicts_warn_and_lose(monkeypatch, capsys, tmp_path):
-    monkeypatch.setenv("TF_STATE_BUCKET", "shell-bucket")
-    values.warn_shell_conflicts({"TF_STATE_BUCKET": "envs-bucket"})
-    assert "the .env value wins" in capsys.readouterr().out
-    values.warn_shell_conflicts({"TF_STATE_BUCKET": "shell-bucket"})
-    assert capsys.readouterr().out == ""
-
-
 def test_check_flow_describes_the_credential_pair(tmp_path, capsys, monkeypatch, clean_nr_env):
     (tmp_path / "observability.toml").write_text(OBS_TOML)
     obs = load(tmp_path / "observability.toml")
@@ -235,7 +235,7 @@ def test_check_flow_describes_the_credential_pair(tmp_path, capsys, monkeypatch,
     assert "NEW_RELIC_ACCOUNT_ID  123456" in out
     assert "mock — set a real account ID" in out
     assert "plane:  floci (emulator http://localhost:4566)" in out
-    assert "state:  detectai-observability-tfstate" in out
+    assert "state:  detectai-observability-tfstate-000000000000" in out
 
 
 def test_check_flow_reports_bad_credentials_before_describing(tmp_path, capsys, clean_nr_env):
@@ -263,7 +263,7 @@ def test_stack_verb_flow_dry_run_prints_the_backend_and_commands(
     assert code == 0
     out = capsys.readouterr().out
     assert "carrier: role session (promoted when the command runs)" in out
-    assert "state:  detectai-observability-tfstate / observability/floci/terraform.tfstate" in out
+    assert "state:  detectai-observability-tfstate-000000000000 / observability/floci/terraform.tfstate" in out
     assert "endpoints = {" in out
     assert "then terraform plan" in out
     assert "-var-file" not in out
@@ -326,7 +326,8 @@ def test_stack_verb_flow_hints_when_init_fails(tmp_path, capsys, monkeypatch, cl
     out = capsys.readouterr().out
     assert "fix: confirm the emulator is up and rerun (the bucket is created on demand)" in out
     assert (
-        "aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-observability-tfstate" in out
+        "aws --endpoint-url http://localhost:4566 s3 mb s3://detectai-observability-tfstate-000000000000"
+        in out
     )
 
 
@@ -608,7 +609,7 @@ def test_cli_destroy_dry_run_previews_the_tail(tmp_path, monkeypatch, capsys, cl
     assert cli.main(arguments, workspace=workspace) == 0
     out = capsys.readouterr().out
     assert "then terraform destroy" in out
-    assert "then purge: every object version in detectai-observability-tfstate" in out
+    assert "then purge: every object version in detectai-observability-tfstate-000000000000" in out
     assert "then drop: detectai-observability-seeder inline policy and role" in out
 
 

@@ -12,7 +12,8 @@ Which file a stack directory holds decides which kind drives the run:
 | **observability** | `observability.toml` at the stack root — the New Relic-as-code stack in `observability` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
 | **infra** | `infra.toml` at the stack root — the shared queue fabric in `infra` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
 
-All three reach for the same two out-of-stack prerequisites — the state bucket and the seeder carrier role ([Carrier](carrier.md)) — created on demand and converged per run, on either plane. What differs is what the stack *is*: secrets turns `infra/.env` into Secrets Manager + SSM; observability terraform-drives the dashboards and alerts root and adds provider-only credentials (New Relic's NRAK triple, never AWS personal keys); infra terraform-drives the shared AWS queue fabric — no credential law at all, only bucket and region shapes.
+All three reach for the same two out-of-stack prerequisites — the state bucket and the seeder carrier role ([Carrier](carrier.md)) — created on demand and converged per run, on either plane. What differs is what the stack *is*: secrets turns `infra/.env` into Secrets Manager + SSM; observability terraform-drives the dashboards and alerts root and adds provider-only credentials (New Relic's NRAK triple, never AWS personal keys); infra terraform-drives the shared AWS queue fabric — no credential law at all,
+only the region shape.
 
 ## What a Kind supplies
 
