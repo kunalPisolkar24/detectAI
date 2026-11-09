@@ -128,4 +128,4 @@ Same double-plane shape document-parser landed; this service's own LLD lives in 
 
 ## Cutover and removal
 
-[messaging.md](messaging.md) owns the cutover sequence (provision → worker deploys SQS consumer → this service flips → Paddle/web flip → RabbitMQ drains and retires). The removal note is the same policy as document-parser's: keep the reference, remove it when its last consumer is migrated; `git log -- services/payment-webhook/slop` recovers everything after.
+[messaging.md](messaging.md) owns the cutover sequence (provision → worker deploys SQS consumer → this service flips → Paddle/web flip → RabbitMQ drains and retires). The reference build-out (`slop/`) was kept as reference material while this one was built; it is now removed. The complete copy is recoverable from git history.
