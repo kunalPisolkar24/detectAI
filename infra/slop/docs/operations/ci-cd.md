@@ -132,7 +132,7 @@ Each service has its own CI workflow:
 | `service-inference.yaml` | AI inference | `services/inference/**` |
 | `service-web.yaml` | Web app | `apps/web/**` |
 | `service-workers.yaml` | Workers | `services/workers/**` |
-| `service-payment-gateway.yaml` | Payment gateway | `services/payments/**` |
+| `payment-webhook.yaml` | Payment webhook | `services/payment-webhook/**` |
 | `document-parser.yaml` | Document parser | `services/document-parser/**` |
 
 ### Typical Service Pipeline

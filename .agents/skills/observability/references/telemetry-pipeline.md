@@ -47,7 +47,6 @@ never page. Rig data still lands in NR; investigate with raw NRQL.
   `deployment.environment=loadtest` and exports to EU on `:443`.
 - A component overlay that wires the collector and exporters onto the load
   project: `apps/web/infra/compose.load.observability.yml`,
-  `services/payments/gateway/infra/compose.load.observability.yml`,
   `services/chats/infra/compose.load.observability.yml`,
   `services/workers/infra/compose.load.observability.yml` (worker-agnostic;
   adds redis/postgres exporters, the rabbitmq exporter rides

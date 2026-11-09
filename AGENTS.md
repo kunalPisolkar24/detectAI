@@ -8,7 +8,7 @@ Monorepo. Stay inside the component you were asked to change.
 
 - `apps/web` — Next.js 15 frontend, BFF, auth, UI (`features/`, `lib/`, `infra/`)
 - `services/chats` — Go gRPC chat service (`internal/core`, `internal/adapters`)
-- `services/payments/gateway` — Go webhook gateway
+- `services/payment-webhook` — Go webhook gateway
 - `services/inference` — Python gRPC model serving (`src/domain`, `src/application`, `src/adapters`, `src/infrastructure`)
 - `services/document-parser` — Python FastAPI text extraction (`app/`)
 - `services/workers` — TypeScript background workers (`src/modules`, `src/shared`)

@@ -248,5 +248,5 @@ make load-test SCENARIO=stress VUS=50 DURATION=5m
 - [Request Flows](../concepts/request-flows.md) — How requests are processed
 - [Health](../operations/health.md) — How to check if configuration is working
 - [Observability](../operations/observability.md) — Monitor configuration impact
-- [Gateway Configuration](../../payments/gateway/docs/08-configuration.md) — Reference AWS chain pattern
+- [Payment Webhook Configuration](../../../payment-webhook/docs/getting-started/configuration.md) — Reference AWS chain pattern
 - [Workers Configuration](../../workers/docs/configuration.md) — Reference ENV_TYPE handling
