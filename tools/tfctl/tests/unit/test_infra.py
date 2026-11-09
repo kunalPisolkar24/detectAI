@@ -21,14 +21,14 @@ pytestmark = pytest.mark.unit
 INFRA_KIND = infra_kind()
 
 INFRA_TOML = (
-    '[service]\nslug = "infra"\nregion = "eu-central-1"\n\n'
+    '[service]\nslug = "infra"\nregion = "ap-southeast-2"\n\n'
     '[[queues]]\nname = "payment_events.fifo"\ndlq = "payment_events_dlq.fifo"\n'
     "max_receive_count = 5\n\n"
     '[[queues]]\nname = "payment_events_dlq.fifo"\n'
 )
 
 INFRA_ENV = {
-    "AWS_REGION": "eu-central-1",
+    "AWS_REGION": "ap-southeast-2",
     "TF_STATE_BUCKET": "detectai-infra-tfstate",
 }
 
@@ -68,7 +68,7 @@ def test_declaration_matches_the_committed_schema(tmp_path):
     assert infra.kind == "infra"
     assert infra.slug == "infra"
     assert infra.seeder_role_name == "detectai-infra-seeder"
-    assert infra.region_default == "eu-central-1"
+    assert infra.region_default == "ap-southeast-2"
     assert infra.stack_root == tmp_path / "terraform"
     ledger = [(entry.name, entry.dlq, entry.max_receive_count) for entry in infra.queue_ledger]
     assert ledger == [
@@ -162,7 +162,7 @@ def test_state_shape_errors_name_the_line_and_the_fix():
 
 
 def test_the_kind_validate_is_state_only(tmp_path):
-    assert values.validate(declaration(tmp_path), {"AWS_REGION": "eu-central-1"}, True) == []
+    assert values.validate(declaration(tmp_path), {"AWS_REGION": "ap-southeast-2"}, True) == []
 
 
 def test_the_seeder_policy_scopes_the_state_plane_and_exactly_the_ledger(tmp_path):
@@ -182,8 +182,8 @@ def test_the_seeder_policy_scopes_the_state_plane_and_exactly_the_ledger(tmp_pat
     assert "sqs:SetQueueAttributes" in actions
     assert "sqs:DeleteQueue" in actions
     assert queue_statement["Resource"] == [
-        "arn:aws:sqs:eu-central-1:000000000000:payment_events.fifo",
-        "arn:aws:sqs:eu-central-1:000000000000:payment_events_dlq.fifo",
+        "arn:aws:sqs:ap-southeast-2:000000000000:payment_events.fifo",
+        "arn:aws:sqs:ap-southeast-2:000000000000:payment_events_dlq.fifo",
     ]
     s3_resources = [
         resource for statement in document["Statement"][:2] for resource in statement["Resource"]
@@ -209,13 +209,13 @@ def test_the_seeder_policy_locks_the_queues_to_the_stacks_region(tmp_path):
         declaration(tmp_path), {}, False, "arn:aws:iam::123456789012:user/u"
     )
     queue_resources = document["Statement"][2]["Resource"]
-    assert all(":sqs:eu-central-1:" in resource for resource in queue_resources)
+    assert all(":sqs:ap-southeast-2:" in resource for resource in queue_resources)
 
 
 def test_tf_vars_carry_the_ledger_region_and_emulator(tmp_path, monkeypatch, clean_tf_env):
     infra = declaration(tmp_path)
     built = tfvars.build_tf_vars(infra, INFRA_ENV, True)
-    assert built["TF_VAR_aws_region"] == "eu-central-1"
+    assert built["TF_VAR_aws_region"] == "ap-southeast-2"
     assert built["TF_VAR_emulator_endpoint"] == "http://localhost:4566"
     assert json.loads(built["TF_VAR_queues"]) == {
         "payment_events.fifo": {
@@ -282,7 +282,7 @@ def test_stack_verb_flow_runs_init_then_the_verb_on_the_carrier_triplet(
     assert len(calls) == 2
     init_call, verb_call = calls
     assert init_call[0] == str(infra.stack_root) and verb_call[0] == str(infra.stack_root)
-    assert init_call[2]["TF_VAR_aws_region"] == "eu-central-1"
+    assert init_call[2]["TF_VAR_aws_region"] == "ap-southeast-2"
     assert (
         json.loads(init_call[2]["TF_VAR_queues"])["payment_events.fifo"]["max_receive_count"] == 5
     )
@@ -527,7 +527,7 @@ def test_cli_seeder_drop_is_available_to_the_infra_kind(tmp_path, capsys):
     workspace = write_stack(tmp_path)
     assert cli.main(["seeder-drop", "--dry-run"], workspace=workspace) == 0
     out = capsys.readouterr().out
-    assert "would run: aws --region eu-central-1 --endpoint-url http://localhost:4566 iam" in out
+    assert "would run: aws --region ap-southeast-2 --endpoint-url http://localhost:4566 iam" in out
     assert "--role-name detectai-infra-seeder" in out
     assert "deleted: detectai-infra-seeder" not in out
 

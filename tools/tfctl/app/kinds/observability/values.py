@@ -115,7 +115,7 @@ def validate_state(values: dict[str, str]) -> list[str]:
     if (region := values.get("AWS_REGION")) is not None and not REGION_RE.fullmatch(region):
         fail(
             f"AWS_REGION is not a valid state-bucket region: {region!r}",
-            "use a plain region code, e.g. ap-south-1 (this is not NEW_RELIC_REGION)",
+            "use a plain region code, e.g. ap-southeast-2 (this is not NEW_RELIC_REGION)",
         )
     if (bucket := values.get("TF_STATE_BUCKET", "")) and not BUCKET_RE.fullmatch(bucket):
         fail(

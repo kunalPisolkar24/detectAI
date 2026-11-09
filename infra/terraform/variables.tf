@@ -1,11 +1,11 @@
 variable "aws_region" {
   description = "AWS region for the queue fabric (the emulator accepts any value)."
   type        = string
-  default     = "eu-central-1"
+  default     = "ap-southeast-2"
 
   validation {
     condition     = can(regex("^[a-z]{2}-[a-z]+-[0-9]+$", var.aws_region))
-    error_message = "aws_region must be a valid AWS region code (e.g. eu-central-1)."
+    error_message = "aws_region must be a valid AWS region code (e.g. ap-southeast-2)."
   }
 }
 

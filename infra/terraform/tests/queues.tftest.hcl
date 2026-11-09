@@ -4,7 +4,7 @@ mock_provider "aws" {}
 # ledger is set here — visibility/retention ride the variables' spec-pinned
 # defaults, so these asserts carry the contract.
 variables {
-  aws_region = "eu-central-1"
+  aws_region = "ap-southeast-2"
   queues = {
     "payment_events.fifo" = {
       name              = "payment_events.fifo"

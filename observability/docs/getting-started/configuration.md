@@ -12,7 +12,7 @@ All credentials and plane settings live in `envs/.env` (gitignored). `make env` 
 | `NEW_RELIC_ACCOUNT_ID` | no | `123456` (mock) | The account the boards and policies are created in — replace with your real account ID for live runs |
 | `NEW_RELIC_REGION` | no | `EU` | The New Relic datacenter (`one.eu.newrelic.com`) |
 | `TF_STATE_BUCKET` | yes on real AWS | `detectai-observability-tfstate` on Floci | S3 bucket that stores Terraform state |
-| `AWS_REGION` | no | `ap-south-1` | The **state bucket's** region — not New Relic's |
+| `AWS_REGION` | no | `ap-southeast-2` | The **state bucket's** region — not New Relic's |
 
 > **Tip**: `make check` validates this file, previews the plane selection, and resolves the account live — without touching any resource.
 

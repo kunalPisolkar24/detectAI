@@ -27,8 +27,15 @@ pytestmark = pytest.mark.integration
 def floci_reachable() -> bool:
     try:
         probe = subprocess.run(
-            ["aws", "--endpoint-url", FLOCI_URL, "--region", "ap-south-1", "sts",
-             "get-caller-identity"],
+            [
+                "aws",
+                "--endpoint-url",
+                FLOCI_URL,
+                "--region",
+                "ap-southeast-2",
+                "sts",
+                "get-caller-identity",
+            ],
             capture_output=True,
             stdin=subprocess.DEVNULL,
             timeout=30,

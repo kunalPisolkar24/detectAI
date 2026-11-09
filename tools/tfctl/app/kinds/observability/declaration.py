@@ -10,7 +10,7 @@ from pathlib import Path
 from app.engine.declaration.model import REGION_RE, Declaration, DeclarationError, seeder_role_for
 
 SLUG = "observability"
-STATE_REGION_DEFAULT = "ap-south-1"
+STATE_REGION_DEFAULT = "ap-southeast-2"
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 TOP_SECTIONS = {"service"}

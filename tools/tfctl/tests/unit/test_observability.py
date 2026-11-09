@@ -21,14 +21,14 @@ pytestmark = pytest.mark.unit
 
 OBS_KIND = observability_kind()
 
-OBS_TOML = '[service]\nslug = "observability"\nregion = "ap-south-1"\n'
+OBS_TOML = '[service]\nslug = "observability"\nregion = "ap-southeast-2"\n'
 
 OBS_ENV = {
     "NEW_RELIC_API_KEY": "NRAK-ABCDEFGHIJKLMNOP",
     "NEW_RELIC_ACCOUNT_ID": "123456",
     "NEW_RELIC_REGION": "EU",
     "TF_STATE_BUCKET": "detectai-observability-tfstate",
-    "AWS_REGION": "ap-south-1",
+    "AWS_REGION": "ap-southeast-2",
 }
 
 SESSION = {
@@ -68,7 +68,7 @@ def test_declaration_matches_the_committed_schema(tmp_path):
     assert obs.slug == "observability"
     assert obs.kind == "observability"
     assert obs.seeder_role_name == "detectai-observability-seeder"
-    assert obs.region_default == "ap-south-1"
+    assert obs.region_default == "ap-southeast-2"
     assert obs.stack_root == tmp_path / "terraform"
 
 
@@ -102,9 +102,10 @@ def test_a_leftover_emulator_line_prints_nowhere(tmp_path, monkeypatch, capsys, 
     (tmp_path / "observability.toml").write_text(OBS_TOML)
     obs = load(tmp_path / "observability.toml")
     monkeypatch.setattr(flow_module, "live_check", lambda config: None)
-    assert flow_module.check_flow(
-        obs, {**OBS_ENV, "EMULATOR_ENDPOINT": "http://localhost:4566"}, True
-    ) == 0
+    assert (
+        flow_module.check_flow(obs, {**OBS_ENV, "EMULATOR_ENDPOINT": "http://localhost:4566"}, True)
+        == 0
+    )
     out = capsys.readouterr().out
     assert "EMULATOR_ENDPOINT" not in out
     assert "plane:  floci (emulator http://localhost:4566)" in out
@@ -166,7 +167,7 @@ def test_build_config_prefers_the_shell_per_key(monkeypatch, tmp_path, clean_nr_
 
 def test_the_kind_validate_is_state_only(tmp_path):
     # No New Relic keys at all: state shapes pass, credentials are the verbs' concern.
-    assert values.validate(declaration(tmp_path), {"AWS_REGION": "ap-south-1"}, True) == []
+    assert values.validate(declaration(tmp_path), {"AWS_REGION": "ap-southeast-2"}, True) == []
 
 
 def test_the_seeder_policy_scopes_only_the_state_bucket_family(tmp_path):
@@ -499,7 +500,7 @@ def test_cli_seeder_drop_is_available_to_the_observability_kind(tmp_path, capsys
     workspace = write_stack(tmp_path)
     assert cli.main(["seeder-drop", "--dry-run"], workspace=workspace) == 0
     out = capsys.readouterr().out
-    assert "would run: aws --region ap-south-1 --endpoint-url http://localhost:4566 iam" in out
+    assert "would run: aws --region ap-southeast-2 --endpoint-url http://localhost:4566 iam" in out
     assert "--role-name detectai-observability-seeder" in out
     assert "deleted: detectai-observability-seeder" not in out
 
@@ -554,7 +555,9 @@ def test_cli_session_clear_targets_only_the_observability_cache(monkeypatch, tmp
     )
 
 
-def test_cli_session_refresh_clears_then_mints_in_order(monkeypatch, tmp_path, capsys, clean_nr_env):
+def test_cli_session_refresh_clears_then_mints_in_order(
+    monkeypatch, tmp_path, capsys, clean_nr_env
+):
     monkeypatch.setattr(carrier_session, "CACHE_ROOT", tmp_path / "cache")
     workspace = write_stack(tmp_path)
     cache = tmp_path / "cache" / "observability.json"

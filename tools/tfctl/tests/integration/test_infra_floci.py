@@ -26,10 +26,10 @@ from app.kinds.locate import REPO_ROOT
 FLOCI_URL = os.environ.get("TFCTL_FLOCI", "http://localhost:4566")
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 INFRA_DIR = REPO_ROOT / "infra"
-REGION = "eu-central-1"
+REGION = "ap-southeast-2"
 
 SANDBOX_TOML = (
-    '[service]\nslug = "infra"\nregion = "eu-central-1"\n\n'
+    '[service]\nslug = "infra"\nregion = "ap-southeast-2"\n\n'
     '[[queues]]\nname = "itn_payment_events.fifo"\ndlq = "itn_payment_events_dlq.fifo"\n'
     "max_receive_count = 5\n\n"
     '[[queues]]\nname = "itn_payment_events_dlq.fifo"\n'

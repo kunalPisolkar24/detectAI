@@ -11,7 +11,7 @@ overwrites). Keys:
 | `NEW_RELIC_ACCOUNT_ID` | no | `123456` (mock) | target account |
 | `NEW_RELIC_REGION` | no | `EU` | datacenter |
 | `TF_STATE_BUCKET` | yes on real AWS | `detectai-observability-tfstate` | Terraform state bucket |
-| `AWS_REGION` | no | `ap-south-1` | the **state bucket's** region, not New Relic's |
+| `AWS_REGION` | no | `ap-southeast-2` | the **state bucket's** region, not New Relic's |
 
 Precedence: New Relic credentials — a shell export wins for one run; state
 keys (`TF_STATE_BUCKET`, `AWS_REGION`) — `envs/.env` wins, a conflicting
