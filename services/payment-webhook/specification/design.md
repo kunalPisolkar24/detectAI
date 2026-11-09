@@ -4,128 +4,110 @@ Module layout, runtime model, and the decisions behind them. Requirements live i
 
 ## Module layout
 
-`go run ./cmd/api` is the whole runtime:
-
 ```
 services/payment-webhook/
   go.mod
   cmd/
-    api/
-      main.go       # boot: config.Load, the SQS publisher, then server assembly
+    api/main.go        # boot: flick → config.Load → the SQS publisher → observability → serve
   internal/
-    server/
-      server.go     # serve until SIGINT/SIGTERM (NFR-9)
-      shutdown.go   # drain within the configured budget, drain logged
+    server/            # serve until SIGINT/SIGTERM (NFR-9)
+      server.go        #   signal.NotifyContext, the serve loop
+      shutdown.go      #   drain within DRAIN_TIMEOUT, drain logged
     config/
-      load.go       # Load: flick → factory → Resolve, wrapped once into ConfigError
-      config.go     # Config{Port, DrainTimeout, PaddleSecret} + Resolve — parsed per field
-      interfaces.go # contracts hub: the Source plane contract
-      errors.go     # the Load-boundary ConfigError wrapper
-      adapters/
-        dotenv.go     # dev file plane reader
-        parameters.go # prod SSM tree reader — skeleton (AWS build)
-        secrets_manager.go # prod secrets blob reader — skeleton (AWS build)
-      planes/
-        source.go      # the Source plane contract
-        dev_source.go  # dev plane: env over dotenv
-        prod_source.go # prod plane: blob + SSM disjoint — skeleton (AWS build)
-      factories/
-        config_factory.go      # the flick wiring: dev wired, prod refuses
-        aws_client_factory.go  # bootstrap clients — skeleton (AWS build)
+      load.go          # Load: flick → factory → Resolve, wrapped once into ConfigError
+      config.go        # Config + Resolve — parsed per field, fail-fast / fail-closed split
+      interfaces.go    # contracts hub: the Source plane contract
+      errors.go        # the Load-boundary ConfigError wrapper
+      planes/          # source.go · dev_source.go (env over dotenv) · prod_source.go (blob + SSM)
+      adapters/        # dotenv.go · parameters.go (SSM tree) · secrets_manager.go (JSON blob)
+      factories/       # config_factory.go (the flick wiring) · aws_client_factory.go
     router/
-      router.go     # gin engine: the /api/v1 group — probes plus the single ingress route
+      router.go        # gin engine: the /api/v1 group — probes + the ingress, otelgin wired
     validator/
-      body.go       # ReadBounded + the bound error pair
-      paddle.go     # the Paddle HMAC verifier: header grammar, freshness, constant-time compare
-      envelope.go   # CheckEnvelope: the Paddle envelope gate — presence-only, warn-level advisory
+      body.go          # ReadBounded + the ErrBodyTooLarge/ErrBodyMalformed pair
+      paddle.go        # the Paddle HMAC verifier: header grammar, freshness, constant-time compare
+      envelope.go      # CheckEnvelope: presence-only over the four core fields + advisories
     events/
-      parse.go      # ParseEvent: the one Paddle spelling walk — snake_case ids, the custom_data user, occurred_at
+      parse.go         # ParseEvent: the one Paddle spelling walk, shared by gate and shaping
     handlers/
-      probes.go     # /api/v1/health, /api/v1/ready — static bodies
-      webhook.go    # POST /api/v1/webhook/paddle — bounded read, verify, envelope gate, one publish
-      response.go   # the shared rows: the two read rows, the publish rows 200/503/500
+      probes.go        # /health, /ready — static bodies
+      webhook.go       # the paddle face: bounded read, verify, gate, one publish, verdict calls
+      response.go      # the read rows, the publish rows 200/503/500, Retry-After
     queue/
-      queue.go      # the Message contract, the Queue interface, the retryable sentinels
-      shape.go      # Shape + the group-key ladder — the message factory consuming events.ParseEvent
-      service.go    # the publish budget composition the Paddle face mounts
-      sqs.go        # the SQS adapter: SendMessage, the fault mapping, the per-message ceiling
+      queue.go         # the Message contract, the Queue interface, the retryable sentinels
+      shape.go         # Shape + the group-key ladder
+      service.go       # the publish budget composition (deadline → ErrDeadlineExceeded)
+      sqs.go           # the SQS adapter: SendMessage, fault mapping, the 256 KiB ceiling
+    observability/
+      interfaces.go    # the Telemetry seam + the attribution vocabularies — no OTel imports
+      null.go          # the disabled boot's realization
+      service.go       # frozen instrument names + every recording method
+      boot.go          # the endpoint gate, exporters, adapters, the slog tee
+      otlp.go          # signal paths, gzip, the api-key header
+      resource.go      # service.name / version / deployment labels
+      adapters/        # one SDK provider per signal, start-once
   tests/
-    unit/
-      config/                # one black-box config_test package, document-parser's tests-tree layout
-        helpers_test.go        # shared: plane writers, the adapter reader
-        dotenv_test.go         # the dotenv grammar and its path modes
-        dev_source_test.go     # env wins over the file
-        config_factory_test.go # dev wired, prod refuses
-        config_test.go         # the flick, Resolve contracts, Load end-to-end
-      validator/               # the bounded read and the signature verifier, black-box
-        body_test.go           # the bound vectors: legality at max, oversize, no excess consumed
-        paddle_test.go         # signature classes: fresh, stale, future, tampered, malformed fragments
-      handlers/                # the paddle face's status mapping, black-box
-        webhook_test.go        # 200/400/401/413/503/500 over the real validator and a fake queue
-      router/                  # the paddle face's mounting and guard wiring, black-box
-        router_test.go         # the signed publish-through, the retired face's 404, the ceiling clamp
-      queue/                   # the transport contract, black-box
-        fakes_test.go          # the fake Queue and the fake SQS client seams
-        shape_test.go          # the group-key ladder vectors and the dedup id fallback
-        service_test.go        # the budget mapping over the fake transport
-        sqs_test.go            # the FIFO message shape and the fault-code mapping
-  Makefile          # default goal run; help aggregates the per-file help targets
-  mk/
-    local.mk       # local-dev verbs: tidy, vet, env, run
-    tests.mk       # testing verbs: test, test-unit (tests tree boundary)
+    unit/              # one black-box package per component (config, validator, handlers,
+                       #   router, queue, observability) with fakes at every seam
+    integration/config/  # the prod planes through the seeded floci emulator, skips when down
+    load/              # the k6 rig: lib/, scenarios/{smoke,load}.js, README
+  Makefile             # help aggregates the per-file targets
+  mk/                  # local.mk · docker.mk · tests.mk · secrets.mk · load.mk
 ```
 
-The paddle face mounts the publisher at boot: bounded read, then the signature check, then the envelope gate, then one `Publish`; the 200 goes out only after the SQS response is in. The validator package owns the checks: the bounded read sits beside the paddle-specific verifier and the envelope gate, one file each, stdlib imports only; the handler owns only statuses and bodies and now the verdict calls (`respondReadError` records, the 401/422 sites record and warn per NFR-8, the accepted body records received/unknown/advisories, and the enqueue rides an app span bracketing one timed `Publish` the telemetry partitions with the status). The envelope gate (`envelope.go`) completes the paddle side: presence-only over the four core fields (`event_id`, `event_type`, `occurred_at`, `data`), with `notification_id` and data-addressability advisory-only — the worker keys idempotency on `event_id`, not on Paddle's delivery-layer id, so the delivery envelope can evolve without breaking anything (http.md's envelope section). The advisory addressable-id check calls `queue.ParseEvent` rather than owning a second alias list: messaging.md keeps that list in exactly one place. The interface seams: the transport `queue.Queue` and the telemetry `observability.Telemetry`, each with one fake in the unit matrix — the observability route-span middleware joins the engine inside `router.New` (`observability.Wire`), which no-ops on the null boot. Middleware stays gin's built-in logger/recovery plus that one join. Growth continues file-first within the standing `cmd/` + `internal/` layout: per-provider validators grow as files in the standing directories.
+## The ingress face and the seams
 
-One of each kind still applies when that split happens. The pre-refactor tree carried parallel layers from stacked iterations — `internal/transport/http` alongside `internal/adapters/inbound/http`, `internal/infrastructure/rabbitmq` alongside `internal/adapters/outbound/rabbitmq`, three observability homes. The rebuild collapses to one layer of each that the repo's clean-architecture rule names, with no interface growth beyond the contracts the standing packages carry, and no `ports/messaging.go` leaking AMQP primitives into the domain (the pre-refactor `ports/messaging.go` was an AMQP interface file — the domain depended on broker transport-shaped things). Dependency direction is one-way whenever the split exists: SDK/Gin imports stay out of the inner layers, wiring happens at boot.
+One face mounts one publish: bounded read, then the signature check, then the envelope gate, then one `Publish` — the 200 goes out only after the SQS response is in. The packages split exactly along the three real jobs:
+
+- `validator` owns the checks — the bounded read beside the paddle-specific verifier and the envelope gate, one file each, stdlib imports only.
+- `events` owns the parse — envelope advisories and message shaping both call `ParseEvent`, so the Paddle spellings live in exactly one place ([messaging.md](messaging.md)'s ladder).
+- `handlers` owns statuses and bodies — it maps typed errors onto rows and folds the verdict calls through the telemetry seam; the enqueue rides an application span bracketing one timed `Publish`.
+- `queue` owns transport — the `Message` contract, the group ladder, the publish budget, and the SQS adapter, with fault codes mapped to the two retryable sentinels.
+
+The interface seams are exactly two: the transport `queue.Queue` and the telemetry `observability.Telemetry`, each with one fake in the unit matrix. Middleware is gin's logger/recovery plus the single otelgin join (`observability.Wire`), which no-ops on the null boot.
 
 ## Runtime model
 
-There is **no executor, no worker pool, no connection machinery — anywhere**. The request path is strictly sequential: bounded body read → validate (sign) → envelope gate → parse metadata → enqueue (one `SendMessage` with the 5 s budget) → response 200. Concurrency exists outside the process — Lambda instances — and for the container runtime, replicas. The local compose instance runs the same code path with no in-process pooling, mirroring document-parser's one-code-path-per-runtime model.
+There is **no executor, no worker pool, no connection machinery — anywhere**. The request path is strictly sequential: bounded body read → verify → envelope gate → parse metadata → enqueue (one `SendMessage` with the 5 s budget) → response 200. Concurrency exists outside the process — Lambda instances, container replicas — exactly the model document-parser runs on the same front door.
 
-Health: `ready` reflects boot validation only (config, credentials, queue URL); there is nothing to check at request time because there is no broker connection to monitor. This deletes the connection-manager gauges and their readiness gate with one stroke ([messaging.md](messaging.md) records what dies).
-
-Shutdown: `signal.NotifyContext` watches SIGINT/SIGTERM; on arrival the server stops accepting and drains in-flight requests within a drain timeout Resolve clamps to never serve shorter than the publish budget plus slack — 10 s with the default budget — then exits with the drain logged, the container-runtime half of NFR-9. Lambda owes no drain (the platform stops the instance); the same signal path is harmless there.
+- **Health** reflects boot validation only (config, credentials, queue URL); there is nothing to check at request time because there is no broker connection to monitor ([messaging.md](messaging.md) records what dies).
+- **Shutdown** watches SIGINT/SIGTERM via `signal.NotifyContext`; on arrival the server stops accepting and drains in-flight requests within `DRAIN_TIMEOUT`, clamped to never serve shorter than the publish budget plus slack (10 s at the default), drain logged.
 
 ## Error taxonomy
 
-The typed error set, mapped to HTTP exactly once on the face — the read/signature errors live beside their checks, and the queue's retryable pair sits in `internal/queue/queue.go` (no domain package keeps them apart from their consumers):
+The typed error set, mapped to HTTP exactly once on the face — the read/signature errors live beside their checks, the queue's retryable pair sits in `internal/queue/queue.go`:
 
 | Typed error | HTTP | Retryable? |
 |-------------|------|------------|
 | `ErrBodyTooLarge` | 413 | no |
 | `ErrBodyMalformed` (unreadable) | 400 | no |
 | `ErrInvalidSignature` | 401 | no |
-| envelope fields missing (CheckEnvelope, paddle face) | 422 | no |
-| `ErrEnqueueUnavailable` (SQS 5xx/throttle) | 503 + `Retry-After: 5` | yes |
-| `ErrDeadlineExceeded` | 503 + `Retry-After: 5` | yes |
+| envelope fields missing (CheckEnvelope) | 422 | no |
+| `ErrEnqueueUnavailable` (SQS 5xx/throttle) | 503 + `Retry-After` | yes |
+| `ErrDeadlineExceeded` (budget) | 503 + `Retry-After` | yes |
 | anything unexpected | 500 | no |
 
-All mapping paths use `errors.Is` — the pre-refactor `err.Error() == "invalid signature"` string comparison is deleted, not ported. The 503/`Retry-After` pair is one mapping site for both retryable errors. The 500 catch-all went live with the publisher build: an unmapped transport fault answers it, generic and non-retryable.
+All mapping paths use `errors.Is` — the pre-rebuild `err.Error() == "…"` string comparison is deleted, not ported; the 503/`Retry-After` pair is one mapping site for both retryable errors.
 
 ## Config planes
 
-Same double-plane shape document-parser landed; this service's own LLD lives in [references/config.md](references/config.md), and the surface is a declared skeleton today — every entry point answers a loud skeleton error until its landing build connects it (dotenv reader + wire-up next, prod plane with AWS):
+Same double-plane shape document-parser landed; the [config LLD](references/config.md) is this service's own:
 
-- **Dev (`ENV_TYPE=dev`)** — env-over-file: process env first, `.env` via godotenv second. Bare keys, no comments — repository convention. Plane values: `PADDLE_WEBHOOK_SECRET`, `QUEUE_URL`, the body bound, the publish budget.
-- **Prod (`ENV_TYPE=prod`)** — AWS-exact: no env-file fallback. The license key reads from the service's Secrets Manager blob; `PADDLE_WEBHOOK_SECRET` rides the same blob; `QUEUE_URL` and region from SSM/env as IaC decides. The ~100 ms cold-start cost is accepted in [requirements.md](requirements.md).
-- **Validation** — `ENV_TYPE` unset resolves to dev; an unknown flick fails the boot; mandatory values non-empty and ≥ 16 chars (the webhook secret); `QUEUE_URL` a valid SQS URL; bounds parse and fail closed to safe defaults, never partial. Boot fails fast on violation — a mis-provisioned instance never serves.
-- **Naming note** — `INTERNAL_API_KEY` and the service-side `API_KEY` both retire with the internal face, which takes its document-parser-inherited credential scheme with it; the caller-side web env name `PAYMENT_GATEWAY_API_KEY` never ships ([requirements.md](requirements.md) knock-ons).
+- **Dev (`ENV_TYPE=dev`)** — env-over-file: process env first, `infra/.env` second. Bare keys, no comments — repository convention.
+- **Prod (`ENV_TYPE=prod`)** — AWS-exact: the Secrets Manager blob (`detectai/payment-webhook/secrets`) and the SSM prefix tree (`/detectai/payment-webhook/`); env-file fallbacks cannot leak a value in. The ~100 ms cold-start cost is accepted in [requirements.md](requirements.md).
+- **Validation** — unset `ENV_TYPE` resolves to dev; an unknown flick fails the boot; the webhook secret is mandatory at the 16-char floor; `QUEUE_URL` must parse as a queue URL; bounds fail closed to their safe defaults. Boot fails fast on violation — a mis-provisioned instance never serves.
 
 ## Packaging (Lambda)
 
-- **Container image via Lambda Web Adapter** — the Go app, config planes, and tests stay unmodified; the same image serves local compose and Lambda. The adapter reads the HTTP server on `PORT` (from `AWS_LWA_PORT` wiring at deploy).
-- **Memory 512 MB** per the minimal-CPU profile measured against HMAC+SendMessage; the knob is operational, recorded in [requirements.md](requirements.md)'s Deployment target.
-- **Timeout stack**: function timeout 10 s above the in-code publish budget 5 s, API Gateway integration above both — [http.md](http.md)'s front-door section carries the numbers.
-- **Go runtime binary** — a scratch/minimal base image; the lambda-build artifact is the static binary.
+- **Container image via the Lambda Web Adapter** — the Go app, config planes, and tests stay unmodified; the same image serves local compose and Lambda.
+- **Memory 512 MB**, timeout stack 10 s over the 5 s budget — per [requirements.md](requirements.md)'s deployment target; a minimal base image with the static Go binary as the build artifact.
 
 ## Testing strategy
 
-- **Unit** — validator vectors: valid signature, tampered body, stale `ts` (−5 min + 1 s), future `ts` (+5 min + 1 s), missing/malformed header fragments, empty secret; bounded-read vectors (legal at exactly the bound, oversize answers before the excess is consumed, short corrupt transfers answer 400); envelope vectors (the four hard fields absent/blank/null/mistyped, non-object top level, RFC3339-parseability, the two advisory-only signals, open top-level set); config plane fail-closed cases (missing creds, short creds, bad bounds). The group-key ladder and `ParseEvent` vectors landed with the publisher build — their consumer did too.
-- **Handler matrix** — the landed face's status surface (200/400/401/413/422/503/500) over the real validator and a fake `Queue`, asserting the envelope and that the bound precedes auth (an oversize body with a garbage signature still answers 413) and that the signature precedes the envelope gate (an unsigned envelope violation answers 401, never 422); a 422 asserts the fake queue saw zero publishes. The metrics rows join the observability build.
-- **Integration** — the SQS adapter runs against a fake client in the unit tree (message shape, fault mapping); the Testcontainers Floci fault-injection rig joins its own build, carrying the real `SendMessage` assertions (FIFO attribute values, dedup id, group key, body byte-equality verbatim). The pre-refactor RabbitMQ testcontainers rig does not port.
-- **Deferred** — load rig stress/soak profiles ([requirements.md](requirements.md)); e2e contract test updates for the renamed paths are part of the knock-on PRs, not the service's suite.
+- **Unit** — one black-box package per component: validator vectors (bound legality at exactly `max`, oversize answering before the excess is consumed; signature classes fresh/stale/future/tampered/malformed; the envelope's four hard fields absent/blank/null/mistyped plus the two advisories), the group-key ladder and `ParseEvent` vectors, the budget mapping and SQS fault-code mapping over fakes, the handler status matrix over the real validator and a fake queue (order initials: an oversize body with a garbage signature still answers 413, an unsigned envelope violation answers 401), and the observability boot against an in-process OTLP receiver.
+- **Integration** — the prod config planes through the seeded floci emulator (`tests/integration/config`), skipped when the emulator is down. The pre-rebuild RabbitMQ testcontainers rig does not port; an SQS fault-injection rig, if wanted, joins the queue IaC build.
+- **Load/e2e** — the k6 rig (`tests/load`): the smoke scenario walks the full rejection matrix, the load scenario shapes `ramping-arrival-rate` profiles from `infra/.env.load` ([tests/load/README.md](../tests/load/README.md)).
 
 ## Cutover and removal
 
-[messaging.md](messaging.md) owns the cutover sequence (provision → worker deploys SQS consumer → this service flips → Paddle/web flip → RabbitMQ drains and retires). The reference build-out (`slop/`) was kept as reference material while this one was built; it is now removed. The complete copy is recoverable from git history.
+[messaging.md](messaging.md) owns the cutover sequence (provision → worker deploys the SQS consumer → this service flips → Paddle/web flip → RabbitMQ drains and retires). The reference build-out (`slop/`) was kept as reference material while this one was built; it is now removed, recoverable from git history.
