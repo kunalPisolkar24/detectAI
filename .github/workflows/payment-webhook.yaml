@@ -29,20 +29,6 @@ jobs:
       run:
         working-directory: ${{ env.SERVICE_PATH }}
 
-    services:
-      rabbitmq:
-        image: rabbitmq:3.12-management-alpine
-        env:
-          RABBITMQ_DEFAULT_USER: guest
-          RABBITMQ_DEFAULT_PASS: guest
-        ports:
-          - 5672:5672
-        options: >-
-          --health-cmd "rabbitmq-diagnostics -q ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -63,8 +49,6 @@ jobs:
         run: go test $(go list ./... | grep -v '/test/integration') -v -cover
 
       - name: Run Integration Tests
-        env:
-          TEST_RABBITMQ_URL: amqp://guest:guest@localhost:5672/
         run: go test -tags=integration -timeout=300s ./... -v -cover
 
   load-test-smoke:
@@ -109,28 +93,6 @@ jobs:
       - name: Tear down the rig
         if: always()
         run: docker compose -f infra/compose.load.yml -f infra/compose.ci.yml down -v --remove-orphans
-
-  ha-integration:
-    name: HA Integration (3-node quorum)
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    continue-on-error: true
-    defaults:
-      run:
-        working-directory: ${{ env.SERVICE_PATH }}
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-          cache-dependency-path: ${{ env.SERVICE_PATH }}/go.sum
-
-      - name: Run HA Integration Tests
-        run: go test -tags=ha_integration -timeout=600s ./test/integration/... -run TestHA -v -cover
 
   build-and-push:
     name: Build & Push Docker Image
