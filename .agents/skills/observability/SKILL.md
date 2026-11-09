@@ -37,7 +37,8 @@ observability/
   `otlp.eu01.nr-data.net:443` with the ingest license key.
 - **Scrape** — the same collector polls Prometheus endpoints: web
   `/api/metrics`, workers `:7001-7003`, postgres/redis/rabbitmq exporters.
-- **Exception** — `document-parser` ships all three signals directly to EU.
+- **Exception** — `document-parser` and `payment-webhook` ship all three
+  signals directly to EU (both run where the collector cannot be reached).
 - **Labels** — each collector upserts `deployment.environment`: `prod`/`floci`
   on the prod stack (from its `DEPLOYMENT_ENV`), `loadtest` on load rigs,
   `dev` for stacks run with `ENV_TYPE=dev`. Every NRQL and every alert filters

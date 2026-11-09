@@ -11,7 +11,7 @@ from `infra/docker/prod/compose.yml`):
 |---|---|
 | Traces + logs | services → OTLP `http://otel-collector:4318` → collector → `otlp.eu01.nr-data.net:443` |
 | Metrics | collector scrapes Prometheus endpoints and forwards them in the same stream |
-| document-parser | direct OTLP to EU — the reference pattern for dropping the collector |
+| document-parser, payment-webhook | direct OTLP to EU — the reference pattern for dropping the collector |
 
 Scraped endpoints: web `/api/metrics`, workers `:7001-7003`, and the
 postgres/redis/rabbitmq exporters.
