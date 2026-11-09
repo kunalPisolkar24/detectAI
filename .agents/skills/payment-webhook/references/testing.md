@@ -35,7 +35,7 @@ gate).
 
 `tests/integration/config` drives the prod read path through the seeded floci
 emulator (`:4566`) — the Secrets Manager blob and the SSM tree exactly as
-`make secrets-apply` ages them (see [references/infra.md](infra.md)). It
+`make secrets-apply` ages them (see [references/config.md](config.md)). It
 skips (not fails) when the emulator is down, so a green `make test` needs no
 running stack.
 

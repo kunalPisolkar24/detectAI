@@ -105,11 +105,15 @@ the make-target tour: [references/running.md](references/running.md)
 
 - **AWS slice:** `make env` → `make secrets-check` (always first) →
   `make secrets-plan` → `make secrets-apply` → `make secrets-verify` —
-  fingerprints only, exit 1 on drift. Every verb takes `PLANE=floci|aws`
-  (default floci; auto-approved on the emulator plane, interactive on real
-  AWS) and `DRY_RUN=1` previews any verb. The whole plane is driven by
-  `tools/tfctl` — there is no hand-rolled terraform here.
-  Verbs, rotation, gotchas: [references/infra.md](references/infra.md)
+  fingerprints only, exit 1 on drift; `make secrets-auto-apply` is the
+  one-shot (validate → plan → apply → verify). Every verb takes
+  `PLANE=floci|aws` (default floci; auto-approved on the emulator plane,
+  interactive on real AWS) and `DRY_RUN=1` previews any verb. Real-AWS verbs
+  ride the MFA-gated seeder role with the 12-hour session cached in
+  `tools/tfctl/.session-cache/` — a plan → apply stretch prompts once; the
+  whole plane is driven by `tools/tfctl`, and there is no hand-rolled
+  terraform here.
+  Verbs, carrier/MFA behavior, rotation, gotchas: [references/config.md](references/config.md)
 - **Tests:** `make test` is the default gate; `make test-unit` for
   logic-only iteration, `make test-integration` for the prod planes (skips,
   not fails, when the emulator is down); the k6 rig is `make load-env` →
@@ -169,7 +173,8 @@ they rely on belong to the `observability` skill — not this one.
 | Endpoint and status-code contract | `services/payment-webhook/docs/reference/http-api.md` |
 | What each test suite runs | [references/testing.md](references/testing.md) |
 | Local + docker operations | [references/running.md](references/running.md) |
-| The secrets stack in detail | [references/infra.md](references/infra.md) |
+| The config planes, secrets verbs, carrier/MFA | [references/config.md](references/config.md) |
+| The engine behind the secrets verbs | the `tfctl` skill |
 | The credential's runtime story | `services/payment-webhook/docs/guides/secrets.md` |
 | Every make target, annotated | `services/payment-webhook/docs/reference/make.md` |
 | Dashboards and alerts | the `observability` skill |

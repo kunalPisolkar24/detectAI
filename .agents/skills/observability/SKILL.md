@@ -103,6 +103,8 @@ default): `make plan PLANE=aws` rides the real plane. On real AWS every
 state-plane step rides the
 `detectai-observability-seeder` role (created on demand, MFA-gated, cached 12
 hours); the MFA device is derived from your caller identity, with no override.
+The engine's mechanics — kinds, carrier, MFA and session caching — are the
+`tfctl` skill's subject.
 
 `NEW_RELIC_API_KEY` must be a **User** key (`NRAK-...`) — the ingest license
 key is rejected. Secrets live only in `envs/.env` or the shell, never

@@ -79,7 +79,7 @@ both ways of running — and the container reaches the emulator over
 | `make logs` / `make ps` / `make clean` | compose diagnostics and full cleanup |
 | `make test` / `test-unit` / `test-integration` | the test suites — [references/testing.md](testing.md) |
 | `make load-env` / `load-test` / `load-e2e` / `load-down` | the k6 rig — [references/testing.md](testing.md) |
-| `make secrets-*` | the tfctl-driven secrets plane — [references/infra.md](infra.md) |
+| `make secrets-*` | the tfctl-driven secrets plane — [references/config.md](config.md) |
 
 ## Deployment shape
 
