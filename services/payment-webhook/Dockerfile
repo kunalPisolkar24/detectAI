@@ -12,25 +12,23 @@ COPY internal internal
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -trimpath -buildvcs=false -ldflags="-s -w" -o webhook ./cmd/api
 
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -trimpath -buildvcs=false -ldflags="-s -w" -o healthcheck ./cmd/healthcheck
+
 # The adapter binary is inert outside Lambda, so this same image stays the compose image.
-FROM debian:bookworm-slim
+# Distroless static ships the CA roots the SQS client needs.
+FROM gcr.io/distroless/static-debian12:nonroot
 
 ENV AWS_LWA_PORT=8080 \
     AWS_LWA_READINESS_CHECK_PATH=/api/v1/ready
 
 WORKDIR /app
 
-# Slim ships no CA roots; the SQS client dials https in production.
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN useradd -m -r appuser
-
 COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0 /lambda-adapter /opt/extensions/lambda-adapter
-COPY --from=builder --chown=appuser:appuser /app/webhook webhook
+COPY --from=builder --chown=65532:65532 /app/webhook webhook
+COPY --from=builder --chown=65532:65532 /app/healthcheck healthcheck
 
-USER appuser
+USER 65532:65532
 
 EXPOSE 8080
 

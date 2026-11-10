@@ -11,7 +11,7 @@ services:
     restart: "no"
     ports: !override []
     healthcheck:
-      test: ["CMD", "bash", "-c", "</dev/tcp/127.0.0.1/8080"]
+      test: ["CMD", "/app/healthcheck"]
       interval: 5s
       timeout: 5s
       retries: 12
