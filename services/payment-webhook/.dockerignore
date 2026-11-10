@@ -1,5 +1,6 @@
 .git/
 specification/
+docs/
 README.md
 .dockerignore
 Dockerfile
@@ -8,6 +9,7 @@ tests/
 mk/
 Makefile
 .env*
+secrets.toml
 vendor/
 webhook
 payment-webhook
