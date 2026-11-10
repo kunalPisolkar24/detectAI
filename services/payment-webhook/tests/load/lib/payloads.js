@@ -1,11 +1,8 @@
 import exec from "k6/execution";
 import crypto from "k6/crypto";
 
-// Wire-size targets per profile. Profiles are minimums — the envelope below
-// already sits above the small target. near-limit and oversize are sized
-// against the read bound the router clamps to (min over MAX_BODY_BYTES and
-// SQS's 256 KiB message ceiling), so near-limit queues under every boot,
-// and oversize answers 413 under every boot.
+// Wire-size targets per profile; near-limit/oversize size against the boot's read bound
+// (min over MAX_BODY_BYTES and SQS's 256 KiB ceiling) so edges hold under every boot.
 const PROFILE_BYTES = {
   small: 200,
   mid: 4096,
@@ -14,14 +11,12 @@ const PROFILE_BYTES = {
   oversize: 290 * 1024,
 };
 
-// The signature header mirrors Paddle's own: hmac-sha256 hex over
-// "<ts>:<raw body>", ts kept verbatim in the header.
+// The signature header mirrors Paddle's own: HMAC over "<ts>:<raw body>".
 export function sign(secret, body, ts = Math.floor(Date.now() / 1000)) {
   const h1 = crypto.hmac("sha256", secret, `${ts}:${body}`, "hex");
   return `ts=${ts};h1=${h1}`;
 }
 
-// The mix's round-robin: every iteration covers the full mix reproducibly.
 export function pickProfile(config, iteration = exec.scenario.iterationInTest) {
   return config.profiles[iteration % config.profiles.length];
 }
@@ -30,8 +25,7 @@ function poolEntry(index) {
   return String(index).padStart(4, "0");
 }
 
-// The rotating identities the seed fans out over — subscription, customer,
-// and users all shift together so FIFO groups spread across the pool.
+// Subscription, customer, and user shift together so FIFO groups spread across the pool.
 function envelopeShaping(config, seed) {
   const slot = seed % config.pool;
   const entry = poolEntry(slot);
@@ -52,9 +46,7 @@ function paddedEnvelope(target, envelope) {
   return JSON.stringify(envelope);
 }
 
-// One signed queued request for one profile. Callers own the event id (a
-// load run keeps them unique so queue dedup never collapses the traffic)
-// and the seed (the fan-out slot); the builder owns sizing and signing.
+// One signed request for one profile; the caller owns the event id and seed.
 export function buildSignedRequest(config, { profile, eventId, eventType, seed = 0 }) {
   const target = PROFILE_BYTES[profile];
   if (target === undefined) {
@@ -82,8 +74,7 @@ export function buildSignedRequest(config, { profile, eventId, eventType, seed =
   };
 }
 
-// The advisory row: complete on every hard gate but nothing addressable in
-// data — the route still queues it, counting the advisory answer server-side.
+// The advisory row: complete on every hard gate, nothing addressable in data.
 export function buildAdvisoryRequest(config, { eventId, eventType }) {
   const body = JSON.stringify({
     event_id: eventId,
@@ -100,9 +91,7 @@ export function buildAdvisoryRequest(config, { eventId, eventType }) {
   };
 }
 
-// A small valid body reshaped per rejection case: the signature guard and
-// the envelope seeing valid traffic must be the thing that answers — not a
-// malformed body, except where the case is being exactly that.
+// A small valid body reshaped per case so the route's guard answers, not a broken payload.
 function smallVariant(config, eventId, reshape) {
   const shaping = envelopeShaping(config, 0);
   const envelope = {
@@ -122,10 +111,8 @@ function smallVariant(config, eventId, reshape) {
   return envelope;
 }
 
-// The rejection matrix, one case per guard of the current route: 401 the
-// signature classes, 413 the bounded body read, 422 the envelope gate. The
-// signature rows carry otherwise-valid bodies, so the guard — not a broken
-// payload — rejects them.
+// The rejection matrix, one case per guard (401 signature, 413 bounded read, 422 envelope);
+// signature rows carry otherwise-valid bodies so the guard, not a broken payload, rejects.
 export function negativePayloads(config) {
   const enrich = (eventId) => smallVariant(config, eventId, () => {});
   const unsigned = enrich("evt_smoke_unsigned");

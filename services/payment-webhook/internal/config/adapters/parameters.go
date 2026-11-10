@@ -13,8 +13,7 @@ import (
 // SSMPrefix is the SSM tree the seeding contract provisions for this service.
 const SSMPrefix = "/detectai/payment-webhook/"
 
-// ParametersClient is the transport interface; the SDK client satisfies it structurally
-// because the SDK ships no service-wide interface. Tests inject fakes.
+// ParametersClient is the transport interface; the SDK ships no service-wide equivalent.
 type ParametersClient interface {
 	GetParametersByPath(ctx context.Context, params *ssm.GetParametersByPathInput, optFns ...func(*ssm.Options)) (*ssm.GetParametersByPathOutput, error)
 }

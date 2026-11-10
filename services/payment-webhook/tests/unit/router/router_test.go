@@ -71,7 +71,6 @@ func TestPaddleFacePublishesASignedBody(t *testing.T) {
 }
 
 func TestInternalFaceIsRetired(t *testing.T) {
-	// The retired internal face answers 404 even with the old credential.
 	target := &fakeQueue{}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/internal/events", nil)
 	req.Header.Set("x-api-key", paddleSecret)
@@ -86,7 +85,6 @@ func TestInternalFaceIsRetired(t *testing.T) {
 }
 
 func TestProbesMoveUnderTheAPIv1Prefix(t *testing.T) {
-	// Probes version with the surface; flat root paths answer 404.
 	engine := newEngine(t, &fakeQueue{})
 	paths := map[string]string{
 		"/api/v1/health": `{"status":"ok"}`,
@@ -114,7 +112,6 @@ func TestProbesMoveUnderTheAPIv1Prefix(t *testing.T) {
 }
 
 func TestReaderBoundClampsToTheSQSCeiling(t *testing.T) {
-	// The wiring clamps the read bound to the SQS ceiling, even before auth.
 	target := &fakeQueue{}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhook/paddle",
 		strings.NewReader(strings.Repeat("x", 262145)))

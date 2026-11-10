@@ -47,8 +47,7 @@ func TestServiceMapsTheBudgetDeadline(t *testing.T) {
 }
 
 func TestServiceAnswersTheDeadlineWhenTheCallerDies(t *testing.T) {
-	// A mid-publish caller cancel maps to ErrDeadlineExceeded; the dedup id
-	// keeps replay harmless.
+	// A mid-publish caller cancel maps like the budget deadline; the dedup id keeps replay harmless.
 	parent, cancel := context.WithCancel(context.Background())
 	cancel()
 	svc := queue.NewService(&fakeQueue{}, time.Hour)

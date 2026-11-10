@@ -15,9 +15,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/validator"
 )
 
-// NewPaddleWebhook mounts the Paddle ingress face: bounded read, signature
-// verify, envelope gate, then one enqueue — every verdict recorded through
-// the telemetry seam, rejections warned (NFR-8).
+// NewPaddleWebhook is the ingress face: bounded read, signature verify, envelope gate, one enqueue (NFR-8).
 func NewPaddleWebhook(v *validator.Paddle, maxBody int64, publish *queue.Service, obs observability.Telemetry) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		body, err := validator.ReadBounded(c.Request.Body, maxBody)
@@ -60,8 +58,7 @@ func NewPaddleWebhook(v *validator.Paddle, maxBody int64, publish *queue.Service
 	}
 }
 
-// publishStatus partitions the publish outcome; the deadline alone is the
-// timeout verdict, never double counted as an error.
+// publishStatus partitions the publish outcome; the deadline alone is the timeout verdict.
 func publishStatus(err error) observability.PublishStatus {
 	switch {
 	case err == nil:

@@ -40,9 +40,8 @@ const (
 	occurredAt    = "2026-11-10T09:00:00Z"
 )
 
-// elasticConf replicates the shared dev emulator (infra/docker/elasticmq/elasticmq.conf):
-// strict SQS limits and the IaC-owned queue pair with its redrive, so the suite runs
-// against the same queue plane the service meets outside CI.
+// elasticConf replicates the shared dev emulator conf (infra/docker/elasticmq/elasticmq.conf),
+// so the suite meets the same strict-limits queue plane the service meets elsewhere.
 const elasticConf = `include classpath("application.conf")
 
 node-address {
@@ -85,8 +84,7 @@ queues {
   }
 }`
 
-// dockerReachable gates the suite like the config plane gates on floci:
-// no daemon means the layer skips, so `make test` stays green without Docker.
+// dockerReachable gates the suite; no daemon means the layer skips and `make test` stays green.
 func dockerReachable() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -98,8 +96,7 @@ func dockerReachable() bool {
 	return err == nil
 }
 
-// stack is one live slice of the app: the ElasticMQ emulator, the real SQS
-// transport, and the router serving against them.
+// stack is one live slice of the app: emulator, real SQS transport, serving router.
 type stack struct {
 	container testcontainers.Container
 	client    *sqs.Client
@@ -159,9 +156,7 @@ func newStack(t *testing.T) *stack {
 	}
 }
 
-// bootApp assembles the service exactly as cmd/api does — env-backed config,
-// the real SQS adapter, the mounted router — and serves it on a live listener.
-// The null telemetry gate keeps every New Relic object off the test's wire.
+// bootApp assembles the service exactly as cmd/api does and serves it on a live listener.
 func bootApp(t *testing.T, endpoint string) (baseURL string, client *sqs.Client, queueURL string) {
 	t.Helper()
 	queueURL = endpoint + "/" + queueAccount
@@ -215,8 +210,7 @@ func (s *stack) stopQueue(t *testing.T) {
 	}
 }
 
-// signBody rebuilds Paddle's two-part scheme: the constant-time compare runs
-// over <ts>:<raw-body>, both fragments riding one header.
+// signBody signs with the true secret over "<ts>:<raw-body>", both fragments in one header.
 func signBody(body []byte) string {
 	return signWith(webhookSecret, body, 0)
 }
@@ -265,8 +259,7 @@ func (s *stack) do(t *testing.T, req *http.Request) (*http.Response, string) {
 	return res, string(payload)
 }
 
-// collect receives until want messages arrive or the budget elapses; the
-// caller asserts the count, so a shorter drained envelope fails loudly.
+// collect receives until want messages arrive or the budget elapses; the caller asserts the count.
 func (s *stack) collect(t *testing.T, want int, budget time.Duration) []types.Message {
 	t.Helper()
 	var got []types.Message
@@ -291,8 +284,7 @@ func (s *stack) collect(t *testing.T, want int, budget time.Duration) []types.Me
 	return got
 }
 
-// pollSilence drives the drains long enough for a late arrival to show; a
-// rejection matrix must leave the depth pinned at zero.
+// pollSilence drains long enough for a late arrival to surface, failing if one does.
 func (s *stack) pollSilence(t *testing.T, budget time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(budget)
@@ -329,8 +321,7 @@ func (s *stack) attr(t *testing.T, message types.Message, name string) string {
 	return deref(attribute.StringValue)
 }
 
-// system reads the receive-side map where queue behavior rides back — group
-// ids, dedup ids — matched by name.
+// system reads a receive-side system attribute (group ids, dedup ids) by name.
 func (s *stack) system(t *testing.T, message types.Message, name string) string {
 	t.Helper()
 	value, ok := message.Attributes[name]
@@ -348,15 +339,13 @@ func deref(value *string) string {
 	return *value
 }
 
-// paddleBody builds a Paddle-shaped envelope; data rides in verbatim so a row
-// can shape the ids the ladder and the attribute map read.
+// paddleBody builds a Paddle-shaped envelope whose data ids each row shapes.
 func paddleBody(eventID, eventType, occurred, data string) []byte {
 	return []byte(fmt.Sprintf(`{"event_id":%q,"event_type":%q,"occurred_at":%q,"notification_id":%q,"data":%s}`,
 		eventID, eventType, occurred, "ntf_"+eventID, data))
 }
 
-// bodyOfLength sizes a valid subscription body to an exact byte count, so the
-// read bound and the queue's size limit meet their edges deterministically.
+// bodyOfLength sizes a valid subscription body to an exact byte count.
 func bodyOfLength(t *testing.T, eventID string, size int) []byte {
 	t.Helper()
 	base := paddleBody(eventID, "subscription.updated", occurredAt, `{"id":"sub_pad","note":""}`)

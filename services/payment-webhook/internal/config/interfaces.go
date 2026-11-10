@@ -8,7 +8,7 @@ import (
 // Source is the plane contract the planes package owns.
 type Source = planes.Source
 
-// Compile-time checks: the plane sources satisfy Source, and the AWS readers satisfy the Plane seam.
+// Compile-time seams: the plane sources satisfy Source, the AWS readers satisfy Plane.
 var (
 	_ Source = (*planes.DevSource)(nil)
 	_ Source = (*planes.ProdSource)(nil)

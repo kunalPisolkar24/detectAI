@@ -1,9 +1,7 @@
 import http from "k6/http";
 import { check } from "k6";
 
-// Every queued probe asserts the exact acknowledgement: a signed post on
-// the paddle route answers 200 {"status":"queued"}, and anything else is a
-// metric-recorded failure.
+// A queued probe asserts the exact 200 {"status":"queued"} acknowledgement; anything else is a recorded failure.
 export function postQueued({ baseUrl, request, timeout, timeoutMs, metrics, scenario }) {
   const tags = { scenario, profile: request.profile, event_type: request.eventType };
   const headers = {
@@ -44,8 +42,7 @@ export function postQueued({ baseUrl, request, timeout, timeoutMs, metrics, scen
   return { res, passed, duration };
 }
 
-// A rejection case asserts its route-verdict exactly; an explicit signature
-// rides its own header, and its absence is the missing-Signature class.
+// A rejection case asserts its route verdict exactly; a missing signature is its own class.
 export function postRejected({ baseUrl, request, timeout, metrics, scenario }) {
   const tags = { scenario, case: request.case };
   const headers = {};
@@ -72,8 +69,7 @@ export function postRejected({ baseUrl, request, timeout, metrics, scenario }) {
   return { res, passed };
 }
 
-// Readiness rides the load run as backpressure bookkeeping; a 503 is a
-// not-ready tick, not a check failure.
+// Readiness samples backpressure during the run; a 503 is a not-ready tick, not a failure.
 export function checkReadiness({ baseUrl, timeout, metrics, scenario }) {
   const tags = { scenario };
   const res = http.get(`${baseUrl}/api/v1/ready`, { timeout, tags });

@@ -1,5 +1,5 @@
-// Package events parses Paddle bodies into event metadata; envelope and message
-// shaping share this one parse so they cannot disagree about ids.
+// Package events parses Paddle bodies once so envelope and message shaping
+// cannot disagree about ids.
 package events
 
 import (
@@ -29,8 +29,7 @@ type payloadData struct {
 	CustomData     map[string]any `json:"custom_data"`
 }
 
-// ParseEvent reads event metadata in one pass; a malformed or foreign body
-// yields an unknown-typed Event that still queues.
+// ParseEvent reads event metadata in one pass; a malformed body yields an unknown-typed Event.
 func ParseEvent(body []byte) Event {
 	var payload struct {
 		EventID    string      `json:"event_id"`
@@ -60,8 +59,7 @@ func eventType(raw string) string {
 	return raw
 }
 
-// subscriptionID and customerID read the explicit field first, then data.id when
-// it carries the entity's Paddle prefix — a bare id must not group wrongly.
+// subscriptionID reads the explicit field first, then a sub_-prefixed data.id — a bare id must not group wrongly.
 func subscriptionID(data payloadData) string {
 	if data.SubscriptionID != "" {
 		return data.SubscriptionID

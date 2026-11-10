@@ -5,8 +5,7 @@ import (
 	"time"
 )
 
-// NullTelemetry is the disabled boot, built when OTEL_EXPORTER_OTLP_ENDPOINT is
-// unset: one code path with no endpoint branches, zero SDK objects behind it.
+// NullTelemetry is the disabled boot for an unset OTEL_EXPORTER_OTLP_ENDPOINT.
 type NullTelemetry struct{}
 
 var _ Telemetry = NullTelemetry{}

@@ -49,7 +49,7 @@ func main() {
 	}
 }
 
-// newPublisher binds the SQS transport at boot; SDK bootstrap vars never enter the Config plane.
+// newPublisher binds the SQS transport at boot; SDK bootstrap vars stay ambient.
 func newPublisher(cfg config.Config) (*queue.Service, error) {
 	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background())
 	if err != nil {

@@ -21,9 +21,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/observability"
 )
 
-// The receiver swallows OTLP POSTs on the three signal paths inside the test
-// process: the units stay network-free, mirroring document-parser's build
-// tests, which point the service at a local receiver instead of New Relic.
+// otlpReceiver swallows OTLP POSTs inside the test process so the units stay network-free.
 type otlpReceiver struct {
 	t        *testing.T
 	endpoint string
@@ -70,7 +68,6 @@ func (r *otlpReceiver) payloads(path string) [][]byte {
 	return r.bodies[path]
 }
 
-// mapSource is the test-plane source Resolve reads from.
 type mapSource map[string]string
 
 func (s mapSource) Get(key string) (string, bool) {
@@ -78,9 +75,7 @@ func (s mapSource) Get(key string) (string, bool) {
 	return value, ok
 }
 
-// resolvePlane boots through the real config: every observability field rides
-// Resolve's defaults, so each test composes the values the way the process
-// does, with extras carrying the per-case keys.
+// resolvePlane boots through the real config, per-case keys riding Resolve's defaults.
 func resolvePlane(t *testing.T, extra map[string]string) config.Config {
 	t.Helper()
 	source := map[string]string{
@@ -216,8 +211,7 @@ func TestWiredBootFallsBackToTheDevVersion(t *testing.T) {
 	}
 }
 
-// resourceAttributes unpicks the first resource payload the traces signal
-// carried; exporters may wrap the protobuf in gzip.
+// resourceAttributes reads the first decodable resource payload; exporters may gzip the protobuf.
 func resourceAttributes(t *testing.T, payloads [][]byte) map[string]string {
 	t.Helper()
 	for _, payload := range payloads {

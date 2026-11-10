@@ -31,9 +31,7 @@ func readEnvPlane(t *testing.T, dir, content string) *adapters.DotEnvAdapter {
 	return adapter
 }
 
-// offlineProd pins the SDK's chain away from every real AWS surface: the shared
-// config files vanish, IMDS is disabled, credentials are static dummies, and a
-// region comes only from the caller's choice (empty string fails the resolution).
+// offlineProd pins the SDK's chain away from every real AWS surface: shared config gone, IMDS disabled, static dummies.
 func offlineProd(t *testing.T, region string) {
 	t.Helper()
 	isolated := t.TempDir()

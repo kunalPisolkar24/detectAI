@@ -16,12 +16,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/observability/adapters"
 )
 
-// Boot builds the boot's own telemetry: a blank endpoint resolves to the
-// NullTelemetry disabled boot — a legitimate disabled boot in every plane —
-// while a set endpoint (whose license-key gate Resolve already owns) pushes
-// OTLP/HTTPS with gzip straight to that endpoint. Resource identity and
-// sampling ride the resolved config; document-parser's
-// build_observability_service is the mirror.
+// Boot switches on the endpoint: blank returns NullTelemetry, set pushes OTLP/HTTPS gzip.
 func Boot(cfg config.Config, flick string) (Telemetry, error) {
 	if cfg.OTelEndpoint == "" {
 		return NullTelemetry{}, nil
@@ -80,9 +75,7 @@ func Boot(cfg config.Config, flick string) (Telemetry, error) {
 	return service, nil
 }
 
-// teeHandler fans every slog record onto the stdout text handler and the OTLP
-// bridge — the process-wide default keeps its stdout surface while also
-// bridging to New Relic (spec: "slog.SetDefault; stdout stays").
+// teeHandler fans every slog record to stdout and the OTLP bridge.
 type teeHandler struct {
 	stdout slog.Handler
 	otlp   slog.Handler
@@ -107,16 +100,14 @@ func (t teeHandler) WithGroup(name string) slog.Handler {
 	return teeHandler{stdout: t.stdout.WithGroup(name), otlp: t.otlp.WithGroup(name)}
 }
 
-// Wire mounts the route-span middleware on the engine; the null realization
-// carries no instrumenter and installs nothing.
+// Wire installs the route-span middleware on a wired boot; the null boot installs nothing.
 func Wire(t Telemetry, engine *gin.Engine) {
 	if instrumenter, ok := t.(engineInstrumenter); ok {
 		instrumenter.instrumentEngine(engine)
 	}
 }
 
-// engineInstrumenter is what the wired build carries so Wire can type-switch;
-// the seam itself stays gin-decoupled.
+// engineInstrumenter is what the wired build carries so Wire can type-switch.
 type engineInstrumenter interface {
 	instrumentEngine(*gin.Engine)
 }

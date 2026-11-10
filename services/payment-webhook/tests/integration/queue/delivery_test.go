@@ -29,8 +29,7 @@ func TestProbesServeOnTheRealBoot(t *testing.T) {
 
 func TestDeliveryCrossesTheQueueVerbatim(t *testing.T) {
 	stack := newStack(t)
-	// The note hides escapes, unicode, and whitespace: any re-encode breaks
-	// the byte identity the worker builds its parsing on.
+	// The note's escapes, unicode, and whitespace break byte identity on any re-encode.
 	body := paddleBody("evt_verbatim", "subscription.updated", occurredAt,
 		`{"id":"sub_verbatim","note":"café 😀 \n \"quoted\" \\ \ttab"}`)
 	res, payload := stack.post(t, body, signBody(body))
@@ -94,9 +93,7 @@ func TestTheGroupLadderLandsOnTheQueue(t *testing.T) {
 	}{
 		// subscription wins over every lower rung the body carries.
 		{"evt_ladder_sub", `{"id":"sub_l1","customer_id":"ctm_hidden"}`, "subscription:sub_l1"},
-		// a bare customer-shaped id names the customer rung.
 		{"evt_ladder_ctm", `{"id":"ctm_l2"}`, "customer:ctm_l2"},
-		// an unprefixable id the event_type rung the ladder's voice.
 		{"evt_ladder_type", `{"note":"entity-free"}`, "system.notification.tested"},
 		// the unknown sentinel passes the gate and falls to the default rung.
 		{"evt_ladder_default", `{"note":"nobody"}`, queue.DefaultGroupID},
@@ -135,7 +132,6 @@ func TestSameEntityRunsInOrder(t *testing.T) {
 	if len(messages) != 5 {
 		t.Fatalf("delivered = %d, want the whole 5-burst", len(messages))
 	}
-	// Same group, one delivery lane: the queue must preserve the post order.
 	for i, message := range messages {
 		got := stack.attr(t, message, "event_id")
 		if want := fmt.Sprintf("evt_order_%d", i+1); got != want {
@@ -150,7 +146,6 @@ func TestDedupCollapsesRepeatDeliveries(t *testing.T) {
 	if res, payload := stack.post(t, body, signBody(body)); res.StatusCode != http.StatusOK {
 		t.Fatalf("first post status = %d, want 200 (%q)", res.StatusCode, payload)
 	}
-	// The same event id makes the second post collapse into the first.
 	if res, payload := stack.post(t, body, signBody(body)); res.StatusCode != http.StatusOK {
 		t.Fatalf("repeat post status = %d, want 200 (%q)", res.StatusCode, payload)
 	}
@@ -187,10 +182,8 @@ func TestNearCeilingBodyPublishes(t *testing.T) {
 	}
 }
 
-// The read clamp sits exactly at the SQS ceiling, and this plane's strict
-// budget still accepts a 262144-byte body carrying the full attribute set —
-// the ingress bound and the queue's limit agree, so the largest shippable
-// request goes through and arrives intact.
+// The ingress bound and the queue's limit agree at the SQS ceiling: a 262144-byte
+// body carrying the full attribute set still publishes.
 func TestExactlyAtTheCeilingPublishes(t *testing.T) {
 	stack := newStack(t)
 	body := bodyOfLength(t, "evt_ceiling", 256<<10)

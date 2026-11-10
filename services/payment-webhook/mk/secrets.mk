@@ -1,8 +1,4 @@
-# tfctl runs this service's whole secrets plane: validate infra/.env, then
-# terraform plan/apply/verify. Nothing to set up first — the state bucket and
-# the seeder carrier role are created on demand; sessions cache ~12h per service
-# in the tfctl tree (.session-cache/<service>.json).
-# The switches below are the whole interface; a rare one-off (an alternate
+# tfctl drives this service's whole secrets plane; a rare one-off (an alternate
 # values file) runs tfctl directly: poetry -C ../../tools/tfctl run tfctl.
 
 PLANE ?= floci

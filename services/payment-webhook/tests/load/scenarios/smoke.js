@@ -12,7 +12,6 @@ export const options = {
   vus: 1,
   iterations: 1,
   thresholds: {
-    // One pass ticks both families below; any unexpected answer ends the run.
     checks: ["rate==1"],
   },
   tags: {
@@ -21,13 +20,10 @@ export const options = {
   },
 };
 
-// The shapes' sizing is what varies, so the smoke posts one valid body per
-// profile; a customized WEBHOOK_LOAD_PROFILES line keeps its own slot too.
+// One valid body per profile; a configured mix keeps its own slot too.
 const SMOKE_PROFILES = ["small", "mid", "large", "near-limit"];
 
-// The functional gate: a healthy deployment, a 200 queueing per profile,
-// the advisory row, and the full rejection matrix with its exact verdicts —
-// every request of this single pass is asserted, so any surprise fails the run.
+// The functional gate: health, one 200 per profile, the advisory row, the full rejection matrix.
 export default function () {
   const config = getRuntimeConfig();
 

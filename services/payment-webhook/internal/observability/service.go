@@ -17,8 +17,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/observability/adapters"
 )
 
-// Instrument names are frozen — the NRQL surface boards and alerts filter on;
-// any rename ships with a dashboard/alert migration in the same PR.
+// Instrument names are frozen; a rename is a dashboard/alert migration, not an edit.
 const (
 	InstrumentReceived           = "payment_webhooks_received_total"
 	InstrumentPublished          = "payment_events_published_total"
@@ -30,9 +29,7 @@ const (
 	InstrumentEnqueueDuration    = "payment_events_enqueue_duration_seconds"
 )
 
-// TelemetryService realizes the seam on the started SDK: instruments build
-// from the adapters' providers, never OTel globals — document-parser's
-// ObservabilityService, one struct.
+// TelemetryService realizes the Telemetry seam on the started SDK providers.
 type TelemetryService struct {
 	serviceName string
 	traces      *adapters.TracesAdapter
@@ -52,8 +49,6 @@ type TelemetryService struct {
 
 var _ Telemetry = (*TelemetryService)(nil)
 
-// newTelemetryService builds the instruments off the started meter; Boot is
-// the sole composition point and starts every adapter first.
 func newTelemetryService(serviceName string, traces *adapters.TracesAdapter, metrics *adapters.MetricsAdapter, logs *adapters.LogsAdapter) (*TelemetryService, error) {
 	meter, err := metrics.Meter()
 	if err != nil {
@@ -81,8 +76,7 @@ func newTelemetryService(serviceName string, traces *adapters.TracesAdapter, met
 	return s, nil
 }
 
-// TrackProcessing opens the application span under the otelgin route span and
-// brackets the handler body that follows.
+// TrackProcessing opens the app span under the otelgin route span.
 func (s *TelemetryService) TrackProcessing(ctx context.Context, eventType, eventID string) (context.Context, func()) {
 	ctx, span := s.tracer.Start(ctx, "process", oteltrace.WithAttributes(
 		attribute.String("event_type", eventType),
@@ -119,8 +113,7 @@ func (s *TelemetryService) RecordUnknownEventType() {
 	s.unknownEventType.Add(context.Background(), 1)
 }
 
-// RecordPublish closes the enqueue site: the counter partitions the outcome
-// and the histogram times it under the same status label.
+// RecordPublish partitions the outcome and times it under one status label.
 func (s *TelemetryService) RecordPublish(eventType string, status PublishStatus, duration time.Duration) {
 	labels := otelmetric.WithAttributes(
 		attribute.String("event_type", eventType),
@@ -130,17 +123,14 @@ func (s *TelemetryService) RecordPublish(eventType string, status PublishStatus,
 	s.enqueueDuration.Record(context.Background(), duration.Seconds(), labels)
 }
 
-// Shutdown drains spans, then metrics, then logs, and restores the plain
-// stdout handler; export leftovers never fail the process it rides on.
+// Shutdown drains each adapter and restores the plain stdout handler without failing the process.
 func (s *TelemetryService) Shutdown(ctx context.Context) error {
 	err := errors.Join(s.traces.Shutdown(ctx), s.metrics.Shutdown(ctx), s.logs.Shutdown(ctx))
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 	return err
 }
 
-// instrumentEngine joins otelgin on the serving path — its route spans frame
-// every verdict below, and the request-span trace context flows into
-// TrackProcessing.
+// instrumentEngine joins otelgin; its route spans frame every app span.
 func (s *TelemetryService) instrumentEngine(engine *gin.Engine) {
 	engine.Use(otelgin.Middleware(s.serviceName, otelgin.WithTracerProvider(s.traces.Provider())))
 }

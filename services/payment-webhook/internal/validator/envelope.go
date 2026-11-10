@@ -15,12 +15,10 @@ type EnvelopeIssues struct {
 	Advisory []string
 }
 
-// CheckEnvelope judges envelope presence only; values and data contents remain
-// the worker's interpretation, and extra top-level keys are tolerated.
+// CheckEnvelope judges presence only; values and data contents stay the worker's interpretation.
 func CheckEnvelope(body []byte) *EnvelopeIssues {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(body, &fields); err != nil || fields == nil {
-		// A body that never parses to an object has no envelope to judge.
 		return &EnvelopeIssues{Missing: []string{"payload"}}
 	}
 	issues := &EnvelopeIssues{}
@@ -34,7 +32,7 @@ func CheckEnvelope(body []byte) *EnvelopeIssues {
 		return issues
 	}
 	if requiredString(fields, "notification_id") == "" {
-		// Delivery-layer only: dropping it is a counter, never a rejection.
+		// Advisory: a counter, never a rejection.
 		issues.Advisory = append(issues.Advisory, "notification_id")
 	}
 	// The advisory sees the same addressability the group ladder will see.
@@ -45,8 +43,7 @@ func CheckEnvelope(body []byte) *EnvelopeIssues {
 	return issues
 }
 
-// satisfiesHardGate checks presence with substance; absent, blank, null, and
-// mistyped values all fail the same gate.
+// satisfiesHardGate checks presence with substance; absent, blank, null, and mistyped values fail the same gate.
 func satisfiesHardGate(fields map[string]json.RawMessage, name string) bool {
 	raw, ok := fields[name]
 	if !ok {

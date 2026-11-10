@@ -11,22 +11,19 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 )
 
-// exportInterval is the old 15 s scrape cadence, carried into the push reader.
 const exportInterval = 15 * time.Second
 
-// MetricsAdapter owns one MeterProvider reading on the push cadence against
-// the shared resource; the exporter arrives injected.
+// MetricsAdapter owns one MeterProvider reading on the push cadence.
 type MetricsAdapter struct {
 	exporter sdkmetric.Exporter
 	provider *sdkmetric.MeterProvider
 }
 
-// NewMetricsAdapter takes the push exporter.
 func NewMetricsAdapter(exporter sdkmetric.Exporter) *MetricsAdapter {
 	return &MetricsAdapter{exporter: exporter}
 }
 
-// Start builds the provider once; a second call is a wiring bug, not a no-op.
+// Start builds the provider once; a second call is a wiring bug.
 func (a *MetricsAdapter) Start(res *resource.Resource) error {
 	if a.provider != nil {
 		return fmt.Errorf("adapters: the metrics provider already started")
@@ -36,7 +33,7 @@ func (a *MetricsAdapter) Start(res *resource.Resource) error {
 	return nil
 }
 
-// Meter exposes the started provider's meter to the seam; call after Start.
+// Meter returns the started provider's meter; call after Start.
 func (a *MetricsAdapter) Meter() (otelmetric.Meter, error) {
 	if a.provider == nil {
 		return nil, fmt.Errorf("adapters: the metrics provider never started")
@@ -56,9 +53,8 @@ func (a *MetricsAdapter) Shutdown(ctx context.Context) error {
 	return provider.Shutdown(drain)
 }
 
-// DeltaTemporality pins the New Relic OTLP wire position: counted and
-// histogrammed instruments carry per-interval values (observability.md's
-// export shape), everything the SDK defaults stay cumulative.
+// DeltaTemporality pins the New Relic wire shape: counters and histograms carry
+// per-interval values, the SDK defaults stay cumulative.
 func DeltaTemporality(kind sdkmetric.InstrumentKind) sdkmetricdata.Temporality {
 	switch kind {
 	case sdkmetric.InstrumentKindCounter, sdkmetric.InstrumentKindHistogram:

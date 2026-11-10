@@ -15,19 +15,18 @@ var (
 // Message is the contract between shaping and transport; no SDK type crosses it.
 type Message struct {
 	Body           []byte // forwarded verbatim from the request
-	Source         string // always "paddle"
-	EventID        string // parsed event_id
-	EventType      string // "unknown" when absent
-	OccurredAt     string // raw occurred_at, verbatim from the body
-	SubscriptionID string // subscription_id, or sub_-prefixed data.id
-	TransactionID  string // transaction_id, or txn_-prefixed data.id
-	CustomerID     string // customer_id, or ctm_-prefixed data.id
-	UserID         string // custom_data.user_id
+	Source         string
+	EventID        string
+	EventType      string // "unknown" when the body names none
+	OccurredAt     string
+	SubscriptionID string // subscription_id, else the sub_-prefixed data.id
+	TransactionID  string
+	CustomerID     string
+	UserID         string
 	DedupID        string // event_id when present, else the sha256 of the body
-	GroupID        string // the group-ladder result
+	GroupID        string
 }
 
-// Queue is the one-way publish contract.
 type Queue interface {
 	Publish(ctx context.Context, message Message) error
 }

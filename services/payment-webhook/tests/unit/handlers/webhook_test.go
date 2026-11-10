@@ -31,7 +31,6 @@ const max = int64(1024)
 // 1.5 s budget: Retry-After carries the ceil, so the 503 asserts 2.
 const testBudget = 1500 * time.Millisecond
 
-// The handler runs the real validator over a fake Queue; tests never touch a network.
 type fakeQueue struct {
 	message queue.Message
 	err     error
@@ -191,7 +190,6 @@ func TestPaddleWebhookRejectsEnvelopeViolationsBeforeQueue(t *testing.T) {
 }
 
 func TestPaddleWebhookChecksTheSignatureBeforeTheEnvelope(t *testing.T) {
-	// Verify-first gate order: an unsigned body never reaches the envelope check.
 	w := post(t, &fakeQueue{}, []byte(`[1,2,3]`), "garbage")
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", w.Code)
@@ -199,7 +197,6 @@ func TestPaddleWebhookChecksTheSignatureBeforeTheEnvelope(t *testing.T) {
 }
 
 func TestPaddleWebhookBoundsTheBodyBeforeAuth(t *testing.T) {
-	// The bound precedes auth: an oversize unsigned body still answers 413.
 	w := post(t, &fakeQueue{}, bytesOf(max+1), "garbage")
 	if w.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want 413", w.Code)
@@ -244,7 +241,6 @@ func TestPaddleWebhookShapesTheRetryable503(t *testing.T) {
 }
 
 func TestPaddleWebhookAnswersThe500CatchAll(t *testing.T) {
-	// An unmapped fault answers the generic 500, with no Retry-After.
 	w := post(t, &fakeQueue{err: errors.New("connection reset")},
 		validBody(), sign(testSecret, freshTS(t), validBody()))
 	if w.Code != http.StatusInternalServerError {
@@ -263,8 +259,7 @@ func signedPost(t *testing.T, target queue.Queue, body []byte) *httptest.Respons
 	return post(t, target, body, sign(testSecret, freshTS(t), body))
 }
 
-// paddedEnvelope pads with JSON whitespace so an exactly-n-byte body still
-// carries a full valid envelope.
+// paddedEnvelope pads with JSON whitespace so an exactly-n-byte body carries a full valid envelope.
 func paddedEnvelope(t *testing.T, n int64) []byte {
 	t.Helper()
 	base := validBody()
@@ -279,7 +274,6 @@ func paddedEnvelope(t *testing.T, n int64) []byte {
 	return body
 }
 
-// brokenReader faults the transport mid-body to drive the 400 class.
 type brokenReader struct{}
 
 func (brokenReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }

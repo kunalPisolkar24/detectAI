@@ -11,8 +11,7 @@ var (
 	ErrBodyMalformed = errors.New("ingress: body unreadable")
 )
 
-// ReadBounded reads up to max bytes, exactly max included; the max+1 read
-// detects an oversize body before the excess is consumed.
+// ReadBounded reads up to max bytes, max included; the max+1 read detects an oversize body.
 func ReadBounded(r io.Reader, max int64) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(r, max+1))
 	if int64(len(data)) > max {

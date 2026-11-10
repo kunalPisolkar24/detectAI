@@ -26,8 +26,7 @@ func NewPaddle(secret string) *Paddle {
 	return &Paddle{secret: secret}
 }
 
-// Verify recomputes the constant-time HMAC over "<ts>:<raw-body>"; the header's
-// ts string frames it verbatim, never reformatted to an integer.
+// Verify recomputes the constant-time HMAC over "<ts>:<raw-body>", ts verbatim.
 func (v *Paddle) Verify(header string, body []byte) error {
 	if v.secret == "" {
 		return ErrInvalid
@@ -52,8 +51,7 @@ func (v *Paddle) Verify(header string, body []byte) error {
 	return nil
 }
 
-// parseHeader splits the ts/h1 segments; both orders are accepted, duplicates
-// and extras are invalid.
+// parseHeader splits the ts/h1 segments; both orders are accepted, duplicates and extras are invalid.
 func parseHeader(header string) (ts, h1 string, ok bool) {
 	segments := strings.Split(header, ";")
 	if len(segments) != 2 {

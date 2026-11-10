@@ -6,20 +6,17 @@ import (
 	"strings"
 )
 
-// Plane is a prod plane reader the adapters satisfy structurally; tests inject fakes.
+// Plane is a prod plane reader the adapters satisfy structurally.
 type Plane interface {
 	Fetch() (map[string]string, error)
 }
 
-// ProdSource merges the Secrets Manager blob with the SSM tree; the process env
-// never reaches it, so a stray environment variable cannot leak a value in.
+// ProdSource merges the Secrets Manager blob with the SSM tree; the process env never reaches it.
 type ProdSource struct {
 	values map[string]string
 }
 
-// NewProdSource fetches both AWS planes once — secrets first, so a secrets
-// failure lands before any SSM work — and merges them; keys seeded after boot
-// are invisible until a restart.
+// NewProdSource fetches both planes once — secrets first — and merges them.
 func NewProdSource(parameters, secrets Plane) (*ProdSource, error) {
 	blob, err := secrets.Fetch()
 	if err != nil {

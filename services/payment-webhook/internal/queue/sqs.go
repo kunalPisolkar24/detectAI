@@ -13,8 +13,7 @@ import (
 // SQSMessageCeiling is the largest body SQS accepts per message; a larger publish can never succeed.
 const SQSMessageCeiling = 256 << 10 // 256 KiB
 
-// SQSClient is the transport interface; the SDK client satisfies it structurally
-// because the SDK ships no service-wide interface. Tests inject fakes.
+// SQSClient is the transport interface; the SDK ships no service-wide equivalent.
 type SQSClient interface {
 	SendMessage(ctx context.Context, params *sqs.SendMessageInput, optFns ...func(*sqs.Options)) (*sqs.SendMessageOutput, error)
 }
@@ -29,13 +28,11 @@ func NewSQSAdapter(client SQSClient, url string) *SQSAdapter {
 	return &SQSAdapter{client: client, url: url}
 }
 
-// Publish maps each unavailability class to ErrEnqueueUnavailable: the
-// retryable SQS codes, and transport outages — a queue that is not yet
-// reachable is temporary for a retried delivery, so it earns the same 503
-// + Retry-After as throttling. Dead contexts and the remaining SQS codes
-// stay unmapped: a crossed deadline is the Service's timeout verdict, and
-// a code like a size rejection can never succeed, so retrying it under a
-// Retry-After would be a lie.
+// Publish maps throttling, the other retryable SQS codes, and transport outages
+// onto ErrEnqueueUnavailable — the same 503 + Retry-After as throttling. Dead
+// contexts and the remaining codes stay unmapped: a crossed deadline is the
+// Service's timeout verdict, and a code that can never succeed must not
+// advertise a retry.
 func (a *SQSAdapter) Publish(ctx context.Context, message Message) error {
 	input := &sqs.SendMessageInput{
 		QueueUrl:               aws.String(a.url),
@@ -61,8 +58,7 @@ func (a *SQSAdapter) Publish(ctx context.Context, message Message) error {
 	return nil
 }
 
-// messageAttributes always sets source and event_type; blank optional ids omit
-// their attribute rather than send empty values.
+// messageAttributes always sets source and event_type; blank optional ids omit the attribute.
 func messageAttributes(message Message) map[string]types.MessageAttributeValue {
 	attributes := map[string]types.MessageAttributeValue{
 		"source":     stringAttribute(message.Source),

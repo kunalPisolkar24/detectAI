@@ -14,8 +14,7 @@ const SecretsName = "detectai/payment-webhook/secrets"
 
 const fetchFix = "apply the plane it reads (make secrets-apply) and check the runtime role"
 
-// SecretsClient is the transport interface; the SDK client satisfies it structurally
-// because the SDK ships no service-wide interface. Tests inject fakes.
+// SecretsClient is the transport interface; the SDK ships no service-wide equivalent.
 type SecretsClient interface {
 	GetSecretValue(ctx context.Context, params *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
 }

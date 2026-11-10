@@ -10,15 +10,12 @@ import (
 
 const dotenvFix = "create it with make env (copies infra/.env.example) or fix the file"
 
-// DotEnvAdapter is the dev plane's file reader. Nothing is ever written to
-// os.environ: the file is parsed once and the merge with the process environment
-// happens in the source.
+// DotEnvAdapter is the dev plane's file reader; it never writes os.environ.
 type DotEnvAdapter struct {
 	values map[string]string
 }
 
-// NewDotEnvAdapter parses the dotenv plane; a missing default (infra/.env) is an
-// empty plane, while a missing explicit path or malformed file fails the boot.
+// NewDotEnvAdapter parses the dotenv plane; a missing default is an empty plane, the rest fails the boot.
 func NewDotEnvAdapter(path string) (*DotEnvAdapter, error) {
 	explicit := path != ""
 	if !explicit {

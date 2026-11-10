@@ -1,6 +1,5 @@
-# test covers the module; test-unit covers the black-box tests/unit tree;
-# test-integration drives the prod config plane against the seeded floci
-# emulator (:4566) and the queue plane against a testcontainers ElasticMQ.
+# test-unit covers the black-box tests/unit tree; test-integration drives the
+# prod config plane and the queue plane against their emulators.
 
 .PHONY: test test-unit test-integration help-tests
 

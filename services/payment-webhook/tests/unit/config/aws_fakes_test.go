@@ -10,7 +10,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config/adapters"
 )
 
-// fakeSecrets answers one recorded GetSecretValue call.
 type fakeSecrets struct {
 	output *secretsmanager.GetSecretValueOutput
 	err    error
@@ -25,7 +24,6 @@ func (f *fakeSecrets) GetSecretValue(_ context.Context, input *secretsmanager.Ge
 
 var _ adapters.SecretsClient = (*fakeSecrets)(nil)
 
-// fakeParameters answers GetParametersByPath page by page and records every input.
 type fakeParameters struct {
 	pages []*ssm.GetParametersByPathOutput
 	err   error
@@ -48,7 +46,6 @@ func (f *fakeParameters) GetParametersByPath(_ context.Context, input *ssm.GetPa
 
 var _ adapters.ParametersClient = (*fakeParameters)(nil)
 
-// fakePlane is an in-memory Plane recording every Fetch into a shared order log.
 type fakePlane struct {
 	name   string
 	log    *[]string

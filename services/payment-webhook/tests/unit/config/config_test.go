@@ -470,7 +470,6 @@ func TestLoadEndToEnd(t *testing.T) {
 	})
 }
 
-// writeEnvPlane seeds the default infra/.env under the current directory.
 func writeEnvPlane(t *testing.T) {
 	t.Helper()
 	if err := os.MkdirAll("infra", 0o755); err != nil {

@@ -50,7 +50,6 @@ func TestReadBoundedAcceptsUpToTheBound(t *testing.T) {
 
 func TestReadBoundedRejectsOversizeBeforeTheTransportError(t *testing.T) {
 	const max = int64(64)
-	// Oversize wins even when the client aborted mid-transfer.
 	data, err := validator.ReadBounded(
 		io.MultiReader(strings.NewReader(string(bytesOf(65))), errReader{}), max)
 	if !errors.Is(err, validator.ErrBodyTooLarge) {

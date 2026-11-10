@@ -7,8 +7,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/validator"
 )
 
-// fullEnvelope is the real Paddle shape: four hard fields plus the delivery id,
-// with a sub_-prefixed data.id.
+// fullEnvelope is the real Paddle shape: the hard fields plus sub_-prefixed data.id.
 var fullEnvelope = []byte(`{"event_id":"ntfsimevt_01m6dk7m1cmrykjg0da6qt2tke","event_type":"subscription.created","occurred_at":"2026-11-02T07:40:26.540606Z","notification_id":"ntfsimntf_01m6dk7m3h1gz9pfrhc9t33ty2","data":{"id":"sub_01hv8x29kz0t586xy6zn1a62ny"}}`)
 
 func without(keys ...string) []byte {
@@ -126,8 +125,7 @@ func TestCheckEnvelopeAdvisesWithoutRejecting(t *testing.T) {
 }
 
 func TestCheckEnvelopeOnlyAdvisesOnAddressability(t *testing.T) {
-	// A bare data.id resolves only under the sub_/ctm_ prefix; a prefix-free id
-	// stays advisory-only.
+	// A bare data.id resolves only under the sub_/ctm_ prefix.
 	body := replaced("data", `{"id":"not_a_paddle_id"}`)
 	checkIssues(t, validator.CheckEnvelope(body), nil, []string{"addressable_id"})
 }

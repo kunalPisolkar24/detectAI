@@ -6,9 +6,7 @@ import (
 	"time"
 )
 
-// The matrix runs over one live container whose queue stays sealed: a signed
-// valid answer is never allowed to sneak past a guard, and every guard speaks
-// the one verdict its contract names.
+// The matrix runs over one live container whose queue stays sealed.
 func TestRejectionsNeverTouchTheQueue(t *testing.T) {
 	stack := newStack(t)
 	goodBody := paddleBody("evt_matrix", "system.notification.tested", occurredAt, `{"note":"healthy"}`)
@@ -25,7 +23,7 @@ func TestRejectionsNeverTouchTheQueue(t *testing.T) {
 		{"stale-signature", goodBody, signWith(webhookSecret, goodBody, 301), http.StatusUnauthorized, `{"error":"unauthorized"}`},
 		{"wrong-secret", goodBody, signWith(foreignSecret, goodBody, 0), http.StatusUnauthorized, `{"error":"unauthorized"}`},
 		{"malformed-signature", goodBody, "ts=oops;h1=zz", http.StatusUnauthorized, `{"error":"unauthorized"}`},
-		// The read bound precedes auth: an oversized body answers 413 unsigned too.
+		// The read bound precedes auth: an oversize body answers 413 unsigned too.
 		{"oversize-unsigned", bodyOfLength(t, "evt_matrix_oversize", 284<<10), "", http.StatusRequestEntityTooLarge,
 			`{"error":"request body exceeds 262144 bytes"}`},
 		{"oversize-signed", bodyOfLength(t, "evt_matrix_signed", 264<<10), signWith(webhookSecret, bodyOfLength(t, "evt_matrix_signed", 264<<10), 0), http.StatusRequestEntityTooLarge,

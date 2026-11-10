@@ -65,8 +65,7 @@ func (r *recordingTelemetry) RecordPublish(eventType string, status observabilit
 
 func (r *recordingTelemetry) Shutdown(context.Context) error { return nil }
 
-// verdictWant carries the exact verdict rows the case must record; a stray
-// call surfaces as a length mismatch against the empty want.
+// verdictWant carries the exact verdict rows the case must record.
 type verdictWant struct {
 	status             int
 	spans              []string
@@ -101,9 +100,7 @@ func TestPaddleWebhookVerdictsAreRecorded(t *testing.T) {
 			sign: true,
 			want: verdictWant{
 				status: http.StatusOK,
-				// the defeated parse resolves no event id and the
-				// addressability ladder sees no entity — both settle to
-				// the unknown/advisory rows (FR-7).
+				// The defeated parse settles to the unknown/advisory rows (FR-7).
 				spans:              []string{"unknown/"},
 				received:           []string{"unknown"},
 				unknown:            1,
@@ -190,8 +187,7 @@ func TestPaddleWebhookVerdictsAreRecorded(t *testing.T) {
 	}
 }
 
-// TestPaddleWebhookRecordsTheUnreadableReason drives the 400 transport fault
-// through the seam so the too_large sibling is not the only recorded reason.
+// Drives the 400 transport fault through the seam beside the too_large row.
 func TestPaddleWebhookRecordsTheUnreadableReason(t *testing.T) {
 	obs := &recordingTelemetry{}
 	handler := handlers.NewPaddleWebhook(validator.NewPaddle(testSecret), max,
@@ -209,8 +205,7 @@ func TestPaddleWebhookRecordsTheUnreadableReason(t *testing.T) {
 	})
 }
 
-// TestPaddleWebhookRecordsTheTooLargeReason runs before and past auth: an
-// oversize unsigned body still lands in the body-error counter.
+// An oversize unsigned body still lands in the body-error counter.
 func TestPaddleWebhookRecordsTheTooLargeReason(t *testing.T) {
 	obs := &recordingTelemetry{}
 	handler := handlers.NewPaddleWebhook(validator.NewPaddle(testSecret), max,

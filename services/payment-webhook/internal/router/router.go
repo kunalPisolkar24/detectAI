@@ -11,8 +11,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/validator"
 )
 
-// New builds the engine; the webhook read bound clamps to the SQS message
-// ceiling so an unshippable body answers 413 instead of faulting mid-publish.
+// New builds the engine; the webhook read bound clamps to the SQS message ceiling.
 func New(cfg config.Config, publish *queue.Service, obs observability.Telemetry) *gin.Engine {
 	bound := min(cfg.MaxBodyBytes, queue.SQSMessageCeiling)
 	r := gin.Default()

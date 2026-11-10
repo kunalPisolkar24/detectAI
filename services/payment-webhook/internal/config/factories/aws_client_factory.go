@@ -12,9 +12,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config/adapters"
 )
 
-// AWSClientFactory resolves the region and optional endpoint override once
-// through the SDK's default chain; credentials stay ambient and never enter
-// the config planes.
+// AWSClientFactory resolves the region and optional endpoint override once; credentials stay ambient.
 type AWSClientFactory struct {
 	base aws.Config
 }

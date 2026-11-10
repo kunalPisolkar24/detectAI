@@ -8,20 +8,17 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 )
 
-// LogsAdapter owns one LoggerProvider started against the shared resource; the
-// exporter arrives injected. The slog bridge assembles in the boot — every
-// slog line then flows to OTLP and stdout both.
+// LogsAdapter owns one LoggerProvider built from the injected exporter.
 type LogsAdapter struct {
 	exporter sdklog.Exporter
 	provider *sdklog.LoggerProvider
 }
 
-// NewLogsAdapter takes the log record exporter.
 func NewLogsAdapter(exporter sdklog.Exporter) *LogsAdapter {
 	return &LogsAdapter{exporter: exporter}
 }
 
-// Start builds the provider once; a second call is a wiring bug, not a no-op.
+// Start builds the provider once; a second call is a wiring bug.
 func (a *LogsAdapter) Start(res *resource.Resource) error {
 	if a.provider != nil {
 		return fmt.Errorf("adapters: the logs provider already started")
@@ -33,7 +30,7 @@ func (a *LogsAdapter) Start(res *resource.Resource) error {
 	return nil
 }
 
-// Provider exposes the started provider to the bridge assembly; call after Start.
+// Provider returns the started provider; call after Start.
 func (a *LogsAdapter) Provider() *sdklog.LoggerProvider {
 	return a.provider
 }

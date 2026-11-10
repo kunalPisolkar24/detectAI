@@ -35,9 +35,8 @@ const (
 	defaultSampleRatio = 1.0
 )
 
-// Resolve reads one plane source: PORT fails the boot on bad values, every other
-// field fails closed to its default, and the secret and queue URL are mandatory;
-// a set OTel endpoint demands the license key while the sample ratio fails loud.
+// Resolve reads one plane source: numeric bounds fail closed, PORT, the
+// credential, and the queue URL fail the boot, and a set OTel endpoint demands the license key.
 func Resolve(source Source) (Config, error) {
 	cfg := Config{
 		Port:            defaultPort,
@@ -94,10 +93,7 @@ func Resolve(source Source) (Config, error) {
 	return cfg, nil
 }
 
-// resolveObservability reads the NFR-5 keys: the endpoint is the gate — blank
-// is a disabled boot — and a set endpoint demands the license key at the
-// credential floor; the identity fields fail closed to their defaults while
-// the sample ratio fails loud, where document-parser's validator raises too.
+// resolveObservability reads the NFR-5 keys; a set endpoint demands the license key at the credential floor.
 func resolveObservability(source Source, cfg *Config) error {
 	if raw, ok := source.Get("OTEL_EXPORTER_OTLP_ENDPOINT"); ok {
 		endpoint := strings.TrimSpace(raw)

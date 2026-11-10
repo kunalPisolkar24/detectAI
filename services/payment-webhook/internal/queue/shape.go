@@ -37,8 +37,8 @@ func Shape(body []byte) Message {
 	}
 }
 
-// GroupKey walks the group ladder: subscription, customer, then event type, else default.
-// Groups are per-entity ordering domains, not burst correlation; the worker sequences cross-entity via occurred_at.
+// GroupKey walks the ladder: subscription, customer, event type, else default.
+// Groups are per-entity ordering domains; the worker orders cross-entity via occurred_at.
 func GroupKey(event events.Event) string {
 	if event.Sub != "" {
 		return "subscription:" + event.Sub

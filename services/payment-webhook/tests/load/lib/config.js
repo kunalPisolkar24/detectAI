@@ -1,8 +1,5 @@
-// Environment knobs with a single resolution step: each reader names its
-// env key and its built-in default — a scenario runs with no configuration
-// at all while .env.load retunes it. The file is the only override path;
-// empty values count as unset: compose interpolates ${VAR:-} into empty
-// entries rather than dropping them.
+// Load knobs: each reader names its env keys and default; empty values count as
+// unset, since compose interpolates ${VAR:-} into empty entries rather than dropping them.
 
 const DURATION_UNITS_MS = {
   ms: 1,
@@ -11,7 +8,6 @@ const DURATION_UNITS_MS = {
   h: 60 * 60 * 1000,
 };
 
-// The first non-empty setting across the given env names, as { name, raw }.
 function firstSetting(names) {
   for (const name of Array.isArray(names) ? names : [names]) {
     const raw = (__ENV[name] || "").trim();
@@ -107,8 +103,7 @@ export function parseDurationMs(value, name = "duration") {
   return Math.round(totalMs);
 }
 
-// The default mix: the envelope floor still serves, mid sustains load,
-// large stresses the handler, and near-limit fills the read bound's room.
+// The default mix stretches from the envelope floor to the read bound's room.
 const DEFAULT_PROFILES = ["small", "mid", "large", "near-limit"];
 
 const DEFAULT_EVENT_TYPES = [
@@ -132,8 +127,7 @@ export function getRuntimeConfig() {
       webhookSecret,
       profiles: readList("WEBHOOK_LOAD_PROFILES", DEFAULT_PROFILES),
       eventTypes: readList("WEBHOOK_LOAD_EVENT_TYPES", DEFAULT_EVENT_TYPES),
-      // The number of rotating subscription identities the mix fans out
-      // over, so FIFO groups spread instead of serializing onto one.
+      // Rotating identities so FIFO groups spread instead of serializing onto one.
       pool: readPositiveInt("WEBHOOK_LOAD_POOL", 64),
       requestTimeout,
       requestTimeoutMs: parseDurationMs(requestTimeout, "WEBHOOK_LOAD_REQUEST_TIMEOUT"),

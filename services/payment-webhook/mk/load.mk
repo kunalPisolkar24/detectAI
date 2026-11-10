@@ -1,6 +1,4 @@
 # Load rig: infra/.env.load is the single lever; its SCENARIO line picks the script.
-# The rig boots only the service + k6 on an isolated network; the queue stays
-# the running emulator, reached over the host gateway the way the dev stack does.
 
 LOAD_ENV_FILE := infra/.env.load
 LOAD_ENV_EXAMPLE := infra/.env.load.example
@@ -19,7 +17,6 @@ K6_SCRIPT := $(if $(filter $(SCENARIO),smoke load),scenarios/$(SCENARIO).js,)
 .PHONY: load-env load-test load-e2e load-down load-down-remote help-load
 .PHONY: load-check
 
-# Everything the run reuses must exist and name a known script before compose runs.
 load-check:
 	@test -f $(LOAD_ENV_FILE) || { echo "no $(LOAD_ENV_FILE) - create it once: make load-env"; exit 1; }
 	@test -f infra/.env || { echo "no infra/.env - create it once: make env"; exit 1; }
@@ -38,8 +35,7 @@ load-env:
 	@test -f $(LOAD_ENV_FILE) || cp $(LOAD_ENV_EXAMPLE) $(LOAD_ENV_FILE)
 	@echo "$(LOAD_ENV_FILE) ready (edit it to configure load + e2e runs)"
 
-# The emulator rides queue-up; the service boots behind its health gate; k6's
-# exit code survives the teardown.
+# The emulator rides queue-up; k6's exit code survives the teardown.
 load-test: | load-check queue-up
 	@echo "Load test SCENARIO=$(SCENARIO) script=$(K6_SCRIPT) rig=$(LOAD_PROJECT)"; \
 	$(COMPOSE_LOAD) run --build --rm k6 run /load/$(K6_SCRIPT); \

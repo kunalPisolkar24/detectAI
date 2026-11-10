@@ -12,10 +12,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/config"
 )
 
-// The prod plane through the real floci endpoint, driven by the boot path. The
-// emulator (and its seeded planes) is environment, not setup: the test skips
-// when :4566 is unreachable and asserts the boot against the values that
-// `make secrets-auto-apply` seeded from infra/.env.
+// The prod plane through the real floci endpoint; the test skips when :4566 is unreachable.
 
 func flociReachable() bool {
 	conn, err := net.DialTimeout("tcp", "127.0.0.1:4566", time.Second)

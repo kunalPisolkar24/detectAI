@@ -128,8 +128,7 @@ func TestSQSAdapterPassesDeadlinesThrough(t *testing.T) {
 }
 
 func TestSQSAdapterMapsTransportOutagesToUnavailable(t *testing.T) {
-	// A queue that is not reachable — refused, reset, wrapped by the SDK's
-	// operation shape — earns the same 503 + Retry-After as throttling.
+	// Unreachable queue earns the same 503 + Retry-After as throttling.
 	outages := []error{
 		errors.New("connection reset"),
 		fmt.Errorf("send: %w", errors.New("connection refused")),
