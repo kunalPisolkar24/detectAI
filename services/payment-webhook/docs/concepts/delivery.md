@@ -134,7 +134,7 @@ classDiagram
     Queue <|.. SQSAdapter
     SQSAdapter o--> SQSClient
     note for Service "Publish shapes, wraps the one send in the budget context, then maps a crossed deadline or a cancel to ErrDeadlineExceeded"
-    note for SQSAdapter "ThrottlingException, InternalFailure, and ServiceUnavailable map to ErrEnqueueUnavailable - a crossed deadline passes through for Service to classify"
+    note for SQSAdapter "ThrottlingException, InternalFailure, ServiceUnavailable, and every transport outage map to ErrEnqueueUnavailable - dead contexts and a crossed deadline pass through for Service to classify"
     note for SQSClient "no SDK-wide interface exists, so the client satisfies this structurally - the unit fakes inject here"
     note for Queue "one fake in the unit matrix - the adapter is its only real realization"
 ```

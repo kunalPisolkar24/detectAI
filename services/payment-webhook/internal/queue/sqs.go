@@ -29,8 +29,13 @@ func NewSQSAdapter(client SQSClient, url string) *SQSAdapter {
 	return &SQSAdapter{client: client, url: url}
 }
 
-// Publish maps SQS throttling and outage classes to ErrEnqueueUnavailable; a
-// crossed deadline passes through for the Service to map.
+// Publish maps each unavailability class to ErrEnqueueUnavailable: the
+// retryable SQS codes, and transport outages — a queue that is not yet
+// reachable is temporary for a retried delivery, so it earns the same 503
+// + Retry-After as throttling. Dead contexts and the remaining SQS codes
+// stay unmapped: a crossed deadline is the Service's timeout verdict, and
+// a code like a size rejection can never succeed, so retrying it under a
+// Retry-After would be a lie.
 func (a *SQSAdapter) Publish(ctx context.Context, message Message) error {
 	input := &sqs.SendMessageInput{
 		QueueUrl:               aws.String(a.url),
@@ -40,7 +45,7 @@ func (a *SQSAdapter) Publish(ctx context.Context, message Message) error {
 		MessageAttributes:      messageAttributes(message),
 	}
 	if _, err := a.client.SendMessage(ctx, input); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return err
 		}
 		var apiErr smithy.APIError
@@ -49,8 +54,9 @@ func (a *SQSAdapter) Publish(ctx context.Context, message Message) error {
 			case "ThrottlingException", "InternalFailure", "ServiceUnavailable":
 				return ErrEnqueueUnavailable
 			}
+			return err
 		}
-		return err
+		return ErrEnqueueUnavailable
 	}
 	return nil
 }

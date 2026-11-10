@@ -6,6 +6,7 @@ Three layers, each answering a different question. The rule that keeps them hone
 |----------|-------|---------|
 | Does this function do the right math? | unit | `make test-unit` |
 | Does the prod plane really read what seeding writes? | integration | `make test-integration` |
+| Does the delivery really cross the queue as promised? | integration | `make test-integration` |
 | How does the service behave under traffic? | load | `make load-test` / `make load-e2e` |
 
 `make test` runs unit + integration together. Green means exit 0; `go test` and k6 alike propagate failures to the shell.
@@ -15,6 +16,7 @@ graph TB
     START(["start: what should this verify?"]) --> CH{"choose the layer"}
     CH -->|"a function or a class"| U["make test-unit<br/>pure logic, fakes, no app boot"]
     CH -->|"config against real AWS shape"| I["make test-integration<br/>the prod plane through floci"]
+    CH -->|"the delivery against a real SQS"| Q["make test-integration<br/>the queue plane through testcontainers ElasticMQ"]
     CH -->|"the service under traffic"| L["make load-env<br/>then load-test or load-e2e"]
     U --> G{"exit 0?"}
     I --> G
@@ -41,6 +43,8 @@ Two orderings the handler matrix exists to prove: an oversize body with a garbag
 ## Integration — the prod planes against real AWS shape
 
 `tests/integration/config` drives the prod read path through the seeded floci emulator (`:4566`) — the Secrets Manager blob and the SSM tree exactly as `make secrets-apply` ages them. It skips (not fails) when the emulator is down, so a green `make test` needs no running stack.
+
+`tests/integration/queue` boots the whole app face against a live ElasticMQ: testcontainers starts the emulator (same `1.7.1` image and queue/conf shape as the shared dev fabric), the harness assembles config → SQS adapter → router exactly as `cmd/api` does, and drives real signed posts through HTTP. The rows it owns are the delivery contract the fakes cannot see: the body arriving byte-for-byte with its ids on message attributes, the group ladder landing on `MessageGroupId`, dedup collapsing repeats, in-group FIFO order, the 250 KiB / 256 KiB sizing edges, the full rejection matrix leaving the queue sealed, and a stopped emulator earning the outage verdict — 503 + `Retry-After`, the verdict Paddle retries on. It skips when Docker is absent, same grammar as the floci skip.
 
 ## Load + e2e — traffic, not tests
 

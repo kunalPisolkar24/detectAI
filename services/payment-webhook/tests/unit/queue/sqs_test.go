@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"testing"
 
 	"github.com/kunalPisolkar24/detectAI/services/payment-webhook/internal/events"
@@ -115,31 +116,44 @@ func TestSQSAdapterMapsTheRetryableSQSFaults(t *testing.T) {
 }
 
 func TestSQSAdapterPassesDeadlinesThrough(t *testing.T) {
-	adapter := queue.NewSQSAdapter(&fakeSQS{err: context.DeadlineExceeded}, testQueueURL)
-	err := adapter.Publish(context.Background(), queue.Message{
-		Body: []byte(`{}`), EventType: events.UnknownEventType, GroupID: queue.DefaultGroupID,
-	})
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("err = %v, want the sentinel passed through unmapped", err)
+	for _, dead := range []error{context.DeadlineExceeded, context.Canceled} {
+		adapter := queue.NewSQSAdapter(&fakeSQS{err: dead}, testQueueURL)
+		err := adapter.Publish(context.Background(), queue.Message{
+			Body: []byte(`{}`), EventType: events.UnknownEventType, GroupID: queue.DefaultGroupID,
+		})
+		if !errors.Is(err, dead) {
+			t.Errorf("err = %v, want %v passed through unmapped", err, dead)
+		}
+	}
+}
+
+func TestSQSAdapterMapsTransportOutagesToUnavailable(t *testing.T) {
+	// A queue that is not reachable — refused, reset, wrapped by the SDK's
+	// operation shape — earns the same 503 + Retry-After as throttling.
+	outages := []error{
+		errors.New("connection reset"),
+		fmt.Errorf("send: %w", errors.New("connection refused")),
+		&net.OpError{Op: "dial", Err: errors.New("connection refused")},
+	}
+	for _, outage := range outages {
+		adapter := queue.NewSQSAdapter(&fakeSQS{err: outage}, testQueueURL)
+		err := adapter.Publish(context.Background(), queue.Message{
+			Body: []byte(`{}`), EventType: events.UnknownEventType, GroupID: queue.DefaultGroupID,
+		})
+		if !errors.Is(err, queue.ErrEnqueueUnavailable) {
+			t.Errorf("%v → err = %v, want ErrEnqueueUnavailable", outage, err)
+		}
 	}
 }
 
 func TestSQSAdapterKeepsUnexpectedFaultsUnmapped(t *testing.T) {
-	// Unmapped faults — access, routing, network — fall to the 500 catch-all.
+	// The remaining SQS codes can never succeed, so they stay unmapped for the 500 row.
 	adapter := queue.NewSQSAdapter(&fakeSQS{err: &apiErr{code: "AWS.SimpleQueueService.NonExistentQueue", msg: "dne"}}, testQueueURL)
 	err := adapter.Publish(context.Background(), queue.Message{
 		Body: []byte(`{}`), EventType: events.UnknownEventType, GroupID: queue.DefaultGroupID,
 	})
 	if err == nil || errors.Is(err, queue.ErrEnqueueUnavailable) {
 		t.Errorf("err = %v, want an unmapped error bound for the 500 row", err)
-	}
-	// and a bare transport error without API shape survives untouched
-	adapter = queue.NewSQSAdapter(&fakeSQS{err: errors.New("connection reset")}, testQueueURL)
-	err = adapter.Publish(context.Background(), queue.Message{
-		Body: []byte(`{}`), EventType: events.UnknownEventType, GroupID: queue.DefaultGroupID,
-	})
-	if got := fmt.Sprint(err); got != "connection reset" {
-		t.Errorf("err = %q, want the raw transport error", got)
 	}
 }
 
