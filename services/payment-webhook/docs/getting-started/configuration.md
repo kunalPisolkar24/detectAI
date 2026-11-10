@@ -206,10 +206,11 @@ classDiagram
 | Key | Role |
 |-----|------|
 | `AWS_REGION` | the one region every AWS composition builds against |
-| `AWS_ENDPOINT_URL_SQS` / `_SECRETS_MANAGER` / `_SSM` | SDK-native endpoint overrides — how local runs reach the emulators |
+| `AWS_ENDPOINT_URL_SQS` | SDK-native endpoint override — ships in the template because the emulator's port is not region-derivable |
+| `AWS_ENDPOINT_URL_SECRETS_MANAGER` / `_SSM` | SDK-native endpoint overrides — deployment territory, unset resolves the region default |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` | the credential trio, riding the SDK default chain |
 
-`infra/.env.example` ships all of them so `set -a` sourcing and compose `env_file` carry them along. Compose forwards `QUEUE_URL` and the SQS endpoint override as whole values — dev defaults are container-shaped, a prod flick carries real endpoints, and an empty override is ignored outright (the SDK resolves the region default). The `environment:` block binds the credential trio, which is the one channel that lets a shell override a run's credentials without touching the file.
+`infra/.env.example` ships the region, the SQS endpoint override, and the credential trio so `set -a` sourcing and compose `env_file` carry them along. The Secrets Manager and SSM overrides never ship: unset they resolve the region default, and pointing a boot elsewhere is deployment territory — an export on the shell, or the two names carried in `infra/.env` (the file rides `env_file` into containers). Compose forwards `QUEUE_URL` and the SQS endpoint override as whole values — dev defaults are container-shaped, a prod flick carries real endpoints, and an empty override is ignored outright (the SDK resolves the region default). The `environment:` block binds the credential trio, which is the one channel that lets a shell override a run's credentials without touching the file.
 
 ## Next Steps
 
