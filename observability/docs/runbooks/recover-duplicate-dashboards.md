@@ -76,3 +76,7 @@ Then, in order:
 - `make audit` runs after `apply`/`auto-apply` automatically; any fresh apply
   that produces a second copy fails the target instead of sitting silently in
   the UI for a week.
+- `make apply` and `make auto-apply` are also guarded *before* they run: the
+  captured plan is parsed and, if it proposes creating a board that is already
+  live on the account, the apply is refused (`scripts/plan-guard.py`). A brand
+  new board still applies normally.

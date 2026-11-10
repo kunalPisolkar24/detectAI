@@ -39,14 +39,17 @@ def load_credential(name):
     return None
 
 
+def template_board_name(template):
+    match = re.search(r'"name":\s*"([^"]+)"', template.read_text())
+    if not match:
+        raise SystemExit(f"error: no dashboard name found in {template.relative_to(ROOT)}")
+    return match.group(1).replace("${environment}", "prod")
+
+
 def declared_board_names():
     names = {}
     for template in sorted((ROOT / "terraform" / "dashboards").glob("*/*.tftpl")):
-        match = re.search(r'"name":\s*"([^"]+)"', template.read_text())
-        if not match:
-            raise SystemExit(f"error: no dashboard name found in {template.relative_to(ROOT)}")
-        name = match.group(1).replace("${environment}", "prod")
-        names[name] = template.relative_to(ROOT)
+        names[template_board_name(template)] = template.relative_to(ROOT)
     return names
 
 
