@@ -21,4 +21,5 @@ env:
 run:
 	@set -a; if [ -f infra/.env ]; then . infra/.env; fi; set +a; \
 	QUEUE_URL=`echo "$$QUEUE_URL" | sed 's/host\.docker\.internal/localhost/'`; \
+	AWS_ENDPOINT_URL_SQS=`echo "$$AWS_ENDPOINT_URL_SQS" | sed 's/host\.docker\.internal/localhost/'`; \
 	go run ./cmd/api

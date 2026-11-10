@@ -209,7 +209,7 @@ classDiagram
 | `AWS_ENDPOINT_URL_SQS` / `_SECRETS_MANAGER` / `_SSM` | SDK-native endpoint overrides — how local runs reach the emulators |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` | the credential trio, riding the SDK default chain |
 
-`infra/.env.example` ships all of them so `set -a` sourcing and compose `env_file` carry them along; the compose `environment:` block carries only the trio, which is the one channel that lets a shell override a run's credentials without touching the file.
+`infra/.env.example` ships all of them so `set -a` sourcing and compose `env_file` carry them along. Compose forwards `QUEUE_URL` and the SQS endpoint override as whole values — dev defaults are container-shaped, a prod flick carries real endpoints, and an empty override is ignored outright (the SDK resolves the region default). The `environment:` block binds the credential trio, which is the one channel that lets a shell override a run's credentials without touching the file.
 
 ## Next Steps
 

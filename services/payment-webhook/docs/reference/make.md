@@ -21,7 +21,7 @@ Details: the [Quick Start](../getting-started/quickstart.md) walks the main line
 
 | Target | What it does | Reach for it when |
 |--------|--------------|-------------------|
-| `make run` | sources `infra/.env` into the shell, repaints `QUEUE_URL` from `host.docker.internal` to `localhost`, runs the API | everyday development |
+| `make run` | sources `infra/.env` into the shell, repaints `QUEUE_URL` and `AWS_ENDPOINT_URL_SQS` from `host.docker.internal` to `localhost`, runs the API | everyday development |
 | `make env` | copies `infra/.env.example` → `infra/.env` **if missing** | first run; it never overwrites an existing file |
 | `make tidy` | resolves and updates `go.mod`/`go.sum` | after pulling dependency changes |
 | `make vet` | `go vet ./...` | before pushing anything |

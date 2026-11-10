@@ -24,7 +24,7 @@ Get the service running locally, then publish your first signed webhook. The who
    make queue-up
    ```
 
-   `QUEUE_URL` in `infra/.env` is written container-shaped (`host.docker.internal:9324`); host runs get it repainted to `localhost` automatically by `make run`.
+   `QUEUE_URL` and `AWS_ENDPOINT_URL_SQS` in `infra/.env` are written container-shaped (`host.docker.internal:9324`); host runs get both repainted to `localhost` automatically by `make run`.
 
 4. **Run the service:**
 

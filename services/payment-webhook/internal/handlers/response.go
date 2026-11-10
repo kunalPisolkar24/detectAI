@@ -43,6 +43,7 @@ func publishResponse(c *gin.Context, publish *queue.Service, err error) {
 		c.Header("Retry-After", strconv.Itoa(int(math.Ceil(publish.Budget().Seconds()))))
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "queue unavailable", "retryable": true})
 	default:
+		slog.Error("payment event enqueue failed", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "unexpected error"})
 	}
 }
