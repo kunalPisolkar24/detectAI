@@ -34,7 +34,7 @@ graph TB
 | **Inference** | Python (gRPC) | Dual ONNX model inference | [docs](services/inference/docs/README.md) |
 | **Chats** | Go (gRPC) | Chat storage, streaming, background worker | [docs](services/chats/docs/README.md) |
 | **Document Parser** | Python (FastAPI) | Text extraction from PDF/DOCX/TXT | [docs](services/document-parser/docs/README.md) |
-| **Payment Gateway** | Go | Paddle webhook validation, RabbitMQ forwarding | [docs](services/payments/gateway/docs/README.md) |
+| **Payment Webhook** | Go | Paddle webhook validation, SQS forwarding | [docs](services/payment-webhook/docs/README.md) |
 | **Workers** | TypeScript (Bun) | Payments, analytics, cron processing | [docs](services/workers/docs/README.md) |
 | **Terraform** | HCL | AWS infrastructure (RDS, DocumentDB, ElastiCache, MQ) | [docs](infra/docs/README.md) |
 
@@ -101,7 +101,7 @@ detectAI/
 │   ├── chats/                  # Go gRPC chat service
 │   ├── document-parser/        # Python text extraction
 │   ├── inference/              # Python gRPC model serving
-│   └── payments/gateway/       # Go webhook gateway
+│   └── payment-webhook/         # Go webhook gateway
 ├── services/workers/           # TypeScript background workers
 ├── tools/
 │   └── seed-secrets/           # AWS Secrets Manager seeding CLI
@@ -121,7 +121,7 @@ Each component has its own documentation in `docs/`. Start with the quickstart f
 | Inference | [Quickstart](services/inference/docs/getting-started/quickstart.md) | [Index](services/inference/docs/README.md) |
 | Chats | [Quickstart](services/chats/docs/getting-started/quickstart.md) | [Index](services/chats/docs/README.md) |
 | Document Parser | [Quickstart](services/document-parser/docs/getting-started/quickstart.md) | [Index](services/document-parser/docs/README.md) |
-| Payment Gateway | [Quickstart](services/payments/gateway/docs/getting-started/quickstart.md) | [Index](services/payments/gateway/docs/README.md) |
+| Payment Webhook | [Quickstart](services/payment-webhook/docs/getting-started/quickstart.md) | [Index](services/payment-webhook/docs/README.md) |
 | Workers | [Quickstart](services/workers/docs/getting-started/quickstart.md) | [Index](services/workers/docs/README.md) |
 | Infrastructure | [Quickstart](infra/docs/getting-started/quickstart.md) | [Index](infra/docs/README.md) |
 | Terraform | [README](infra/terraform/README.md) | [Docs](infra/docs/concepts/terraform.md) |

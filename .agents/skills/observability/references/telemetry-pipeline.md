@@ -11,7 +11,7 @@ from `infra/docker/prod/compose.yml`):
 |---|---|
 | Traces + logs | services → OTLP `http://otel-collector:4318` → collector → `otlp.eu01.nr-data.net:443` |
 | Metrics | collector scrapes Prometheus endpoints and forwards them in the same stream |
-| document-parser | direct OTLP to EU — the reference pattern for dropping the collector |
+| document-parser, payment-webhook | direct OTLP to EU — the reference pattern for dropping the collector |
 
 Scraped endpoints: web `/api/metrics`, workers `:7001-7003`, and the
 postgres/redis/rabbitmq exporters.
@@ -47,7 +47,6 @@ never page. Rig data still lands in NR; investigate with raw NRQL.
   `deployment.environment=loadtest` and exports to EU on `:443`.
 - A component overlay that wires the collector and exporters onto the load
   project: `apps/web/infra/compose.load.observability.yml`,
-  `services/payments/gateway/infra/compose.load.observability.yml`,
   `services/chats/infra/compose.load.observability.yml`,
   `services/workers/infra/compose.load.observability.yml` (worker-agnostic;
   adds redis/postgres exporters, the rabbitmq exporter rides

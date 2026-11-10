@@ -1,8 +1,7 @@
 """Factory wiring against fakes only: the flick composes the right plane,
-prod wiring builds the secret plane before SSM is even constructed, and
-the bootstrap environment read decides region and the emulator override.
-No network, no boot — the real-plane equivalent lives beside its kin in
-tests/integration/config (FLoCI).
+prod wiring builds the secret plane before SSM is even constructed, and the
+bootstrap environment read decides region. No network, no boot — credentials
+ride boto3's default chain, injected by the deployment, never the app.
 """
 
 import json
@@ -69,16 +68,14 @@ def test_from_env_fails_without_region(monkeypatch: pytest.MonkeyPatch) -> None:
         AWSClientFactory.from_env()
 
 
-def test_from_env_reads_region_and_trims_the_emulator(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_from_env_reads_the_region(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_REGION", "ap-southeast-2")
-    monkeypatch.setenv("EMULATOR_ENDPOINT", " http://localhost:4566 ")
 
     factory = AWSClientFactory.from_env()
     assert factory._region == "ap-southeast-2"
-    assert factory._endpoint_url == "http://localhost:4566"
 
 
-def test_create_client_shares_region_and_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_client_shares_the_region(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeBoto:
         def __init__(self) -> None:
             self.calls: list[tuple[str, dict[str, Any]]] = []
@@ -89,12 +86,12 @@ def test_create_client_shares_region_and_endpoint(monkeypatch: pytest.MonkeyPatc
 
     boto = FakeBoto()
     monkeypatch.setitem(sys.modules, "boto3", boto)
-    factory = AWSClientFactory("ap-southeast-2", endpoint_url="http://localhost:4566")
+    factory = AWSClientFactory("ap-southeast-2")
 
     factory.create_client("ssm")
     factory.create_client("secretsmanager")
 
     assert boto.calls == [
-        ("ssm", {"region_name": "ap-southeast-2", "endpoint_url": "http://localhost:4566"}),
-        ("secretsmanager", {"region_name": "ap-southeast-2", "endpoint_url": "http://localhost:4566"}),
+        ("ssm", {"region_name": "ap-southeast-2"}),
+        ("secretsmanager", {"region_name": "ap-southeast-2"}),
     ]

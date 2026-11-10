@@ -4,9 +4,9 @@ One wiring file per board in `dashboards/`, each backed by JSON templates.
 `modules/dashboard` wraps `newrelic_one_dashboard_json` + `newrelic_entity_tags`
 (tags: `team=detectai`, `managed-by=terraform`, `service`, `env`, `kind`).
 
-Boards: prod set is `overview`, `datastores`, `web`, `payment-gateway`,
+Boards: prod set is `overview`, `datastores`, `web`, `payment-webhook`,
 `workers`, `inference`, `document-parser`, `chats`; dev twins exist for web,
-payment-gateway, workers, document-parser, chats (`overview`/`datastores`/
+payment-webhook, workers, document-parser, chats (`overview`/`datastores`/
 `inference` have none — rigs never run the AI service). What each board shows:
 `docs/services/<name>.md`.
 
@@ -69,7 +69,7 @@ panel-for-panel, titles suffixed ` (dev)`. `tests/dashboards.tftest.hcl`
 
 - the total board count
 - twin parity: same pages, same panel counts, same panel coverage
-- exact title order for web/payment-gateway/chats; workers may swap prod's
+- exact title order for web/payment-webhook/chats; workers may swap prod's
   "Paddle API latency and cancels" for the rig's "Cancel events/min" on its
   Payments page
 - layout invariants (full-width tables, side-by-side chart pairs)

@@ -6,9 +6,13 @@ from fastapi import FastAPI
 
 from .api.extract import router as extract_router
 from .config import ConfigFactory, Settings, deployment_flick
-from .extraction import CleaningKnobs, build_default_extraction_service
 from .observability import build_observability_service
-from .validation import build_default_service
+from .processing import (
+    CleaningKnobs,
+    DocumentProcessingService,
+    build_default_extraction_service,
+    build_default_service,
+)
 
 # Stdout is the baseline destination; a wired build adds its OTel ride-along.
 logging.basicConfig(level=logging.INFO)
@@ -22,11 +26,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     provider = ConfigFactory.create(flick)
     settings = Settings.from_provider(provider)
     app.state.settings = settings
-    app.state.validation_service = build_default_service(
+    # The gate flips on the endpoint: unset installs nothing, set wires the OTel
+    # ride-along. The pipeline folds its verdicts onto the same seam, so it is wired first.
+    app.state.observability = build_observability_service(settings, app, flick)
+    validation_service = build_default_service(
         max_pdf_pages=settings.max_pdf_pages,
         docx_max_uncompressed_bytes=settings.docx_max_uncompressed_bytes,
     )
-    app.state.extraction_service = build_default_extraction_service(
+    extraction_service = build_default_extraction_service(
         processing_budget_seconds=settings.processing_budget_seconds,
         output_char_limit=settings.output_char_limit,
         cleaning_knobs=CleaningKnobs(
@@ -38,8 +45,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             folio_monotonic_ratio=settings.folio_monotonic_ratio,
         ),
     )
-    # The gate flips on the endpoint: unset installs nothing, set wires the OTel ride-along.
-    app.state.observability = build_observability_service(settings, app)
+    app.state.document_processing_service = DocumentProcessingService(
+        validation_service, extraction_service, app.state.observability
+    )
     logger.info("config plane: %s", flick)
     logger.info("observability: %s", type(app.state.observability).__name__)
 

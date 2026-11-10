@@ -30,11 +30,14 @@ factories:
   non-secret keys in SSM), and the merge enforces it: a case-insensitive
   key collision fails the boot loud.
 
-`AWS_REGION` and `EMULATOR_ENDPOINT` are bootstrap variables, not config:
-`AWSClientFactory.from_env()` reads them from the process environment once
-(`AWS_REGION` required — compose injects it from `infra/.env`, ECS injects it
-in real prod; the endpoint override points a prod-config fetch at Floci).
-Credentials ride boto3's default chain (the task role), never the config.
+`AWS_REGION` is a bootstrap variable, not config: `AWSClientFactory.from_env()`
+reads it from the process environment once (required — compose injects it from
+`infra/.env` via `env_file`, ECS injects it in real prod). Credentials ride
+boto3's default chain (the task role), never the config; compose carries the
+credential trio in from `infra/.env` the same way, and its `environment:` block
+exists only so the host shell can override one run's credentials without
+touching the file. The SDK's native `AWS_ENDPOINT_URL_*` variables remain the
+deployment-level endpoint choice — the app defines no knob of its own.
 
 The config classes split cleanly in two: the boot shell — who builds what
 from the flick, and who reads the result — and the plane machinery, the

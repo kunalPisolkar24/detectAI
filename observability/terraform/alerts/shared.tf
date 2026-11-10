@@ -4,7 +4,7 @@
 locals {
   area_policies = {
     web             = "web"
-    payment_gateway = "payment-gateway"
+    payment_webhook = "payment-webhook"
     workers         = "workers"
     inference       = "inference"
     document_parser = "document-parser"

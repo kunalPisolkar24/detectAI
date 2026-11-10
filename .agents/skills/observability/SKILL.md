@@ -1,29 +1,33 @@
 ---
 name: observability
-description: DetectAI's New Relic observability — how telemetry flows to New Relic EU and how dashboards and alerts are authored and published as Terraform in observability/terraform. Use when adding or changing boards, panels, NRQL widgets or alerts, wiring or checking service telemetry, streaming load tests to New Relic, or discussing observability.
+description: DetectAI's New Relic observability — how telemetry flows to New Relic EU and how dashboards and alerts are authored and published as Terraform in observability. Use when adding or changing boards, panels, NRQL widgets or alerts, wiring or checking service telemetry, streaming load tests to New Relic, or discussing observability.
 ---
 
 # Observability — New Relic as code
 
-Boards and alerts are Terraform in `observability/terraform/`, a root kept
-separate from `infra/terraform` on purpose: destroying a datastore must not
-take the boards with it. Everything publishes to the New Relic **EU**
-datacenter (`one.eu.newrelic.com`). Current shape: 13 boards (8 prod + 5 dev
-twins), 7 alert policies with 16 conditions, one email workflow.
+Boards and alerts are Terraform in the `observability/` stack root — its HCL
+(`terraform/`) is kept separate from `infra/` on purpose: destroying a
+datastore must not take the boards with it. Everything publishes to the
+New Relic **EU** datacenter (`one.eu.newrelic.com`). Current shape: 13 boards
+(8 prod + 5 dev twins), 7 alert policies with 16 conditions, one email
+workflow.
 
 ## Map
 
 ```text
-observability/terraform/
-├── main.tf                  wiring only: the two module layers below
-├── dashboards/              <name>.tf wiring + <name>/{prod,dev}.tftpl board JSON
-├── alerts/                  shared.tf (policies), <area>.tf (conditions), notifications.tf
-├── modules/dashboard/       one board + its entity tags
-├── modules/alert-condition/ one NRQL condition
-├── envs/                    .env (gitignored, from .env.example) + prod.tfvars
-├── tools/newrelic.py        credentials brain + terraform driver
-├── tests/                   mocked terraform tests — the same gate CI runs
-└── docs/                    canonical reference: quickstart, configuration, architecture, per-board tours
+observability/
+├── observability.toml         tfctl's declaration — the tfctl engine drives every live verb
+├── Makefile + mk/             the make targets; terraform ones -chdir into terraform/
+├── envs/                      .env (gitignored, from .env.example) — tfctl's values file
+├── docs/                      canonical reference: quickstart, configuration, architecture, per-board tours
+├── README.md                  stack overview
+└── terraform/                 the New Relic-as-code HCL
+    ├── main.tf                wiring only: the two module layers below
+    ├── dashboards/            <name>.tf wiring + <name>/{prod,dev}.tftpl board JSON
+    ├── alerts/                shared.tf (policies), <area>.tf (conditions), notifications.tf
+    ├── modules/dashboard/     one board + its entity tags
+    ├── modules/alert-condition/ one NRQL condition
+    └── tests/                 mocked terraform tests — the same gate CI runs
 ```
 
 ## How telemetry reaches New Relic
@@ -33,7 +37,8 @@ observability/terraform/
   `otlp.eu01.nr-data.net:443` with the ingest license key.
 - **Scrape** — the same collector polls Prometheus endpoints: web
   `/api/metrics`, workers `:7001-7003`, postgres/redis/rabbitmq exporters.
-- **Exception** — `document-parser` ships all three signals directly to EU.
+- **Exception** — `document-parser` and `payment-webhook` ship all three
+  signals directly to EU (both run where the collector cannot be reached).
 - **Labels** — each collector upserts `deployment.environment`: `prod`/`floci`
   on the prod stack (from its `DEPLOYMENT_ENV`), `loadtest` on load rigs,
   `dev` for stacks run with `ENV_TYPE=dev`. Every NRQL and every alert filters
@@ -53,7 +58,7 @@ Details and per-service endpoints: [references/telemetry-pipeline.md](references
    `"accountId": "${account_id}"`.
 3. Layout: tables span the full 12 columns; charts pair side by side at width
    6; gauge rows go four-up at width 3.
-4. Verify offline from `observability/terraform`:
+4. Verify offline from `observability`:
    `make fmt init validate test` — no key, no network.
 5. Publish (below).
 
@@ -85,13 +90,21 @@ Anatomy, thresholds, notifications: [references/alerts.md](references/alerts.md)
 ## Publish to New Relic
 
 ```bash
-cd observability/terraform        # never the root Makefile's obs-* targets
+cd observability                    # never the root Makefile's obs-* targets
 make env                          # creates envs/.env — put a real NRAK- key in it
 make fmt init validate test       # offline gate — exactly what CI runs
 make check                        # validates .env, previews the plane, resolves the account live
-make bootstrap                    # state bucket for the selected plane (no key needed)
-make plan && make apply           # auto-approves on Floci, interactive on real AWS
+make plan && make apply           # the bucket self-heals; auto-approves on Floci, interactive on real AWS
 ```
+
+tfctl (installed from `tools/tfctl`) is the driver — the make targets wrap its
+observability kind. The plane follows `PLANE=floci|aws` (**floci** is the
+default): `make plan PLANE=aws` rides the real plane. On real AWS every
+state-plane step rides the
+`detectai-observability-seeder` role (created on demand, MFA-gated, cached 12
+hours); the MFA device is derived from your caller identity, with no override.
+The engine's mechanics — kinds, carrier, MFA and session caching — are the
+`tfctl` skill's subject.
 
 `NEW_RELIC_API_KEY` must be a **User** key (`NRAK-...`) — the ingest license
 key is rejected. Secrets live only in `envs/.env` or the shell, never
@@ -101,8 +114,9 @@ Planes, precedence, failure modes: [references/publishing.md](references/publish
 
 ## Guardrails
 
-- Run everything from `observability/terraform`. The root `Makefile`'s
-  `obs-*` targets point at a removed `infra/observability` path — dead today.
+- Run everything from `observability`. The root `Makefile` has no
+  obs targets; the make targets here (`check`/`plan`/`apply`/
+  `auto-apply`/`destroy`) drive tfctl directly.
 - This root is pure New Relic: no AWS provider, and no edits reaching into
   `infra/terraform` or service code from here.
 - A widget is only as real as its telemetry: confirm the span/metric/log

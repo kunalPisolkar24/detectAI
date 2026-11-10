@@ -1,14 +1,18 @@
 """The authenticated extraction route."""
 
-import time
 from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from starlette.datastructures import FormData, UploadFile
 from starlette.formparsers import MultiPartException, MultiPartParser
 
-from ..extraction import BudgetExhaustedError, UnreadableDocumentError
-from ..validation import CorruptDocumentError, TooLargeError, UnsupportedTypeError
+from ..processing import (
+    BudgetExhaustedError,
+    CorruptDocumentError,
+    TooLargeError,
+    UnreadableDocumentError,
+    UnsupportedTypeError,
+)
 from .auth import api_key_auth
 
 router = APIRouter()
@@ -20,7 +24,7 @@ _FILE_FIELD = "file"
 
 @router.post("/api/v1/extract", dependencies=[Depends(api_key_auth)], response_model=None)
 async def extract(request: Request) -> dict[str, object]:
-    """Bounded read, admission, pipeline; each failure carries its verdict."""
+    """Bounded read and multipart parse; the pipeline's typed verdicts map onto HTTP."""
     observability = request.app.state.observability
     with observability.track_request():
         bound = request.app.state.settings.upload_limit_bytes
@@ -34,50 +38,34 @@ async def extract(request: Request) -> dict[str, object]:
 
         document, filename = await _file_part_bytes(request, body, bound)
         try:
-            outcome = request.app.state.validation_service.validate(document)
+            outcome = request.app.state.document_processing_service.process(document)
         except UnsupportedTypeError as verdict:
-            observability.record_rejection("unsupported_type")
             raise HTTPException(
                 status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(verdict)
             ) from verdict
         except TooLargeError as verdict:
-            observability.record_rejection("too_large")
             raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(verdict)) from verdict
-        except CorruptDocumentError as unrecognized:
-            observability.record_rejection("corrupt")
+        except CorruptDocumentError:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_CORRUPT_DETAIL
-            ) from unrecognized
-
-        mime = outcome.mime
-        started = time.perf_counter()
-        with observability.track_extraction(mime, len(document)):
-            try:
-                result = request.app.state.extraction_service.extract(document, mime)
-            except BudgetExhaustedError as spent:
-                observability.record_extraction(mime, "timeout", time.perf_counter() - started)
-                raise HTTPException(
-                    status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=_BUDGET_DETAIL
-                ) from spent
-            except UnreadableDocumentError as unreadable:
-                observability.record_extraction(mime, "unreadable", time.perf_counter() - started)
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_CORRUPT_DETAIL
-                ) from unreadable
-            observability.record_extraction(
-                mime,
-                "truncated" if result.truncated else "ok",
-                time.perf_counter() - started,
+            )
+        except BudgetExhaustedError:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=_BUDGET_DETAIL
+            )
+        except UnreadableDocumentError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_CORRUPT_DETAIL
             )
 
         # content_type is always the sniffed MIME; the filename is echoed
         # metadata, defaulted when the part carried none.
         return {
             "filename": filename or "unknown",
-            "content_type": mime,
-            "text_length": len(result.text),
-            "text": result.text,
-            "truncated": result.truncated,
+            "content_type": outcome.mime,
+            "text_length": len(outcome.text),
+            "text": outcome.text,
+            "truncated": outcome.truncated,
         }
 
 

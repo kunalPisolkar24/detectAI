@@ -6,7 +6,7 @@ email fan-in in `notifications.tf`.
 ## Policies
 
 `alerts/shared.tf` maps area → policy (`detectai-<area>-<environment>`,
-incident preference `PER_CONDITION`): `web`, `payment_gateway`, `workers`,
+incident preference `PER_CONDITION`): `web`, `payment_webhook`, `workers`,
 `inference`, `document_parser`, `chats`, `pipeline`. Conditions reference
 their policy by `newrelic_alert_policy.area["<area>"].id`. What each policy
 watches, with thresholds: `docs/services/<area>.md`.
@@ -25,8 +25,8 @@ do not vary it per condition. Variation lives in the call site:
   above 2 % for 300 s)
 - optional `fill` — static `fill_value` for sparse series
 
-Per-area files: `web.tf`, `gateway.tf`, `workers.tf`, `inference.tf`,
-`parser.tf`, `chats.tf`, `pipeline.tf`.
+Per-area files: `web.tf`, `payment-webhook.tf`, `workers.tf`, `inference.tf`,
+`document-parser.tf`, `chats.tf`, `pipeline.tf`.
 
 ## Notifications (`alerts/notifications.tf`)
 

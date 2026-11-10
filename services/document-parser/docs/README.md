@@ -36,7 +36,7 @@ Start here:
 |-------|-------------------|--------------|
 | [Testing](guides/testing.md) | Unit, integration, and load testing with k6 | Verifying changes |
 | [Secrets](guides/secrets.md) | How the API key is stored, resolved, and compared | Provisioning or rotating credentials |
-| [Infrastructure](guides/infrastructure.md) | Provisioning AWS secrets, config parameters, and the runtime role — planes, state, teardown | First AWS apply, or something there broke |
+| [Infrastructure](guides/infrastructure.md) | Provisioning AWS secrets and config parameters — planes, state, teardown, the seeder identity | First AWS apply, or something there broke |
 
 ### Reference
 
@@ -52,7 +52,8 @@ graph LR
     START(["start"]) --> REQ["multipart upload<br/>+ x-api-key"]
 
     subgraph PIPE["one request through the pipeline"]
-        API["api<br/>auth guard · bounded read · parts"] --> VAL["validation<br/>magic sniff · bounds"]
+        API["api<br/>auth guard · bounded read · parts"] --> PROC["processing<br/>one service behind the route"]
+        PROC --> VAL["validation<br/>magic sniff · bounds"]
         VAL --> EXT["extraction<br/>deadline · strategy · cleaning · cap"]
     end
 
@@ -63,7 +64,7 @@ graph LR
     OBS["observability<br/>signals out"] -.->|instruments| PIPE
 ```
 
-Two of the five components never serve a request directly: **config** is resolved once at boot and **observability** only emits signals around the other three.
+Two of the four components never serve a request directly: **config** is resolved once at boot and **observability** only emits signals around the other two.
 
 ## Project Structure
 
@@ -72,12 +73,10 @@ services/document-parser/
 ├── app/                    the service
 │   ├── main.py             lifespan: wires config, services, observability
 │   ├── api/                extract route, key guard, bounded read
-│   ├── validation/         admission gate: sniff + container + bounds
-│   ├── extraction/         pipeline: strategies, deadline, cleaning, cap
+│   ├── processing/         the pipeline behind one service: validation + extraction
 │   ├── config/             config planes, typed settings, factories
 │   └── observability/      OTel facade: traces, metrics, logs
-├── infra/                  .env planes, compose files, secrets terraform
-├── tools/secrets.py        the secrets pipeline driver
+├── infra/                  .env planes, compose files
 ├── tests/                  unit + integration + load (k6)
 ├── specification/          design history for maintainers
 └── docs/                   this documentation

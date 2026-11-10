@@ -12,12 +12,17 @@ run "policies_fanout" {
 
   assert {
     condition     = length(module.alerts.policies) == 7
-    error_message = "Seven policies: web, payment_gateway, workers, inference, document_parser, chats, pipeline."
+    error_message = "Seven policies: web, payment_webhook, workers, inference, document_parser, chats, pipeline."
   }
 
   assert {
     condition     = module.alerts.policies["web"].name == "detectai-web-prod"
     error_message = "Alert policies must carry the environment-suffixed names."
+  }
+
+  assert {
+    condition     = module.alerts.policies["payment_webhook"].name == "detectai-payment-webhook-prod"
+    error_message = "The payment webhook policy carries the service name."
   }
 
   assert {

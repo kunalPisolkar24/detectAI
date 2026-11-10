@@ -1,0 +1,231 @@
+{
+  "name": "detectai-payment-webhook (${environment})",
+  "description": "Go/Gin Paddle webhook service: HMAC validation, SQS enqueue. service.name = payment-webhook. Kept widget-for-widget in sync with payment-webhook (dev) (only the deployment.environment filter differs).",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Payment webhook",
+      "description": "Webhook RED, HMAC validation, SQS enqueue",
+      "widgets": [
+        {
+          "title": "Webhooks/min",
+          "layout": { "column": 1, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` = '/api/v1/webhook/paddle'" }
+            ],
+            "limit": 200
+          }
+        },
+        {
+          "title": "Error share",
+          "layout": { "column": 4, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` = '/api/v1/webhook/paddle'" }
+            ],
+            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } },
+            "limit": 2
+          }
+        },
+        {
+          "title": "Webhook p95",
+          "layout": { "column": 7, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` = '/api/v1/webhook/paddle'" }
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "title": "Webhook p99",
+          "layout": { "column": 10, "row": 1, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) AS `p99 ms` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` = '/api/v1/webhook/paddle'" }
+            ],
+            "limit": 1000
+          }
+        },
+        {
+          "title": "Server latency p50/p95/p99 by route",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` NOT IN ('/api/v1/health', '/api/v1/ready') FACET `http.route` TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Webhook throughput",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `rpm` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` = '/api/v1/webhook/paddle' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Status codes",
+          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` NOT IN ('/api/v1/health', '/api/v1/ready') FACET `http.response.status_code` TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Signature / validation failures",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`payment_webhook_signatures_invalid_total`), 1 minute) AS `invalid signatures/min`, rate(sum(`payment_webhooks_unknown_event_type_total`), 1 minute) AS `unknown types/min`, rate(sum(`payment_internal_events_unauthorized_total`), 1 minute) AS `unauthorized/min` WHERE deployment.environment = '${environment}' TIMESERIES AUTO" },
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`payment_webhook_body_errors_total`), 1 minute) AS `body errors/min` WHERE deployment.environment = '${environment}' FACET reason TIMESERIES AUTO LIMIT 5" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Events published",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`payment_events_published_total`), 1 minute) AS `events/min` WHERE deployment.environment = '${environment}' FACET status TIMESERIES AUTO LIMIT 5" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "SQS enqueue errors/min",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 4 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT rate(sum(`payment_events_published_total`), 1 minute) AS `errors/min` WHERE deployment.environment = '${environment}' AND status IN ('error', 'timeout')" }
+            ],
+            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 0.5 } },
+            "limit": 10
+          }
+        },
+        {
+          "title": "SQS enqueue latency",
+          "layout": { "column": 5, "row": 2, "height": 3, "width": 8 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT percentile(`payment_events_enqueue_duration_seconds`, 50, 95, 99) WHERE deployment.environment = '${environment}' AND status = 'success' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Slowest routes",
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT max(duration.ms) AS `max ms`, average(duration.ms) AS `avg ms`, count(*) WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `http.route` NOT IN ('/api/v1/health', '/api/v1/ready') FACET `http.route` LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Service versions reporting",
+          "layout": { "column": 7, "row": 6, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) AS spans FACET service.name, service.version WHERE deployment.environment = '${environment}' AND service.name = 'payment-webhook' LIMIT 20" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Logs",
+      "description": "Error-first log stream plus volume and slow requests",
+      "widgets": [
+        {
+          "title": "Error log stream (latest 100)",
+          "layout": { "column": 1, "row": 1, "height": 4, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, `severity.text`, message, `http.route`, `trace.id` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' LIMIT 100" }
+            ]
+          }
+        },
+        {
+          "title": "Log volume by level (click legend to isolate)",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' FACET `severity.text` TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Errors by message",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.stacked-bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message TIMESERIES AUTO" }
+            ],
+            "facet": { "showOtherSeries": false },
+            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Recent webhook errors",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(`trace.id`) AS `sample trace` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND `severity.text` = 'ERROR' FACET message LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Slow requests over 500ms",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT timestamp, name, `http.route`, duration.ms, `http.response.status_code`, `trace.id` WHERE service.name = 'payment-webhook' AND deployment.environment = '${environment}' AND span.kind = 'server' AND duration.ms > 500 LIMIT 100" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

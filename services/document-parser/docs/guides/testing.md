@@ -30,8 +30,9 @@ One folder per component, pure logic only. The suite pins the semantics integrat
 | Folder | Covers |
 |--------|--------|
 | `tests/unit/api/` | the key guard: comparison semantics, the generic 401, no echo of attempts |
-| `tests/unit/validation/` | strategy claims and declines, the diagnosis sniffer, registry order |
-| `tests/unit/extraction/` | cleaning rules, deadline + cap ownership, per-strategy behavior |
+| `tests/unit/processing/` | the pipeline facade: one call, every verdict folded, re-raises for the route |
+| `tests/unit/processing/validation/` | strategy claims and declines, the diagnosis sniffer, registry order |
+| `tests/unit/processing/extraction/` | cleaning rules, deadline + cap ownership, per-strategy behavior |
 | `tests/unit/config/` | dotenv/env merges, plane factory, settings validation, the secrets CLI |
 | `tests/unit/observability/` | adapters, resource, the null-vs-wired build, instrument mapping |
 
@@ -41,7 +42,6 @@ The client runs the production app's **real lifespan boot** — same config reso
 
 | Suite | What it pins |
 |-------|--------------|
-| `config/test_emulator_plane` | the prod plane resolved through the actual boot path against the local AWS emulator (skips politely when it isn't up) |
 | `extract/test_gate` | what a caller gets for every credential outcome — 401s, generic detail, nothing leaked |
 | `extract/test_input` | the full-path matrix: bounded read, multipart forms, sniffed-vs-declared types, each verdict's exact wire shape |
 | `extract/test_document_bounds` | admission verdicts end to end with shrunken bounds — 413 names its limit, 422 stays generic |

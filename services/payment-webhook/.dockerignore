@@ -1,0 +1,17 @@
+.git/
+specification/
+docs/
+README.md
+.dockerignore
+Dockerfile
+infra/
+tests/
+mk/
+Makefile
+.env*
+secrets.toml
+vendor/
+webhook
+payment-webhook
+*.test
+*.out

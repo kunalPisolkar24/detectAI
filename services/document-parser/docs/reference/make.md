@@ -59,18 +59,26 @@ One `infra/.env.load` configures everything, `SCENARIO` included (`smoke` or `lo
 | `make load-e2e` | k6 alone, against whatever the file's `API_URL` names | a specific target — local, docker, or prod |
 | `make load-down` | removes the rig and any e2e leftovers | cleaning up after either run |
 
+The rig pins the parser's restart policy to `no`: a crashed parser stays down mid-run, so the thresholds and assertions see the real failure instead of a resurrected instance.
+
 ## Secrets and AWS — `mk/secrets.mk`
 
 | Target | What it does | Reach for it when |
 |--------|--------------|-------------------|
 | `make secrets-check` | validates `infra/.env` and previews the plane and vars — no terraform, no AWS | before anything else, always |
-| `make secrets-bootstrap-state` | creates the state bucket for the plane `.env` selects (idempotent) | first apply, or after an emulator restart ate the bucket |
 | `make secrets-plan` | terraform plan against the selected plane | reading what would change |
 | `make secrets-apply` | terraform apply — auto-approved on the emulator, interactive confirm on real AWS | making it real |
-| `make secrets-iam-bootstrap` | creates/updates the out-of-stack deploy role | one-time, or to recreate it after a full wipe |
+| `make secrets-verify` | reads the live plane (SSM + secret) and matches it against `infra/.env`; values appear as lengths and fingerprints only | after apply, or whenever "is the seed actually right?" nags |
+| `make secrets-drop-seeder` | detaches `seeder-policy` and deletes the role (personal credentials) | leaving an account clean |
+| `make secrets-session-clear` | removes the service's cached seeder session (`tools/tfctl/.session-cache/<service>.json`) | after a stale/failed MFA window; the next verb re-prompts |
+| `make secrets-session-refresh-all` | mints fresh seeder sessions for every ready service in one run — one shared MFA code on real AWS (`FORCE=1` re-mints still-valid triplets) | the 12-hour window lapsed across several services and re-typing the code per service |
 | `make secrets-clean` | terraform destroy; keeps the state bucket and ledger | wiping resources, keeping your place |
-| `make secrets-destroy` | full teardown: destroy, then the bucket purge, then the deploy role | leaving no trace |
-| `make secrets-test` | pytest for the pipeline driver `tools/secrets.py` | the parse/validation layer changed |
+| `make secrets-destroy` | full teardown: destroy, the state bucket purge, and the seeder role | leaving no trace |
+| `make secrets-test` | pytest for the pipeline driver `tools/tfctl` | the parse/validation layer changed |
+
+Every target takes `PLANE=floci|aws` (default floci), plus `DRY_RUN=1` to preview
+any verb; `FORCE=1` applies to session-refresh-all and `FORCE_DELETE=1` to
+destroy. Rare extras (an alternate values file) run `tfctl` directly.
 
 The order, the two planes, state handling, and the teardown rules are the [infrastructure guide](../guides/infrastructure.md)'s subject — this page only lists the levers.
 

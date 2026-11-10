@@ -13,7 +13,7 @@ from pydantic import (
     model_validator,
 )
 
-from ..extraction.models import (
+from ..processing.extraction.models import (
     DEFAULT_EDGE_TOLERANCE_RATIO,
     DEFAULT_EDGE_ZONE_RATIO,
     DEFAULT_FOLIO_MONOTONIC_RATIO,
@@ -23,7 +23,7 @@ from ..extraction.models import (
     DEFAULT_PROCESSING_BUDGET_SECONDS,
     DEFAULT_REPETITION_MIN_PAGES,
 )
-from ..validation.models import (
+from ..processing.validation.models import (
     DEFAULT_DOCX_MAX_UNCOMPRESSED_BYTES,
     DEFAULT_MAX_PDF_PAGES,
     DEFAULT_UPLOAD_LIMIT_BYTES,

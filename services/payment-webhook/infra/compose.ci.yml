@@ -1,0 +1,4 @@
+services:
+  payment-webhook:
+    image: kunalpisolkar/detect-ai-payment-gateway:ci
+    pull_policy: never

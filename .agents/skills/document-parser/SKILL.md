@@ -22,20 +22,21 @@ services/document-parser/
 ├── app/
 │   ├── main.py            lifespan: resolve config, wire services, start observability
 │   ├── api/               the extract route: key guard, bounded read, multipart parse, verdicts → HTTP
-│   ├── validation/        admission: magic sniff + container checks + bounds → typed verdicts
-│   ├── extraction/        pipeline: strategies, deadline, cleaning, output cap
+│   ├── processing/        the pipeline behind one service: admission + extraction
+│   │   ├── validation/    admission: magic sniff + container checks + bounds → typed verdicts
+│   │   └── extraction/    pipeline: strategies, deadline, cleaning, output cap
 │   ├── config/            planes (dev env-over-file, prod AWS), typed Settings
 │   └── observability/     OTel facade: traces, metrics, logs — or NullObservability
-├── infra/                 .env planes, compose files, secrets terraform stack
-├── tools/secrets.py       the secrets pipeline driver (parse → validate → terraform)
+├── infra/                 .env planes + compose files (the terraform lives in tools/tfctl)
+├── secrets.toml           the tfctl declaration — the secrets plane's shape, committed
 ├── tests/                 unit + integration + load (k6) — a hard tree boundary
 ├── specification/         design history for maintainers — history, not truth
 ├── docs/                  the deep documentation tree
 └── mk/ + Makefile         make targets: local / docker / tests / load / secrets
 ```
 
-The layering is inward-facing: `api` orchestrates, `validation` and
-`extraction` do the two halves of the work, `config`/`observability` serve
+The layering is inward-facing: `api` orchestrates, `processing` runs the
+two halves of the work behind one service, `config`/`observability` serve
 them. Nothing in the inner layers knows about HTTP.
 
 ## Run it
@@ -52,9 +53,10 @@ fail-fast table: [references/running.md](references/running.md)
 
 ## Change the pipeline without breaking it
 
-- `api/` never parses documents — it bounds the body, hands bytes down, and
-  translates typed verdicts (its own auth guard, `413`, `415`, `422`, `504`)
-  into HTTP. Inner layers speak verdicts, never HTTP.
+- `api/` never parses documents — it bounds the body, hands bytes to the
+  pipeline service, and translates typed verdicts (its own auth guard,
+  `413`, `415`, `422`, `504`) into HTTP. Inner layers speak verdicts,
+  never HTTP; the pipeline folds its own verdict rows onto the seam.
 - The declared `Content-Type` is metadata only: **the sniffed MIME wins** and
   is what validation, extraction, and the response all use.
 - The deadline is a value passed down, checked in strategy inner loops —
@@ -85,12 +87,18 @@ fail-fast table: [references/running.md](references/running.md)
 ## Infra and testing — the short tours
 
 - **AWS slice:** `make env` → `make secrets-check` (always first) →
-  `make secrets-bootstrap-state` → `make secrets-plan` →
-  `make secrets-apply` — auto-approved on the Floci emulator plane,
-  interactive on real AWS; the plane flips on `EMULATOR_ENDPOINT` in
-  `infra/.env`. Teardown: `secrets-clean` keeps the bucket and ledger,
-  `secrets-destroy` wipes everything including the role.
-  Verbs, state gotchas: [references/infra.md](references/infra.md)
+  `make secrets-plan` → `make secrets-apply` — the state bucket and the
+  out-of-stack write carrier (seeder role) are created on demand; auto-approved
+  on the Floci emulator plane, interactive on real AWS. `make secrets-auto-apply`
+  is the one-shot (validate → plan → apply → verify). Then
+  `make secrets-verify`: reads the live plane and
+  matches it against `infra/.env` — fingerprints only, exit 1 on drift.
+  Teardown: `secrets-clean` keeps the bucket and ledger,
+  `secrets-destroy` wipes everything including the role. Real-AWS verbs ride
+  the MFA-gated seeder role with the 12-hour session cached in
+  `tools/tfctl/.session-cache/` — a plan → apply stretch prompts once.
+  Verbs, carrier/MFA behavior, state gotchas:
+  [references/config.md](references/config.md)
 - **Tests:** `make test` is the default gate; `make test-unit` for
   logic-only iteration, `make test-integration` when wiring or boot changed;
   the k6 rig is `make load-env` → `load-fixtures` (once per fresh tree) →
@@ -121,8 +129,9 @@ Boards, alerts, and the push pipeline they rely on belong to the
   instances; keep the runtime the simplest thing that works for one instance.
 - No second credential carrier (`Authorization: Bearer` twins) — every extra
   envelope multiplies the comparison surface.
-- Never run bare `terraform init` in `infra/terraform` — the stacked backend
-  is intentionally partial; `tools/secrets.py` supplies it.
+- Never run bare `terraform init` against the secrets stack — the backend is
+  composed per plane by the tfctl engine; drive everything through the make
+  targets or `tfctl` itself.
 - Do not cross service boundaries or share code between services (monorepo
   rule).
 - Write documentation under `docs/` in its established style; `specification/`
@@ -139,7 +148,8 @@ Boards, alerts, and the push pipeline they rely on belong to the
 | Endpoint and status-code contract | `services/document-parser/docs/reference/http-api.md` |
 | What each test suite runs | [references/testing.md](references/testing.md) |
 | Local + docker operations | [references/running.md](references/running.md) |
-| The AWS slice in detail | [references/infra.md](references/infra.md) |
+| The config planes, secrets verbs, carrier/MFA | [references/config.md](references/config.md) |
+| The engine behind the secrets verbs | the `tfctl` skill |
 | The credential's runtime story | `services/document-parser/docs/guides/secrets.md` |
 | Every make target, annotated | `services/document-parser/docs/reference/make.md` |
 | Dashboards and alerts | the `observability` skill |

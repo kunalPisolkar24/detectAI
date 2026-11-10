@@ -28,6 +28,8 @@ A missing file at the default location is fine (values then come from the enviro
 - **Secrets Manager** — one JSON blob of env-named keys (secrets: the API key, license key)
 - **SSM parameters** — plain settings under a reserved prefix
 
+The clients build against the process environment's `AWS_REGION` and ride boto3's default credential chain — for containers, compose injects the region and the credential trio from `infra/.env` (`env_file`), and the compose `environment:` block carries just the trio so one run's credentials can be overridden by the shell. Pointing a prod fetch elsewhere is deployment territory through the SDK's native `AWS_ENDPOINT_URL_*` variables; the app defines no endpoint knob.
+
 The two planes are disjoint by contract; a key found on both fails the boot with an operator-facing error. A key seeded after boot stays invisible until restart. Seeding and rotation are the [secrets guide's](../guides/secrets.md) `make secrets-*` flow.
 
 ## Every key
@@ -56,6 +58,7 @@ Field names are the env keys, uppercased. Unknown keys are ignored (consume-firs
 | `OTEL_TRACE_SAMPLE_RATIO` | fraction of traces sampled, `(0, 1]` | 1.0 | **boot fails** |
 | `PORT` | host port for docker compose | 8000 | compose-only helper |
 | `DOTENV_PATH` | location of the dev `.env` file | `infra/.env` | adapter-only |
+| `SECRET_RECOVERY_WINDOW` | real-AWS seeding only: days the secret survives a destroy, `0` skips the window | 30 | seeding stops with a named error before terraform (the emulator plane ignores this key) |
 
 The split that matters: **numeric bounds fail closed** (an unreadable value falls back to the safe default, boot continues) — **credentials and cleaning knobs fail the boot** (a deletion-rule threshold must never silently loosen).
 
@@ -108,7 +111,7 @@ classDiagram
 
 ### The adapters behind the planes
 
-Every adapter follows one contract: fetch **once at construction**, cache the values in memory, hand out copies via `fetch()`/`get()`. Neither plane ever refetches. The AWS adapters receive injected clients — `AWSClientFactory` reads `AWS_REGION` (plus an optional emulator endpoint) and hands out boto3 clients; tests inject fakes instead, which is why `ConfigProvider` stays importable without AWS.
+Every adapter follows one contract: fetch **once at construction**, cache the values in memory, hand out copies via `fetch()`/`get()`. Neither plane ever refetches. The AWS adapters receive injected clients — `AWSClientFactory` reads `AWS_REGION` and hands out boto3 clients, with credentials riding boto3's default chain; tests inject fakes instead, which is why `ConfigProvider` stays importable without AWS.
 
 ```mermaid
 classDiagram
@@ -145,7 +148,6 @@ classDiagram
     }
     class AWSClientFactory {
         -region
-        -endpoint_url
         +from_env()$
         +create_client(service)
     }

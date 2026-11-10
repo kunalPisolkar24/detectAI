@@ -3,6 +3,10 @@
 .env.*
 **/.env
 **/.env.*
+!infra/envs/.env.example
+
+# Local derived seeder sessions (tfctl's carrier cache)
+tools/tfctl/.session-cache/
 
 # Python
 .pytest_cache/
