@@ -17,6 +17,8 @@ All credentials and plane settings live in `envs/.env` (gitignored). `make env` 
 
 ## Which state plane am I on?
 
+Publishing from this root is **Floci-only** by convention — every plane run uses the default `PLANE=floci`; the stack never publishes through the real AWS plane. The state bucket lives inside the local emulator, so a `make floci-clean`, a container recreation or a `--purge-state` teardown wipes it; when that happens the next `make plan` reports *"N to add"* although the boards exist on New Relic. Do not apply from that state — follow the [duplicated-dashboards recovery runbook](../runbooks/recover-duplicate-dashboards.md).
+
 ```mermaid
 graph TB
     START(["start"]) --> B{"--aws given?<br/>(make: PLANE=aws)"}

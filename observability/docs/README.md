@@ -25,6 +25,12 @@ Start here:
 |----------|-------------------|--------------|
 | [Architecture](concepts/architecture.md) | Data flow, Terraform structure, alert anatomy | Understanding the system |
 
+### Runbooks
+
+| Document | What You'll Learn | When to Read |
+|----------|-------------------|--------------|
+| [Recovering from duplicated dashboards](runbooks/recover-duplicate-dashboards.md) | The plan-says-add-while-boards-exist incident, and the ordered recovery | Boards or policies appear twice |
+
 ### Dashboards — one page per board
 
 | Dashboard | What You'll Learn | When to Read |
