@@ -13,6 +13,7 @@ protobuf = "6.33.3"
 pydantic = "^2.14.1"
 python-dotenv = "^1.2.4"
 boto3 = "^1.43.118"
+huggingface-hub = "^2.4.0"
 
 [build-system]
 requires = ["poetry-core"]
