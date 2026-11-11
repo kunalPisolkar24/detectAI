@@ -10,6 +10,9 @@ python = "^3.14"
 grpcio = "1.80.0"
 grpcio-health-checking = "1.80.0"
 protobuf = "6.33.3"
+pydantic = "^2.14.1"
+python-dotenv = "^1.2.4"
+boto3 = "^1.43.118"
 
 [build-system]
 requires = ["poetry-core"]
@@ -20,3 +23,7 @@ dev = [
     "pytest (>=9.0,<10.0)",
     "ruff (>=0.17.2,<0.18.0)"
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

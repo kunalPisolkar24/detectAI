@@ -1,4 +1,5 @@
 .env
+!infra/.env.example
 venv/
 .venv/
 models/
