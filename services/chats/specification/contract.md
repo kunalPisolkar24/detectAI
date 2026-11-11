@@ -35,7 +35,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/kunalPisolkar24/detectAI/services/chats/api/proto/v1;chatv1";
+option go_package = "github.com/kunalPisolkar24/detectAI/services/chats/proto;chatv1";
 
 service ChatService {
   rpc CreateChat(CreateChatRequest) returns (Chat);
@@ -240,7 +240,7 @@ Redis never fails an RPC: reads degrade to Mongo on miss/eviction, a failed inva
 
 ## Transport and codegen
 
-connect-go mounted on the existing gin engine — the `grpchealth` surface and `/api/v1` probes are unchanged. The server speaks HTTP/1 + unencrypted H2C (already set in `cmd/api/main.go`); connect-go negotiates gRPC, gRPC-Web, and the Connect protocol on one handler. Codegen: `buf generate` with Go stubs into `services/chats/api/proto/v1/` and a connect-es TypeScript client for the BFF; the generated client is the sanctioned cross-service artifact.
+connect-go mounted on the existing gin engine — the `grpchealth` surface and `/api/v1` probes are unchanged. The server speaks HTTP/1 + unencrypted H2C (already set in `cmd/api/main.go`); connect-go negotiates gRPC, gRPC-Web, and the Connect protocol on one handler. The contract source of truth is `services/chats/proto/chat_service.proto`; `buf generate` emits the Go stubs (`package chatv1`) beside it, and a connect-es TypeScript client for the BFF comes with the consumer work; the generated client is the sanctioned cross-service artifact.
 
 ## Resolved decisions
 
