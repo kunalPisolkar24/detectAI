@@ -2,7 +2,7 @@
 !infra/.env.example
 venv/
 .venv/
-models/
+/models/
 .cache/
 
 __pycache__/
