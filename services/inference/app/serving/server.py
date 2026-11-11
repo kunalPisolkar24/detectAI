@@ -11,11 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 async def run_server(port: int) -> None:
-    server, health_servicer = _build(port)
-    await _serve_until_stopped(server, health_servicer)
+    server, health_servicer, _ = _build(port)
+    await _serve_until_stopped(server, health_servicer, _wait_for_signal())
 
 
-def _build(port: int) -> tuple[aio.Server, health.aio.HealthServicer]:
+def _build(port: int) -> tuple[aio.Server, health.aio.HealthServicer, int]:
     server = aio.server()
     health_servicer = health.aio.HealthServicer()
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
@@ -23,17 +23,17 @@ def _build(port: int) -> tuple[aio.Server, health.aio.HealthServicer]:
     bound = server.add_insecure_port(f"[::]:{port}")
     if bound == 0:
         raise RuntimeError(f"failed to bind port {port}")
-    return server, health_servicer
+    return server, health_servicer, bound
 
 
 async def _serve_until_stopped(
-    server: aio.Server, health_servicer: health.aio.HealthServicer
+    server: aio.Server, health_servicer: health.aio.HealthServicer, stop: asyncio.Event
 ) -> None:
     await health_servicer.set("", health_pb2.HealthCheckResponse.SERVING)
     await server.start()
     logger.info("grpc server listening")
 
-    await _wait_for_signal().wait()
+    await stop.wait()
     await health_servicer.enter_graceful_shutdown()
     await server.stop(grace=_SHUTDOWN_GRACE_SECONDS)
     logger.info("grpc server stopped")
