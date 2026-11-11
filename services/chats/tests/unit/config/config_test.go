@@ -189,10 +189,14 @@ func TestResolveContracts(t *testing.T) {
 	})
 
 	for caseName, bad := range map[string]string{
-		"garbage":  "junks",
-		"zero":     "0",
-		"negative": "-0.5",
-		"over one": "1.01",
+		"garbage":        "junks",
+		"zero":           "0",
+		"negative":       "-0.5",
+		"over one":       "1.01",
+		"NaN":            "NaN",
+		"lowercase NaN":  "nan",
+		"plus infinity":  "Inf",
+		"minus infinity": "-Inf",
 	} {
 		t.Run("OTEL_TRACE_SAMPLE_RATIO "+caseName+" fails loud naming the var", func(t *testing.T) {
 			_, err := config.Resolve(with(map[string]string{"OTEL_TRACE_SAMPLE_RATIO": bad}))
@@ -219,6 +223,16 @@ func TestResolveContracts(t *testing.T) {
 		}
 		if cfg.OTelVersion != "1.2.3" {
 			t.Errorf("OTelVersion = %q, want the explicit version", cfg.OTelVersion)
+		}
+	})
+
+	t.Run("a whitespace-only OTEL_SERVICE_VERSION drops to the default", func(t *testing.T) {
+		cfg, err := config.Resolve(with(map[string]string{"OTEL_SERVICE_VERSION": "   "}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.OTelVersion != "dev" {
+			t.Errorf("OTelVersion = %q, want the dev fallback", cfg.OTelVersion)
 		}
 	})
 
@@ -286,6 +300,52 @@ func TestLoadEndToEnd(t *testing.T) {
 		var cfgErr *config.ConfigError
 		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "needs AWS_REGION") {
 			t.Errorf("err = %v, want a *ConfigError naming the missing region", err)
+		}
+	})
+
+	t.Run("process env values never rescue a prod boot", func(t *testing.T) {
+		t.Setenv("ENV_TYPE", "prod")
+		offlineProd(t, "eu-central-1")
+		t.Setenv("AWS_ENDPOINT_URL_SECRETS_MANAGER", "http://127.0.0.1:1")
+		t.Setenv("AWS_ENDPOINT_URL_SSM", "http://127.0.0.1:1")
+		t.Setenv("PORT", "9137")
+		t.Setenv("DRAIN_TIMEOUT", "12s")
+		t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", testOTelEndpoint)
+		t.Setenv("NEW_RELIC_LICENSE_KEY", testLicenseKey)
+
+		_, err := config.Load()
+		var cfgErr *config.ConfigError
+		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), `could not fetch secret "detectai/chats/secrets"`) {
+			t.Errorf("err = %v, want the prod fetch failure; the process env must not serve the prod plane", err)
+		}
+	})
+
+	t.Run("an empty exported PORT fails the boot", func(t *testing.T) {
+		t.Setenv("ENV_TYPE", "dev")
+		t.Setenv("PORT", "")
+		t.Chdir(t.TempDir())
+
+		_, err := config.Load()
+		var cfgErr *config.ConfigError
+		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "PORT must be an integer between 1 and 65535") {
+			t.Errorf("err = %v, want a *ConfigError naming PORT", err)
+		}
+	})
+
+	t.Run("a malformed dev file plane fails wrapped", func(t *testing.T) {
+		t.Setenv("ENV_TYPE", "dev")
+		t.Chdir(t.TempDir())
+		if err := os.MkdirAll("infra", 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join("infra", ".env"), []byte("not a dotenv line\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := config.Load()
+		var cfgErr *config.ConfigError
+		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), `is malformed at line 1`) {
+			t.Errorf("err = %v, want a *ConfigError naming the malformed line", err)
 		}
 	})
 
