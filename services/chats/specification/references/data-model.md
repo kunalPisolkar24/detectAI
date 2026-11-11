@@ -88,13 +88,13 @@ Two indexes beyond the defaults is the whole story. Cursor = `(created_at, _id)`
 
 ## Redis overlay
 
-Cache-aside, invalidate-on-write, TTL safety net. Mongo is the source of truth; staleness is tolerated by a chat UI.
+Cache-aside, invalidate-on-write, TTL safety net. Mongo is the source of truth; staleness is tolerated by a chat UI. Keys carry the `chats:` service prefix — the shared-instance namespace convention, TTLs, value shapes, and failure semantics live in [cache.md](cache.md).
 
 | Key | Value | TTL | Serves | Invalidated by |
 |-----|-------|-----|--------|----------------|
-| `chat:{id}` | Chat meta (owner, title, updated_at) | ~10m | Ownership check + `getChat` | Append, update-analysis, rename, delete |
-| `user:{id}:chats` | Sidebar list, newest-first | ~5m | Chat list | Create, append, update-analysis, rename, delete |
-| `chat:{id}:head` | Last ~50 messages | ~10m | First page of history | Append, update-analysis, delete |
+| `chats:chat:{id}` | Chat meta (owner, title, updated_at) | ~10m | Ownership check + `GetChat` | Append, update-analysis, rename, delete |
+| `chats:user:{id}:chats` | Sidebar list, newest-first | ~5m | Chat list | Create, append, update-analysis, rename, delete |
+| `chats:chat:{id}:head` | Last ~50 messages | ~10m | First page of history | Append, update-analysis, delete |
 
 ```mermaid
 flowchart LR

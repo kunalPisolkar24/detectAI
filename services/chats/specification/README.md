@@ -6,7 +6,7 @@ Specifications for the chats service. This file is the hub — every design doc 
 
 | Doc | Covers |
 |-----|--------|
-| [contract.md](contract.md) | The Connect RPC wire contract — RPC surface, types, pagination, error semantics, codegen |
+| [contract.md](contract.md) | The Connect RPC wire contract — RPC surface, types, pagination, rate limiting, error semantics, codegen |
 
 ## Read order
 
@@ -15,6 +15,7 @@ Specifications for the chats service. This file is the hub — every design doc 
 ## References
 
 - [references/data-model.md](references/data-model.md) — LLD for the data layer: the `chats` and `messages` documents, indexes, and the Redis cache overlay
+- [references/cache.md](references/cache.md) — LLD for the cache plane: shared-instance namespacing, key inventory, TTLs, eviction, and cutover
 
 ## Planned
 

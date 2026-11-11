@@ -191,7 +191,7 @@ message GetChatHistoryResponse {
 Every RPC is ownership-checked: the interceptor resolves the caller's identity, and any `chat_id` not owned by that identity answers `NOT_FOUND` — one code for "missing" and "not yours".
 
 - **CreateChat** — inserts the chat; title = truncation of `initial_message` (the web never passes a title on create). Returns the `Chat` with an empty message list.
-- **GetChat** — meta + first page of messages (the `chat:{id}:head` cache serves this) + `next_cursor`; the cursor chains straight into `GetChatHistory` for scrollback.
+- **GetChat** — meta + first page of messages (the `chats:chat:{id}:head` cache serves this) + `next_cursor`; the cursor chains straight into `GetChatHistory` for scrollback.
 - **ListChats** — newest-first by `updated_at`; `limit` clamped to the server default/cap. No cursor in v1 (additive field later, non-breaking).
 - **RenameChat** — `$set` title, bump `updated_at`; returns the updated `ChatSummary`.
 - **DeleteChat** — chat doc first, messages after, no transaction (orphaned messages are unreachable). Idempotent: deleting an already-deleted chat returns success; another user's chat is `NOT_FOUND`.
@@ -214,6 +214,16 @@ The cursor is opaque base64 over `{"chat_id", "t", "i"}` — the chat id is embe
 | `GetChatHistory(chat1, C2)` | m4, m3, m2 + `cursor_C3` |
 | `GetChatHistory(chat1, C3)` | m1 + empty cursor |
 
+## Rate limiting
+
+Per-user burst limits on the write surface, enforced by a connect interceptor beside the auth interceptor — one procedure → scope map owns the policy; handlers stay business-only.
+
+- **Scopes** — `create` covers `CreateChat`; `write` covers `SaveUserMessage` and `SaveAnalysisMessage` as one shared budget (an analysis flow does 2–4 writes). Reads are not limited in v1.
+- **Business quotas stay at the edge** — the web BFF owns daily usage accounting (`FREE_TIER_LIMIT`, idempotent `eventId` dedup); chats runs only operational burst protection and never duplicates the business rule.
+- **Numbers are deployment-owned** — limits resolve through the config plane (`RATE_LIMIT_*`), with the factory failing closed to conservative defaults when keys are unset.
+- **Fail open, always** — Redis down means the check is skipped and counted, never rejected; the same "Redis never fails an RPC" rule the cache plane obeys.
+- Over-limit answers `RESOURCE_EXHAUSTED` with retry-hint metadata (below).
+
 ## Errors
 
 | Condition | Connect code |
@@ -223,6 +233,7 @@ The cursor is opaque base64 over `{"chat_id", "t", "i"}` — the chat id is embe
 | Chat missing or not owned; message id bound to another chat | `NOT_FOUND` |
 | Analysis write into a terminal state (`COMPLETED`/`FAILED`/`CANCELLED`) that is not an identical replay | `FAILED_PRECONDITION` |
 | Mongo unavailable | `UNAVAILABLE` |
+| Per-user burst limit exceeded (`create`/`write` scopes) | `RESOURCE_EXHAUSTED`, with retry-hint metadata |
 | Anything unexpected | `INTERNAL` |
 
 Redis never fails an RPC: reads degrade to Mongo on miss/eviction, a failed invalidation is logged and absorbed (the TTL bounds staleness). Only Mongo faults map to `UNAVAILABLE`.
