@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -122,7 +123,8 @@ func resolveObservability(source Source, cfg *Config) error {
 	if raw, ok := source.Get("OTEL_TRACE_SAMPLE_RATIO"); ok {
 		trimmed := strings.TrimSpace(raw)
 		ratio, err := strconv.ParseFloat(trimmed, 64)
-		if err != nil || ratio <= 0 || ratio > 1 {
+		// NaN parses cleanly and defeats both bounds checks, so it is refused explicitly.
+		if err != nil || math.IsNaN(ratio) || ratio <= 0 || ratio > 1 {
 			return fmt.Errorf("config: OTEL_TRACE_SAMPLE_RATIO must lie in the interval (0, 1]; got %q", trimmed)
 		}
 		cfg.OTelSampleRatio = ratio
