@@ -1,0 +1,103 @@
+package config_test
+
+import (
+	"net"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
+)
+
+// The prod plane through the real floci endpoint; the test skips when :4566 is unreachable.
+
+func flociReachable() bool {
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:4566", time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
+func envValues(t *testing.T) map[string]string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "infra", ".env"))
+	if err != nil {
+		t.Fatalf("config: the integration test reads infra/.env: %v", err)
+	}
+	values := map[string]string{}
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, found := strings.Cut(line, "=")
+		if !found {
+			continue
+		}
+		values[key] = value
+	}
+	return values
+}
+
+func TestProdLoadBranchesOnTheSeededFlociPlanes(t *testing.T) {
+	if !flociReachable() {
+		t.Skip("floci not reachable on :4566")
+	}
+	env := envValues(t)
+	t.Setenv("ENV_TYPE", "prod")
+	t.Setenv("AWS_REGION", env["AWS_REGION"])
+	t.Setenv("AWS_ACCESS_KEY_ID", "test")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
+	t.Setenv("AWS_CONFIG_FILE", filepath.Join(t.TempDir(), "config"))
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(t.TempDir(), "credentials"))
+	t.Setenv("AWS_ENDPOINT_URL_SECRETS_MANAGER", "http://localhost:4566")
+	t.Setenv("AWS_ENDPOINT_URL_SSM", "http://localhost:4566")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+
+	// The license key is consumed only when the endpoint gate fires; Load
+	// succeeding in prod already proves the blob fetch happened.
+	wantKey := ""
+	if env["OTEL_EXPORTER_OTLP_ENDPOINT"] != "" {
+		wantKey = env["NEW_RELIC_LICENSE_KEY"]
+	}
+	if cfg.NewRelicKey != wantKey {
+		t.Errorf("NewRelicKey = %q, want %q per the endpoint gate", cfg.NewRelicKey, wantKey)
+	}
+	if cfg.OTelEndpoint != env["OTEL_EXPORTER_OTLP_ENDPOINT"] {
+		t.Errorf("OTelEndpoint = %q, want the seeded gate %q", cfg.OTelEndpoint, env["OTEL_EXPORTER_OTLP_ENDPOINT"])
+	}
+	if env["PORT"] != "" {
+		if port, _ := strconv.Atoi(env["PORT"]); cfg.Port != port {
+			t.Errorf("Port = %d, want the seeded %d", cfg.Port, port)
+		}
+	}
+	if env["DRAIN_TIMEOUT"] != "" {
+		if drain, _ := time.ParseDuration(env["DRAIN_TIMEOUT"]); cfg.DrainTimeout != drain {
+			t.Errorf("DrainTimeout = %v, want the seeded %v", cfg.DrainTimeout, drain)
+		}
+	}
+	if cfg.OTelName != env["OTEL_SERVICE_NAME"] {
+		t.Errorf("OTelName = %q, want the seeded %q", cfg.OTelName, env["OTEL_SERVICE_NAME"])
+	}
+	if env["OTEL_SERVICE_VERSION"] != "" {
+		if cfg.OTelVersion != env["OTEL_SERVICE_VERSION"] {
+			t.Errorf("OTelVersion = %q, want the seeded %q", cfg.OTelVersion, env["OTEL_SERVICE_VERSION"])
+		}
+	} else if cfg.OTelVersion != "dev" {
+		t.Errorf("OTelVersion = %q, want the seeded blank falling back to dev", cfg.OTelVersion)
+	}
+	if env["OTEL_TRACE_SAMPLE_RATIO"] != "" {
+		if ratio, _ := strconv.ParseFloat(env["OTEL_TRACE_SAMPLE_RATIO"], 64); cfg.OTelSampleRatio != ratio {
+			t.Errorf("OTelSampleRatio = %v, want the seeded %v", cfg.OTelSampleRatio, ratio)
+		}
+	}
+}
