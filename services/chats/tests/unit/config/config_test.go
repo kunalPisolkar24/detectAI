@@ -14,6 +14,7 @@ import (
 const testLicenseKey = "lic-0123456789abcdef79"
 const testOTelEndpoint = "https://otlp.eu01.nr-data.net"
 const testMongoURI = "mongodb://localhost:27017"
+const testRedisEndpoint = "redis://localhost:6379"
 
 type mapSource map[string]string
 
@@ -22,9 +23,9 @@ func (m mapSource) Get(key string) (string, bool) {
 	return value, ok
 }
 
-// with merges the extra keys over the always-required MONGO_URI.
+// with merges the extra keys over the always-required MONGO_URI and REDIS_ENDPOINT.
 func with(extra map[string]string) mapSource {
-	source := mapSource{"MONGO_URI": testMongoURI}
+	source := mapSource{"MONGO_URI": testMongoURI, "REDIS_ENDPOINT": testRedisEndpoint}
 	for key, value := range extra {
 		source[key] = value
 	}
@@ -61,7 +62,7 @@ func TestDeploymentFlick(t *testing.T) {
 }
 
 func TestResolveContracts(t *testing.T) {
-	t.Run("a plane with only the required URI keeps every default", func(t *testing.T) {
+	t.Run("a minimal plane keeps every default", func(t *testing.T) {
 		cfg, err := config.Resolve(with(nil))
 		if err != nil {
 			t.Fatal(err)
@@ -92,6 +93,12 @@ func TestResolveContracts(t *testing.T) {
 		}
 		if cfg.MongoDatabase != "chat_db" {
 			t.Errorf("MongoDatabase = %q, want the default", cfg.MongoDatabase)
+		}
+		if cfg.RedisEndpoint != testRedisEndpoint {
+			t.Errorf("RedisEndpoint = %q, want the seeded endpoint", cfg.RedisEndpoint)
+		}
+		if cfg.RedisAuthToken != "" {
+			t.Errorf("RedisAuthToken = non-empty; a plain endpoint boot stays token-free")
 		}
 	})
 
@@ -143,6 +150,95 @@ func TestResolveContracts(t *testing.T) {
 		}
 		if cfg.MongoDatabase != "chat_db" {
 			t.Errorf("MongoDatabase = %q, want the default", cfg.MongoDatabase)
+		}
+	})
+
+	t.Run("a missing REDIS_ENDPOINT fails the boot", func(t *testing.T) {
+		_, err := config.Resolve(mapSource{"MONGO_URI": testMongoURI})
+		if err == nil || !strings.Contains(err.Error(), "REDIS_ENDPOINT is required") {
+			t.Errorf("err = %v, want the required-endpoint failure", err)
+		}
+	})
+
+	for caseName, bad := range map[string]string{
+		"blank":        "",
+		"whitespace":   "   ",
+		"wrong scheme": "http://localhost:6379",
+		"no scheme":    "localhost:6379",
+	} {
+		t.Run("REDIS_ENDPOINT "+caseName+" fails naming the var", func(t *testing.T) {
+			_, err := config.Resolve(with(map[string]string{"REDIS_ENDPOINT": bad}))
+			if err == nil || !strings.Contains(err.Error(), "REDIS_ENDPOINT must be a redis:// or rediss:// endpoint") {
+				t.Errorf("err = %v, want the endpoint shape failure", err)
+			}
+		})
+	}
+
+	t.Run("REDIS_ENDPOINT trims and serves", func(t *testing.T) {
+		cfg, err := config.Resolve(with(map[string]string{"REDIS_ENDPOINT": " " + testRedisEndpoint + " "}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.RedisEndpoint != testRedisEndpoint {
+			t.Errorf("RedisEndpoint = %q, want the trimmed endpoint", cfg.RedisEndpoint)
+		}
+	})
+
+	t.Run("a rediss endpoint demands the auth token at its floor", func(t *testing.T) {
+		_, err := config.Resolve(with(map[string]string{"REDIS_ENDPOINT": "rediss://master.example:6379"}))
+		if err == nil || !strings.Contains(err.Error(), "REDIS_AUTH_TOKEN must be at least 16 characters") {
+			t.Errorf("err = %v, want the rediss gate failure", err)
+		}
+	})
+
+	t.Run("a short auth token fails without echo", func(t *testing.T) {
+		short := "tok-short"
+		_, err := config.Resolve(with(map[string]string{
+			"REDIS_ENDPOINT":   "rediss://master.example:6379",
+			"REDIS_AUTH_TOKEN": short,
+		}))
+		if err == nil || !strings.Contains(err.Error(), "REDIS_AUTH_TOKEN must be at least 16 characters") {
+			t.Errorf("err = %v, want the rediss gate failure", err)
+		}
+		if err != nil && strings.Contains(err.Error(), short) {
+			t.Errorf("err = %v; the attempted secret must never be echoed", err)
+		}
+	})
+
+	t.Run("a whitespace-only auth token counts as unset at the gate", func(t *testing.T) {
+		_, err := config.Resolve(with(map[string]string{
+			"REDIS_ENDPOINT":   "rediss://master.example:6379",
+			"REDIS_AUTH_TOKEN": "   ",
+		}))
+		if err == nil || !strings.Contains(err.Error(), "REDIS_AUTH_TOKEN must be at least 16 characters") {
+			t.Errorf("err = %v, want the rediss gate failure", err)
+		}
+	})
+
+	t.Run("a rediss endpoint with a floor-holding trimmed token serves", func(t *testing.T) {
+		token := "tok-0123456789abcdef"
+		cfg, err := config.Resolve(with(map[string]string{
+			"REDIS_ENDPOINT":   " rediss://master.example:6379 ",
+			"REDIS_AUTH_TOKEN": " " + token + " ",
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.RedisEndpoint != "rediss://master.example:6379" {
+			t.Errorf("RedisEndpoint = %q, want the trimmed endpoint", cfg.RedisEndpoint)
+		}
+		if cfg.RedisAuthToken != token {
+			t.Errorf("RedisAuthToken = %q, want the trimmed token", cfg.RedisAuthToken)
+		}
+	})
+
+	t.Run("a plain endpoint serves token-free", func(t *testing.T) {
+		cfg, err := config.Resolve(with(nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.RedisEndpoint != testRedisEndpoint || cfg.RedisAuthToken != "" {
+			t.Errorf("cfg = %+v, want the plain endpoint with no token", cfg)
 		}
 	})
 
@@ -324,12 +420,16 @@ func TestLoadEndToEnd(t *testing.T) {
 		if cfg.MongoURI != testMongoURI || cfg.MongoDatabase != "chat_db" {
 			t.Errorf("cfg = %+v, want the plane's mongo URI with the default database", cfg)
 		}
+		if cfg.RedisEndpoint != testRedisEndpoint {
+			t.Errorf("cfg = %+v, want the plane's redis endpoint", cfg)
+		}
 	})
 
 	t.Run("dev boots env-only when the file plane is absent", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "dev")
 		t.Setenv("PORT", "9138")
 		t.Setenv("MONGO_URI", testMongoURI)
+		t.Setenv("REDIS_ENDPOINT", testRedisEndpoint)
 		t.Chdir(t.TempDir())
 
 		cfg, err := config.Load()
@@ -443,7 +543,7 @@ func writeEnvPlane(t *testing.T) {
 	if err := os.MkdirAll("infra", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	plane := "PORT=9137\nDRAIN_TIMEOUT=12s\nOTEL_TRACE_SAMPLE_RATIO=0.5\nMONGO_URI=" + testMongoURI + "\n"
+	plane := "PORT=9137\nDRAIN_TIMEOUT=12s\nOTEL_TRACE_SAMPLE_RATIO=0.5\nMONGO_URI=" + testMongoURI + "\nREDIS_ENDPOINT=" + testRedisEndpoint + "\n"
 	if err := os.WriteFile(filepath.Join("infra", ".env"), []byte(plane), 0o600); err != nil {
 		t.Fatal(err)
 	}

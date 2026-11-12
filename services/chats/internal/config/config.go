@@ -19,6 +19,8 @@ type Config struct {
 	OTelSampleRatio float64
 	MongoURI        string
 	MongoDatabase   string
+	RedisEndpoint   string
+	RedisAuthToken  string
 }
 
 const (
@@ -62,7 +64,40 @@ func Resolve(source Source) (Config, error) {
 	if err := resolveMongo(source, &cfg); err != nil {
 		return Config{}, err
 	}
+	if err := resolveRedis(source, &cfg); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// resolveRedis reads the cache keys; REDIS_ENDPOINT is required and a rediss
+// endpoint demands REDIS_AUTH_TOKEN at the credential floor.
+func resolveRedis(source Source, cfg *Config) error {
+	raw, ok := source.Get("REDIS_ENDPOINT")
+	if !ok {
+		return fmt.Errorf("config: REDIS_ENDPOINT is required; set it in infra/.env (dev) or the SSM plane (prod)")
+	}
+	endpoint := strings.TrimSpace(raw)
+	if !redisEndpointShaped(endpoint) {
+		return fmt.Errorf("config: REDIS_ENDPOINT must be a redis:// or rediss:// endpoint")
+	}
+	cfg.RedisEndpoint = endpoint
+	if raw, ok := source.Get("REDIS_AUTH_TOKEN"); ok {
+		if token := strings.TrimSpace(raw); token != "" {
+			cfg.RedisAuthToken = token
+		}
+	}
+	if strings.HasPrefix(endpoint, "rediss://") && len(cfg.RedisAuthToken) < minCredentialChars {
+		return fmt.Errorf(
+			"config: REDIS_ENDPOINT is rediss://, so REDIS_AUTH_TOKEN must be at least %d characters (the ElastiCache AUTH token)",
+			minCredentialChars)
+	}
+	return nil
+}
+
+// redisEndpointShaped accepts both driver schemes; deeper validation belongs to the dial.
+func redisEndpointShaped(endpoint string) bool {
+	return strings.HasPrefix(endpoint, "redis://") || strings.HasPrefix(endpoint, "rediss://")
 }
 
 // resolveMongo reads the database keys; MONGO_URI is required and MONGO_DATABASE defaults to chat_db.

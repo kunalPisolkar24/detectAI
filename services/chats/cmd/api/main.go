@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/mongo"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/redis"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/router"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/server"
@@ -30,6 +31,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	cacheClient, err := redis.Connect(bootCtx, cfg.RedisEndpoint, cfg.RedisAuthToken)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	protocols := new(http.Protocols)
 	protocols.SetHTTP1(true)
@@ -47,6 +52,9 @@ func main() {
 	defer cancelDrain()
 	if err := dbClient.Disconnect(drainCtx); err != nil {
 		log.Printf("mongo disconnect: %v", err)
+	}
+	if err := cacheClient.Disconnect(drainCtx); err != nil {
+		log.Printf("redis disconnect: %v", err)
 	}
 
 	if runErr != nil {

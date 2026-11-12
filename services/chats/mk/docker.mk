@@ -37,7 +37,7 @@ cache-up:
 	fi
 	@echo ""
 	@echo "  addr    localhost:$(or $(REDIS_PORT),$(REDIS_PORT_FILE),6379)"
-	@echo "  next    CHAT_REDIS_ADDR=localhost:$(or $(REDIS_PORT),$(REDIS_PORT_FILE),6379) in infra/.env, then make run"
+	@echo "  next    REDIS_ENDPOINT=redis://localhost:$(or $(REDIS_PORT),$(REDIS_PORT_FILE),6379) in infra/.env, then make run"
 
 cache-down:
 	$(REDIS_COMPOSE) down --remove-orphans
