@@ -190,6 +190,57 @@ def test_deployment_flick_is_fail_closed(
     assert deployment_flick() == expected
 
 
+# The load knobs: providers fail closed on unknown or empty seeds, threads
+# fail open to ONNX Runtime's own default.
+
+
+def test_the_load_knobs_hold_their_defaults() -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
+
+    assert settings.inference_providers == ("CPUExecutionProvider",)
+    assert settings.ort_intra_op_threads == 0
+
+
+def test_a_csv_provider_seed_splits_trims_and_dedupes_in_order() -> None:
+    settings = Settings.from_provider(
+        StubProvider({
+            "API_KEY": "a" * 20,
+            "INFERENCE_PROVIDERS": " CUDAExecutionProvider , CPUExecutionProvider , CUDAExecutionProvider , ",
+        })
+    )
+
+    assert settings.inference_providers == ("CUDAExecutionProvider", "CPUExecutionProvider")
+
+
+def test_an_unknown_provider_fails_the_boot() -> None:
+    with pytest.raises(ValidationError):
+        Settings.from_provider(
+            StubProvider({"API_KEY": "a" * 20, "INFERENCE_PROVIDERS": "CudaExecutionProvider"})
+        )
+
+
+def test_a_blank_provider_seed_fails_the_boot() -> None:
+    with pytest.raises(ValidationError):
+        Settings.from_provider(StubProvider({"API_KEY": "a" * 20, "INFERENCE_PROVIDERS": " , "}))
+
+
+@pytest.mark.parametrize("seeded", ["not a number", "-1", "0", "1.5"])
+def test_an_invalid_thread_budget_falls_back_to_the_runtime_default(seeded: str) -> None:
+    settings = Settings.from_provider(
+        StubProvider({"API_KEY": "a" * 20, "ORT_INTRA_OP_THREADS": seeded})
+    )
+
+    assert settings.ort_intra_op_threads == 0
+
+
+def test_a_seeded_thread_budget_passes_through() -> None:
+    settings = Settings.from_provider(
+        StubProvider({"API_KEY": "a" * 20, "ORT_INTRA_OP_THREADS": "2"})
+    )
+
+    assert settings.ort_intra_op_threads == 2
+
+
 # The observability gate: the flipped pair (endpoint + ingest license key) or
 # the legitimate disabled boot — never a half-configured push.
 

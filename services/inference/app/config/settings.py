@@ -29,6 +29,14 @@ _GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 _LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
+# Pure strings so Settings never imports onnxruntime; the loader consumes the names.
+_EXECUTION_PROVIDERS = frozenset({
+    "CPUExecutionProvider",
+    "CUDAExecutionProvider",
+    "TensorrtExecutionProvider",
+    "ROCMExecutionProvider",
+})
+
 
 def deployment_flick() -> Literal["dev", "prod"]:
     """Fail closed: only an exact prod in ENV_TYPE is prod; never read from a file or AWS."""
@@ -75,6 +83,11 @@ class Settings(BaseModel):
     spark_model_revision: str = SPARK_MODEL_REVISION
     spark_model_dir: str = SPARK_MODEL_DIR
 
+    # The load contract: requested execution providers (order is preference)
+    # and the per-session intra-op budget; 0 leaves ONNX Runtime's default.
+    inference_providers: tuple[str, ...] = ("CPUExecutionProvider",)
+    ort_intra_op_threads: int = 0
+
     # The endpoint is the gate — unset is a legitimate disabled boot, so these
     # fields must never trip a credential-style min_length in any plane.
     otel_exporter_otlp_endpoint: str | None = None
@@ -107,6 +120,37 @@ class Settings(BaseModel):
         if not _GIT_SHA_PATTERN.fullmatch(value):
             raise ValueError("model revisions must be full 40-character lowercase git SHAs")
         return value
+
+    @field_validator("inference_providers", mode="before")
+    @classmethod
+    def _fail_closed_providers(cls, value: object) -> tuple[str, ...]:
+        if isinstance(value, str):
+            items: list[object] = value.split(",")
+        elif isinstance(value, (list, tuple)):
+            items = list(value)
+        else:
+            raise TypeError("inference_providers must be a CSV string or a sequence of names")
+        names: list[str] = []
+        for item in items:
+            if not isinstance(item, str):
+                raise TypeError("every inference provider must be a name string")
+            name = item.strip()
+            if name and name not in names:
+                names.append(name)
+        if not names:
+            raise ValueError("at least one inference provider is required")
+        unknown = [name for name in names if name not in _EXECUTION_PROVIDERS]
+        if unknown:
+            raise ValueError(
+                f"unknown inference provider(s): {', '.join(unknown)}; "
+                f"known: {', '.join(sorted(_EXECUTION_PROVIDERS))}"
+            )
+        return tuple(names)
+
+    @field_validator("ort_intra_op_threads", mode="before")
+    @classmethod
+    def _fail_closed_threads(cls, value: object) -> int:
+        return _positive_int_or_default(value, default=0)
 
     @model_validator(mode="after")
     def _gate_observability(self) -> "Settings":

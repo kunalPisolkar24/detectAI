@@ -11,3 +11,7 @@ class MissingArtifact(ArtifactError):
 
 class ArtifactPullError(ArtifactError):
     """A hub pull failed after its retries; the message names the repo and the cause."""
+
+
+class ModelLoadError(ArtifactError):
+    """A session or tokenizer failed to build from a pulled artifact; the message names the model."""
