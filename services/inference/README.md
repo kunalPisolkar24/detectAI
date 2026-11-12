@@ -21,4 +21,6 @@ grpcurl -plaintext localhost:50051 grpc.health.v1.Health/Check
 
 ## Contract
 
-`api/proto/ai_service.proto` defines the standing contract: `Detect` (unary) and `AnalyzeDocument` (server-streaming) under `inference.v1`. `make proto` generates the Python stubs into `app/serving/generated/`. See `specifications/references/inference-api-contract.md` for the pinned semantics. The servicer arrives with the next slice; `Detect`/`AnalyzeDocument` still return `UNIMPLEMENTED`.
+`api/proto/ai_service.proto` defines the standing contract: `Detect` (unary) and `AnalyzeDocument` (server-streaming) under `inference.v1`. `make proto` generates the Python stubs into `app/serving/generated/`. See `specifications/references/inference-api-contract.md` for the pinned semantics.
+
+Every RPC except the health check demands `x-api-key` metadata matching `API_KEY`, answered `UNAUTHENTICATED` otherwise. The servicer arrives with the next slice; `Detect`/`AnalyzeDocument` still return `UNIMPLEMENTED`, and the `MAX_TEXT_CHARS` submission bound (default 1,000,000) is enforced there.

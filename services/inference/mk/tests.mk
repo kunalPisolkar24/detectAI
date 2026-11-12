@@ -1,7 +1,7 @@
 # Test suites. The two trees are a hard boundary: tests/unit holds pure logic
 # with fakes and no boot, tests/integration drives the production boot — the
 # dev plane, the gRPC server, and the prod plane through the floci emulator.
-# tests/unit/serving pins the generated contract, so the unit targets stub first.
+# The serving tests import the generated stubs, so the test targets stub first.
 
 .PHONY: test test-unit test-integration help-tests
 
@@ -18,5 +18,5 @@ test: proto
 test-unit: proto
 	poetry run pytest tests/unit -q
 
-test-integration:
+test-integration: proto
 	poetry run pytest tests/integration -q

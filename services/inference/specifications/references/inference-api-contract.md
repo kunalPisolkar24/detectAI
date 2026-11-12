@@ -1,9 +1,10 @@
 # Inference — API Contract (design reference)
 
 Status: design reference for the API-contract slice, implemented in
-`api/proto/ai_service.proto` (the contract), `mk/proto.mk` (stub codegen), and
-`tests/unit/serving/test_contract.py` (the pins). The servicer is not part of
-this slice; the `app/` service today serves health only.
+`api/proto/ai_service.proto` (the contract), `mk/proto.mk` (stub codegen),
+`app/serving/auth.py` (the `x-api-key` gate), and
+`tests/unit/serving/test_contract.py` (the pins). The servicer is not
+implemented; the `app/` service today serves health and denies unkeyed calls.
 
 The quarantined `services/inference/slop/` tree is the reference draft. Its
 `aidetection` contract carried slop-era vocabulary (`PredictRequest`, a `final`
@@ -18,9 +19,10 @@ standing contract both RPCs will be implemented against.
 | In scope | Out of scope (later slices) |
 | --- | --- |
 | The proto contract: `Detect` (unary) + `AnalyzeDocument` (server-streaming) | The Python servicer and its registration on the server |
-| Pinned semantics: offsets, units, model-id rules, error codes | Chunking, the engine contract (`predict_batch`), batching proxy |
-| Python stub codegen: `make proto` → `app/serving/generated/` | Auth interceptor (enforcement) and telemetry |
-| Contract-pin unit tests | The web-side adaptation to `inference.v1` |
+| The `x-api-key` gate on every non-health RPC (`app/serving/auth.py`) | Chunking, the engine contract (`predict_batch`), batching proxy |
+| The `MAX_TEXT_CHARS` submission bound (Settings knob; servicer-enforced) | Telemetry |
+| Pinned semantics: offsets, units, model-id rules, error codes | The web-side adaptation to `inference.v1` |
+| Python stub codegen: `make proto` → `app/serving/generated/` | |
 
 ## 2. Mapping from the quarantined contract
 
@@ -111,9 +113,12 @@ defaults to `spark`; an unknown value is `INVALID_ARGUMENT`. No
 case-normalization is promised — clients send the canonical key, and the
 response `model_id` is the canonical echo of what was used.
 
-**Text limits.** Non-empty and at most 50,000 scalars, else
-`INVALID_ARGUMENT`. A token-count ceiling (~10,000) is a server-side engine
-limit, not a wire guarantee.
+**Text limits.** Non-empty, else `INVALID_ARGUMENT`. The submission bound is
+`MAX_TEXT_CHARS` scalars — 1,000,000 by default, env-overridable, and bad
+values fail closed to the default — and exceeding it is `INVALID_ARGUMENT`:
+admission, not truncation (a truncated document changes the analysis). A
+token-count ceiling (~10,000) is a server-side engine limit, not a wire
+guarantee.
 
 **Stream guarantees.** First event is `started` (`total_chars`,
 `total_chunks`). `progress` follows with `processed_chunks` strictly
@@ -132,6 +137,12 @@ client cancellation surfaces as `CANCELLED`.
 | Full queue / saturated pool / shutting down | `RESOURCE_EXHAUSTED` | Load shedding; does **not** flip health to `NOT_SERVING` |
 | Client disconnect mid-stream | `CANCELLED` | Client reconnects and retries |
 | Unexpected engine or server failure | `INTERNAL` | Generic message only: `Internal Inference Error` |
+
+The `UNAUTHENTICATED` path is enforced at the server boundary
+(`app/serving/auth.py`), ahead of dispatch: an unkeyed or wrong-keyed call
+answers `UNAUTHENTICATED` even for a method with no registered servicer, where
+a valid key would return `UNIMPLEMENTED`. Only `x-api-key` is honored; there
+is no Bearer/JWT path.
 
 ## 6. Health
 
@@ -171,9 +182,13 @@ as `app.serving.generated`. The directory is derived and gitignored; the
 drift: package name, both RPCs' input/output types, request and result field
 sets (including the absence of `label` / `model_name`), the event oneof's
 `started → progress → result` order, and the grpc stub's relative-import fix.
-`test` / `test-unit` depend on `proto` so the pins always run against fresh
-stubs; the integration tree is unchanged (the boot test drives health only).
-Run with `make test-unit`.
+`tests/unit/serving/test_auth.py` pins the gate at the interceptor: health
+pass-through, deny on missing, wrong, or non-string keys, case-insensitive
+metadata, streaming-shape preservation, and the unknown-method deny. The
+integration boot probes a real channel: unkeyed and wrong-keyed `Detect` →
+`UNAUTHENTICATED`, keyed → `UNIMPLEMENTED` until the servicer lands, health
+open without a key. `test`, `test-unit`, and `test-integration` depend on
+`proto` so every run drives fresh stubs. Run with `make test-unit`.
 
 ## 10. Defaults taken (override if any read wrong)
 
@@ -189,3 +204,9 @@ Run with `make test-unit`.
    comment-free, and the doc is the review surface.
 6. No proto `options` — a Python service; chats carries `go_package` because
    chats is Go.
+7. `x-api-key` only, no Bearer/JWT path — the single consumer (the web BFF)
+   sends the header; slop's JWT path served its load rig.
+8. Admission-reject at the text bound, not document-parser's truncate — a
+   truncated document changes the analysis.
+9. A bad `MAX_TEXT_CHARS` seed falls back to the default — the `grpc_port`
+   fail-closed pattern; the bound never widens on garbage.

@@ -5,18 +5,20 @@ import signal
 from grpc import aio
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
+from .auth import ApiKeyAuthInterceptor
+
 _SHUTDOWN_GRACE_SECONDS = 5
 
 logger = logging.getLogger(__name__)
 
 
-async def run_server(port: int) -> None:
-    server, health_servicer, _ = _build(port)
+async def run_server(port: int, api_key: str) -> None:
+    server, health_servicer, _ = _build(port, api_key)
     await _serve_until_stopped(server, health_servicer, _wait_for_signal())
 
 
-def _build(port: int) -> tuple[aio.Server, health.aio.HealthServicer, int]:
-    server = aio.server()
+def _build(port: int, api_key: str) -> tuple[aio.Server, health.aio.HealthServicer, int]:
+    server = aio.server(interceptors=[ApiKeyAuthInterceptor(api_key)])
     health_servicer = health.aio.HealthServicer()
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
 

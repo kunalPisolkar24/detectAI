@@ -25,7 +25,7 @@ async def main() -> None:
     artifacts = _ensure_model_artifacts(settings)
     _load_models(settings, artifacts)
 
-    await run_server(port=settings.grpc_port)
+    await run_server(port=settings.grpc_port, api_key=settings.api_key)
 
 
 def _ensure_model_artifacts(settings: Settings) -> Mapping[str, Path]:

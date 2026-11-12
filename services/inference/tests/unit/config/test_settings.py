@@ -15,6 +15,7 @@ from app.config.settings import (
     FLARE_MODEL_DIR,
     FLARE_MODEL_REPO,
     FLARE_MODEL_REVISION,
+    MAX_TEXT_CHARS_DEFAULT,
     SPARK_MODEL_DIR,
     SPARK_MODEL_REPO,
     SPARK_MODEL_REVISION,
@@ -65,7 +66,11 @@ def test_a_short_required_key_fails_the_boot() -> None:
 
 # Server knobs: fail-closed like document-parser's bounds — garbage and
 # non-positive values land on the default, the boot lives.
-_SERVER_KNOBS: dict[str, object] = {"grpc_port": 50051, "log_level": "INFO"}
+_SERVER_KNOBS: dict[str, object] = {
+    "grpc_port": 50051,
+    "log_level": "INFO",
+    "max_text_chars": MAX_TEXT_CHARS_DEFAULT,
+}
 
 
 def test_the_server_knobs_hold_their_defaults_without_seeds() -> None:
@@ -77,11 +82,17 @@ def test_the_server_knobs_hold_their_defaults_without_seeds() -> None:
 
 def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
     settings = Settings.from_provider(
-        StubProvider({"API_KEY": "a" * 20, "GRPC_PORT": "50052", "LOG_LEVEL": "debug"})
+        StubProvider({
+            "API_KEY": "a" * 20,
+            "GRPC_PORT": "50052",
+            "LOG_LEVEL": "debug",
+            "MAX_TEXT_CHARS": "2000000",
+        })
     )
 
     assert settings.grpc_port == 50052
     assert settings.log_level == "DEBUG"
+    assert settings.max_text_chars == 2_000_000
 
 
 @pytest.mark.parametrize(
@@ -93,6 +104,10 @@ def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
         ("grpc_port", "1.5"),
         ("log_level", "bogus"),
         ("log_level", " "),
+        ("max_text_chars", "not a number"),
+        ("max_text_chars", "-1"),
+        ("max_text_chars", "0"),
+        ("max_text_chars", "1.5"),
     ],
 )
 def test_an_invalid_server_knob_falls_back_to_its_safe_default(field: str, seeded: str) -> None:

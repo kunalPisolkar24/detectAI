@@ -25,6 +25,9 @@ SPARK_MODEL_REPO = "kpisolkar24/detect-ai-spark"
 SPARK_MODEL_REVISION = "b0ab87257cc240d66622c2482270ec726e16c553"
 SPARK_MODEL_DIR = "onnx/fp16"
 
+# The submission bound default: the document-parser cap's scale (~1M chars).
+MAX_TEXT_CHARS_DEFAULT = 1_000_000
+
 _GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 _LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
@@ -71,6 +74,10 @@ class Settings(BaseModel):
     grpc_port: int = 50051
     log_level: str = "INFO"
 
+    # The submission bound is admission, not truncation: a truncated document
+    # changes the analysis, so over-limit text is rejected instead.
+    max_text_chars: int = MAX_TEXT_CHARS_DEFAULT
+
     # Where pulled artifacts land; a volume mount in a container keeps restarts cheap.
     model_cache_dir: str = "./models"
 
@@ -106,6 +113,11 @@ class Settings(BaseModel):
     def _fail_closed_log_level(cls, value: object) -> str:
         normalized = value.strip().upper() if isinstance(value, str) else None
         return normalized if normalized in _LOG_LEVELS else cls.model_fields["log_level"].default
+
+    @field_validator("max_text_chars", mode="before")
+    @classmethod
+    def _fail_closed_text_limit(cls, value: object) -> int:
+        return _positive_int_or_default(value, default=cls.model_fields["max_text_chars"].default)
 
     @field_validator("hf_token", mode="before")
     @classmethod
