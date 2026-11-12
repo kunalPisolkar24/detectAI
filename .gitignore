@@ -4,6 +4,7 @@
 **/.env
 **/.env.*
 !infra/envs/.env.example
+!infra/docker/mongo/.env.example
 
 # Local derived seeder sessions (tfctl's carrier cache)
 tools/tfctl/.session-cache/
