@@ -4,6 +4,7 @@ venv/
 .venv/
 /models/
 .cache/
+app/serving/generated/
 
 __pycache__/
 *.py[cod]
