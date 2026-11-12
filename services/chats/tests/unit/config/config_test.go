@@ -13,6 +13,7 @@ import (
 
 const testLicenseKey = "lic-0123456789abcdef79"
 const testOTelEndpoint = "https://otlp.eu01.nr-data.net"
+const testMongoURI = "mongodb://localhost:27017"
 
 type mapSource map[string]string
 
@@ -21,9 +22,9 @@ func (m mapSource) Get(key string) (string, bool) {
 	return value, ok
 }
 
-// with merges the extra keys; chats has no always-mandatory credential.
+// with merges the extra keys over the always-required MONGO_URI.
 func with(extra map[string]string) mapSource {
-	source := mapSource{}
+	source := mapSource{"MONGO_URI": testMongoURI}
 	for key, value := range extra {
 		source[key] = value
 	}
@@ -60,7 +61,7 @@ func TestDeploymentFlick(t *testing.T) {
 }
 
 func TestResolveContracts(t *testing.T) {
-	t.Run("an empty plane keeps every default", func(t *testing.T) {
+	t.Run("a plane with only the required URI keeps every default", func(t *testing.T) {
 		cfg, err := config.Resolve(with(nil))
 		if err != nil {
 			t.Fatal(err)
@@ -85,6 +86,63 @@ func TestResolveContracts(t *testing.T) {
 		}
 		if cfg.OTelSampleRatio != 1.0 {
 			t.Errorf("OTelSampleRatio = %v, want the unsampled-full default", cfg.OTelSampleRatio)
+		}
+		if cfg.MongoURI != testMongoURI {
+			t.Errorf("MongoURI = %q, want the seeded URI", cfg.MongoURI)
+		}
+		if cfg.MongoDatabase != "chat_db" {
+			t.Errorf("MongoDatabase = %q, want the default", cfg.MongoDatabase)
+		}
+	})
+
+	t.Run("a missing MONGO_URI fails the boot", func(t *testing.T) {
+		_, err := config.Resolve(mapSource{})
+		if err == nil || !strings.Contains(err.Error(), "MONGO_URI is required") {
+			t.Errorf("err = %v, want the required-URI failure", err)
+		}
+	})
+
+	for caseName, bad := range map[string]string{
+		"blank":        "",
+		"whitespace":   "   ",
+		"wrong scheme": "postgres://localhost:5432",
+		"no scheme":    "localhost:27017",
+	} {
+		t.Run("MONGO_URI "+caseName+" fails naming the var", func(t *testing.T) {
+			_, err := config.Resolve(with(map[string]string{"MONGO_URI": bad}))
+			if err == nil || !strings.Contains(err.Error(), "MONGO_URI must be a mongodb:// or mongodb+srv:// URI") {
+				t.Errorf("err = %v, want the URI shape failure", err)
+			}
+		})
+	}
+
+	t.Run("MONGO_URI trims and serves", func(t *testing.T) {
+		cfg, err := config.Resolve(with(map[string]string{"MONGO_URI": " " + testMongoURI + " "}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.MongoURI != testMongoURI {
+			t.Errorf("MongoURI = %q, want the trimmed URI", cfg.MongoURI)
+		}
+	})
+
+	t.Run("MONGO_DATABASE overrides the default", func(t *testing.T) {
+		cfg, err := config.Resolve(with(map[string]string{"MONGO_DATABASE": "chats_prod"}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.MongoDatabase != "chats_prod" {
+			t.Errorf("MongoDatabase = %q, want the override", cfg.MongoDatabase)
+		}
+	})
+
+	t.Run("a whitespace-only MONGO_DATABASE drops to the default", func(t *testing.T) {
+		cfg, err := config.Resolve(with(map[string]string{"MONGO_DATABASE": "   "}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.MongoDatabase != "chat_db" {
+			t.Errorf("MongoDatabase = %q, want the default", cfg.MongoDatabase)
 		}
 	})
 
@@ -263,11 +321,15 @@ func TestLoadEndToEnd(t *testing.T) {
 		if cfg.OTelSampleRatio != 0.5 || cfg.OTelEndpoint != "" {
 			t.Errorf("cfg = %+v, want the plane's half sampling with the endpoint gate still unset", cfg)
 		}
+		if cfg.MongoURI != testMongoURI || cfg.MongoDatabase != "chat_db" {
+			t.Errorf("cfg = %+v, want the plane's mongo URI with the default database", cfg)
+		}
 	})
 
 	t.Run("dev boots env-only when the file plane is absent", func(t *testing.T) {
 		t.Setenv("ENV_TYPE", "dev")
 		t.Setenv("PORT", "9138")
+		t.Setenv("MONGO_URI", testMongoURI)
 		t.Chdir(t.TempDir())
 
 		cfg, err := config.Load()
@@ -276,6 +338,9 @@ func TestLoadEndToEnd(t *testing.T) {
 		}
 		if cfg.Port != 9138 || cfg.DrainTimeout != 10*time.Second {
 			t.Errorf("cfg = %+v, want Port 9138 and the 10s default drain", cfg)
+		}
+		if cfg.MongoURI != testMongoURI {
+			t.Errorf("cfg = %+v, want the env-served mongo URI", cfg)
 		}
 	})
 
@@ -378,7 +443,7 @@ func writeEnvPlane(t *testing.T) {
 	if err := os.MkdirAll("infra", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	plane := "PORT=9137\nDRAIN_TIMEOUT=12s\nOTEL_TRACE_SAMPLE_RATIO=0.5\n"
+	plane := "PORT=9137\nDRAIN_TIMEOUT=12s\nOTEL_TRACE_SAMPLE_RATIO=0.5\nMONGO_URI=" + testMongoURI + "\n"
 	if err := os.WriteFile(filepath.Join("infra", ".env"), []byte(plane), 0o600); err != nil {
 		t.Fatal(err)
 	}

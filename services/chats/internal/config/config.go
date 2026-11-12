@@ -17,6 +17,8 @@ type Config struct {
 	OTelName        string
 	OTelVersion     string
 	OTelSampleRatio float64
+	MongoURI        string
+	MongoDatabase   string
 }
 
 const (
@@ -26,6 +28,8 @@ const (
 	defaultOTelName    = "chats"
 	defaultOTelVersion = "dev"
 	defaultSampleRatio = 1.0
+
+	defaultMongoDatabase = "chat_db"
 )
 
 // Resolve reads one plane source: numeric bounds fail closed, PORT and the
@@ -37,6 +41,7 @@ func Resolve(source Source) (Config, error) {
 		OTelName:        defaultOTelName,
 		OTelVersion:     defaultOTelVersion,
 		OTelSampleRatio: defaultSampleRatio,
+		MongoDatabase:   defaultMongoDatabase,
 	}
 	if raw, ok := source.Get("PORT"); ok {
 		port, err := strconv.Atoi(strings.TrimSpace(raw))
@@ -54,7 +59,34 @@ func Resolve(source Source) (Config, error) {
 	if err := resolveObservability(source, &cfg); err != nil {
 		return Config{}, err
 	}
+	if err := resolveMongo(source, &cfg); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// resolveMongo reads the database keys; MONGO_URI is required and MONGO_DATABASE defaults to chat_db.
+func resolveMongo(source Source, cfg *Config) error {
+	raw, ok := source.Get("MONGO_URI")
+	if !ok {
+		return fmt.Errorf("config: MONGO_URI is required; set it in infra/.env (dev) or the secrets plane (prod)")
+	}
+	uri := strings.TrimSpace(raw)
+	if !mongoURIShaped(uri) {
+		return fmt.Errorf("config: MONGO_URI must be a mongodb:// or mongodb+srv:// URI")
+	}
+	cfg.MongoURI = uri
+	if raw, ok := source.Get("MONGO_DATABASE"); ok {
+		if name := strings.TrimSpace(raw); name != "" {
+			cfg.MongoDatabase = name
+		}
+	}
+	return nil
+}
+
+// mongoURIShaped accepts both driver schemes; deeper validation belongs to the dial.
+func mongoURIShaped(uri string) bool {
+	return strings.HasPrefix(uri, "mongodb://") || strings.HasPrefix(uri, "mongodb+srv://")
 }
 
 // resolveObservability reads the OTel keys; a set endpoint demands the license key at the credential floor.

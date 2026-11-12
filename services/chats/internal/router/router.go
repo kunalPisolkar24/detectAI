@@ -6,18 +6,19 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/connect"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
 
 // New builds the engine with the probe routes, the connect health surface, and the ChatService wire.
-func New() *gin.Engine {
+func New(database db.Database) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
 	v1 := r.Group("/api/v1")
 	v1.GET("/health", handlers.Health)
-	v1.GET("/ready", handlers.Ready)
+	v1.GET("/ready", handlers.Ready(database))
 
 	healthPath, healthHandler := grpchealth.NewHandler(grpchealth.NewStaticChecker("chats.v1.ChatService"))
 	r.Any(healthPath+"*any", gin.WrapH(healthHandler))
