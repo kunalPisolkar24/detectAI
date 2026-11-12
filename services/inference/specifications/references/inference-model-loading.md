@@ -1,8 +1,8 @@
 # Inference — Model Loading (design reference)
 
-Status: design reference for the model-loading slice. Not yet implemented; the
-`app/` service today is the config plane, the completed model-pulling plane
-(`app/models/`), and the health-only gRPC bootstrap.
+Status: design reference for the model-loading slice, implemented in
+`app/models/loader.py` (port), `app/models/onnx.py` (adapter), and the
+`app/main.py` boot wiring.
 
 The quarantined `services/inference/slop/` tree is the reference draft. Its
 `HuggingFaceLoader` mixed pulling, ONNX session building, tokenizer loading,

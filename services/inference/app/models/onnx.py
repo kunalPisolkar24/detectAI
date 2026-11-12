@@ -1,10 +1,15 @@
-"""The ONNX Runtime loader skeleton: contracts now, session and tokenizer bodies with the implementation."""
+"""The ONNX Runtime loader: offline session and tokenizer builds from pulled artifacts."""
 
 import logging
+import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+import onnxruntime as ort
+from transformers import AutoTokenizer
+
+from .errors import ModelLoadError
 from .loader import LoadedModel
 
 logger = logging.getLogger(__name__)
@@ -16,25 +21,56 @@ class OnnxModelLoader:
     """Satisfies ModelLoader structurally; the only module that imports onnxruntime and transformers."""
 
     def __init__(self, providers: Sequence[str], intra_op_threads: int = 0) -> None:
-        self._providers = tuple(providers)
+        self._providers = list(providers)
         self._intra_op_threads = intra_op_threads
 
     def load_all(self, artifacts: Mapping[str, Path]) -> Mapping[str, LoadedModel]:
-        """Walk the keys sorted and fail fast; the first failure aborts with ModelLoadError."""
-        raise NotImplementedError
+        """Every key resolved to a runtime pair, walked sorted; the first failure aborts."""
+        started = time.perf_counter()
+        logger.info("model loading: ensuring %s", ", ".join(sorted(artifacts)))
+
+        loaded: dict[str, LoadedModel] = {}
+        for key in sorted(artifacts):
+            loaded[key] = self._load(key, artifacts[key])
+
+        logger.info("model loading: ready in %.1fs", time.perf_counter() - started)
+        return loaded
 
     def _load(self, key: str, path: Path) -> LoadedModel:
-        """Build the session, the tokenizer, log the effective providers, and pair them."""
-        raise NotImplementedError
+        """Build the session and the tokenizer, verify the providers, and pair them."""
+        started = time.perf_counter()
+        try:
+            session = self._session(path)
+            tokenizer = self._tokenizer(path)
+        except Exception as error:
+            raise ModelLoadError(f"{key}: load failed from {path}: {error}") from error
+        self._log_effective_providers(key, session)
+        logger.info("%s: loaded in %.1fs", key, time.perf_counter() - started)
+        return LoadedModel(key=key, session=session, tokenizer=tokenizer)
 
     def _session(self, path: Path) -> Any:
-        """Build one InferenceSession from model.onnx with fresh session options."""
-        raise NotImplementedError
+        """One InferenceSession from model.onnx; session options are never shared."""
+        options = ort.SessionOptions()
+        if self._intra_op_threads > 0:
+            options.intra_op_num_threads = self._intra_op_threads
+        return ort.InferenceSession(
+            str(path / _ONNX_MODEL_FILENAME),
+            sess_options=options,
+            providers=self._providers,
+        )
 
     def _tokenizer(self, path: Path) -> Any:
-        """Load the HF tokenizer from the artifact dir, strictly offline."""
-        raise NotImplementedError
+        """The HF tokenizer from the artifact dir; strictly offline, never the hub."""
+        return AutoTokenizer.from_pretrained(str(path), local_files_only=True)
 
     def _log_effective_providers(self, key: str, session: Any) -> None:
-        """Log requested vs effective providers; a mismatch is a loud warning."""
-        raise NotImplementedError
+        """Compare by missing, never equality: ORT appends CPU as a fallback tail."""
+        effective = list(session.get_providers())
+        missing = [name for name in self._providers if name not in effective]
+        if missing:
+            logger.warning(
+                "%s: provider mismatch: requested %s, effective %s",
+                key, self._providers, effective,
+            )
+        else:
+            logger.info("%s: providers %s", key, effective)
