@@ -5,8 +5,8 @@ from pathlib import Path
 
 from .config import ConfigFactory, Settings, deployment_flick
 from .models import LoadedModel, ModelArtifactManager, ModelSpecs
-from .models.huggingface import HuggingFaceStore
-from .models.onnx import OnnxModelLoader
+from .models.loading.onnx import OnnxModelLoader
+from .models.pulling.huggingface import HuggingFaceStore
 from .serving.server import run_server
 
 # Stdout is the baseline level until the plane resolves; the seeded knob follows.

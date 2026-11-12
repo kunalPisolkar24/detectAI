@@ -13,7 +13,7 @@ from huggingface_hub.errors import (
 )
 from huggingface_hub.utils import disable_progress_bars
 
-from .errors import ArtifactPullError, MissingArtifact
+from ..errors import ArtifactPullError, MissingArtifact
 from .spec import ModelSpec
 
 logger = logging.getLogger(__name__)

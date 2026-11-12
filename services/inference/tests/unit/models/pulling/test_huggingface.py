@@ -8,10 +8,10 @@ import httpx2
 import pytest
 from huggingface_hub.errors import EntryNotFoundError, HfHubHTTPError
 
-import app.models.huggingface as hf
+import app.models.pulling.huggingface as hf
 from app.models import ArtifactPullError, MissingArtifact
-from app.models.huggingface import HuggingFaceStore
-from app.models.spec import ModelSpec
+from app.models.pulling.huggingface import HuggingFaceStore
+from app.models.pulling.spec import ModelSpec
 
 _REVISION = "a" * 40
 

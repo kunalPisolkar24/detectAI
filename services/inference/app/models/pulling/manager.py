@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from .errors import MissingArtifact
+from ..errors import MissingArtifact
 from .spec import ModelSpec
 from .store import ArtifactStore
 

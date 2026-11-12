@@ -24,14 +24,14 @@ out and builds only that.
 
 | Rough LLD name | Design name | Module | Responsibility |
 | --- | --- | --- | --- |
-| Model artifact manager (orchestrator) | `ModelArtifactManager` | `app/models/manager.py` | Decides cache-hit vs pull per spec; fail-fast orchestration |
-| Model config class | `ModelSpec` + `ModelSpecs.from_settings` | `app/models/spec.py` | Pure data: key, repo, revision, artifact dir |
-| HF adapter (pull, auth, disk) | `HuggingFaceStore` | `app/models/huggingface.py` | The only module that imports `huggingface_hub` |
-| "Check if we need to pull" | `ArtifactStore.locate()` probe | `app/models/store.py` | Typed port; the manager never touches the hub |
+| Model artifact manager (orchestrator) | `ModelArtifactManager` | `app/models/pulling/manager.py` | Decides cache-hit vs pull per spec; fail-fast orchestration |
+| Model config class | `ModelSpec` + `ModelSpecs.from_settings` | `app/models/pulling/spec.py` | Pure data: key, repo, revision, artifact dir |
+| HF adapter (pull, auth, disk) | `HuggingFaceStore` | `app/models/pulling/huggingface.py` | The only module that imports `huggingface_hub` |
+| "Check if we need to pull" | `ArtifactStore.locate()` probe | `app/models/pulling/store.py` | Typed port; the manager never touches the hub |
 
 ## 3. Components
 
-### `app/models/spec.py` — `ModelSpec`
+### `app/models/pulling/spec.py` — `ModelSpec`
 
 Frozen pydantic model, no I/O. The revision SHA validation already lives in
 `Settings` (`_revisions_are_full_pinned_shas`), so the spec stays thin.
@@ -47,7 +47,7 @@ class ModelSpec(BaseModel, frozen=True):
 `ModelSpecs.from_settings(settings) -> tuple[ModelSpec, ...]` builds one spec
 per model from the Settings pull contract.
 
-### `app/models/store.py` — the port
+### `app/models/pulling/store.py` — the port
 
 ```python
 class ArtifactStore(Protocol):
@@ -58,14 +58,14 @@ class ArtifactStore(Protocol):
         """Fetch from the hub; returns the local artifact dir."""
 ```
 
-### `app/models/manager.py` — `ModelArtifactManager`
+### `app/models/pulling/manager.py` — `ModelArtifactManager`
 
 Holds specs + store. `ensure_all()` walks each spec: `locate` first (cache
 hit → log and skip), `pull` on miss. First failure aborts the walk and raises
 a typed error — the boot dies before serving, matching `main.py`'s existing
 fail-closed posture.
 
-### `app/models/huggingface.py` — `HuggingFaceStore`
+### `app/models/pulling/huggingface.py` — `HuggingFaceStore`
 
 - Constructor takes `root: Path` + `token: str | None`, wired from Settings in
   `main.py`. No env reads inside the adapter.
@@ -317,11 +317,11 @@ Env keys are the uppercase field names (`Settings.from_provider` contract).
 
 ## 11. Testing
 
-- `tests/unit/models/test_specs.py` — specs built from settings; one per model;
+- `tests/unit/models/pulling/test_specs.py` — specs built from settings; one per model;
   values flow through unchanged.
-- `tests/unit/models/test_manager.py` — stub store: hit skips the pull, miss
+- `tests/unit/models/pulling/test_manager.py` — stub store: hit skips the pull, miss
   pulls, first failure aborts the walk; returns key→path mapping.
-- `tests/unit/models/test_huggingface.py` — hub functions monkeypatched at the
+- `tests/unit/models/pulling/test_huggingface.py` — hub functions monkeypatched at the
   module attribute: transient retries then success, permanent error → no retry,
   token pass-through, probe behavior, returned path shape.
 - No integration tests this slice — pulling needs real network; the

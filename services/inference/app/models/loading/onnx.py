@@ -9,7 +9,7 @@ from typing import Any
 import onnxruntime as ort
 from transformers import AutoTokenizer
 
-from .errors import ModelLoadError
+from ..errors import ModelLoadError
 from .loader import LoadedModel
 
 logger = logging.getLogger(__name__)

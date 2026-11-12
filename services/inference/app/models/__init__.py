@@ -1,11 +1,8 @@
-"""The model artifact plane: spec, store port, orchestrator, hub adapter, load port, load adapter."""
+"""The model artifact plane: pulling and loading subpackages over a shared error vocabulary."""
 
 from .errors import ArtifactError, ArtifactPullError, MissingArtifact, ModelLoadError
-from .loader import LoadedModel, ModelLoader
-from .manager import ModelArtifactManager
-from .onnx import OnnxModelLoader
-from .spec import ModelSpec, ModelSpecs
-from .store import ArtifactStore
+from .loading import LoadedModel, ModelLoader, OnnxModelLoader
+from .pulling import ArtifactStore, ModelArtifactManager, ModelSpec, ModelSpecs
 
 __all__ = [
     "ArtifactError",

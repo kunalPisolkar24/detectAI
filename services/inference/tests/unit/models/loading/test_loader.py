@@ -6,7 +6,8 @@ from typing import Any
 
 import pytest
 
-from app.models import ModelLoadError, OnnxModelLoader, onnx
+from app.models import ModelLoadError, OnnxModelLoader
+from app.models.loading import onnx
 
 _FLARE = Path("/models/flare/onnx/fp32")
 _SPARK = Path("/models/spark/onnx/fp16")

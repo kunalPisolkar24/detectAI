@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from ..config.settings import Settings
+from ...config.settings import Settings
 
 # The file names inference needs per model; the dir comes from Settings so a
 # different build directory keeps working without touching these lists.
