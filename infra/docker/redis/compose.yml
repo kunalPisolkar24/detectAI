@@ -1,0 +1,15 @@
+# Composable from consumer compose files: no networks/container_name, everything varying is a variable.
+# The cache is ephemeral — down/up empties it; misses repopulate from Mongo.
+
+services:
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
