@@ -9,14 +9,13 @@ import (
 	"strconv"
 	"time"
 
-	chatsconnect "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/connect"
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/mongo"
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/redis"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/router"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/server"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 )
 
 const (
@@ -33,21 +32,21 @@ func main() {
 
 	bootCtx, cancelBoot := context.WithTimeout(context.Background(), bootBudget)
 	defer cancelBoot()
-	dbClient, err := mongo.Connect(bootCtx, cfg.MongoURI, cfg.MongoDatabase)
+	dbClient, err := repository.Connect(bootCtx, cfg.MongoURI, cfg.MongoDatabase)
 	if err != nil {
 		log.Fatal(err)
 	}
-	cacheClient, err := redis.Connect(bootCtx, cfg.RedisEndpoint, cfg.RedisAuthToken)
+	cacheClient, err := cache.Connect(bootCtx, cfg.RedisEndpoint, cfg.RedisAuthToken)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	service := core.NewChatService(
+	service := services.NewChatService(
 		repository.New(dbClient.Database()),
-		redis.NewEntries(cacheClient),
+		cache.NewEntries(cacheClient),
 		slog.Default(),
 	)
-	limits := chatsconnect.Limits{
+	limits := handlers.Limits{
 		Create: cfg.RateLimitCreateMax,
 		Write:  cfg.RateLimitWriteMax,
 	}
@@ -58,7 +57,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:      ":" + strconv.Itoa(cfg.Port),
-		Handler:   router.New(dbClient, service, cfg.APIKey, redis.NewLimiter(cacheClient), limits, slog.Default()),
+		Handler:   router.New(dbClient, service, cfg.APIKey, cache.NewLimiter(cacheClient), limits, slog.Default()),
 		Protocols: protocols,
 	}
 

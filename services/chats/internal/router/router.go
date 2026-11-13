@@ -2,37 +2,41 @@
 package router
 
 import (
+	"context"
 	"log/slog"
 
 	connectrpc "connectrpc.com/connect"
 	"connectrpc.com/grpchealth"
 	"github.com/gin-gonic/gin"
 
-	chatsconnect "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/connect"
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core"
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
 
+// Database is the readiness contract the probe needs; the mongo client
+// implements it.
+type Database interface {
+	Ping(ctx context.Context) error
+}
+
 // New builds the engine with the probe routes, the connect health surface, and the ChatService wire.
-func New(database db.Database, service core.Service, apiKey string, limiter cache.Limiter, limits chatsconnect.Limits, logger *slog.Logger) *gin.Engine {
+func New(database Database, service services.Service, apiKey string, limiter services.Limiter, limits handlers.Limits, logger *slog.Logger) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
 	v1 := r.Group("/api/v1")
-	v1.GET("/health", handlers.Health)
-	v1.GET("/ready", handlers.Ready(database))
+	v1.GET("/health", Health)
+	v1.GET("/ready", Ready(database))
 
 	healthPath, healthHandler := grpchealth.NewHandler(grpchealth.NewStaticChecker("chats.v1.ChatService"))
 	r.Any(healthPath+"*any", gin.WrapH(healthHandler))
 
 	chatPath, chatHandler := chatv1connect.NewChatServiceHandler(
-		chatsconnect.New(service),
+		handlers.New(service),
 		connectrpc.WithInterceptors(
-			chatsconnect.NewAuthInterceptor(apiKey),
-			chatsconnect.NewRateLimitInterceptor(limiter, limits, logger),
+			handlers.NewAuthInterceptor(apiKey),
+			handlers.NewRateLimitInterceptor(limiter, limits, logger),
 		),
 	)
 	r.Any(chatPath+"*any", gin.WrapH(chatHandler))

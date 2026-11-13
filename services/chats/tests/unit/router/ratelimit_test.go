@@ -13,7 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 	"github.com/kunalPisolkar24/detectAI/services/chats/proto"
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
@@ -21,26 +21,26 @@ import (
 // allowAllLimiter lets every call through.
 type allowAllLimiter struct{}
 
-func (allowAllLimiter) Consume(context.Context, string, string, int) (cache.Decision, error) {
-	return cache.Decision{Allowed: true}, nil
+func (allowAllLimiter) Consume(context.Context, string, string, int) (services.Decision, error) {
+	return services.Decision{Allowed: true}, nil
 }
 
 // stubLimiter records the checks it answers and returns a fixed outcome.
 type stubLimiter struct {
 	err       error
-	decision  cache.Decision
-	decisions []cache.Decision
+	decision  services.Decision
+	decisions []services.Decision
 	owners    []string
 	scopes    []string
 	limits    []int
 }
 
-func (l *stubLimiter) Consume(_ context.Context, ownerID, scope string, limit int) (cache.Decision, error) {
+func (l *stubLimiter) Consume(_ context.Context, ownerID, scope string, limit int) (services.Decision, error) {
 	l.owners = append(l.owners, ownerID)
 	l.scopes = append(l.scopes, scope)
 	l.limits = append(l.limits, limit)
 	if l.err != nil {
-		return cache.Decision{}, l.err
+		return services.Decision{}, l.err
 	}
 	if len(l.decisions) > 0 {
 		decision := l.decisions[0]
@@ -59,7 +59,7 @@ func authenticated[T any](msg *T) *connect.Request[T] {
 }
 
 func TestEachScopeDrawsFromItsOwnBudget(t *testing.T) {
-	limiter := &stubLimiter{decision: cache.Decision{Allowed: true}}
+	limiter := &stubLimiter{decision: services.Decision{Allowed: true}}
 	srv := newServerWithLimiter(t, fakeDatabase{}, stubService{}, limiter)
 	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
 
@@ -89,7 +89,7 @@ func TestEachScopeDrawsFromItsOwnBudget(t *testing.T) {
 }
 
 func TestAnUnlimitedProcedureIsNeverCounted(t *testing.T) {
-	limiter := &stubLimiter{decision: cache.Decision{Allowed: true}}
+	limiter := &stubLimiter{decision: services.Decision{Allowed: true}}
 	srv := newServerWithLimiter(t, fakeDatabase{}, stubService{}, limiter)
 	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
 
@@ -102,7 +102,7 @@ func TestAnUnlimitedProcedureIsNeverCounted(t *testing.T) {
 }
 
 func TestAnOverLimitCallIsRefused(t *testing.T) {
-	limiter := &stubLimiter{decision: cache.Decision{Allowed: false, Count: 11, Limit: 10, RetryAfter: 42 * time.Second}}
+	limiter := &stubLimiter{decision: services.Decision{Allowed: false, Count: 11, Limit: 10, RetryAfter: 42 * time.Second}}
 	srv := newServerWithLimiter(t, fakeDatabase{}, stubService{}, limiter)
 	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
 
@@ -145,7 +145,7 @@ func TestACacheFaultFailsOpen(t *testing.T) {
 }
 
 func TestARefusalIsLoggedOncePerWindow(t *testing.T) {
-	limiter := &stubLimiter{decisions: []cache.Decision{
+	limiter := &stubLimiter{decisions: []services.Decision{
 		{Allowed: false, Count: 11, Limit: 10, RetryAfter: 42 * time.Second},
 		{Allowed: false, Count: 12, Limit: 10, RetryAfter: 41 * time.Second},
 	}}
@@ -169,7 +169,7 @@ func TestARefusalIsLoggedOncePerWindow(t *testing.T) {
 }
 
 func TestAnUnauthenticatedCallIsNeverCounted(t *testing.T) {
-	limiter := &stubLimiter{decision: cache.Decision{Allowed: true}}
+	limiter := &stubLimiter{decision: services.Decision{Allowed: true}}
 	srv := newServerWithLimiter(t, fakeDatabase{}, stubService{}, limiter)
 	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
 

@@ -7,7 +7,7 @@ Guidelines for AI and human contributors working in this repo.
 Monorepo. Stay inside the component you were asked to change.
 
 - `apps/web` — Next.js 15 frontend, BFF, auth, UI (`features/`, `lib/`, `infra/`)
-- `services/chats` — Go gRPC chat service (`internal/core`, `internal/adapters`)
+- `services/chats` — Go chat service over ConnectRPC (`internal/services`, `internal/repository`, `internal/cache`, `internal/handlers`, `internal/router`)
 - `services/payment-webhook` — Go webhook gateway
 - `services/inference` — Python gRPC model serving (`src/domain`, `src/application`, `src/adapters`, `src/infrastructure`)
 - `services/document-parser` — Python FastAPI text extraction (`app/`)
@@ -23,7 +23,7 @@ Do not cross service boundaries or share code between services except through ex
 Dependencies point inward only. Outer layers may depend on inner layers, never the reverse.
 
 - `apps/web`: UI components render only. Data access and external calls live in `lib/` or `infra/`. No SQL, Prisma, or `fetch` inside `components/` or `features/*/components`.
-- `services/chats`: `internal/core` holds business rules with no Mongo, Redis, or gRPC imports. All I/O lives in `internal/adapters`.
+- `services/chats`: one directory per responsibility. `internal/services` holds the use cases, the types they work on, and the contracts they code against; it imports nothing internal. `internal/repository` (MongoDB), `internal/cache` (Redis), `internal/handlers` (the ConnectRPC wire), and `internal/router` (the HTTP edge) implement those contracts.
 - `services/inference`: `domain` has no I/O. `application` holds use cases. `adapters` and `infrastructure` hold ONNX, HuggingFace, and transport code.
 - `services/workers`: one folder per bounded context under `src/modules`. Shared helpers go in `src/shared`.
 
