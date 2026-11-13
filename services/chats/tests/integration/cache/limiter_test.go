@@ -1,5 +1,4 @@
-// Package redis_test drives the burst counter against the local compose redis.
-package redis_test
+package cache_test
 
 import (
 	"context"
@@ -16,7 +15,7 @@ import (
 
 func newLimiter(t *testing.T) chatscache.Limiter {
 	t.Helper()
-	return chatscache.NewLimiter(connectLocal(t))
+	return chatscache.NewLimiter(connectContainer(t))
 }
 
 func TestConsumeCountsTowardsTheLimit(t *testing.T) {
@@ -161,7 +160,7 @@ func TestTheBudgetIsFreshInTheNextWindow(t *testing.T) {
 }
 
 func TestAFaultSurfacesAsAnError(t *testing.T) {
-	client := connectLocal(t)
+	client := connectContainer(t)
 	limiter := chatscache.NewLimiter(client)
 	ctx := testContext(t)
 

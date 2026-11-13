@@ -1,5 +1,5 @@
-// Package mongo_test drives the repository against the local compose mongo.
-package mongo_test
+// Package repository_test drives the repository against a container-backed mongo.
+package repository_test
 
 import (
 	"context"
@@ -14,9 +14,17 @@ import (
 	driver "go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
+	"github.com/kunalPisolkar24/detectAI/services/chats/tests/integration/support"
 )
+
+const testDatabase = "chat_db_test"
+
+func TestMain(m *testing.M) {
+	support.Main(m)
+}
 
 // owner returns an identity no other test shares.
 func owner() string {
@@ -25,7 +33,8 @@ func owner() string {
 
 func newRepository(t *testing.T) *repository.Mongo {
 	t.Helper()
-	repo, err := repository.New(testContext(t), connectLocal(t).Database())
+	dbClient := connectContainer(t)
+	repo, err := repository.New(testContext(t), dbClient.Database())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -34,7 +43,7 @@ func newRepository(t *testing.T) *repository.Mongo {
 
 func testContext(t *testing.T) context.Context {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 	return ctx
 }
@@ -58,7 +67,7 @@ func assertErrorIs(t *testing.T, err error, target error) {
 // countMessages counts the messages left on a chat.
 func countMessages(t *testing.T, chatID string) int64 {
 	t.Helper()
-	count, err := connectLocal(t).Database().
+	count, err := connectContainer(t).Database().
 		Collection("messages").
 		CountDocuments(testContext(t), bson.M{"chat_id": chatID})
 	if err != nil {
@@ -67,8 +76,26 @@ func countMessages(t *testing.T, chatID string) int64 {
 	return count
 }
 
-// The repository bootstrap creates the indexes, and every re-run against the
-// persistent dev volume proves the identical create is a server no-op.
+// connectContainer dials the client against the package's mongo container.
+func connectContainer(t *testing.T) *db.Client {
+	t.Helper()
+	uri := support.Mongo(t).URI
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	client, err := db.Connect(ctx, uri, testDatabase)
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	t.Cleanup(func() {
+		disCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = client.Disconnect(disCtx)
+	})
+	return client
+}
+
+// The repository bootstrap creates the indexes, and a second create against the
+// same server proves the identical create is a no-op.
 func TestNewEnsuresDataModelIndexes(t *testing.T) {
 	newRepository(t)
 
@@ -676,7 +703,7 @@ func indexKeys(t *testing.T, collection string) map[string]bool {
 	defer cancel()
 
 	inspector, err := driver.Connect(options.Client().
-		ApplyURI(testURI(t)).
+		ApplyURI(support.Mongo(t).URI).
 		SetConnectTimeout(5 * time.Second).
 		SetServerSelectionTimeout(5 * time.Second))
 	if err != nil {

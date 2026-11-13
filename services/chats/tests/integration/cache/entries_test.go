@@ -1,5 +1,4 @@
-// Package redis_test drives the cache entries surface against the local compose redis.
-package redis_test
+package cache_test
 
 import (
 	"context"
@@ -11,17 +10,18 @@ import (
 
 	chatscache "github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
+	"github.com/kunalPisolkar24/detectAI/services/chats/tests/integration/support"
 )
 
 func newEntries(t *testing.T) *chatscache.Entries {
 	t.Helper()
-	return chatscache.NewEntries(connectLocal(t))
+	return chatscache.NewEntries(connectContainer(t))
 }
 
 // rawClient dials redis directly for the assertions the cache surface does not expose.
 func rawClient(t *testing.T) *driver.Client {
 	t.Helper()
-	opts, err := driver.ParseURL(testEndpoint(t))
+	opts, err := driver.ParseURL(support.Redis(t).Endpoint)
 	if err != nil {
 		t.Fatalf("parse endpoint: %v", err)
 	}

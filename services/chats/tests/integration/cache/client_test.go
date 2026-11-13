@@ -1,19 +1,21 @@
-// Package mongo_test drives the database client against the local compose mongo.
-package mongo_test
+// Package cache_test drives the cache plane against a container-backed redis.
+package cache_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
+	chatscache "github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/tests/integration/support"
 )
 
-const testDatabase = "chat_db_test"
+func TestMain(m *testing.M) {
+	support.Main(m)
+}
 
 func TestConnectPingsAndDisconnects(t *testing.T) {
-	client := connectLocal(t)
+	client := connectContainer(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -29,21 +31,22 @@ func TestConnectFailsLoudOnUnreachable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	client, err := db.Connect(ctx, "mongodb://127.0.0.1:1", testDatabase)
+	client, err := chatscache.Connect(ctx, "redis://127.0.0.1:1", "")
 	if err == nil {
 		_ = client.Disconnect(context.Background())
 		t.Fatal("Connect = nil error, want a failure against a closed port")
 	}
 }
 
-// connectLocal dials the client or skips when the compose mongo is down.
-func connectLocal(t *testing.T) *db.Client {
+// connectContainer dials the client against the package's redis container.
+func connectContainer(t *testing.T) *chatscache.Client {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	endpoint := support.Redis(t).Endpoint
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	client, err := db.Connect(ctx, testURI(t), testDatabase)
+	client, err := chatscache.Connect(ctx, endpoint, "")
 	if err != nil {
-		t.Skipf("mongo not reachable; run make db-up (or point MONGO_URI elsewhere): %v", err)
+		t.Fatalf("Connect: %v", err)
 	}
 	t.Cleanup(func() {
 		disCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -51,12 +54,4 @@ func connectLocal(t *testing.T) *db.Client {
 		_ = client.Disconnect(disCtx)
 	})
 	return client
-}
-
-func testURI(t *testing.T) string {
-	t.Helper()
-	if uri := os.Getenv("MONGO_URI"); uri != "" {
-		return uri
-	}
-	return "mongodb://localhost:27017"
 }
