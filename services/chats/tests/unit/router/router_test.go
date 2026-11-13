@@ -6,15 +6,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"connectrpc.com/grpchealth"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/router"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/store"
 	"github.com/kunalPisolkar24/detectAI/services/chats/proto"
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
+
+const testAPIKey = "key-0123456789abcdef79"
 
 type fakeDatabase struct {
 	pingErr error
@@ -23,26 +27,107 @@ type fakeDatabase struct {
 func (f fakeDatabase) Ping(context.Context) error       { return f.pingErr }
 func (f fakeDatabase) Disconnect(context.Context) error { return nil }
 
-func newServer(t *testing.T, database db.Database) *httptest.Server {
+// stubService answers the one RPC the router tests exercise.
+type stubService struct {
+	getChat func(ctx context.Context, ownerID, chatID string) (store.Chat, []store.Message, string, error)
+}
+
+func (s stubService) CreateChat(context.Context, string, string) (store.Chat, error) {
+	return store.Chat{}, nil
+}
+
+func (s stubService) GetChat(ctx context.Context, ownerID, chatID string) (store.Chat, []store.Message, string, error) {
+	if s.getChat == nil {
+		return store.Chat{}, nil, "", nil
+	}
+	return s.getChat(ctx, ownerID, chatID)
+}
+
+func (s stubService) ListChats(context.Context, string, int) ([]store.ChatSummary, error) {
+	return nil, nil
+}
+
+func (s stubService) RenameChat(context.Context, string, string, string) (store.ChatSummary, error) {
+	return store.ChatSummary{}, nil
+}
+
+func (s stubService) DeleteChat(context.Context, string, string) error { return nil }
+
+func (s stubService) SaveUserMessage(context.Context, string, string, string, string, time.Time) (store.Message, error) {
+	return store.Message{}, nil
+}
+
+func (s stubService) SaveAnalysisMessage(context.Context, string, string, string, time.Time, *store.Analysis) (store.Message, error) {
+	return store.Message{}, nil
+}
+
+func (s stubService) GetChatHistory(context.Context, string, string, string, int) ([]store.Message, string, error) {
+	return nil, "", nil
+}
+
+func newServer(t *testing.T, database db.Database, service stubService) *httptest.Server {
 	t.Helper()
-	srv := httptest.NewServer(router.New(database))
+	srv := httptest.NewServer(router.New(database, service, testAPIKey))
 	t.Cleanup(srv.Close)
 	return srv
 }
 
-func TestChatServiceAnswersUnimplemented(t *testing.T) {
-	srv := newServer(t, fakeDatabase{})
+func TestChatServiceRejectsAnUnauthenticatedCall(t *testing.T) {
+	srv := newServer(t, fakeDatabase{}, stubService{})
 
 	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
 
 	_, err := client.GetChat(context.Background(), connect.NewRequest(&chatv1.GetChatRequest{ChatId: "chat-1"}))
-	if connect.CodeOf(err) != connect.CodeUnimplemented {
-		t.Fatalf("GetChat code = %v, want %v", connect.CodeOf(err), connect.CodeUnimplemented)
+	if connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("GetChat code = %v, want %v", connect.CodeOf(err), connect.CodeUnauthenticated)
+	}
+}
+
+func TestChatServiceRejectsAWrongAPIKey(t *testing.T) {
+	srv := newServer(t, fakeDatabase{}, stubService{})
+
+	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
+
+	req := connect.NewRequest(&chatv1.GetChatRequest{ChatId: "chat-1"})
+	req.Header().Set("x-api-key", "wrong-key-0123456789abcd")
+	req.Header().Set("x-user-id", "owner-1")
+
+	_, err := client.GetChat(context.Background(), req)
+	if connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("GetChat code = %v, want %v", connect.CodeOf(err), connect.CodeUnauthenticated)
+	}
+}
+
+func TestChatServiceResolvesTheOwnerFromTheHeader(t *testing.T) {
+	var ownerID string
+	service := stubService{
+		getChat: func(_ context.Context, owner string, chatID string) (store.Chat, []store.Message, string, error) {
+			ownerID = owner
+			return store.Chat{ID: chatID, UserID: owner, Title: "a title"}, nil, "", nil
+		},
+	}
+	srv := newServer(t, fakeDatabase{}, service)
+
+	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
+
+	req := connect.NewRequest(&chatv1.GetChatRequest{ChatId: "chat-1"})
+	req.Header().Set("x-api-key", testAPIKey)
+	req.Header().Set("x-user-id", "owner-1")
+
+	resp, err := client.GetChat(context.Background(), req)
+	if err != nil {
+		t.Fatalf("GetChat: %v", err)
+	}
+	if ownerID != "owner-1" {
+		t.Errorf("owner = %q, want %q", ownerID, "owner-1")
+	}
+	if resp.Msg.Title != "a title" {
+		t.Errorf("title = %q, want %q", resp.Msg.Title, "a title")
 	}
 }
 
 func TestHealthAdvertisesChatService(t *testing.T) {
-	srv := newServer(t, fakeDatabase{})
+	srv := newServer(t, fakeDatabase{}, stubService{})
 
 	client := grpchealth.NewClient(srv.Client(), srv.URL)
 
@@ -56,7 +141,7 @@ func TestHealthAdvertisesChatService(t *testing.T) {
 }
 
 func TestProbesServe(t *testing.T) {
-	srv := newServer(t, fakeDatabase{})
+	srv := newServer(t, fakeDatabase{}, stubService{})
 
 	for _, path := range []string{"/api/v1/health", "/api/v1/ready"} {
 		resp, err := srv.Client().Get(srv.URL + path)
@@ -71,7 +156,7 @@ func TestProbesServe(t *testing.T) {
 }
 
 func TestReadyReflectsDatabaseHealth(t *testing.T) {
-	srv := newServer(t, fakeDatabase{pingErr: errors.New("down")})
+	srv := newServer(t, fakeDatabase{pingErr: errors.New("down")}, stubService{})
 
 	resp, err := srv.Client().Get(srv.URL + "/api/v1/ready")
 	if err != nil {

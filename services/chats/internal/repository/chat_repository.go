@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,7 +24,7 @@ func (r *Repository) CreateChat(ctx context.Context, ownerID, title string) (sto
 		UpdatedAt: now,
 	}
 	if _, err := r.chats.InsertOne(ctx, chat); err != nil {
-		return store.Chat{}, fmt.Errorf("repository: create chat: %w", err)
+		return store.Chat{}, wrap("create chat", err)
 	}
 	return chat, nil
 }
@@ -38,7 +37,7 @@ func (r *Repository) Chat(ctx context.Context, ownerID, chatID string) (store.Ch
 		return store.Chat{}, store.ErrNotFound
 	}
 	if err != nil {
-		return store.Chat{}, fmt.Errorf("repository: chat: %w", err)
+		return store.Chat{}, wrap("chat", err)
 	}
 	return chat, nil
 }
@@ -51,13 +50,13 @@ func (r *Repository) Chats(ctx context.Context, ownerID string, limit int) ([]st
 		SetSort(bson.D{{Key: "updated_at", Value: -1}}).
 		SetLimit(int64(limit)))
 	if err != nil {
-		return nil, fmt.Errorf("repository: chats: %w", err)
+		return nil, wrap("chats", err)
 	}
 	defer find.Close(ctx)
 
 	summaries := make([]store.ChatSummary, 0, limit)
 	if err := find.All(ctx, &summaries); err != nil {
-		return nil, fmt.Errorf("repository: chats: %w", err)
+		return nil, wrap("chats", err)
 	}
 	return summaries, nil
 }
@@ -74,7 +73,7 @@ func (r *Repository) RenameChat(ctx context.Context, ownerID, chatID, title stri
 		return store.ChatSummary{}, store.ErrNotFound
 	}
 	if err != nil {
-		return store.ChatSummary{}, fmt.Errorf("repository: rename chat: %w", err)
+		return store.ChatSummary{}, wrap("rename chat", err)
 	}
 	return summary, nil
 }
@@ -83,13 +82,13 @@ func (r *Repository) RenameChat(ctx context.Context, ownerID, chatID, title stri
 func (r *Repository) DeleteChat(ctx context.Context, ownerID, chatID string) error {
 	res, err := r.chats.DeleteOne(ctx, bson.M{"_id": chatID, "user_id": ownerID})
 	if err != nil {
-		return fmt.Errorf("repository: delete chat: %w", err)
+		return wrap("delete chat", err)
 	}
 	if res.DeletedCount == 0 {
 		return r.deletedChatOutcome(ctx, chatID)
 	}
 	if _, err := r.messages.DeleteMany(ctx, bson.M{"chat_id": chatID}); err != nil {
-		return fmt.Errorf("repository: delete messages: %w", err)
+		return wrap("delete messages", err)
 	}
 	return nil
 }
@@ -103,7 +102,7 @@ func (r *Repository) deletedChatOutcome(ctx context.Context, chatID string) erro
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("repository: delete chat: %w", err)
+		return wrap("delete chat", err)
 	}
 	return store.ErrNotFound
 }
@@ -115,7 +114,7 @@ func (r *Repository) ownChat(ctx context.Context, ownerID, chatID string) error 
 		return store.ErrNotFound
 	}
 	if err != nil {
-		return fmt.Errorf("repository: chat ownership: %w", err)
+		return wrap("chat ownership", err)
 	}
 	return nil
 }
@@ -126,7 +125,7 @@ func (r *Repository) bumpChat(ctx context.Context, chatID string) error {
 		bson.M{"_id": chatID},
 		bson.M{"$set": bson.M{"updated_at": stamp(time.Now())}},
 	); err != nil {
-		return fmt.Errorf("repository: bump chat: %w", err)
+		return wrap("bump chat", err)
 	}
 	return nil
 }

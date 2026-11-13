@@ -2,6 +2,7 @@
 package repository
 
 import (
+	"fmt"
 	"time"
 
 	driver "go.mongodb.org/mongo-driver/v2/mongo"
@@ -34,4 +35,13 @@ func New(database *driver.Database) *Repository {
 // timestamp the repository hands back matches the one it wrote.
 func stamp(value time.Time) time.Time {
 	return value.UTC().Truncate(time.Millisecond)
+}
+
+// wrap classifies a driver fault: an unreachable source is the store's own
+// sentinel, so the transport layer can map it without the driver.
+func wrap(op string, err error) error {
+	if driver.IsNetworkError(err) || driver.IsTimeout(err) {
+		return fmt.Errorf("repository: %s: %w: %w", op, store.ErrUnavailable, err)
+	}
+	return fmt.Errorf("repository: %s: %w", op, err)
 }

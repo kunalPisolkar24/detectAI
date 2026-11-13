@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
 	"slices"
 	"time"
@@ -34,7 +33,7 @@ func (r *Repository) SaveUserMessage(ctx context.Context, ownerID string, msg st
 
 	if _, err := r.messages.InsertOne(ctx, msg); err != nil {
 		if !driver.IsDuplicateKeyError(err) {
-			return store.Message{}, fmt.Errorf("repository: save user message: %w", err)
+			return store.Message{}, wrap("save user message", err)
 		}
 		stored, found, err := r.chatMessage(ctx, msg.ID, msg.ChatID)
 		if err != nil {
@@ -72,7 +71,7 @@ func (r *Repository) SaveAnalysisMessage(ctx context.Context, ownerID string, ms
 				if driver.IsDuplicateKeyError(err) {
 					continue
 				}
-				return store.Message{}, fmt.Errorf("repository: save analysis message: %w", err)
+				return store.Message{}, wrap("save analysis message", err)
 			}
 			if err := r.bumpChat(ctx, msg.ChatID); err != nil {
 				return store.Message{}, err
@@ -80,7 +79,7 @@ func (r *Repository) SaveAnalysisMessage(ctx context.Context, ownerID string, ms
 			return msg, nil
 		}
 		if err != nil {
-			return store.Message{}, fmt.Errorf("repository: save analysis message: %w", err)
+			return store.Message{}, wrap("save analysis message", err)
 		}
 
 		if stored.ChatID != msg.ChatID {
@@ -125,13 +124,13 @@ func (r *Repository) ChatHistory(ctx context.Context, ownerID, chatID, cursor st
 		SetSort(bson.D{{Key: "created_at", Value: -1}, {Key: "_id", Value: -1}}).
 		SetLimit(int64(limit)+1))
 	if err != nil {
-		return nil, "", fmt.Errorf("repository: chat history: %w", err)
+		return nil, "", wrap("chat history", err)
 	}
 	defer find.Close(ctx)
 
 	var messages []store.Message
 	if err := find.All(ctx, &messages); err != nil {
-		return nil, "", fmt.Errorf("repository: chat history: %w", err)
+		return nil, "", wrap("chat history", err)
 	}
 	if len(messages) <= limit {
 		return messages, "", nil
@@ -154,7 +153,7 @@ func (r *Repository) chatMessage(ctx context.Context, id, chatID string) (store.
 		return store.Message{}, false, nil
 	}
 	if err != nil {
-		return store.Message{}, false, fmt.Errorf("repository: message: %w", err)
+		return store.Message{}, false, wrap("message", err)
 	}
 	return msg, true, nil
 }
@@ -171,7 +170,7 @@ func (r *Repository) setAnalysis(ctx context.Context, id string, analysis *store
 		return store.Message{}, store.ErrNotFound
 	}
 	if err != nil {
-		return store.Message{}, fmt.Errorf("repository: set analysis: %w", err)
+		return store.Message{}, wrap("set analysis", err)
 	}
 	return updated, nil
 }

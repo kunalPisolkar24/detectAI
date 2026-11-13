@@ -19,6 +19,9 @@ var (
 	// ErrConflict answers a write into a terminal analysis state that is not
 	// an identical replay of what is stored.
 	ErrConflict = errors.New("store: terminal analysis state conflict")
+	// ErrUnavailable answers a source that cannot be reached; the transport
+	// layer maps it to the wire's unavailable code.
+	ErrUnavailable = errors.New("store: source unavailable")
 )
 
 // Role is the message author.

@@ -3,13 +3,17 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/mongo"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/redis"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/core"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/router"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/server"
 )
@@ -24,6 +28,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
 	bootCtx, cancelBoot := context.WithTimeout(context.Background(), bootBudget)
 	defer cancelBoot()
@@ -36,13 +41,19 @@ func main() {
 		log.Fatal(err)
 	}
 
+	service := core.NewChatService(
+		repository.New(dbClient.Database()),
+		redis.NewEntries(cacheClient),
+		slog.Default(),
+	)
+
 	protocols := new(http.Protocols)
 	protocols.SetHTTP1(true)
 	protocols.SetUnencryptedHTTP2(true)
 
 	srv := &http.Server{
 		Addr:      ":" + strconv.Itoa(cfg.Port),
-		Handler:   router.New(dbClient),
+		Handler:   router.New(dbClient, service, cfg.APIKey),
 		Protocols: protocols,
 	}
 
