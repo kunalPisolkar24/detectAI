@@ -14,7 +14,7 @@ func (s *ChatService) cachedChat(ctx context.Context, ownerID, chatID string) (m
 	cached, found, err := s.cache.Chat(ctx, chatID)
 	s.recordCacheRead(observability.CacheOperationChat, found, err, start)
 	if err != nil {
-		s.absorb("chat read", err)
+		s.absorb(ctx, "chat read", err)
 	} else if found {
 		if cached.UserID != ownerID {
 			return models.Chat{}, models.ErrNotFound
@@ -35,7 +35,7 @@ func (s *ChatService) cachedList(ctx context.Context, ownerID string, limit int)
 	cached, found, err := s.cache.ChatList(ctx, ownerID)
 	s.recordCacheRead(observability.CacheOperationChatList, found, err, start)
 	if err != nil {
-		s.absorb("chat list read", err)
+		s.absorb(ctx, "chat list read", err)
 	} else if found {
 		return trimSummaries(cached, limit), nil
 	}
@@ -56,7 +56,7 @@ func (s *ChatService) headPage(ctx context.Context, ownerID, chatID string, limi
 	cached, found, err := s.cache.Head(ctx, chatID)
 	s.recordCacheRead(observability.CacheOperationHead, found, err, start)
 	if err != nil {
-		s.absorb("head read", err)
+		s.absorb(ctx, "head read", err)
 	} else if found {
 		return trimPage(chatID, cached, limit)
 	}
@@ -75,7 +75,7 @@ func (s *ChatService) invalidateChat(ctx context.Context, chatID, ownerID string
 	err := s.cache.InvalidateChat(ctx, chatID)
 	s.recordCacheWrite(observability.CacheOperationInvalidateChat, err, start)
 	if err != nil {
-		s.absorb("chat invalidation", err)
+		s.absorb(ctx, "chat invalidation", err)
 	}
 	s.invalidateOwner(ctx, ownerID)
 }
@@ -85,7 +85,7 @@ func (s *ChatService) invalidateMeta(ctx context.Context, chatID, ownerID string
 	err := s.cache.InvalidateMeta(ctx, chatID)
 	s.recordCacheWrite(observability.CacheOperationInvalidateMeta, err, start)
 	if err != nil {
-		s.absorb("chat meta invalidation", err)
+		s.absorb(ctx, "chat meta invalidation", err)
 	}
 	s.invalidateOwner(ctx, ownerID)
 }
@@ -95,7 +95,7 @@ func (s *ChatService) invalidateOwner(ctx context.Context, ownerID string) {
 	err := s.cache.InvalidateOwner(ctx, ownerID)
 	s.recordCacheWrite(observability.CacheOperationInvalidateOwner, err, start)
 	if err != nil {
-		s.absorb("owner invalidation", err)
+		s.absorb(ctx, "owner invalidation", err)
 	}
 }
 
@@ -104,7 +104,7 @@ func (s *ChatService) putChat(ctx context.Context, chat models.Chat) {
 	err := s.cache.PutChat(ctx, chat)
 	s.recordCacheWrite(observability.CacheOperationPutChat, err, start)
 	if err != nil {
-		s.absorb("chat write", err)
+		s.absorb(ctx, "chat write", err)
 	}
 }
 
@@ -113,7 +113,7 @@ func (s *ChatService) putChatList(ctx context.Context, ownerID string, chats []m
 	err := s.cache.PutChatList(ctx, ownerID, chats)
 	s.recordCacheWrite(observability.CacheOperationPutChatList, err, start)
 	if err != nil {
-		s.absorb("chat list write", err)
+		s.absorb(ctx, "chat list write", err)
 	}
 }
 
@@ -122,7 +122,7 @@ func (s *ChatService) putHead(ctx context.Context, chatID string, page models.Pa
 	err := s.cache.PutHead(ctx, chatID, page)
 	s.recordCacheWrite(observability.CacheOperationPutHead, err, start)
 	if err != nil {
-		s.absorb("head write", err)
+		s.absorb(ctx, "head write", err)
 	}
 }
 
@@ -149,8 +149,8 @@ func (s *ChatService) recordCacheWrite(operation string, err error, start time.T
 }
 
 // absorb drops a cache fault: a cache fault never fails an RPC.
-func (s *ChatService) absorb(op string, err error) {
-	s.logger.Warn("cache fault absorbed", "op", op, "error", err)
+func (s *ChatService) absorb(ctx context.Context, op string, err error) {
+	s.logger.WarnContext(ctx, "cache fault absorbed", "op", op, "error", err)
 }
 
 func trimPage(chatID string, page models.Page, limit int) (models.Page, error) {

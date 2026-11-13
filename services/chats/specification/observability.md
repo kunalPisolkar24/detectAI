@@ -111,13 +111,23 @@ The boot reads a small `observability.Config` — endpoint, license key, service
 
 A failed span also carries the error status, so a board can filter on the code without reading the attributes.
 
+### The trace context
+
+The SDK's global text-map propagator is a no-op until one is registered, so the boot registers `propagation.TraceContext{}`. Without it `otelgin` extracts nothing from the inbound headers, every request starts an orphan trace, and the parent-based sampler has no parent to honour. With it, the route span joins the trace the caller started, and the procedure span hangs under that route span.
+
+The boot also sets the global tracer provider to the one it started, so anything that reaches for `otel.Tracer` lands in this pipeline rather than in a second one. The global meter provider stays unset on purpose: otelgin would then emit its own `http.server.*` metrics, and the inventory below is frozen at nine.
+
 ## The logs
 
 `log/slog` is the service's logger and it stays the one on stdout: JSON, unchanged. The boot tees every record to stdout **and** to the OTLP bridge, so one `slog.Info` call reaches New Relic without a second logging call at the call site. The tee's stdout half is a JSON handler, so the stdout contract the rest of the stack parses is untouched.
 
+Every record is emitted with the request's context, so the OTel logs SDK finds the span in it and stamps the trace and span ids onto the record. A log line is therefore a link into the trace that produced it, not a line of text beside one.
+
 ## The deployment label
 
 `deployment.environment` is stamped by the app from `ENV_TYPE`, which the config plane accepts as exactly `dev` or `prod`. The observability stack's prod boards filter on `prod` or `floci`, and `floci` is a collector-side label a direct-push service never sees — a board rewritten for this service must filter on what the app stamps.
+
+`OTEL_RESOURCE_ATTRIBUTES` may add labels to the resource, but it cannot relabel the app's own: the SDK merges the environment's attributes under the resource the provider is given, so `service.name` and `deployment.environment` stay owned by the app.
 
 ## Known limits
 
@@ -136,6 +146,8 @@ A failed span also carries the error status, so a board can filter on the code w
 7. **Absorbed faults get their own counter** — a cache fault never changes the RPC code, so it needs an instrument of its own.
 8. **Push direct to New Relic EU** — the service is outside the collector's reach, and it owns the resource labels the collector would upsert.
 9. **A panic is a telemetry event** — the interceptor settles the verdict on the way out, so a crash closes its span and counts as `internal` instead of vanishing with the stack.
+10. **The boot registers the trace-context propagator** — the SDK's global propagator is a no-op by default, and an unregistered one drops the caller's trace on the floor.
+11. **Log records carry the request context** — the trace id is only on a record when the context handed to the handler carries the span.
 
 ## Open questions
 

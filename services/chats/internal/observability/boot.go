@@ -8,9 +8,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
+	"go.opentelemetry.io/otel"
 	otlploghttp "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	otlpmetrichttp "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/propagation"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability/adapters"
 )
@@ -78,6 +80,13 @@ func Boot(cfg Config, flick string) (Telemetry, error) {
 	if err := logs.Start(res); err != nil {
 		return nil, err
 	}
+	// The SDK's global propagator is a no-op until one is registered, and
+	// otelgin reads it when the middleware is built: without this the inbound
+	// traceparent is dropped and every request starts an orphan trace. The
+	// global tracer follows it so anything reaching for otel.Tracer lands in
+	// this pipeline rather than in a second one.
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	otel.SetTracerProvider(traces.Provider())
 	name := serviceName(cfg)
 	slog.SetDefault(slog.New(teeHandler{
 		stdout: slog.NewJSONHandler(os.Stdout, nil),

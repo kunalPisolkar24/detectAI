@@ -56,7 +56,7 @@ func NewRateLimitInterceptor(limiter cache.Limiter, limits Limits, logger *slog.
 			}
 			decision, err := limiter.Consume(ctx, ownerID, string(selected), limits.forScope(selected))
 			if err != nil {
-				logger.Warn("rate limit check failed open",
+				logger.WarnContext(ctx, "rate limit check failed open",
 					"scope", string(selected),
 					"owner", ownerIDHash(ownerID),
 					"error", err)
@@ -64,7 +64,7 @@ func NewRateLimitInterceptor(limiter cache.Limiter, limits Limits, logger *slog.
 			}
 			if !decision.Allowed {
 				obs.RecordRateLimitRefusal(string(selected))
-				logRefusal(logger, ownerID, selected, decision)
+				logRefusal(ctx, logger, ownerID, selected, decision)
 				return nil, rateLimitError(decision)
 			}
 			return next(ctx, req)
@@ -75,11 +75,11 @@ func NewRateLimitInterceptor(limiter cache.Limiter, limits Limits, logger *slog.
 // The refusal is logged once per exhausted budget per window. The counter moves
 // by one, so the first refusal of a window is limit+1; later ones stay silent
 // and a client hammering the limit cannot flood the logs.
-func logRefusal(logger *slog.Logger, ownerID string, selected scope, decision cache.Decision) {
+func logRefusal(ctx context.Context, logger *slog.Logger, ownerID string, selected scope, decision cache.Decision) {
 	if decision.Count != decision.Limit+1 {
 		return
 	}
-	logger.Info("rate limit refused",
+	logger.InfoContext(ctx, "rate limit refused",
 		"scope", string(selected),
 		"owner", ownerIDHash(ownerID),
 		"count", decision.Count,
