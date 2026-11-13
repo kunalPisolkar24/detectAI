@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
 
@@ -42,7 +43,7 @@ func (l Limits) forScope(s scope) int {
 }
 
 // The check fails open: a cache fault lets the call through.
-func NewRateLimitInterceptor(limiter cache.Limiter, limits Limits, logger *slog.Logger) connect.UnaryInterceptorFunc {
+func NewRateLimitInterceptor(limiter cache.Limiter, limits Limits, logger *slog.Logger, obs observability.Telemetry) connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			selected, limited := scopeByProcedure[req.Spec().Procedure]
@@ -62,6 +63,7 @@ func NewRateLimitInterceptor(limiter cache.Limiter, limits Limits, logger *slog.
 				return next(ctx, req)
 			}
 			if !decision.Allowed {
+				obs.RecordRateLimitRefusal(string(selected))
 				logRefusal(logger, ownerID, selected, decision)
 				return nil, rateLimitError(decision)
 			}

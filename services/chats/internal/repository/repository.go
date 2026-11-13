@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	driver "go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 )
 
 const (
@@ -40,21 +42,46 @@ type Repository interface {
 }
 
 type Mongo struct {
-	chats    *driver.Collection
-	messages *driver.Collection
+	chats     *driver.Collection
+	messages  *driver.Collection
+	telemetry observability.Telemetry
 }
 
 var _ Repository = (*Mongo)(nil)
 
 // Ensures the data-model indexes.
-func New(ctx context.Context, database *driver.Database) (*Mongo, error) {
+func New(ctx context.Context, database *driver.Database, telemetry observability.Telemetry) (*Mongo, error) {
 	if err := ensureIndexes(ctx, database); err != nil {
 		return nil, fmt.Errorf("repository: ensure indexes: %w", err)
 	}
 	return &Mongo{
-		chats:    database.Collection(chatsCollection),
-		messages: database.Collection(messagesCollection),
+		chats:     database.Collection(chatsCollection),
+		messages:  database.Collection(messagesCollection),
+		telemetry: telemetry,
 	}, nil
+}
+
+// record counts one datastore operation and times it.
+func (r *Mongo) record(operation string, err error, start time.Time) {
+	r.telemetry.RecordDatastoreOp(operation, datastoreResult(err), time.Since(start))
+}
+
+// datastoreResult classifies a repository call's outcome.
+func datastoreResult(err error) observability.DatastoreResult {
+	switch {
+	case err == nil:
+		return observability.DatastoreOK
+	case errors.Is(err, models.ErrNotFound):
+		return observability.DatastoreNotFound
+	case errors.Is(err, models.ErrConflict):
+		return observability.DatastoreConflict
+	case errors.Is(err, models.ErrInvalidCursor):
+		return observability.DatastoreInvalidCursor
+	case errors.Is(err, models.ErrUnavailable):
+		return observability.DatastoreUnavailable
+	default:
+		return observability.DatastoreError
+	}
 }
 
 // stamp truncates a timestamp to the precision bson stores datetimes at, so a

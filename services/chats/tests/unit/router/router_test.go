@@ -16,6 +16,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	chatshandlers "github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/router"
 	"github.com/kunalPisolkar24/detectAI/services/chats/proto"
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
@@ -80,7 +81,7 @@ func newServerWithLimiter(t *testing.T, database db.Database, service stubServic
 
 func newServerWithLogger(t *testing.T, database db.Database, service stubService, limiter cache.Limiter, logger *slog.Logger) *httptest.Server {
 	t.Helper()
-	srv := httptest.NewServer(router.New(database, service, testAPIKey, limiter, chatshandlers.Limits{Create: 10, Write: 60}, logger))
+	srv := httptest.NewServer(router.New(database, service, testAPIKey, limiter, chatshandlers.Limits{Create: 10, Write: 60}, logger, observability.NullTelemetry{}))
 	t.Cleanup(srv.Close)
 	return srv
 }

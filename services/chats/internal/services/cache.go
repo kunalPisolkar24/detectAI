@@ -2,13 +2,17 @@ package services
 
 import (
 	"context"
+	"time"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 )
 
 // cachedChat returns the chat meta, cache first. A cached chat carries its owner, so the ownership rule holds on a hit as well as on a miss.
 func (s *ChatService) cachedChat(ctx context.Context, ownerID, chatID string) (models.Chat, error) {
+	start := time.Now()
 	cached, found, err := s.cache.Chat(ctx, chatID)
+	s.recordCacheRead(observability.CacheOperationChat, found, err, start)
 	if err != nil {
 		s.absorb("chat read", err)
 	} else if found {
@@ -27,7 +31,9 @@ func (s *ChatService) cachedChat(ctx context.Context, ownerID, chatID string) (m
 }
 
 func (s *ChatService) cachedList(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, error) {
+	start := time.Now()
 	cached, found, err := s.cache.ChatList(ctx, ownerID)
+	s.recordCacheRead(observability.CacheOperationChatList, found, err, start)
 	if err != nil {
 		s.absorb("chat list read", err)
 	} else if found {
@@ -46,7 +52,9 @@ func (s *ChatService) cachedList(ctx context.Context, ownerID string, limit int)
 // limit. The cache always holds a full page, so a smaller request trims it
 // and the larger one reads the source.
 func (s *ChatService) headPage(ctx context.Context, ownerID, chatID string, limit int) (models.Page, error) {
+	start := time.Now()
 	cached, found, err := s.cache.Head(ctx, chatID)
+	s.recordCacheRead(observability.CacheOperationHead, found, err, start)
 	if err != nil {
 		s.absorb("head read", err)
 	} else if found {
@@ -63,41 +71,81 @@ func (s *ChatService) headPage(ctx context.Context, ownerID, chatID string, limi
 }
 
 func (s *ChatService) invalidateChat(ctx context.Context, chatID, ownerID string) {
-	if err := s.cache.InvalidateChat(ctx, chatID); err != nil {
+	start := time.Now()
+	err := s.cache.InvalidateChat(ctx, chatID)
+	s.recordCacheWrite(observability.CacheOperationInvalidateChat, err, start)
+	if err != nil {
 		s.absorb("chat invalidation", err)
 	}
 	s.invalidateOwner(ctx, ownerID)
 }
 
 func (s *ChatService) invalidateMeta(ctx context.Context, chatID, ownerID string) {
-	if err := s.cache.InvalidateMeta(ctx, chatID); err != nil {
+	start := time.Now()
+	err := s.cache.InvalidateMeta(ctx, chatID)
+	s.recordCacheWrite(observability.CacheOperationInvalidateMeta, err, start)
+	if err != nil {
 		s.absorb("chat meta invalidation", err)
 	}
 	s.invalidateOwner(ctx, ownerID)
 }
 
 func (s *ChatService) invalidateOwner(ctx context.Context, ownerID string) {
-	if err := s.cache.InvalidateOwner(ctx, ownerID); err != nil {
+	start := time.Now()
+	err := s.cache.InvalidateOwner(ctx, ownerID)
+	s.recordCacheWrite(observability.CacheOperationInvalidateOwner, err, start)
+	if err != nil {
 		s.absorb("owner invalidation", err)
 	}
 }
 
 func (s *ChatService) putChat(ctx context.Context, chat models.Chat) {
-	if err := s.cache.PutChat(ctx, chat); err != nil {
+	start := time.Now()
+	err := s.cache.PutChat(ctx, chat)
+	s.recordCacheWrite(observability.CacheOperationPutChat, err, start)
+	if err != nil {
 		s.absorb("chat write", err)
 	}
 }
 
 func (s *ChatService) putChatList(ctx context.Context, ownerID string, chats []models.ChatSummary) {
-	if err := s.cache.PutChatList(ctx, ownerID, chats); err != nil {
+	start := time.Now()
+	err := s.cache.PutChatList(ctx, ownerID, chats)
+	s.recordCacheWrite(observability.CacheOperationPutChatList, err, start)
+	if err != nil {
 		s.absorb("chat list write", err)
 	}
 }
 
 func (s *ChatService) putHead(ctx context.Context, chatID string, page models.Page) {
-	if err := s.cache.PutHead(ctx, chatID, page); err != nil {
+	start := time.Now()
+	err := s.cache.PutHead(ctx, chatID, page)
+	s.recordCacheWrite(observability.CacheOperationPutHead, err, start)
+	if err != nil {
 		s.absorb("head write", err)
 	}
+}
+
+// recordCacheRead counts one cache lookup: a hit, a miss, or a fault the read
+// absorbs.
+func (s *ChatService) recordCacheRead(operation string, found bool, err error, start time.Time) {
+	result := observability.CacheMiss
+	switch {
+	case err != nil:
+		result = observability.CacheError
+	case found:
+		result = observability.CacheHit
+	}
+	s.telemetry.RecordCacheOp(operation, result, time.Since(start))
+}
+
+// recordCacheWrite counts one cache write or invalidation.
+func (s *ChatService) recordCacheWrite(operation string, err error, start time.Time) {
+	result := observability.CacheOK
+	if err != nil {
+		result = observability.CacheError
+	}
+	s.telemetry.RecordCacheOp(operation, result, time.Since(start))
 }
 
 // absorb drops a cache fault: a cache fault never fails an RPC.

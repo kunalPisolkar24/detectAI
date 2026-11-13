@@ -19,6 +19,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/router"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
@@ -601,7 +602,7 @@ func boot(t *testing.T, mongoURI, redisEndpoint string, createLimit, writeLimit 
 	}
 	t.Cleanup(func() { _ = dbClient.Disconnect(context.Background()) })
 
-	repo, err := repository.New(bootCtx, dbClient.Database())
+	repo, err := repository.New(bootCtx, dbClient.Database(), observability.NullTelemetry{})
 	if err != nil {
 		t.Fatalf("repository.New: %v", err)
 	}
@@ -612,9 +613,9 @@ func boot(t *testing.T, mongoURI, redisEndpoint string, createLimit, writeLimit 
 	}
 	t.Cleanup(func() { _ = cacheClient.Disconnect(context.Background()) })
 
-	service := services.NewChatService(repo, cache.NewEntries(cacheClient), slog.Default())
+	service := services.NewChatService(repo, cache.NewEntries(cacheClient), slog.Default(), observability.NullTelemetry{})
 	limits := handlers.Limits{Create: cfg.RateLimitCreateMax, Write: cfg.RateLimitWriteMax}
-	srv := httptest.NewServer(router.New(dbClient, service, cfg.APIKey, cache.NewLimiter(cacheClient), limits, slog.Default()))
+	srv := httptest.NewServer(router.New(dbClient, service, cfg.APIKey, cache.NewLimiter(cacheClient), limits, slog.Default(), observability.NullTelemetry{}))
 	t.Cleanup(srv.Close)
 
 	return &stack{

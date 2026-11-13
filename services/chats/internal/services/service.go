@@ -9,6 +9,7 @@ import (
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
 )
 
@@ -25,13 +26,14 @@ type Service interface {
 }
 
 type ChatService struct {
-	repo   repository.Repository
-	cache  cache.Cache
-	logger *slog.Logger
+	repo      repository.Repository
+	cache     cache.Cache
+	logger    *slog.Logger
+	telemetry observability.Telemetry
 }
 
-func NewChatService(repo repository.Repository, entries cache.Cache, logger *slog.Logger) *ChatService {
-	return &ChatService{repo: repo, cache: entries, logger: logger}
+func NewChatService(repo repository.Repository, entries cache.Cache, logger *slog.Logger, telemetry observability.Telemetry) *ChatService {
+	return &ChatService{repo: repo, cache: entries, logger: logger, telemetry: telemetry}
 }
 
 var _ Service = (*ChatService)(nil)

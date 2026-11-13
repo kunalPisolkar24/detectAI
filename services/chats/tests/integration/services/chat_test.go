@@ -16,6 +16,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 	"github.com/kunalPisolkar24/detectAI/services/chats/tests/integration/support"
@@ -256,7 +257,7 @@ func newStackWith(t *testing.T, endpoint string, logger *slog.Logger) *stack {
 	}
 	t.Cleanup(func() { _ = dbClient.Disconnect(context.Background()) })
 
-	repo, err := repository.New(ctx, dbClient.Database())
+	repo, err := repository.New(ctx, dbClient.Database(), observability.NullTelemetry{})
 	if err != nil {
 		t.Fatalf("repository.New: %v", err)
 	}
@@ -275,7 +276,7 @@ func newStackWith(t *testing.T, endpoint string, logger *slog.Logger) *stack {
 	t.Cleanup(func() { _ = raw.Close() })
 
 	return &stack{
-		service: services.NewChatService(repo, cache.NewEntries(cacheClient), logger),
+		service: services.NewChatService(repo, cache.NewEntries(cacheClient), logger, observability.NullTelemetry{}),
 		redis:   raw,
 	}
 }

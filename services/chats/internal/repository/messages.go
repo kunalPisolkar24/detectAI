@@ -13,6 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 )
 
 // writeAttempts bounds the read-insert race on the analysis upsert.
@@ -20,6 +21,13 @@ const writeAttempts = 3
 
 // SaveUserMessage is insert-only: a duplicate id replays the stored message.
 func (r *Mongo) SaveUserMessage(ctx context.Context, ownerID string, msg models.Message) (models.Message, error) {
+	start := time.Now()
+	saved, err := r.saveUserMessage(ctx, ownerID, msg)
+	r.record(observability.DatastoreOperationSaveUserMessage, err, start)
+	return saved, err
+}
+
+func (r *Mongo) saveUserMessage(ctx context.Context, ownerID string, msg models.Message) (models.Message, error) {
 	if err := r.ownChat(ctx, ownerID, msg.ChatID); err != nil {
 		return models.Message{}, err
 	}
@@ -51,6 +59,13 @@ func (r *Mongo) SaveUserMessage(ctx context.Context, ownerID string, msg models.
 }
 
 func (r *Mongo) SaveAnalysisMessage(ctx context.Context, ownerID string, msg models.Message) (models.Message, error) {
+	start := time.Now()
+	saved, err := r.saveAnalysisMessage(ctx, ownerID, msg)
+	r.record(observability.DatastoreOperationSaveAnalysisMessage, err, start)
+	return saved, err
+}
+
+func (r *Mongo) saveAnalysisMessage(ctx context.Context, ownerID string, msg models.Message) (models.Message, error) {
 	if err := r.ownChat(ctx, ownerID, msg.ChatID); err != nil {
 		return models.Message{}, err
 	}
@@ -103,7 +118,15 @@ func (r *Mongo) SaveAnalysisMessage(ctx context.Context, ownerID string, msg mod
 	return models.Message{}, errors.New("repository: save analysis message: concurrent write did not settle")
 }
 
+// ChatHistory pages a chat's messages newest-first.
 func (r *Mongo) ChatHistory(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]models.Message, string, error) {
+	start := time.Now()
+	messages, next, err := r.chatHistory(ctx, ownerID, chatID, cursor, limit)
+	r.record(observability.DatastoreOperationChatHistory, err, start)
+	return messages, next, err
+}
+
+func (r *Mongo) chatHistory(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]models.Message, string, error) {
 	if err := r.ownChat(ctx, ownerID, chatID); err != nil {
 		return nil, "", err
 	}

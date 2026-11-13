@@ -11,13 +11,19 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
 
-func New(database db.Database, service services.Service, apiKey string, limiter cache.Limiter, limits handlers.Limits, logger *slog.Logger) *gin.Engine {
+func New(database db.Database, service services.Service, apiKey string, limiter cache.Limiter, limits handlers.Limits, logger *slog.Logger, obs observability.Telemetry) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
-	r := gin.Default()
+	// The trace middleware is registered first so its span brackets the
+	// recovery: a panic the recovery absorbs would otherwise leave the span
+	// open and the crash untraced.
+	r := gin.New()
+	observability.Wire(obs, r)
+	r.Use(gin.Logger(), gin.Recovery())
 
 	v1 := r.Group("/api/v1")
 	v1.GET("/health", Health)
@@ -29,8 +35,9 @@ func New(database db.Database, service services.Service, apiKey string, limiter 
 	chatPath, chatHandler := chatv1connect.NewChatServiceHandler(
 		handlers.New(service),
 		connectrpc.WithInterceptors(
+			handlers.NewTelemetryInterceptor(obs),
 			handlers.NewAuthInterceptor(apiKey),
-			handlers.NewRateLimitInterceptor(limiter, limits, logger),
+			handlers.NewRateLimitInterceptor(limiter, limits, logger, obs),
 		),
 	)
 	r.Any(chatPath+"*any", gin.WrapH(chatHandler))

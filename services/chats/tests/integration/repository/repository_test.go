@@ -16,6 +16,7 @@ import (
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
 	"github.com/kunalPisolkar24/detectAI/services/chats/tests/integration/support"
 )
@@ -34,7 +35,7 @@ func owner() string {
 func newRepository(t *testing.T) *repository.Mongo {
 	t.Helper()
 	dbClient := connectContainer(t)
-	repo, err := repository.New(testContext(t), dbClient.Database())
+	repo, err := repository.New(testContext(t), dbClient.Database(), observability.NullTelemetry{})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

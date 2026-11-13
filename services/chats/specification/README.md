@@ -7,6 +7,7 @@ Specifications for the chats service. This file is the hub — every design doc 
 | Doc | Covers |
 |-----|--------|
 | [contract.md](contract.md) | The Connect RPC wire contract — RPC surface, types, pagination, rate limiting, error semantics, codegen |
+| [observability.md](observability.md) | The OTel push pipeline to New Relic, the metric inventory, the telemetry seam |
 
 ## Read order
 
@@ -23,4 +24,3 @@ Specifications for the chats service. This file is the hub — every design doc 
 |-----|--------|
 | `requirements.md` | Functional and non-functional requirements, bounds, out-of-scope, deployment target |
 | `design.md` | Module layout, runtime model, config planes, packaging, testing strategy |
-| `observability.md` | The OTel push pipeline, metric inventory, current assets |

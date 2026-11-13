@@ -11,9 +11,18 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 )
 
+// CreateChat inserts the chat shell; the service derives the title and saves the first message.
 func (r *Mongo) CreateChat(ctx context.Context, ownerID, title string) (models.Chat, error) {
+	start := time.Now()
+	chat, err := r.createChat(ctx, ownerID, title)
+	r.record(observability.DatastoreOperationCreateChat, err, start)
+	return chat, err
+}
+
+func (r *Mongo) createChat(ctx context.Context, ownerID, title string) (models.Chat, error) {
 	now := stamp(time.Now())
 	chat := models.Chat{
 		ID:        uuid.NewString(),
@@ -28,7 +37,15 @@ func (r *Mongo) CreateChat(ctx context.Context, ownerID, title string) (models.C
 	return chat, nil
 }
 
+// Chat returns the chat meta; a missing or unowned chat is models.ErrNotFound.
 func (r *Mongo) Chat(ctx context.Context, ownerID, chatID string) (models.Chat, error) {
+	start := time.Now()
+	chat, err := r.chat(ctx, ownerID, chatID)
+	r.record(observability.DatastoreOperationChat, err, start)
+	return chat, err
+}
+
+func (r *Mongo) chat(ctx context.Context, ownerID, chatID string) (models.Chat, error) {
 	var chat models.Chat
 	err := r.chats.FindOne(ctx, bson.M{"_id": chatID, "user_id": ownerID}).Decode(&chat)
 	if errors.Is(err, driver.ErrNoDocuments) {
@@ -40,7 +57,15 @@ func (r *Mongo) Chat(ctx context.Context, ownerID, chatID string) (models.Chat, 
 	return chat, nil
 }
 
+// Chats lists the owner's chats newest-first.
 func (r *Mongo) Chats(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, error) {
+	start := time.Now()
+	chats, err := r.listChats(ctx, ownerID, limit)
+	r.record(observability.DatastoreOperationChats, err, start)
+	return chats, err
+}
+
+func (r *Mongo) listChats(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, error) {
 	limit = models.ClampChatsLimit(limit)
 
 	find, err := r.chats.Find(ctx, bson.M{"user_id": ownerID}, options.Find().
@@ -58,7 +83,15 @@ func (r *Mongo) Chats(ctx context.Context, ownerID string, limit int) ([]models.
 	return summaries, nil
 }
 
+// RenameChat changes the title and bumps updated_at.
 func (r *Mongo) RenameChat(ctx context.Context, ownerID, chatID, title string) (models.ChatSummary, error) {
+	start := time.Now()
+	summary, err := r.renameChat(ctx, ownerID, chatID, title)
+	r.record(observability.DatastoreOperationRenameChat, err, start)
+	return summary, err
+}
+
+func (r *Mongo) renameChat(ctx context.Context, ownerID, chatID, title string) (models.ChatSummary, error) {
 	var summary models.ChatSummary
 	err := r.chats.FindOneAndUpdate(ctx,
 		bson.M{"_id": chatID, "user_id": ownerID},
@@ -76,6 +109,13 @@ func (r *Mongo) RenameChat(ctx context.Context, ownerID, chatID, title string) (
 
 // DeleteChat runs without a transaction.
 func (r *Mongo) DeleteChat(ctx context.Context, ownerID, chatID string) error {
+	start := time.Now()
+	err := r.deleteChat(ctx, ownerID, chatID)
+	r.record(observability.DatastoreOperationDeleteChat, err, start)
+	return err
+}
+
+func (r *Mongo) deleteChat(ctx context.Context, ownerID, chatID string) error {
 	res, err := r.chats.DeleteOne(ctx, bson.M{"_id": chatID, "user_id": ownerID})
 	if err != nil {
 		return wrap("delete chat", err)

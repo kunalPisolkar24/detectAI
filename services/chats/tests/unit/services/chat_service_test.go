@@ -11,6 +11,7 @@ import (
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 )
@@ -202,7 +203,7 @@ func (f *fakeCache) InvalidateOwner(_ context.Context, ownerID string) error {
 }
 
 func newService(repo repository.Repository, entries cache.Cache) *services.ChatService {
-	return services.NewChatService(repo, entries, slog.New(slog.DiscardHandler))
+	return services.NewChatService(repo, entries, slog.New(slog.DiscardHandler), observability.NullTelemetry{})
 }
 
 func TestCreateChatDerivesTheTitleAndStoresTheFirstMessage(t *testing.T) {
