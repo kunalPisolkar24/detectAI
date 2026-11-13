@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Plane is a prod plane reader the adapters satisfy structurally.
+// A prod plane reader the adapters satisfy structurally.
 type Plane interface {
 	Fetch() (map[string]string, error)
 }
@@ -16,7 +16,6 @@ type ProdSource struct {
 	values map[string]string
 }
 
-// NewProdSource fetches both planes once — secrets first — and merges them.
 func NewProdSource(parameters, secrets Plane) (*ProdSource, error) {
 	blob, err := secrets.Fetch()
 	if err != nil {

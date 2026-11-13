@@ -7,7 +7,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 )
 
-// CreateChat opens a chat and stores the message that opened it.
 func (s *ChatService) CreateChat(ctx context.Context, ownerID, initialMessage string) (models.Chat, error) {
 	if err := ValidateContent(initialMessage); err != nil {
 		return models.Chat{}, err
@@ -49,12 +48,10 @@ func (s *ChatService) GetChat(ctx context.Context, ownerID, chatID string) (mode
 	return chat, page.Messages, page.NextCursor, nil
 }
 
-// ListChats returns the owner's chats newest-first.
 func (s *ChatService) ListChats(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, error) {
 	return s.cachedList(ctx, ownerID, models.ClampChatsLimit(limit))
 }
 
-// RenameChat sets a chat's title.
 func (s *ChatService) RenameChat(ctx context.Context, ownerID, chatID, title string) (models.ChatSummary, error) {
 	if err := ValidateChatID(chatID); err != nil {
 		return models.ChatSummary{}, err
@@ -70,7 +67,6 @@ func (s *ChatService) RenameChat(ctx context.Context, ownerID, chatID, title str
 	return summary, nil
 }
 
-// DeleteChat deletes a chat and its messages.
 func (s *ChatService) DeleteChat(ctx context.Context, ownerID, chatID string) error {
 	if err := ValidateChatID(chatID); err != nil {
 		return err
@@ -82,7 +78,6 @@ func (s *ChatService) DeleteChat(ctx context.Context, ownerID, chatID string) er
 	return nil
 }
 
-// SaveUserMessage stores a message the user sent.
 func (s *ChatService) SaveUserMessage(ctx context.Context, ownerID, chatID, messageID, content string, createdAt time.Time) (models.Message, error) {
 	message := models.Message{
 		ID:        messageID,
@@ -102,7 +97,6 @@ func (s *ChatService) SaveUserMessage(ctx context.Context, ownerID, chatID, mess
 	return saved, nil
 }
 
-// SaveAnalysisMessage stores the analysis state of a message.
 func (s *ChatService) SaveAnalysisMessage(ctx context.Context, ownerID, chatID, messageID string, createdAt time.Time, analysis *models.Analysis) (models.Message, error) {
 	message := models.Message{
 		ID:        messageID,

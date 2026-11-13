@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 )
 
-// SecretsName is the secrets blob the seeding contract provisions for this service.
+// The secrets blob the seeding contract provisions for this service.
 const SecretsName = "detectai/chats/secrets"
 
 const fetchFix = "apply the plane it reads (make secrets-apply) and check the runtime role"
@@ -19,7 +19,7 @@ type SecretsClient interface {
 	GetSecretValue(ctx context.Context, params *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
 }
 
-// SecretsManagerAdapter reads the service's secrets blob as a JSON object of key/value strings.
+// Reads the service's secrets blob as a JSON object of key/value strings.
 type SecretsManagerAdapter struct {
 	client SecretsClient
 	name   string
@@ -29,7 +29,7 @@ func NewSecretsManagerAdapter(client SecretsClient) *SecretsManagerAdapter {
 	return &SecretsManagerAdapter{client: client, name: SecretsName}
 }
 
-// Fetch returns the plane's key/value map; treat it as read-only.
+// The plane's key/value map; treat it as read-only.
 func (a *SecretsManagerAdapter) Fetch() (map[string]string, error) {
 	output, err := a.client.GetSecretValue(context.Background(),
 		&secretsmanager.GetSecretValueInput{SecretId: aws.String(a.name)})
@@ -58,7 +58,6 @@ func (a *SecretsManagerAdapter) Fetch() (map[string]string, error) {
 	return values, nil
 }
 
-// jsonShape names the decoded JSON kind for the failure messages.
 func jsonShape(value any) string {
 	switch value.(type) {
 	case string:

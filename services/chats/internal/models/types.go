@@ -1,6 +1,5 @@
 // Package models holds the chats vocabulary: the document shapes the stores
-// persist, the enums they carry, and the rules the domain and the adapters
-// share.
+// persist, the enums they carry, and the rules the domain and the adapters share.
 package models
 
 import "time"
@@ -15,7 +14,6 @@ type Chat struct {
 	UpdatedAt time.Time `bson:"updated_at"`
 }
 
-// ChatSummary is the sidebar projection of a chat.
 type ChatSummary struct {
 	ID        string    `bson:"_id"`
 	Title     string    `bson:"title"`
@@ -33,7 +31,6 @@ type Message struct {
 	CreatedAt time.Time `bson:"created_at"`
 }
 
-// Analysis is the embedded analysis payload on assistant messages.
 type Analysis struct {
 	State           AnalysisState   `bson:"state"`
 	Model           Model           `bson:"model"`
@@ -51,13 +48,11 @@ type AnalysisResult struct {
 	Raw        map[string]any `bson:"raw,omitempty"`
 }
 
-// Scores are the AI-vs-human detector probabilities.
 type Scores struct {
 	AI    float64 `bson:"ai"`
 	Human float64 `bson:"human"`
 }
 
-// Highlight is one detection span within the analyzed text.
 type Highlight struct {
 	CharStart    int32   `bson:"char_start"`
 	CharEnd      int32   `bson:"char_end"`
@@ -65,8 +60,6 @@ type Highlight struct {
 	Label        Label   `bson:"label"`
 }
 
-// Page is a chat's head page of messages and the cursor that chains to the
-// next one.
 type Page struct {
 	Messages   []Message `json:"messages"`
 	NextCursor string    `json:"next_cursor"`

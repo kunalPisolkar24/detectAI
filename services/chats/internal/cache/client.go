@@ -12,7 +12,6 @@ import (
 
 const dialTimeout = 5 * time.Second
 
-// Client is the redis-backed cache connection.
 type Client struct {
 	client *driver.Client
 }
@@ -49,12 +48,10 @@ func clientOptions(endpoint, authToken string) (*driver.Options, error) {
 	return opts, nil
 }
 
-// Ping reports whether the server answers.
 func (c *Client) Ping(ctx context.Context) error {
 	return c.client.Ping(ctx).Err()
 }
 
-// Disconnect closes the connection.
 func (c *Client) Disconnect(context.Context) error {
 	return c.client.Close()
 }

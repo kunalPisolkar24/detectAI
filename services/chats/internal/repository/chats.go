@@ -13,7 +13,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 )
 
-// CreateChat inserts the chat shell with a server-generated id.
 func (r *Mongo) CreateChat(ctx context.Context, ownerID, title string) (models.Chat, error) {
 	now := stamp(time.Now())
 	chat := models.Chat{
@@ -29,7 +28,6 @@ func (r *Mongo) CreateChat(ctx context.Context, ownerID, title string) (models.C
 	return chat, nil
 }
 
-// Chat returns the owner-scoped chat meta.
 func (r *Mongo) Chat(ctx context.Context, ownerID, chatID string) (models.Chat, error) {
 	var chat models.Chat
 	err := r.chats.FindOne(ctx, bson.M{"_id": chatID, "user_id": ownerID}).Decode(&chat)
@@ -42,7 +40,6 @@ func (r *Mongo) Chat(ctx context.Context, ownerID, chatID string) (models.Chat, 
 	return chat, nil
 }
 
-// Chats lists the owner's chats newest-first by updated_at.
 func (r *Mongo) Chats(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, error) {
 	limit = models.ClampChatsLimit(limit)
 
@@ -61,7 +58,6 @@ func (r *Mongo) Chats(ctx context.Context, ownerID string, limit int) ([]models.
 	return summaries, nil
 }
 
-// RenameChat sets the title and bumps updated_at, returning the summary.
 func (r *Mongo) RenameChat(ctx context.Context, ownerID, chatID, title string) (models.ChatSummary, error) {
 	var summary models.ChatSummary
 	err := r.chats.FindOneAndUpdate(ctx,
@@ -78,7 +74,7 @@ func (r *Mongo) RenameChat(ctx context.Context, ownerID, chatID, title string) (
 	return summary, nil
 }
 
-// DeleteChat deletes the chat then its messages without a transaction.
+// DeleteChat runs without a transaction.
 func (r *Mongo) DeleteChat(ctx context.Context, ownerID, chatID string) error {
 	res, err := r.chats.DeleteOne(ctx, bson.M{"_id": chatID, "user_id": ownerID})
 	if err != nil {
@@ -107,7 +103,6 @@ func (r *Mongo) deletedChatOutcome(ctx context.Context, chatID string) error {
 	return models.ErrNotFound
 }
 
-// ownChat reports whether the chat exists under the caller's identity.
 func (r *Mongo) ownChat(ctx context.Context, ownerID, chatID string) error {
 	err := r.chats.FindOne(ctx, bson.M{"_id": chatID, "user_id": ownerID}).Err()
 	if errors.Is(err, driver.ErrNoDocuments) {
@@ -119,7 +114,6 @@ func (r *Mongo) ownChat(ctx context.Context, ownerID, chatID string) error {
 	return nil
 }
 
-// bumpChat moves the sidebar order key forward after a message write.
 func (r *Mongo) bumpChat(ctx context.Context, chatID string) error {
 	if _, err := r.chats.UpdateOne(ctx,
 		bson.M{"_id": chatID},

@@ -10,7 +10,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config/planes"
 )
 
-// ConfigFactory assembles the plane source for the selected environment.
 type ConfigFactory struct{}
 
 func (ConfigFactory) Create(flick string) (planes.Source, error) {

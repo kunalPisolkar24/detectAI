@@ -12,19 +12,16 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 )
 
-// Entries is the redis-backed cache-aside surface.
 type Entries struct {
 	client *driver.Client
 }
 
 var _ Cache = (*Entries)(nil)
 
-// NewEntries builds the entries surface over a connected client.
 func NewEntries(client *Client) *Entries {
 	return &Entries{client: client.client}
 }
 
-// Chat returns the cached chat meta.
 func (e *Entries) Chat(ctx context.Context, chatID string) (models.Chat, bool, error) {
 	var chat models.Chat
 	found, err := e.get(ctx, ChatKey(chatID), &chat)
@@ -34,12 +31,10 @@ func (e *Entries) Chat(ctx context.Context, chatID string) (models.Chat, bool, e
 	return chat, true, nil
 }
 
-// PutChat caches the chat meta.
 func (e *Entries) PutChat(ctx context.Context, chat models.Chat) error {
 	return e.put(ctx, ChatKey(chat.ID), chat, ChatMetaTTL)
 }
 
-// ChatList returns the cached sidebar list of an owner.
 func (e *Entries) ChatList(ctx context.Context, ownerID string) ([]models.ChatSummary, bool, error) {
 	var chats []models.ChatSummary
 	found, err := e.get(ctx, OwnerChatsKey(ownerID), &chats)
@@ -52,12 +47,10 @@ func (e *Entries) ChatList(ctx context.Context, ownerID string) ([]models.ChatSu
 	return chats, true, nil
 }
 
-// PutChatList caches the sidebar list of an owner.
 func (e *Entries) PutChatList(ctx context.Context, ownerID string, chats []models.ChatSummary) error {
 	return e.put(ctx, OwnerChatsKey(ownerID), chats, ChatListTTL)
 }
 
-// Head returns the cached head page of a chat's messages.
 func (e *Entries) Head(ctx context.Context, chatID string) (models.Page, bool, error) {
 	var page models.Page
 	found, err := e.get(ctx, ChatHeadKey(chatID), &page)
@@ -70,22 +63,18 @@ func (e *Entries) Head(ctx context.Context, chatID string) (models.Page, bool, e
 	return page, true, nil
 }
 
-// PutHead caches the head page of a chat's messages.
 func (e *Entries) PutHead(ctx context.Context, chatID string, page models.Page) error {
 	return e.put(ctx, ChatHeadKey(chatID), page, ChatHeadTTL)
 }
 
-// InvalidateMeta drops a chat's meta entry.
 func (e *Entries) InvalidateMeta(ctx context.Context, chatID string) error {
 	return e.del(ctx, ChatKey(chatID))
 }
 
-// InvalidateChat drops a chat's meta and head entries.
 func (e *Entries) InvalidateChat(ctx context.Context, chatID string) error {
 	return e.del(ctx, ChatKey(chatID), ChatHeadKey(chatID))
 }
 
-// InvalidateOwner drops an owner's sidebar list.
 func (e *Entries) InvalidateOwner(ctx context.Context, ownerID string) error {
 	return e.del(ctx, OwnerChatsKey(ownerID))
 }
@@ -107,7 +96,6 @@ func (e *Entries) get(ctx context.Context, key string, target any) (bool, error)
 	return true, nil
 }
 
-// put encodes a value and writes it with its TTL.
 func (e *Entries) put(ctx context.Context, key string, value any, ttl time.Duration) error {
 	payload, err := json.Marshal(value)
 	if err != nil {
@@ -119,7 +107,6 @@ func (e *Entries) put(ctx context.Context, key string, value any, ttl time.Durat
 	return nil
 }
 
-// del removes the given keys.
 func (e *Entries) del(ctx context.Context, keys ...string) error {
 	if err := e.client.Del(ctx, keys...).Err(); err != nil {
 		return fmt.Errorf("redis: delete %v: %w", keys, err)

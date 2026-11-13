@@ -10,7 +10,6 @@ import (
 	chatv1 "github.com/kunalPisolkar24/detectAI/services/chats/proto"
 )
 
-// chatToProto maps a chat meta onto the wire.
 func chatToProto(chat models.Chat) *chatv1.Chat {
 	return &chatv1.Chat{
 		Id:        chat.ID,
@@ -20,7 +19,6 @@ func chatToProto(chat models.Chat) *chatv1.Chat {
 	}
 }
 
-// summaryToProto maps a chat summary onto the wire.
 func summaryToProto(summary models.ChatSummary) *chatv1.ChatSummary {
 	return &chatv1.ChatSummary{
 		Id:        summary.ID,
@@ -29,7 +27,6 @@ func summaryToProto(summary models.ChatSummary) *chatv1.ChatSummary {
 	}
 }
 
-// messageToProto maps a message onto the wire.
 func messageToProto(message models.Message) (*chatv1.Message, error) {
 	analysis, err := analysisToProto(message.Analysis)
 	if err != nil {
@@ -45,7 +42,6 @@ func messageToProto(message models.Message) (*chatv1.Message, error) {
 	}, nil
 }
 
-// analysisToProto maps an analysis payload onto the wire.
 func analysisToProto(analysis *models.Analysis) (*chatv1.Analysis, error) {
 	if analysis == nil {
 		return nil, nil
@@ -63,7 +59,6 @@ func analysisToProto(analysis *models.Analysis) (*chatv1.Analysis, error) {
 	}, nil
 }
 
-// resultToProto maps a detection verdict onto the wire.
 func resultToProto(result *models.AnalysisResult) (*chatv1.AnalysisResult, error) {
 	if result == nil {
 		return nil, nil
@@ -91,7 +86,6 @@ func resultToProto(result *models.AnalysisResult) (*chatv1.AnalysisResult, error
 	return proto, nil
 }
 
-// analysisFromProto maps the request's analysis payload onto the domain.
 func analysisFromProto(state chatv1.AnalysisState, model chatv1.Model, sourceMessageID, analysisError string, result *chatv1.AnalysisResult) (*models.Analysis, error) {
 	analysis := &models.Analysis{
 		State:           stateFromProto(state),
@@ -105,7 +99,6 @@ func analysisFromProto(state chatv1.AnalysisState, model chatv1.Model, sourceMes
 	return analysis, nil
 }
 
-// resultFromProto maps a wire verdict onto the domain.
 func resultFromProto(result *chatv1.AnalysisResult) *models.AnalysisResult {
 	converted := &models.AnalysisResult{
 		Label:      labelFromProto(result.Label),
@@ -128,7 +121,6 @@ func resultFromProto(result *chatv1.AnalysisResult) *models.AnalysisResult {
 	return converted
 }
 
-// roleToProto maps a message author onto the wire.
 func roleToProto(role models.Role) chatv1.Role {
 	switch role {
 	case models.RoleUser:
@@ -140,7 +132,6 @@ func roleToProto(role models.Role) chatv1.Role {
 	}
 }
 
-// stateToProto maps an analysis state onto the wire.
 func stateToProto(state models.AnalysisState) chatv1.AnalysisState {
 	switch state {
 	case models.StateRunning:
@@ -156,7 +147,6 @@ func stateToProto(state models.AnalysisState) chatv1.AnalysisState {
 	}
 }
 
-// modelToProto maps an inference model onto the wire.
 func modelToProto(model models.Model) chatv1.Model {
 	switch model {
 	case models.ModelSpark:
@@ -168,7 +158,6 @@ func modelToProto(model models.Model) chatv1.Model {
 	}
 }
 
-// labelToProto maps a detection verdict onto the wire.
 func labelToProto(label models.Label) chatv1.Label {
 	switch label {
 	case models.LabelAI:
@@ -180,8 +169,7 @@ func labelToProto(label models.Label) chatv1.Label {
 	}
 }
 
-// stateFromProto maps an analysis state off the wire; an unspecified state
-// stays empty and the domain validator rejects it.
+// An unspecified state stays empty and the domain validator rejects it.
 func stateFromProto(state chatv1.AnalysisState) models.AnalysisState {
 	switch state {
 	case chatv1.AnalysisState_ANALYSIS_STATE_RUNNING:
@@ -197,7 +185,6 @@ func stateFromProto(state chatv1.AnalysisState) models.AnalysisState {
 	}
 }
 
-// modelFromProto maps an inference model off the wire.
 func modelFromProto(model chatv1.Model) models.Model {
 	switch model {
 	case chatv1.Model_MODEL_SPARK:
@@ -209,7 +196,6 @@ func modelFromProto(model chatv1.Model) models.Model {
 	}
 }
 
-// labelFromProto maps a detection verdict off the wire.
 func labelFromProto(label chatv1.Label) models.Label {
 	switch label {
 	case chatv1.Label_LABEL_AI:
@@ -221,7 +207,7 @@ func labelFromProto(label chatv1.Label) models.Label {
 	}
 }
 
-// timestampOf reads an optional wire timestamp; an absent one is the zero time.
+// An absent timestamp is the zero time.
 func timestampOf(ts *timestamppb.Timestamp) time.Time {
 	if ts == nil {
 		return time.Time{}

@@ -17,7 +17,6 @@ const (
 // ownerKey is the context key the resolved owner travels under.
 type ownerKey struct{}
 
-// OwnerFrom reads the owner the request speaks for.
 func OwnerFrom(ctx context.Context) (string, error) {
 	ownerID, ok := ctx.Value(ownerKey{}).(string)
 	if !ok || ownerID == "" {
@@ -26,8 +25,7 @@ func OwnerFrom(ctx context.Context) (string, error) {
 	return ownerID, nil
 }
 
-// NewAuthInterceptor authenticates the caller with the api key and resolves
-// the owner the request speaks for.
+// NewAuthInterceptor authenticates the caller and resolves the owner.
 func NewAuthInterceptor(apiKey string) connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
@@ -43,8 +41,7 @@ func NewAuthInterceptor(apiKey string) connect.UnaryInterceptorFunc {
 	}
 }
 
-// credentialMatches compares the presented key in constant time; a missing key
-// is a mismatch.
+// Compares the presented key in constant time; a missing key is a mismatch.
 func credentialMatches(expected, candidate string) bool {
 	if candidate == "" {
 		return false

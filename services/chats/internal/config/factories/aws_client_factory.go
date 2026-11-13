@@ -17,7 +17,7 @@ type AWSClientFactory struct {
 	base aws.Config
 }
 
-// NewAWSClientFactory loads the base AWS config for the prod plane; clients stay method-local.
+// Loads the base AWS config for the prod plane; clients stay method-local.
 func NewAWSClientFactory(ctx context.Context) (AWSClientFactory, error) {
 	loaded, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -30,12 +30,10 @@ func NewAWSClientFactory(ctx context.Context) (AWSClientFactory, error) {
 	return AWSClientFactory{base: loaded}, nil
 }
 
-// NewSecretsManagerAdapter builds the secrets blob reader on the resolved config.
 func (f AWSClientFactory) NewSecretsManagerAdapter() *adapters.SecretsManagerAdapter {
 	return adapters.NewSecretsManagerAdapter(secretsmanager.NewFromConfig(f.base))
 }
 
-// NewParameterStoreAdapter builds the SSM tree reader on the resolved config.
 func (f AWSClientFactory) NewParameterStoreAdapter() *adapters.ParameterStoreAdapter {
 	return adapters.NewParameterStoreAdapter(ssm.NewFromConfig(f.base))
 }

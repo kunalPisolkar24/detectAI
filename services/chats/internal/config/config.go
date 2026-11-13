@@ -83,8 +83,7 @@ func Resolve(source Source) (Config, error) {
 	return cfg, nil
 }
 
-// resolveRateLimits reads the burst budgets; an unset key takes the
-// conservative default and a malformed one fails the boot.
+// resolveRateLimits reads the burst budgets; an unset key takes the conservative default and a malformed one fails the boot.
 func resolveRateLimits(source Source, cfg *Config) error {
 	create, err := resolveRateLimitMax(source, "RATE_LIMIT_CREATE_MAX", defaultRateLimitCreateMax)
 	if err != nil {
@@ -99,8 +98,7 @@ func resolveRateLimits(source Source, cfg *Config) error {
 	return nil
 }
 
-// resolveRateLimitMax reads one burst budget; an unset or empty key takes
-// the fallback, a malformed one fails the boot.
+// resolveRateLimitMax reads one burst budget; an unset or empty key takes the fallback, a malformed one fails the boot.
 func resolveRateLimitMax(source Source, key string, fallback int) (int, error) {
 	raw, ok := source.Get(key)
 	if !ok {
@@ -132,8 +130,7 @@ func resolveAPIKey(source Source, cfg *Config) error {
 	return nil
 }
 
-// resolveRedis reads the cache keys; REDIS_ENDPOINT is required and a rediss
-// endpoint demands REDIS_AUTH_TOKEN at the credential floor.
+// resolveRedis reads the cache keys; REDIS_ENDPOINT is required and a rediss endpoint demands REDIS_AUTH_TOKEN at the credential floor.
 func resolveRedis(source Source, cfg *Config) error {
 	raw, ok := source.Get("REDIS_ENDPOINT")
 	if !ok {

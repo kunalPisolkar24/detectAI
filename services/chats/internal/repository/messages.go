@@ -18,7 +18,7 @@ import (
 // writeAttempts bounds the read-insert race on the analysis upsert.
 const writeAttempts = 3
 
-// SaveUserMessage is insert-only — a duplicate id replays the stored message.
+// SaveUserMessage is insert-only: a duplicate id replays the stored message.
 func (r *Mongo) SaveUserMessage(ctx context.Context, ownerID string, msg models.Message) (models.Message, error) {
 	if err := r.ownChat(ctx, ownerID, msg.ChatID); err != nil {
 		return models.Message{}, err
@@ -50,7 +50,6 @@ func (r *Mongo) SaveUserMessage(ctx context.Context, ownerID string, msg models.
 	return msg, nil
 }
 
-// SaveAnalysisMessage upserts the analysis state machine keyed on id.
 func (r *Mongo) SaveAnalysisMessage(ctx context.Context, ownerID string, msg models.Message) (models.Message, error) {
 	if err := r.ownChat(ctx, ownerID, msg.ChatID); err != nil {
 		return models.Message{}, err
@@ -104,7 +103,6 @@ func (r *Mongo) SaveAnalysisMessage(ctx context.Context, ownerID string, msg mod
 	return models.Message{}, errors.New("repository: save analysis message: concurrent write did not settle")
 }
 
-// ChatHistory pages newest-first on the (created_at, _id) keyset.
 func (r *Mongo) ChatHistory(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]models.Message, string, error) {
 	if err := r.ownChat(ctx, ownerID, chatID); err != nil {
 		return nil, "", err
@@ -145,7 +143,7 @@ func (r *Mongo) ChatHistory(ctx context.Context, ownerID, chatID, cursor string,
 	return page, next, nil
 }
 
-// chatMessage reads the message bound to one chat; a miss means the id belongs elsewhere.
+// A miss means the id belongs elsewhere.
 func (r *Mongo) chatMessage(ctx context.Context, id, chatID string) (models.Message, bool, error) {
 	var msg models.Message
 	err := r.messages.FindOne(ctx, bson.M{"_id": id, "chat_id": chatID}).Decode(&msg)
@@ -158,7 +156,7 @@ func (r *Mongo) chatMessage(ctx context.Context, id, chatID string) (models.Mess
 	return msg, true, nil
 }
 
-// setAnalysis writes the analysis payload, leaving created_at as it was inserted.
+// setAnalysis leaves created_at as it was inserted.
 func (r *Mongo) setAnalysis(ctx context.Context, id string, analysis *models.Analysis) (models.Message, error) {
 	var updated models.Message
 	err := r.messages.FindOneAndUpdate(ctx,
@@ -175,7 +173,6 @@ func (r *Mongo) setAnalysis(ctx context.Context, id string, analysis *models.Ana
 	return updated, nil
 }
 
-// terminal reports whether the analysis state machine has settled.
 func terminal(analysis *models.Analysis) bool {
 	if analysis == nil {
 		return false
@@ -187,7 +184,6 @@ func terminal(analysis *models.Analysis) bool {
 	return false
 }
 
-// sameAnalysis reports whether an incoming analysis is an identical replay of the stored one.
 func sameAnalysis(stored, incoming *models.Analysis) bool {
 	if stored == nil || incoming == nil {
 		return stored == incoming
@@ -201,7 +197,6 @@ func sameAnalysis(stored, incoming *models.Analysis) bool {
 	return sameResult(stored.Result, incoming.Result)
 }
 
-// sameResult reports whether two detection verdicts match.
 func sameResult(stored, incoming *models.AnalysisResult) bool {
 	if stored == nil || incoming == nil {
 		return stored == incoming

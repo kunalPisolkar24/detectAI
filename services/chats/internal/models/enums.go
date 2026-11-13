@@ -1,6 +1,5 @@
 package models
 
-// Role is the message author.
 type Role string
 
 const (
@@ -8,7 +7,6 @@ const (
 	RoleAssistant Role = "assistant"
 )
 
-// Model is the inference model an analysis ran on.
 type Model string
 
 const (
@@ -16,7 +14,6 @@ const (
 	ModelFlare Model = "flare"
 )
 
-// AnalysisState is the analysis state machine.
 type AnalysisState string
 
 const (
@@ -26,7 +23,6 @@ const (
 	StateCancelled AnalysisState = "cancelled"
 )
 
-// Label is the detection verdict.
 type Label string
 
 const (

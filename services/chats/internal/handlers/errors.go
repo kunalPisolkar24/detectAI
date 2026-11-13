@@ -9,7 +9,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 )
 
-// toConnectError maps a service failure onto the wire's codes.
 func toConnectError(err error) error {
 	switch {
 	case errors.Is(err, models.ErrNotFound):

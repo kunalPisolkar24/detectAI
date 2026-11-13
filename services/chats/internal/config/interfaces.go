@@ -5,7 +5,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config/planes"
 )
 
-// Source is the plane contract the planes package owns.
 type Source = planes.Source
 
 // Compile-time seams: the plane sources satisfy Source, the AWS readers satisfy Plane.

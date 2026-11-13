@@ -36,7 +36,7 @@ func NewDotEnvAdapter(path string) (*DotEnvAdapter, error) {
 	return &DotEnvAdapter{values: values}, nil
 }
 
-// Fetch returns the parsed plane; treat the map as read-only.
+// The parsed plane; treat the map as read-only.
 func (a *DotEnvAdapter) Fetch() map[string]string {
 	return a.values
 }

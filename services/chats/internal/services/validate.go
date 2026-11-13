@@ -19,7 +19,6 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("services: %s %s", e.Field, e.Reason)
 }
 
-// ValidateChatTitle validates a create or rename title.
 func ValidateChatTitle(title string) error {
 	if err := nonEmpty("title", title); err != nil {
 		return err
@@ -27,12 +26,10 @@ func ValidateChatTitle(title string) error {
 	return bounded("title", title, models.MaxTitleLen)
 }
 
-// ValidateChatID validates a chat id on every chat-scoped path.
 func ValidateChatID(chatID string) error {
 	return nonEmpty("chat_id", chatID)
 }
 
-// ValidateContent validates a message body on its own.
 func ValidateContent(content string) error {
 	if err := nonEmpty("content", content); err != nil {
 		return err
@@ -40,7 +37,6 @@ func ValidateContent(content string) error {
 	return bounded("content", content, models.MaxContentLen)
 }
 
-// ValidateUserMessage validates the SaveUserMessage payload.
 func ValidateUserMessage(msg models.Message) error {
 	if err := ValidateChatID(msg.ChatID); err != nil {
 		return err
@@ -54,7 +50,6 @@ func ValidateUserMessage(msg models.Message) error {
 	return ValidateContent(msg.Content)
 }
 
-// ValidateAnalysisMessage validates the SaveAnalysisMessage payload per state.
 func ValidateAnalysisMessage(msg models.Message) error {
 	if err := ValidateChatID(msg.ChatID); err != nil {
 		return err
@@ -86,7 +81,6 @@ func ValidateAnalysisMessage(msg models.Message) error {
 	return nil
 }
 
-// DeriveChatTitle derives a chat's title from the message that opened it.
 func DeriveChatTitle(initialMessage string) string {
 	title := strings.TrimSpace(initialMessage)
 	if utf8.RuneCountInString(title) > models.MaxTitleLen {

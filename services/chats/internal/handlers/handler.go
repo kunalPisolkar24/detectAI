@@ -19,12 +19,10 @@ type Handler struct {
 	service services.Service
 }
 
-// New builds the ChatService handler.
 func New(service services.Service) *Handler {
 	return &Handler{service: service}
 }
 
-// CreateChat opens a chat with the message that opened it.
 func (h *Handler) CreateChat(ctx context.Context, req *connect.Request[chatv1.CreateChatRequest]) (*connect.Response[chatv1.Chat], error) {
 	ownerID, err := OwnerFrom(ctx)
 	if err != nil {
@@ -37,7 +35,6 @@ func (h *Handler) CreateChat(ctx context.Context, req *connect.Request[chatv1.Cr
 	return connect.NewResponse(chatToProto(chat)), nil
 }
 
-// GetChat returns the chat meta with its head page.
 func (h *Handler) GetChat(ctx context.Context, req *connect.Request[chatv1.GetChatRequest]) (*connect.Response[chatv1.Chat], error) {
 	ownerID, err := OwnerFrom(ctx)
 	if err != nil {
@@ -59,7 +56,6 @@ func (h *Handler) GetChat(ctx context.Context, req *connect.Request[chatv1.GetCh
 	return connect.NewResponse(protoChat), nil
 }
 
-// ListChats returns the owner's chats newest-first.
 func (h *Handler) ListChats(ctx context.Context, req *connect.Request[chatv1.ListChatsRequest]) (*connect.Response[chatv1.ListChatsResponse], error) {
 	ownerID, err := OwnerFrom(ctx)
 	if err != nil {
@@ -76,7 +72,6 @@ func (h *Handler) ListChats(ctx context.Context, req *connect.Request[chatv1.Lis
 	return connect.NewResponse(response), nil
 }
 
-// RenameChat sets a chat's title.
 func (h *Handler) RenameChat(ctx context.Context, req *connect.Request[chatv1.RenameChatRequest]) (*connect.Response[chatv1.ChatSummary], error) {
 	ownerID, err := OwnerFrom(ctx)
 	if err != nil {
@@ -89,7 +84,6 @@ func (h *Handler) RenameChat(ctx context.Context, req *connect.Request[chatv1.Re
 	return connect.NewResponse(summaryToProto(summary)), nil
 }
 
-// DeleteChat deletes a chat and its messages.
 func (h *Handler) DeleteChat(ctx context.Context, req *connect.Request[chatv1.DeleteChatRequest]) (*connect.Response[emptypb.Empty], error) {
 	ownerID, err := OwnerFrom(ctx)
 	if err != nil {
@@ -101,7 +95,6 @@ func (h *Handler) DeleteChat(ctx context.Context, req *connect.Request[chatv1.De
 	return connect.NewResponse(&emptypb.Empty{}), nil
 }
 
-// SaveUserMessage stores a message the user sent.
 func (h *Handler) SaveUserMessage(ctx context.Context, req *connect.Request[chatv1.SaveUserMessageRequest]) (*connect.Response[chatv1.Message], error) {
 	ownerID, err := OwnerFrom(ctx)
 	if err != nil {
@@ -118,7 +111,6 @@ func (h *Handler) SaveUserMessage(ctx context.Context, req *connect.Request[chat
 	return connect.NewResponse(message), nil
 }
 
-// SaveAnalysisMessage stores the analysis state of a message.
 func (h *Handler) SaveAnalysisMessage(ctx context.Context, req *connect.Request[chatv1.SaveAnalysisMessageRequest]) (*connect.Response[chatv1.Message], error) {
 	ownerID, err := OwnerFrom(ctx)
 	if err != nil {
@@ -139,7 +131,6 @@ func (h *Handler) SaveAnalysisMessage(ctx context.Context, req *connect.Request[
 	return connect.NewResponse(message), nil
 }
 
-// GetChatHistory pages a chat's history newest-first.
 func (h *Handler) GetChatHistory(ctx context.Context, req *connect.Request[chatv1.GetChatHistoryRequest]) (*connect.Response[chatv1.GetChatHistoryResponse], error) {
 	ownerID, err := OwnerFrom(ctx)
 	if err != nil {

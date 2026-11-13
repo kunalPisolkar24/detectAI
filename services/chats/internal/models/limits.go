@@ -12,12 +12,10 @@ const (
 	MaxChatsLimit       = 200
 )
 
-// ClampHistoryLimit applies the history limit's server default and hard cap.
 func ClampHistoryLimit(limit int) int {
 	return clamp(limit, DefaultHistoryLimit, MaxHistoryLimit)
 }
 
-// ClampChatsLimit applies the sidebar limit's server default and hard cap.
 func ClampChatsLimit(limit int) int {
 	return clamp(limit, DefaultChatsLimit, MaxChatsLimit)
 }
