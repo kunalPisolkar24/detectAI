@@ -229,9 +229,20 @@ Per-user burst limits on the write surface, enforced by a connect interceptor be
 
 - **Scopes** — `create` covers `CreateChat`; `write` covers `SaveUserMessage` and `SaveAnalysisMessage` as one shared budget (an analysis flow does 2–4 writes). Reads are not limited in v1.
 - **Business quotas stay at the edge** — the web BFF owns daily usage accounting (`FREE_TIER_LIMIT`, idempotent `eventId` dedup); chats runs only operational burst protection and never duplicates the business rule.
-- **Numbers are deployment-owned** — limits resolve through the config plane (`RATE_LIMIT_*`), with the factory failing closed to conservative defaults when keys are unset.
-- **Fail open, always** — Redis down means the check is skipped and counted, never rejected; the same "Redis never fails an RPC" rule the cache plane obeys.
+- **Numbers are deployment-owned** — limits resolve through the config plane (`RATE_LIMIT_CREATE_MAX`, `RATE_LIMIT_WRITE_MAX`), with the factory failing closed to conservative defaults when keys are unset. The window is fixed at one minute and the counter key carries the epoch minute.
+- **Fail open, always** — Redis down means the check is skipped and counted, never rejected; the same "Redis never fails an RPC" rule the cache plane obeys. The counter call carries its own 250ms deadline, so a cache fault costs a fraction of a second rather than the driver's socket timeout.
 - Over-limit answers `RESOURCE_EXHAUSTED` with retry-hint metadata (below).
+
+The interceptor order matters: the auth interceptor is outermost, so the rate-limit interceptor sees the owner the request speaks for. An unauthenticated call never reaches a counter.
+
+| Scope | Procedures | Default budget |
+|-------|-----------|----------------|
+| `create` | `CreateChat` | 10 per minute |
+| `write` | `SaveUserMessage`, `SaveAnalysisMessage` | 60 per minute |
+
+An over-limit answer carries `retry-after-ms` (the time left in the window), `x-ratelimit-limit`, and `x-ratelimit-remaining` as error metadata.
+
+A refused call logs once per exhausted budget per window — scope, hashed owner, count, limit, retry-after — so a client hammering the limit cannot flood the logs. Raw owner ids never reach the logs.
 
 ## Errors
 

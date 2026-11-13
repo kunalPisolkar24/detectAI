@@ -22,6 +22,9 @@ type Config struct {
 	RedisEndpoint   string
 	RedisAuthToken  string
 	APIKey          string
+
+	RateLimitCreateMax int
+	RateLimitWriteMax  int
 }
 
 const (
@@ -33,6 +36,9 @@ const (
 	defaultSampleRatio = 1.0
 
 	defaultMongoDatabase = "chat_db"
+
+	defaultRateLimitCreateMax = 10
+	defaultRateLimitWriteMax  = 60
 )
 
 // Resolve reads one plane source: numeric bounds fail closed, PORT and the
@@ -71,7 +77,44 @@ func Resolve(source Source) (Config, error) {
 	if err := resolveAPIKey(source, &cfg); err != nil {
 		return Config{}, err
 	}
+	if err := resolveRateLimits(source, &cfg); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// resolveRateLimits reads the burst budgets; an unset key takes the
+// conservative default and a malformed one fails the boot.
+func resolveRateLimits(source Source, cfg *Config) error {
+	create, err := resolveRateLimitMax(source, "RATE_LIMIT_CREATE_MAX", defaultRateLimitCreateMax)
+	if err != nil {
+		return err
+	}
+	write, err := resolveRateLimitMax(source, "RATE_LIMIT_WRITE_MAX", defaultRateLimitWriteMax)
+	if err != nil {
+		return err
+	}
+	cfg.RateLimitCreateMax = create
+	cfg.RateLimitWriteMax = write
+	return nil
+}
+
+// resolveRateLimitMax reads one burst budget; an unset or empty key takes
+// the fallback, a malformed one fails the boot.
+func resolveRateLimitMax(source Source, key string, fallback int) (int, error) {
+	raw, ok := source.Get(key)
+	if !ok {
+		return fallback, nil
+	}
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(trimmed)
+	if err != nil || value <= 0 {
+		return 0, fmt.Errorf("config: %s must be a positive integer; got %q", key, trimmed)
+	}
+	return value, nil
 }
 
 // resolveAPIKey reads the service credential; API_KEY is required and must

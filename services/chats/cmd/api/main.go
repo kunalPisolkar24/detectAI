@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	chatsconnect "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/connect"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/mongo"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/redis"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
@@ -46,6 +47,10 @@ func main() {
 		redis.NewEntries(cacheClient),
 		slog.Default(),
 	)
+	limits := chatsconnect.Limits{
+		Create: cfg.RateLimitCreateMax,
+		Write:  cfg.RateLimitWriteMax,
+	}
 
 	protocols := new(http.Protocols)
 	protocols.SetHTTP1(true)
@@ -53,7 +58,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:      ":" + strconv.Itoa(cfg.Port),
-		Handler:   router.New(dbClient, service, cfg.APIKey),
+		Handler:   router.New(dbClient, service, cfg.APIKey, redis.NewLimiter(cacheClient), limits, slog.Default()),
 		Protocols: protocols,
 	}
 

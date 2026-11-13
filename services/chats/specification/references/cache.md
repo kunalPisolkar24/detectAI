@@ -38,11 +38,11 @@ Values are JSON blobs written from Go structs and read with the defensive-decode
 
 `chats:rate_limit:{userId}:{scope}:{windowId}` — per-minute fixed-window burst counters, one key per user and scope: `create` covers `CreateChat`, `write` covers `SaveUserMessage` + `SaveAnalysisMessage` as one shared budget (an analysis flow does 2–4 writes). Reads are not limited in v1 — defer until load evidence asks for a `read` scope.
 
-Incremented atomically through the same Lua `INCRBY` + `EXPIREAT` script the web limiter runs in production — non-atomic INCR-then-EXPIRE can leak immortal keys. TTL ~2 minutes past the window edge; window ids are epoch minutes.
+Incremented atomically through the same Lua `INCRBY` + `EXPIREAT` script the web limiter runs in production — non-atomic INCR-then-EXPIRE can leak immortal keys. The window is one minute and the window id is the epoch minute it opens at; the TTL runs to the window edge plus a two-minute grace.
 
-The numbers are deployment-owned: limits resolve through the config plane (`RATE_LIMIT_*` — SSM parameters in prod, `infra/.env` in dev), never pinned in code or here, with the config factory failing closed to conservative defaults when keys are unset.
+The numbers are deployment-owned: limits resolve through the config plane (`RATE_LIMIT_CREATE_MAX` and `RATE_LIMIT_WRITE_MAX` — SSM parameters in prod, `infra/.env` in dev), never pinned in code or here, with the config factory failing closed to conservative defaults (10 creates and 60 writes per minute) when keys are unset. A key set to a malformed or non-positive number fails the boot.
 
-Failure rule — **fail open**: Redis down, timeout, or throttle means the check is skipped, counted, and logged. A cache-plane blip must never surface as `RESOURCE_EXHAUSTED`.
+Failure rule — **fail open**: Redis down, timeout, or throttle means the check is skipped, counted, and logged. A cache-plane blip must never surface as `RESOURCE_EXHAUSTED`. The counter call carries its own 250ms deadline, so a fault costs a fraction of a second instead of the driver's socket timeout.
 
 ## The full key inventory
 

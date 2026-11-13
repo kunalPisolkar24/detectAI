@@ -3,6 +3,7 @@ package router_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +12,8 @@ import (
 	"connectrpc.com/connect"
 	"connectrpc.com/grpchealth"
 
+	chatsconnect "github.com/kunalPisolkar24/detectAI/services/chats/internal/adapters/connect"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/router"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/store"
@@ -67,7 +70,17 @@ func (s stubService) GetChatHistory(context.Context, string, string, string, int
 
 func newServer(t *testing.T, database db.Database, service stubService) *httptest.Server {
 	t.Helper()
-	srv := httptest.NewServer(router.New(database, service, testAPIKey))
+	return newServerWithLimiter(t, database, service, allowAllLimiter{})
+}
+
+func newServerWithLimiter(t *testing.T, database db.Database, service stubService, limiter cache.Limiter) *httptest.Server {
+	t.Helper()
+	return newServerWithLogger(t, database, service, limiter, slog.Default())
+}
+
+func newServerWithLogger(t *testing.T, database db.Database, service stubService, limiter cache.Limiter, logger *slog.Logger) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(router.New(database, service, testAPIKey, limiter, chatsconnect.Limits{Create: 10, Write: 60}, logger))
 	t.Cleanup(srv.Close)
 	return srv
 }

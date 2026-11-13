@@ -1,6 +1,9 @@
 package cache
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 // prefix scopes every chats key on the shared instance; the namespace
 // convention is what keeps one instance safe for many services.
@@ -13,6 +16,14 @@ const (
 	ChatHeadTTL = 10 * time.Minute
 	ChatListTTL = 5 * time.Minute
 )
+
+// RateLimitWindow is the fixed window the burst counters run on; the window
+// id is the epoch minute it opens at.
+const RateLimitWindow = time.Minute
+
+// RateLimitGrace outlives the window edge, so a counter never expires while
+// its window still counts.
+const RateLimitGrace = 2 * time.Minute
 
 // ChatKey is the key of a chat's meta entry.
 func ChatKey(chatID string) string {
@@ -27,4 +38,9 @@ func ChatHeadKey(chatID string) string {
 // OwnerChatsKey is the key of an owner's sidebar list.
 func OwnerChatsKey(ownerID string) string {
 	return prefix + "user:" + ownerID + ":chats"
+}
+
+// RateLimitKey is the counter of an owner's calls in one scope and window.
+func RateLimitKey(ownerID, scope string, windowMinute int64) string {
+	return prefix + "rate_limit:" + ownerID + ":" + scope + ":" + strconv.FormatInt(windowMinute, 10)
 }
