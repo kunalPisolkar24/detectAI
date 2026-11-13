@@ -1,5 +1,6 @@
 """The ONNX Runtime loader: offline session and tokenizer builds from pulled artifacts."""
 
+import json
 import logging
 import time
 from collections.abc import Mapping, Sequence
@@ -15,6 +16,7 @@ from .loader import LoadedModel
 logger = logging.getLogger(__name__)
 
 _ONNX_MODEL_FILENAME = "model.onnx"
+_TOKENIZER_CONFIG_FILENAME = "tokenizer_config.json"
 
 
 class OnnxModelLoader:
@@ -37,16 +39,42 @@ class OnnxModelLoader:
         return loaded
 
     def _load(self, key: str, path: Path) -> LoadedModel:
-        """Build the session and the tokenizer, verify the providers, and pair them."""
+        """Build the session and the tokenizer, read the ceiling, verify the providers, and pair them."""
         started = time.perf_counter()
         try:
             session = self._session(path)
             tokenizer = self._tokenizer(path)
         except Exception as error:
             raise ModelLoadError(f"{key}: load failed from {path}: {error}") from error
+        max_sequence_length = self._max_sequence_length(key, path)
         self._log_effective_providers(key, session)
         logger.info("%s: loaded in %.1fs", key, time.perf_counter() - started)
-        return LoadedModel(key=key, session=session, tokenizer=tokenizer)
+        return LoadedModel(
+            key=key,
+            session=session,
+            tokenizer=tokenizer,
+            max_sequence_length=max_sequence_length,
+        )
+
+    def _max_sequence_length(self, key: str, path: Path) -> int:
+        """The model's declared sequence ceiling, read from the artifact's tokenizer config."""
+        config_path = path / _TOKENIZER_CONFIG_FILENAME
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise ModelLoadError(
+                f"{key}: unreadable {_TOKENIZER_CONFIG_FILENAME} in {path}: {error}"
+            ) from error
+        if not isinstance(config, dict):
+            raise ModelLoadError(f"{key}: {_TOKENIZER_CONFIG_FILENAME} in {path} is not an object")
+        # max_length is the length the model was trained at; model_max_length is only
+        # the position-embedding ceiling.
+        declared = config.get("max_length") or config.get("model_max_length")
+        if isinstance(declared, bool) or not isinstance(declared, int) or declared <= 0:
+            raise ModelLoadError(
+                f"{key}: no usable sequence length in {config_path}"
+            )
+        return declared
 
     def _session(self, path: Path) -> Any:
         """One InferenceSession from model.onnx; session options are never shared."""

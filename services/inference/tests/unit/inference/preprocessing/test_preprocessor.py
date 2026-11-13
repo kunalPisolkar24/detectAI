@@ -1,4 +1,6 @@
-"""The preparation facade: the window clamp is real, the admission and the cut rule are pending."""
+"""The preparation facade: admission, the window clamp, and the boundary-aligned cut."""
+
+import itertools
 
 import pytest
 
@@ -17,6 +19,26 @@ class StubTokenizer:
     sep_token_id = 50282
     special_token_count = 2
 
+    def __init__(self) -> None:
+        self.seen: list[str] = []
+
+    def encode(self, text: str) -> Encoding:
+        self.seen.append(text)
+        return _encoding(text.split(" "))
+
+
+def _encoding(words: list[str]) -> Encoding:
+    """A contiguous encoding: one token per word, the space before a word inside its span."""
+    offsets: list[tuple[int, int]] = []
+    ids: list[int] = []
+    cursor = 0
+    for index, word in enumerate(words):
+        end = cursor + len(word) + (1 if index else 0)
+        offsets.append((cursor, end))
+        ids.append(1000 + index)
+        cursor = end
+    return Encoding(ids=tuple(ids), offsets=tuple(offsets))
+
 
 def _preprocessor(**overrides: object) -> DocumentPreprocessor:
     kwargs: dict[str, object] = {
@@ -29,14 +51,14 @@ def _preprocessor(**overrides: object) -> DocumentPreprocessor:
     return DocumentPreprocessor(**kwargs)  # type: ignore[arg-type]
 
 
-def test_a_prepare_request_is_pending() -> None:
-    with pytest.raises(NotImplementedError):
-        _preprocessor().prepare("some text")
-
-
-def test_a_split_request_is_pending() -> None:
-    with pytest.raises(NotImplementedError):
-        _preprocessor().split("some text", Encoding(ids=(), offsets=()))
+def _words(count: int, sentence_every: int = 0) -> list[str]:
+    """Words, every nth one ending a sentence."""
+    return [
+        f"word{index}."
+        if sentence_every and (index + 1) % sentence_every == 0
+        else f"word{index}"
+        for index in range(count)
+    ]
 
 
 def test_the_preprocessor_holds_its_explicit_contract() -> None:
@@ -84,5 +106,142 @@ def test_a_ceiling_below_the_floor_is_refused() -> None:
         _preprocessor(chunk_token_limit=512, model_max_sequence_length=32)
 
 
+def test_a_window_with_no_room_for_content_is_refused() -> None:
+    class GreedyTokenizer(StubTokenizer):
+        special_token_count = 64
+
+    with pytest.raises(ValueError):
+        _preprocessor(tokenizer=GreedyTokenizer(), chunk_token_limit=64)
+
+
 def test_invalid_document_joins_the_preprocessing_tree() -> None:
     assert issubclass(InvalidDocument, PreprocessingError)
+
+
+def test_prepare_admits_tokenizes_and_windows_once() -> None:
+    tokenizer = StubTokenizer()
+    preprocessor = _preprocessor(tokenizer=tokenizer)
+    text = "One two three."
+
+    document = preprocessor.prepare(text)
+
+    assert tokenizer.seen == [text]
+    assert document.total_chars == len(text)
+    assert document.total_tokens == 3
+    assert len(document.chunks) == 1
+    assert document.chunks[0].token_ids == (50281, 1000, 1001, 1002, 50282)
+
+
+def test_split_windows_an_already_encoded_document() -> None:
+    words = _words(100)
+    encoding = _encoding(words)
+
+    chunks = _preprocessor(chunk_token_limit=64).split(" ".join(words), encoding)
+
+    assert [chunk.index for chunk in chunks] == [0, 1]
+
+
+@pytest.mark.parametrize("text", ["", "   \n  ", "\x00", "\x01\x02", " \x00 "])
+def test_a_blank_submission_is_refused(text: str) -> None:
+    with pytest.raises(InvalidDocument):
+        _preprocessor().prepare(text)
+
+
+def test_a_non_string_submission_is_refused() -> None:
+    with pytest.raises(InvalidDocument):
+        _preprocessor().prepare(None)  # type: ignore[arg-type]
+
+
+def test_an_oversized_submission_is_refused_before_any_tokenization() -> None:
+    tokenizer = StubTokenizer()
+    preprocessor = _preprocessor(tokenizer=tokenizer, max_text_chars=10)
+
+    with pytest.raises(InvalidDocument):
+        preprocessor.prepare("x" * 11)
+
+    assert tokenizer.seen == []
+
+
+def test_the_text_reaches_the_tokenizer_unmodified() -> None:
+    tokenizer = StubTokenizer()
+    preprocessor = _preprocessor(tokenizer=tokenizer)
+
+    preprocessor.prepare("  Hello world.  ")
+
+    assert tokenizer.seen == ["  Hello world.  "]
+
+
+def test_the_special_tokens_bracket_the_content_exactly_once() -> None:
+    words = _words(100)
+    encoding = _encoding(words)
+
+    chunks = _preprocessor(chunk_token_limit=64).split(" ".join(words), encoding)
+
+    assert chunks[0].token_ids[0] == 50281
+    assert chunks[0].token_ids[-1] == 50282
+    assert chunks[0].token_ids[1:-1] == encoding.ids[: chunks[0].token_count - 2]
+
+
+def test_no_chunk_exceeds_the_window() -> None:
+    words = _words(200, sentence_every=10)
+    encoding = _encoding(words)
+
+    chunks = _preprocessor(chunk_token_limit=64).split(" ".join(words), encoding)
+
+    assert all(chunk.token_count <= 64 for chunk in chunks)
+
+
+def test_the_chunks_tile_the_text_without_gaps_or_overlaps() -> None:
+    words = _words(200, sentence_every=10)
+    encoding = _encoding(words)
+
+    chunks = _preprocessor(chunk_token_limit=64).split(" ".join(words), encoding)
+
+    for previous, following in itertools.pairwise(chunks):
+        assert previous.char_end == following.char_start
+
+
+def test_a_cut_is_taken_at_the_last_boundary_in_the_upper_half() -> None:
+    words = _words(100, sentence_every=10)
+    encoding = _encoding(words)
+
+    chunks = _preprocessor(chunk_token_limit=64).split(" ".join(words), encoding)
+
+    # the window holds 62 content tokens; the last boundary inside it follows token 59
+    assert chunks[0].token_count == 62
+    assert chunks[1].char_start == chunks[0].char_end
+
+
+def test_a_document_without_boundaries_is_cut_hard() -> None:
+    words = _words(100)
+    encoding = _encoding(words)
+
+    chunks = _preprocessor(chunk_token_limit=64).split(" ".join(words), encoding)
+
+    assert chunks[0].token_count == 64
+    assert chunks[1].token_count == 40
+
+
+def test_short_sentences_do_not_produce_a_chunk_each() -> None:
+    words = _words(100, sentence_every=1)
+    encoding = _encoding(words)
+
+    chunks = _preprocessor(chunk_token_limit=64).split(" ".join(words), encoding)
+
+    # every token ends a sentence, yet the first chunk holds the whole window
+    assert chunks[0].token_count == 64
+    assert len(chunks) == 2
+
+
+def test_a_single_chunk_document() -> None:
+    words = _words(3)
+    encoding = _encoding(words)
+
+    chunks = _preprocessor(chunk_token_limit=64).split(" ".join(words), encoding)
+
+    assert len(chunks) == 1
+    assert chunks[0].token_count == 5
+
+
+def test_an_empty_encoding_windows_to_nothing() -> None:
+    assert _preprocessor().split("", Encoding(ids=(), offsets=())) == ()

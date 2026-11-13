@@ -35,4 +35,15 @@ class FastTokenizer:
 
     def encode(self, text: str) -> Encoding:
         """Tokenize without special tokens and return each token's character span."""
-        raise NotImplementedError
+        encoded = self._tokenizer(
+            text,
+            add_special_tokens=False,
+            return_offsets_mapping=True,
+            truncation=False,
+        )
+        return Encoding(
+            ids=tuple(int(token) for token in encoded["input_ids"]),
+            offsets=tuple(
+                (int(start), int(end)) for start, end in encoded["offset_mapping"]
+            ),
+        )

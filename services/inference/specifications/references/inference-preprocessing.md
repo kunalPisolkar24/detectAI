@@ -1,9 +1,9 @@
 # Inference — Preprocessing (design reference)
 
-Status: design reference for the preprocessing slice. Not yet implemented; the
-`app/` tree today serves health, denies unkeyed calls, and holds no chunking
-code. The `app/inference/preprocessing/` package, the `LoadedModel.max_sequence_length`
-field, and the `chunk_token_limit` knob are what this document specifies.
+Status: design reference for the preprocessing slice, implemented in
+`app/inference/preprocessing/` (the facade, the tokenizer port and its
+adapter, the results), `app/models/loading/` (the declared sequence
+ceiling), and the `chunk_token_limit` knob.
 
 The quarantined `services/inference/slop/` tree is the reference draft. Its
 `chunking/` package held a fixed-stride sliding window over token offsets,
@@ -29,8 +29,8 @@ the basis for the design decisions in §11.
 | --- | --- |
 | 1,000,000 chars → tokens (flare tokenizer) | 154,472 (~6.5 chars/token) |
 | Tokenize + offset mapping, 1M chars | 0.4–1.3 s (one blocking Rust call) |
-| Offsets → `np.int32` `(N, 2)` | 0.036 s, 1.24 MB (vs ~17 MB as Python tuples) |
-| Boundary scan over 154k tokens | 0.002 s |
+| Boundary scan over 220k tokens, pure Python | 0.09 s |
+| Boundary scan over 220k tokens, numpy | 0.08 s, of which 0.07 s builds the `int32` array |
 | Chunk planning, 244 chunks | 0.5 ms |
 | Per-chunk encoding (slice + specials), 244 chunks | 1.7 ms |
 | Two concurrent tokenizations of 1M chars | 0.64 s wall vs 0.50 s for one — **the Rust tokenizer releases the GIL** |
@@ -210,10 +210,15 @@ than silently produce meaningless chunks.
 
 `prepare` runs three steps and stops at the first failure:
 
-1. **Admit.** Not a string, empty, blank after `strip()`, or longer than
+1. **Admit.** Not a string, empty, blank, or longer than
    `max_text_chars` → `InvalidDocument`. The bound is a *character* bound and
    is checked before any tokenization, so an oversized submission costs
    nothing.
+   Blank means *no analysable content*: whitespace-only (Unicode whitespace,
+   as `str.strip()` sees it) and control-character-only alike. The rule is
+   `not text.strip() or not text.strip(_BLANK_CHARS)`, where `_BLANK_CHARS`
+   is the ASCII whitespace and control set — so `"\x00"` and `" \x00 "` are
+   refused while `"a\x00b"` is admitted.
    The text is **never rewritten**. The draft replaced control characters with
    spaces and stripped the result, which moved every subsequent character
    offset — `HighlightSpan` would then point into the sanitized text rather
@@ -224,37 +229,28 @@ than silently produce meaningless chunks.
 `split` is the chunking rule, and it takes the text alongside the encoding
 because the rule reads characters. The algorithm, in order:
 
-1. **A scalar view of the text.** `codes = np.frombuffer(text.encode("utf-32-le", errors="replace"), dtype=np.uint32)`.
-   UTF-32-LE encodes exactly one code point per 4 bytes, so `len(codes) ==
-   len(text)` — Python's scalar semantics, which is what the contract's
-   character offsets mean. `errors="replace"` keeps that length true for lone
-   surrogates, which `str.encode` refuses outright; a lone surrogate becomes
-   one replacement code point, so no offset shifts.
-2. **Offsets as an array.** `offs = np.asarray(encoding.offsets, dtype=np.int32)`,
-   shape `(N, 2)`. 1.24 MB at 154k tokens, against roughly 17 MB for the
-   equivalent list of Python tuples.
-3. **Soft boundaries.** Two vectorized tests over the token spans:
-   - the token's span **ends** on `.`, `!` or `?` — the next token starts a
-     new sentence;
-   - the token's span **starts** with `\n` — the next token starts a new line
-     or paragraph.
+1. **The cut points.** One walk over the token spans. A cut may follow
+   token *i* when:
+   - its span **ends** on `.`, `!` or `?` — the next token starts a new
+     sentence;
+   - the next token's span **starts** with `\n` — the next token starts a new
+     line or paragraph.
 
-   A boundary mask marks every token that *begins* a new sentence or line.
    The gaps between token spans are not used for this: the shipped byte-level
    tokenizers absorb whitespace into the following token's span, so the spans
    are contiguous and there are no gaps to find. The rule reads the characters
    the spans point at instead.
-4. **The cut.** Walk the token stream from the start. Fill a window of
+2. **The cut.** Walk the token stream from the start. Fill a window of
    `content_window` content tokens. If the window ends before the document
    does, look for the **last** soft boundary inside it. Cut there if that
    boundary is at least half a window in; otherwise cut hard at the window
    limit. The half-window floor is what stops a document of short sentences
    from producing a chunk per sentence — it prefers an aligned cut, but never
    at the cost of a mostly-empty chunk.
-5. **The chunk.** `token_ids = ([cls] + ids[start:end] + [sep])`, with
-   `char_start = offs[start, 0]` and `char_end = offs[end - 1, 1]`. Because
-   the offsets are contiguous, consecutive chunks tile the request text with
-   no gap and no overlap — which is what makes the contract's
+3. **The chunk.** `token_ids = ([cls] + ids[start:end] + [sep])`, with
+   `char_start = offsets[start][0]` and `char_end = offsets[end - 1][1]`.
+   Because the offsets are contiguous, consecutive chunks tile the request text
+   with no gap and no overlap — which is what makes the contract's
    "non-overlapping `highlight_spans`" fall out for free.
 
 Every step is deterministic: the same text and the same window always produce
@@ -289,21 +285,31 @@ The loader already reads the artifact directory, so it already knows where
 ```python
 _TOKENIZER_CONFIG_FILENAME = "tokenizer_config.json"
 
-def _max_sequence_length(self, path: Path) -> int:
-    config = json.loads((path / _TOKENIZER_CONFIG_FILENAME).read_text(encoding="utf-8"))
+def _max_sequence_length(self, key: str, path: Path) -> int:
+    config_path = path / _TOKENIZER_CONFIG_FILENAME
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ModelLoadError(
+            f"{key}: unreadable {_TOKENIZER_CONFIG_FILENAME} in {path}: {error}"
+        ) from error
+    if not isinstance(config, dict):
+        raise ModelLoadError(f"{key}: {_TOKENIZER_CONFIG_FILENAME} in {path} is not an object")
     declared = config.get("max_length") or config.get("model_max_length")
-    if not isinstance(declared, int) or declared <= 0:
-        raise ModelLoadError(f"{path}: no usable sequence length in {_TOKENIZER_CONFIG_FILENAME}")
+    if isinstance(declared, bool) or not isinstance(declared, int) or declared <= 0:
+        raise ModelLoadError(f"{key}: no usable sequence length in {config_path}")
     return declared
 ```
 
 `max_length` wins over `model_max_length` because it is the length the model
 was trained at; `model_max_length` is only the position-embedding ceiling.
-For the shipped artifacts: **flare 512**, **spark 8192**.
+For the shipped artifacts: **flare 512**, **spark 8192** (flare declares
+`max_length`, spark declares only `model_max_length`).
 
-A missing or malformed `tokenizer_config.json` fails the boot with
-`ModelLoadError`, which is the same fail-closed posture as a missing
-`model.onnx`.
+A missing, malformed, or lengthless `tokenizer_config.json` fails the boot
+with `ModelLoadError` — the same fail-closed posture as a missing
+`model.onnx`. The read sits outside the session/tokenizer try block, so the
+message names the model once rather than nesting inside the load failure.
 
 ### `app/config/settings.py` — one knob
 
@@ -360,8 +366,11 @@ classDiagram
 
     class DocumentPreprocessor {
         -tokenizer: Tokenizer
-        -window_tokens: int
+        -chunk_token_limit: int
+        -model_max_sequence_length: int
         -max_text_chars: int
+        -window_tokens: int
+        -content_tokens: int
         +prepare(text) PreparedDocument
         +split(text, encoding) tuple~Chunk, ...~
     }
@@ -443,8 +452,7 @@ sequenceDiagram
     P->>T: encode(text)
     T-->>P: Encoding(ids, offsets)
     P->>P: split(text, encoding)
-    P->>P: codes = utf-32-le view, offs = int32 (N,2)
-    P->>P: mark soft boundaries — sentence ends, line starts
+    P->>P: collect the cut points — sentence ends, line starts
     loop over the token stream
         P->>P: fill the window, cut at the last aligned boundary
         P->>P: token_ids = [CLS] + ids[start:end] + [SEP]
@@ -572,10 +580,16 @@ the CPU. The GPU wheel itself arrives with the engine slice.
 
 ## 9. Dependencies
 
-- `numpy` is promoted from a transitive dependency to a direct one in
-  `services/inference/pyproject.toml`. `split` imports it directly, and it is
-  what keeps a 154k-token document's offsets at 1.24 MB instead of roughly
-  17 MB.
+- `numpy` is **not** promoted. The cut rule is neighbour-aware — a cut follows
+  token *i* when its span ends a sentence, or when token *i+1*'s span opens a
+  line — so a vectorized form needs a shifted view and a validity mask, and
+  comes out longer than the plain walk. Measured on 220k tokens: 0.09 s in pure
+  Python against 0.08 s with numpy, of which 0.07 s is building the `int32`
+  array. The memory argument does not hold either: `Encoding.offsets` already
+  holds the tuples, so the array *adds* 1.24 MB rather than saving 17 MB.
+  numpy stays a transitive dependency of `onnxruntime` until the
+  postprocessing slice earns it — that slice aggregates per-token scores into
+  spans, which is where the arrays actually pay.
 - `transformers` is not new — the load slice already depends on it. The
   preprocessing package never imports it; the adapter receives the tokenizer
   by injection.
@@ -591,11 +605,11 @@ the CPU. The GPU wheel itself arrives with the engine slice.
   constructor's contract and the window clamp, then the admission rules and
   the chunking rule. The rule's cases are driven by hand-built `Encoding`
   values, with no tokenizer and no model files:
-  - `prepare` and `split` are pending
   - the constructor holds its explicit contract
   - the window is the smaller of the knob and the model's ceiling
   - a window below `MIN_SEQUENCE_LENGTH` fails at construction
   - `InvalidDocument` joins the `PreprocessingError` tree
+  - `prepare` admits, tokenizes once, and returns the totals and the chunks
   - empty, blank and non-string submissions → `InvalidDocument`
   - a submission over `max_text_chars` → `InvalidDocument`, and no
     tokenization is attempted
@@ -616,22 +630,25 @@ the CPU. The GPU wheel itself arrives with the engine slice.
   - `Chunk` and `PreparedDocument` are frozen pure data
   - `token_count` counts the sequence the model sees
 - `tests/unit/inference/preprocessing/test_tokenizer.py` — the adapter:
-  - `encode` is pending
   - the adapter holds its injected tokenizer and reads the special tokens
+  - `encode` calls the tokenizer once, with no special tokens and one span
+    per token
   - `Encoding` is frozen pure data
   - against the pulled artifacts in `models/`: `encode` returns IDs without
     special tokens and one span per token, the spans are contiguous and cover
     the text, `special_token_count` is 2
 - `tests/unit/models/loading/test_loader.py` — the extended `LoadedModel`:
   - the declared sequence length is read from `tokenizer_config.json`
-  - `max_length` wins over `model_max_length`; a missing or malformed config
-    → `ModelLoadError`
+  - `max_length` wins over `model_max_length`; a missing, malformed, or
+    lengthless config → `ModelLoadError`
 - `tests/unit/config/test_settings.py` — the knob: a valid value passes
   through, garbage fails closed to 512.
 - An end-to-end round-trip against the real tokenizer: for every chunk,
   `tokenizer.decode(chunk.token_ids[1:-1]) == text[chunk.char_start:chunk.char_end]`
   (verified exact against the shipped artifacts). This is the test that proves
-  the offsets and the chunk boundaries agree with the text.
+  the offsets and the chunk boundaries agree with the text. The artifact-backed
+  tests skip when `models/` is absent — it is gitignored, so a fresh clone has
+  no artifacts to read.
 
 No integration test this slice: the preprocessing package has no service
 surface to boot. Run with `make test-unit`.
@@ -649,8 +666,10 @@ surface to boot. Run with `make test-unit`.
    the window) is a compromise: aligned when it can be, full when it cannot.
    A stricter or looser floor is a one-constant change.
 4. **The text is validated, never rewritten.** The draft's sanitization broke
-   the offset contract. A control-character-only submission is treated as
-   blank and rejected.
+   the offset contract. Blank means *no analysable content* — whitespace-only
+   and control-character-only alike — so a control-character-only submission is
+   refused; a submission that carries content between the controls is kept as
+   it was sent.
 5. **No token ceiling.** `MAX_TEXT_CHARS` is the only admission bound, so a
    1M-character submission is admissible and yields ~303 chunks — about 7
    minutes on CPU for spark and 16 for flare. That is what the streaming RPC
@@ -699,3 +718,13 @@ surface to boot. Run with `make test-unit`.
 15. **The frozen data types hold tuples, not lists.** `Encoding`, `Chunk`
     and `PreparedDocument` are frozen dataclasses, and a frozen dataclass
     holding a list is only shallow-frozen. Tuples make the marker true.
+16. **The cut scan is plain Python.** The rule is neighbour-aware, so the
+    vectorized form needs a shifted view and a validity mask and comes out
+    longer than the walk it replaces. Measured on 220k tokens: 0.09 s against
+    0.08 s for numpy, of which 0.07 s is building the array. numpy stays a
+    transitive dependency until the postprocessing slice earns it — that slice
+    aggregates per-token scores into spans, which is where arrays pay.
+17. **The artifact-backed tests skip when `models/` is absent.** The pulled
+    artifacts are gitignored, so a fresh clone has none; the pure-logic tests
+    carry the rules and the round-trip carries the proof where the artifacts
+    are on the host.

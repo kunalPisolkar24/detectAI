@@ -13,6 +13,7 @@ class LoadedModel:
     key: str
     session: Any
     tokenizer: Any
+    max_sequence_length: int
 
 
 class ModelLoader(Protocol):

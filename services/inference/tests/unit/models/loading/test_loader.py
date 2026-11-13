@@ -1,5 +1,6 @@
 """The load plane: a sorted fail-fast walk builds every pair offline; typed failures name the key."""
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -9,8 +10,18 @@ import pytest
 from app.models import ModelLoadError, OnnxModelLoader
 from app.models.loading import onnx
 
-_FLARE = Path("/models/flare/onnx/fp32")
-_SPARK = Path("/models/spark/onnx/fp16")
+
+def _artifact(
+    root: Path, key: str, config: dict[str, Any] | None = None
+) -> Path:
+    """A pulled artifact dir: the loader reads the tokenizer config from it."""
+    path = root / key / "onnx" / "fp32"
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "tokenizer_config.json").write_text(
+        json.dumps(config if config is not None else {"max_length": 512}),
+        encoding="utf-8",
+    )
+    return path
 
 
 def _wiring(
@@ -66,103 +77,121 @@ def _loader(
 
 
 def test_every_pulled_model_resolves_to_a_runtime_pair(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     recorder: dict[str, list[Any]] = {}
     _wiring(monkeypatch, recorder)
     loader = _loader()
+    flare = _artifact(tmp_path, "flare")
+    spark = _artifact(tmp_path, "spark")
 
-    loaded = loader.load_all({"spark": _SPARK, "flare": _FLARE})
+    loaded = loader.load_all({"spark": spark, "flare": flare})
 
     assert list(loaded) == ["flare", "spark"]
     assert loaded["flare"].key == "flare"
-    assert loaded["flare"].tokenizer == f"tokenizer:{_FLARE}"
+    assert loaded["flare"].tokenizer == f"tokenizer:{flare}"
     assert loaded["flare"].session.get_providers() == ["CPUExecutionProvider"]
-    assert loaded["spark"].tokenizer == f"tokenizer:{_SPARK}"
+    assert loaded["spark"].tokenizer == f"tokenizer:{spark}"
     assert [entry["model_path"] for entry in recorder["sessions"]] == [
-        str(_FLARE / "model.onnx"),
-        str(_SPARK / "model.onnx"),
+        str(flare / "model.onnx"),
+        str(spark / "model.onnx"),
     ]
 
 
-def test_the_tokenizer_loads_strictly_offline(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_tokenizer_loads_strictly_offline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     recorder: dict[str, list[Any]] = {}
     _wiring(monkeypatch, recorder)
+    flare = _artifact(tmp_path, "flare")
 
-    _loader().load_all({"flare": _FLARE})
+    _loader().load_all({"flare": flare})
 
-    assert recorder["tokenizers"] == [{"path": str(_FLARE), "local_files_only": True}]
+    assert recorder["tokenizers"] == [{"path": str(flare), "local_files_only": True}]
 
 
-def test_the_providers_reach_the_session_as_a_list(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_providers_reach_the_session_as_a_list(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     recorder: dict[str, list[Any]] = {}
-    requested = ("CUDAExecutionProvider", "CPUExecutionProvider")
     _wiring(monkeypatch, recorder, effective=["CUDAExecutionProvider", "CPUExecutionProvider"])
+    flare = _artifact(tmp_path, "flare")
+    requested = ("CUDAExecutionProvider", "CPUExecutionProvider")
 
-    _loader(providers=requested).load_all({"flare": _FLARE})
+    _loader(providers=requested).load_all({"flare": flare})
 
     assert recorder["sessions"][0]["providers"] == list(requested)
 
 
 def test_a_zero_thread_budget_leaves_the_runtime_default(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     recorder: dict[str, list[Any]] = {}
     _wiring(monkeypatch, recorder)
+    flare = _artifact(tmp_path, "flare")
 
-    _loader().load_all({"flare": _FLARE})
+    _loader().load_all({"flare": flare})
 
     assert recorder["options"][0].intra_op_num_threads is None
 
 
 def test_a_seeded_thread_budget_reaches_fresh_options_per_session(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     recorder: dict[str, list[Any]] = {}
     _wiring(monkeypatch, recorder)
+    flare = _artifact(tmp_path, "flare")
+    spark = _artifact(tmp_path, "spark")
 
-    _loader(intra_op_threads=4).load_all({"flare": _FLARE, "spark": _SPARK})
+    _loader(intra_op_threads=4).load_all({"flare": flare, "spark": spark})
 
     assert len(recorder["options"]) == 2
     assert all(options.intra_op_num_threads == 4 for options in recorder["options"])
 
 
 def test_a_session_failure_dies_typed_and_ends_the_walk(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     recorder: dict[str, list[Any]] = {}
-    _wiring(monkeypatch, recorder, session_fail=str(_SPARK / "model.onnx"))
+    _wiring(monkeypatch, recorder, session_fail=str(_artifact(tmp_path, "spark") / "model.onnx"))
     loader = _loader()
+    flare = _artifact(tmp_path, "flare")
+    spark = _artifact(tmp_path, "spark")
 
     with pytest.raises(ModelLoadError) as raised:
-        loader.load_all({"flare": _FLARE, "spark": _SPARK})
+        loader.load_all({"flare": flare, "spark": spark})
 
     assert "spark" in str(raised.value)
     assert isinstance(raised.value.__cause__, RuntimeError)
     assert [entry["model_path"] for entry in recorder["sessions"]] == [
-        str(_FLARE / "model.onnx")
+        str(flare / "model.onnx")
     ]
 
 
-def test_a_tokenizer_failure_dies_typed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_tokenizer_failure_dies_typed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     recorder: dict[str, list[Any]] = {}
-    _wiring(monkeypatch, recorder, tokenizer_fail=str(_SPARK))
+    _wiring(monkeypatch, recorder, tokenizer_fail=str(_artifact(tmp_path, "spark")))
+    flare = _artifact(tmp_path, "flare")
+    spark = _artifact(tmp_path, "spark")
 
     with pytest.raises(ModelLoadError) as raised:
-        _loader().load_all({"flare": _FLARE, "spark": _SPARK})
+        _loader().load_all({"flare": flare, "spark": spark})
 
     assert "spark" in str(raised.value)
     assert isinstance(raised.value.__cause__, RuntimeError)
 
 
 def test_a_provider_mismatch_warns_and_proceeds(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, tmp_path: Path
 ) -> None:
     recorder: dict[str, list[Any]] = {}
     _wiring(monkeypatch, recorder, effective=["CPUExecutionProvider"])
+    flare = _artifact(tmp_path, "flare")
 
     loaded = _loader(providers=("CUDAExecutionProvider", "CPUExecutionProvider")).load_all(
-        {"flare": _FLARE}
+        {"flare": flare}
     )
 
     assert list(loaded) == ["flare"]
@@ -170,11 +199,90 @@ def test_a_provider_mismatch_warns_and_proceeds(
 
 
 def test_matching_providers_log_without_a_warning(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, tmp_path: Path
 ) -> None:
     recorder: dict[str, list[Any]] = {}
     _wiring(monkeypatch, recorder, effective=["CPUExecutionProvider"])
+    flare = _artifact(tmp_path, "flare")
 
-    _loader().load_all({"flare": _FLARE})
+    _loader().load_all({"flare": flare})
 
     assert not [message for message in caplog.messages if "mismatch" in message]
+
+
+def test_the_declared_sequence_length_comes_from_the_tokenizer_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    recorder: dict[str, list[Any]] = {}
+    _wiring(monkeypatch, recorder)
+    flare = _artifact(tmp_path, "flare", {"max_length": 512})
+
+    loaded = _loader().load_all({"flare": flare})
+
+    assert loaded["flare"].max_sequence_length == 512
+
+
+def test_the_training_length_wins_over_the_position_ceiling(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    recorder: dict[str, list[Any]] = {}
+    _wiring(monkeypatch, recorder)
+    flare = _artifact(tmp_path, "flare", {"max_length": 512, "model_max_length": 8192})
+
+    loaded = _loader().load_all({"flare": flare})
+
+    assert loaded["flare"].max_sequence_length == 512
+
+
+def test_the_position_ceiling_is_read_when_no_training_length_is_declared(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    recorder: dict[str, list[Any]] = {}
+    _wiring(monkeypatch, recorder)
+    flare = _artifact(tmp_path, "flare", {"max_length": None, "model_max_length": 8192})
+
+    loaded = _loader().load_all({"flare": flare})
+
+    assert loaded["flare"].max_sequence_length == 8192
+
+
+def test_a_missing_tokenizer_config_dies_typed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    recorder: dict[str, list[Any]] = {}
+    _wiring(monkeypatch, recorder)
+    flare = tmp_path / "flare" / "onnx" / "fp32"
+    flare.mkdir(parents=True)
+
+    with pytest.raises(ModelLoadError) as raised:
+        _loader().load_all({"flare": flare})
+
+    assert "flare" in str(raised.value)
+
+
+def test_a_malformed_tokenizer_config_dies_typed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    recorder: dict[str, list[Any]] = {}
+    _wiring(monkeypatch, recorder)
+    flare = tmp_path / "flare" / "onnx" / "fp32"
+    flare.mkdir(parents=True)
+    (flare / "tokenizer_config.json").write_text("{not json", encoding="utf-8")
+
+    with pytest.raises(ModelLoadError) as raised:
+        _loader().load_all({"flare": flare})
+
+    assert "flare" in str(raised.value)
+
+
+def test_a_tokenizer_config_without_a_usable_length_dies_typed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    recorder: dict[str, list[Any]] = {}
+    _wiring(monkeypatch, recorder)
+    flare = _artifact(tmp_path, "flare", {"model_max_length": 0})
+
+    with pytest.raises(ModelLoadError) as raised:
+        _loader().load_all({"flare": flare})
+
+    assert "flare" in str(raised.value)
