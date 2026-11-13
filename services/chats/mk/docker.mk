@@ -5,16 +5,41 @@ REDIS_ENV_FILE := $(if $(wildcard ../../infra/docker/redis/.env),../../infra/doc
 REDIS_COMPOSE := docker compose --env-file $(REDIS_ENV_FILE) -f ../../infra/docker/redis/compose.yml
 REDIS_PORT_FILE := $(shell sed -n 's/^REDIS_PORT=//p' $(REDIS_ENV_FILE) 2>/dev/null)
 
-.PHONY: db-up db-down cache-up cache-down clean help-docker
+ENV_FILE := $(if $(wildcard infra/.env),infra/.env,infra/.env.example)
+COMPOSE := docker compose --env-file $(ENV_FILE) -f infra/compose.yml
+PROJECT := detectai-chats
+
+.PHONY: build up down logs ps db-up db-down cache-up cache-down clean help-docker
 
 help-docker:
 	@echo "Docker commands (mk/docker.mk):"
+	@echo "  build      build the Docker image ($(PROJECT))"
+	@echo "  up         db-up + cache-up, then compose up --build -d (the flick rides infra/.env; compose run -e for one-offs)"
+	@echo "  down       compose down; the datastores keep running under their own verbs"
+	@echo "  logs       compose logs -f (chats)"
+	@echo "  ps         compose ps"
 	@echo "  db-up      start the local mongo (a running one is left untouched; port lives in infra/docker/mongo/.env)"
 	@echo "  db-down    mongo compose down (the volume and its data stay)"
 	@echo "  cache-up   start the local redis (a running one is left untouched; port lives in infra/docker/redis/.env)"
 	@echo "  cache-down redis compose down (the cache is ephemeral — its contents go with it)"
-	@echo "  clean      db-down + cache-down + drop the mongo volume (the data goes with it)"
+	@echo "  clean      down + db-down + cache-down + drop the mongo volume (the data goes with it)"
 	@echo ""
+
+build:
+	docker build -t $(PROJECT) .
+
+up: db-up cache-up
+	$(COMPOSE) up --build -d
+	$(COMPOSE) ps
+
+down:
+	$(COMPOSE) down --remove-orphans
+
+logs:
+	$(COMPOSE) logs -f chats
+
+ps:
+	$(COMPOSE) ps
 
 db-up:
 	@if $(MONGO_COMPOSE) ps --services 2>/dev/null | grep -qx mongo; then \
@@ -24,7 +49,7 @@ db-up:
 	fi
 	@echo ""
 	@echo "  uri     mongodb://localhost:$(or $(MONGO_PORT),$(MONGO_PORT_FILE),27017)"
-	@echo "  next    MONGO_URI=mongodb://localhost:$(or $(MONGO_PORT),$(MONGO_PORT_FILE),27017) MONGO_DATABASE=chat_db in infra/.env, then make run"
+	@echo "  next    MONGO_URI=mongodb://host.docker.internal:$(or $(MONGO_PORT),$(MONGO_PORT_FILE),27017) MONGO_DATABASE=chat_db in infra/.env, then make run"
 
 db-down:
 	$(MONGO_COMPOSE) down --remove-orphans
@@ -37,11 +62,12 @@ cache-up:
 	fi
 	@echo ""
 	@echo "  addr    localhost:$(or $(REDIS_PORT),$(REDIS_PORT_FILE),6379)"
-	@echo "  next    REDIS_ENDPOINT=redis://localhost:$(or $(REDIS_PORT),$(REDIS_PORT_FILE),6379) in infra/.env, then make run"
+	@echo "  next    REDIS_ENDPOINT=redis://host.docker.internal:$(or $(REDIS_PORT),$(REDIS_PORT_FILE),6379) in infra/.env, then make run"
 
 cache-down:
 	$(REDIS_COMPOSE) down --remove-orphans
 
 clean:
+	$(COMPOSE) down --remove-orphans --volumes
 	$(MONGO_COMPOSE) down --remove-orphans --volumes
 	$(REDIS_COMPOSE) down --remove-orphans --volumes

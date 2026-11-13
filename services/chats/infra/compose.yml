@@ -1,0 +1,36 @@
+name: chats
+
+services:
+  chats:
+    image: detectai-chats:latest
+    container_name: detectai-chats
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 15s
+    env_file:
+      - .env
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    environment:
+      PORT: "8090"
+      MONGO_URI: "${MONGO_URI:-mongodb://host.docker.internal:27017}"
+      MONGO_DATABASE: "${MONGO_DATABASE:-chat_db}"
+      REDIS_ENDPOINT: "${REDIS_ENDPOINT:-redis://host.docker.internal:6379}"
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "/app/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    ports:
+      - "${PORT:-8090}:8090"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
