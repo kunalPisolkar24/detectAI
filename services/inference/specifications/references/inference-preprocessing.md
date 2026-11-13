@@ -2,7 +2,7 @@
 
 Status: design reference for the preprocessing slice. Not yet implemented; the
 `app/` tree today serves health, denies unkeyed calls, and holds no chunking
-code. The `app/preprocessing/` package, the `LoadedModel.max_sequence_length`
+code. The `app/inference/preprocessing/` package, the `LoadedModel.max_sequence_length`
 field, and the `chunk_token_limit` knob are what this document specifies.
 
 The quarantined `services/inference/slop/` tree is the reference draft. Its
@@ -65,16 +65,16 @@ Chunk counts at 1M chars (154,472 tokens):
 
 | slop name | Design name | Module | Responsibility |
 | --- | --- | --- | --- |
-| `chunking/protocol.py` — `TokenChunker` | `Tokenizer` | `app/preprocessing/tokenizer.py` | A narrow port: the tokenizer surface preparation actually needs, and nothing else |
-| `chunking/bert_chunker.py` — `BertTokenChunker` | `FastTokenizer` | `app/preprocessing/tokenizer.py` | The only module that knows the HF calling convention; adapts a tokenizer to the `Tokenizer` port |
-| the draft's implicit `(ids, offsets)` pair | `Encoding` | `app/preprocessing/tokenizer.py` | A named frozen type for the tokenizer's output; the draft returned a loose pair whose order meant nothing |
+| `chunking/protocol.py` — `TokenChunker` | `Tokenizer` | `app/inference/preprocessing/tokenizer.py` | A narrow port: the tokenizer surface preparation actually needs, and nothing else |
+| `chunking/bert_chunker.py` — `BertTokenChunker` | `FastTokenizer` | `app/inference/preprocessing/tokenizer.py` | The only module that knows the HF calling convention; adapts a tokenizer to the `Tokenizer` port |
+| the draft's implicit `(ids, offsets)` pair | `Encoding` | `app/inference/preprocessing/tokenizer.py` | A named frozen type for the tokenizer's output; the draft returned a loose pair whose order meant nothing |
 | `chunking/regex_chunker.py` — `RegexTokenChunker` | **Deleted** | — | It existed only because the draft's spark model shipped a pickled sklearn vectorizer; both models ship HF tokenizers now |
 | `chunking/sliding_window.py` — `build_sliding_chunks` | **Deleted** | — | A fixed-stride window over a uniform grid; replaced by boundary-aligned cuts (§3) |
-| `chunking/planner.py` — `ChunkPlanner` | `DocumentPreprocessor.split` | `app/preprocessing/preprocessor.py` | Folded in: the draft's planner was a wrapper carrying four positional config arguments and had exactly one caller |
+| `chunking/planner.py` — `ChunkPlanner` | `DocumentPreprocessor.split` | `app/inference/preprocessing/preprocessor.py` | Folded in: the draft's planner was a wrapper carrying four positional config arguments and had exactly one caller |
 | `chunking/factory.py` — `build_chunk_planner` | **Deleted** | — | The draft selected a strategy by `callable(tokenizer)`; a mis-shaped tokenizer silently degraded to the regex path |
-| `text_pipeline.py` — `TextPreparationPipeline` | `DocumentPreprocessor` | `app/preprocessing/preprocessor.py` | Admission + tokenization + windowing in one object; the draft's validator and planner were separate and both reconfigurable |
-| `validation.py` — `InputValidator.validate` | admission inside `DocumentPreprocessor.prepare` | `app/preprocessing/preprocessor.py` | The draft **rewrote** the text (`re.sub` then `.strip()`), shifting every character offset; this one validates and never mutates |
-| `domain/models.py` — `DocumentChunk` | `Chunk` | `app/preprocessing/chunk.py` | Carries token IDs and a character span; the draft carried text and no IDs |
+| `text_pipeline.py` — `TextPreparationPipeline` | `DocumentPreprocessor` | `app/inference/preprocessing/preprocessor.py` | Admission + tokenization + windowing in one object; the draft's validator and planner were separate and both reconfigurable |
+| `validation.py` — `InputValidator.validate` | admission inside `DocumentPreprocessor.prepare` | `app/inference/preprocessing/preprocessor.py` | The draft **rewrote** the text (`re.sub` then `.strip()`), shifting every character offset; this one validates and never mutates |
+| `domain/models.py` — `DocumentChunk` | `Chunk` | `app/inference/preprocessing/chunk.py` | Carries token IDs and a character span; the draft carried text and no IDs |
 | `CHUNK_TOKEN_STRIDE` | **Deleted** | — | Overlap is gone: aligned chunks are contiguous and non-overlapping by construction (§11.3) |
 | `MAX_GLOBAL_TOKENS` | **Deleted** | — | No token ceiling this slice; `MAX_TEXT_CHARS` remains the only admission bound |
 | `engines/flare.py`, `engines/spark.py` — re-tokenizing chunk text | **Deleted** | — | The draft tokenized the document for offsets and then tokenized each chunk's text again; the engine now consumes the IDs preparation already produced |
@@ -82,7 +82,7 @@ Chunk counts at 1M chars (154,472 tokens):
 
 ## 3. Components
 
-### `app/preprocessing/errors.py` — one raiser
+### `app/inference/preprocessing/errors.py` — one raiser
 
 ```
 PreprocessingError (root, RuntimeError) — catch this for blanket handling
@@ -93,7 +93,7 @@ PreprocessingError (root, RuntimeError) — catch this for blanket handling
 blank, or over the character bound. It is an input fault, not a service
 fault: the servicer maps it to `INVALID_ARGUMENT`.
 
-### `app/preprocessing/chunk.py` — the two results
+### `app/inference/preprocessing/chunk.py` — the two results
 
 ```python
 @dataclass(frozen=True)
@@ -113,7 +113,7 @@ class Chunk:
 
 @dataclass(frozen=True)
 class PreparedDocument:
-    """One prepared submission: the totals the stream's first event carries, plus the chunks."""
+    """One prepared submission: the document's totals, plus the chunks it was windowed into."""
 
     total_chars: int
     total_tokens: int
@@ -127,7 +127,7 @@ the chunks tile the text — and every reader would have to know that.
 `total_tokens` is the document's token count *before* windowing, which no
 chunk can supply.
 
-### `app/preprocessing/tokenizer.py` — the port, the adapter, and the encoding
+### `app/inference/preprocessing/tokenizer.py` — the port, the adapter, and the encoding
 
 ```python
 @dataclass(frozen=True)
@@ -177,7 +177,7 @@ places at once: preparation saying "510 content tokens per chunk" while the
 engine says "sequence length 512". Preparation owns the window, so preparation
 owns the specials.
 
-### `app/preprocessing/preprocessor.py` — the facade
+### `app/inference/preprocessing/preprocessor.py` — the facade
 
 ```python
 class DocumentPreprocessor:
@@ -401,8 +401,8 @@ classDiagram
 Boundary rules: `split` is pure — it reads the text and the encoding and
 returns chunks, touching no service state. `tokenizer.py` is the only module
 that knows the HF calling convention. `preprocessor.py` owns admission and
-composes the two. Nothing under `app/preprocessing/` imports `onnxruntime`,
-and nothing under `app/preprocessing/` imports `transformers`.
+composes the two. Nothing under `app/inference/preprocessing/` imports `onnxruntime`,
+and nothing under `app/inference/preprocessing/` imports `transformers`.
 
 ## 5. Boot flow
 
@@ -587,16 +587,19 @@ the CPU. The GPU wheel itself arrives with the engine slice.
 
 ## 10. Testing
 
-- `tests/unit/preprocessing/test_preprocessor.py` — admission and the
-  constructor, with a fake `Tokenizer`:
+- `tests/unit/inference/preprocessing/test_preprocessor.py` — the facade. The
+  constructor's contract and the window clamp, then the admission rules and
+  the chunking rule. The rule's cases are driven by hand-built `Encoding`
+  values, with no tokenizer and no model files:
+  - `prepare` and `split` are pending
+  - the constructor holds its explicit contract
+  - the window is the smaller of the knob and the model's ceiling
+  - a window below `MIN_SEQUENCE_LENGTH` fails at construction
+  - `InvalidDocument` joins the `PreprocessingError` tree
   - empty, blank and non-string submissions → `InvalidDocument`
   - a submission over `max_text_chars` → `InvalidDocument`, and no
     tokenization is attempted
-  - the window is clamped to the model's ceiling
-  - a knob below `MIN_SEQUENCE_LENGTH` fails at construction
   - the text reaches the tokenizer unmodified
-- `tests/unit/preprocessing/test_split.py` — the chunking rule, driven by
-  hand-built `Encoding` values, with no tokenizer and no model files:
   - the window is never exceeded; every chunk's content token count is within
     the window
   - chunks are contiguous and non-overlapping: chunk *k*'s `char_end` equals
@@ -609,11 +612,16 @@ the CPU. The GPU wheel itself arrives with the engine slice.
     produce one chunk per sentence
   - a single-chunk document
   - the special tokens bracket the content exactly once
-- `tests/unit/preprocessing/test_tokenizer.py` — the adapter, against the
-  pulled artifacts in `models/`:
-  - `encode` returns IDs without special tokens and one span per token
-  - the spans are contiguous and cover the text
-  - `special_token_count` is 2
+- `tests/unit/inference/preprocessing/test_chunk.py` — the results:
+  - `Chunk` and `PreparedDocument` are frozen pure data
+  - `token_count` counts the sequence the model sees
+- `tests/unit/inference/preprocessing/test_tokenizer.py` — the adapter:
+  - `encode` is pending
+  - the adapter holds its injected tokenizer and reads the special tokens
+  - `Encoding` is frozen pure data
+  - against the pulled artifacts in `models/`: `encode` returns IDs without
+    special tokens and one span per token, the spans are contiguous and cover
+    the text, `special_token_count` is 2
 - `tests/unit/models/loading/test_loader.py` — the extended `LoadedModel`:
   - the declared sequence length is read from `tokenizer_config.json`
   - `max_length` wins over `model_max_length`; a missing or malformed config

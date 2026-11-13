@@ -28,6 +28,10 @@ SPARK_MODEL_DIR = "onnx/fp16"
 # The submission bound default: the document-parser cap's scale (~1M chars).
 MAX_TEXT_CHARS_DEFAULT = 1_000_000
 
+# The chunk window default: the total sequence length per chunk, special
+# tokens included; the model ceiling clamps it down.
+CHUNK_TOKEN_LIMIT_DEFAULT = 512
+
 _GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 _LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
@@ -78,6 +82,10 @@ class Settings(BaseModel):
     # changes the analysis, so over-limit text is rejected instead.
     max_text_chars: int = MAX_TEXT_CHARS_DEFAULT
 
+    # The chunk window: the total sequence length per chunk, special tokens
+    # included; the model ceiling clamps it down.
+    chunk_token_limit: int = CHUNK_TOKEN_LIMIT_DEFAULT
+
     # Where pulled artifacts land; a volume mount in a container keeps restarts cheap.
     model_cache_dir: str = "./models"
 
@@ -118,6 +126,11 @@ class Settings(BaseModel):
     @classmethod
     def _fail_closed_text_limit(cls, value: object) -> int:
         return _positive_int_or_default(value, default=cls.model_fields["max_text_chars"].default)
+
+    @field_validator("chunk_token_limit", mode="before")
+    @classmethod
+    def _fail_closed_chunk_limit(cls, value: object) -> int:
+        return _positive_int_or_default(value, default=cls.model_fields["chunk_token_limit"].default)
 
     @field_validator("hf_token", mode="before")
     @classmethod

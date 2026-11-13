@@ -12,6 +12,7 @@ from app.config.adapters import dotenv as dotenv_module
 from app.config.adapters.dotenv import DotEnvAdapter
 from app.config.provider import DevConfig
 from app.config.settings import (
+    CHUNK_TOKEN_LIMIT_DEFAULT,
     FLARE_MODEL_DIR,
     FLARE_MODEL_REPO,
     FLARE_MODEL_REVISION,
@@ -70,6 +71,7 @@ _SERVER_KNOBS: dict[str, object] = {
     "grpc_port": 50051,
     "log_level": "INFO",
     "max_text_chars": MAX_TEXT_CHARS_DEFAULT,
+    "chunk_token_limit": CHUNK_TOKEN_LIMIT_DEFAULT,
 }
 
 
@@ -87,12 +89,14 @@ def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
             "GRPC_PORT": "50052",
             "LOG_LEVEL": "debug",
             "MAX_TEXT_CHARS": "2000000",
+            "CHUNK_TOKEN_LIMIT": "256",
         })
     )
 
     assert settings.grpc_port == 50052
     assert settings.log_level == "DEBUG"
     assert settings.max_text_chars == 2_000_000
+    assert settings.chunk_token_limit == 256
 
 
 @pytest.mark.parametrize(
@@ -108,6 +112,10 @@ def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
         ("max_text_chars", "-1"),
         ("max_text_chars", "0"),
         ("max_text_chars", "1.5"),
+        ("chunk_token_limit", "not a number"),
+        ("chunk_token_limit", "-1"),
+        ("chunk_token_limit", "0"),
+        ("chunk_token_limit", "1.5"),
     ],
 )
 def test_an_invalid_server_knob_falls_back_to_its_safe_default(field: str, seeded: str) -> None:
