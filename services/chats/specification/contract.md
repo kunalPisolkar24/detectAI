@@ -190,6 +190,15 @@ message GetChatHistoryResponse {
 
 Every RPC is ownership-checked: the interceptor resolves the caller's identity, and any `chat_id` not owned by that identity answers `NOT_FOUND` — one code for "missing" and "not yours".
 
+### Authentication
+
+Two headers, both set by the web BFF:
+
+- **`x-api-key`** — the service credential, compared in constant time against the `API_KEY` the config plane resolves. Missing or wrong answers `UNAUTHENTICATED` with the same message either way; the attempt is never echoed. The key is required at boot — an unset key would authenticate everyone.
+- **`x-user-id`** — the owner every RPC speaks for. Missing answers `UNAUTHENTICATED`.
+
+The api key authenticates the caller, which is what makes the asserted `x-user-id` trustworthy: only a holder of the key can name a user. The request body carries no `user_id` — the header is the only channel, so the pre-rebuild spoofing surface is closed. The health surface and the `/api/v1` probes stay unauthenticated.
+
 - **CreateChat** — inserts the chat; title = truncation of `initial_message` (the web never passes a title on create). Returns the `Chat` with an empty message list.
 - **GetChat** — meta + first page of messages (the `chats:chat:{id}:head` cache serves this) + `next_cursor`; the cursor chains straight into `GetChatHistory` for scrollback.
 - **ListChats** — newest-first by `updated_at`; `limit` clamped to the server default/cap. No cursor in v1 (additive field later, non-breaking).
@@ -251,9 +260,9 @@ connect-go mounted on the existing gin engine — the `grpchealth` surface and `
 5. **Two message verbs instead of one blob** — user messages are insert-only; analysis messages are upserts with a state machine. The payload split is real: analysis messages carry no content.
 6. **Idempotent writes on client-supplied ids** — duplicate user-message save = replay, analysis saves re-send the same id across the state machine, delete is idempotent.
 7. **No streaming RPCs** — chats is a synchronous store; the BFF streams inference directly.
+8. **Api key for the caller, trusted header for the user** — the only caller is the web BFF, so a shared secret plus the `x-user-id` header it asserts closes the spoofing surface without a second credential system. A JWT earns its keep only if the browser ever reaches chats directly.
 
 ## Open questions
 
-1. **Auth metadata mechanism** — forwarded NextAuth session, web-minted internal JWT, or trusted header. Blocks the interceptor and codegen; recommendation: web-minted short-lived internal JWT validated once in the interceptor.
-2. **Terminal-state enforcement** — reject non-replay writes into a terminal analysis state (`FAILED_PRECONDITION`) vs last-write-wins. Recommendation: enforce; the BFF's cancel-after-failure path can double-write the same terminal state, which the replay rule admits.
-3. **User-message replay** — return existing without overwrite (recommended) vs blind overwrite (preview-db's `put`).
+1. **Terminal-state enforcement** — reject non-replay writes into a terminal analysis state (`FAILED_PRECONDITION`) vs last-write-wins. Recommendation: enforce; the BFF's cancel-after-failure path can double-write the same terminal state, which the replay rule admits.
+2. **User-message replay** — return existing without overwrite (recommended) vs blind overwrite (preview-db's `put`).
