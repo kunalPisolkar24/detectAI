@@ -1,10 +1,10 @@
 # Inference — Chunk Overlap (design reference)
 
 Status: design reference for the overlap amendment to the preparation
-plane, implementing `chunk_token_overlap` in `app/config/settings.py`, the
-`context_tokens` member added to `Chunk`, the context-prefix construction
-in `app/inference/preprocessing/preprocessor.py`, and the fail-closed
-validation of the knob.
+plane, implemented in `app/config/settings.py` (the `chunk_token_overlap`
+knob), `app/inference/preprocessing/chunk.py` (the `context_tokens` member
+added to `Chunk`) and `app/inference/preprocessing/preprocessor.py` (the
+context-prefix construction and the validation of the knob).
 
 This is an amendment to the finished preparation slice, not a replacement
 of it. The chunking rule, the cut points and the admission bounds are
@@ -78,7 +78,7 @@ forward pass.
 
 | In scope | Out of scope |
 | --- | --- |
-| The `chunk_token_overlap` knob, fail-closed to 0 | Overlapping **scored regions** (see §2) |
+| The `chunk_token_overlap` knob: fail-closed to 0 when unparseable, a boot failure when out of range | Overlapping **scored regions** (see §2) |
 | The context prefix in a chunk's model input | The aggregation rule (postprocessing) |
 | `Chunk.context_tokens` — how much of the input is context | The window size itself (`CHUNK_TOKEN_LIMIT`) |
 | The reduced content window that pays for the context | Any change to the engine (it is unaffected) |
@@ -104,15 +104,26 @@ coverage.
 | Scored regions | disjoint, tile the document | overlap → coverage-weighted merge |
 | Aggregation | stays a plain weighted mean | needs the draft's delta-array |
 | The contract's non-overlapping `highlight_spans` | falls out for free | still satisfiable, with more machinery |
-| A sentence split anywhere? | **no** — the context is whole sentences | yes, the region edges cut mid-sentence |
+| A sentence split anywhere? | the **scored** region never is; the context prefix starts mid-sentence on purpose | yes, the region edges cut mid-sentence |
 | What it isolates | whether context helps the model | context *and* score-averaging at once |
 
 **This reference implements (A).** It answers the question the knob exists
 to ask — *does the model judge better with context?* — without changing
 the aggregation at the same time, and it keeps the property the finished
-preparation slice earned: no sentence is ever split, in the scored region
-or in the context. (B) remains available later, and the aggregation change
-it requires is confined to postprocessing.
+preparation slice earned: no sentence is ever split in the **scored**
+region. (B) remains available later, and the aggregation change it requires
+is confined to postprocessing.
+
+The context prefix, on the other hand, does start mid-sentence — on purpose.
+It is the tail of the previous chunk's scored region, cut at an arbitrary
+token index, so the model reads one *contiguous* stream of text: the
+sentence the chunk opens in the middle of, carried in from behind. A
+boundary-snapped context is not reachable inside a fixed token budget:
+snapping forward lands on the previous chunk's own cut, which yields a
+one-token context, and snapping backward extends the context past the knob
+and past the model's ceiling. The "no split sentence" property that matters
+is the one on the scored side, because that is what the contract's spans
+point at.
 
 Note what (A) does **not** buy: it does not give the model more of the
 document than one window holds. A 510-token chunk with 64 tokens of
@@ -120,6 +131,27 @@ overlap still shows the model 510 tokens. **Overlap buys context at the
 seams; the window buys document context** — spark declares 8,192, flare
 512. They are different levers, and the window is the one that answers
 "how do I judge a 1,000,000-character document".
+
+### The budget is shared
+
+The overlap and the scored content come out of the same budget: the content
+window is `window − special_token_count − overlap`, so a chunk's input
+always fits the model's declared ceiling — and the price of the context is
+fewer scored tokens per chunk, and therefore more chunks (the baseline table
+above).
+
+So the knob moves two things at once: more context for the model, and less
+content per chunk to judge. A sweep that holds `CHUNK_TOKEN_LIMIT` fixed
+does **not** hold the scored region fixed, and therefore measures the two
+together and cannot say which one moved the verdict.
+
+A clean sweep holds the *scored* region fixed and lets the input grow:
+`CHUNK_TOKEN_LIMIT = 512 + overlap` keeps 510 scored tokens per chunk while
+the context grows. That needs a window larger than the model's declared
+ceiling, so it is possible on spark (8,192) and impossible on flare (512,
+where the loader clamps the window to the model's own limit). **The knob
+means something slightly different on each model**, and only spark can
+answer "does the context help?" on its own.
 
 ---
 
@@ -149,16 +181,45 @@ CHUNK_TOKEN_OVERLAP_DEFAULT = 0
 chunk_token_overlap: int = CHUNK_TOKEN_OVERLAP_DEFAULT
 ```
 
-The knob fails closed to 0 on a bad value, following the `grpc_port` and
-`chunk_token_limit` pattern: a garbage or negative value becomes 0, so a
-bad seed never widens or shrinks the window unpredictably.
+The knob has two rules, and each lives where it can be seen.
 
-Whether the overlap leaves room for content is a *different* check, and it
-cannot be made in the config plane — only the preparer knows the model's
-declared ceiling. There it **fails loudly**: an overlap that would leave
-no room for content raises `ValueError` at construction, exactly as an
-unusable window already does, so the boot stops rather than producing
-meaningless chunks.
+**An unparseable value fails closed to 0**, following the `grpc_port` and
+`chunk_token_limit` pattern: a garbage or negative value becomes 0, so a
+bad seed never widens or shrinks the window unpredictably. Zero is a legal
+value here — it is the default and the identity — so the coercion is
+non-negative, not positive.
+
+**An out-of-range value fails the boot.** A value the window could never
+honour is a misconfiguration, not an unparseable seed, and the house
+pattern for a parseable value that contradicts a contract is a boot
+failure: an unknown provider name and a malformed model revision both take
+the boot down rather than falling back to something else. Silently running
+with no overlap when the operator asked for one is the same lie as silently
+running on the CPU when CUDA was requested.
+
+The config plane can bound the overlap against the only window it can see:
+the window is `min(CHUNK_TOKEN_LIMIT, the model's ceiling)`, so it can never
+exceed `CHUNK_TOKEN_LIMIT`, and no model could honour an overlap at or
+above it.
+
+```text
+chunk_token_overlap=1919 is not usable: the chunk window is at most
+CHUNK_TOKEN_LIMIT=512 tokens, so the overlap must be less than it
+```
+
+That bound is necessary, not sufficient. The exact one needs the model's
+ceiling, which only the preparer has: there an overlap that would leave no
+room for content **fails loudly**, raising `ValueError` at construction,
+exactly as an unusable window already does, so the boot stops rather than
+producing meaningless chunks. The largest usable overlap is
+`window − special_token_count − 1`:
+
+| Window | The largest usable overlap |
+| --- | --- |
+| 512 (flare's declared ceiling, and the default limit) | 509 |
+| 8192 (spark's declared ceiling, with the limit raised to match) | 8189 |
+
+Nothing clamps. A silent clamp is a lie about what the knob is doing.
 
 ### `app/inference/preprocessing/chunk.py` — one member added
 
@@ -184,6 +245,14 @@ the regions still tile the request text and the contract's non-overlapping
 spans still fall out. `context_tokens` says how much of `token_ids` is
 context, so a consumer can tell where the scored region begins inside the
 input.
+
+The field is not decoration: the chunk's `token_ids` is now a *mixture* —
+the context and the scored content are one sequence of IDs — and without a
+marker the chunk cannot say which part of it was judged. The producer
+publishes the split rather than leaving the consumer to reconstruct it. It
+is a count and not a span: the context's character span is not carried,
+because nothing needs it. The scored region already has one, and the
+context is only ever the tokens immediately before it.
 
 ### `app/inference/preprocessing/preprocessor.py` — the arithmetic
 
@@ -388,9 +457,12 @@ sequenceDiagram
 flowchart TD
     A["CHUNK_TOKEN_OVERLAP read"] --> B{"a usable non-negative int?"}
     B -- no --> Z["0 — the config plane fails closed"]
-    B -- yes --> C{"the overlap leaves room<br/>for content?"}
-    C -- no --> Y["ValueError at construction —<br/>the boot stops"]
-    C -- yes --> D["the overlap is honoured"]
+    B -- yes --> C{"the overlap is below<br/>CHUNK_TOKEN_LIMIT?"}
+    C -- no --> X["the boot fails — no window<br/>could honour it"]
+    C -- yes --> D["the overlap reaches the preparer"]
+    D --> E{"does it leave room<br/>for content?"}
+    E -- no --> Y["ValueError at construction —<br/>the boot stops"]
+    E -- yes --> F["the overlap is honoured"]
 ```
 
 ---
@@ -403,7 +475,10 @@ flowchart TD
 | `chunk_token_limit` | `CHUNK_TOKEN_LIMIT` | `512` | The total sequence length per chunk, special tokens included — unchanged, and the ceiling the overlap is subtracted from |
 
 `CHUNK_TOKEN_OVERLAP` must be added to `secrets.toml`'s `[ssm].keys` or it
-never reaches prod, exactly as `CHUNK_TOKEN_LIMIT` was.
+never reaches prod, exactly as `CHUNK_TOKEN_LIMIT` was, and to
+`infra/.env.example` for the dev plane. The field has to exist before the
+seeded value does anything: `from_provider` is consume-first, so a seeded
+key with no matching field is silently ignored.
 
 The knob is **inert until the artifacts discriminate** — with everything
 scoring ~99.9% AI, every overlap value yields the same document verdict.
@@ -414,13 +489,19 @@ once a working detector exists.
 
 ## 8. Testing
 
+- **`tests/unit/config/test_settings.py`** — the knob: the default is 0, a
+  valid value passes through, an unparseable or negative value fails closed
+  to 0, and an out-of-range value fails the boot. `0` is a *legal* seed
+  here, unlike every other knob: the "invalid seed" list for the others
+  includes `"0"`, and this one must not.
 - **`tests/unit/inference/preprocessing/test_preprocessor.py`** — the
   construction and the arithmetic:
   - the content window is the window minus the special tokens minus the
     overlap
-  - the input length never exceeds the window
-  - an overlap that leaves no content room fails at construction
-  - a negative or garbage overlap fails closed to 0
+  - the input length never exceeds the window, and is exactly the window for
+    every chunk but the first
+  - an overlap that leaves no content room fails at construction, with the
+    numbers in the message
   - the overlap is honoured when it is usable
 - **The overlap-0 identity** — with the knob at 0, the preprocessor's
   output is identical to the finished slice's: the same chunk count, the
@@ -465,18 +546,21 @@ once a working detector exists.
 3. **The default is 0** — the finished slice's behaviour, byte-identical.
    The knob exists to make the strategy a config decision, not to change
    the default.
-4. **A bad value fails closed to 0; an unusable one fails loudly.** A
-   garbage or negative overlap becomes 0 in the config plane. An overlap
-   that leaves no room for content raises `ValueError` at construction —
-   only the preparer knows the model's ceiling, and a boot that stops beats
-   a boot that serves meaningless chunks.
+4. **A bad value fails closed to 0; an unusable one fails the boot.** A
+   garbage or negative overlap becomes 0 in the config plane. An overlap at
+   or above `CHUNK_TOKEN_LIMIT` fails the boot there, because the window
+   can never exceed the limit. An overlap that leaves no room for content
+   raises `ValueError` at construction — only the preparer knows the
+   model's ceiling, and a boot that stops beats a boot that serves
+   meaningless chunks. Nothing clamps.
 5. **The overlap is subtracted from the content window**, so the input
    always fits the model's declared ceiling and the knob can never push a
    chunk past the model's trained length.
 6. **`Chunk.context_tokens` is a count, not a span.** The scored region is
    already described by `char_start` / `char_end`; the count says where
    the scored region begins inside the input, which is all a consumer
-   needs.
+   needs. It is not decoration either: `token_ids` is a mixture of context
+   and scored content, and the chunk publishes the split.
 7. **The context is clamped at the document start**, so the first chunk
    has no prefix and `context_tokens == 0`.
 8. **The cut rule is untouched.** The overlap changes what a chunk's input
@@ -492,3 +576,12 @@ once a working detector exists.
 10. **The engine is unaffected and stays that way.** It receives token-ID
     sequences; where they came from is not its concern. The window, the
     overlap and the aggregation are all upstream or downstream of it.
+11. **The knob is a cost knob before it is a quality knob.** At an overlap
+    of 64 a 1,000,000-character document goes from 303 to 347 chunks —
+    about 14% more engine time, which is about a minute more on spark's CPU
+    path. At 256 it doubles. Nobody should enable it casually.
+12. **Nothing consumes the knob at the boot yet.** The preparer registry
+    lands with the servicer slice, so `CHUNK_TOKEN_OVERLAP` is read by
+    `Settings` and nothing else until then. The config plane's guard is
+    therefore the only live validation in prod for now, which is why it
+    belongs there and not only in the preparer.
