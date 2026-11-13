@@ -42,6 +42,14 @@ func ValidateChatID(chatID string) error {
 	return nonEmpty("chat_id", chatID)
 }
 
+// ValidateContent validates a message body on its own.
+func ValidateContent(content string) error {
+	if err := nonEmpty("content", content); err != nil {
+		return err
+	}
+	return bounded("content", content, MaxContentLen)
+}
+
 // ValidateUserMessage validates the SaveUserMessage payload.
 func ValidateUserMessage(msg Message) error {
 	if err := ValidateChatID(msg.ChatID); err != nil {
@@ -53,10 +61,7 @@ func ValidateUserMessage(msg Message) error {
 	if msg.Analysis != nil {
 		return &ValidationError{Field: "analysis", Reason: "must be unset on a user message"}
 	}
-	if err := nonEmpty("content", msg.Content); err != nil {
-		return err
-	}
-	return bounded("content", msg.Content, MaxContentLen)
+	return ValidateContent(msg.Content)
 }
 
 // ValidateAnalysisMessage validates the SaveAnalysisMessage payload per state.
