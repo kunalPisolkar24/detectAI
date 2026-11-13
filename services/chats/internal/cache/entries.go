@@ -22,9 +22,9 @@ type Entries interface {
 	// PutChatList caches the sidebar list of an owner.
 	PutChatList(ctx context.Context, ownerID string, chats []store.ChatSummary) error
 	// Head returns the cached head page of a chat's messages.
-	Head(ctx context.Context, chatID string) ([]store.Message, bool, error)
+	Head(ctx context.Context, chatID string) (Page, bool, error)
 	// PutHead caches the head page of a chat's messages.
-	PutHead(ctx context.Context, chatID string, messages []store.Message) error
+	PutHead(ctx context.Context, chatID string, page Page) error
 	// InvalidateMeta drops a chat's meta entry; the rename path leaves the
 	// head page alone.
 	InvalidateMeta(ctx context.Context, chatID string) error
@@ -33,4 +33,11 @@ type Entries interface {
 	InvalidateChat(ctx context.Context, chatID string) error
 	// InvalidateOwner drops an owner's sidebar list.
 	InvalidateOwner(ctx context.Context, ownerID string) error
+}
+
+// Page is a chat's head page of messages and the cursor that chains to the
+// next one.
+type Page struct {
+	Messages   []store.Message `json:"messages"`
+	NextCursor string          `json:"next_cursor"`
 }

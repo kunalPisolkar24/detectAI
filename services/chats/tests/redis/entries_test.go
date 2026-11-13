@@ -180,7 +180,7 @@ func TestHeadRoundTripsTheAnalysisPayload(t *testing.T) {
 		},
 	}
 
-	if err := entries.PutHead(testContext(t), chatID, messages); err != nil {
+	if err := entries.PutHead(testContext(t), chatID, cache.Page{Messages: messages, NextCursor: "next-page"}); err != nil {
 		t.Fatalf("PutHead: %v", err)
 	}
 
@@ -191,13 +191,16 @@ func TestHeadRoundTripsTheAnalysisPayload(t *testing.T) {
 	if !found {
 		t.Fatal("found = false, want the cached head page")
 	}
-	if len(cached) != len(messages) {
-		t.Fatalf("cached head = %d messages, want %d", len(cached), len(messages))
+	if cached.NextCursor != "next-page" {
+		t.Errorf("next cursor = %q, want %q", cached.NextCursor, "next-page")
 	}
-	if cached[0].Content != "who wrote this" {
-		t.Errorf("content = %q, want %q", cached[0].Content, "who wrote this")
+	if len(cached.Messages) != len(messages) {
+		t.Fatalf("cached head = %d messages, want %d", len(cached.Messages), len(messages))
 	}
-	analysis := cached[1].Analysis
+	if cached.Messages[0].Content != "who wrote this" {
+		t.Errorf("content = %q, want %q", cached.Messages[0].Content, "who wrote this")
+	}
+	analysis := cached.Messages[1].Analysis
 	if analysis == nil || analysis.State != store.StateCompleted {
 		t.Fatalf("analysis = %+v, want the completed state", analysis)
 	}
@@ -225,7 +228,7 @@ func TestInvalidateMetaLeavesTheHead(t *testing.T) {
 	if err := entries.PutChat(ctx, sampleChat(chatID, ownerID)); err != nil {
 		t.Fatalf("PutChat: %v", err)
 	}
-	if err := entries.PutHead(ctx, chatID, []store.Message{}); err != nil {
+	if err := entries.PutHead(ctx, chatID, cache.Page{}); err != nil {
 		t.Fatalf("PutHead: %v", err)
 	}
 
@@ -249,7 +252,7 @@ func TestInvalidateChatClearsMetaAndHead(t *testing.T) {
 	if err := entries.PutChat(ctx, sampleChat(chatID, uuid.NewString())); err != nil {
 		t.Fatalf("PutChat: %v", err)
 	}
-	if err := entries.PutHead(ctx, chatID, []store.Message{}); err != nil {
+	if err := entries.PutHead(ctx, chatID, cache.Page{}); err != nil {
 		t.Fatalf("PutHead: %v", err)
 	}
 
@@ -293,7 +296,7 @@ func TestKeysCarryThePrefixAndTTL(t *testing.T) {
 	if err := entries.PutChat(ctx, sampleChat(chatID, ownerID)); err != nil {
 		t.Fatalf("PutChat: %v", err)
 	}
-	if err := entries.PutHead(ctx, chatID, []store.Message{}); err != nil {
+	if err := entries.PutHead(ctx, chatID, cache.Page{}); err != nil {
 		t.Fatalf("PutHead: %v", err)
 	}
 	if err := entries.PutChatList(ctx, ownerID, []store.ChatSummary{}); err != nil {

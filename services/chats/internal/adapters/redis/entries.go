@@ -59,21 +59,21 @@ func (e *Entries) PutChatList(ctx context.Context, ownerID string, chats []store
 }
 
 // Head returns the cached head page of a chat's messages.
-func (e *Entries) Head(ctx context.Context, chatID string) ([]store.Message, bool, error) {
-	var messages []store.Message
-	found, err := e.get(ctx, cache.ChatHeadKey(chatID), &messages)
+func (e *Entries) Head(ctx context.Context, chatID string) (cache.Page, bool, error) {
+	var page cache.Page
+	found, err := e.get(ctx, cache.ChatHeadKey(chatID), &page)
 	if err != nil || !found {
-		return nil, false, err
+		return cache.Page{}, false, err
 	}
-	if messages == nil {
-		messages = []store.Message{}
+	if page.Messages == nil {
+		page.Messages = []store.Message{}
 	}
-	return messages, true, nil
+	return page, true, nil
 }
 
 // PutHead caches the head page of a chat's messages.
-func (e *Entries) PutHead(ctx context.Context, chatID string, messages []store.Message) error {
-	return e.put(ctx, cache.ChatHeadKey(chatID), messages, cache.ChatHeadTTL)
+func (e *Entries) PutHead(ctx context.Context, chatID string, page cache.Page) error {
+	return e.put(ctx, cache.ChatHeadKey(chatID), page, cache.ChatHeadTTL)
 }
 
 // InvalidateMeta drops a chat's meta entry.
