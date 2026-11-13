@@ -10,7 +10,7 @@ import (
 	driver "github.com/redis/go-redis/v9"
 
 	chatscache "github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 )
 
 func newEntries(t *testing.T) *chatscache.Entries {
@@ -37,8 +37,8 @@ func testContext(t *testing.T) context.Context {
 	return ctx
 }
 
-func sampleChat(id, ownerID string) services.Chat {
-	return services.Chat{
+func sampleChat(id, ownerID string) models.Chat {
+	return models.Chat{
 		ID:        id,
 		UserID:    ownerID,
 		Title:     "a question about the repo",
@@ -103,7 +103,7 @@ func TestChatTreatsAnUndecodableValueAsAMiss(t *testing.T) {
 func TestChatListRoundTrips(t *testing.T) {
 	entries := newEntries(t)
 	ownerID := uuid.NewString()
-	chats := []services.ChatSummary{
+	chats := []models.ChatSummary{
 		{ID: uuid.NewString(), Title: "first", UpdatedAt: time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC)},
 		{ID: uuid.NewString(), Title: "second", UpdatedAt: time.Date(2026, 1, 2, 2, 0, 0, 0, time.UTC)},
 	}
@@ -133,7 +133,7 @@ func TestChatListRoundTripsAnEmptyList(t *testing.T) {
 	entries := newEntries(t)
 	ownerID := uuid.NewString()
 
-	if err := entries.PutChatList(testContext(t), ownerID, []services.ChatSummary{}); err != nil {
+	if err := entries.PutChatList(testContext(t), ownerID, []models.ChatSummary{}); err != nil {
 		t.Fatalf("PutChatList: %v", err)
 	}
 
@@ -152,34 +152,34 @@ func TestChatListRoundTripsAnEmptyList(t *testing.T) {
 func TestHeadRoundTripsTheAnalysisPayload(t *testing.T) {
 	entries := newEntries(t)
 	chatID := uuid.NewString()
-	messages := []services.Message{
+	messages := []models.Message{
 		{
 			ID:        uuid.NewString(),
 			ChatID:    chatID,
-			Role:      services.RoleUser,
+			Role:      models.RoleUser,
 			Content:   "who wrote this",
 			CreatedAt: time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC),
 		},
 		{
 			ID:        uuid.NewString(),
 			ChatID:    chatID,
-			Role:      services.RoleAssistant,
+			Role:      models.RoleAssistant,
 			CreatedAt: time.Date(2026, 1, 2, 3, 0, 1, 0, time.UTC),
-			Analysis: &services.Analysis{
-				State:           services.StateCompleted,
-				Model:           services.ModelSpark,
+			Analysis: &models.Analysis{
+				State:           models.StateCompleted,
+				Model:           models.ModelSpark,
 				SourceMessageID: "m1",
-				Result: &services.AnalysisResult{
-					Label:      services.LabelAI,
+				Result: &models.AnalysisResult{
+					Label:      models.LabelAI,
 					Confidence: 0.9,
-					Scores:     services.Scores{AI: 0.9, Human: 0.1},
+					Scores:     models.Scores{AI: 0.9, Human: 0.1},
 					Raw:        map[string]any{"nested": map[string]any{"score": 0.5}},
 				},
 			},
 		},
 	}
 
-	if err := entries.PutHead(testContext(t), chatID, services.Page{Messages: messages, NextCursor: "next-page"}); err != nil {
+	if err := entries.PutHead(testContext(t), chatID, models.Page{Messages: messages, NextCursor: "next-page"}); err != nil {
 		t.Fatalf("PutHead: %v", err)
 	}
 
@@ -200,10 +200,10 @@ func TestHeadRoundTripsTheAnalysisPayload(t *testing.T) {
 		t.Errorf("content = %q, want %q", cached.Messages[0].Content, "who wrote this")
 	}
 	analysis := cached.Messages[1].Analysis
-	if analysis == nil || analysis.State != services.StateCompleted {
+	if analysis == nil || analysis.State != models.StateCompleted {
 		t.Fatalf("analysis = %+v, want the completed state", analysis)
 	}
-	if analysis.Result == nil || analysis.Result.Label != services.LabelAI {
+	if analysis.Result == nil || analysis.Result.Label != models.LabelAI {
 		t.Errorf("result = %+v, want the ai verdict", analysis.Result)
 	}
 	if analysis.Result.Confidence != 0.9 {
@@ -227,7 +227,7 @@ func TestInvalidateMetaLeavesTheHead(t *testing.T) {
 	if err := entries.PutChat(ctx, sampleChat(chatID, ownerID)); err != nil {
 		t.Fatalf("PutChat: %v", err)
 	}
-	if err := entries.PutHead(ctx, chatID, services.Page{}); err != nil {
+	if err := entries.PutHead(ctx, chatID, models.Page{}); err != nil {
 		t.Fatalf("PutHead: %v", err)
 	}
 
@@ -251,7 +251,7 @@ func TestInvalidateChatClearsMetaAndHead(t *testing.T) {
 	if err := entries.PutChat(ctx, sampleChat(chatID, uuid.NewString())); err != nil {
 		t.Fatalf("PutChat: %v", err)
 	}
-	if err := entries.PutHead(ctx, chatID, services.Page{}); err != nil {
+	if err := entries.PutHead(ctx, chatID, models.Page{}); err != nil {
 		t.Fatalf("PutHead: %v", err)
 	}
 
@@ -272,7 +272,7 @@ func TestInvalidateOwnerClearsTheList(t *testing.T) {
 	ownerID := uuid.NewString()
 	ctx := testContext(t)
 
-	if err := entries.PutChatList(ctx, ownerID, []services.ChatSummary{{ID: uuid.NewString(), Title: "first"}}); err != nil {
+	if err := entries.PutChatList(ctx, ownerID, []models.ChatSummary{{ID: uuid.NewString(), Title: "first"}}); err != nil {
 		t.Fatalf("PutChatList: %v", err)
 	}
 
@@ -295,10 +295,10 @@ func TestKeysCarryThePrefixAndTTL(t *testing.T) {
 	if err := entries.PutChat(ctx, sampleChat(chatID, ownerID)); err != nil {
 		t.Fatalf("PutChat: %v", err)
 	}
-	if err := entries.PutHead(ctx, chatID, services.Page{}); err != nil {
+	if err := entries.PutHead(ctx, chatID, models.Page{}); err != nil {
 		t.Fatalf("PutHead: %v", err)
 	}
-	if err := entries.PutChatList(ctx, ownerID, []services.ChatSummary{}); err != nil {
+	if err := entries.PutChatList(ctx, ownerID, []models.ChatSummary{}); err != nil {
 		t.Fatalf("PutChatList: %v", err)
 	}
 

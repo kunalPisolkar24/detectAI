@@ -9,41 +9,44 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 )
 
 // fakeRepository records the calls the service makes and answers from the
 // function fields a test sets.
 type fakeRepository struct {
-	createChat          func(ctx context.Context, ownerID, title string) (services.Chat, error)
-	chat                func(ctx context.Context, ownerID, chatID string) (services.Chat, error)
-	chats               func(ctx context.Context, ownerID string, limit int) ([]services.ChatSummary, error)
-	renameChat          func(ctx context.Context, ownerID, chatID, title string) (services.ChatSummary, error)
+	createChat          func(ctx context.Context, ownerID, title string) (models.Chat, error)
+	chat                func(ctx context.Context, ownerID, chatID string) (models.Chat, error)
+	chats               func(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, error)
+	renameChat          func(ctx context.Context, ownerID, chatID, title string) (models.ChatSummary, error)
 	deleteChat          func(ctx context.Context, ownerID, chatID string) error
-	saveUserMessage     func(ctx context.Context, ownerID string, msg services.Message) (services.Message, error)
-	saveAnalysisMessage func(ctx context.Context, ownerID string, msg services.Message) (services.Message, error)
-	chatHistory         func(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]services.Message, string, error)
+	saveUserMessage     func(ctx context.Context, ownerID string, msg models.Message) (models.Message, error)
+	saveAnalysisMessage func(ctx context.Context, ownerID string, msg models.Message) (models.Message, error)
+	chatHistory         func(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]models.Message, string, error)
 
 	calls []string
 }
 
-func (f *fakeRepository) CreateChat(ctx context.Context, ownerID, title string) (services.Chat, error) {
+func (f *fakeRepository) CreateChat(ctx context.Context, ownerID, title string) (models.Chat, error) {
 	f.calls = append(f.calls, "CreateChat")
 	if f.createChat == nil {
-		return services.Chat{}, nil
+		return models.Chat{}, nil
 	}
 	return f.createChat(ctx, ownerID, title)
 }
 
-func (f *fakeRepository) Chat(ctx context.Context, ownerID, chatID string) (services.Chat, error) {
+func (f *fakeRepository) Chat(ctx context.Context, ownerID, chatID string) (models.Chat, error) {
 	f.calls = append(f.calls, "Chat")
 	if f.chat == nil {
-		return services.Chat{}, services.ErrNotFound
+		return models.Chat{}, models.ErrNotFound
 	}
 	return f.chat(ctx, ownerID, chatID)
 }
 
-func (f *fakeRepository) Chats(ctx context.Context, ownerID string, limit int) ([]services.ChatSummary, error) {
+func (f *fakeRepository) Chats(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, error) {
 	f.calls = append(f.calls, "Chats")
 	if f.chats == nil {
 		return nil, nil
@@ -51,10 +54,10 @@ func (f *fakeRepository) Chats(ctx context.Context, ownerID string, limit int) (
 	return f.chats(ctx, ownerID, limit)
 }
 
-func (f *fakeRepository) RenameChat(ctx context.Context, ownerID, chatID, title string) (services.ChatSummary, error) {
+func (f *fakeRepository) RenameChat(ctx context.Context, ownerID, chatID, title string) (models.ChatSummary, error) {
 	f.calls = append(f.calls, "RenameChat")
 	if f.renameChat == nil {
-		return services.ChatSummary{}, nil
+		return models.ChatSummary{}, nil
 	}
 	return f.renameChat(ctx, ownerID, chatID, title)
 }
@@ -67,7 +70,7 @@ func (f *fakeRepository) DeleteChat(ctx context.Context, ownerID, chatID string)
 	return f.deleteChat(ctx, ownerID, chatID)
 }
 
-func (f *fakeRepository) SaveUserMessage(ctx context.Context, ownerID string, msg services.Message) (services.Message, error) {
+func (f *fakeRepository) SaveUserMessage(ctx context.Context, ownerID string, msg models.Message) (models.Message, error) {
 	f.calls = append(f.calls, "SaveUserMessage")
 	if f.saveUserMessage == nil {
 		return msg, nil
@@ -75,7 +78,7 @@ func (f *fakeRepository) SaveUserMessage(ctx context.Context, ownerID string, ms
 	return f.saveUserMessage(ctx, ownerID, msg)
 }
 
-func (f *fakeRepository) SaveAnalysisMessage(ctx context.Context, ownerID string, msg services.Message) (services.Message, error) {
+func (f *fakeRepository) SaveAnalysisMessage(ctx context.Context, ownerID string, msg models.Message) (models.Message, error) {
 	f.calls = append(f.calls, "SaveAnalysisMessage")
 	if f.saveAnalysisMessage == nil {
 		return msg, nil
@@ -83,7 +86,7 @@ func (f *fakeRepository) SaveAnalysisMessage(ctx context.Context, ownerID string
 	return f.saveAnalysisMessage(ctx, ownerID, msg)
 }
 
-func (f *fakeRepository) ChatHistory(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]services.Message, string, error) {
+func (f *fakeRepository) ChatHistory(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]models.Message, string, error) {
 	f.calls = append(f.calls, "ChatHistory")
 	if f.chatHistory == nil {
 		return nil, "", nil
@@ -104,9 +107,9 @@ func countOf(calls []string, name string) int {
 
 // fakeCache is an in-memory cache plane that can be told to fail.
 type fakeCache struct {
-	chats map[string]services.Chat
-	lists map[string][]services.ChatSummary
-	heads map[string]services.Page
+	chats map[string]models.Chat
+	lists map[string][]models.ChatSummary
+	heads map[string]models.Page
 
 	readErr  error
 	writeErr error
@@ -116,21 +119,21 @@ type fakeCache struct {
 
 func newFakeCache() *fakeCache {
 	return &fakeCache{
-		chats: map[string]services.Chat{},
-		lists: map[string][]services.ChatSummary{},
-		heads: map[string]services.Page{},
+		chats: map[string]models.Chat{},
+		lists: map[string][]models.ChatSummary{},
+		heads: map[string]models.Page{},
 	}
 }
 
-func (f *fakeCache) Chat(_ context.Context, chatID string) (services.Chat, bool, error) {
+func (f *fakeCache) Chat(_ context.Context, chatID string) (models.Chat, bool, error) {
 	if f.readErr != nil {
-		return services.Chat{}, false, f.readErr
+		return models.Chat{}, false, f.readErr
 	}
 	chat, ok := f.chats[chatID]
 	return chat, ok, nil
 }
 
-func (f *fakeCache) PutChat(_ context.Context, chat services.Chat) error {
+func (f *fakeCache) PutChat(_ context.Context, chat models.Chat) error {
 	if f.writeErr != nil {
 		return f.writeErr
 	}
@@ -138,7 +141,7 @@ func (f *fakeCache) PutChat(_ context.Context, chat services.Chat) error {
 	return nil
 }
 
-func (f *fakeCache) ChatList(_ context.Context, ownerID string) ([]services.ChatSummary, bool, error) {
+func (f *fakeCache) ChatList(_ context.Context, ownerID string) ([]models.ChatSummary, bool, error) {
 	if f.readErr != nil {
 		return nil, false, f.readErr
 	}
@@ -146,7 +149,7 @@ func (f *fakeCache) ChatList(_ context.Context, ownerID string) ([]services.Chat
 	return chats, ok, nil
 }
 
-func (f *fakeCache) PutChatList(_ context.Context, ownerID string, chats []services.ChatSummary) error {
+func (f *fakeCache) PutChatList(_ context.Context, ownerID string, chats []models.ChatSummary) error {
 	if f.writeErr != nil {
 		return f.writeErr
 	}
@@ -154,15 +157,15 @@ func (f *fakeCache) PutChatList(_ context.Context, ownerID string, chats []servi
 	return nil
 }
 
-func (f *fakeCache) Head(_ context.Context, chatID string) (services.Page, bool, error) {
+func (f *fakeCache) Head(_ context.Context, chatID string) (models.Page, bool, error) {
 	if f.readErr != nil {
-		return services.Page{}, false, f.readErr
+		return models.Page{}, false, f.readErr
 	}
 	page, ok := f.heads[chatID]
 	return page, ok, nil
 }
 
-func (f *fakeCache) PutHead(_ context.Context, chatID string, page services.Page) error {
+func (f *fakeCache) PutHead(_ context.Context, chatID string, page models.Page) error {
 	if f.writeErr != nil {
 		return f.writeErr
 	}
@@ -198,19 +201,19 @@ func (f *fakeCache) InvalidateOwner(_ context.Context, ownerID string) error {
 	return nil
 }
 
-func newService(repo services.Repository, entries services.Cache) *services.ChatService {
+func newService(repo repository.Repository, entries cache.Cache) *services.ChatService {
 	return services.NewChatService(repo, entries, slog.New(slog.DiscardHandler))
 }
 
 func TestCreateChatDerivesTheTitleAndStoresTheFirstMessage(t *testing.T) {
 	var savedTitle string
-	var savedMessage services.Message
+	var savedMessage models.Message
 	repo := &fakeRepository{
-		createChat: func(_ context.Context, ownerID, title string) (services.Chat, error) {
+		createChat: func(_ context.Context, ownerID, title string) (models.Chat, error) {
 			savedTitle = title
-			return services.Chat{ID: "chat-1", UserID: ownerID, Title: title}, nil
+			return models.Chat{ID: "chat-1", UserID: ownerID, Title: title}, nil
 		},
-		saveUserMessage: func(_ context.Context, _ string, msg services.Message) (services.Message, error) {
+		saveUserMessage: func(_ context.Context, _ string, msg models.Message) (models.Message, error) {
 			savedMessage = msg
 			return msg, nil
 		},
@@ -255,11 +258,11 @@ func TestCreateChatRejectsAnEmptyMessage(t *testing.T) {
 
 func TestGetChatServesTheSecondCallFromTheCache(t *testing.T) {
 	repo := &fakeRepository{
-		chat: func(_ context.Context, ownerID, chatID string) (services.Chat, error) {
-			return services.Chat{ID: chatID, UserID: ownerID, Title: "a title"}, nil
+		chat: func(_ context.Context, ownerID, chatID string) (models.Chat, error) {
+			return models.Chat{ID: chatID, UserID: ownerID, Title: "a title"}, nil
 		},
-		chatHistory: func(_ context.Context, _ string, chatID, _ string, _ int) ([]services.Message, string, error) {
-			return []services.Message{{ID: "m1", ChatID: chatID, Role: services.RoleUser, Content: "hello"}}, "cursor-1", nil
+		chatHistory: func(_ context.Context, _ string, chatID, _ string, _ int) ([]models.Message, string, error) {
+			return []models.Message{{ID: "m1", ChatID: chatID, Role: models.RoleUser, Content: "hello"}}, "cursor-1", nil
 		},
 	}
 	service := newService(repo, newFakeCache())
@@ -292,12 +295,12 @@ func TestGetChatServesTheSecondCallFromTheCache(t *testing.T) {
 func TestGetChatRejectsAnotherOwnerOnACacheHit(t *testing.T) {
 	repo := &fakeRepository{}
 	entries := newFakeCache()
-	entries.chats["chat-1"] = services.Chat{ID: "chat-1", UserID: "owner-2", Title: "private"}
+	entries.chats["chat-1"] = models.Chat{ID: "chat-1", UserID: "owner-2", Title: "private"}
 	service := newService(repo, entries)
 
 	_, _, _, err := service.GetChat(context.Background(), "owner-1", "chat-1")
-	if !errors.Is(err, services.ErrNotFound) {
-		t.Fatalf("err = %v, want %v", err, services.ErrNotFound)
+	if !errors.Is(err, models.ErrNotFound) {
+		t.Fatalf("err = %v, want %v", err, models.ErrNotFound)
 	}
 	if len(repo.calls) != 0 {
 		t.Errorf("repository calls = %v, want none", repo.calls)
@@ -306,8 +309,8 @@ func TestGetChatRejectsAnotherOwnerOnACacheHit(t *testing.T) {
 
 func TestListChatsTrimsToTheLimit(t *testing.T) {
 	repo := &fakeRepository{
-		chats: func(_ context.Context, _ string, _ int) ([]services.ChatSummary, error) {
-			return []services.ChatSummary{{ID: "c1"}, {ID: "c2"}, {ID: "c3"}}, nil
+		chats: func(_ context.Context, _ string, _ int) ([]models.ChatSummary, error) {
+			return []models.ChatSummary{{ID: "c1"}, {ID: "c2"}, {ID: "c3"}}, nil
 		},
 	}
 	service := newService(repo, newFakeCache())
@@ -333,13 +336,13 @@ func TestListChatsTrimsToTheLimit(t *testing.T) {
 
 func TestRenameChatInvalidatesTheMetaAndTheOwnerList(t *testing.T) {
 	repo := &fakeRepository{
-		renameChat: func(_ context.Context, _ string, chatID, title string) (services.ChatSummary, error) {
-			return services.ChatSummary{ID: chatID, Title: title}, nil
+		renameChat: func(_ context.Context, _ string, chatID, title string) (models.ChatSummary, error) {
+			return models.ChatSummary{ID: chatID, Title: title}, nil
 		},
 	}
 	entries := newFakeCache()
-	entries.chats["chat-1"] = services.Chat{ID: "chat-1", UserID: "owner-1"}
-	entries.heads["chat-1"] = services.Page{Messages: []services.Message{{ID: "m1"}}}
+	entries.chats["chat-1"] = models.Chat{ID: "chat-1", UserID: "owner-1"}
+	entries.heads["chat-1"] = models.Page{Messages: []models.Message{{ID: "m1"}}}
 	service := newService(repo, entries)
 
 	if _, err := service.RenameChat(context.Background(), "owner-1", "chat-1", "a new title"); err != nil {
@@ -373,8 +376,8 @@ func TestRenameChatRejectsAnEmptyTitle(t *testing.T) {
 func TestDeleteChatInvalidatesTheChatAndTheOwnerList(t *testing.T) {
 	repo := &fakeRepository{}
 	entries := newFakeCache()
-	entries.chats["chat-1"] = services.Chat{ID: "chat-1", UserID: "owner-1"}
-	entries.heads["chat-1"] = services.Page{Messages: []services.Message{{ID: "m1"}}}
+	entries.chats["chat-1"] = models.Chat{ID: "chat-1", UserID: "owner-1"}
+	entries.heads["chat-1"] = models.Page{Messages: []models.Message{{ID: "m1"}}}
 	service := newService(repo, entries)
 
 	if err := service.DeleteChat(context.Background(), "owner-1", "chat-1"); err != nil {
@@ -415,9 +418,9 @@ func TestSaveAnalysisMessageRejectsACompletionWithoutAResult(t *testing.T) {
 	repo := &fakeRepository{}
 	service := newService(repo, newFakeCache())
 
-	_, err := service.SaveAnalysisMessage(context.Background(), "owner-1", "chat-1", "a1", time.Time{}, &services.Analysis{
-		State:           services.StateCompleted,
-		Model:           services.ModelSpark,
+	_, err := service.SaveAnalysisMessage(context.Background(), "owner-1", "chat-1", "a1", time.Time{}, &models.Analysis{
+		State:           models.StateCompleted,
+		Model:           models.ModelSpark,
 		SourceMessageID: "m1",
 	})
 	var validation *services.ValidationError
@@ -434,9 +437,9 @@ func TestSaveAnalysisMessageInvalidatesTheChat(t *testing.T) {
 	entries := newFakeCache()
 	service := newService(repo, entries)
 
-	if _, err := service.SaveAnalysisMessage(context.Background(), "owner-1", "chat-1", "a1", time.Time{}, &services.Analysis{
-		State:           services.StateRunning,
-		Model:           services.ModelSpark,
+	if _, err := service.SaveAnalysisMessage(context.Background(), "owner-1", "chat-1", "a1", time.Time{}, &models.Analysis{
+		State:           models.StateRunning,
+		Model:           models.ModelSpark,
 		SourceMessageID: "m1",
 	}); err != nil {
 		t.Fatalf("SaveAnalysisMessage: %v", err)
@@ -448,14 +451,14 @@ func TestSaveAnalysisMessageInvalidatesTheChat(t *testing.T) {
 
 func TestGetChatHistoryCachesTheFirstPageAndBypassesTheCacheForCursorPages(t *testing.T) {
 	repo := &fakeRepository{
-		chat: func(_ context.Context, ownerID, chatID string) (services.Chat, error) {
-			return services.Chat{ID: chatID, UserID: ownerID}, nil
+		chat: func(_ context.Context, ownerID, chatID string) (models.Chat, error) {
+			return models.Chat{ID: chatID, UserID: ownerID}, nil
 		},
-		chatHistory: func(_ context.Context, _ string, chatID, cursor string, _ int) ([]services.Message, string, error) {
+		chatHistory: func(_ context.Context, _ string, chatID, cursor string, _ int) ([]models.Message, string, error) {
 			if cursor != "" {
-				return []services.Message{{ID: "m3", ChatID: chatID}}, "cursor-2", nil
+				return []models.Message{{ID: "m3", ChatID: chatID}}, "cursor-2", nil
 			}
-			return []services.Message{{ID: "m1", ChatID: chatID}}, "cursor-1", nil
+			return []models.Message{{ID: "m1", ChatID: chatID}}, "cursor-1", nil
 		},
 	}
 	service := newService(repo, newFakeCache())
@@ -490,11 +493,11 @@ func TestGetChatHistoryCachesTheFirstPageAndBypassesTheCacheForCursorPages(t *te
 
 func TestGetChatHistoryTrimsTheCachedPageAndDerivesItsCursor(t *testing.T) {
 	repo := &fakeRepository{
-		chat: func(_ context.Context, ownerID, chatID string) (services.Chat, error) {
-			return services.Chat{ID: chatID, UserID: ownerID}, nil
+		chat: func(_ context.Context, ownerID, chatID string) (models.Chat, error) {
+			return models.Chat{ID: chatID, UserID: ownerID}, nil
 		},
-		chatHistory: func(_ context.Context, _ string, chatID, _ string, _ int) ([]services.Message, string, error) {
-			return []services.Message{
+		chatHistory: func(_ context.Context, _ string, chatID, _ string, _ int) ([]models.Message, string, error) {
+			return []models.Message{
 				{ID: "m3", ChatID: chatID, CreatedAt: time.Date(2026, 1, 2, 3, 0, 3, 0, time.UTC)},
 				{ID: "m2", ChatID: chatID, CreatedAt: time.Date(2026, 1, 2, 3, 0, 2, 0, time.UTC)},
 				{ID: "m1", ChatID: chatID, CreatedAt: time.Date(2026, 1, 2, 3, 0, 1, 0, time.UTC)},
@@ -523,11 +526,11 @@ func TestGetChatHistoryTrimsTheCachedPageAndDerivesItsCursor(t *testing.T) {
 
 func TestACacheReadFaultDegradesToTheRepository(t *testing.T) {
 	repo := &fakeRepository{
-		chat: func(_ context.Context, ownerID, chatID string) (services.Chat, error) {
-			return services.Chat{ID: chatID, UserID: ownerID, Title: "a title"}, nil
+		chat: func(_ context.Context, ownerID, chatID string) (models.Chat, error) {
+			return models.Chat{ID: chatID, UserID: ownerID, Title: "a title"}, nil
 		},
-		chatHistory: func(_ context.Context, _ string, chatID, _ string, _ int) ([]services.Message, string, error) {
-			return []services.Message{{ID: "m1", ChatID: chatID}}, "", nil
+		chatHistory: func(_ context.Context, _ string, chatID, _ string, _ int) ([]models.Message, string, error) {
+			return []models.Message{{ID: "m1", ChatID: chatID}}, "", nil
 		},
 	}
 	entries := newFakeCache()

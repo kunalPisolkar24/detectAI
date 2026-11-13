@@ -2,26 +2,21 @@
 package router
 
 import (
-	"context"
 	"log/slog"
 
 	connectrpc "connectrpc.com/connect"
 	"connectrpc.com/grpchealth"
 	"github.com/gin-gonic/gin"
 
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
 
-// Database is the readiness contract the probe needs; the mongo client
-// implements it.
-type Database interface {
-	Ping(ctx context.Context) error
-}
-
 // New builds the engine with the probe routes, the connect health surface, and the ChatService wire.
-func New(database Database, service services.Service, apiKey string, limiter services.Limiter, limits handlers.Limits, logger *slog.Logger) *gin.Engine {
+func New(database db.Database, service services.Service, apiKey string, limiter cache.Limiter, limits handlers.Limits, logger *slog.Logger) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 

@@ -1,5 +1,5 @@
 // Package cache owns the cache plane: the redis client, the cache-aside
-// entries surface, and the burst counter.
+// entries surface, the burst counter, and the contracts they implement.
 package cache
 
 import (

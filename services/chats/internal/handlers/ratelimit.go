@@ -11,7 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
 
@@ -47,7 +47,7 @@ func (l Limits) forScope(s scope) int {
 
 // NewRateLimitInterceptor enforces the per-user burst budgets. The check
 // fails open: a cache fault lets the call through.
-func NewRateLimitInterceptor(limiter services.Limiter, limits Limits, logger *slog.Logger) connect.UnaryInterceptorFunc {
+func NewRateLimitInterceptor(limiter cache.Limiter, limits Limits, logger *slog.Logger) connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			selected, limited := scopeByProcedure[req.Spec().Procedure]
@@ -78,7 +78,7 @@ func NewRateLimitInterceptor(limiter services.Limiter, limits Limits, logger *sl
 // logRefusal records the refusal once per exhausted budget per window. The
 // counter moves by one, so the first refusal of a window is limit+1; later
 // ones stay silent and a client hammering the limit cannot flood the logs.
-func logRefusal(logger *slog.Logger, ownerID string, selected scope, decision services.Decision) {
+func logRefusal(logger *slog.Logger, ownerID string, selected scope, decision cache.Decision) {
 	if decision.Count != decision.Limit+1 {
 		return
 	}
@@ -97,7 +97,7 @@ func ownerIDHash(ownerID string) string {
 }
 
 // rateLimitError answers an over-limit call with the retry hint.
-func rateLimitError(decision services.Decision) error {
+func rateLimitError(decision cache.Decision) error {
 	err := connect.NewError(connect.CodeResourceExhausted, errors.New("rate limit exceeded"))
 	err.Meta().Set("retry-after-ms", strconv.FormatInt(decision.RetryAfter.Milliseconds(), 10))
 	err.Meta().Set("x-ratelimit-limit", strconv.Itoa(decision.Limit))

@@ -11,6 +11,7 @@ import (
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/router"
@@ -32,7 +33,11 @@ func main() {
 
 	bootCtx, cancelBoot := context.WithTimeout(context.Background(), bootBudget)
 	defer cancelBoot()
-	dbClient, err := repository.Connect(bootCtx, cfg.MongoURI, cfg.MongoDatabase)
+	dbClient, err := db.Connect(bootCtx, cfg.MongoURI, cfg.MongoDatabase)
+	if err != nil {
+		log.Fatal(err)
+	}
+	repo, err := repository.New(bootCtx, dbClient.Database())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -42,7 +47,7 @@ func main() {
 	}
 
 	service := services.NewChatService(
-		repository.New(dbClient.Database()),
+		repo,
 		cache.NewEntries(cacheClient),
 		slog.Default(),
 	)

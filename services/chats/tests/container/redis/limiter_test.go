@@ -14,7 +14,7 @@ import (
 	chatscache "github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
 )
 
-func newLimiter(t *testing.T) *chatscache.Limiter {
+func newLimiter(t *testing.T) chatscache.Limiter {
 	t.Helper()
 	return chatscache.NewLimiter(connectLocal(t))
 }

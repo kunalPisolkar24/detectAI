@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 
 	chatshandlers "github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 	chatv1 "github.com/kunalPisolkar24/detectAI/services/chats/proto"
 )
@@ -19,40 +20,40 @@ const testAPIKey = "key-0123456789abcdef79"
 
 // stubService answers the RPCs the handler tests exercise.
 type stubService struct {
-	createChat          func(ctx context.Context, ownerID, initialMessage string) (services.Chat, error)
-	chat                func(ctx context.Context, ownerID, chatID string) (services.Chat, []services.Message, string, error)
-	chats               func(ctx context.Context, ownerID string, limit int) ([]services.ChatSummary, error)
-	renameChat          func(ctx context.Context, ownerID, chatID, title string) (services.ChatSummary, error)
+	createChat          func(ctx context.Context, ownerID, initialMessage string) (models.Chat, error)
+	chat                func(ctx context.Context, ownerID, chatID string) (models.Chat, []models.Message, string, error)
+	chats               func(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, error)
+	renameChat          func(ctx context.Context, ownerID, chatID, title string) (models.ChatSummary, error)
 	deleteChat          func(ctx context.Context, ownerID, chatID string) error
-	saveUserMessage     func(ctx context.Context, ownerID, chatID, messageID, content string, createdAt time.Time) (services.Message, error)
-	saveAnalysisMessage func(ctx context.Context, ownerID, chatID, messageID string, createdAt time.Time, analysis *services.Analysis) (services.Message, error)
-	chatHistory         func(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]services.Message, string, error)
+	saveUserMessage     func(ctx context.Context, ownerID, chatID, messageID, content string, createdAt time.Time) (models.Message, error)
+	saveAnalysisMessage func(ctx context.Context, ownerID, chatID, messageID string, createdAt time.Time, analysis *models.Analysis) (models.Message, error)
+	chatHistory         func(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]models.Message, string, error)
 }
 
-func (s stubService) CreateChat(ctx context.Context, ownerID, initialMessage string) (services.Chat, error) {
+func (s stubService) CreateChat(ctx context.Context, ownerID, initialMessage string) (models.Chat, error) {
 	if s.createChat == nil {
-		return services.Chat{}, nil
+		return models.Chat{}, nil
 	}
 	return s.createChat(ctx, ownerID, initialMessage)
 }
 
-func (s stubService) GetChat(ctx context.Context, ownerID, chatID string) (services.Chat, []services.Message, string, error) {
+func (s stubService) GetChat(ctx context.Context, ownerID, chatID string) (models.Chat, []models.Message, string, error) {
 	if s.chat == nil {
-		return services.Chat{}, nil, "", nil
+		return models.Chat{}, nil, "", nil
 	}
 	return s.chat(ctx, ownerID, chatID)
 }
 
-func (s stubService) ListChats(ctx context.Context, ownerID string, limit int) ([]services.ChatSummary, error) {
+func (s stubService) ListChats(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, error) {
 	if s.chats == nil {
 		return nil, nil
 	}
 	return s.chats(ctx, ownerID, limit)
 }
 
-func (s stubService) RenameChat(ctx context.Context, ownerID, chatID, title string) (services.ChatSummary, error) {
+func (s stubService) RenameChat(ctx context.Context, ownerID, chatID, title string) (models.ChatSummary, error) {
 	if s.renameChat == nil {
-		return services.ChatSummary{}, nil
+		return models.ChatSummary{}, nil
 	}
 	return s.renameChat(ctx, ownerID, chatID, title)
 }
@@ -64,21 +65,21 @@ func (s stubService) DeleteChat(ctx context.Context, ownerID, chatID string) err
 	return s.deleteChat(ctx, ownerID, chatID)
 }
 
-func (s stubService) SaveUserMessage(ctx context.Context, ownerID, chatID, messageID, content string, createdAt time.Time) (services.Message, error) {
+func (s stubService) SaveUserMessage(ctx context.Context, ownerID, chatID, messageID, content string, createdAt time.Time) (models.Message, error) {
 	if s.saveUserMessage == nil {
-		return services.Message{}, nil
+		return models.Message{}, nil
 	}
 	return s.saveUserMessage(ctx, ownerID, chatID, messageID, content, createdAt)
 }
 
-func (s stubService) SaveAnalysisMessage(ctx context.Context, ownerID, chatID, messageID string, createdAt time.Time, analysis *services.Analysis) (services.Message, error) {
+func (s stubService) SaveAnalysisMessage(ctx context.Context, ownerID, chatID, messageID string, createdAt time.Time, analysis *models.Analysis) (models.Message, error) {
 	if s.saveAnalysisMessage == nil {
-		return services.Message{}, nil
+		return models.Message{}, nil
 	}
 	return s.saveAnalysisMessage(ctx, ownerID, chatID, messageID, createdAt, analysis)
 }
 
-func (s stubService) GetChatHistory(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]services.Message, string, error) {
+func (s stubService) GetChatHistory(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]models.Message, string, error) {
 	if s.chatHistory == nil {
 		return nil, "", nil
 	}
@@ -105,9 +106,9 @@ func ownerContext(t *testing.T, apiKey, ownerID string) context.Context {
 
 func TestGetChatReturnsTheMetaAndTheHeadPage(t *testing.T) {
 	service := stubService{
-		chat: func(_ context.Context, ownerID, chatID string) (services.Chat, []services.Message, string, error) {
-			return services.Chat{ID: chatID, UserID: ownerID, Title: "a title"},
-				[]services.Message{{ID: "m1", ChatID: chatID, Role: services.RoleUser, Content: "hello"}},
+		chat: func(_ context.Context, ownerID, chatID string) (models.Chat, []models.Message, string, error) {
+			return models.Chat{ID: chatID, UserID: ownerID, Title: "a title"},
+				[]models.Message{{ID: "m1", ChatID: chatID, Role: models.RoleUser, Content: "hello"}},
 				"cursor-1",
 				nil
 		},
@@ -133,11 +134,11 @@ func TestGetChatReturnsTheMetaAndTheHeadPage(t *testing.T) {
 }
 
 func TestSaveAnalysisMessageMapsTheAnalysisPayload(t *testing.T) {
-	var captured *services.Analysis
+	var captured *models.Analysis
 	service := stubService{
-		saveAnalysisMessage: func(_ context.Context, _, chatID, messageID string, _ time.Time, analysis *services.Analysis) (services.Message, error) {
+		saveAnalysisMessage: func(_ context.Context, _, chatID, messageID string, _ time.Time, analysis *models.Analysis) (models.Message, error) {
 			captured = analysis
-			return services.Message{ID: messageID, ChatID: chatID, Role: services.RoleAssistant, Analysis: analysis}, nil
+			return models.Message{ID: messageID, ChatID: chatID, Role: models.RoleAssistant, Analysis: analysis}, nil
 		},
 	}
 	handler := chatshandlers.New(service)
@@ -162,13 +163,13 @@ func TestSaveAnalysisMessageMapsTheAnalysisPayload(t *testing.T) {
 	if captured == nil {
 		t.Fatal("the service got no analysis payload")
 	}
-	if captured.State != services.StateCompleted || captured.Model != services.ModelSpark {
+	if captured.State != models.StateCompleted || captured.Model != models.ModelSpark {
 		t.Errorf("analysis = %+v, want the completed spark state", captured)
 	}
 	if captured.SourceMessageID != "m1" {
 		t.Errorf("source message id = %q, want %q", captured.SourceMessageID, "m1")
 	}
-	if captured.Result == nil || captured.Result.Label != services.LabelAI {
+	if captured.Result == nil || captured.Result.Label != models.LabelAI {
 		t.Errorf("result = %+v, want the ai verdict", captured.Result)
 	}
 	if captured.Result.Confidence != 0.9 {
@@ -182,9 +183,9 @@ func TestSaveAnalysisMessageMapsTheAnalysisPayload(t *testing.T) {
 func TestSaveUserMessagePassesTheRequestThrough(t *testing.T) {
 	var ownerID, chatID, messageID, content string
 	service := stubService{
-		saveUserMessage: func(_ context.Context, owner, chat, message, body string, _ time.Time) (services.Message, error) {
+		saveUserMessage: func(_ context.Context, owner, chat, message, body string, _ time.Time) (models.Message, error) {
 			ownerID, chatID, messageID, content = owner, chat, message, body
-			return services.Message{ID: message, ChatID: chat, Role: services.RoleUser, Content: body}, nil
+			return models.Message{ID: message, ChatID: chat, Role: models.RoleUser, Content: body}, nil
 		},
 	}
 	handler := chatshandlers.New(service)
@@ -208,17 +209,17 @@ func TestTheServiceErrorsMapOntoConnectCodes(t *testing.T) {
 		err  error
 		want connect.Code
 	}{
-		"a missing chat":        {err: services.ErrNotFound, want: connect.CodeNotFound},
-		"a malformed cursor":    {err: services.ErrInvalidCursor, want: connect.CodeInvalidArgument},
-		"a terminal state":      {err: services.ErrConflict, want: connect.CodeFailedPrecondition},
-		"an unreachable source": {err: services.ErrUnavailable, want: connect.CodeUnavailable},
+		"a missing chat":        {err: models.ErrNotFound, want: connect.CodeNotFound},
+		"a malformed cursor":    {err: models.ErrInvalidCursor, want: connect.CodeInvalidArgument},
+		"a terminal state":      {err: models.ErrConflict, want: connect.CodeFailedPrecondition},
+		"an unreachable source": {err: models.ErrUnavailable, want: connect.CodeUnavailable},
 		"a validation failure":  {err: &services.ValidationError{Field: "title", Reason: "must not be empty"}, want: connect.CodeInvalidArgument},
 		"an unexpected failure": {err: errors.New("something broke"), want: connect.CodeInternal},
 	} {
 		t.Run(name, func(t *testing.T) {
 			service := stubService{
-				chat: func(_ context.Context, _, _ string) (services.Chat, []services.Message, string, error) {
-					return services.Chat{}, nil, "", tc.err
+				chat: func(_ context.Context, _, _ string) (models.Chat, []models.Message, string, error) {
+					return models.Chat{}, nil, "", tc.err
 				},
 			}
 			handler := chatshandlers.New(service)
@@ -233,8 +234,8 @@ func TestTheServiceErrorsMapOntoConnectCodes(t *testing.T) {
 
 func TestTheValidationFailureReachesTheClient(t *testing.T) {
 	service := stubService{
-		renameChat: func(_ context.Context, _, _, _ string) (services.ChatSummary, error) {
-			return services.ChatSummary{}, &services.ValidationError{Field: "title", Reason: "must not be empty"}
+		renameChat: func(_ context.Context, _, _, _ string) (models.ChatSummary, error) {
+			return models.ChatSummary{}, &services.ValidationError{Field: "title", Reason: "must not be empty"}
 		},
 	}
 	handler := chatshandlers.New(service)
@@ -251,9 +252,9 @@ func TestTheValidationFailureReachesTheClient(t *testing.T) {
 func TestTheHandlerRejectsACallWithoutAnOwner(t *testing.T) {
 	called := false
 	service := stubService{
-		chat: func(_ context.Context, _, _ string) (services.Chat, []services.Message, string, error) {
+		chat: func(_ context.Context, _, _ string) (models.Chat, []models.Message, string, error) {
 			called = true
-			return services.Chat{}, nil, "", nil
+			return models.Chat{}, nil, "", nil
 		},
 	}
 	handler := chatshandlers.New(service)

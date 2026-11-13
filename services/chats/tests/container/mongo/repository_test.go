@@ -4,14 +4,18 @@ package mongo_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	driver "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 )
 
 // owner returns an identity no other test shares.
@@ -19,9 +23,13 @@ func owner() string {
 	return "owner-" + uuid.NewString()
 }
 
-func newRepository(t *testing.T) *repository.Repository {
+func newRepository(t *testing.T) *repository.Mongo {
 	t.Helper()
-	return repository.New(connectLocal(t).Database())
+	repo, err := repository.New(testContext(t), connectLocal(t).Database())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return repo
 }
 
 func testContext(t *testing.T) context.Context {
@@ -31,7 +39,7 @@ func testContext(t *testing.T) context.Context {
 	return ctx
 }
 
-func createChat(t *testing.T, repo *repository.Repository, ownerID, title string) services.Chat {
+func createChat(t *testing.T, repo *repository.Mongo, ownerID, title string) models.Chat {
 	t.Helper()
 	chat, err := repo.CreateChat(testContext(t), ownerID, title)
 	if err != nil {
@@ -57,6 +65,21 @@ func countMessages(t *testing.T, chatID string) int64 {
 		t.Fatalf("CountDocuments: %v", err)
 	}
 	return count
+}
+
+// The repository bootstrap creates the indexes, and every re-run against the
+// persistent dev volume proves the identical create is a server no-op.
+func TestNewEnsuresDataModelIndexes(t *testing.T) {
+	newRepository(t)
+
+	chats := indexKeys(t, "chats")
+	if !chats["user_id:1,updated_at:-1"] {
+		t.Errorf("chats indexes = %v, want the sidebar index {user_id: 1, updated_at: -1}", chats)
+	}
+	messages := indexKeys(t, "messages")
+	if !messages["chat_id:1,created_at:-1,_id:-1"] {
+		t.Errorf("messages indexes = %v, want the history index {chat_id: 1, created_at: -1, _id: -1}", messages)
+	}
 }
 
 func TestCreateChatStoresOwnerAndTitle(t *testing.T) {
@@ -92,7 +115,7 @@ func TestChatRejectsAnotherOwner(t *testing.T) {
 	chat := createChat(t, repo, owner(), "private")
 
 	_, err := repo.Chat(testContext(t), owner(), chat.ID)
-	assertErrorIs(t, err, services.ErrNotFound)
+	assertErrorIs(t, err, models.ErrNotFound)
 }
 
 func TestChatsListsNewestFirst(t *testing.T) {
@@ -160,17 +183,17 @@ func TestRenameChatRejectsAnotherOwner(t *testing.T) {
 	chat := createChat(t, repo, owner(), "private")
 
 	_, err := repo.RenameChat(testContext(t), owner(), chat.ID, "hijacked")
-	assertErrorIs(t, err, services.ErrNotFound)
+	assertErrorIs(t, err, models.ErrNotFound)
 }
 
 func TestDeleteChatRemovesChatAndMessages(t *testing.T) {
 	repo := newRepository(t)
 	ownerID := owner()
 	chat := createChat(t, repo, ownerID, "doomed")
-	_, err := repo.SaveUserMessage(testContext(t), ownerID, services.Message{
+	_, err := repo.SaveUserMessage(testContext(t), ownerID, models.Message{
 		ID:      uuid.NewString(),
 		ChatID:  chat.ID,
-		Role:    services.RoleUser,
+		Role:    models.RoleUser,
 		Content: "hello",
 	})
 	if err != nil {
@@ -182,7 +205,7 @@ func TestDeleteChatRemovesChatAndMessages(t *testing.T) {
 	}
 
 	_, err = repo.Chat(testContext(t), ownerID, chat.ID)
-	assertErrorIs(t, err, services.ErrNotFound)
+	assertErrorIs(t, err, models.ErrNotFound)
 	if count := countMessages(t, chat.ID); count != 0 {
 		t.Errorf("messages left = %d, want 0", count)
 	}
@@ -207,7 +230,7 @@ func TestDeleteChatRejectsAnotherOwner(t *testing.T) {
 	chat := createChat(t, repo, ownerID, "private")
 
 	err := repo.DeleteChat(testContext(t), owner(), chat.ID)
-	assertErrorIs(t, err, services.ErrNotFound)
+	assertErrorIs(t, err, models.ErrNotFound)
 
 	if _, err := repo.Chat(testContext(t), ownerID, chat.ID); err != nil {
 		t.Fatalf("Chat after the rejected delete: %v", err)
@@ -219,10 +242,10 @@ func TestSaveUserMessageStoresTheMessage(t *testing.T) {
 	ownerID := owner()
 	chat := createChat(t, repo, ownerID, "thread")
 
-	saved, err := repo.SaveUserMessage(testContext(t), ownerID, services.Message{
+	saved, err := repo.SaveUserMessage(testContext(t), ownerID, models.Message{
 		ID:      uuid.NewString(),
 		ChatID:  chat.ID,
-		Role:    services.RoleUser,
+		Role:    models.RoleUser,
 		Content: "hello there",
 	})
 	if err != nil {
@@ -242,20 +265,20 @@ func TestSaveUserMessageReplaysTheStoredMessage(t *testing.T) {
 	chat := createChat(t, repo, ownerID, "thread")
 	id := uuid.NewString()
 
-	first, err := repo.SaveUserMessage(testContext(t), ownerID, services.Message{
+	first, err := repo.SaveUserMessage(testContext(t), ownerID, models.Message{
 		ID:      id,
 		ChatID:  chat.ID,
-		Role:    services.RoleUser,
+		Role:    models.RoleUser,
 		Content: "the original",
 	})
 	if err != nil {
 		t.Fatalf("SaveUserMessage: %v", err)
 	}
 
-	replay, err := repo.SaveUserMessage(testContext(t), ownerID, services.Message{
+	replay, err := repo.SaveUserMessage(testContext(t), ownerID, models.Message{
 		ID:      id,
 		ChatID:  chat.ID,
-		Role:    services.RoleUser,
+		Role:    models.RoleUser,
 		Content: "a different take",
 	})
 	if err != nil {
@@ -276,36 +299,36 @@ func TestSaveUserMessageRejectsMessageBoundToAnotherChat(t *testing.T) {
 	second := createChat(t, repo, ownerID, "second")
 	id := uuid.NewString()
 
-	_, err := repo.SaveUserMessage(testContext(t), ownerID, services.Message{
+	_, err := repo.SaveUserMessage(testContext(t), ownerID, models.Message{
 		ID:      id,
 		ChatID:  first.ID,
-		Role:    services.RoleUser,
+		Role:    models.RoleUser,
 		Content: "hello",
 	})
 	if err != nil {
 		t.Fatalf("SaveUserMessage: %v", err)
 	}
 
-	_, err = repo.SaveUserMessage(testContext(t), ownerID, services.Message{
+	_, err = repo.SaveUserMessage(testContext(t), ownerID, models.Message{
 		ID:      id,
 		ChatID:  second.ID,
-		Role:    services.RoleUser,
+		Role:    models.RoleUser,
 		Content: "hello",
 	})
-	assertErrorIs(t, err, services.ErrNotFound)
+	assertErrorIs(t, err, models.ErrNotFound)
 }
 
 func TestSaveUserMessageRejectsAnotherOwner(t *testing.T) {
 	repo := newRepository(t)
 	chat := createChat(t, repo, owner(), "private")
 
-	_, err := repo.SaveUserMessage(testContext(t), owner(), services.Message{
+	_, err := repo.SaveUserMessage(testContext(t), owner(), models.Message{
 		ID:      uuid.NewString(),
 		ChatID:  chat.ID,
-		Role:    services.RoleUser,
+		Role:    models.RoleUser,
 		Content: "hello",
 	})
-	assertErrorIs(t, err, services.ErrNotFound)
+	assertErrorIs(t, err, models.ErrNotFound)
 }
 
 func TestSaveUserMessageBumpsTheSidebarOrder(t *testing.T) {
@@ -316,10 +339,10 @@ func TestSaveUserMessageBumpsTheSidebarOrder(t *testing.T) {
 	busy := createChat(t, repo, ownerID, "busy")
 
 	time.Sleep(2 * time.Millisecond)
-	if _, err := repo.SaveUserMessage(testContext(t), ownerID, services.Message{
+	if _, err := repo.SaveUserMessage(testContext(t), ownerID, models.Message{
 		ID:      uuid.NewString(),
 		ChatID:  quiet.ID,
-		Role:    services.RoleUser,
+		Role:    models.RoleUser,
 		Content: "hello",
 	}); err != nil {
 		t.Fatalf("SaveUserMessage: %v", err)
@@ -346,36 +369,36 @@ func TestSaveAnalysisMessageWalksTheStateMachine(t *testing.T) {
 	chat := createChat(t, repo, ownerID, "thread")
 	id := uuid.NewString()
 
-	running, err := repo.SaveAnalysisMessage(testContext(t), ownerID, services.Message{
+	running, err := repo.SaveAnalysisMessage(testContext(t), ownerID, models.Message{
 		ID:     id,
 		ChatID: chat.ID,
-		Role:   services.RoleAssistant,
-		Analysis: &services.Analysis{
-			State:           services.StateRunning,
-			Model:           services.ModelSpark,
+		Role:   models.RoleAssistant,
+		Analysis: &models.Analysis{
+			State:           models.StateRunning,
+			Model:           models.ModelSpark,
 			SourceMessageID: "m1",
 		},
 	})
 	if err != nil {
 		t.Fatalf("SaveAnalysisMessage: %v", err)
 	}
-	if running.Analysis == nil || running.Analysis.State != services.StateRunning {
+	if running.Analysis == nil || running.Analysis.State != models.StateRunning {
 		t.Fatalf("analysis = %+v, want the running state", running.Analysis)
 	}
 
-	completed, err := repo.SaveAnalysisMessage(testContext(t), ownerID, services.Message{
+	completed, err := repo.SaveAnalysisMessage(testContext(t), ownerID, models.Message{
 		ID:     id,
 		ChatID: chat.ID,
-		Role:   services.RoleAssistant,
-		Analysis: &services.Analysis{
-			State:           services.StateCompleted,
-			Model:           services.ModelSpark,
+		Role:   models.RoleAssistant,
+		Analysis: &models.Analysis{
+			State:           models.StateCompleted,
+			Model:           models.ModelSpark,
 			SourceMessageID: "m1",
-			Result: &services.AnalysisResult{
-				Label:      services.LabelAI,
+			Result: &models.AnalysisResult{
+				Label:      models.LabelAI,
 				Confidence: 0.9,
-				Scores:     services.Scores{AI: 0.9, Human: 0.1},
-				Highlights: []services.Highlight{{CharStart: 0, CharEnd: 4, AIConfidence: 0.8, Label: services.LabelAI}},
+				Scores:     models.Scores{AI: 0.9, Human: 0.1},
+				Highlights: []models.Highlight{{CharStart: 0, CharEnd: 4, AIConfidence: 0.8, Label: models.LabelAI}},
 				Raw:        map[string]any{"nested": map[string]any{"score": 0.5}},
 			},
 		},
@@ -383,10 +406,10 @@ func TestSaveAnalysisMessageWalksTheStateMachine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SaveAnalysisMessage: %v", err)
 	}
-	if completed.Analysis == nil || completed.Analysis.State != services.StateCompleted {
+	if completed.Analysis == nil || completed.Analysis.State != models.StateCompleted {
 		t.Fatalf("analysis = %+v, want the completed state", completed.Analysis)
 	}
-	if completed.Analysis.Result == nil || completed.Analysis.Result.Label != services.LabelAI {
+	if completed.Analysis.Result == nil || completed.Analysis.Result.Label != models.LabelAI {
 		t.Errorf("result = %+v, want the ai verdict", completed.Analysis.Result)
 	}
 	if !completed.CreatedAt.Equal(running.CreatedAt) {
@@ -399,26 +422,26 @@ func TestSaveAnalysisMessageAcceptsAnIdenticalReplay(t *testing.T) {
 	ownerID := owner()
 	chat := createChat(t, repo, ownerID, "thread")
 	id := uuid.NewString()
-	failed := &services.Analysis{
-		State:           services.StateFailed,
-		Model:           services.ModelSpark,
+	failed := &models.Analysis{
+		State:           models.StateFailed,
+		Model:           models.ModelSpark,
 		SourceMessageID: "m1",
 		Error:           "inference timeout",
 	}
 
-	if _, err := repo.SaveAnalysisMessage(testContext(t), ownerID, services.Message{
+	if _, err := repo.SaveAnalysisMessage(testContext(t), ownerID, models.Message{
 		ID:       id,
 		ChatID:   chat.ID,
-		Role:     services.RoleAssistant,
+		Role:     models.RoleAssistant,
 		Analysis: failed,
 	}); err != nil {
 		t.Fatalf("SaveAnalysisMessage: %v", err)
 	}
 
-	replay, err := repo.SaveAnalysisMessage(testContext(t), ownerID, services.Message{
+	replay, err := repo.SaveAnalysisMessage(testContext(t), ownerID, models.Message{
 		ID:       id,
 		ChatID:   chat.ID,
-		Role:     services.RoleAssistant,
+		Role:     models.RoleAssistant,
 		Analysis: failed,
 	})
 	if err != nil {
@@ -435,40 +458,40 @@ func TestSaveAnalysisMessageRejectsANonReplayTerminalWrite(t *testing.T) {
 	chat := createChat(t, repo, ownerID, "thread")
 	id := uuid.NewString()
 
-	if _, err := repo.SaveAnalysisMessage(testContext(t), ownerID, services.Message{
+	if _, err := repo.SaveAnalysisMessage(testContext(t), ownerID, models.Message{
 		ID:     id,
 		ChatID: chat.ID,
-		Role:   services.RoleAssistant,
-		Analysis: &services.Analysis{
-			State:           services.StateCompleted,
-			Model:           services.ModelSpark,
+		Role:   models.RoleAssistant,
+		Analysis: &models.Analysis{
+			State:           models.StateCompleted,
+			Model:           models.ModelSpark,
 			SourceMessageID: "m1",
-			Result: &services.AnalysisResult{
-				Label:      services.LabelAI,
+			Result: &models.AnalysisResult{
+				Label:      models.LabelAI,
 				Confidence: 0.9,
-				Scores:     services.Scores{AI: 0.9, Human: 0.1},
+				Scores:     models.Scores{AI: 0.9, Human: 0.1},
 			},
 		},
 	}); err != nil {
 		t.Fatalf("SaveAnalysisMessage: %v", err)
 	}
 
-	_, err := repo.SaveAnalysisMessage(testContext(t), ownerID, services.Message{
+	_, err := repo.SaveAnalysisMessage(testContext(t), ownerID, models.Message{
 		ID:     id,
 		ChatID: chat.ID,
-		Role:   services.RoleAssistant,
-		Analysis: &services.Analysis{
-			State:           services.StateCompleted,
-			Model:           services.ModelSpark,
+		Role:   models.RoleAssistant,
+		Analysis: &models.Analysis{
+			State:           models.StateCompleted,
+			Model:           models.ModelSpark,
 			SourceMessageID: "m1",
-			Result: &services.AnalysisResult{
-				Label:      services.LabelHuman,
+			Result: &models.AnalysisResult{
+				Label:      models.LabelHuman,
 				Confidence: 0.2,
-				Scores:     services.Scores{AI: 0.2, Human: 0.8},
+				Scores:     models.Scores{AI: 0.2, Human: 0.8},
 			},
 		},
 	})
-	assertErrorIs(t, err, services.ErrConflict)
+	assertErrorIs(t, err, models.ErrConflict)
 }
 
 func TestSaveAnalysisMessageRejectsMessageBoundToAnotherChat(t *testing.T) {
@@ -478,47 +501,47 @@ func TestSaveAnalysisMessageRejectsMessageBoundToAnotherChat(t *testing.T) {
 	second := createChat(t, repo, ownerID, "second")
 	id := uuid.NewString()
 
-	if _, err := repo.SaveAnalysisMessage(testContext(t), ownerID, services.Message{
+	if _, err := repo.SaveAnalysisMessage(testContext(t), ownerID, models.Message{
 		ID:     id,
 		ChatID: first.ID,
-		Role:   services.RoleAssistant,
-		Analysis: &services.Analysis{
-			State:           services.StateRunning,
-			Model:           services.ModelSpark,
+		Role:   models.RoleAssistant,
+		Analysis: &models.Analysis{
+			State:           models.StateRunning,
+			Model:           models.ModelSpark,
 			SourceMessageID: "m1",
 		},
 	}); err != nil {
 		t.Fatalf("SaveAnalysisMessage: %v", err)
 	}
 
-	_, err := repo.SaveAnalysisMessage(testContext(t), ownerID, services.Message{
+	_, err := repo.SaveAnalysisMessage(testContext(t), ownerID, models.Message{
 		ID:     id,
 		ChatID: second.ID,
-		Role:   services.RoleAssistant,
-		Analysis: &services.Analysis{
-			State:           services.StateRunning,
-			Model:           services.ModelSpark,
+		Role:   models.RoleAssistant,
+		Analysis: &models.Analysis{
+			State:           models.StateRunning,
+			Model:           models.ModelSpark,
 			SourceMessageID: "m1",
 		},
 	})
-	assertErrorIs(t, err, services.ErrNotFound)
+	assertErrorIs(t, err, models.ErrNotFound)
 }
 
 func TestSaveAnalysisMessageRejectsAnotherOwner(t *testing.T) {
 	repo := newRepository(t)
 	chat := createChat(t, repo, owner(), "private")
 
-	_, err := repo.SaveAnalysisMessage(testContext(t), owner(), services.Message{
+	_, err := repo.SaveAnalysisMessage(testContext(t), owner(), models.Message{
 		ID:     uuid.NewString(),
 		ChatID: chat.ID,
-		Role:   services.RoleAssistant,
-		Analysis: &services.Analysis{
-			State:           services.StateRunning,
-			Model:           services.ModelSpark,
+		Role:   models.RoleAssistant,
+		Analysis: &models.Analysis{
+			State:           models.StateRunning,
+			Model:           models.ModelSpark,
 			SourceMessageID: "m1",
 		},
 	})
-	assertErrorIs(t, err, services.ErrNotFound)
+	assertErrorIs(t, err, models.ErrNotFound)
 }
 
 func TestChatHistoryPagesWithCursor(t *testing.T) {
@@ -528,10 +551,10 @@ func TestChatHistoryPagesWithCursor(t *testing.T) {
 	base := time.Now().UTC().Truncate(time.Second)
 
 	for i := range 5 {
-		if _, err := repo.SaveUserMessage(testContext(t), ownerID, services.Message{
+		if _, err := repo.SaveUserMessage(testContext(t), ownerID, models.Message{
 			ID:        uuid.NewString(),
 			ChatID:    chat.ID,
-			Role:      services.RoleUser,
+			Role:      models.RoleUser,
 			Content:   "message",
 			CreatedAt: base.Add(time.Duration(i) * time.Second),
 		}); err != nil {
@@ -570,7 +593,7 @@ func TestChatHistoryPagesWithCursor(t *testing.T) {
 	}
 
 	seen := make([]string, 0, 5)
-	for _, page := range [][]services.Message{first, second, last} {
+	for _, page := range [][]models.Message{first, second, last} {
 		for _, msg := range page {
 			seen = append(seen, msg.CreatedAt.UTC().Format(time.RFC3339))
 		}
@@ -596,7 +619,7 @@ func TestChatHistoryRejectsAMalformedCursor(t *testing.T) {
 
 	for _, cursor := range []string{"not base64!!", "bm90IGpzb24"} {
 		_, _, err := repo.ChatHistory(testContext(t), ownerID, chat.ID, cursor, 10)
-		assertErrorIs(t, err, services.ErrInvalidCursor)
+		assertErrorIs(t, err, models.ErrInvalidCursor)
 	}
 }
 
@@ -606,18 +629,18 @@ func TestChatHistoryRejectsAForeignCursor(t *testing.T) {
 	first := createChat(t, repo, ownerID, "first")
 	second := createChat(t, repo, ownerID, "second")
 
-	if _, err := repo.SaveUserMessage(testContext(t), ownerID, services.Message{
+	if _, err := repo.SaveUserMessage(testContext(t), ownerID, models.Message{
 		ID:      uuid.NewString(),
 		ChatID:  first.ID,
-		Role:    services.RoleUser,
+		Role:    models.RoleUser,
 		Content: "hello",
 	}); err != nil {
 		t.Fatalf("SaveUserMessage: %v", err)
 	}
-	if _, err := repo.SaveUserMessage(testContext(t), ownerID, services.Message{
+	if _, err := repo.SaveUserMessage(testContext(t), ownerID, models.Message{
 		ID:      uuid.NewString(),
 		ChatID:  first.ID,
-		Role:    services.RoleUser,
+		Role:    models.RoleUser,
 		Content: "hello again",
 	}); err != nil {
 		t.Fatalf("SaveUserMessage: %v", err)
@@ -634,7 +657,7 @@ func TestChatHistoryRejectsAForeignCursor(t *testing.T) {
 	}
 
 	_, _, err = repo.ChatHistory(testContext(t), ownerID, second.ID, cursor, 10)
-	assertErrorIs(t, err, services.ErrInvalidCursor)
+	assertErrorIs(t, err, models.ErrInvalidCursor)
 }
 
 func TestChatHistoryRejectsAnotherOwner(t *testing.T) {
@@ -642,5 +665,60 @@ func TestChatHistoryRejectsAnotherOwner(t *testing.T) {
 	chat := createChat(t, repo, owner(), "private")
 
 	_, _, err := repo.ChatHistory(testContext(t), owner(), chat.ID, "", 10)
-	assertErrorIs(t, err, services.ErrNotFound)
+	assertErrorIs(t, err, models.ErrNotFound)
+}
+
+// indexKeys lists one collection's indexes through a raw inspector connection,
+// keyed by the "field:direction" signature of each index.
+func indexKeys(t *testing.T, collection string) map[string]bool {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	inspector, err := driver.Connect(options.Client().
+		ApplyURI(testURI(t)).
+		SetConnectTimeout(5 * time.Second).
+		SetServerSelectionTimeout(5 * time.Second))
+	if err != nil {
+		t.Fatalf("inspector connect: %v", err)
+	}
+	defer func() {
+		disCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = inspector.Disconnect(disCtx)
+	}()
+
+	cursor, err := inspector.Database(testDatabase).Collection(collection).Indexes().List(ctx)
+	if err != nil {
+		t.Fatalf("list indexes on %s: %v", collection, err)
+	}
+	defer cursor.Close(ctx)
+
+	keys := make(map[string]bool)
+	for cursor.Next(ctx) {
+		var spec bson.D
+		if err := cursor.Decode(&spec); err != nil {
+			t.Fatalf("decode index spec: %v", err)
+		}
+		for _, el := range spec {
+			if el.Key != "key" {
+				continue
+			}
+			if doc, ok := el.Value.(bson.D); ok {
+				keys[keysSignature(doc)] = true
+			}
+		}
+	}
+	if err := cursor.Err(); err != nil {
+		t.Fatalf("iterate indexes on %s: %v", collection, err)
+	}
+	return keys
+}
+
+func keysSignature(keys bson.D) string {
+	parts := make([]string, 0, len(keys))
+	for _, el := range keys {
+		parts = append(parts, fmt.Sprintf("%s:%v", el.Key, el.Value))
+	}
+	return strings.Join(parts, ",")
 }

@@ -6,12 +6,12 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 	chatv1 "github.com/kunalPisolkar24/detectAI/services/chats/proto"
 )
 
 // chatToProto maps a chat meta onto the wire.
-func chatToProto(chat services.Chat) *chatv1.Chat {
+func chatToProto(chat models.Chat) *chatv1.Chat {
 	return &chatv1.Chat{
 		Id:        chat.ID,
 		Title:     chat.Title,
@@ -21,7 +21,7 @@ func chatToProto(chat services.Chat) *chatv1.Chat {
 }
 
 // summaryToProto maps a chat summary onto the wire.
-func summaryToProto(summary services.ChatSummary) *chatv1.ChatSummary {
+func summaryToProto(summary models.ChatSummary) *chatv1.ChatSummary {
 	return &chatv1.ChatSummary{
 		Id:        summary.ID,
 		Title:     summary.Title,
@@ -30,7 +30,7 @@ func summaryToProto(summary services.ChatSummary) *chatv1.ChatSummary {
 }
 
 // messageToProto maps a message onto the wire.
-func messageToProto(message services.Message) (*chatv1.Message, error) {
+func messageToProto(message models.Message) (*chatv1.Message, error) {
 	analysis, err := analysisToProto(message.Analysis)
 	if err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func messageToProto(message services.Message) (*chatv1.Message, error) {
 }
 
 // analysisToProto maps an analysis payload onto the wire.
-func analysisToProto(analysis *services.Analysis) (*chatv1.Analysis, error) {
+func analysisToProto(analysis *models.Analysis) (*chatv1.Analysis, error) {
 	if analysis == nil {
 		return nil, nil
 	}
@@ -64,7 +64,7 @@ func analysisToProto(analysis *services.Analysis) (*chatv1.Analysis, error) {
 }
 
 // resultToProto maps a detection verdict onto the wire.
-func resultToProto(result *services.AnalysisResult) (*chatv1.AnalysisResult, error) {
+func resultToProto(result *models.AnalysisResult) (*chatv1.AnalysisResult, error) {
 	if result == nil {
 		return nil, nil
 	}
@@ -92,8 +92,8 @@ func resultToProto(result *services.AnalysisResult) (*chatv1.AnalysisResult, err
 }
 
 // analysisFromProto maps the request's analysis payload onto the domain.
-func analysisFromProto(state chatv1.AnalysisState, model chatv1.Model, sourceMessageID, analysisError string, result *chatv1.AnalysisResult) (*services.Analysis, error) {
-	analysis := &services.Analysis{
+func analysisFromProto(state chatv1.AnalysisState, model chatv1.Model, sourceMessageID, analysisError string, result *chatv1.AnalysisResult) (*models.Analysis, error) {
+	analysis := &models.Analysis{
 		State:           stateFromProto(state),
 		Model:           modelFromProto(model),
 		SourceMessageID: sourceMessageID,
@@ -106,16 +106,16 @@ func analysisFromProto(state chatv1.AnalysisState, model chatv1.Model, sourceMes
 }
 
 // resultFromProto maps a wire verdict onto the domain.
-func resultFromProto(result *chatv1.AnalysisResult) *services.AnalysisResult {
-	converted := &services.AnalysisResult{
+func resultFromProto(result *chatv1.AnalysisResult) *models.AnalysisResult {
+	converted := &models.AnalysisResult{
 		Label:      labelFromProto(result.Label),
 		Confidence: result.Confidence,
 	}
 	if result.Scores != nil {
-		converted.Scores = services.Scores{AI: result.Scores.Ai, Human: result.Scores.Human}
+		converted.Scores = models.Scores{AI: result.Scores.Ai, Human: result.Scores.Human}
 	}
 	for _, highlight := range result.Highlights {
-		converted.Highlights = append(converted.Highlights, services.Highlight{
+		converted.Highlights = append(converted.Highlights, models.Highlight{
 			CharStart:    highlight.CharStart,
 			CharEnd:      highlight.CharEnd,
 			AIConfidence: highlight.AiConfidence,
@@ -129,11 +129,11 @@ func resultFromProto(result *chatv1.AnalysisResult) *services.AnalysisResult {
 }
 
 // roleToProto maps a message author onto the wire.
-func roleToProto(role services.Role) chatv1.Role {
+func roleToProto(role models.Role) chatv1.Role {
 	switch role {
-	case services.RoleUser:
+	case models.RoleUser:
 		return chatv1.Role_ROLE_USER
-	case services.RoleAssistant:
+	case models.RoleAssistant:
 		return chatv1.Role_ROLE_ASSISTANT
 	default:
 		return chatv1.Role_ROLE_UNSPECIFIED
@@ -141,15 +141,15 @@ func roleToProto(role services.Role) chatv1.Role {
 }
 
 // stateToProto maps an analysis state onto the wire.
-func stateToProto(state services.AnalysisState) chatv1.AnalysisState {
+func stateToProto(state models.AnalysisState) chatv1.AnalysisState {
 	switch state {
-	case services.StateRunning:
+	case models.StateRunning:
 		return chatv1.AnalysisState_ANALYSIS_STATE_RUNNING
-	case services.StateCompleted:
+	case models.StateCompleted:
 		return chatv1.AnalysisState_ANALYSIS_STATE_COMPLETED
-	case services.StateFailed:
+	case models.StateFailed:
 		return chatv1.AnalysisState_ANALYSIS_STATE_FAILED
-	case services.StateCancelled:
+	case models.StateCancelled:
 		return chatv1.AnalysisState_ANALYSIS_STATE_CANCELLED
 	default:
 		return chatv1.AnalysisState_ANALYSIS_STATE_UNSPECIFIED
@@ -157,11 +157,11 @@ func stateToProto(state services.AnalysisState) chatv1.AnalysisState {
 }
 
 // modelToProto maps an inference model onto the wire.
-func modelToProto(model services.Model) chatv1.Model {
+func modelToProto(model models.Model) chatv1.Model {
 	switch model {
-	case services.ModelSpark:
+	case models.ModelSpark:
 		return chatv1.Model_MODEL_SPARK
-	case services.ModelFlare:
+	case models.ModelFlare:
 		return chatv1.Model_MODEL_FLARE
 	default:
 		return chatv1.Model_MODEL_UNSPECIFIED
@@ -169,11 +169,11 @@ func modelToProto(model services.Model) chatv1.Model {
 }
 
 // labelToProto maps a detection verdict onto the wire.
-func labelToProto(label services.Label) chatv1.Label {
+func labelToProto(label models.Label) chatv1.Label {
 	switch label {
-	case services.LabelAI:
+	case models.LabelAI:
 		return chatv1.Label_LABEL_AI
-	case services.LabelHuman:
+	case models.LabelHuman:
 		return chatv1.Label_LABEL_HUMAN
 	default:
 		return chatv1.Label_LABEL_UNSPECIFIED
@@ -182,40 +182,40 @@ func labelToProto(label services.Label) chatv1.Label {
 
 // stateFromProto maps an analysis state off the wire; an unspecified state
 // stays empty and the domain validator rejects it.
-func stateFromProto(state chatv1.AnalysisState) services.AnalysisState {
+func stateFromProto(state chatv1.AnalysisState) models.AnalysisState {
 	switch state {
 	case chatv1.AnalysisState_ANALYSIS_STATE_RUNNING:
-		return services.StateRunning
+		return models.StateRunning
 	case chatv1.AnalysisState_ANALYSIS_STATE_COMPLETED:
-		return services.StateCompleted
+		return models.StateCompleted
 	case chatv1.AnalysisState_ANALYSIS_STATE_FAILED:
-		return services.StateFailed
+		return models.StateFailed
 	case chatv1.AnalysisState_ANALYSIS_STATE_CANCELLED:
-		return services.StateCancelled
+		return models.StateCancelled
 	default:
 		return ""
 	}
 }
 
 // modelFromProto maps an inference model off the wire.
-func modelFromProto(model chatv1.Model) services.Model {
+func modelFromProto(model chatv1.Model) models.Model {
 	switch model {
 	case chatv1.Model_MODEL_SPARK:
-		return services.ModelSpark
+		return models.ModelSpark
 	case chatv1.Model_MODEL_FLARE:
-		return services.ModelFlare
+		return models.ModelFlare
 	default:
 		return ""
 	}
 }
 
 // labelFromProto maps a detection verdict off the wire.
-func labelFromProto(label chatv1.Label) services.Label {
+func labelFromProto(label chatv1.Label) models.Label {
 	switch label {
 	case chatv1.Label_LABEL_AI:
-		return services.LabelAI
+		return models.LabelAI
 	case chatv1.Label_LABEL_HUMAN:
-		return services.LabelHuman
+		return models.LabelHuman
 	default:
 		return ""
 	}

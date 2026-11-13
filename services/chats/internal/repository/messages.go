@@ -12,16 +12,16 @@ import (
 	driver "go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 )
 
 // writeAttempts bounds the read-insert race on the analysis upsert.
 const writeAttempts = 3
 
 // SaveUserMessage is insert-only — a duplicate id replays the stored message.
-func (r *Repository) SaveUserMessage(ctx context.Context, ownerID string, msg services.Message) (services.Message, error) {
+func (r *Mongo) SaveUserMessage(ctx context.Context, ownerID string, msg models.Message) (models.Message, error) {
 	if err := r.ownChat(ctx, ownerID, msg.ChatID); err != nil {
-		return services.Message{}, err
+		return models.Message{}, err
 	}
 	if msg.ID == "" {
 		msg.ID = uuid.NewString()
@@ -33,27 +33,27 @@ func (r *Repository) SaveUserMessage(ctx context.Context, ownerID string, msg se
 
 	if _, err := r.messages.InsertOne(ctx, msg); err != nil {
 		if !driver.IsDuplicateKeyError(err) {
-			return services.Message{}, wrap("save user message", err)
+			return models.Message{}, wrap("save user message", err)
 		}
 		stored, found, err := r.chatMessage(ctx, msg.ID, msg.ChatID)
 		if err != nil {
-			return services.Message{}, err
+			return models.Message{}, err
 		}
 		if !found {
-			return services.Message{}, services.ErrNotFound
+			return models.Message{}, models.ErrNotFound
 		}
 		return stored, nil
 	}
 	if err := r.bumpChat(ctx, msg.ChatID); err != nil {
-		return services.Message{}, err
+		return models.Message{}, err
 	}
 	return msg, nil
 }
 
 // SaveAnalysisMessage upserts the analysis state machine keyed on id.
-func (r *Repository) SaveAnalysisMessage(ctx context.Context, ownerID string, msg services.Message) (services.Message, error) {
+func (r *Mongo) SaveAnalysisMessage(ctx context.Context, ownerID string, msg models.Message) (models.Message, error) {
 	if err := r.ownChat(ctx, ownerID, msg.ChatID); err != nil {
-		return services.Message{}, err
+		return models.Message{}, err
 	}
 	if msg.ID == "" {
 		msg.ID = uuid.NewString()
@@ -64,58 +64,58 @@ func (r *Repository) SaveAnalysisMessage(ctx context.Context, ownerID string, ms
 	msg.CreatedAt = stamp(msg.CreatedAt)
 
 	for attempt := 0; attempt < writeAttempts; attempt++ {
-		var stored services.Message
+		var stored models.Message
 		err := r.messages.FindOne(ctx, bson.M{"_id": msg.ID}).Decode(&stored)
 		if errors.Is(err, driver.ErrNoDocuments) {
 			if _, err := r.messages.InsertOne(ctx, msg); err != nil {
 				if driver.IsDuplicateKeyError(err) {
 					continue
 				}
-				return services.Message{}, wrap("save analysis message", err)
+				return models.Message{}, wrap("save analysis message", err)
 			}
 			if err := r.bumpChat(ctx, msg.ChatID); err != nil {
-				return services.Message{}, err
+				return models.Message{}, err
 			}
 			return msg, nil
 		}
 		if err != nil {
-			return services.Message{}, wrap("save analysis message", err)
+			return models.Message{}, wrap("save analysis message", err)
 		}
 
 		if stored.ChatID != msg.ChatID {
-			return services.Message{}, services.ErrNotFound
+			return models.Message{}, models.ErrNotFound
 		}
 		if terminal(stored.Analysis) {
 			if sameAnalysis(stored.Analysis, msg.Analysis) {
 				return stored, nil
 			}
-			return services.Message{}, services.ErrConflict
+			return models.Message{}, models.ErrConflict
 		}
 
 		updated, err := r.setAnalysis(ctx, stored.ID, msg.Analysis)
 		if err != nil {
-			return services.Message{}, err
+			return models.Message{}, err
 		}
 		if err := r.bumpChat(ctx, msg.ChatID); err != nil {
-			return services.Message{}, err
+			return models.Message{}, err
 		}
 		return updated, nil
 	}
-	return services.Message{}, errors.New("repository: save analysis message: concurrent write did not settle")
+	return models.Message{}, errors.New("repository: save analysis message: concurrent write did not settle")
 }
 
 // ChatHistory pages newest-first on the (created_at, _id) keyset.
-func (r *Repository) ChatHistory(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]services.Message, string, error) {
+func (r *Mongo) ChatHistory(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]models.Message, string, error) {
 	if err := r.ownChat(ctx, ownerID, chatID); err != nil {
 		return nil, "", err
 	}
-	limit = services.ClampHistoryLimit(limit)
+	limit = models.ClampHistoryLimit(limit)
 
 	filter := bson.M{"chat_id": chatID}
 	if cursor != "" {
-		key, err := services.DecodeCursor(cursor)
+		key, err := models.DecodeCursor(cursor)
 		if err != nil || key.ChatID != chatID {
-			return nil, "", services.ErrInvalidCursor
+			return nil, "", models.ErrInvalidCursor
 		}
 		filter = keysetFilter(chatID, key)
 	}
@@ -128,7 +128,7 @@ func (r *Repository) ChatHistory(ctx context.Context, ownerID, chatID, cursor st
 	}
 	defer find.Close(ctx)
 
-	var messages []services.Message
+	var messages []models.Message
 	if err := find.All(ctx, &messages); err != nil {
 		return nil, "", wrap("chat history", err)
 	}
@@ -138,7 +138,7 @@ func (r *Repository) ChatHistory(ctx context.Context, ownerID, chatID, cursor st
 
 	page := messages[:limit]
 	last := page[len(page)-1]
-	next, err := services.EncodeCursor(chatID, last.CreatedAt, last.ID)
+	next, err := models.EncodeCursor(chatID, last.CreatedAt, last.ID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -146,49 +146,49 @@ func (r *Repository) ChatHistory(ctx context.Context, ownerID, chatID, cursor st
 }
 
 // chatMessage reads the message bound to one chat; a miss means the id belongs elsewhere.
-func (r *Repository) chatMessage(ctx context.Context, id, chatID string) (services.Message, bool, error) {
-	var msg services.Message
+func (r *Mongo) chatMessage(ctx context.Context, id, chatID string) (models.Message, bool, error) {
+	var msg models.Message
 	err := r.messages.FindOne(ctx, bson.M{"_id": id, "chat_id": chatID}).Decode(&msg)
 	if errors.Is(err, driver.ErrNoDocuments) {
-		return services.Message{}, false, nil
+		return models.Message{}, false, nil
 	}
 	if err != nil {
-		return services.Message{}, false, wrap("message", err)
+		return models.Message{}, false, wrap("message", err)
 	}
 	return msg, true, nil
 }
 
 // setAnalysis writes the analysis payload, leaving created_at as it was inserted.
-func (r *Repository) setAnalysis(ctx context.Context, id string, analysis *services.Analysis) (services.Message, error) {
-	var updated services.Message
+func (r *Mongo) setAnalysis(ctx context.Context, id string, analysis *models.Analysis) (models.Message, error) {
+	var updated models.Message
 	err := r.messages.FindOneAndUpdate(ctx,
 		bson.M{"_id": id},
 		bson.M{"$set": bson.M{"analysis": analysis}},
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
 	).Decode(&updated)
 	if errors.Is(err, driver.ErrNoDocuments) {
-		return services.Message{}, services.ErrNotFound
+		return models.Message{}, models.ErrNotFound
 	}
 	if err != nil {
-		return services.Message{}, wrap("set analysis", err)
+		return models.Message{}, wrap("set analysis", err)
 	}
 	return updated, nil
 }
 
 // terminal reports whether the analysis state machine has settled.
-func terminal(analysis *services.Analysis) bool {
+func terminal(analysis *models.Analysis) bool {
 	if analysis == nil {
 		return false
 	}
 	switch analysis.State {
-	case services.StateCompleted, services.StateFailed, services.StateCancelled:
+	case models.StateCompleted, models.StateFailed, models.StateCancelled:
 		return true
 	}
 	return false
 }
 
 // sameAnalysis reports whether an incoming analysis is an identical replay of the stored one.
-func sameAnalysis(stored, incoming *services.Analysis) bool {
+func sameAnalysis(stored, incoming *models.Analysis) bool {
 	if stored == nil || incoming == nil {
 		return stored == incoming
 	}
@@ -202,7 +202,7 @@ func sameAnalysis(stored, incoming *services.Analysis) bool {
 }
 
 // sameResult reports whether two detection verdicts match.
-func sameResult(stored, incoming *services.AnalysisResult) bool {
+func sameResult(stored, incoming *models.AnalysisResult) bool {
 	if stored == nil || incoming == nil {
 		return stored == incoming
 	}

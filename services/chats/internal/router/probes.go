@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 )
 
 // Health is the liveness probe.
@@ -14,7 +16,7 @@ func Health(c *gin.Context) {
 }
 
 // Ready reports readiness; the database must answer a ping within the probe budget.
-func Ready(database Database) gin.HandlerFunc {
+func Ready(database db.Database) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), readyPingBudget)
 		defer cancel()

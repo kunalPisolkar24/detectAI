@@ -2,24 +2,26 @@ package services
 
 import (
 	"context"
+
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 )
 
 // cachedChat returns the chat meta, cache first. A cached chat carries its
 // owner, so the ownership rule holds on a hit as well as on a miss.
-func (s *ChatService) cachedChat(ctx context.Context, ownerID, chatID string) (Chat, error) {
+func (s *ChatService) cachedChat(ctx context.Context, ownerID, chatID string) (models.Chat, error) {
 	cached, found, err := s.cache.Chat(ctx, chatID)
 	if err != nil {
 		s.absorb("chat read", err)
 	} else if found {
 		if cached.UserID != ownerID {
-			return Chat{}, ErrNotFound
+			return models.Chat{}, models.ErrNotFound
 		}
 		return cached, nil
 	}
 
 	chat, err := s.repo.Chat(ctx, ownerID, chatID)
 	if err != nil {
-		return Chat{}, err
+		return models.Chat{}, err
 	}
 	s.putChat(ctx, chat)
 	return chat, nil
@@ -27,7 +29,7 @@ func (s *ChatService) cachedChat(ctx context.Context, ownerID, chatID string) (C
 
 // cachedList returns the owner's chats newest-first, cache first, trimmed to
 // the requested limit.
-func (s *ChatService) cachedList(ctx context.Context, ownerID string, limit int) ([]ChatSummary, error) {
+func (s *ChatService) cachedList(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, error) {
 	cached, found, err := s.cache.ChatList(ctx, ownerID)
 	if err != nil {
 		s.absorb("chat list read", err)
@@ -35,7 +37,7 @@ func (s *ChatService) cachedList(ctx context.Context, ownerID string, limit int)
 		return trimSummaries(cached, limit), nil
 	}
 
-	chats, err := s.repo.Chats(ctx, ownerID, DefaultChatsLimit)
+	chats, err := s.repo.Chats(ctx, ownerID, models.DefaultChatsLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +48,7 @@ func (s *ChatService) cachedList(ctx context.Context, ownerID string, limit int)
 // headPage returns a chat's head page, cache first, trimmed to the requested
 // limit. The cache always holds a full page, so a smaller request trims it
 // and the larger one reads the source.
-func (s *ChatService) headPage(ctx context.Context, ownerID, chatID string, limit int) (Page, error) {
+func (s *ChatService) headPage(ctx context.Context, ownerID, chatID string, limit int) (models.Page, error) {
 	cached, found, err := s.cache.Head(ctx, chatID)
 	if err != nil {
 		s.absorb("head read", err)
@@ -54,11 +56,11 @@ func (s *ChatService) headPage(ctx context.Context, ownerID, chatID string, limi
 		return trimPage(chatID, cached, limit)
 	}
 
-	messages, next, err := s.repo.ChatHistory(ctx, ownerID, chatID, "", DefaultHistoryLimit)
+	messages, next, err := s.repo.ChatHistory(ctx, ownerID, chatID, "", models.DefaultHistoryLimit)
 	if err != nil {
-		return Page{}, err
+		return models.Page{}, err
 	}
-	page := Page{Messages: messages, NextCursor: next}
+	page := models.Page{Messages: messages, NextCursor: next}
 	s.putHead(ctx, chatID, page)
 	return trimPage(chatID, page, limit)
 }
@@ -86,19 +88,19 @@ func (s *ChatService) invalidateOwner(ctx context.Context, ownerID string) {
 	}
 }
 
-func (s *ChatService) putChat(ctx context.Context, chat Chat) {
+func (s *ChatService) putChat(ctx context.Context, chat models.Chat) {
 	if err := s.cache.PutChat(ctx, chat); err != nil {
 		s.absorb("chat write", err)
 	}
 }
 
-func (s *ChatService) putChatList(ctx context.Context, ownerID string, chats []ChatSummary) {
+func (s *ChatService) putChatList(ctx context.Context, ownerID string, chats []models.ChatSummary) {
 	if err := s.cache.PutChatList(ctx, ownerID, chats); err != nil {
 		s.absorb("chat list write", err)
 	}
 }
 
-func (s *ChatService) putHead(ctx context.Context, chatID string, page Page) {
+func (s *ChatService) putHead(ctx context.Context, chatID string, page models.Page) {
 	if err := s.cache.PutHead(ctx, chatID, page); err != nil {
 		s.absorb("head write", err)
 	}
@@ -111,21 +113,21 @@ func (s *ChatService) absorb(op string, err error) {
 
 // trimPage trims a full page to the requested limit and derives the cursor
 // that chains to what is left of it.
-func trimPage(chatID string, page Page, limit int) (Page, error) {
+func trimPage(chatID string, page models.Page, limit int) (models.Page, error) {
 	if limit <= 0 || limit >= len(page.Messages) {
 		return page, nil
 	}
 	messages := page.Messages[:limit]
 	last := messages[len(messages)-1]
-	cursor, err := EncodeCursor(chatID, last.CreatedAt, last.ID)
+	cursor, err := models.EncodeCursor(chatID, last.CreatedAt, last.ID)
 	if err != nil {
-		return Page{}, err
+		return models.Page{}, err
 	}
-	return Page{Messages: messages, NextCursor: cursor}, nil
+	return models.Page{Messages: messages, NextCursor: cursor}, nil
 }
 
 // trimSummaries trims a cached list to the requested limit.
-func trimSummaries(chats []ChatSummary, limit int) []ChatSummary {
+func trimSummaries(chats []models.ChatSummary, limit int) []models.ChatSummary {
 	if limit <= 0 || limit >= len(chats) {
 		return chats
 	}

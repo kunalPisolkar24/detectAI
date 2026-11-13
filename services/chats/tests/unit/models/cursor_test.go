@@ -1,22 +1,22 @@
-package services_test
+package models_test
 
 import (
 	"encoding/base64"
 	"testing"
 	"time"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 )
 
 func TestEncodeCursorRoundTrips(t *testing.T) {
 	createdAt := time.Date(2026, 1, 2, 3, 4, 5, 6000000, time.UTC)
 
-	cursor, err := services.EncodeCursor("chat-1", createdAt, "m1")
+	cursor, err := models.EncodeCursor("chat-1", createdAt, "m1")
 	if err != nil {
 		t.Fatalf("EncodeCursor: %v", err)
 	}
 
-	key, err := services.DecodeCursor(cursor)
+	key, err := models.DecodeCursor(cursor)
 	if err != nil {
 		t.Fatalf("DecodeCursor: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestDecodeCursorRejectsAMalformedCursor(t *testing.T) {
 		"an empty cursor": "",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := services.DecodeCursor(cursor); err == nil {
+			if _, err := models.DecodeCursor(cursor); err == nil {
 				t.Fatalf("DecodeCursor(%q) = nil error, want a failure", cursor)
 			}
 		})
@@ -49,7 +49,7 @@ func TestDecodeCursorRejectsAnIncompleteKey(t *testing.T) {
 	// A payload that decodes but carries no keyset tuple is not a usable boundary.
 	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"chat_id":"chat-1"}`))
 
-	if _, err := services.DecodeCursor(payload); err == nil {
+	if _, err := models.DecodeCursor(payload); err == nil {
 		t.Fatal("DecodeCursor = nil error, want a failure")
 	}
 }

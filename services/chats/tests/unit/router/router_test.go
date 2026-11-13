@@ -12,9 +12,11 @@ import (
 	"connectrpc.com/connect"
 	"connectrpc.com/grpchealth"
 
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	chatshandlers "github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/router"
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 	"github.com/kunalPisolkar24/detectAI/services/chats/proto"
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
@@ -30,53 +32,53 @@ func (f fakeDatabase) Disconnect(context.Context) error { return nil }
 
 // stubService answers the one RPC the router tests exercise.
 type stubService struct {
-	getChat func(ctx context.Context, ownerID, chatID string) (services.Chat, []services.Message, string, error)
+	getChat func(ctx context.Context, ownerID, chatID string) (models.Chat, []models.Message, string, error)
 }
 
-func (s stubService) CreateChat(context.Context, string, string) (services.Chat, error) {
-	return services.Chat{}, nil
+func (s stubService) CreateChat(context.Context, string, string) (models.Chat, error) {
+	return models.Chat{}, nil
 }
 
-func (s stubService) GetChat(ctx context.Context, ownerID, chatID string) (services.Chat, []services.Message, string, error) {
+func (s stubService) GetChat(ctx context.Context, ownerID, chatID string) (models.Chat, []models.Message, string, error) {
 	if s.getChat == nil {
-		return services.Chat{}, nil, "", nil
+		return models.Chat{}, nil, "", nil
 	}
 	return s.getChat(ctx, ownerID, chatID)
 }
 
-func (s stubService) ListChats(context.Context, string, int) ([]services.ChatSummary, error) {
+func (s stubService) ListChats(context.Context, string, int) ([]models.ChatSummary, error) {
 	return nil, nil
 }
 
-func (s stubService) RenameChat(context.Context, string, string, string) (services.ChatSummary, error) {
-	return services.ChatSummary{}, nil
+func (s stubService) RenameChat(context.Context, string, string, string) (models.ChatSummary, error) {
+	return models.ChatSummary{}, nil
 }
 
 func (s stubService) DeleteChat(context.Context, string, string) error { return nil }
 
-func (s stubService) SaveUserMessage(context.Context, string, string, string, string, time.Time) (services.Message, error) {
-	return services.Message{}, nil
+func (s stubService) SaveUserMessage(context.Context, string, string, string, string, time.Time) (models.Message, error) {
+	return models.Message{}, nil
 }
 
-func (s stubService) SaveAnalysisMessage(context.Context, string, string, string, time.Time, *services.Analysis) (services.Message, error) {
-	return services.Message{}, nil
+func (s stubService) SaveAnalysisMessage(context.Context, string, string, string, time.Time, *models.Analysis) (models.Message, error) {
+	return models.Message{}, nil
 }
 
-func (s stubService) GetChatHistory(context.Context, string, string, string, int) ([]services.Message, string, error) {
+func (s stubService) GetChatHistory(context.Context, string, string, string, int) ([]models.Message, string, error) {
 	return nil, "", nil
 }
 
-func newServer(t *testing.T, database router.Database, service stubService) *httptest.Server {
+func newServer(t *testing.T, database db.Database, service stubService) *httptest.Server {
 	t.Helper()
 	return newServerWithLimiter(t, database, service, allowAllLimiter{})
 }
 
-func newServerWithLimiter(t *testing.T, database router.Database, service stubService, limiter services.Limiter) *httptest.Server {
+func newServerWithLimiter(t *testing.T, database db.Database, service stubService, limiter cache.Limiter) *httptest.Server {
 	t.Helper()
 	return newServerWithLogger(t, database, service, limiter, slog.Default())
 }
 
-func newServerWithLogger(t *testing.T, database router.Database, service stubService, limiter services.Limiter, logger *slog.Logger) *httptest.Server {
+func newServerWithLogger(t *testing.T, database db.Database, service stubService, limiter cache.Limiter, logger *slog.Logger) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(router.New(database, service, testAPIKey, limiter, chatshandlers.Limits{Create: 10, Write: 60}, logger))
 	t.Cleanup(srv.Close)
@@ -112,9 +114,9 @@ func TestChatServiceRejectsAWrongAPIKey(t *testing.T) {
 func TestChatServiceResolvesTheOwnerFromTheHeader(t *testing.T) {
 	var ownerID string
 	service := stubService{
-		getChat: func(_ context.Context, owner string, chatID string) (services.Chat, []services.Message, string, error) {
+		getChat: func(_ context.Context, owner string, chatID string) (models.Chat, []models.Message, string, error) {
 			ownerID = owner
-			return services.Chat{ID: chatID, UserID: owner, Title: "a title"}, nil, "", nil
+			return models.Chat{ID: chatID, UserID: owner, Title: "a title"}, nil, "", nil
 		},
 	}
 	srv := newServer(t, fakeDatabase{}, service)

@@ -1,4 +1,4 @@
-package services
+package models
 
 import (
 	"encoding/base64"
@@ -20,7 +20,7 @@ type CursorKey struct {
 func EncodeCursor(chatID string, createdAt time.Time, id string) (string, error) {
 	payload, err := json.Marshal(CursorKey{ChatID: chatID, T: createdAt, ID: id})
 	if err != nil {
-		return "", fmt.Errorf("services: encode cursor: %w", err)
+		return "", fmt.Errorf("models: encode cursor: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(payload), nil
 }
@@ -29,14 +29,14 @@ func EncodeCursor(chatID string, createdAt time.Time, id string) (string, error)
 func DecodeCursor(cursor string) (CursorKey, error) {
 	payload, err := base64.RawURLEncoding.Strict().DecodeString(cursor)
 	if err != nil {
-		return CursorKey{}, fmt.Errorf("services: decode cursor: %w", err)
+		return CursorKey{}, fmt.Errorf("models: decode cursor: %w", err)
 	}
 	var key CursorKey
 	if err := json.Unmarshal(payload, &key); err != nil {
-		return CursorKey{}, fmt.Errorf("services: decode cursor: %w", err)
+		return CursorKey{}, fmt.Errorf("models: decode cursor: %w", err)
 	}
 	if key.ChatID == "" || key.ID == "" || key.T.IsZero() {
-		return CursorKey{}, errors.New("services: decode cursor: incomplete key")
+		return CursorKey{}, errors.New("models: decode cursor: incomplete key")
 	}
 	return key, nil
 }

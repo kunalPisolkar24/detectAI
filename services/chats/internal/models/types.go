@@ -1,40 +1,9 @@
-package services
+// Package models holds the chats vocabulary: the document shapes the stores
+// persist, the enums they carry, and the rules the domain and the adapters
+// share.
+package models
 
 import "time"
-
-// Role is the message author.
-type Role string
-
-const (
-	RoleUser      Role = "user"
-	RoleAssistant Role = "assistant"
-)
-
-// Model is the inference model an analysis ran on.
-type Model string
-
-const (
-	ModelSpark Model = "spark"
-	ModelFlare Model = "flare"
-)
-
-// AnalysisState is the analysis state machine.
-type AnalysisState string
-
-const (
-	StateRunning   AnalysisState = "running"
-	StateCompleted AnalysisState = "completed"
-	StateFailed    AnalysisState = "failed"
-	StateCancelled AnalysisState = "cancelled"
-)
-
-// Label is the detection verdict.
-type Label string
-
-const (
-	LabelAI    Label = "ai"
-	LabelHuman Label = "human"
-)
 
 // Chat is one chat session document; the service composes the wire Chat by
 // joining this meta with a head page of messages.
@@ -101,16 +70,4 @@ type Highlight struct {
 type Page struct {
 	Messages   []Message `json:"messages"`
 	NextCursor string    `json:"next_cursor"`
-}
-
-// Decision is the outcome of one counted call.
-type Decision struct {
-	// Allowed reports whether the call fits the limit.
-	Allowed bool
-	// Count is the calls counted in the window, this one included.
-	Count int
-	// Limit is the budget the call was measured against.
-	Limit int
-	// RetryAfter is the time left in the window.
-	RetryAfter time.Duration
 }
