@@ -15,6 +15,7 @@ const testLicenseKey = "lic-0123456789abcdef79"
 const testOTelEndpoint = "https://otlp.eu01.nr-data.net"
 const testMongoURI = "mongodb://localhost:27017"
 const testRedisEndpoint = "redis://localhost:6379"
+const testAPIKey = "key-0123456789abcdef79"
 
 type mapSource map[string]string
 
@@ -23,9 +24,10 @@ func (m mapSource) Get(key string) (string, bool) {
 	return value, ok
 }
 
-// with merges the extra keys over the always-required MONGO_URI and REDIS_ENDPOINT.
+// with merges the extra keys over the always-required MONGO_URI, REDIS_ENDPOINT,
+// and API_KEY.
 func with(extra map[string]string) mapSource {
-	source := mapSource{"MONGO_URI": testMongoURI, "REDIS_ENDPOINT": testRedisEndpoint}
+	source := mapSource{"MONGO_URI": testMongoURI, "REDIS_ENDPOINT": testRedisEndpoint, "API_KEY": testAPIKey}
 	for key, value := range extra {
 		source[key] = value
 	}
@@ -242,6 +244,35 @@ func TestResolveContracts(t *testing.T) {
 		}
 	})
 
+	t.Run("a missing API_KEY fails the boot", func(t *testing.T) {
+		source := mapSource{"MONGO_URI": testMongoURI, "REDIS_ENDPOINT": testRedisEndpoint}
+		_, err := config.Resolve(source)
+		if err == nil || !strings.Contains(err.Error(), "API_KEY is required") {
+			t.Errorf("err = %v, want the API_KEY identity failure", err)
+		}
+	})
+
+	t.Run("a short API_KEY fails without echo", func(t *testing.T) {
+		short := "short-key"
+		_, err := config.Resolve(with(map[string]string{"API_KEY": short}))
+		if err == nil || !strings.Contains(err.Error(), "API_KEY must be at least 16 characters") {
+			t.Errorf("err = %v, want the credential floor failure", err)
+		}
+		if err != nil && strings.Contains(err.Error(), short) {
+			t.Errorf("err = %v; the attempted secret must never be echoed", err)
+		}
+	})
+
+	t.Run("a trimmed API_KEY at the floor serves", func(t *testing.T) {
+		cfg, err := config.Resolve(with(map[string]string{"API_KEY": " " + testAPIKey + " "}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.APIKey != testAPIKey {
+			t.Errorf("APIKey = %q, want the trimmed key", cfg.APIKey)
+		}
+	})
+
 	for caseName, bad := range map[string]string{
 		"garbage":     "eight",
 		"blank":       "",
@@ -430,6 +461,7 @@ func TestLoadEndToEnd(t *testing.T) {
 		t.Setenv("PORT", "9138")
 		t.Setenv("MONGO_URI", testMongoURI)
 		t.Setenv("REDIS_ENDPOINT", testRedisEndpoint)
+		t.Setenv("API_KEY", testAPIKey)
 		t.Chdir(t.TempDir())
 
 		cfg, err := config.Load()
@@ -543,7 +575,7 @@ func writeEnvPlane(t *testing.T) {
 	if err := os.MkdirAll("infra", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	plane := "PORT=9137\nDRAIN_TIMEOUT=12s\nOTEL_TRACE_SAMPLE_RATIO=0.5\nMONGO_URI=" + testMongoURI + "\nREDIS_ENDPOINT=" + testRedisEndpoint + "\n"
+	plane := "PORT=9137\nDRAIN_TIMEOUT=12s\nOTEL_TRACE_SAMPLE_RATIO=0.5\nMONGO_URI=" + testMongoURI + "\nREDIS_ENDPOINT=" + testRedisEndpoint + "\nAPI_KEY=" + testAPIKey + "\n"
 	if err := os.WriteFile(filepath.Join("infra", ".env"), []byte(plane), 0o600); err != nil {
 		t.Fatal(err)
 	}

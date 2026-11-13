@@ -21,6 +21,7 @@ type Config struct {
 	MongoDatabase   string
 	RedisEndpoint   string
 	RedisAuthToken  string
+	APIKey          string
 }
 
 const (
@@ -67,7 +68,25 @@ func Resolve(source Source) (Config, error) {
 	if err := resolveRedis(source, &cfg); err != nil {
 		return Config{}, err
 	}
+	if err := resolveAPIKey(source, &cfg); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// resolveAPIKey reads the service credential; API_KEY is required and must
+// clear the credential floor, because an unset key would authenticate everyone.
+func resolveAPIKey(source Source, cfg *Config) error {
+	raw, ok := source.Get("API_KEY")
+	if !ok {
+		return fmt.Errorf("config: API_KEY is required; set it in infra/.env (dev) or the secrets plane (prod)")
+	}
+	key := strings.TrimSpace(raw)
+	if len(key) < minCredentialChars {
+		return fmt.Errorf("config: API_KEY must be at least %d characters", minCredentialChars)
+	}
+	cfg.APIKey = key
+	return nil
 }
 
 // resolveRedis reads the cache keys; REDIS_ENDPOINT is required and a rediss
