@@ -50,6 +50,11 @@ func Connect(ctx context.Context, uri, database string) (*Client, error) {
 	return &Client{client: client, database: d}, nil
 }
 
+// Database exposes the connected handle the repository builds its collections on.
+func (c *Client) Database() *driver.Database {
+	return c.database
+}
+
 // Ping reports whether the server answers.
 func (c *Client) Ping(ctx context.Context) error {
 	return c.client.Ping(ctx, nil)
