@@ -114,7 +114,7 @@ func (r *Repository) ChatHistory(ctx context.Context, ownerID, chatID, cursor st
 
 	filter := bson.M{"chat_id": chatID}
 	if cursor != "" {
-		key, err := decodeCursor(cursor)
+		key, err := store.DecodeCursor(cursor)
 		if err != nil || key.ChatID != chatID {
 			return nil, "", store.ErrInvalidCursor
 		}
@@ -139,7 +139,7 @@ func (r *Repository) ChatHistory(ctx context.Context, ownerID, chatID, cursor st
 
 	page := messages[:limit]
 	last := page[len(page)-1]
-	next, err := encodeCursor(chatID, last.CreatedAt, last.ID)
+	next, err := store.EncodeCursor(chatID, last.CreatedAt, last.ID)
 	if err != nil {
 		return nil, "", err
 	}
