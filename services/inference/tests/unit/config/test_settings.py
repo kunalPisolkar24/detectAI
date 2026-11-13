@@ -13,6 +13,7 @@ from app.config.adapters.dotenv import DotEnvAdapter
 from app.config.provider import DevConfig
 from app.config.settings import (
     CHUNK_TOKEN_LIMIT_DEFAULT,
+    CHUNK_TOKEN_OVERLAP_DEFAULT,
     FLARE_MODEL_DIR,
     FLARE_MODEL_REPO,
     FLARE_MODEL_REVISION,
@@ -72,6 +73,7 @@ _SERVER_KNOBS: dict[str, object] = {
     "log_level": "INFO",
     "max_text_chars": MAX_TEXT_CHARS_DEFAULT,
     "chunk_token_limit": CHUNK_TOKEN_LIMIT_DEFAULT,
+    "chunk_token_overlap": CHUNK_TOKEN_OVERLAP_DEFAULT,
 }
 
 
@@ -90,6 +92,7 @@ def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
             "LOG_LEVEL": "debug",
             "MAX_TEXT_CHARS": "2000000",
             "CHUNK_TOKEN_LIMIT": "256",
+            "CHUNK_TOKEN_OVERLAP": "64",
         })
     )
 
@@ -97,6 +100,7 @@ def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
     assert settings.log_level == "DEBUG"
     assert settings.max_text_chars == 2_000_000
     assert settings.chunk_token_limit == 256
+    assert settings.chunk_token_overlap == 64
 
 
 @pytest.mark.parametrize(
@@ -116,12 +120,42 @@ def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
         ("chunk_token_limit", "-1"),
         ("chunk_token_limit", "0"),
         ("chunk_token_limit", "1.5"),
+        ("chunk_token_overlap", "not a number"),
+        ("chunk_token_overlap", "-1"),
+        ("chunk_token_overlap", "1.5"),
     ],
 )
 def test_an_invalid_server_knob_falls_back_to_its_safe_default(field: str, seeded: str) -> None:
     settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20, field.upper(): seeded}))
 
     assert getattr(settings, field) == _SERVER_KNOBS[field]
+
+
+def test_a_zero_overlap_is_a_legal_seed() -> None:
+    settings = Settings.from_provider(
+        StubProvider({"API_KEY": "a" * 20, "CHUNK_TOKEN_OVERLAP": "0"})
+    )
+
+    assert settings.chunk_token_overlap == 0
+
+
+@pytest.mark.parametrize("seeded", ["512", "1919"])
+def test_an_overlap_no_window_could_honour_fails_the_boot(seeded: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings.from_provider(
+            StubProvider({"API_KEY": "a" * 20, "CHUNK_TOKEN_OVERLAP": seeded})
+        )
+
+
+def test_the_overlap_is_bounded_by_the_chunk_limit() -> None:
+    with pytest.raises(ValidationError):
+        Settings.from_provider(
+            StubProvider({
+                "API_KEY": "a" * 20,
+                "CHUNK_TOKEN_LIMIT": "256",
+                "CHUNK_TOKEN_OVERLAP": "300",
+            })
+        )
 
 
 # The pull knobs: the pinned revisions are the reviewed artifact contract.

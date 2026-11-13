@@ -8,7 +8,13 @@ from app.inference.preprocessing import Chunk, PreparedDocument
 
 
 def _chunk() -> Chunk:
-    return Chunk(index=0, token_ids=(50281, 42, 50282), char_start=0, char_end=6)
+    return Chunk(
+        index=0,
+        token_ids=(50281, 42, 50282),
+        context_tokens=0,
+        char_start=0,
+        char_end=6,
+    )
 
 
 def test_a_chunk_is_frozen_pure_data() -> None:
@@ -23,6 +29,18 @@ def test_a_chunk_is_frozen_pure_data() -> None:
 
 def test_a_chunk_counts_the_sequence_the_model_sees() -> None:
     assert _chunk().token_count == 3
+
+
+def test_a_chunk_says_how_much_of_its_input_is_context() -> None:
+    chunk = Chunk(
+        index=1,
+        token_ids=(50281, 7, 8, 42, 50282),
+        context_tokens=2,
+        char_start=6,
+        char_end=12,
+    )
+
+    assert chunk.context_tokens == 2
 
 
 def test_a_prepared_document_is_frozen_pure_data() -> None:

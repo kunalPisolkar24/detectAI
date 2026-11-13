@@ -1,4 +1,4 @@
-"""The preparation facade: admission, the window clamp, and the boundary-aligned cut."""
+"""The preparation facade: admission, the window clamp, the overlap, and the cut."""
 
 import itertools
 
@@ -112,6 +112,29 @@ def test_a_window_with_no_room_for_content_is_refused() -> None:
 
     with pytest.raises(ValueError):
         _preprocessor(tokenizer=GreedyTokenizer(), chunk_token_limit=64)
+
+
+def test_the_content_window_shrinks_by_the_overlap() -> None:
+    preprocessor = _preprocessor(chunk_token_limit=64, chunk_token_overlap=10)
+
+    assert preprocessor._window_tokens == 64
+    assert preprocessor._content_tokens == 64 - 2 - 10
+
+
+def test_the_largest_usable_overlap_is_accepted() -> None:
+    preprocessor = _preprocessor(chunk_token_limit=512, chunk_token_overlap=509)
+
+    assert preprocessor._content_tokens == 1
+
+
+def test_an_overlap_that_leaves_no_content_room_is_refused() -> None:
+    with pytest.raises(ValueError, match="leaves no room for content"):
+        _preprocessor(chunk_token_limit=512, chunk_token_overlap=510)
+
+
+def test_the_refused_overlap_names_its_numbers() -> None:
+    with pytest.raises(ValueError, match="at most 509 is usable"):
+        _preprocessor(chunk_token_limit=512, chunk_token_overlap=510)
 
 
 def test_invalid_document_joins_the_preprocessing_tree() -> None:
@@ -245,3 +268,86 @@ def test_a_single_chunk_document() -> None:
 
 def test_an_empty_encoding_windows_to_nothing() -> None:
     assert _preprocessor().split("", Encoding(ids=(), offsets=())) == ()
+
+
+def test_the_overlap_at_zero_is_the_finished_slices_output() -> None:
+    words = _words(200, sentence_every=10)
+    encoding = _encoding(words)
+    preprocessor = _preprocessor(chunk_token_limit=64, chunk_token_overlap=0)
+
+    chunks = preprocessor.split(" ".join(words), encoding)
+
+    assert [chunk.token_count for chunk in chunks] == [62, 62, 62, 22]
+    assert all(chunk.context_tokens == 0 for chunk in chunks)
+    assert chunks[1].token_ids[1:-1] == encoding.ids[60:120]
+
+
+def test_the_input_is_the_window_but_for_the_first_chunk() -> None:
+    words = _words(200, sentence_every=10)
+    encoding = _encoding(words)
+    preprocessor = _preprocessor(chunk_token_limit=64, chunk_token_overlap=10)
+
+    chunks = preprocessor.split(" ".join(words), encoding)
+
+    assert [chunk.token_count for chunk in chunks] == [52, 62, 62, 62]
+    assert all(chunk.token_count <= 64 for chunk in chunks)
+
+
+def test_the_context_prefix_carries_the_preceding_content() -> None:
+    words = _words(200, sentence_every=10)
+    encoding = _encoding(words)
+    preprocessor = _preprocessor(chunk_token_limit=64, chunk_token_overlap=10)
+
+    chunks = preprocessor.split(" ".join(words), encoding)
+
+    assert chunks[1].context_tokens == 10
+    assert chunks[1].token_ids[1:11] == encoding.ids[40:50]
+    assert chunks[1].token_ids[11:-1] == encoding.ids[50:100]
+
+
+def test_the_first_chunk_has_no_context() -> None:
+    words = _words(200, sentence_every=10)
+    encoding = _encoding(words)
+    preprocessor = _preprocessor(chunk_token_limit=64, chunk_token_overlap=10)
+
+    chunks = preprocessor.split(" ".join(words), encoding)
+
+    assert chunks[0].context_tokens == 0
+    assert chunks[0].token_ids[1:-1] == encoding.ids[:50]
+
+
+def test_the_scored_regions_still_tile_the_text_under_an_overlap() -> None:
+    words = _words(200, sentence_every=10)
+    encoding = _encoding(words)
+    preprocessor = _preprocessor(chunk_token_limit=64, chunk_token_overlap=10)
+
+    chunks = preprocessor.split(" ".join(words), encoding)
+
+    for previous, following in itertools.pairwise(chunks):
+        assert previous.char_end == following.char_start
+
+
+def test_the_scored_regions_still_tile_the_token_stream() -> None:
+    words = _words(200, sentence_every=10)
+    encoding = _encoding(words)
+    preprocessor = _preprocessor(chunk_token_limit=64, chunk_token_overlap=10)
+
+    chunks = preprocessor.split(" ".join(words), encoding)
+
+    scored = tuple(
+        token
+        for chunk in chunks
+        for token in chunk.token_ids[1 + chunk.context_tokens : -1]
+    )
+    assert scored == encoding.ids
+
+
+def test_the_context_is_clamped_at_the_document_start() -> None:
+    words = _words(60, sentence_every=10)
+    encoding = _encoding(words)
+    preprocessor = _preprocessor(chunk_token_limit=64, chunk_token_overlap=20)
+
+    chunks = preprocessor.split(" ".join(words), encoding)
+
+    assert chunks[0].context_tokens == 0
+    assert chunks[1].context_tokens == 20

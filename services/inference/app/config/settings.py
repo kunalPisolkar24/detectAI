@@ -32,6 +32,10 @@ MAX_TEXT_CHARS_DEFAULT = 1_000_000
 # tokens included; the model ceiling clamps it down.
 CHUNK_TOKEN_LIMIT_DEFAULT = 512
 
+# The chunk overlap default: tokens of preceding context carried in a
+# chunk's model input; 0 is no overlap.
+CHUNK_TOKEN_OVERLAP_DEFAULT = 0
+
 _GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 _LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
@@ -64,6 +68,20 @@ def _positive_int_or_default(value: object, default: int) -> int:
     return default
 
 
+def _non_negative_int_or_default(value: object, default: int) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value if value >= 0 else default
+    if isinstance(value, str):
+        try:
+            parsed = int(value.strip())
+        except ValueError:
+            return default
+        return parsed if parsed >= 0 else default
+    return default
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(validate_default=True)
 
@@ -85,6 +103,10 @@ class Settings(BaseModel):
     # The chunk window: the total sequence length per chunk, special tokens
     # included; the model ceiling clamps it down.
     chunk_token_limit: int = CHUNK_TOKEN_LIMIT_DEFAULT
+
+    # The chunk overlap: tokens shared with the previous chunk, so a chunk's
+    # model input carries context its scored region does not. 0 = no overlap.
+    chunk_token_overlap: int = CHUNK_TOKEN_OVERLAP_DEFAULT
 
     # Where pulled artifacts land; a volume mount in a container keeps restarts cheap.
     model_cache_dir: str = "./models"
@@ -132,6 +154,13 @@ class Settings(BaseModel):
     def _fail_closed_chunk_limit(cls, value: object) -> int:
         return _positive_int_or_default(value, default=cls.model_fields["chunk_token_limit"].default)
 
+    @field_validator("chunk_token_overlap", mode="before")
+    @classmethod
+    def _fail_closed_chunk_overlap(cls, value: object) -> int:
+        return _non_negative_int_or_default(
+            value, default=cls.model_fields["chunk_token_overlap"].default
+        )
+
     @field_validator("hf_token", mode="before")
     @classmethod
     def _a_blank_token_is_an_unset_one(cls, value: object) -> object:
@@ -176,6 +205,17 @@ class Settings(BaseModel):
     @classmethod
     def _fail_closed_threads(cls, value: object) -> int:
         return _positive_int_or_default(value, default=0)
+
+    @model_validator(mode="after")
+    def _gate_chunk_overlap(self) -> "Settings":
+        """An overlap no window could honour fails the boot, not a silent clamp to zero."""
+        if self.chunk_token_overlap >= self.chunk_token_limit:
+            raise ValueError(
+                f"chunk_token_overlap={self.chunk_token_overlap} is not usable: the chunk "
+                f"window is at most CHUNK_TOKEN_LIMIT={self.chunk_token_limit} tokens, so "
+                "the overlap must be less than it"
+            )
+        return self
 
     @model_validator(mode="after")
     def _gate_observability(self) -> "Settings":

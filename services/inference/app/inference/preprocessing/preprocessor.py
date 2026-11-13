@@ -24,22 +24,26 @@ class DocumentPreprocessor:
         chunk_token_limit: int,
         model_max_sequence_length: int,
         max_text_chars: int,
+        chunk_token_overlap: int = 0,
     ) -> None:
         self._tokenizer = tokenizer
         self._chunk_token_limit = chunk_token_limit
         self._model_max_sequence_length = model_max_sequence_length
         self._max_text_chars = max_text_chars
+        self._chunk_token_overlap = chunk_token_overlap
         window = min(chunk_token_limit, model_max_sequence_length)
         if window < MIN_SEQUENCE_LENGTH:
             raise ValueError(
                 f"the chunk window is {window} tokens; at least {MIN_SEQUENCE_LENGTH} are needed"
             )
         self._window_tokens = window
-        self._content_tokens = window - tokenizer.special_token_count
+        self._content_tokens = window - tokenizer.special_token_count - chunk_token_overlap
         if self._content_tokens < 1:
             raise ValueError(
                 f"the chunk window is {window} tokens and the tokenizer adds "
-                f"{tokenizer.special_token_count} special ones; no room for content"
+                f"{tokenizer.special_token_count} special ones; an overlap of "
+                f"{chunk_token_overlap} leaves no room for content "
+                f"(at most {window - tokenizer.special_token_count - 1} is usable)"
             )
 
     def prepare(self, text: str) -> PreparedDocument:
@@ -53,7 +57,7 @@ class DocumentPreprocessor:
         )
 
     def split(self, text: str, encoding: Encoding) -> tuple[Chunk, ...]:
-        """Cut the token stream at soft boundaries into contiguous, non-overlapping chunks."""
+        """Cut the token stream at soft boundaries into non-overlapping scored regions."""
         ids = encoding.ids
         offsets = encoding.offsets
         if not ids:
@@ -67,14 +71,17 @@ class DocumentPreprocessor:
                 aligned = self._aligned_cut(cuts, start, end)
                 if aligned is not None:
                     end = aligned + 1
+            context = ids[max(0, start - self._chunk_token_overlap) : start]
             chunks.append(
                 Chunk(
                     index=len(chunks),
                     token_ids=(
                         self._tokenizer.cls_token_id,
+                        *context,
                         *ids[start:end],
                         self._tokenizer.sep_token_id,
                     ),
+                    context_tokens=len(context),
                     char_start=offsets[start][0],
                     char_end=offsets[end - 1][1],
                 )

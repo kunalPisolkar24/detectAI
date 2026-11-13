@@ -123,6 +123,42 @@ def test_every_chunk_decodes_back_to_the_text_it_came_from() -> None:
 
 
 @requires_artifacts
+def test_the_context_prefix_decodes_back_to_the_text_before_the_chunk() -> None:
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(str(_FLARE), local_files_only=True)
+    preprocessor = DocumentPreprocessor(
+        FastTokenizer(tokenizer),
+        chunk_token_limit=64,
+        model_max_sequence_length=8192,
+        max_text_chars=1_000_000,
+        chunk_token_overlap=16,
+    )
+    text = (
+        "The first sentence carries a little more than the second one does. "
+        "Then a line break lands here.\n"
+        "And a last sentence closes the document."
+    ) * 6
+
+    document = preprocessor.prepare(text)
+
+    assert len(document.chunks) > 1
+    assert document.chunks[0].context_tokens == 0
+    assert document.chunks[1].context_tokens == 16
+    for chunk in document.chunks:
+        decoded = tokenizer.decode(
+            chunk.token_ids[1 + chunk.context_tokens : -1],
+            clean_up_tokenization_spaces=False,
+        )
+        assert decoded == text[chunk.char_start : chunk.char_end]
+        context = tokenizer.decode(
+            chunk.token_ids[1 : 1 + chunk.context_tokens],
+            clean_up_tokenization_spaces=False,
+        )
+        assert text[: chunk.char_start].endswith(context)
+
+
+@requires_artifacts
 def test_both_shipped_tokenizers_declare_the_same_special_tokens() -> None:
     from transformers import AutoTokenizer
 

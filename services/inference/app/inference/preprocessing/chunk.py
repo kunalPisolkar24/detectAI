@@ -8,7 +8,8 @@ class Chunk:
     """One analysable window: the token IDs to feed the model and the text span they came from."""
 
     index: int
-    token_ids: tuple[int, ...]  # includes [CLS] ... [SEP]
+    token_ids: tuple[int, ...]  # includes [CLS] ... [SEP]; may carry a context prefix
+    context_tokens: int  # leading tokens that are context, not scored
     char_start: int  # Unicode scalar offset into the request text
     char_end: int
 
