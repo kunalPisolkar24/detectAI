@@ -10,3 +10,7 @@ class Engine(Protocol):
     def score(self, sequences: Sequence[Sequence[int]]) -> tuple[float, ...]:
         """One AI probability per token-id sequence, in the same order."""
         ...
+
+    def warmup(self, sequence_length: int) -> None:
+        """Prove the session executes, before the service takes traffic."""
+        ...

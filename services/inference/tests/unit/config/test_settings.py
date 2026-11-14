@@ -19,6 +19,7 @@ from app.config.settings import (
     FLARE_MODEL_REPO,
     FLARE_MODEL_REVISION,
     INFERENCE_BATCH_SIZE_DEFAULT,
+    MAX_INFLIGHT_DOCUMENTS_DEFAULT,
     MAX_TEXT_CHARS_DEFAULT,
     MODEL_KEYS,
     MODEL_MAX_SEQUENCE_LENGTH_DEFAULT,
@@ -79,6 +80,7 @@ _SERVER_KNOBS: dict[str, object] = {
     "chunk_token_limit": CHUNK_TOKEN_LIMIT_DEFAULT,
     "chunk_token_overlap": CHUNK_TOKEN_OVERLAP_DEFAULT,
     "inference_batch_size": INFERENCE_BATCH_SIZE_DEFAULT,
+    "max_inflight_documents": MAX_INFLIGHT_DOCUMENTS_DEFAULT,
     "ai_detection_threshold": AI_DETECTION_THRESHOLD_DEFAULT,
 }
 
@@ -88,7 +90,6 @@ def test_the_server_knobs_hold_their_defaults_without_seeds() -> None:
 
     for field, default in _SERVER_KNOBS.items():
         assert getattr(settings, field) == default
-
 
 def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
     settings = Settings.from_provider(
@@ -137,6 +138,10 @@ def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
         ("inference_batch_size", "-1"),
         ("inference_batch_size", "0"),
         ("inference_batch_size", "1.5"),
+        ("max_inflight_documents", "not a number"),
+        ("max_inflight_documents", "-1"),
+        ("max_inflight_documents", "0"),
+        ("max_inflight_documents", "1.5"),
         ("ai_detection_threshold", "not a number"),
         ("ai_detection_threshold", "-0.1"),
         ("ai_detection_threshold", "1.5"),

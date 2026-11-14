@@ -83,7 +83,7 @@ class OnnxEngine:
         return input_ids, attention_mask
 
     def _logits(
-        self, input_ids: np.ndarray, attention_mask: np.ndarray, width: int
+        self, input_ids: np.ndarray, attention_mask: np.ndarray, batch: int
     ) -> np.ndarray:
         """Run the session once and hold its output to the artifacts' contract."""
         feed = {"input_ids": input_ids, "attention_mask": attention_mask}
@@ -97,10 +97,10 @@ class OnnxEngine:
             logits = np.asarray(outputs[0], dtype=np.float32)
         except (TypeError, ValueError) as error:
             raise EngineError(f"the session returned a non-numeric output: {error}") from error
-        if logits.shape != (width, _LOGIT_COLUMNS):
+        if logits.shape != (batch, _LOGIT_COLUMNS):
             raise EngineError(
                 f"the session returned logits of shape {logits.shape}; the contract is "
-                f"({width}, {_LOGIT_COLUMNS})"
+                f"({batch}, {_LOGIT_COLUMNS})"
             )
         if not np.isfinite(logits).all():
             raise EngineError("the session returned non-finite logits")

@@ -13,21 +13,16 @@ def _engine() -> OnnxEngine:
     )
 
 
-def test_the_port_is_one_scoring_method_wide() -> None:
-    assert Engine.__protocol_attrs__ == {"score"}
+def test_the_port_is_scoring_and_warmup_wide() -> None:
+    # The runtime holds the port, so the warmup it owns has to be on it.
+    assert Engine.__protocol_attrs__ == {"score", "warmup"}
 
 
 def test_the_adapter_satisfies_the_port_structurally() -> None:
     engine = _engine()
 
     assert callable(engine.score)
-
-
-def test_the_warmup_lives_on_the_adapter_and_not_on_the_port() -> None:
-    engine = _engine()
-
     assert callable(engine.warmup)
-    assert "warmup" not in Engine.__protocol_attrs__
 
 
 def test_engine_error_joins_the_plane_tree() -> None:

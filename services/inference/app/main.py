@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from .config import ConfigFactory, Settings, deployment_flick
+from .inference.analysis import DocumentAnalysis
 from .inference.engine import OnnxEngine
 from .inference.preprocessing import DocumentPreprocessor, FastTokenizer
 from .inference.runtime import ModelRuntime, build_runtime
@@ -30,6 +31,7 @@ async def main() -> None:
     loaded = _load_models(settings, artifacts)
     runtimes = _build_runtimes(settings, loaded)
     _warm_runtimes(runtimes)
+    analysis = DocumentAnalysis(runtimes, threshold=settings.ai_detection_threshold)
     logger.info(
         "model runtimes: %s",
         ", ".join(
@@ -38,7 +40,7 @@ async def main() -> None:
         ),
     )
 
-    await run_server(port=settings.grpc_port, api_key=settings.api_key)
+    await run_server(port=settings.grpc_port, api_key=settings.api_key, analysis=analysis)
 
 
 def _ensure_model_artifacts(settings: Settings) -> Mapping[str, Path]:
@@ -83,6 +85,7 @@ def _build_runtimes(
             preprocessor=preprocessor,
             engine=engine,
             batch_size=batch_size,
+            max_inflight=settings.max_inflight_documents,
         )
     return runtimes
 

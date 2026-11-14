@@ -5,16 +5,18 @@ import signal
 from grpc import aio
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
+from ..inference.analysis import DocumentAnalysis
 from .auth import ApiKeyAuthInterceptor
 
-_SHUTDOWN_GRACE_SECONDS = 5
+# How long the server waits for the documents in flight when it stops.
+_SHUTDOWN_GRACE_SECONDS = 120
 
 logger = logging.getLogger(__name__)
 
 
-async def run_server(port: int, api_key: str) -> None:
+async def run_server(port: int, api_key: str, analysis: DocumentAnalysis) -> None:
     server, health_servicer, _ = _build(port, api_key)
-    await _serve_until_stopped(server, health_servicer, _wait_for_signal())
+    await _serve_until_stopped(server, health_servicer, _wait_for_signal(), analysis)
 
 
 def _build(port: int, api_key: str) -> tuple[aio.Server, health.aio.HealthServicer, int]:
@@ -29,13 +31,17 @@ def _build(port: int, api_key: str) -> tuple[aio.Server, health.aio.HealthServic
 
 
 async def _serve_until_stopped(
-    server: aio.Server, health_servicer: health.aio.HealthServicer, stop: asyncio.Event
+    server: aio.Server,
+    health_servicer: health.aio.HealthServicer,
+    stop: asyncio.Event,
+    analysis: DocumentAnalysis,
 ) -> None:
     await health_servicer.set("", health_pb2.HealthCheckResponse.SERVING)
     await server.start()
     logger.info("grpc server listening")
 
     await stop.wait()
+    analysis.begin_draining()
     await health_servicer.enter_graceful_shutdown()
     await server.stop(grace=_SHUTDOWN_GRACE_SECONDS)
     logger.info("grpc server stopped")

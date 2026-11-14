@@ -48,6 +48,7 @@ def _runtime(engine: object, chunk_token_limit: int = 512) -> ModelRuntime:
         batch_size=8,
         preparation_executor=object(),  # type: ignore[arg-type]
         engine_executor=object(),  # type: ignore[arg-type]
+        max_inflight=2,
     )
 
 

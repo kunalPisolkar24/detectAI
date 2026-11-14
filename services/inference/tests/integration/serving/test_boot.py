@@ -9,6 +9,7 @@ import grpc
 from grpc import aio
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 
+from app.inference.analysis import DocumentAnalysis
 from app.serving.generated import ai_service_pb2 as pb
 from app.serving.generated import ai_service_pb2_grpc
 from app.serving.server import _build, _serve_until_stopped
@@ -16,14 +17,16 @@ from app.serving.server import _build, _serve_until_stopped
 _BOOT_KEY = "boot-integration-key"
 
 
-def test_the_production_boot_serves_health_on_an_ephemeral_port() -> None:
-    asyncio.run(_serve_and_probe())
+def test_the_production_boot_serves_health_on_an_ephemeral_port(
+    analysis: DocumentAnalysis,
+) -> None:
+    asyncio.run(_serve_and_probe(analysis))
 
 
-async def _serve_and_probe() -> None:
+async def _serve_and_probe(analysis: DocumentAnalysis) -> None:
     stop = asyncio.Event()
     server, health_servicer, port = _build(0, api_key=_BOOT_KEY)
-    serve = asyncio.create_task(_serve_until_stopped(server, health_servicer, stop))
+    serve = asyncio.create_task(_serve_until_stopped(server, health_servicer, stop, analysis))
 
     async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
         await asyncio.wait_for(channel.channel_ready(), timeout=5.0)
@@ -35,14 +38,16 @@ async def _serve_and_probe() -> None:
     await serve
 
 
-def test_the_gate_rejects_unkeyed_calls_and_admits_keyed_ones() -> None:
-    asyncio.run(_probe_the_gate())
+def test_the_gate_rejects_unkeyed_calls_and_admits_keyed_ones(
+    analysis: DocumentAnalysis,
+) -> None:
+    asyncio.run(_probe_the_gate(analysis))
 
 
-async def _probe_the_gate() -> None:
+async def _probe_the_gate(analysis: DocumentAnalysis) -> None:
     stop = asyncio.Event()
     server, health_servicer, port = _build(0, api_key=_BOOT_KEY)
-    serve = asyncio.create_task(_serve_until_stopped(server, health_servicer, stop))
+    serve = asyncio.create_task(_serve_until_stopped(server, health_servicer, stop, analysis))
 
     async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
         detect = ai_service_pb2_grpc.AIServiceStub(channel).Detect

@@ -51,6 +51,11 @@ CHUNK_TOKEN_OVERLAP_DEFAULT = 0
 # value until the GPU sweep measures the real one.
 INFERENCE_BATCH_SIZE_DEFAULT = 8
 
+# The in-flight documents per model: how many may be in the engine at once. It
+# is the engine pool's width, so a saturated model sheds the request instead of
+# queueing work that would take minutes to drain.
+MAX_INFLIGHT_DOCUMENTS_DEFAULT = 2
+
 # The verdict threshold default: the AI probability at which a document reads
 # as AI. The house cutoff, not a measurement - the artifacts score everything
 # above 0.9875, so nothing calibrates it yet.
@@ -164,6 +169,10 @@ class Settings(BaseModel):
     flare_batch_size: int | None = None
     spark_batch_size: int | None = None
 
+    # The in-flight documents per model: how many may be in the engine at once.
+    # The engine pool is this wide, so the pool never queues behind itself.
+    max_inflight_documents: int = MAX_INFLIGHT_DOCUMENTS_DEFAULT
+
     # The sequence ceiling per model: the length the artifact's build was
     # trained at. The artifact's declared length is a cross-check on this
     # number, never its source - one of the two pinned artifacts declares none.
@@ -246,6 +255,11 @@ class Settings(BaseModel):
     @classmethod
     def _fail_closed_model_sequence_length(cls, value: object) -> int:
         return _positive_int_or_default(value, default=MODEL_MAX_SEQUENCE_LENGTH_DEFAULT)
+
+    @field_validator("max_inflight_documents", mode="before")
+    @classmethod
+    def _fail_closed_inflight_documents(cls, value: object) -> int:
+        return _positive_int_or_default(value, default=MAX_INFLIGHT_DOCUMENTS_DEFAULT)
 
     @field_validator("ai_detection_threshold", mode="before")
     @classmethod
