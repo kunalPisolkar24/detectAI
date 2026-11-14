@@ -157,7 +157,23 @@ def test_an_unknown_model_is_refused() -> None:
             )
 
         assert context.code == grpc.StatusCode.INVALID_ARGUMENT
-        assert "nope" in context.detail
+        assert context.detail == "nope is not served by this process"
+
+    asyncio.run(scenario())
+
+
+def test_a_model_the_process_does_not_serve_says_so() -> None:
+    async def scenario() -> None:
+        servicer = _servicer(models=("spark",))
+        context = FakeContext()
+
+        with pytest.raises(Aborted):
+            await servicer.Detect(
+                pb.DetectRequest(text=_text(10), model_id="flare"), context
+            )
+
+        assert context.code == grpc.StatusCode.INVALID_ARGUMENT
+        assert context.detail == "flare is not served by this process"
 
     asyncio.run(scenario())
 

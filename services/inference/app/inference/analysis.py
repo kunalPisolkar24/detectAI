@@ -114,7 +114,7 @@ class DocumentAnalysis:
     def _runtime_for(self, model_id: str) -> ModelRuntime:
         runtime = self._runtimes.get(model_id)
         if runtime is None:
-            raise UnknownModelError(f"unknown model: {model_id}")
+            raise UnknownModelError(f"{model_id} is not served by this process")
         return runtime
 
     async def _prepare(self, runtime: ModelRuntime, text: str) -> PreparedDocument:
