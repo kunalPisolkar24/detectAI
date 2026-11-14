@@ -184,6 +184,10 @@ One model per card is the recommendation, and the reason is not only
 scaling: it is that the concurrency accounting becomes honest. A limit that
 is per model but that a device can break is not a limit.
 
+`ENABLED_MODELS` is what makes the recommendation expressible: a process
+serves the models it is told to, so the card gets one model and one process,
+and the other model gets its own.
+
 ### Sequential or concurrent within a request
 
 The groups are independent — chunk 0–31 and chunk 32–63 do not depend on
@@ -388,8 +392,9 @@ sequence length, so its ceiling is correspondingly lower. See §3.
 | `spark_batch_size` | `SPARK_BATCH_SIZE` | unset → global | The per-model override |
 | `inference_providers` | `INFERENCE_PROVIDERS` | `CPUExecutionProvider` | Provider preference — **must be effective, or the boot fails** |
 | `ort_intra_op_threads` | `ORT_INTRA_OP_THREADS` | `0` | The intra-op pool; 1–2 on a card, the core count on a CPU host |
-| `max_inflight_requests` | `MAX_INFLIGHT_REQUESTS` | — | The gRPC server's `maximum_concurrent_rpcs` |
-| `max_concurrent_batches` | `MAX_CONCURRENT_BATCHES` | — | The width of the engine executor pool: **1 on a card** |
+| `max_inflight_requests` | `MAX_INFLIGHT_REQUESTS` | `8` | The gRPC server's `maximum_concurrent_rpcs` |
+| `max_concurrent_batches` | `MAX_CONCURRENT_BATCHES` | `2` | The width of the engine executor pool **and** the model's admission: **1 on a card**. The two are one knob, because a permit wider than the pool would queue documents instead of shedding them |
+| `enabled_models` | `ENABLED_MODELS` | `spark` | The models this process serves — one model per card is `ENABLED_MODELS=flare` in one deployment and `spark` in the other |
 | `ort_device_id` | `ORT_DEVICE_ID` | `0` | Which card the session binds to — the loading plane's, and the lever that makes "one model per card" expressible |
 
 **The default is the CPU-safe value.** The measured CPU behaviour says
@@ -397,10 +402,11 @@ batch shape barely matters but a long single run holds a thread longer and
 hurts tail latency, so small-and-concurrent wins there. The sweep moves it
 up. A default is never the answer to a hardware question.
 
-`INFERENCE_PROVIDERS` and `ORT_INTRA_OP_THREADS` are **missing from
-`secrets.toml`'s `[ssm].keys`** today, so prod cannot request a device at
-all. That gap predates this document and is a prerequisite for it. The new
-knobs need the same treatment.
+`INFERENCE_PROVIDERS` and `ORT_INTRA_OP_THREADS` are both in `secrets.toml`'s
+`[ssm].keys`, so prod can request a device today. The knobs this document
+adds — `MAX_INFLIGHT_REQUESTS`, `MAX_CONCURRENT_BATCHES`,
+`FLARE_MAX_SEQUENCE_LENGTH`, `SPARK_MAX_SEQUENCE_LENGTH` — carry the same
+treatment.
 
 ## 9. Dependencies
 

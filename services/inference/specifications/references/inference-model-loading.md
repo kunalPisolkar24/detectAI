@@ -88,8 +88,9 @@ Three shared steps, composed once:
    local_files_only=True)`. Strictly offline: ModernBERT resolves from
    `tokenizer_config.json` without `trust_remote_code`. A hub round-trip in
    the load path is a bug.
-3. **Verify step** — log requested vs `session.get_providers()` plus load
-   duration, per model. Mismatch → loud warning, proceed (see defaults).
+3. **Verify step** — compare the requested providers against
+   `session.get_providers()`, plus the load duration, per model. A requested
+   provider that is not effective fails the boot (see defaults).
 
 External data (`model.onnx.data`) resolves automatically: ORT reads it
 relative to the onnx file, and the pull contract lands both in the same dir.
@@ -236,7 +237,7 @@ sequenceDiagram
     M->>M: run_server
 ```
 
-### Provider mismatch: loud warning, proceed
+### Provider mismatch: the boot fails
 
 ```mermaid
 sequenceDiagram
@@ -247,8 +248,8 @@ sequenceDiagram
     ORT-->>L: session
     L->>ORT: get_providers
     ORT-->>L: ["CPUExecutionProvider"]
-    Note over L: warning: requested GPU, effective CPU — proceed
-    L-->>L: LoadedModel
+    Note over L: requested GPU, effective CPU — fail the boot
+    L--xL: ModelLoadError
 ```
 
 ### Permanent load failure: fail-closed boot
@@ -293,8 +294,15 @@ Env keys are the uppercase field names (`Settings.from_provider` contract).
 
 | Field | Env key | Default | Role |
 | --- | --- | --- | --- |
-| `inference_providers` | `INFERENCE_PROVIDERS` | `CPUExecutionProvider` | CSV of ORT execution providers, order = preference |
+| `inference_providers` | `INFERENCE_PROVIDERS` | `CPUExecutionProvider` | CSV of ORT execution providers, order = preference; each one must be effective or the boot fails |
 | `ort_intra_op_threads` | `ORT_INTRA_OP_THREADS` | `0` (ORT default) | Per-session intra-op threads; `0` = leave ORT's default |
+| `flare_max_sequence_length` | `FLARE_MAX_SEQUENCE_LENGTH` | `512` | The sequence ceiling for flare — the length its build was trained at. Configured, not guessed: only one of the two pinned artifacts declares its trained length, and the position-embedding ceiling is not it |
+| `spark_max_sequence_length` | `SPARK_MAX_SEQUENCE_LENGTH` | `512` | The same ceiling for spark |
+
+The artifact's own declared length is a **cross-check** on the configured
+ceiling, never its source: a configured ceiling above the length the artifact
+was built for fails the boot. A ceiling below it is honoured — it is a
+deliberate tightening.
 
 ## 9. Dependencies
 
@@ -317,7 +325,8 @@ Env keys are the uppercase field names (`Settings.from_provider` contract).
   - `intra_op_threads=0` leaves ORT's default threads untouched
   - session build failure → `ModelLoadError` carrying the model key
   - tokenizer failure → `ModelLoadError` carrying the model key
-  - provider mismatch logs a warning and proceeds
+  - provider mismatch fails the boot with the model key and the providers the
+    session actually offers
   - fail-fast: first failure aborts the walk
 - `tests/unit/config/test_settings.py` — provider CSV split/strip/dedupe with
   order preserved, unknown provider → `ValueError`, blank → `ValueError`,
@@ -332,8 +341,9 @@ Env keys are the uppercase field names (`Settings.from_provider` contract).
    divergence adds per-key step overrides, not subclasses.
 2. Loading is strictly offline (`local_files_only=True` everywhere); the pull
    plane owns every hub interaction.
-3. Provider mismatch → loud warning, proceed — not fail-closed. Revisit if a
-   config/pod mismatch should kill the boot instead.
+3. Provider mismatch → the boot fails — not a warning. A silent fallback to
+   the CPU is a silent slowdown that reports itself as healthy in every
+   dashboard; the GPU reference reached the same conclusion.
 4. Settings validates provider names against a pure-string frozenset; config
    never imports onnxruntime.
 5. Intra-op threads only; inter-op, graph-opt level, execution mode, and mem

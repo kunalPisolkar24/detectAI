@@ -113,6 +113,13 @@ defaults to `spark`; an unknown value is `INVALID_ARGUMENT`. No
 case-normalization is promised — clients send the canonical key, and the
 response `model_id` is the canonical echo of what was used.
 
+The **served set is deployment-scoped**: `ENABLED_MODELS` names the models a
+process serves — `spark`, `flare`, or both, `spark` alone by default. A model
+the deployment does not serve answers `INVALID_ARGUMENT` like any other
+unknown one, with a detail naming the model and saying it is not served. The
+default deployment serves `spark`, so the contract's own default for an
+unnamed request resolves to a model that is actually there.
+
 **Text limits.** Non-empty, else `INVALID_ARGUMENT`. The submission bound is
 `MAX_TEXT_CHARS` scalars — 1,000,000 by default, env-overridable, and bad
 values fail closed to the default — and exceeding it is `INVALID_ARGUMENT`:
@@ -184,10 +191,16 @@ sets (including the absence of `label` / `model_name`), the event oneof's
 `started → progress → result` order, and the grpc stub's relative-import fix.
 `tests/unit/serving/test_auth.py` pins the gate at the interceptor: health
 pass-through, deny on missing, wrong, or non-string keys, case-insensitive
-metadata, streaming-shape preservation, and the unknown-method deny. The
-integration boot probes a real channel: unkeyed and wrong-keyed `Detect` →
-`UNAUTHENTICATED`, keyed → `UNIMPLEMENTED` until the servicer lands, health
-open without a key. `test`, `test-unit`, and `test-integration` depend on
+metadata, streaming-shape preservation, and the unknown-method deny.
+`tests/unit/serving/test_servicer.py` and `test_mapper.py` pin the RPC
+surface: the verdict's percentages and the confidence that mirrors the winning
+side, the canonical `model_id` echo, the event order, the progress
+coalescing, and each error's status — `INVALID_ARGUMENT` for a bad input or
+an unserved model, `RESOURCE_EXHAUSTED` for a shed load, `INTERNAL` for
+anything unexpected. The integration boot probes a real channel: unkeyed and
+wrong-keyed `Detect` → `UNAUTHENTICATED`, keyed → a verdict, health open
+without a key, and a request past the server's concurrency limit →
+`RESOURCE_EXHAUSTED`. `test`, `test-unit`, and `test-integration` depend on
 `proto` so every run drives fresh stubs. Run with `make test-unit`.
 
 ## 10. Defaults taken (override if any read wrong)

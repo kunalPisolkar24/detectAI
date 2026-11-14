@@ -63,19 +63,25 @@ class ArtifactStore(Protocol):
 Holds specs + store. `ensure_all()` walks each spec: `locate` first (cache
 hit → log and skip), `pull` on miss. First failure aborts the walk and raises
 a typed error — the boot dies before serving, matching `main.py`'s existing
-fail-closed posture.
+fail-closed posture. The workers that pull in parallel are daemonic: a failure
+must not wait out a sibling's multi-gigabyte download before the process can
+exit.
 
 ### `app/models/pulling/huggingface.py` — `HuggingFaceStore`
 
 - Constructor takes `root: Path` + `token: str | None`, wired from Settings in
   `main.py`. No env reads inside the adapter.
-- `locate`: `snapshot_download(..., local_files_only=True)` probe; catches
-  `LocalEntryNotFoundError` → `MissingArtifact`. With pinned SHAs a hit is
-  always the exact bytes.
-- `pull`: `snapshot_download` with `allow_patterns=[f"{artifact_dir}/*"]`,
-  3 attempts with linear backoff. Transient errors (timeouts, 5xx, 429)
-  retry; permanent ones (401/403/404, disk) do not. Hub errors are mapped to
-  the typed vocabulary below — callers never see `HfHubHTTPError`.
+- `locate`: an offline probe that never reaches the hub. Each file's
+  recorded commit hash — the hub's own download metadata, written beside the
+  file — is compared against the pinned revision; a file that is not cached, or
+  that belongs to another commit, is a `MissingArtifact`. The hub hands back a
+  cached file even when it came from another commit, so without this check a
+  volume that outlived a revision bump would keep serving the old build under
+  the new pin.
+- `pull`: `hf_hub_download` per file with the pinned revision, 3 attempts with
+  linear backoff. Transient errors (timeouts, 5xx, 429) retry; permanent ones
+  (401/403/404, disk) do not. Hub errors are mapped to the typed vocabulary
+  below — callers never see `HfHubHTTPError`.
 - Auth: the token is passed only when set; public repos need none.
 - Free from the hub: per-file locks, `.incomplete` partial-download resume,
   ETag HEADs when a revision is already cached.
@@ -305,6 +311,7 @@ Env keys are the uppercase field names (`Settings.from_provider` contract).
 | --- | --- | --- | --- |
 | `model_cache_dir` | `MODEL_CACHE_DIR` | `./models` | Volume root |
 | `hf_token` | `HF_TOKEN` | `None` | Private-repo auth; blank seed = unset |
+| `enabled_models` | `ENABLED_MODELS` | `spark` | The models this process serves — `spark`, `flare`, or both. It filters the specs, so a process pulls, loads and answers for exactly these. One model per process is what makes the one-model-per-card shape expressible |
 | `flare_model_repo` / `revision` / `dir` | `FLARE_MODEL_*` | pinned | Flare pull contract |
 | `spark_model_repo` / `revision` / `dir` | `SPARK_MODEL_*` | pinned | Spark pull contract |
 
