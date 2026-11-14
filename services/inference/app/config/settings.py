@@ -302,7 +302,11 @@ class Settings(BaseModel):
 
     @model_validator(mode="after")
     def _gate_chunk_overlap(self) -> "Settings":
-        """An overlap no window could honour fails the boot, not a silent clamp to zero."""
+        """The cheap pre-check: an overlap the limit alone forbids fails the boot
+        before the models are pulled. The binding rule - the overlap against the
+        window the model's own ceiling leaves - belongs to the preparation
+        plane, which is the only one that knows the tokenizer's special tokens.
+        """
         if self.chunk_token_overlap >= self.chunk_token_limit:
             raise ValueError(
                 f"chunk_token_overlap={self.chunk_token_overlap} is not usable: the chunk "

@@ -8,6 +8,11 @@ from .tokenizer import Encoding, Tokenizer
 
 MIN_SEQUENCE_LENGTH = 64
 
+# The chunk shape the models were trained on: [CLS] ... [SEP]. The chunk is
+# built by hand so a context prefix can sit between the two, which means the
+# tokenizer has to add exactly these two.
+_SPECIAL_TOKENS = 2
+
 # The characters that end a sentence: the span that ends on one is a cut point.
 _SENTENCE_END = ".!?"
 
@@ -31,6 +36,11 @@ class DocumentPreprocessor:
         self._model_max_sequence_length = model_max_sequence_length
         self._max_text_chars = max_text_chars
         self._chunk_token_overlap = chunk_token_overlap
+        if tokenizer.special_token_count != _SPECIAL_TOKENS:
+            raise ValueError(
+                f"the tokenizer adds {tokenizer.special_token_count} special tokens; "
+                f"a chunk is [CLS] ... [SEP], so exactly {_SPECIAL_TOKENS} are needed"
+            )
         window = min(chunk_token_limit, model_max_sequence_length)
         if window < MIN_SEQUENCE_LENGTH:
             raise ValueError(
@@ -55,6 +65,8 @@ class DocumentPreprocessor:
         """Admit the submission, tokenize it once, and window it."""
         self._admit(text)
         encoding = self._tokenizer.encode(text)
+        if not encoding.ids:
+            raise InvalidDocument("the submission carries no analysable text")
         return PreparedDocument(
             total_chars=len(text),
             total_tokens=len(encoding.ids),

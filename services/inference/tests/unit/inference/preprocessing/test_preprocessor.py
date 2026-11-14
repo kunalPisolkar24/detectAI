@@ -52,6 +52,20 @@ def _preprocessor(**overrides: object) -> DocumentPreprocessor:
     return DocumentPreprocessor(**kwargs)  # type: ignore[arg-type]
 
 
+class EmptyTokenizer(StubTokenizer):
+    """A tokenizer that drops every character of the submission."""
+
+    def encode(self, text: str) -> Encoding:
+        self.seen.append(text)
+        return Encoding(ids=(), offsets=())
+
+
+class ThreeSpecialTokens(StubTokenizer):
+    """A tokenizer whose chunk shape is not [CLS] ... [SEP]."""
+
+    special_token_count = 3
+
+
 def _words(count: int, sentence_every: int = 0) -> list[str]:
     """Words, every nth one ending a sentence."""
     return [
@@ -195,6 +209,20 @@ def test_a_blank_submission_is_refused(text: str) -> None:
 def test_a_non_string_submission_is_refused() -> None:
     with pytest.raises(InvalidDocument):
         _preprocessor().prepare(None)  # type: ignore[arg-type]
+
+
+def test_a_submission_that_tokenizes_to_nothing_is_refused() -> None:
+    # The text carries characters the tokenizer drops: nothing is analysable,
+    # so the submission is refused here rather than scored as an empty document.
+    preprocessor = _preprocessor(tokenizer=EmptyTokenizer())
+
+    with pytest.raises(InvalidDocument):
+        preprocessor.prepare("some characters")
+
+
+def test_a_tokenizer_whose_chunk_shape_is_not_cls_sep_is_refused() -> None:
+    with pytest.raises(ValueError):
+        _preprocessor(tokenizer=ThreeSpecialTokens())
 
 
 def test_an_oversized_submission_is_refused_before_any_tokenization() -> None:
