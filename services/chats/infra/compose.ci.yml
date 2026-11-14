@@ -1,0 +1,4 @@
+services:
+  chats:
+    image: kunalpisolkar/detect-ai-chats-service:ci
+    pull_policy: never

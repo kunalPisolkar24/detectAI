@@ -51,9 +51,54 @@ jobs:
       - name: Run Integration Tests
         run: go test -tags=integration -timeout=900s ./... -v -cover
 
+  load-test-smoke:
+    name: Run Smoke Load Test
+    needs: quality-assurance
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.SERVICE_PATH }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create the service env file
+        run: make env
+
+      - name: Load rig env file
+        run: make load-env
+
+      - name: Start the datastores
+        run: |
+          make db-up
+          make cache-up
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image for the smoke rig
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ env.SERVICE_PATH }}
+          file: ${{ env.SERVICE_PATH }}/Dockerfile
+          push: false
+          load: true
+          tags: ${{ env.DOCKER_IMAGE_NAME }}:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run smoke scenario (service + k6 containers)
+        run: |
+          docker compose -f infra/compose.load.yml -f infra/compose.ci.yml run --rm k6 run /load/scenarios/smoke.js
+
+      - name: Tear down the rig
+        if: always()
+        run: docker compose -f infra/compose.load.yml -f infra/compose.ci.yml down -v --remove-orphans
+
   build-and-push:
     name: Build & Push Docker Image
-    needs: quality-assurance
+    needs: [quality-assurance, load-test-smoke]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 

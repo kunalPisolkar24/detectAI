@@ -1,0 +1,33 @@
+name: chats-load
+
+include:
+  - compose.yml
+  - compose.k6.yml
+
+services:
+  chats:
+    # The rig must never collide with a dev stack's fixed container name.
+    container_name: chats-load
+    restart: "no"
+    ports: !override []
+    environment:
+      # The rig is a local rig: the dev plane over infra/.env, and the local
+      # redis without the token the dev file carries.
+      ENV_TYPE: dev
+      REDIS_AUTH_TOKEN: ""
+    healthcheck:
+      test: ["CMD", "/app/healthcheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - loadnet
+
+  k6:
+    depends_on:
+      chats:
+        condition: service_healthy
+
+networks:
+  loadnet:
