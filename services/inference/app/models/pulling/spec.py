@@ -22,6 +22,9 @@ _SPARK_FILE_NAMES = (
     "special_tokens_map.json",
 )
 
+# The file set per model: the two pinned artifacts ship different files.
+_MODEL_FILE_NAMES = {"flare": _FLARE_FILE_NAMES, "spark": _SPARK_FILE_NAMES}
+
 
 def _spec_files(artifact_dir: str, names: tuple[str, ...]) -> tuple[str, ...]:
     directory = artifact_dir.rstrip("/")
@@ -52,19 +55,13 @@ class ModelSpec(BaseModel):
 class ModelSpecs:
     @classmethod
     def from_settings(cls, settings: Settings) -> tuple[ModelSpec, ...]:
-        return (
+        return tuple(
             ModelSpec(
-                key="flare",
-                repo=settings.flare_model_repo,
-                revision=settings.flare_model_revision,
-                artifact_dir=settings.flare_model_dir,
-                files=_spec_files(settings.flare_model_dir, _FLARE_FILE_NAMES),
-            ),
-            ModelSpec(
-                key="spark",
-                repo=settings.spark_model_repo,
-                revision=settings.spark_model_revision,
-                artifact_dir=settings.spark_model_dir,
-                files=_spec_files(settings.spark_model_dir, _SPARK_FILE_NAMES),
-            ),
+                key=model.key,
+                repo=model.repo,
+                revision=model.revision,
+                artifact_dir=model.artifact_dir,
+                files=_spec_files(model.artifact_dir, _MODEL_FILE_NAMES[model.key]),
+            )
+            for model in settings.model_settings_all()
         )

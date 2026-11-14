@@ -51,6 +51,7 @@ def _load_models(settings: Settings, artifacts: Mapping[str, Path]) -> Mapping[s
     """Load after pull, before serving: a bad build kills the boot."""
     loader = OnnxModelLoader(
         providers=settings.inference_providers,
+        ceilings=settings.max_sequence_lengths(),
         intra_op_threads=settings.ort_intra_op_threads,
     )
     return loader.load_all(artifacts)

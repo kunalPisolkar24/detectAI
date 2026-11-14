@@ -2,6 +2,7 @@
 
 import os
 import re
+from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import (
@@ -24,6 +25,16 @@ FLARE_MODEL_DIR = "onnx/fp32"
 SPARK_MODEL_REPO = "kpisolkar24/detect-ai-spark"
 SPARK_MODEL_REVISION = "b0ab87257cc240d66622c2482270ec726e16c553"
 SPARK_MODEL_DIR = "onnx/fp16"
+
+# The model keys the service serves. One list, owned here, so the pull specs
+# and the per-model knobs cannot drift apart.
+MODEL_KEYS = ("flare", "spark")
+
+# The sequence ceiling per model: the length the artifact's build was trained
+# and numerically validated at. Both pinned artifacts declare 512 - one in its
+# tokenizer config, one only in its export metadata - so the ceiling is
+# configured rather than guessed out of a file that may not say.
+MODEL_MAX_SEQUENCE_LENGTH_DEFAULT = 512
 
 # The submission bound default: the document-parser cap's scale (~1M chars).
 MAX_TEXT_CHARS_DEFAULT = 1_000_000
@@ -109,6 +120,18 @@ def _unit_interval_or_default(value: object, default: float) -> float:
     return default
 
 
+@dataclass(frozen=True)
+class ModelSettings:
+    """One model's knobs: the pull identity, the batch width, the sequence ceiling."""
+
+    key: str
+    repo: str
+    revision: str
+    artifact_dir: str
+    max_sequence_length: int
+    batch_size: int | None
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(validate_default=True)
 
@@ -140,6 +163,12 @@ class Settings(BaseModel):
     inference_batch_size: int = INFERENCE_BATCH_SIZE_DEFAULT
     flare_batch_size: int | None = None
     spark_batch_size: int | None = None
+
+    # The sequence ceiling per model: the length the artifact's build was
+    # trained at. The artifact's declared length is a cross-check on this
+    # number, never its source - one of the two pinned artifacts declares none.
+    flare_max_sequence_length: int = MODEL_MAX_SEQUENCE_LENGTH_DEFAULT
+    spark_max_sequence_length: int = MODEL_MAX_SEQUENCE_LENGTH_DEFAULT
 
     # The verdict threshold: the AI probability at which a document reads as
     # AI. A probability in [0,1], compared against the raw aggregate.
@@ -212,6 +241,11 @@ class Settings(BaseModel):
         if value is None:
             return None
         return _positive_int_or_default(value, default=0) or None
+
+    @field_validator("flare_max_sequence_length", "spark_max_sequence_length", mode="before")
+    @classmethod
+    def _fail_closed_model_sequence_length(cls, value: object) -> int:
+        return _positive_int_or_default(value, default=MODEL_MAX_SEQUENCE_LENGTH_DEFAULT)
 
     @field_validator("ai_detection_threshold", mode="before")
     @classmethod
@@ -315,8 +349,30 @@ class Settings(BaseModel):
         # through validation, where the before-validators own the coercion.
         return cls.model_validate(values)
 
+    def model_settings(self, model_key: str) -> ModelSettings:
+        """One model's knobs: the per-model fields behind a single accessor."""
+        if model_key not in MODEL_KEYS:
+            raise KeyError(f"unknown model key: {model_key}")
+        return ModelSettings(
+            key=model_key,
+            repo=getattr(self, f"{model_key}_model_repo"),
+            revision=getattr(self, f"{model_key}_model_revision"),
+            artifact_dir=getattr(self, f"{model_key}_model_dir"),
+            max_sequence_length=getattr(self, f"{model_key}_max_sequence_length"),
+            batch_size=getattr(self, f"{model_key}_batch_size"),
+        )
+
+    def model_settings_all(self) -> tuple[ModelSettings, ...]:
+        """Every model's knobs, in the canonical key order."""
+        return tuple(self.model_settings(key) for key in MODEL_KEYS)
+
+    def max_sequence_lengths(self) -> dict[str, int]:
+        """Each model's sequence ceiling, keyed by model key."""
+        return {model.key: model.max_sequence_length for model in self.model_settings_all()}
+
     def batch_size_for(self, model_key: str) -> int:
         """The widest call one model accepts: its own override, else the global knob."""
-        overrides = {"flare": self.flare_batch_size, "spark": self.spark_batch_size}
-        override = overrides.get(model_key)
+        if model_key not in MODEL_KEYS:
+            return self.inference_batch_size
+        override = self.model_settings(model_key).batch_size
         return override if override is not None else self.inference_batch_size

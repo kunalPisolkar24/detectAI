@@ -7,7 +7,7 @@ from .errors import ConfigError, ConfigFetchError
 from .factories.aws_client_factory import AWSClientFactory
 from .factories.config_factory import ConfigFactory
 from .provider import ConfigProvider, DevConfig, ProdConfig
-from .settings import Settings, deployment_flick
+from .settings import ModelSettings, Settings, deployment_flick
 
 __all__ = [
     "AWSClientFactory",
@@ -18,6 +18,7 @@ __all__ = [
     "DevConfig",
     "DotEnvAdapter",
     "DotEnvError",
+    "ModelSettings",
     "ParameterStoreAdapter",
     "ProdConfig",
     "SecretsManagerAdapter",

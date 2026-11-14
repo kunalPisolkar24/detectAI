@@ -20,6 +20,8 @@ from app.config.settings import (
     FLARE_MODEL_REVISION,
     INFERENCE_BATCH_SIZE_DEFAULT,
     MAX_TEXT_CHARS_DEFAULT,
+    MODEL_KEYS,
+    MODEL_MAX_SEQUENCE_LENGTH_DEFAULT,
     SPARK_MODEL_DIR,
     SPARK_MODEL_REPO,
     SPARK_MODEL_REVISION,
@@ -198,6 +200,65 @@ def test_an_unknown_model_resolves_to_the_global_width() -> None:
     settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
 
     assert settings.batch_size_for("unknown") == INFERENCE_BATCH_SIZE_DEFAULT
+
+
+# The sequence ceilings: one per model, configured rather than guessed out of
+# an artifact that may not declare one.
+
+def test_the_per_model_sequence_ceilings_hold_their_defaults() -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
+
+    assert settings.flare_max_sequence_length == MODEL_MAX_SEQUENCE_LENGTH_DEFAULT
+    assert settings.spark_max_sequence_length == MODEL_MAX_SEQUENCE_LENGTH_DEFAULT
+
+
+def test_a_seeded_sequence_ceiling_is_read_from_the_string_plane() -> None:
+    settings = Settings.from_provider(
+        StubProvider({"API_KEY": "a" * 20, "SPARK_MAX_SEQUENCE_LENGTH": "256"})
+    )
+
+    assert settings.spark_max_sequence_length == 256
+    assert settings.flare_max_sequence_length == MODEL_MAX_SEQUENCE_LENGTH_DEFAULT
+
+
+@pytest.mark.parametrize("seeded", ["not a number", "-1", "0", "1.5"])
+def test_an_invalid_sequence_ceiling_falls_back_to_its_default(seeded: str) -> None:
+    settings = Settings.from_provider(
+        StubProvider({"API_KEY": "a" * 20, "FLARE_MAX_SEQUENCE_LENGTH": seeded})
+    )
+
+    assert settings.flare_max_sequence_length == MODEL_MAX_SEQUENCE_LENGTH_DEFAULT
+
+
+def test_the_ceilings_are_published_per_model_key() -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
+
+    assert settings.max_sequence_lengths() == {
+        "flare": MODEL_MAX_SEQUENCE_LENGTH_DEFAULT,
+        "spark": MODEL_MAX_SEQUENCE_LENGTH_DEFAULT,
+    }
+
+
+def test_every_model_key_carries_its_own_settings() -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
+
+    contracts = settings.model_settings_all()
+
+    assert [model.key for model in contracts] == list(MODEL_KEYS)
+    for model in contracts:
+        assert model.repo == getattr(settings, f"{model.key}_model_repo")
+        assert model.revision == getattr(settings, f"{model.key}_model_revision")
+        assert model.artifact_dir == getattr(settings, f"{model.key}_model_dir")
+        assert model.max_sequence_length == getattr(
+            settings, f"{model.key}_max_sequence_length"
+        )
+
+
+def test_an_unknown_model_key_has_no_settings() -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
+
+    with pytest.raises(KeyError):
+        settings.model_settings("unknown")
 
 
 def test_a_zero_overlap_is_a_legal_seed() -> None:

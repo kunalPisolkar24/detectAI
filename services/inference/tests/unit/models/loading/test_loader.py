@@ -71,9 +71,15 @@ def _wiring(
 
 
 def _loader(
-    providers: tuple[str, ...] = ("CPUExecutionProvider",), intra_op_threads: int = 0
+    providers: tuple[str, ...] = ("CPUExecutionProvider",),
+    ceilings: dict[str, int] | None = None,
+    intra_op_threads: int = 0,
 ) -> OnnxModelLoader:
-    return OnnxModelLoader(providers=providers, intra_op_threads=intra_op_threads)
+    return OnnxModelLoader(
+        providers=providers,
+        ceilings=ceilings if ceilings is not None else {"flare": 512, "spark": 512},
+        intra_op_threads=intra_op_threads,
+    )
 
 
 def test_every_pulled_model_resolves_to_a_runtime_pair(
@@ -210,40 +216,69 @@ def test_matching_providers_log_without_a_warning(
     assert not [message for message in caplog.messages if "mismatch" in message]
 
 
-def test_the_declared_sequence_length_comes_from_the_tokenizer_config(
+def test_the_configured_ceiling_is_the_model_s_sequence_length(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     recorder: dict[str, list[Any]] = {}
     _wiring(monkeypatch, recorder)
     flare = _artifact(tmp_path, "flare", {"max_length": 512})
 
-    loaded = _loader().load_all({"flare": flare})
+    loaded = _loader(ceilings={"flare": 512}).load_all({"flare": flare})
 
     assert loaded["flare"].max_sequence_length == 512
 
 
-def test_the_training_length_wins_over_the_position_ceiling(
+def test_the_position_ceiling_never_becomes_the_sequence_length(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    recorder: dict[str, list[Any]] = {}
-    _wiring(monkeypatch, recorder)
-    flare = _artifact(tmp_path, "flare", {"max_length": 512, "model_max_length": 8192})
-
-    loaded = _loader().load_all({"flare": flare})
-
-    assert loaded["flare"].max_sequence_length == 512
-
-
-def test_the_position_ceiling_is_read_when_no_training_length_is_declared(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+    # The artifact says how long the model could go, not how long it was built
+    # to score: the configured ceiling is the one that counts.
     recorder: dict[str, list[Any]] = {}
     _wiring(monkeypatch, recorder)
     flare = _artifact(tmp_path, "flare", {"max_length": None, "model_max_length": 8192})
 
-    loaded = _loader().load_all({"flare": flare})
+    loaded = _loader(ceilings={"flare": 512}).load_all({"flare": flare})
 
-    assert loaded["flare"].max_sequence_length == 8192
+    assert loaded["flare"].max_sequence_length == 512
+
+
+def test_a_ceiling_below_the_built_length_is_honoured(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    recorder: dict[str, list[Any]] = {}
+    _wiring(monkeypatch, recorder)
+    flare = _artifact(tmp_path, "flare", {"max_length": 512})
+
+    loaded = _loader(ceilings={"flare": 256}).load_all({"flare": flare})
+
+    assert loaded["flare"].max_sequence_length == 256
+
+
+def test_a_ceiling_above_the_built_length_fails_the_boot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    recorder: dict[str, list[Any]] = {}
+    _wiring(monkeypatch, recorder)
+    flare = _artifact(tmp_path, "flare", {"max_length": 512})
+
+    with pytest.raises(ModelLoadError) as raised:
+        _loader(ceilings={"flare": 8192}).load_all({"flare": flare})
+
+    assert "flare" in str(raised.value)
+    assert "512" in str(raised.value)
+
+
+def test_a_model_without_a_configured_ceiling_fails_the_boot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    recorder: dict[str, list[Any]] = {}
+    _wiring(monkeypatch, recorder)
+    flare = _artifact(tmp_path, "flare")
+
+    with pytest.raises(ModelLoadError) as raised:
+        _loader(ceilings={}).load_all({"flare": flare})
+
+    assert "flare" in str(raised.value)
 
 
 def test_a_missing_tokenizer_config_dies_typed(
@@ -268,19 +303,6 @@ def test_a_malformed_tokenizer_config_dies_typed(
     flare = tmp_path / "flare" / "onnx" / "fp32"
     flare.mkdir(parents=True)
     (flare / "tokenizer_config.json").write_text("{not json", encoding="utf-8")
-
-    with pytest.raises(ModelLoadError) as raised:
-        _loader().load_all({"flare": flare})
-
-    assert "flare" in str(raised.value)
-
-
-def test_a_tokenizer_config_without_a_usable_length_dies_typed(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    recorder: dict[str, list[Any]] = {}
-    _wiring(monkeypatch, recorder)
-    flare = _artifact(tmp_path, "flare", {"model_max_length": 0})
 
     with pytest.raises(ModelLoadError) as raised:
         _loader().load_all({"flare": flare})

@@ -28,6 +28,14 @@ def test_one_spec_per_model_built_from_the_settings_contract() -> None:
     )
 
 
+def test_the_specs_are_built_from_the_per_model_contract() -> None:
+    settings = _settings()
+
+    specs = ModelSpecs.from_settings(settings)
+
+    assert [spec.key for spec in specs] == [model.key for model in settings.model_settings_all()]
+
+
 def test_the_flare_file_set_is_the_minimal_inference_set() -> None:
     flare = ModelSpecs.from_settings(_settings())[0]
 

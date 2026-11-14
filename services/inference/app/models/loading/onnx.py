@@ -22,8 +22,14 @@ _TOKENIZER_CONFIG_FILENAME = "tokenizer_config.json"
 class OnnxModelLoader:
     """Satisfies ModelLoader structurally; the only module that imports onnxruntime and transformers."""
 
-    def __init__(self, providers: Sequence[str], intra_op_threads: int = 0) -> None:
+    def __init__(
+        self,
+        providers: Sequence[str],
+        ceilings: Mapping[str, int],
+        intra_op_threads: int = 0,
+    ) -> None:
         self._providers = list(providers)
+        self._ceilings = dict(ceilings)
         self._intra_op_threads = intra_op_threads
 
     def load_all(self, artifacts: Mapping[str, Path]) -> Mapping[str, LoadedModel]:
@@ -57,7 +63,24 @@ class OnnxModelLoader:
         )
 
     def _max_sequence_length(self, key: str, path: Path) -> int:
-        """The model's declared sequence ceiling, read from the artifact's tokenizer config."""
+        """The configured ceiling, checked against the length the artifact declares."""
+        ceiling = self._ceilings.get(key)
+        if ceiling is None:
+            raise ModelLoadError(f"{key}: no sequence ceiling is configured")
+        declared = self._declared_length(key, path)
+        if declared is not None and ceiling > declared:
+            raise ModelLoadError(
+                f"{key}: the configured ceiling is {ceiling} tokens; the artifact "
+                f"was built for {declared}"
+            )
+        return ceiling
+
+    def _declared_length(self, key: str, path: Path) -> int | None:
+        """The length the artifact says it was trained at, when it says one at all.
+
+        The position-embedding ceiling is not this: it says how long the model
+        could go, not how long it was built to score.
+        """
         config_path = path / _TOKENIZER_CONFIG_FILENAME
         try:
             config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -67,13 +90,9 @@ class OnnxModelLoader:
             ) from error
         if not isinstance(config, dict):
             raise ModelLoadError(f"{key}: {_TOKENIZER_CONFIG_FILENAME} in {path} is not an object")
-        # max_length is the length the model was trained at; model_max_length is only
-        # the position-embedding ceiling.
-        declared = config.get("max_length") or config.get("model_max_length")
+        declared = config.get("max_length")
         if isinstance(declared, bool) or not isinstance(declared, int) or declared <= 0:
-            raise ModelLoadError(
-                f"{key}: no usable sequence length in {config_path}"
-            )
+            return None
         return declared
 
     def _session(self, path: Path) -> Any:
