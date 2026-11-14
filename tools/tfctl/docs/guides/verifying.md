@@ -25,6 +25,8 @@ graph LR
     CMP -->|"missing, mismatched,<br/>or a scheduled deletion"| PROBLEMS["problem: lines, one per finding<br/>fail: the seeded plane does not<br/>match the .env values"] --> END_FAIL(["end: exit 1"])
 ```
 
+A declared key with no `.env` value prints as a note beside the extra rows — it is not a finding, and it never changes the exit code.
+
 The output is a printable audit:
 
 ```text
@@ -43,10 +45,13 @@ ok:      the seeded plane matches the .env values
 |--------------|-------|
 | per-row `… len N fp XXXXXXXXXXXX` | the plane's key with its length and fingerprint |
 | `extra: <name>` | on the plane but not in `.env`'s seed list (stale leftovers count) — a note, never a failure |
+| `declared, not seeded (no value in .env)` | in the declaration but with no value in `.env`, so never on the plane — a note, never a failure |
 | `missing (expected from .env)` | declared for the plane, absent from it — a problem |
 | `mismatch (expected fp …)` | the plane's bytes differ from your `.env` bytes — a problem |
 | secret scheduled for deletion | a problem, even if every key currently matches — destroy is already in motion |
 | `ok:` / `fail:` | the verdict, and the exit code follows it |
+
+A declared key with no `.env` value is a gap between the declaration and the plane, not drift between the plane and `.env` — the plane faithfully carries what `.env` asks for. `verify` reports it so the gap is visible, but the verdict stays `ok`: the comparison is `.env` against the plane, and widening it to the declaration would fail every service whose local `.env` legitimately omits an optional key.
 
 ## The drift-heal loop
 

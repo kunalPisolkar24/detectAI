@@ -52,6 +52,7 @@ def verify_flow(
     extras: list[str] = []
 
     expected_ssm = expected_ssm_seeds(declaration, values)
+    unseeded = [key for key in declaration.ssm_keys if key not in expected_ssm]
     print(f"ssm:     {declaration.ssm_prefix}")
     live = collect_ssm_parameters(declaration, values, is_emulator, session)
     if live is None:
@@ -81,6 +82,8 @@ def verify_flow(
         findings.append(
             f"{declaration.ssm_prefix}{leaf} does not match .env (expected fp {fingerprint(expected_ssm[leaf])})"
         )
+    for leaf in sorted(unseeded):
+        print(f"  {leaf:<32} declared, not seeded (no value in .env)")
 
     blob_keys = expected_blob(declaration, values)
     print(f"secret:  {declaration.secret_name}")
@@ -117,6 +120,11 @@ def verify_flow(
     print()
     for note in extras:
         print(f"note:   {note} is on the plane outside the .env seed list")
+    for leaf in sorted(unseeded):
+        print(
+            f"note:   {declaration.ssm_prefix}{leaf} is declared in secrets.toml "
+            "but has no value in .env"
+        )
     if findings:
         for finding in findings:
             print(f"problem: {finding}")

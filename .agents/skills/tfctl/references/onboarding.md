@@ -43,8 +43,10 @@ Three laws bite early — onboarding is where they all usually trip:
   means a new plane, not a rename. The 34-char ceiling is not stylistic: the
   derived state bucket carries a 29-character scaffold and must fit S3's
   63-char limit.
-- **The allowlist is exhaustive.** A `.env` line outside these lists never
-  reaches the plane; plan's `--dry-run` banner tells you what *will* ride.
+- **The allowlist is exhaustive, both ways.** A `.env` line outside these
+  lists never reaches the plane; plan's `--dry-run` banner tells you what
+  *will* ride. A key the declaration lists but the `.env` does not carry
+  never reaches it either — the banner's `warning:` line names those.
 - **The planes are disjoint.** The same key in `[secrets]` and `[ssm]` is a
   refused declaration, not a warning.
 

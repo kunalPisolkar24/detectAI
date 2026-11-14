@@ -315,6 +315,29 @@ def test_plan_runs_init_then_plan_on_the_emulator(tmp_path, monkeypatch, capsys)
     assert "window: 0 day(s)" in out
 
 
+def test_plan_banner_names_the_seeded_and_the_unseeded_ssm_keys(tmp_path, monkeypatch, capsys):
+    workspace = ws_with(tmp_path, {**EMULATOR_ENV, "UPLOAD_LIMIT_BYTES": "1024"})
+
+    def fake_run_terraform(tf_dir, args, tf_vars, env_overlay=None):
+        return 0
+
+    monkeypatch.setattr(stack_flow, "run_terraform", fake_run_terraform)
+    monkeypatch.setattr(
+        stack_flow,
+        "ensure_state_bucket",
+        lambda declaration, values, is_emulator, account, session=None: 0,
+    )
+    monkeypatch.setattr(cli, "resolve_carrier_session", fake_carrier_session)
+    assert cli.main(["plan"], workspace=workspace) == 0
+
+    out = capsys.readouterr().out
+    assert "config: 1 key(s) -> SSM /detectai/document-parser/: UPLOAD_LIMIT_BYTES" in out
+    assert (
+        "warning: 3 declared SSM key(s) not seeded (no value in .env): "
+        "MAX_PDF_PAGES OTEL_TRACE_SAMPLE_RATIO OTEL_EXPORTER_OTLP_ENDPOINT" in out
+    )
+
+
 def test_apply_on_real_aws_uses_the_session_triplet(tmp_path, monkeypatch):
     workspace = ws_with(tmp_path, REAL_ENV)
     calls = []

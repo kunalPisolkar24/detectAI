@@ -42,7 +42,7 @@ API_KEY = 16                 # the boot gate, mirrored so the plane refuses what
 Three laws bite early — onboarding is where they all usually trip:
 
 - **The slug is forever.** Every AWS name derives from it; renaming later means a new plane, not a rename.
-- **The allowlist is exhaustive.** A `.env` line outside these lists never reaches the plane; plan's `--dry-run` banner tells you what *will* ride if you are unsure.
+- **The allowlist is exhaustive, both ways.** A `.env` line outside these lists never reaches the plane; plan's `--dry-run` banner tells you what *will* ride if you are unsure. A key the declaration lists but the `.env` does not carry never reaches it either — the banner's `warning:` line names those, because a declared key with no value is a promise the plane cannot keep.
 - **The planes are disjoint.** The same key in `[secrets]` and `[ssm]` is a refused declaration, not a warning.
 
 ## Step 2: provide the values

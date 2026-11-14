@@ -123,8 +123,10 @@ The slug is the only identity knob and it pins every AWS name — blob
 it is **forever**: renaming means a new plane, not a rename (and it must fit
 S3's 63-char bucket limit, hence the 34-char ceiling). The allowlists are
 exhaustive: a `.env` key outside `[secrets]`/`[ssm]` never reaches a plane,
-and a key in both is a refused declaration. The schemas, laws, and the
-derived-name table: [references/onboarding.md](references/onboarding.md)
+a key in both is a refused declaration, and a declared key with no `.env`
+value never reaches one either — the plan banner names those. The schemas,
+laws, and the derived-name table live in
+[references/onboarding.md](references/onboarding.md)
 
 ## Testing
 

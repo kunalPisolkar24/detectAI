@@ -29,7 +29,7 @@ No IAM, no S3 state-bucket-in-stack (the bucket is engine tooling, [healed on de
 
 ## The verb anatomy
 
-Every run opens with the banner — the run's whole world in eight lines:
+Every run opens with the banner — the run's whole world in eight lines, plus a warning line when a declared key has no value:
 
 ```text
 plane:   floci (emulator http://localhost:4566)
@@ -39,8 +39,11 @@ secret:  detectai/document-parser/secrets
 keys:    API_KEY *** (18 chars, hidden) NEW_RELIC_LICENSE_KEY *** (21 chars, hidden)
 state:   detectai-document-parser-tfstate-000000000000 / document-parser/floci/terraform.tfstate
 window:  0 day(s)
-config:  15 key(s) -> SSM /detectai/document-parser/
+config:  15 key(s) -> SSM /detectai/document-parser/: UPLOAD_LIMIT_BYTES MAX_PDF_PAGES ...
+warning: 2 declared SSM key(s) not seeded (no value in .env): OTEL_SERVICE_VERSION OTEL_TRACE_SAMPLE_RATIO
 ```
+
+The `config:` line names the keys that ride; the `warning:` line names the ones the declaration promises but the `.env` does not carry — they never reach the plane.
 
 Then the machinery, in fixed order:
 
