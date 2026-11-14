@@ -12,6 +12,7 @@ from app.config.adapters import dotenv as dotenv_module
 from app.config.adapters.dotenv import DotEnvAdapter
 from app.config.provider import DevConfig
 from app.config.settings import (
+    AI_DETECTION_THRESHOLD_DEFAULT,
     CHUNK_TOKEN_LIMIT_DEFAULT,
     CHUNK_TOKEN_OVERLAP_DEFAULT,
     FLARE_MODEL_DIR,
@@ -76,6 +77,7 @@ _SERVER_KNOBS: dict[str, object] = {
     "chunk_token_limit": CHUNK_TOKEN_LIMIT_DEFAULT,
     "chunk_token_overlap": CHUNK_TOKEN_OVERLAP_DEFAULT,
     "inference_batch_size": INFERENCE_BATCH_SIZE_DEFAULT,
+    "ai_detection_threshold": AI_DETECTION_THRESHOLD_DEFAULT,
 }
 
 
@@ -96,6 +98,7 @@ def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
             "CHUNK_TOKEN_LIMIT": "256",
             "CHUNK_TOKEN_OVERLAP": "64",
             "INFERENCE_BATCH_SIZE": "16",
+            "AI_DETECTION_THRESHOLD": "0.75",
         })
     )
 
@@ -105,6 +108,7 @@ def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
     assert settings.chunk_token_limit == 256
     assert settings.chunk_token_overlap == 64
     assert settings.inference_batch_size == 16
+    assert settings.ai_detection_threshold == 0.75
 
 
 @pytest.mark.parametrize(
@@ -131,12 +135,25 @@ def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
         ("inference_batch_size", "-1"),
         ("inference_batch_size", "0"),
         ("inference_batch_size", "1.5"),
+        ("ai_detection_threshold", "not a number"),
+        ("ai_detection_threshold", "-0.1"),
+        ("ai_detection_threshold", "1.5"),
+        ("ai_detection_threshold", "nan"),
+        ("ai_detection_threshold", "inf"),
     ],
 )
 def test_an_invalid_server_knob_falls_back_to_its_safe_default(field: str, seeded: str) -> None:
     settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20, field.upper(): seeded}))
 
     assert getattr(settings, field) == _SERVER_KNOBS[field]
+
+
+def test_the_threshold_endpoints_are_legal_seeds() -> None:
+    settings = Settings.from_provider(
+        StubProvider({"API_KEY": "a" * 20, "AI_DETECTION_THRESHOLD": "0"})
+    )
+
+    assert settings.ai_detection_threshold == 0.0
 
 
 # The batch knobs: the global width, a per-model override, and the rule that

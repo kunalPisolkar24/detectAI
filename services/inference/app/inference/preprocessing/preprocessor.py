@@ -87,6 +87,7 @@ class DocumentPreprocessor:
                         self._tokenizer.sep_token_id,
                     ),
                     context_tokens=len(context),
+                    scored_tokens=end - start,
                     char_start=offsets[start][0],
                     char_end=offsets[end - 1][1],
                 )

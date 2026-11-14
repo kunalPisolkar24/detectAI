@@ -101,8 +101,10 @@ class Chunk:
     """One analysable window: the token IDs to feed the model and the text span they came from."""
 
     index: int
-    token_ids: tuple[int, ...]   # includes [CLS] ... [SEP]
-    char_start: int              # Unicode scalar offset into the request text
+    token_ids: tuple[int, ...]   # includes [CLS] ... [SEP]; may carry a context prefix
+    context_tokens: int           # leading tokens that are context, not scored
+    scored_tokens: int            # the region's own tokens: the weight aggregation uses
+    char_start: int               # Unicode scalar offset into the request text
     char_end: int
 
     @property
@@ -119,6 +121,11 @@ class PreparedDocument:
     total_tokens: int
     chunks: tuple[Chunk, ...]
 ```
+
+`context_tokens` was added by the overlap slice (`inference-overlap.md` §3)
+and `scored_tokens` by the postprocessing slice
+(`inference-postprocessing.md` §3). Neither changes the chunking rule: the
+region a chunk covers is the same with and without them.
 
 `total_chars` is the request's scalar count, matching the contract's
 `AnalyzeDocumentStarted.total_chars`. It is carried explicitly rather than
@@ -386,6 +393,8 @@ classDiagram
         <<frozen data>>
         +index: int
         +token_ids: tuple~int, ...~
+        +context_tokens: int
+        +scored_tokens: int
         +char_start: int
         +char_end: int
         +token_count() int

@@ -10,6 +10,7 @@ class Chunk:
     index: int
     token_ids: tuple[int, ...]  # includes [CLS] ... [SEP]; may carry a context prefix
     context_tokens: int  # leading tokens that are context, not scored
+    scored_tokens: int  # the region's own tokens: the weight aggregation uses
     char_start: int  # Unicode scalar offset into the request text
     char_end: int
 

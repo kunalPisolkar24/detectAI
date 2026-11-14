@@ -231,6 +231,7 @@ class Chunk:
     index: int
     token_ids: tuple[int, ...]   # includes [CLS] ... [SEP]; may carry a context prefix
     context_tokens: int           # leading tokens that are context, not scored
+    scored_tokens: int            # the region's own tokens: the weight aggregation uses
     char_start: int               # the scored region only
     char_end: int                 # the scored region only
 
@@ -245,6 +246,12 @@ the regions still tile the request text and the contract's non-overlapping
 spans still fall out. `context_tokens` says how much of `token_ids` is
 context, so a consumer can tell where the scored region begins inside the
 input.
+
+`scored_tokens` was added later, by the postprocessing slice: it counts the
+region's own content tokens, and it is the weight that slice's aggregation
+uses. It is the counterpart of `context_tokens` — the two together account
+for every token in the input but the special ones. See
+`inference-postprocessing.md` §3.
 
 The field is not decoration: the chunk's `token_ids` is now a *mixture* —
 the context and the scored content are one sequence of IDs — and without a
@@ -341,6 +348,7 @@ classDiagram
         +index: int
         +token_ids: tuple~int, ...~
         +context_tokens: int
+        +scored_tokens: int
         +char_start: int
         +char_end: int
         +token_count() int

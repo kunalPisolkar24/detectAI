@@ -40,6 +40,11 @@ CHUNK_TOKEN_OVERLAP_DEFAULT = 0
 # value until the GPU sweep measures the real one.
 INFERENCE_BATCH_SIZE_DEFAULT = 8
 
+# The verdict threshold default: the AI probability at which a document reads
+# as AI. The house cutoff, not a measurement - the artifacts score everything
+# above 0.9875, so nothing calibrates it yet.
+AI_DETECTION_THRESHOLD_DEFAULT = 0.5
+
 _GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 _LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
@@ -86,6 +91,24 @@ def _non_negative_int_or_default(value: object, default: int) -> int:
     return default
 
 
+def _unit_interval_or_default(value: object, default: float) -> float:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        try:
+            parsed = float(value)
+        except OverflowError:  # an int too large to be a float is not a threshold
+            return default
+        return parsed if 0.0 <= parsed <= 1.0 else default
+    if isinstance(value, str):
+        try:
+            parsed = float(value.strip())
+        except ValueError:
+            return default
+        return parsed if 0.0 <= parsed <= 1.0 else default
+    return default
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(validate_default=True)
 
@@ -117,6 +140,10 @@ class Settings(BaseModel):
     inference_batch_size: int = INFERENCE_BATCH_SIZE_DEFAULT
     flare_batch_size: int | None = None
     spark_batch_size: int | None = None
+
+    # The verdict threshold: the AI probability at which a document reads as
+    # AI. A probability in [0,1], compared against the raw aggregate.
+    ai_detection_threshold: float = AI_DETECTION_THRESHOLD_DEFAULT
 
     # Where pulled artifacts land; a volume mount in a container keeps restarts cheap.
     model_cache_dir: str = "./models"
@@ -185,6 +212,14 @@ class Settings(BaseModel):
         if value is None:
             return None
         return _positive_int_or_default(value, default=0) or None
+
+    @field_validator("ai_detection_threshold", mode="before")
+    @classmethod
+    def _fail_closed_detection_threshold(cls, value: object) -> float:
+        """A threshold outside the unit interval is meaningless: the default governs."""
+        return _unit_interval_or_default(
+            value, default=cls.model_fields["ai_detection_threshold"].default
+        )
 
     @field_validator("hf_token", mode="before")
     @classmethod

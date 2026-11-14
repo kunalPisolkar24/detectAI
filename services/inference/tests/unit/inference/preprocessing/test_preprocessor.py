@@ -373,3 +373,44 @@ def test_the_context_is_clamped_at_the_document_start() -> None:
 
     assert chunks[0].context_tokens == 0
     assert chunks[1].context_tokens == 20
+
+
+def test_the_scored_tokens_count_the_content_only() -> None:
+    words = _words(200, sentence_every=10)
+    encoding = _encoding(words)
+    preprocessor = _preprocessor(chunk_token_limit=64, chunk_token_overlap=10)
+
+    chunks = preprocessor.split(" ".join(words), encoding)
+
+    assert [chunk.scored_tokens for chunk in chunks] == [50, 50, 50, 50]
+
+
+def test_every_token_of_the_document_is_scored_exactly_once() -> None:
+    words = _words(200, sentence_every=10)
+    encoding = _encoding(words)
+    preprocessor = _preprocessor(chunk_token_limit=64, chunk_token_overlap=10)
+
+    chunks = preprocessor.split(" ".join(words), encoding)
+
+    assert sum(chunk.scored_tokens for chunk in chunks) == len(encoding.ids)
+
+
+def test_the_scored_tokens_exclude_the_context_prefix() -> None:
+    words = _words(200, sentence_every=10)
+    encoding = _encoding(words)
+    preprocessor = _preprocessor(chunk_token_limit=64, chunk_token_overlap=10)
+
+    chunks = preprocessor.split(" ".join(words), encoding)
+
+    assert chunks[1].scored_tokens == len(chunks[1].token_ids) - chunks[1].context_tokens - 2
+
+
+def test_the_chunk_accounts_for_every_token_it_carries() -> None:
+    words = _words(200, sentence_every=10)
+    encoding = _encoding(words)
+    preprocessor = _preprocessor(chunk_token_limit=64, chunk_token_overlap=10)
+
+    chunks = preprocessor.split(" ".join(words), encoding)
+
+    for chunk in chunks:
+        assert chunk.scored_tokens + chunk.context_tokens + 2 == chunk.token_count
