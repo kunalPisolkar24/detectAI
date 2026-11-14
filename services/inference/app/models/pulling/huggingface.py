@@ -22,14 +22,25 @@ _PULL_ATTEMPTS = 3
 
 _TRANSIENT_WORDS = ("timeout", "connect", "network", "protocol", "temporarily", "429", "503")
 
+# The filesystem faults a retry cannot fix: the disk is full, the path is not
+# writable, the mount is read-only, the file is gone.
+_PERMANENT_ERRNOS = frozenset({
+    errno.ENOSPC,
+    errno.EACCES,
+    errno.EPERM,
+    errno.EROFS,
+    errno.ENOENT,
+})
+
 
 class HuggingFaceStore:
     """Satisfies ArtifactStore structurally; hub failures surface only as the typed vocabulary."""
 
     def __init__(self, root: Path, token: str | None) -> None:
-        self._root = Path(root)
+        # Resolved once: every path the store hands out is absolute, so no
+        # later working-directory change can move the artifacts under it.
+        self._root = Path(root).expanduser().resolve()
         self._token = token
-        disable_progress_bars()
 
     def locate(self, spec: ModelSpec) -> Path:
         """Offline resolve at the pinned revision; raises MissingArtifact on a miss."""
@@ -44,6 +55,8 @@ class HuggingFaceStore:
 
     def pull(self, spec: ModelSpec) -> Path:
         """Fetch the spec's files with retries and progress logs; returns the local artifact dir."""
+        # The store logs its own progress; the hub's bars would only duplicate it.
+        disable_progress_bars()
         started = time.perf_counter()
         logger.info(
             "%s: pulling %d files from %s@%s", spec.key, len(spec.files), spec.repo, spec.revision
@@ -98,5 +111,5 @@ class HuggingFaceStore:
         if any(word in name for word in _TRANSIENT_WORDS):
             return True
         if isinstance(error, OSError):
-            return error.errno != errno.ENOSPC
+            return error.errno not in _PERMANENT_ERRNOS
         return any(word in str(error).lower() for word in _TRANSIENT_WORDS)

@@ -134,6 +134,48 @@ def test_disk_full_dies_without_a_retry(
     assert sleeps == []
 
 
+def test_an_unwritable_path_dies_without_a_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = _hub(monkeypatch, [PermissionError(errno.EACCES, "Permission denied")])
+    sleeps = _sleeps(monkeypatch)
+    store = _store(tmp_path)
+
+    with pytest.raises(ArtifactPullError):
+        store.pull(_spec())
+
+    assert len(hub.calls) == 1
+    assert sleeps == []
+
+
+def test_the_root_is_resolved_to_an_absolute_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _hub(monkeypatch, ["x"])
+    store = _store(Path("models"))
+
+    artifact_dir = store.pull(_spec())
+
+    assert artifact_dir.is_absolute()
+    assert artifact_dir == (tmp_path / "models" / "spark" / "onnx" / "fp16").resolve()
+
+
+def test_the_progress_bars_are_disabled_when_a_pull_starts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub(monkeypatch, ["x"])
+    disabled: list[bool] = []
+    monkeypatch.setattr(hf, "disable_progress_bars", lambda: disabled.append(True))
+    store = _store(tmp_path)
+
+    assert disabled == []
+
+    store.pull(_spec())
+
+    assert disabled == [True]
+
+
 def test_the_token_reaches_the_hub_when_set(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
