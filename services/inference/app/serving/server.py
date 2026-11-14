@@ -20,15 +20,20 @@ _HEALTH_SERVICE = pb.DESCRIPTOR.services_by_name["AIService"].full_name
 logger = logging.getLogger(__name__)
 
 
-async def run_server(port: int, api_key: str, analysis: DocumentAnalysis) -> None:
-    server, health_servicer, _ = _build(port, api_key, analysis)
+async def run_server(
+    port: int, api_key: str, analysis: DocumentAnalysis, max_inflight_requests: int
+) -> None:
+    server, health_servicer, _ = _build(port, api_key, analysis, max_inflight_requests)
     await _serve_until_stopped(server, health_servicer, _wait_for_signal(), analysis)
 
 
 def _build(
-    port: int, api_key: str, analysis: DocumentAnalysis
+    port: int, api_key: str, analysis: DocumentAnalysis, max_inflight_requests: int
 ) -> tuple[aio.Server, health.aio.HealthServicer, int]:
-    server = aio.server(interceptors=[ApiKeyAuthInterceptor(api_key)])
+    server = aio.server(
+        interceptors=[ApiKeyAuthInterceptor(api_key)],
+        maximum_concurrent_rpcs=max_inflight_requests,
+    )
     health_servicer = health.aio.HealthServicer()
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
     pb_grpc.add_AIServiceServicer_to_server(AIServiceServicer(analysis), server)

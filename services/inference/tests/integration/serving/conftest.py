@@ -2,6 +2,8 @@
 to end without a session or a downloaded artifact.
 """
 
+import threading
+
 import pytest
 
 from app.inference.analysis import DocumentAnalysis
@@ -42,8 +44,20 @@ class StubEngine:
         return None
 
 
-@pytest.fixture
-def analysis() -> DocumentAnalysis:
+class BlockingEngine(StubEngine):
+    """Holds the engine until the test releases it."""
+
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def score(self, sequences: list[list[int]]) -> tuple[float, ...]:
+        self.entered.set()
+        self.release.wait(timeout=10)
+        return tuple(_SCORE for _ in sequences)
+
+
+def build_analysis(engine: StubEngine, max_inflight: int = 2) -> DocumentAnalysis:
     """The use case over a fake model: the service's own wiring, no weights."""
     preprocessor = DocumentPreprocessor(
         tokenizer=StubTokenizer(),
@@ -54,8 +68,13 @@ def analysis() -> DocumentAnalysis:
     runtime = build_runtime(
         key="spark",
         preprocessor=preprocessor,
-        engine=StubEngine(),
+        engine=engine,
         batch_size=8,
-        max_inflight=2,
+        max_inflight=max_inflight,
     )
     return DocumentAnalysis({"spark": runtime}, threshold=0.5)
+
+
+@pytest.fixture
+def analysis() -> DocumentAnalysis:
+    return build_analysis(StubEngine())

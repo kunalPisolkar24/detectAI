@@ -15,13 +15,20 @@ from app.serving.generated import ai_service_pb2 as pb
 from app.serving.generated import ai_service_pb2_grpc
 from app.serving.server import _build, _serve_until_stopped
 
+from .conftest import BlockingEngine, build_analysis
+
 _BOOT_KEY = "boot-integration-key"
+_MAX_INFLIGHT_REQUESTS = 8
 
 
-async def _booted(analysis: DocumentAnalysis) -> AsyncIterator[tuple[int, asyncio.Task]]:
+async def _booted(
+    analysis: DocumentAnalysis, max_inflight_requests: int = _MAX_INFLIGHT_REQUESTS
+) -> AsyncIterator[tuple[int, asyncio.Task]]:
     """The server on an ephemeral port, stopped whatever the probe does."""
     stop = asyncio.Event()
-    server, health_servicer, port = _build(0, api_key=_BOOT_KEY, analysis=analysis)
+    server, health_servicer, port = _build(
+        0, api_key=_BOOT_KEY, analysis=analysis, max_inflight_requests=max_inflight_requests
+    )
     serve = asyncio.create_task(_serve_until_stopped(server, health_servicer, stop, analysis))
     try:
         yield port, serve
@@ -89,7 +96,6 @@ def test_the_streaming_rpc_answers_started_progress_and_the_result(
 ) -> None:
     asyncio.run(_stream_a_document(analysis))
 
-
 async def _stream_a_document(analysis: DocumentAnalysis) -> None:
     async for port, _serve in _booted(analysis):
         async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
@@ -108,3 +114,34 @@ async def _stream_a_document(analysis: DocumentAnalysis) -> None:
             assert events[0].started.total_chars == len(request.text)
             assert events[0].started.total_chunks == 1
             assert events[-1].result.model_id == "spark"
+
+
+def test_the_server_sheds_the_request_past_its_concurrency_limit() -> None:
+    asyncio.run(_probe_the_limit())
+
+
+async def _probe_the_limit() -> None:
+    engine = BlockingEngine()
+    analysis = build_analysis(engine)
+    async for port, _serve in _booted(analysis, max_inflight_requests=1):
+        async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+            detect = ai_service_pb2_grpc.AIServiceStub(channel).Detect
+            metadata = (("x-api-key", _BOOT_KEY),)
+
+            async def first_call(
+                stub: ai_service_pb2_grpc.AIServiceStub = detect,
+                meta: tuple[tuple[str, str], ...] = metadata,
+            ) -> None:
+                await stub(pb.DetectRequest(text="x"), metadata=meta)
+
+            first = asyncio.create_task(first_call())
+            for _ in range(200):
+                if engine.entered.is_set():
+                    break
+                await asyncio.sleep(0.01)
+
+            second = await _detect_code(detect, pb.DetectRequest(text="x"), api_key=_BOOT_KEY)
+
+            assert second == grpc.StatusCode.RESOURCE_EXHAUSTED
+            engine.release.set()
+            await first

@@ -62,3 +62,14 @@ def test_a_runtime_is_frozen_pure_data() -> None:
 
     with pytest.raises(FrozenInstanceError):
         runtime.key = "flare"  # type: ignore[misc]
+
+
+def test_closing_a_runtime_shuts_both_pools() -> None:
+    runtime = _runtime()
+
+    runtime.close()
+
+    with pytest.raises(RuntimeError):
+        runtime.engine_executor.submit(lambda: None)
+    with pytest.raises(RuntimeError):
+        runtime.preparation_executor.submit(lambda: None)

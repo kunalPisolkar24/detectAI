@@ -9,6 +9,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
@@ -51,10 +52,15 @@ CHUNK_TOKEN_OVERLAP_DEFAULT = 0
 # value until the GPU sweep measures the real one.
 INFERENCE_BATCH_SIZE_DEFAULT = 8
 
-# The in-flight documents per model: how many may be in the engine at once. It
-# is the engine pool's width, so a saturated model sheds the request instead of
-# queueing work that would take minutes to drain.
-MAX_INFLIGHT_DOCUMENTS_DEFAULT = 2
+# The engine pool's width per model: how many forward passes a model may run
+# at once. It is the model's admission too - a permit wider than the pool
+# would queue documents instead of shedding them.
+MAX_CONCURRENT_BATCHES_DEFAULT = 2
+
+# The requests the server services at once, across every model. It is the
+# outer bound: the per-model permit sheds first, and this one keeps the
+# server's own handlers from piling up behind it.
+MAX_INFLIGHT_REQUESTS_DEFAULT = 8
 
 # The verdict threshold default: the AI probability at which a document reads
 # as AI. The house cutoff, not a measurement - the artifacts score everything
@@ -169,9 +175,13 @@ class Settings(BaseModel):
     flare_batch_size: int | None = None
     spark_batch_size: int | None = None
 
-    # The in-flight documents per model: how many may be in the engine at once.
-    # The engine pool is this wide, so the pool never queues behind itself.
-    max_inflight_documents: int = MAX_INFLIGHT_DOCUMENTS_DEFAULT
+    # The engine pool's width per model: how many forward passes a model may
+    # run at once. It is the model's admission too, so a saturated model sheds
+    # the request instead of queueing work that would take minutes to drain.
+    max_concurrent_batches: int = MAX_CONCURRENT_BATCHES_DEFAULT
+
+    # The requests the server services at once, across every model.
+    max_inflight_requests: int = MAX_INFLIGHT_REQUESTS_DEFAULT
 
     # The sequence ceiling per model: the length the artifact's build was
     # trained at. The artifact's declared length is a cross-check on this
@@ -256,10 +266,12 @@ class Settings(BaseModel):
     def _fail_closed_model_sequence_length(cls, value: object) -> int:
         return _positive_int_or_default(value, default=MODEL_MAX_SEQUENCE_LENGTH_DEFAULT)
 
-    @field_validator("max_inflight_documents", mode="before")
+    @field_validator("max_concurrent_batches", "max_inflight_requests", mode="before")
     @classmethod
-    def _fail_closed_inflight_documents(cls, value: object) -> int:
-        return _positive_int_or_default(value, default=MAX_INFLIGHT_DOCUMENTS_DEFAULT)
+    def _fail_closed_concurrency_knobs(cls, value: object, info: ValidationInfo) -> int:
+        return _positive_int_or_default(
+            value, default=cls.model_fields[info.field_name].default
+        )
 
     @field_validator("ai_detection_threshold", mode="before")
     @classmethod

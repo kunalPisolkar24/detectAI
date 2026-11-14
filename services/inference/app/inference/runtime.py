@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from .engine import Engine
 from .preprocessing import DocumentPreprocessor
 
-# The engine pool's width: how many documents one model may have in the engine
-# at once. The serving slice's knob (MAX_INFLIGHT_DOCUMENTS) sets it, and the
-# admission permit is the same width, so the pool never queues behind itself.
+# The engine pool's width: how many forward passes one model may run at once.
+# The serving slice's knob (MAX_CONCURRENT_BATCHES) sets it, and the admission
+# permit is the same width, so the pool never queues behind itself.
 _ENGINE_POOL_WORKERS = 2
 
 
@@ -23,6 +23,11 @@ class ModelRuntime:
     preparation_executor: Executor
     engine_executor: Executor
     max_inflight: int
+
+    def close(self) -> None:
+        """Close the pools the runtime opened."""
+        self.preparation_executor.shutdown(wait=False)
+        self.engine_executor.shutdown(wait=False)
 
 
 def build_runtime(

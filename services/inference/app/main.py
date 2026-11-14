@@ -40,7 +40,15 @@ async def main() -> None:
         ),
     )
 
-    await run_server(port=settings.grpc_port, api_key=settings.api_key, analysis=analysis)
+    try:
+        await run_server(
+            port=settings.grpc_port,
+            api_key=settings.api_key,
+            analysis=analysis,
+            max_inflight_requests=settings.max_inflight_requests,
+        )
+    finally:
+        _close_runtimes(runtimes)
 
 
 def _ensure_model_artifacts(settings: Settings) -> Mapping[str, Path]:
@@ -85,9 +93,15 @@ def _build_runtimes(
             preprocessor=preprocessor,
             engine=engine,
             batch_size=batch_size,
-            max_inflight=settings.max_inflight_documents,
+            max_inflight=settings.max_concurrent_batches,
         )
     return runtimes
+
+
+def _close_runtimes(runtimes: Mapping[str, ModelRuntime]) -> None:
+    """Close the pools the runtimes opened, once the server has stopped."""
+    for key in sorted(runtimes):
+        runtimes[key].close()
 
 
 def _warm_runtimes(runtimes: Mapping[str, ModelRuntime]) -> None:
