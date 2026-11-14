@@ -23,5 +23,12 @@ def test_the_adapter_satisfies_the_port_structurally() -> None:
     assert callable(engine.score)
 
 
+def test_the_warmup_lives_on_the_adapter_and_not_on_the_port() -> None:
+    engine = _engine()
+
+    assert callable(engine.warmup)
+    assert "warmup" not in Engine.__protocol_attrs__
+
+
 def test_engine_error_joins_the_plane_tree() -> None:
     assert issubclass(EngineError, InferenceError)

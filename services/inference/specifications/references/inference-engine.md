@@ -1,12 +1,13 @@
 # Inference — Engine (design reference)
 
-Status: design reference for the engine slice. The skeleton lands in
+Status: design reference for the engine slice, implemented in
 `app/inference/engine/` (the port, the ONNX adapter, the raiser),
 `app/inference/errors.py` (the plane's error root), the `pad_token_id`
 member added to the tokenizer port, `app/inference/runtime.py` (the
-per-model bundle and its two executor pools), and the boot wiring in
-`app/main.py`. The adapter's scoring, its warmup and the fail-closed
-boot that depends on them are not yet implemented.
+per-model bundle and its two executor pools), the `window_tokens` property
+on the preprocessor, and the boot wiring in `app/main.py`. The adapter's
+scoring and its warmup are implemented; the fail-closed boot that
+depends on them is wired and pinned by a unit test.
 
 The engine is the middle of the pipeline: preparation hands it token-ID
 sequences, it hands back one AI probability per sequence. It is the only
@@ -249,14 +250,23 @@ class OnnxEngine:
     ) -> None: ...
 
     def score(self, sequences: Sequence[Sequence[int]]) -> tuple[float, ...]: ...
-    def warmup(self) -> None: ...
+    def warmup(self, sequence_length: int) -> None: ...
+    def _guard(self, sequences: Sequence[Sequence[int]]) -> None: ...
     def _pad(self, sequences: Sequence[Sequence[int]]) -> tuple[np.ndarray, np.ndarray]: ...
+    def _logits(self, input_ids: np.ndarray, attention_mask: np.ndarray, width: int) -> np.ndarray: ...
     def _probability(self, logits: np.ndarray) -> np.ndarray: ...
 ```
 
 Four constructor arguments: the session, the pad token id, the model's
 declared ceiling, and the batch size. **No provider, no device, no thread
 count** — none of those are the engine's business.
+
+The warmup takes the production sequence length as an argument because the
+engine cannot know it: `spark` declares a ceiling of 8192 tokens while the
+chunk window is 512, and warming at the ceiling would be both the wrong
+shape and an enormous allocation. The caller — the runtime bundle's
+preprocessor, through `window_tokens` — owns the window; the engine owns the
+width.
 
 The batch size is the one exception, and it earns its place by being a
 **guard rather than a policy**. The adapter refuses a call wider than
@@ -361,8 +371,10 @@ classDiagram
         -max_sequence_length: int
         -batch_size: int
         +score(sequences) tuple~float, ...~
-        +warmup() None
+        +warmup(sequence_length) None
+        -_guard(sequences) None
         -_pad(sequences) tuple~ndarray, ndarray~
+        -_logits(input_ids, attention_mask, width) ndarray
         -_probability(logits) ndarray
     }
 
@@ -482,14 +494,14 @@ sequenceDiagram
     participant O as onnxruntime
 
     M->>E: OnnxEngine(session, pad_token_id, ceiling, batch_size)
-    M->>E: warmup()
+    M->>E: warmup(window)
     Note over E: step 1 — the probe
-    E->>E: build [CLS] + six pad ids + [SEP]
+    E->>E: build eight pad ids
     E->>O: session.run(input_ids, attention_mask)
     O-->>E: logits [1, 2]
     E->>E: softmax → one finite probability
     Note over E: step 2 — the production shape
-    E->>E: build batch_size sequences at the model's window length
+    E->>E: build batch_size sequences at the window length
     E->>O: session.run(input_ids, attention_mask)
     O-->>E: logits [batch_size, 2]
     E->>E: softmax → every probability finite
@@ -503,7 +515,11 @@ The warmup is two steps, and the second is the one that matters on a GPU.
 vocabulary entry, so it exercises the whole graph on a valid eight-token
 sequence at negligible cost — milliseconds against the ~2.9 s a full
 512-token sequence costs. Its output is meaningless and discarded; only the
-fact that it ran matters. It fails the boot fast on a corrupt artifact.
+fact that it ran matters. It fails the boot fast on a corrupt artifact. The
+probe is built from the pad id alone — the engine holds no other vocabulary
+id, and the reference is explicit that it takes no tokenizer (§11.1), so the
+sequence is eight pad ids rather than the draft's `[CLS] + six pads + [SEP]`.
+Both exercise the same graph path; the output is discarded either way.
 
 **The production-shape run** warms the kernels the service will actually
 use. On the CPU the probe is enough, because the shape barely changes the
@@ -622,6 +638,18 @@ def score(self, sequences: Sequence[Sequence[int]]) -> tuple[float, ...]:
         EngineError  a call wider than the batch size, an over-length or
                      empty sequence, a malformed output, or a failed
                      session run
+    """
+```
+
+```python
+def warmup(self, sequence_length: int) -> None:
+    """Prove the session executes: a cheap probe, then the production shape.
+
+    Preconditions
+        1 <= sequence_length <= the model's ceiling
+
+    Raises
+        EngineError  the probe or the production-shape run could not score
     """
 ```
 
@@ -760,11 +788,18 @@ call it cannot hold.
     the session is not called
   - a call exactly at the batch size → accepted
   - a failed `session.run` → `EngineError` wrapping the cause
+  - the probabilities come back in the order the sequences were handed over
+  - the softmax survives a large logit margin
   - `warmup` runs the probe and then the production shape, and accepts a
     valid result at both
   - a session that raises on warmup → `EngineError`
+  - a warmup length above the ceiling, or below one token → `EngineError`
 - **`tests/unit/inference/engine/test_engine.py`** — the port: the protocol
-  surface, and that `OnnxEngine` satisfies it structurally.
+  surface, that `OnnxEngine` satisfies it structurally, and that the warmup
+  lives on the adapter and not on the port.
+- **`tests/unit/inference/test_main.py`** — the boot's warmup step: every
+  model is warmed at the preprocessor's window, and a model that cannot score
+  raises out of the step, which is the fail-closed guarantee.
 - **`tests/unit/inference/test_runtime.py`** — the bundle: it carries the
   preprocessor, the engine and the batch size for one model; the two
   executors are distinct objects; the batch size is the resolved per-model
@@ -776,14 +811,16 @@ call it cannot hold.
 - **`tests/unit/inference/preprocessing/test_tokenizer.py`** — the new
   member: the adapter reads `pad_token_id`, and the shipped tokenizers
   report 50283.
-- **Artifact-backed tests** (skipped when `models/` is absent, as the
-  preparation tests already do): score a real chunk and assert one finite
-  probability in `[0,1]` per sequence, and that the result matches the
-  tokenizer's own vocabulary. **The observed values are reported, not
-  asserted** — see §11.13.
-- **Integration** — the boot fails when a model cannot score. That is the
-  fail-closed guarantee, and it is the one behaviour worth pinning at the
-  boot boundary.
+- **`tests/unit/inference/preprocessing/test_preprocessor.py`** — the
+  `window_tokens` property: it reads the smaller of the knob and the model's
+  ceiling, the same window the chunks are cut to.
+- **Artifact-backed tests** (`tests/unit/inference/engine/test_onnx_artifacts.py`,
+  skipped when `models/` is absent, as the preparation tests already do):
+  score a three-token sequence against each shipped graph and assert one
+  finite probability in `[0,1]`. **The observed values are reported, not
+  asserted** — see §11.13. The sequence is three tokens long on purpose:
+  the test proves the input names, the dtype and the output shape, and stays
+  small on any host.
 
 **No test may encode a batch size, a throughput figure or a latency.** The
 batch size's *default* is hardware-dependent by construction, so a test
@@ -827,13 +864,15 @@ Run with `make test-unit`; `make test-integration` when the boot changed.
    results back to chunks by index, and a wrapper would add a field nothing
    reads.
 8. **`warmup()` is on the adapter, not the port**, because only the boot
-   depends on its outcome.
+   depends on its outcome. It takes the production sequence length as an
+   argument: the engine holds the model's ceiling, not the chunk window, and
+   the two differ (`spark` declares 8192, the window is 512).
 9. **The warmup has two steps: a probe, then the production shape.** The
-   probe input is `[CLS] + six pad ids + [SEP]` — the pad token is a real
-   vocabulary entry, so the graph runs end to end for a few milliseconds,
-   and a corrupt artifact fails the boot in milliseconds rather than
-   seconds. The production-shape run warms the kernels the service will
-   actually use, which is what a GPU needs and the CPU does not.
+   probe input is eight pad ids — the pad token is a real vocabulary entry,
+   so the graph runs end to end for a few milliseconds, and a corrupt
+   artifact fails the boot in milliseconds rather than seconds. The
+   production-shape run warms the kernels the service will actually use,
+   which is what a GPU needs and the CPU does not.
 10. **An over-length sequence is refused, never truncated.**
 11. **No fallback path and no default score.** Every engine fault is an
     `EngineError`.

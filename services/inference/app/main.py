@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -28,6 +29,7 @@ async def main() -> None:
     artifacts = _ensure_model_artifacts(settings)
     loaded = _load_models(settings, artifacts)
     runtimes = _build_runtimes(settings, loaded)
+    _warm_runtimes(runtimes)
     logger.info(
         "model runtimes: %s",
         ", ".join(
@@ -82,6 +84,14 @@ def _build_runtimes(
             batch_size=batch_size,
         )
     return runtimes
+
+
+def _warm_runtimes(runtimes: Mapping[str, ModelRuntime]) -> None:
+    """Warm after build, before serving: a model that cannot score kills the boot."""
+    for key, runtime in sorted(runtimes.items()):
+        started = time.perf_counter()
+        runtime.engine.warmup(runtime.preprocessor.window_tokens)
+        logger.info("%s: warmed up in %.1fs", key, time.perf_counter() - started)
 
 
 if __name__ == "__main__":

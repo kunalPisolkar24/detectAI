@@ -46,6 +46,11 @@ class DocumentPreprocessor:
                 f"(at most {window - tokenizer.special_token_count - 1} is usable)"
             )
 
+    @property
+    def window_tokens(self) -> int:
+        """The sequence length one chunk occupies in the model, special tokens included."""
+        return self._window_tokens
+
     def prepare(self, text: str) -> PreparedDocument:
         """Admit the submission, tokenize it once, and window it."""
         self._admit(text)

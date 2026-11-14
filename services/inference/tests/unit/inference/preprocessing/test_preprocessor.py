@@ -97,6 +97,27 @@ def test_the_window_is_the_smaller_of_the_knob_and_the_model_ceiling(
     assert preprocessor._content_tokens == expected - 2
 
 
+@pytest.mark.parametrize(
+    ("chunk_token_limit", "model_max_sequence_length", "expected"),
+    [
+        (512, 8192, 512),
+        (4096, 8192, 4096),
+        (4096, 512, 512),
+    ],
+)
+def test_the_window_is_readable_from_the_outside(
+    chunk_token_limit: int,
+    model_max_sequence_length: int,
+    expected: int,
+) -> None:
+    preprocessor = _preprocessor(
+        chunk_token_limit=chunk_token_limit,
+        model_max_sequence_length=model_max_sequence_length,
+    )
+
+    assert preprocessor.window_tokens == expected
+
+
 def test_a_window_below_the_floor_is_refused() -> None:
     with pytest.raises(ValueError):
         _preprocessor(chunk_token_limit=8, model_max_sequence_length=8192)
