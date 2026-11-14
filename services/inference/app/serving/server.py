@@ -7,22 +7,31 @@ from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
 from ..inference.analysis import DocumentAnalysis
 from .auth import ApiKeyAuthInterceptor
+from .generated import ai_service_pb2 as pb
+from .generated import ai_service_pb2_grpc as pb_grpc
+from .servicer import AIServiceServicer
 
 # How long the server waits for the documents in flight when it stops.
 _SHUTDOWN_GRACE_SECONDS = 120
+
+# The service's own name in the health registry, taken from the contract.
+_HEALTH_SERVICE = pb.DESCRIPTOR.services_by_name["AIService"].full_name
 
 logger = logging.getLogger(__name__)
 
 
 async def run_server(port: int, api_key: str, analysis: DocumentAnalysis) -> None:
-    server, health_servicer, _ = _build(port, api_key)
+    server, health_servicer, _ = _build(port, api_key, analysis)
     await _serve_until_stopped(server, health_servicer, _wait_for_signal(), analysis)
 
 
-def _build(port: int, api_key: str) -> tuple[aio.Server, health.aio.HealthServicer, int]:
+def _build(
+    port: int, api_key: str, analysis: DocumentAnalysis
+) -> tuple[aio.Server, health.aio.HealthServicer, int]:
     server = aio.server(interceptors=[ApiKeyAuthInterceptor(api_key)])
     health_servicer = health.aio.HealthServicer()
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
+    pb_grpc.add_AIServiceServicer_to_server(AIServiceServicer(analysis), server)
 
     bound = server.add_insecure_port(f"[::]:{port}")
     if bound == 0:
@@ -37,6 +46,7 @@ async def _serve_until_stopped(
     analysis: DocumentAnalysis,
 ) -> None:
     await health_servicer.set("", health_pb2.HealthCheckResponse.SERVING)
+    await health_servicer.set(_HEALTH_SERVICE, health_pb2.HealthCheckResponse.SERVING)
     await server.start()
     logger.info("grpc server listening")
 
