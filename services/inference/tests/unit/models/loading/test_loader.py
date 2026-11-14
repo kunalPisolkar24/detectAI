@@ -189,19 +189,18 @@ def test_a_tokenizer_failure_dies_typed(
     assert isinstance(raised.value.__cause__, RuntimeError)
 
 
-def test_a_provider_mismatch_warns_and_proceeds(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, tmp_path: Path
+def test_a_provider_mismatch_fails_the_boot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     recorder: dict[str, list[Any]] = {}
     _wiring(monkeypatch, recorder, effective=["CPUExecutionProvider"])
     flare = _artifact(tmp_path, "flare")
 
-    loaded = _loader(providers=("CUDAExecutionProvider", "CPUExecutionProvider")).load_all(
-        {"flare": flare}
-    )
+    with pytest.raises(ModelLoadError) as raised:
+        _loader(providers=("CUDAExecutionProvider",)).load_all({"flare": flare})
 
-    assert list(loaded) == ["flare"]
-    assert any("provider mismatch" in message for message in caplog.messages)
+    assert "flare" in str(raised.value)
+    assert "CUDAExecutionProvider" in str(raised.value)
 
 
 def test_matching_providers_log_without_a_warning(
@@ -214,6 +213,26 @@ def test_matching_providers_log_without_a_warning(
     _loader().load_all({"flare": flare})
 
     assert not [message for message in caplog.messages if "mismatch" in message]
+
+
+def test_the_requested_provider_leading_the_session_is_accepted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # ORT keeps the requested order and appends the CPU as a fallback tail, so
+    # the comparison is by what is missing, never by equality.
+    recorder: dict[str, list[Any]] = {}
+    _wiring(
+        monkeypatch,
+        recorder,
+        effective=["CUDAExecutionProvider", "CPUExecutionProvider"],
+    )
+    flare = _artifact(tmp_path, "flare")
+
+    loaded = _loader(
+        providers=("CUDAExecutionProvider", "CPUExecutionProvider")
+    ).load_all({"flare": flare})
+
+    assert loaded["flare"].key == "flare"
 
 
 def test_the_configured_ceiling_is_the_model_s_sequence_length(

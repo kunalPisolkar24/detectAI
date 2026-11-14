@@ -53,7 +53,7 @@ class OnnxModelLoader:
         except Exception as error:
             raise ModelLoadError(f"{key}: load failed from {path}: {error}") from error
         max_sequence_length = self._max_sequence_length(key, path)
-        self._log_effective_providers(key, session)
+        self._check_effective_providers(key, session)
         logger.info("%s: loaded in %.1fs", key, time.perf_counter() - started)
         return LoadedModel(
             key=key,
@@ -110,14 +110,20 @@ class OnnxModelLoader:
         """The HF tokenizer from the artifact dir; strictly offline, never the hub."""
         return AutoTokenizer.from_pretrained(str(path), local_files_only=True)
 
-    def _log_effective_providers(self, key: str, session: Any) -> None:
-        """Compare by missing, never equality: ORT appends CPU as a fallback tail."""
+    def _check_effective_providers(self, key: str, session: Any) -> None:
+        """The requested provider must be effective, or the boot fails.
+
+        A silent fallback to the CPU is a silent slowdown that reports itself
+        as healthy in every dashboard. A partial fallback - some nodes still
+        on the CPU inside a working session - is the graph's own shape and not
+        this check's business.
+        """
+        # Compared by missing, never equality: ORT appends CPU as a fallback tail.
         effective = list(session.get_providers())
         missing = [name for name in self._providers if name not in effective]
         if missing:
-            logger.warning(
-                "%s: provider mismatch: requested %s, effective %s",
-                key, self._providers, effective,
+            raise ModelLoadError(
+                f"{key}: the requested provider(s) {', '.join(missing)} are not "
+                f"effective; the session offers {', '.join(effective)}"
             )
-        else:
-            logger.info("%s: providers %s", key, effective)
+        logger.info("%s: providers %s", key, effective)
