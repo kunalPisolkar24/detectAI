@@ -124,11 +124,11 @@ The contract layer maps these directly — no reinterpretation at the adapter.
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Message storage | Flat document per message | The slop bucket design had append races, in-memory pagination, and a fetch cap that made deep history unreachable; an index range scan is simpler and fast enough at this volume |
+| Message storage | Flat document per message | The pre-rebuild bucket design had append races, in-memory pagination, and a fetch cap that made deep history unreachable; an index range scan is simpler and fast enough at this volume |
 | Analysis payload | Embedded in the message doc | 1:1 with its message; one query serves history; state transitions are a `$set` on the subdoc |
 | `user_id` on messages | Dropped | Ownership flows `chat_id` → chat; the session is authoritative per the web interface |
 | Message `_id` | BFF-supplied UUID, server fallback | Idempotent appends — the BFF orchestrates inference and retries; a duplicate-key insert is a replay, not an error |
 | Delete consistency | Chat doc first, then messages, no transaction | Worst case is orphaned unreachable messages; avoids requiring replica-set transactions in compose |
-| Pagination | Keyset on `(created_at, _id)` | History is append-only; offset pagination was the slop bug |
+| Pagination | Keyset on `(created_at, _id)` | History is append-only; offset pagination was the pre-rebuild bug |
 | Cache strategy | Cache-aside, invalidate-on-write, TTL safety net | At human typing speed DEL-on-write is cheap; no ZSET or write-through cleverness |
 | Async path | Worker and SQS consumer dropped | Simple CRUD; analysis results flow synchronously BFF → chats RPC |

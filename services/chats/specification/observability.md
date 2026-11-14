@@ -131,7 +131,7 @@ Every record is emitted with the request's context, so the OTel logs SDK finds t
 
 ## Known limits
 
-1. **The `detectai-chats` board still describes the retired build.** It queries `chat-service`/`chat-worker` and the `chat_*` metrics the quarantined `slop/` tree emitted; the worker, the Redis streams and the publish/ingest flow are gone. The board and its `chat_redis_degraded` alert stay dark until they are rewritten against this inventory.
+1. **The `detectai-chats` board still describes the retired build.** It queries `chat-service`/`chat-worker` and the `chat_*` metrics the removed pre-rebuild tree emitted; the worker, the Redis streams and the publish/ingest flow are gone. The board and its `chat_redis_degraded` alert stay dark until they are rewritten against this inventory.
 2. **No trace of the cache or the datastore.** The instruments count and time the operations; only the RPC and the route spans are traced. A Mongo call that stalls shows up as a slow RPC, not as a span of its own.
 3. **No metric endpoint.** There is no Prometheus scrape path; the push is the only export.
 

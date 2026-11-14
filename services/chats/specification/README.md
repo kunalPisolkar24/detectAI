@@ -1,6 +1,6 @@
 # Specification Index
 
-Specifications for the chats service. This file is the hub — every design doc links to related specs. The quarantined pre-rebuild build-out (`slop/`) is reference material only.
+Specifications for the chats service. This file is the hub — every design doc links to related specs. The reference build-out (`slop/`) was kept as reference material while this one was built; it is now removed, recoverable from git history.
 
 ## Specs
 
