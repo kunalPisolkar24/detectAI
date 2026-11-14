@@ -1,11 +1,12 @@
 # Inference — Engine (design reference)
 
-Status: design reference for the engine slice. The implementation lands in
+Status: design reference for the engine slice. The skeleton lands in
 `app/inference/engine/` (the port, the ONNX adapter, the raiser),
 `app/inference/errors.py` (the plane's error root), the `pad_token_id`
 member added to the tokenizer port, `app/inference/runtime.py` (the
 per-model bundle and its two executor pools), and the boot wiring in
-`app/main.py`.
+`app/main.py`. The adapter's scoring, its warmup and the fail-closed
+boot that depends on them are not yet implemented.
 
 The engine is the middle of the pipeline: preparation hands it token-ID
 sequences, it hands back one AI probability per sequence. It is the only

@@ -13,10 +13,11 @@ class Encoding:
 
 
 class Tokenizer(Protocol):
-    """The tokenizer surface preparation needs; nothing else."""
+    """The tokenizer surface the plane needs; nothing else."""
 
     cls_token_id: int
     sep_token_id: int
+    pad_token_id: int
     special_token_count: int
 
     def encode(self, text: str) -> Encoding:
@@ -31,6 +32,7 @@ class FastTokenizer:
         self._tokenizer = tokenizer
         self.cls_token_id = tokenizer.cls_token_id
         self.sep_token_id = tokenizer.sep_token_id
+        self.pad_token_id = tokenizer.pad_token_id
         self.special_token_count = tokenizer.num_special_tokens_to_add(pair=False)
 
     def encode(self, text: str) -> Encoding:

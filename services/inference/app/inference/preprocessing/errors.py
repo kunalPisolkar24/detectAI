@@ -1,8 +1,10 @@
-"""Shared preprocessing error vocabulary; colocate in its raiser, graduate here with a second."""
+"""Shared preprocessing error vocabulary; the preparation plane's leaves of the plane root."""
+
+from ..errors import InferenceError
 
 
-class PreprocessingError(RuntimeError):
-    """Root of the preprocessing plane's failures; catch this for blanket handling."""
+class PreprocessingError(InferenceError):
+    """The preparation plane's failures; catch this for that plane alone."""
 
 
 class InvalidDocument(PreprocessingError):

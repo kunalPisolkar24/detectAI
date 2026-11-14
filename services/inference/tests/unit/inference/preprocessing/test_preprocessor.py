@@ -13,10 +13,11 @@ from app.inference.preprocessing import (
 
 
 class StubTokenizer:
-    """Satisfies the Tokenizer port: the three attributes preparation reads."""
+    """Satisfies the Tokenizer port: the four attributes preparation reads."""
 
     cls_token_id = 50281
     sep_token_id = 50282
+    pad_token_id = 50283
     special_token_count = 2
 
     def __init__(self) -> None:

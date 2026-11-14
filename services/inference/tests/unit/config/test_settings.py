@@ -17,6 +17,7 @@ from app.config.settings import (
     FLARE_MODEL_DIR,
     FLARE_MODEL_REPO,
     FLARE_MODEL_REVISION,
+    INFERENCE_BATCH_SIZE_DEFAULT,
     MAX_TEXT_CHARS_DEFAULT,
     SPARK_MODEL_DIR,
     SPARK_MODEL_REPO,
@@ -74,6 +75,7 @@ _SERVER_KNOBS: dict[str, object] = {
     "max_text_chars": MAX_TEXT_CHARS_DEFAULT,
     "chunk_token_limit": CHUNK_TOKEN_LIMIT_DEFAULT,
     "chunk_token_overlap": CHUNK_TOKEN_OVERLAP_DEFAULT,
+    "inference_batch_size": INFERENCE_BATCH_SIZE_DEFAULT,
 }
 
 
@@ -93,6 +95,7 @@ def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
             "MAX_TEXT_CHARS": "2000000",
             "CHUNK_TOKEN_LIMIT": "256",
             "CHUNK_TOKEN_OVERLAP": "64",
+            "INFERENCE_BATCH_SIZE": "16",
         })
     )
 
@@ -101,6 +104,7 @@ def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
     assert settings.max_text_chars == 2_000_000
     assert settings.chunk_token_limit == 256
     assert settings.chunk_token_overlap == 64
+    assert settings.inference_batch_size == 16
 
 
 @pytest.mark.parametrize(
@@ -123,12 +127,60 @@ def test_the_server_knobs_read_plain_seeds_from_the_string_plane() -> None:
         ("chunk_token_overlap", "not a number"),
         ("chunk_token_overlap", "-1"),
         ("chunk_token_overlap", "1.5"),
+        ("inference_batch_size", "not a number"),
+        ("inference_batch_size", "-1"),
+        ("inference_batch_size", "0"),
+        ("inference_batch_size", "1.5"),
     ],
 )
 def test_an_invalid_server_knob_falls_back_to_its_safe_default(field: str, seeded: str) -> None:
     settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20, field.upper(): seeded}))
 
     assert getattr(settings, field) == _SERVER_KNOBS[field]
+
+
+# The batch knobs: the global width, a per-model override, and the rule that
+# resolves them. An unset override inherits the global width.
+
+
+def test_the_per_model_batch_overrides_are_unset_without_seeds() -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
+
+    assert settings.flare_batch_size is None
+    assert settings.spark_batch_size is None
+
+
+def test_a_per_model_override_wins_over_the_global_width() -> None:
+    settings = Settings.from_provider(
+        StubProvider({
+            "API_KEY": "a" * 20,
+            "INFERENCE_BATCH_SIZE": "16",
+            "FLARE_BATCH_SIZE": "32",
+        })
+    )
+
+    assert settings.batch_size_for("flare") == 32
+    assert settings.batch_size_for("spark") == 16
+
+
+@pytest.mark.parametrize("seeded", ["", "not a number", "-1", "0", "1.5"])
+def test_an_unusable_per_model_override_falls_back_to_the_global_width(seeded: str) -> None:
+    settings = Settings.from_provider(
+        StubProvider({
+            "API_KEY": "a" * 20,
+            "INFERENCE_BATCH_SIZE": "16",
+            "FLARE_BATCH_SIZE": seeded,
+        })
+    )
+
+    assert settings.flare_batch_size is None
+    assert settings.batch_size_for("flare") == 16
+
+
+def test_an_unknown_model_resolves_to_the_global_width() -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
+
+    assert settings.batch_size_for("unknown") == INFERENCE_BATCH_SIZE_DEFAULT
 
 
 def test_a_zero_overlap_is_a_legal_seed() -> None:

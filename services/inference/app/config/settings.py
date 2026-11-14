@@ -36,6 +36,10 @@ CHUNK_TOKEN_LIMIT_DEFAULT = 512
 # chunk's model input; 0 is no overlap.
 CHUNK_TOKEN_OVERLAP_DEFAULT = 0
 
+# The batch width default: the widest call the engine accepts. The CPU-safe
+# value until the GPU sweep measures the real one.
+INFERENCE_BATCH_SIZE_DEFAULT = 8
+
 _GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 _LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
@@ -108,6 +112,12 @@ class Settings(BaseModel):
     # model input carries context its scored region does not. 0 = no overlap.
     chunk_token_overlap: int = CHUNK_TOKEN_OVERLAP_DEFAULT
 
+    # The batch width: the widest call the engine accepts, per model. The global
+    # knob is the fallback; a per-model override wins over it.
+    inference_batch_size: int = INFERENCE_BATCH_SIZE_DEFAULT
+    flare_batch_size: int | None = None
+    spark_batch_size: int | None = None
+
     # Where pulled artifacts land; a volume mount in a container keeps restarts cheap.
     model_cache_dir: str = "./models"
 
@@ -160,6 +170,21 @@ class Settings(BaseModel):
         return _non_negative_int_or_default(
             value, default=cls.model_fields["chunk_token_overlap"].default
         )
+
+    @field_validator("inference_batch_size", mode="before")
+    @classmethod
+    def _fail_closed_batch_size(cls, value: object) -> int:
+        return _positive_int_or_default(
+            value, default=cls.model_fields["inference_batch_size"].default
+        )
+
+    @field_validator("flare_batch_size", "spark_batch_size", mode="before")
+    @classmethod
+    def _fail_closed_model_batch_size(cls, value: object) -> int | None:
+        """An unusable override is no override: the global knob governs."""
+        if value is None:
+            return None
+        return _positive_int_or_default(value, default=0) or None
 
     @field_validator("hf_token", mode="before")
     @classmethod
@@ -254,3 +279,9 @@ class Settings(BaseModel):
         # model_validate, not __init__: string-typed plane values must enter
         # through validation, where the before-validators own the coercion.
         return cls.model_validate(values)
+
+    def batch_size_for(self, model_key: str) -> int:
+        """The widest call one model accepts: its own override, else the global knob."""
+        overrides = {"flare": self.flare_batch_size, "spark": self.spark_batch_size}
+        override = overrides.get(model_key)
+        return override if override is not None else self.inference_batch_size

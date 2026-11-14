@@ -4,6 +4,9 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from .config import ConfigFactory, Settings, deployment_flick
+from .inference.engine import OnnxEngine
+from .inference.preprocessing import DocumentPreprocessor, FastTokenizer
+from .inference.runtime import ModelRuntime, build_runtime
 from .models import LoadedModel, ModelArtifactManager, ModelSpecs
 from .models.loading.onnx import OnnxModelLoader
 from .models.pulling.huggingface import HuggingFaceStore
@@ -23,7 +26,15 @@ async def main() -> None:
     logger.info("config plane: %s", flick)
 
     artifacts = _ensure_model_artifacts(settings)
-    _load_models(settings, artifacts)
+    loaded = _load_models(settings, artifacts)
+    runtimes = _build_runtimes(settings, loaded)
+    logger.info(
+        "model runtimes: %s",
+        ", ".join(
+            f"{key} (batch {runtime.batch_size})"
+            for key, runtime in sorted(runtimes.items())
+        ),
+    )
 
     await run_server(port=settings.grpc_port, api_key=settings.api_key)
 
@@ -41,6 +52,36 @@ def _load_models(settings: Settings, artifacts: Mapping[str, Path]) -> Mapping[s
         intra_op_threads=settings.ort_intra_op_threads,
     )
     return loader.load_all(artifacts)
+
+
+def _build_runtimes(
+    settings: Settings, loaded: Mapping[str, LoadedModel]
+) -> Mapping[str, ModelRuntime]:
+    """Build after load, before serving: one runtime per model, walking sorted."""
+    runtimes: dict[str, ModelRuntime] = {}
+    for key, model in sorted(loaded.items()):
+        tokenizer = FastTokenizer(model.tokenizer)
+        batch_size = settings.batch_size_for(key)
+        preprocessor = DocumentPreprocessor(
+            tokenizer=tokenizer,
+            chunk_token_limit=settings.chunk_token_limit,
+            model_max_sequence_length=model.max_sequence_length,
+            max_text_chars=settings.max_text_chars,
+            chunk_token_overlap=settings.chunk_token_overlap,
+        )
+        engine = OnnxEngine(
+            session=model.session,
+            pad_token_id=tokenizer.pad_token_id,
+            max_sequence_length=model.max_sequence_length,
+            batch_size=batch_size,
+        )
+        runtimes[key] = build_runtime(
+            key=key,
+            preprocessor=preprocessor,
+            engine=engine,
+            batch_size=batch_size,
+        )
+    return runtimes
 
 
 if __name__ == "__main__":

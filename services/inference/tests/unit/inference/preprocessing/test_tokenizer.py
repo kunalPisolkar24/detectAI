@@ -22,6 +22,7 @@ class StubTokenizer:
 
     cls_token_id = 50281
     sep_token_id = 50282
+    pad_token_id = 50283
 
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
@@ -45,6 +46,7 @@ def test_the_adapter_reads_the_special_tokens() -> None:
 
     assert adapter.cls_token_id == 50281
     assert adapter.sep_token_id == 50282
+    assert adapter.pad_token_id == 50283
     assert adapter.special_token_count == 2
 
 
@@ -168,3 +170,4 @@ def test_both_shipped_tokenizers_declare_the_same_special_tokens() -> None:
 
         assert adapter.special_token_count == 2
         assert adapter.cls_token_id != adapter.sep_token_id
+        assert adapter.pad_token_id == 50283
