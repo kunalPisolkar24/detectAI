@@ -1,4 +1,4 @@
-name: Service - Chats
+name: Chats
 
 on:
   workflow_dispatch:
@@ -8,14 +8,14 @@ on:
       - staging
     paths:
       - "services/chats/**"
-      - ".github/workflows/service-chats.yaml"
+      - ".github/workflows/chats.yaml"
   pull_request:
     branches:
       - main
       - staging
     paths:
       - "services/chats/**"
-      - ".github/workflows/service-chats.yaml"
+      - ".github/workflows/chats.yaml"
 
 env:
   DOCKER_IMAGE_NAME: kunalpisolkar/detect-ai-chats-service
