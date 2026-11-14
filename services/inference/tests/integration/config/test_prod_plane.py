@@ -26,6 +26,7 @@ _INT_KNOBS = (
 )
 _FLOAT_KNOBS = ("OTEL_TRACE_SAMPLE_RATIO",)
 _LEVEL_KNOBS = ("LOG_LEVEL",)
+_CSV_KNOBS = ("ENABLED_MODELS", "INFERENCE_PROVIDERS")
 _TEXT_KNOBS = (
     "MODEL_CACHE_DIR",
     "FLARE_MODEL_REPO",
@@ -58,13 +59,15 @@ def _plane(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, region: str) -> None
     monkeypatch.setenv("AWS_ENDPOINT_URL", "http://localhost:4566")
 
 
-def _seeded_value(name: str, seeded: str) -> int | float | str:
+def _seeded_value(name: str, seeded: str) -> int | float | str | tuple[str, ...]:
     if name in _INT_KNOBS:
         return int(seeded)
     if name in _FLOAT_KNOBS:
         return float(seeded)
     if name in _LEVEL_KNOBS:
         return seeded.strip().upper()
+    if name in _CSV_KNOBS:
+        return tuple(part.strip() for part in seeded.split(",") if part.strip())
     return seeded
 
 
@@ -87,7 +90,7 @@ def test_the_prod_plane_reads_the_seeded_floci_planes(
         elif resolved != seeded:
             pytest.fail(f"{name} did not come off the seeded secrets blob")
 
-    for name in (*_INT_KNOBS, *_FLOAT_KNOBS, *_LEVEL_KNOBS, *_TEXT_KNOBS):
+    for name in (*_INT_KNOBS, *_FLOAT_KNOBS, *_LEVEL_KNOBS, *_CSV_KNOBS, *_TEXT_KNOBS):
         seeded = env.get(name, "")
         if seeded == "":
             continue

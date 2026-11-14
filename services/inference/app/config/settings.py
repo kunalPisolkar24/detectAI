@@ -183,6 +183,11 @@ class Settings(BaseModel):
     # The requests the server services at once, across every model.
     max_inflight_requests: int = MAX_INFLIGHT_REQUESTS_DEFAULT
 
+    # The models this process serves, in the canonical key order. It is what
+    # makes one model per card - and a light dev boot - expressible: a
+    # process that serves only spark pulls and loads only spark.
+    enabled_models: tuple[str, ...] = ("spark",)
+
     # The sequence ceiling per model: the length the artifact's build was
     # trained at. The artifact's declared length is a cross-check on this
     # number, never its source - one of the two pinned artifacts declares none.
@@ -265,6 +270,33 @@ class Settings(BaseModel):
     @classmethod
     def _fail_closed_model_sequence_length(cls, value: object) -> int:
         return _positive_int_or_default(value, default=MODEL_MAX_SEQUENCE_LENGTH_DEFAULT)
+
+    @field_validator("enabled_models", mode="before")
+    @classmethod
+    def _fail_closed_enabled_models(cls, value: object) -> tuple[str, ...]:
+        """The served set: known names only, at least one, in the canonical order."""
+        if isinstance(value, str):
+            items: list[object] = value.split(",")
+        elif isinstance(value, (list, tuple)):
+            items = list(value)
+        else:
+            raise TypeError("enabled_models must be a CSV string or a sequence of names")
+        names: list[str] = []
+        for item in items:
+            if not isinstance(item, str):
+                raise TypeError("every enabled model must be a name string")
+            name = item.strip()
+            if name and name not in names:
+                names.append(name)
+        if not names:
+            raise ValueError("at least one model must be enabled")
+        unknown = [name for name in names if name not in MODEL_KEYS]
+        if unknown:
+            raise ValueError(
+                f"unknown model(s): {', '.join(unknown)}; "
+                f"known: {', '.join(MODEL_KEYS)}"
+            )
+        return tuple(name for name in MODEL_KEYS if name in names)
 
     @field_validator("max_concurrent_batches", "max_inflight_requests", mode="before")
     @classmethod

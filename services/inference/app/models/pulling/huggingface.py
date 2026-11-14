@@ -11,6 +11,7 @@ from huggingface_hub.errors import (
     HfHubHTTPError,
     OfflineModeIsEnabled,
 )
+from huggingface_hub.file_download import read_download_metadata
 from huggingface_hub.utils import disable_progress_bars
 
 from ..errors import ArtifactPullError, MissingArtifact
@@ -44,14 +45,28 @@ class HuggingFaceStore:
 
     def locate(self, spec: ModelSpec) -> Path:
         """Offline resolve at the pinned revision; raises MissingArtifact on a miss."""
-        try:
-            for filename in spec.files:
-                self._download(spec, filename, local_files_only=True)
-        except (FileNotFoundError, EntryNotFoundError) as error:
-            raise MissingArtifact(
-                f"{spec.key} is not present locally at {spec.revision}: {error}"
-            ) from error
+        for filename in spec.files:
+            self._verify_cached(spec, filename)
         return self._artifact_dir(spec)
+
+    def _verify_cached(self, spec: ModelSpec, filename: str) -> None:
+        """The file must be cached, and it must carry the pinned revision.
+
+        The hub hands back a cached file even when it belongs to another
+        commit, so a volume that outlived a revision bump would otherwise keep
+        serving the old build under the new pin.
+        """
+        metadata = read_download_metadata(self._root / spec.key, filename)
+        if metadata is None:
+            raise MissingArtifact(
+                f"{spec.key} is not present locally at {spec.revision}: "
+                f"{filename} is not cached"
+            )
+        if metadata.commit_hash != spec.revision:
+            raise MissingArtifact(
+                f"{spec.key} is not present locally at {spec.revision}: "
+                f"{filename} belongs to another revision"
+            )
 
     def pull(self, spec: ModelSpec) -> Path:
         """Fetch the spec's files with retries and progress logs; returns the local artifact dir."""

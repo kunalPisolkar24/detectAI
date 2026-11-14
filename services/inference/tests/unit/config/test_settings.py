@@ -272,6 +272,38 @@ def test_an_unknown_model_key_has_no_settings() -> None:
         settings.model_settings("unknown")
 
 
+# The served set: which models this process pulls, loads and answers for.
+
+def test_the_served_set_holds_its_default() -> None:
+    settings = Settings.from_provider(StubProvider({"API_KEY": "a" * 20}))
+
+    assert settings.enabled_models == ("spark",)
+
+
+def test_a_csv_served_set_splits_trims_and_dedupes() -> None:
+    settings = Settings.from_provider(
+        StubProvider({"API_KEY": "a" * 20, "ENABLED_MODELS": " flare , spark , flare , "})
+    )
+
+    assert settings.enabled_models == ("flare", "spark")
+
+
+def test_the_served_set_comes_out_in_the_canonical_order() -> None:
+    settings = Settings.from_provider(
+        StubProvider({"API_KEY": "a" * 20, "ENABLED_MODELS": "spark,flare"})
+    )
+
+    assert settings.enabled_models == ("flare", "spark")
+
+
+@pytest.mark.parametrize("seeded", ["", "  ", "unknown", "flare,unknown", "flare,bogus"])
+def test_an_unusable_served_set_fails_the_boot(seeded: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings.from_provider(
+            StubProvider({"API_KEY": "a" * 20, "ENABLED_MODELS": seeded})
+        )
+
+
 def test_a_zero_overlap_is_a_legal_seed() -> None:
     settings = Settings.from_provider(
         StubProvider({"API_KEY": "a" * 20, "CHUNK_TOKEN_OVERLAP": "0"})

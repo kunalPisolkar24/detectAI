@@ -7,6 +7,7 @@ from pathlib import Path
 import httpx2
 import pytest
 from huggingface_hub.errors import EntryNotFoundError, HfHubHTTPError
+from huggingface_hub.file_download import write_download_metadata
 
 import app.models.pulling.huggingface as hf
 from app.models import ArtifactPullError, MissingArtifact
@@ -207,31 +208,54 @@ def test_an_unset_token_never_reaches_the_hub(
     assert "token" not in hub.calls[0]
 
 
-def test_locate_resolves_offline_at_the_pinned_revision(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    hub = _hub(monkeypatch, ["x"])
+def _cached(root: Path, key: str, filename: str, revision: str) -> Path:
+    """A file the hub has cached, with the revision it came from recorded."""
+    local_dir = root / key
+    path = local_dir / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"artifact")
+    write_download_metadata(
+        local_dir=local_dir, filename=filename, commit_hash=revision, etag="etag"
+    )
+    return path
+
+
+def test_locate_resolves_offline_at_the_pinned_revision(tmp_path: Path) -> None:
+    _cached(tmp_path, "spark", "onnx/fp16/model.onnx", _REVISION)
     store = _store(tmp_path)
 
     artifact_dir = store.locate(_spec())
 
     assert artifact_dir == tmp_path / "spark" / "onnx" / "fp16"
-    assert hub.calls[0]["local_files_only"] is True
-    assert "token" not in hub.calls[0]
 
 
-def test_a_locate_miss_raises_missing_artifact_without_a_retry(
+def test_locate_never_reaches_the_hub(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    hub = _hub(monkeypatch, [EntryNotFoundError("nothing cached")])
-    sleeps = _sleeps(monkeypatch)
+    hub = _hub(monkeypatch, ["x"])
+    _cached(tmp_path, "spark", "onnx/fp16/model.onnx", _REVISION)
+    store = _store(tmp_path)
+
+    store.locate(_spec())
+
+    assert hub.calls == []
+
+
+def test_an_artifact_from_another_revision_is_a_miss(tmp_path: Path) -> None:
+    # The volume outlived a revision bump: the cached file belongs to another
+    # commit, so it is not the artifact this pin names.
+    _cached(tmp_path, "spark", "onnx/fp16/model.onnx", "b" * 40)
     store = _store(tmp_path)
 
     with pytest.raises(MissingArtifact):
         store.locate(_spec())
 
-    assert len(hub.calls) == 1
-    assert sleeps == []
+
+def test_a_file_that_is_not_cached_is_a_miss(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    with pytest.raises(MissingArtifact):
+        store.locate(_spec())
 
 
 def test_pull_creates_a_missing_root_volume(

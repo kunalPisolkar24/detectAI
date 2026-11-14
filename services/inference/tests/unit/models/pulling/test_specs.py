@@ -7,8 +7,30 @@ from app.config import Settings
 from app.models import ModelSpec, ModelSpecs
 
 
-def _settings() -> Settings:
-    return Settings(api_key="a" * 20)
+def _settings(**overrides: object) -> Settings:
+    return Settings(api_key="a" * 20, enabled_models=("flare", "spark"), **overrides)
+
+
+def test_the_default_serves_spark_alone() -> None:
+    settings = Settings(api_key="a" * 20)
+
+    assert settings.enabled_models == ("spark",)
+    assert [spec.key for spec in ModelSpecs.from_settings(settings)] == ["spark"]
+
+
+def test_only_the_enabled_models_get_a_spec() -> None:
+    settings = Settings(api_key="a" * 20, enabled_models=("flare",))
+
+    specs = ModelSpecs.from_settings(settings)
+
+    assert [spec.key for spec in specs] == ["flare"]
+
+
+def test_the_enabled_models_come_out_in_the_canonical_order() -> None:
+    settings = Settings(api_key="a" * 20, enabled_models=("spark", "flare"))
+
+    assert settings.enabled_models == ("flare", "spark")
+    assert [spec.key for spec in ModelSpecs.from_settings(settings)] == ["flare", "spark"]
 
 
 def test_one_spec_per_model_built_from_the_settings_contract() -> None:

@@ -26,3 +26,9 @@ grpcurl -plaintext localhost:50051 grpc.health.v1.Health/Check
 Every RPC except the health check demands `x-api-key` metadata matching `API_KEY`, answered `UNAUTHENTICATED` otherwise. The `MAX_TEXT_CHARS` submission bound (default 1,000,000) is enforced on both RPCs; a bad input answers `INVALID_ARGUMENT`, a saturated model answers `RESOURCE_EXHAUSTED`, and an unexpected failure answers `INTERNAL`.
 
 `Detect` returns the document's verdict. `AnalyzeDocument` streams the same verdict: a `started` event with the document's shape, coalesced `progress` events as its chunks land, and the `result` event last. The confidences on the wire are 0-100 percentages, and the `model_id` names the model that answered (`spark` by default, `flare` or `spark`).
+
+## Models
+
+`ENABLED_MODELS` names the models a process serves: `spark`, `flare`, or both. The default is `spark` alone, so a boot pulls and loads only what it answers for — and one model per process is what makes the one-model-per-card deployment shape expressible. A `model_id` the process does not serve answers `INVALID_ARGUMENT`.
+
+Each model's artifact is pulled at its pinned git SHA and verified against that SHA on disk, so a volume that outlived a revision bump is re-pulled rather than silently serving the old build.

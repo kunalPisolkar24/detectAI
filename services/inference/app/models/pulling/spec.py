@@ -55,6 +55,7 @@ class ModelSpec(BaseModel):
 class ModelSpecs:
     @classmethod
     def from_settings(cls, settings: Settings) -> tuple[ModelSpec, ...]:
+        """One spec per enabled model, in the canonical key order."""
         return tuple(
             ModelSpec(
                 key=model.key,
@@ -64,4 +65,5 @@ class ModelSpecs:
                 files=_spec_files(model.artifact_dir, _MODEL_FILE_NAMES[model.key]),
             )
             for model in settings.model_settings_all()
+            if model.key in settings.enabled_models
         )
