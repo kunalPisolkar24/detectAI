@@ -6,6 +6,7 @@ import (
 
 	connectrpc "connectrpc.com/connect"
 	"connectrpc.com/grpchealth"
+	"connectrpc.com/grpcreflect"
 	"github.com/gin-gonic/gin"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
@@ -31,6 +32,12 @@ func New(database db.Database, service services.Service, apiKey string, limiter 
 
 	healthPath, healthHandler := grpchealth.NewHandler(grpchealth.NewStaticChecker("chats.v1.ChatService"))
 	r.Any(healthPath+"*any", gin.WrapH(healthHandler))
+
+	reflector := grpcreflect.NewStaticReflector(chatv1connect.ChatServiceName)
+	reflectPath, reflectHandler := grpcreflect.NewHandlerV1(reflector)
+	r.Any(reflectPath+"*any", gin.WrapH(reflectHandler))
+	reflectPathAlpha, reflectHandlerAlpha := grpcreflect.NewHandlerV1Alpha(reflector)
+	r.Any(reflectPathAlpha+"*any", gin.WrapH(reflectHandlerAlpha))
 
 	chatPath, chatHandler := chatv1connect.NewChatServiceHandler(
 		handlers.New(service),

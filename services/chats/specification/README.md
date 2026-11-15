@@ -6,7 +6,7 @@ Specifications for the chats service. This file is the hub — every design doc 
 
 | Doc | Covers |
 |-----|--------|
-| [contract.md](contract.md) | The Connect RPC wire contract — RPC surface, types, pagination, rate limiting, error semantics, codegen |
+| [contract.md](contract.md) | The Connect RPC wire contract — RPC surface, types, pagination, rate limiting, error semantics, codegen, reflection |
 | [observability.md](observability.md) | The OTel push pipeline to New Relic, the metric inventory, the telemetry seam |
 
 ## Read order

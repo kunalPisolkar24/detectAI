@@ -6,11 +6,15 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	"connectrpc.com/grpchealth"
+	"connectrpc.com/grpcreflect"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
@@ -86,6 +90,29 @@ func newServerWithLogger(t *testing.T, database db.Database, service stubService
 	return srv
 }
 
+// newH2CServer serves the router the way cmd/api does: HTTP/1.1 and
+// unencrypted HTTP/2 on one listener. Reflection is a bidirectional stream, so
+// it answers only over HTTP/2.
+func newH2CServer(t *testing.T, database db.Database, service stubService) *httptest.Server {
+	t.Helper()
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+
+	srv := httptest.NewUnstartedServer(router.New(database, service, testAPIKey, allowAllLimiter{}, chatshandlers.Limits{Create: 10, Write: 60}, slog.Default(), observability.NullTelemetry{}))
+	srv.Config.Protocols = protocols
+	srv.Start()
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// h2cClient speaks HTTP/2 without TLS, the way grpcurl reaches the service.
+func h2cClient() *http.Client {
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
+	return &http.Client{Transport: &http.Transport{Protocols: protocols}}
+}
+
 func TestChatServiceRejectsAnUnauthenticatedCall(t *testing.T) {
 	srv := newServer(t, fakeDatabase{}, stubService{})
 
@@ -152,6 +179,56 @@ func TestHealthAdvertisesChatService(t *testing.T) {
 	if resp.Status != grpchealth.StatusServing {
 		t.Fatalf("health status = %v, want %v", resp.Status, grpchealth.StatusServing)
 	}
+}
+
+func TestReflectionAdvertisesTheChatService(t *testing.T) {
+	srv := newH2CServer(t, fakeDatabase{}, stubService{})
+
+	client := grpcreflect.NewClient(h2cClient(), srv.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	stream := client.NewStream(ctx)
+	t.Cleanup(func() { _, _ = stream.Close() })
+
+	serviceName := protoreflect.FullName(chatv1connect.ChatServiceName)
+	names, err := stream.ListServices()
+	if err != nil {
+		t.Fatalf("ListServices: %v", err)
+	}
+	if !slices.Contains(names, serviceName) {
+		t.Fatalf("reflected services = %v, want %q", names, serviceName)
+	}
+
+	files, err := stream.FileContainingSymbol(serviceName)
+	if err != nil {
+		t.Fatalf("FileContainingSymbol: %v", err)
+	}
+	if !carriesChatService(files) {
+		t.Fatalf("reflected files = %v, want chat_service.proto carrying ChatService", fileNames(files))
+	}
+}
+
+func carriesChatService(files []*descriptorpb.FileDescriptorProto) bool {
+	for _, file := range files {
+		if file.GetName() != "chat_service.proto" {
+			continue
+		}
+		for _, service := range file.GetService() {
+			if service.GetName() == "ChatService" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func fileNames(files []*descriptorpb.FileDescriptorProto) []string {
+	names := make([]string, 0, len(files))
+	for _, file := range files {
+		names = append(names, file.GetName())
+	}
+	return names
 }
 
 func TestProbesServe(t *testing.T) {

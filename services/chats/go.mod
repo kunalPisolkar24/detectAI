@@ -5,6 +5,7 @@ go 1.27.1
 require (
 	connectrpc.com/connect v1.21.1
 	connectrpc.com/grpchealth v1.5.0
+	connectrpc.com/grpcreflect v1.3.1
 	github.com/aws/aws-sdk-go-v2 v1.48.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.18
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.50.12

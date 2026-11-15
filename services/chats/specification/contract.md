@@ -262,6 +262,18 @@ Redis never fails an RPC: reads degrade to Mongo on miss/eviction, a failed inva
 
 connect-go mounted on the existing gin engine — the `grpchealth` surface and `/api/v1` probes are unchanged. The server speaks HTTP/1 + unencrypted H2C (already set in `cmd/api/main.go`); connect-go negotiates gRPC, gRPC-Web, and the Connect protocol on one handler. The contract source of truth is `services/chats/proto/chat_service.proto`; `buf generate` emits the Go stubs (`package chatv1`) beside it, and a connect-es TypeScript client for the BFF comes with the consumer work; the generated client is the sanctioned cross-service artifact.
 
+## Reflection
+
+Server reflection is mounted beside `grpchealth`, at `/grpc.reflection.v1.ServerReflection/` and `/grpc.reflection.v1alpha.ServerReflection/`, serving the `chats.v1.ChatService` descriptor out of the global protobuf registry. It lets a debugging tool discover the wire contract without a copy of the schema:
+
+```
+grpcurl -plaintext localhost:8090 list
+```
+
+The surface is unauthenticated — it discloses schema only, never data. The RPCs themselves still require `x-api-key` and `x-user-id`.
+
+Reflection is the one HTTP/2-only surface, because server reflection is a bidirectional stream. An HTTP/1.1 client gets `505`, which is the correct answer rather than a degradation to fix: every tool that consumes reflection speaks HTTP/2 by definition. The service's RPC surface serves both HTTP/1.1 and HTTP/2, and both must stay enabled — the container healthcheck probe and the load rig both depend on HTTP/1.1.
+
 ## Resolved decisions
 
 1. **Eight RPCs, mined from the caller** — `apps/web/lib/domain/chat-service.ts` is the spec; everything else is speculative surface.
@@ -272,6 +284,7 @@ connect-go mounted on the existing gin engine — the `grpchealth` surface and `
 6. **Idempotent writes on client-supplied ids** — duplicate user-message save = replay, analysis saves re-send the same id across the state machine, delete is idempotent.
 7. **No streaming RPCs** — chats is a synchronous store; the BFF streams inference directly.
 8. **Api key for the caller, trusted header for the user** — the only caller is the web BFF, so a shared secret plus the `x-user-id` header it asserts closes the spoofing surface without a second credential system. A JWT earns its keep only if the browser ever reaches chats directly.
+9. **Reflection on, unauthenticated, always mounted** — a debugging surface that needs a credential is a debugging surface nobody reaches. It serves schema, never data, and the RPCs keep their own guard. A config gate would buy nothing: the schema is already public to anyone who can reach the port, and the cost of the key is that the tool has to carry it.
 
 ## Open questions
 
