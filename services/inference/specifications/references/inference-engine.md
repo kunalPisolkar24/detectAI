@@ -183,15 +183,15 @@ before it can mean anything.
 
 | slop name | Design name | Module | Responsibility |
 | --- | --- | --- | --- |
-| `engines/base.py` — `BaseEngine.softmax` / `sigmoid` / `decode_logits` | `OnnxEngine._probability` | `app/inference/engine/onnx.py` | The draft's base class held a softmax, a sigmoid and three accepted output shapes. Only the two-class softmax survives, folded into the adapter — the draft's `(N,)` and `(N,1)` tolerances are dropped |
-| `engines/flare.py` — `FlareEngine.predict_batch` | `OnnxEngine.score` | `app/inference/engine/onnx.py` | The draft re-tokenized each chunk's text and truncated at its own `max_length=256`. The engine now consumes the IDs preparation produced and truncates nothing |
+| `engines/base.py` — `BaseEngine.softmax` / `sigmoid` / `decode_logits` | `OnnxEngine._probability` | `app/inference/engine/adapters/onnx.py` | The draft's base class held a softmax, a sigmoid and three accepted output shapes. Only the two-class softmax survives, folded into the adapter — the draft's `(N,)` and `(N,1)` tolerances are dropped |
+| `engines/flare.py` — `FlareEngine.predict_batch` | `OnnxEngine.score` | `app/inference/engine/adapters/onnx.py` | The draft re-tokenized each chunk's text and truncated at its own `max_length=256`. The engine now consumes the IDs preparation produced and truncates nothing |
 | `engines/spark.py` — `SparkEngine.predict_batch` | **Deleted** | — | It fed a pickled sklearn TF-IDF vectorizer. Spark now ships an HF tokenizer and an ONNX transformer, so the per-model engine dies — one uniform adapter serves both artifacts |
 | `ports/outbound/inference.py` — `ISyncBatchInferenceEngine` | `Engine` | `app/inference/engine/engine.py` | Narrowed from `predict_batch(texts)` to one method over token-ID sequences |
 | `ports/outbound/inference.py` — `IAsyncInferenceEngine` | **Deleted** | — | The draft's async engine and the batching proxy's async wrapper. The engine is synchronous; the caller offloads it |
 | `batcher.py` — `BatchingProxy` | **Deferred to the GPU slice** | — | The queue, the linger timer, the health snapshot and the shutdown drain buy nothing measurable on CPU (§ baseline). That justification is CPU-scoped and does not transfer: on a device the batch width is the throughput knob, and filling a batch from a queue of chunks arriving out of several requests is what a device needs. It is the next slice after the GPU lands, and it lands with the servicer, where the contract's queue semantics already live (`inference-gpu.md`) |
 | `src/infrastructure/config/settings.py` — `batch_size_for(model_key)` | `Settings.batch_size_for(model_key)` | `app/config/settings.py` | The idea survives — one batch size per model — but the draft's override tuned the proxy's queue depth, which is a different quantity. Here it overrides the engine's guard, and a global knob sits beside it as the fallback |
 | `batching/processor.py` | **Deleted** | — | Belonged to the proxy |
-| `engines/*.warmup` | `OnnxEngine.warmup` | `app/inference/engine/onnx.py` | The draft warmed each engine at boot. The warmup now proves the session executes before traffic is served, and then warms the production shape the service will actually use |
+| `engines/*.warmup` | `OnnxEngine.warmup` | `app/inference/engine/adapters/onnx.py` | The draft warmed each engine at boot. The warmup now proves the session executes before traffic is served, and then warms the production shape the service will actually use |
 | `engines/flare.py` — `max_length: int = 256` | **Deleted** | — | The window belongs to preparation. The engine is handed the model's declared ceiling and refuses anything longer |
 | `domain/exceptions.py` — `InferenceError` | `InferenceError` | `app/inference/errors.py` | Graduated from the draft's domain package to the plane root; the engine's failure joins it |
 | `domain/exceptions.py` — `InferenceError` raised by the engines | `EngineError` | `app/inference/engine/errors.py` | A typed, single-name failure for every engine fault |
@@ -235,7 +235,7 @@ class Engine(Protocol):
 One method. The whole contract. No configuration, no lifecycle, no health,
 no shutdown.
 
-### `app/inference/engine/onnx.py` — the adapter
+### `app/inference/engine/adapters/onnx.py` — the adapter
 
 ```python
 class OnnxEngine:

@@ -26,7 +26,7 @@ out and builds only that.
 | --- | --- | --- | --- |
 | Model artifact manager (orchestrator) | `ModelArtifactManager` | `app/models/pulling/manager.py` | Decides cache-hit vs pull per spec; fail-fast orchestration |
 | Model config class | `ModelSpec` + `ModelSpecs.from_settings` | `app/models/pulling/spec.py` | Pure data: key, repo, revision, artifact dir |
-| HF adapter (pull, auth, disk) | `HuggingFaceStore` | `app/models/pulling/huggingface.py` | The only module that imports `huggingface_hub` |
+| HF adapter (pull, auth, disk) | `HuggingFaceStore` | `app/models/pulling/adapters/huggingface.py` | The only module that imports `huggingface_hub` |
 | "Check if we need to pull" | `ArtifactStore.locate()` probe | `app/models/pulling/store.py` | Typed port; the manager never touches the hub |
 
 ## 3. Components
@@ -67,7 +67,7 @@ fail-closed posture. The workers that pull in parallel are daemonic: a failure
 must not wait out a sibling's multi-gigabyte download before the process can
 exit.
 
-### `app/models/pulling/huggingface.py` — `HuggingFaceStore`
+### `app/models/pulling/adapters/huggingface.py` — `HuggingFaceStore`
 
 - Constructor takes `root: Path` + `token: str | None`, wired from Settings in
   `main.py`. No env reads inside the adapter.

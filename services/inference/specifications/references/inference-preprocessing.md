@@ -284,7 +284,7 @@ with the chunker. It lets one `chunk_token_limit` knob serve both models with
 no per-model branches: flare declares 512, spark declares 8192, and the
 preprocessor takes the smaller of the two.
 
-### `app/models/loading/onnx.py` — where the ceiling comes from
+### `app/models/loading/adapters/onnx.py` — where the ceiling comes from
 
 The loader already reads the artifact directory, so it already knows where
 `tokenizer_config.json` is.

@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from app.models import ModelLoadError, OnnxModelLoader
-from app.models.loading import onnx
+from app.models.loading.adapters import onnx
 
 
 def _artifact(

@@ -9,9 +9,9 @@ import pytest
 from huggingface_hub.errors import EntryNotFoundError, HfHubHTTPError
 from huggingface_hub.file_download import write_download_metadata
 
-import app.models.pulling.huggingface as hf
+import app.models.pulling.adapters.huggingface as hf
 from app.models import ArtifactPullError, MissingArtifact
-from app.models.pulling.huggingface import HuggingFaceStore
+from app.models.pulling.adapters.huggingface import HuggingFaceStore
 from app.models.pulling.spec import ModelSpec
 
 _REVISION = "a" * 40

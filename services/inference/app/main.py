@@ -10,8 +10,8 @@ from .inference.engine import OnnxEngine
 from .inference.preprocessing import DocumentPreprocessor, FastTokenizer
 from .inference.runtime import ModelRuntime, build_runtime
 from .models import LoadedModel, ModelArtifactManager, ModelSpecs
-from .models.loading.onnx import OnnxModelLoader
-from .models.pulling.huggingface import HuggingFaceStore
+from .models.loading import OnnxModelLoader
+from .models.pulling import HuggingFaceStore
 from .serving.server import run_server
 
 # Stdout is the baseline level until the plane resolves; the seeded knob follows.

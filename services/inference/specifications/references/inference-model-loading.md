@@ -1,7 +1,7 @@
 # Inference — Model Loading (design reference)
 
 Status: design reference for the model-loading slice, implemented in
-`app/models/loading/loader.py` (port), `app/models/loading/onnx.py` (adapter), and the
+`app/models/loading/loader.py` (port), `app/models/loading/adapters/onnx.py` (adapter), and the
 `app/main.py` boot wiring.
 
 The quarantined `services/inference/slop/` tree is the reference draft. Its
@@ -32,11 +32,11 @@ uniform load path serves both; no per-model branches.
 
 | slop name | Design name | Module | Responsibility |
 | --- | --- | --- | --- |
-| `HuggingFaceLoader._load_spark` / `_load_flare` | One uniform `_load(key, path)` | `app/models/loading/onnx.py` | Both builds share `model.onnx` + an HF tokenizer; the per-model if/else dies |
+| `HuggingFaceLoader._load_spark` / `_load_flare` | One uniform `_load(key, path)` | `app/models/loading/adapters/onnx.py` | Both builds share `model.onnx` + an HF tokenizer; the per-model if/else dies |
 | `hf_hub_download` / `snapshot_download` + offline fallback | **Deleted** | — | Loading consumes `ensure_all()`'s paths; the hub lives only in the pull plane |
 | `RestrictedUnpickler` | **Deleted** | — | Both models ship HF tokenizers; no pickle in the load path |
-| `build_session_options` | Settings knobs + fresh `SessionOptions` per session | `app/config/settings.py`, `app/models/loading/onnx.py` | Providers + intra-op threads only; `0` = leave ORT's default |
-| `provider_verifier.verify_providers` | Provider logging inside the adapter | `app/models/loading/onnx.py` | Requested vs effective; warning on mismatch; no telemetry hooks |
+| `build_session_options` | Settings knobs + fresh `SessionOptions` per session | `app/config/settings.py`, `app/models/loading/adapters/onnx.py` | Providers + intra-op threads only; `0` = leave ORT's default |
+| `provider_verifier.verify_providers` | Provider logging inside the adapter | `app/models/loading/adapters/onnx.py` | Requested vs effective; warning on mismatch; no telemetry hooks |
 
 ## 3. Components
 
@@ -58,10 +58,10 @@ The loader never sees the hub, the repo, or the revision — the path is the
 contract. `ensure_all()`'s output (`key → <root>/<key>/<artifact_dir>`) is
 `load_all()`'s input, unchanged.
 
-### `app/models/loading/onnx.py` — the adapter
+### `app/models/loading/adapters/onnx.py` — the adapter
 
 Named after what it consumes, mirroring the plane's library-named-adapter
-convention (`huggingface.py`). The only module importing `onnxruntime` and
+convention (`adapters/huggingface.py`). The only module importing `onnxruntime` and
 `transformers`.
 
 ```python
@@ -185,8 +185,8 @@ classDiagram
 ```
 
 Boundary rules: `loading/loader.py` imports nothing heavy — the port and the
-result stay pure. Only `loading/onnx.py` imports `onnxruntime` and
-`transformers`, exactly as only `pulling/huggingface.py` imports
+result stay pure. Only `loading/adapters/onnx.py` imports `onnxruntime` and
+`transformers`, exactly as only `pulling/adapters/huggingface.py` imports
 `huggingface_hub`. Wiring happens once, in `main.py`.
 
 ## 5. Boot flow

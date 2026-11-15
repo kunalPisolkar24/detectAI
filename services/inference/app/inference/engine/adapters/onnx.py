@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from .errors import EngineError
+from ..errors import EngineError
 
 # The shape the artifacts' logits come back in, and the column that holds the AI class.
 _LOGIT_COLUMNS = 2

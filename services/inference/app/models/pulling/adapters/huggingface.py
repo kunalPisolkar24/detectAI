@@ -14,8 +14,8 @@ from huggingface_hub.errors import (
 from huggingface_hub.file_download import read_download_metadata
 from huggingface_hub.utils import disable_progress_bars
 
-from ..errors import ArtifactPullError, MissingArtifact
-from .spec import ModelSpec
+from ...errors import ArtifactPullError, MissingArtifact
+from ..spec import ModelSpec
 
 logger = logging.getLogger(__name__)
 
