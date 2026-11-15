@@ -123,9 +123,10 @@ unnamed request resolves to a model that is actually there.
 **Text limits.** Non-empty, else `INVALID_ARGUMENT`. The submission bound is
 `MAX_TEXT_CHARS` scalars — 1,000,000 by default, env-overridable, and bad
 values fail closed to the default — and exceeding it is `INVALID_ARGUMENT`:
-admission, not truncation (a truncated document changes the analysis). A
-token-count ceiling (~10,000) is a server-side engine limit, not a wire
-guarantee.
+admission, not truncation (a truncated document changes the analysis).
+`MAX_TEXT_CHARS` is the only admission bound: there is no document-level token
+ceiling, because the engine sees fixed-size windows rather than the whole
+document.
 
 **Stream guarantees.** First event is `started` (`total_chars`,
 `total_chunks`). `progress` follows with `processed_chunks` strictly
@@ -209,8 +210,8 @@ without a key, and a request past the server's concurrency limit →
    unversioned `chat` — contracts outlive services; pay the version once.
 2. Two separate request messages over one shared message — their shapes
    evolve independently.
-3. `int32` counts — text is capped at 50k scalars and chunk counts in the
-   hundreds.
+3. `int32` counts — text is capped at 1,000,000 scalars and chunk counts in
+   the hundreds.
 4. `confidence_score` kept despite being derivable — the client reads one
    field for display instead of branching.
 5. Semantics live in this doc, not proto comments — house protos are
