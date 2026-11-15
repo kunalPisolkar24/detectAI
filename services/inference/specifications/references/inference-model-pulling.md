@@ -62,7 +62,7 @@ class ArtifactStore(Protocol):
 
 Holds specs + store. `ensure_all()` walks each spec: `locate` first (cache
 hit → log and skip), `pull` on miss. First failure aborts the walk and raises
-a typed error — the boot dies before serving, matching `main.py`'s existing
+a typed error — the boot dies before serving, matching the boot's existing
 fail-closed posture. The workers that pull in parallel are daemonic: a failure
 must not wait out a sibling's multi-gigabyte download before the process can
 exit.
@@ -70,7 +70,7 @@ exit.
 ### `app/models/pulling/adapters/huggingface.py` — `HuggingFaceStore`
 
 - Constructor takes `root: Path` + `token: str | None`, wired from Settings in
-  `main.py`. No env reads inside the adapter.
+  `app/boot.py`. No env reads inside the adapter.
 - `locate`: an offline probe that never reaches the hub. Each file's
   recorded commit hash — the hub's own download metadata, written beside the
   file — is compared against the pinned revision; a file that is not cached, or
@@ -168,7 +168,7 @@ classDiagram
 
 Boundary rules: `ModelSpecs` and `ModelArtifactManager` import nothing from
 `huggingface_hub`. Only `HuggingFaceStore` does. Wiring happens once, in
-`main.py`.
+`app/boot.py`.
 
 ## 5. Boot flow
 

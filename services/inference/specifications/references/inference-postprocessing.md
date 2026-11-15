@@ -320,7 +320,7 @@ classDiagram
 There is no boot wiring in this slice. The aggregator is process-wide — it
 holds no model state, and the threshold is a single global knob — so it is
 built once by the serving slice's composition and handed to the servicer at
-registration. Wiring it into `main.py` now would create a value nobody
+registration. Wiring it into `app/boot.py` now would create a value nobody
 holds (§11.9).
 
 The knob lands in this slice; its consumer lands with the servicer. The
@@ -553,7 +553,7 @@ Run with `make test-unit`.
    threshold compares against the raw probability, and a rounded value would
    put the flag and the number it came from out of step.
 9. **No boot wiring in this slice.** The aggregator is process-wide and
-   nothing holds it until the servicer lands, so `main.py` gains no dead
+   nothing holds it until the servicer lands, so `app/boot.py` gains no dead
    value. The knob lands now; its consumer lands with the servicer.
 10. **The rules are pinned by synthetic probabilities, never by the shipped
     artifacts.** Every text scores above 0.9875 on them, so an artifact-

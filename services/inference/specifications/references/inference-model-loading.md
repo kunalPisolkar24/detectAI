@@ -2,7 +2,7 @@
 
 Status: design reference for the model-loading slice, implemented in
 `app/models/loading/loader.py` (port), `app/models/loading/adapters/onnx.py` (adapter), and the
-`app/main.py` boot wiring.
+`app/boot.py` boot wiring.
 
 The quarantined `services/inference/slop/` tree is the reference draft. Its
 `HuggingFaceLoader` mixed pulling, ONNX session building, tokenizer loading,
@@ -105,7 +105,7 @@ ArtifactError (root, RuntimeError) — catch this for blanket handling
 └── ModelLoadError         session build or tokenizer load failed
 ```
 
-`ModelLoadError` joins the existing tree so `main.py` catches `ArtifactError`
+`ModelLoadError` joins the existing tree so `app/boot.py` catches `ArtifactError`
 once around pull + load. Checksum/shape verification stays a future
 `ArtifactIntegrityError` (pulling reference, §3).
 
@@ -187,7 +187,7 @@ classDiagram
 Boundary rules: `loading/loader.py` imports nothing heavy — the port and the
 result stay pure. Only `loading/adapters/onnx.py` imports `onnxruntime` and
 `transformers`, exactly as only `pulling/adapters/huggingface.py` imports
-`huggingface_hub`. Wiring happens once, in `main.py`.
+`huggingface_hub`. Wiring happens once, in `app/boot.py`.
 
 ## 5. Boot flow
 

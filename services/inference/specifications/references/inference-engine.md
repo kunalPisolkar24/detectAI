@@ -5,7 +5,7 @@ Status: design reference for the engine slice, implemented in
 `app/inference/errors.py` (the plane's error root), the `pad_token_id`
 member added to the tokenizer port, `app/inference/runtime.py` (the
 per-model bundle and its two executor pools), the `window_tokens` property
-on the preprocessor, and the boot wiring in `app/main.py`. The adapter's
+on the preprocessor, and the boot wiring in `app/boot.py`. The adapter's
 scoring and its warmup are implemented; the fail-closed boot that
 depends on them is wired and pinned by a unit test.
 
@@ -797,7 +797,7 @@ call it cannot hold.
 - **`tests/unit/inference/engine/test_engine.py`** — the port: the protocol
   surface, that `OnnxEngine` satisfies it structurally, and that the warmup
   lives on the adapter and not on the port.
-- **`tests/unit/inference/test_main.py`** — the boot's warmup step: every
+- **`tests/unit/test_boot.py`** — the boot's warmup step: every
   model is warmed at the preprocessor's window, and a model that cannot score
   raises out of the step, which is the fail-closed guarantee.
 - **`tests/unit/inference/test_runtime.py`** — the bundle: it carries the
