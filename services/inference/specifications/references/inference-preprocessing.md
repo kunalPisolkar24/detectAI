@@ -66,7 +66,7 @@ Chunk counts at 1M chars (154,472 tokens):
 | slop name | Design name | Module | Responsibility |
 | --- | --- | --- | --- |
 | `chunking/protocol.py` — `TokenChunker` | `Tokenizer` | `app/inference/preprocessing/tokenizer.py` | A narrow port: the tokenizer surface preparation actually needs, and nothing else |
-| `chunking/bert_chunker.py` — `BertTokenChunker` | `FastTokenizer` | `app/inference/preprocessing/tokenizer.py` | The only module that knows the HF calling convention; adapts a tokenizer to the `Tokenizer` port |
+| `chunking/bert_chunker.py` — `BertTokenChunker` | `FastTokenizer` | `app/inference/preprocessing/adapters/tokenizer.py` | The only module that knows the HF calling convention; adapts a tokenizer to the `Tokenizer` port |
 | the draft's implicit `(ids, offsets)` pair | `Encoding` | `app/inference/preprocessing/tokenizer.py` | A named frozen type for the tokenizer's output; the draft returned a loose pair whose order meant nothing |
 | `chunking/regex_chunker.py` — `RegexTokenChunker` | **Deleted** | — | It existed only because the draft's spark model shipped a pickled sklearn vectorizer; both models ship HF tokenizers now |
 | `chunking/sliding_window.py` — `build_sliding_chunks` | **Deleted** | — | A fixed-stride window over a uniform grid; replaced by boundary-aligned cuts (§3) |
@@ -134,7 +134,7 @@ the chunks tile the text — and every reader would have to know that.
 `total_tokens` is the document's token count *before* windowing, which no
 chunk can supply.
 
-### `app/inference/preprocessing/tokenizer.py` — the port, the adapter, and the encoding
+### `app/inference/preprocessing/tokenizer.py` — the port and the encoding
 
 ```python
 @dataclass(frozen=True)
@@ -155,8 +155,11 @@ class Tokenizer(Protocol):
     def encode(self, text: str) -> Encoding:
         """Token IDs without special tokens, plus each token's character span."""
         ...
+```
 
+### `app/inference/preprocessing/adapters/tokenizer.py` — the adapter
 
+```python
 class FastTokenizer:
     """Satisfies Tokenizer structurally; the only module that knows the HF calling convention."""
 
@@ -417,7 +420,7 @@ classDiagram
 ```
 
 Boundary rules: `split` is pure — it reads the text and the encoding and
-returns chunks, touching no service state. `tokenizer.py` is the only module
+returns chunks, touching no service state. `adapters/tokenizer.py` is the only module
 that knows the HF calling convention. `preprocessor.py` owns admission and
 composes the two. Nothing under `app/inference/preprocessing/` imports `onnxruntime`,
 and nothing under `app/inference/preprocessing/` imports `transformers`.
