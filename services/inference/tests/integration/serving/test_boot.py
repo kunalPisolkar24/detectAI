@@ -1,14 +1,17 @@
 """The production gRPC boot on an ephemeral port: the health servicer answers
-SERVING through a real channel, the stop event drains gracefully, and the
-x-api-key gate rejects unkeyed calls before dispatch.
+SERVING through a real channel, the stop event drains gracefully, the
+x-api-key gate rejects unkeyed calls before dispatch, and the dev plane's
+reflection answers the schema without a key.
 """
 
 import asyncio
 from collections.abc import AsyncIterator
 
 import grpc
+import pytest
 from grpc import aio
 from grpc_health.v1 import health_pb2, health_pb2_grpc
+from grpc_reflection.v1alpha import reflection, reflection_pb2
 
 from app.inference.analysis import DocumentAnalysis
 from app.serving.generated import ai_service_pb2 as pb
@@ -19,15 +22,22 @@ from .conftest import BlockingEngine, build_analysis
 
 _BOOT_KEY = "boot-integration-key"
 _MAX_INFLIGHT_REQUESTS = 8
+_REFLECTION_METHOD = f"/{reflection.SERVICE_NAME}/ServerReflectionInfo"
 
 
 async def _booted(
-    analysis: DocumentAnalysis, max_inflight_requests: int = _MAX_INFLIGHT_REQUESTS
+    analysis: DocumentAnalysis,
+    max_inflight_requests: int = _MAX_INFLIGHT_REQUESTS,
+    enable_reflection: bool = False,
 ) -> AsyncIterator[tuple[int, asyncio.Task]]:
     """The server on an ephemeral port, stopped whatever the probe does."""
     stop = asyncio.Event()
     server, health_servicer, port = _build(
-        0, api_key=_BOOT_KEY, analysis=analysis, max_inflight_requests=max_inflight_requests
+        0,
+        api_key=_BOOT_KEY,
+        analysis=analysis,
+        max_inflight_requests=max_inflight_requests,
+        enable_reflection=enable_reflection,
     )
     serve = asyncio.create_task(_serve_until_stopped(server, health_servicer, stop, analysis))
     try:
@@ -118,6 +128,54 @@ async def _stream_a_document(analysis: DocumentAnalysis) -> None:
 
 def test_the_server_sheds_the_request_past_its_concurrency_limit() -> None:
     asyncio.run(_probe_the_limit())
+
+
+def test_the_dev_plane_answers_reflection_without_a_key(
+    analysis: DocumentAnalysis,
+) -> None:
+    asyncio.run(_probe_reflection(analysis))
+
+
+async def _probe_reflection(analysis: DocumentAnalysis) -> None:
+    async for port, _serve in _booted(analysis, enable_reflection=True):
+        async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+            responses = await _reflection_responses(channel)
+
+            services = responses[0].list_services_response.service
+            assert [service.name for service in services] == ["inference.v1.AIService"]
+
+
+def test_a_plane_without_reflection_keeps_the_schema_closed(
+    analysis: DocumentAnalysis,
+) -> None:
+    asyncio.run(_probe_the_closed_schema(analysis))
+
+
+async def _probe_the_closed_schema(analysis: DocumentAnalysis) -> None:
+    async for port, _serve in _booted(analysis):
+        async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+            call = channel.stream_stream(
+                _REFLECTION_METHOD,
+                request_serializer=reflection_pb2.ServerReflectionRequest.SerializeToString,
+                response_deserializer=reflection_pb2.ServerReflectionResponse.FromString,
+            )
+            request = reflection_pb2.ServerReflectionRequest(list_services="")
+
+            with pytest.raises(aio.AioRpcError) as failure:
+                async for _ in call(iter([request]), metadata=(("x-api-key", _BOOT_KEY),)):
+                    pass
+
+            assert failure.value.code() == grpc.StatusCode.UNIMPLEMENTED
+
+
+async def _reflection_responses(channel: aio.Channel) -> list:
+    call = channel.stream_stream(
+        _REFLECTION_METHOD,
+        request_serializer=reflection_pb2.ServerReflectionRequest.SerializeToString,
+        response_deserializer=reflection_pb2.ServerReflectionResponse.FromString,
+    )
+    request = reflection_pb2.ServerReflectionRequest(list_services="")
+    return [response async for response in call(iter([request]))]
 
 
 async def _probe_the_limit() -> None:

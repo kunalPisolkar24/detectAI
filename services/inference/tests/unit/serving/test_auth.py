@@ -1,4 +1,4 @@
-"""The x-api-key gate: health passes open, a matching key passes through, and
+"""The x-api-key gate: the open methods pass, a matching key passes through, and
 everything else lands on an UNAUTHENTICATED abort in the handler's own shape.
 """
 
@@ -7,12 +7,13 @@ import asyncio
 import grpc
 import pytest
 
-from app.serving.auth import ApiKeyAuthInterceptor
+from app.serving.auth import HEALTH_METHODS, ApiKeyAuthInterceptor
 
 _API_KEY = "unit-test-key-16chars"
 _HEALTH_CHECK = "/grpc.health.v1.Health/Check"
 _HEALTH_WATCH = "/grpc.health.v1.Health/Watch"
 _DETECT = "/inference.v1.AIService/Detect"
+_REFLECTION = "/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo"
 
 
 class _AbortRecorded(Exception):
@@ -91,6 +92,24 @@ def test_the_health_methods_pass_open_without_a_key() -> None:
 
     assert _intercept(_HEALTH_CHECK, handler=sentinel) is sentinel
     assert _intercept(_HEALTH_WATCH, handler=sentinel) is sentinel
+
+
+def test_the_reflection_method_passes_open_when_the_server_opens_it() -> None:
+    sentinel = _unary_handler()
+
+    handler = asyncio.run(
+        ApiKeyAuthInterceptor(_API_KEY, HEALTH_METHODS | {_REFLECTION}).intercept_service(
+            _continuation(sentinel), _details(_REFLECTION)
+        )
+    )
+
+    assert handler is sentinel
+
+
+def test_the_gate_closes_the_reflection_method_by_default() -> None:
+    handler = _intercept(_REFLECTION)
+
+    assert _denied_code(handler) == grpc.StatusCode.UNAUTHENTICATED
 
 
 def test_a_matching_key_passes_through() -> None:

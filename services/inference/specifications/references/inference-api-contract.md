@@ -19,7 +19,7 @@ standing contract both RPCs will be implemented against.
 | In scope | Out of scope (later slices) |
 | --- | --- |
 | The proto contract: `Detect` (unary) + `AnalyzeDocument` (server-streaming) | The Python servicer and its registration on the server |
-| The `x-api-key` gate on every non-health RPC (`app/serving/auth.py`) | Chunking, the engine contract (`predict_batch`), batching proxy |
+| The `x-api-key` gate on every RPC but the open ones — health, and reflection on the dev plane (`app/serving/auth.py`) | Chunking, the engine contract (`predict_batch`), batching proxy |
 | The `MAX_TEXT_CHARS` submission bound (Settings knob; servicer-enforced) | Telemetry |
 | Pinned semantics: offsets, units, model-id rules, error codes | The web-side adaptation to `inference.v1` |
 | Python stub codegen: `make proto` → `app/serving/generated/` | |
@@ -152,6 +152,12 @@ answers `UNAUTHENTICATED` even for a method with no registered servicer, where
 a valid key would return `UNIMPLEMENTED`. Only `x-api-key` is honored; there
 is no Bearer/JWT path.
 
+The open methods are the two health methods and, on the dev plane, the
+reflection method (`app/serving/auth.py` takes the open set; the server owns
+which one it is). Reflection carries the schema and no inference capacity, so
+it answers without a key — a schema-aware client cannot send one with the
+schema fetch.
+
 ## 6. Health
 
 `grpc.health.v1.Health` remains the readiness surface: `Check('')` answers
@@ -159,6 +165,18 @@ is no Bearer/JWT path.
 `Check('inference.v1.AIService')` answers `SERVING` under that service name.
 The web probes health by proto package name, so its `aidetection.AIService`
 probe strings change as part of the web slice below.
+
+### 6.1 Reflection
+
+The dev plane registers `grpc.reflection.v1alpha.ServerReflection`
+(`grpcio-reflection`, pinned to the `grpcio` version) with
+`inference.v1.AIService` as its served service, so a client reads the contract
+off the wire instead of importing `api/proto/ai_service.proto`. The prod plane
+registers nothing extra: the contract stays closed behind the key there, the
+same shape `services/chats` keeps (reflection is registered off prod).
+
+The reflection method is exempt from the `x-api-key` gate, alongside health:
+it serves the schema and nothing else — no document, no verdict, no capacity.
 
 ## 7. Codegen
 
@@ -200,8 +218,10 @@ coalescing, and each error's status — `INVALID_ARGUMENT` for a bad input or
 an unserved model, `RESOURCE_EXHAUSTED` for a shed load, `INTERNAL` for
 anything unexpected. The integration boot probes a real channel: unkeyed and
 wrong-keyed `Detect` → `UNAUTHENTICATED`, keyed → a verdict, health open
-without a key, and a request past the server's concurrency limit →
-`RESOURCE_EXHAUSTED`. `test`, `test-unit`, and `test-integration` depend on
+without a key, a request past the server's concurrency limit →
+`RESOURCE_EXHAUSTED`, and — on the dev plane — reflection listing
+`inference.v1.AIService` without a key, against a plane without reflection
+answering `UNIMPLEMENTED`. `test`, `test-unit`, and `test-integration` depend on
 `proto` so every run drives fresh stubs. Run with `make test-unit`.
 
 ## 10. Defaults taken (override if any read wrong)

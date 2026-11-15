@@ -5,6 +5,7 @@ import logging
 import time
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Literal
 
 from .config import ConfigFactory, Settings, deployment_flick
 from .inference.engine import OnnxEngine
@@ -17,13 +18,18 @@ from .models.pulling import HuggingFaceStore
 logger = logging.getLogger(__name__)
 
 
+def resolve_plane() -> Literal["dev", "prod"]:
+    """The plane the boot runs on: the process env decides, never a file."""
+    return deployment_flick()
+
+
 def resolve_settings() -> Settings:
     """Resolve the plane and read the settings; a bad plane or key dies here.
 
     The seeded log level lands before the plane is announced, so a plane that
     asks for quiet stays quiet.
     """
-    flick = deployment_flick()
+    flick = resolve_plane()
     provider = ConfigFactory.create(flick)
     settings = Settings.from_provider(provider)
     logging.getLogger().setLevel(settings.log_level)

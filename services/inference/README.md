@@ -19,6 +19,16 @@ grpcurl -plaintext localhost:50051 grpc.health.v1.Health/Check
 
 `Check` returns `SERVING` for the overall service (`''`) and for `inference.v1.AIService`, and `NOT_FOUND` for any unknown service name.
 
+## Reflection
+
+The dev plane registers `grpc.reflection.v1alpha.ServerReflection`, so a schema-aware client loads the contract from the URL instead of a hand-imported `.proto` file:
+
+```sh
+grpcurl -plaintext localhost:50051 list
+```
+
+The prod plane registers nothing extra — the contract stays closed behind the key there. Reflection's method is exempt from the `x-api-key` gate, like health: it serves the schema, and nothing else.
+
 ## Contract
 
 `api/proto/ai_service.proto` defines the standing contract: `Detect` (unary) and `AnalyzeDocument` (server-streaming) under `inference.v1`. `make proto` generates the Python stubs into `app/serving/generated/`. See `specifications/references/inference-api-contract.md` for the pinned semantics.

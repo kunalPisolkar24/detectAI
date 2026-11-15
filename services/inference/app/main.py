@@ -8,6 +8,7 @@ from .boot import (
     close_runtimes,
     ensure_model_artifacts,
     load_models,
+    resolve_plane,
     resolve_settings,
     warm_runtimes,
 )
@@ -20,6 +21,7 @@ logging.basicConfig(level=logging.INFO)
 
 async def main() -> None:
     # Fail the boot before serving: a bad plane or key dies here.
+    plane = resolve_plane()
     settings = resolve_settings()
 
     artifacts = ensure_model_artifacts(settings)
@@ -34,6 +36,7 @@ async def main() -> None:
             api_key=settings.api_key,
             analysis=analysis,
             max_inflight_requests=settings.max_inflight_requests,
+            enable_reflection=plane == "dev",
         )
     finally:
         close_runtimes(runtimes)

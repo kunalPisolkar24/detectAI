@@ -1,5 +1,5 @@
 """The x-api-key gate: every RPC is denied before dispatch unless the key
-matches, with the two health methods exempt so probes stay open.
+matches, with the open methods exempt so probes and the schema stay reachable.
 """
 
 import hmac
@@ -7,7 +7,7 @@ import hmac
 import grpc
 from grpc import aio
 
-_HEALTH_METHODS = frozenset({
+HEALTH_METHODS = frozenset({
     "/grpc.health.v1.Health/Check",
     "/grpc.health.v1.Health/Watch",
 })
@@ -17,11 +17,12 @@ _DENY_DETAIL = "Missing or invalid API key"
 
 
 class ApiKeyAuthInterceptor(aio.ServerInterceptor):
-    def __init__(self, api_key: str) -> None:
+    def __init__(self, api_key: str, open_methods: frozenset[str] = HEALTH_METHODS) -> None:
         self._api_key = api_key
+        self._open_methods = open_methods
 
     async def intercept_service(self, continuation, handler_call_details):
-        if handler_call_details.method in _HEALTH_METHODS:
+        if handler_call_details.method in self._open_methods:
             return await continuation(handler_call_details)
 
         provided = _metadata_value(handler_call_details.invocation_metadata, _API_KEY_METADATA)

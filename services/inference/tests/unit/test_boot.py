@@ -107,6 +107,17 @@ def test_the_settings_come_from_the_config_plane(monkeypatch: pytest.MonkeyPatch
     assert settings.api_key == "0123456789abcdef"
 
 
+def test_the_plane_is_prod_only_for_an_exact_prod(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ENV_TYPE", "prod")
+    assert boot.resolve_plane() == "prod"
+
+    monkeypatch.setenv("ENV_TYPE", "dev")
+    assert boot.resolve_plane() == "dev"
+
+    monkeypatch.delenv("ENV_TYPE", raising=False)
+    assert boot.resolve_plane() == "dev"
+
+
 def test_the_plane_is_announced_after_the_log_level_lands(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
