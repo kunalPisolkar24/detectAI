@@ -26,6 +26,9 @@ On floci this is now automatic. `tfctl` snapshots the state ledger to
 and restores the latest snapshot before a `plan`/`apply` when the emulator has
 forgotten it. `make check` prints the ledger and snapshot status. If a restart
 happened, the normal `make plan` should say *No changes* without any manual step.
+The snapshot commands and the floci/AWS split are documented in
+`.agents/skills/observability/references/publishing.md` (State snapshots and
+recovery).
 
 If no snapshot exists (a fresh machine, or the backup directory was removed):
 

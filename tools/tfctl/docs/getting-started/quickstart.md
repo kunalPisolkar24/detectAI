@@ -86,6 +86,8 @@ graph LR
 | `error: services/.../infra/.env not found` | step 1 not done for this service | copy the committed `.env.example` |
 | validation ladder `error:` lines | values don't satisfy the declaration yet | the `fix:` line after each error tells you what to set |
 | state-bucket create failing / init failing on the emulator | Floci is down or not on `localhost:4566` | `docker start floci`, or move it behind `TFCTL_FLOCI_URL` |
+| `note: state ledger is empty after emulator restart; restoring …` | expected: floci forgot its S3 contents on restart | nothing — the plan restores automatically and should say *No changes* |
+| ledger empty with no local snapshot | a fresh machine or removed backup directory | `warning:` then the plan decides; restore with `tfctl state-load --file …`, or `make recover-state` for observability |
 | a real-AWS run cannot derive an MFA device | the seeder assume only rides a derivable device ([carrier](../concepts/carrier.md)) | run under your IAM user credentials, with the device named after the user |
 
 ## Next Steps

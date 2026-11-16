@@ -54,7 +54,7 @@ graph LR
 
 Three details the flow hides:
 
-- **Verb families.** Two verbs never touch a stack at all (`session-clear-all`, `session-refresh-all` — they walk all services), one verb needs only the declaration (`session-clear` deletes its stack's cache file without touching any values), and the rest are single-stack verbs.
+- **Verb families.** Two verbs never touch a stack at all (`session-clear-all`, `session-refresh-all` — they walk all services), one verb needs only the declaration (`session-clear` deletes its stack's cache file without touching any values), the three `state-*` verbs touch only the stack's state bucket (never the provider plane), and the rest are single-stack verbs. On floci, plan/apply additionally restore and snapshot that bucket automatically ([state snapshots](guides/terraform-lifecycle.md#state-snapshots)).
 - **Validation depth varies by verb.** Terraform-writing verbs run the [full value ladder](values.md); verify and `seeder-drop` run only the region check, because they must be able to comment on a plane even when a value is misedited.
 - **Dry runs are stakeouts, not executions.** `--dry-run` resolves no carrier session, prompts for nothing, runs no terraform. What it prints is verb-shaped: the full banner plus backend overrides and exact commands on the terraform verbs, the three read-only aws commands on `verify`, the would-refresh list on the batch verb.
 - **Each kind owns its verb shapes.** `check` is the observability kind's own flow (no terraform) and `verify` is the secrets kind's; the terraform verbs and `auto-apply` are shared, with auto-apply's audit conditional on the kind supplying a verify. The registry decides which shapes a stack gets.
