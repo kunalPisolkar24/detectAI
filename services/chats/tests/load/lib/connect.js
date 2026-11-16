@@ -1,29 +1,12 @@
 import http from "k6/http";
 import { check } from "k6";
 
-// The service name the Connect protocol routes under.
-const SERVICE = "chats.v1.ChatService";
+import { healthCheck, protocolTag, request } from "./transports/index.js";
 
-// The Connect protocol's unary route: the procedure path under the service name.
-export function procedureUrl(baseUrl, method) {
-  return `${baseUrl}/${SERVICE}/${method}`;
-}
+export { procedureUrl, connectHeaders } from "./transports/http.js";
 
-// The Connect protocol's unary headers: the JSON codec, the protocol version,
-// and the service's two credential carriers. An absent carrier stays off the
-// wire entirely, so a missing key stays missing.
-export function connectHeaders({ apiKey, ownerId }) {
-  const headers = {
-    "Content-Type": "application/json",
-    "Connect-Protocol-Version": "1",
-  };
-  if (apiKey !== undefined && apiKey !== null) {
-    headers["x-api-key"] = apiKey;
-  }
-  if (ownerId !== undefined && ownerId !== null) {
-    headers["x-user-id"] = ownerId;
-  }
-  return headers;
+function withProtocol(tags) {
+  return { ...tags, protocol: protocolTag };
 }
 
 // The Connect error body names the code; the status carries the same verdict.
@@ -59,16 +42,12 @@ function carriesRepeated(res, field) {
 }
 
 function post({ baseUrl, method, body, apiKey, ownerId, timeout, tags }) {
-  return http.post(procedureUrl(baseUrl, method), JSON.stringify(body), {
-    headers: connectHeaders({ apiKey, ownerId }),
-    timeout,
-    tags,
-  });
+  return request({ baseUrl, method, body, apiKey, ownerId, timeout, tags });
 }
 
 // One unary call on the happy path: the checks and the metric record.
 function call({ baseUrl, method, body, apiKey, ownerId, timeout, timeoutMs, metrics, scenario, op, checks }) {
-  const tags = { scenario, op };
+  const tags = withProtocol({ scenario, op });
   const startedAt = Date.now();
   const res = post({ baseUrl, method, body, apiKey, ownerId, timeout, tags });
   const duration = Date.now() - startedAt;
@@ -92,7 +71,7 @@ function call({ baseUrl, method, body, apiKey, ownerId, timeout, timeoutMs, metr
 // One unary call on an expected-failure path: the verdict is the point, so
 // the row scores against its own metric and never against the happy path.
 function expect({ baseUrl, method, body, apiKey, ownerId, timeout, metrics, scenario, op, checks }) {
-  const tags = { scenario, op };
+  const tags = withProtocol({ scenario, op });
   const res = post({ baseUrl, method, body, apiKey, ownerId, timeout, tags });
 
   const passed = check(res, checks, tags);
@@ -266,7 +245,7 @@ export function expectRejection({ baseUrl, method, body, apiKey, ownerId, expect
 // refused after it, so both answers are expected and the row scores on the
 // refusal it is looking for.
 export function createUnderBudget({ baseUrl, apiKey, ownerId, content, timeout, metrics, scenario }) {
-  const tags = { scenario, op: "create" };
+  const tags = withProtocol({ scenario, op: "create" });
   const res = post({
     baseUrl,
     method: "CreateChat",
@@ -297,8 +276,8 @@ export function createUnderBudget({ baseUrl, apiKey, ownerId, content, timeout, 
 }
 
 export function checkHealth({ baseUrl, timeout, scenario }) {
-  const tags = { scenario };
-  const res = http.get(`${baseUrl}/api/v1/health`, { timeout, tags });
+  const tags = withProtocol({ scenario });
+  const res = healthCheck({ baseUrl, timeout, tags });
   return check(
     res,
     {
@@ -318,7 +297,7 @@ export function checkHealth({ baseUrl, timeout, scenario }) {
 // Readiness samples backpressure during a run; a 503 is a not-ready tick, not
 // a failure.
 export function checkReadiness({ baseUrl, timeout, metrics, scenario }) {
-  const tags = { scenario };
+  const tags = withProtocol({ scenario });
   const res = http.get(`${baseUrl}/api/v1/ready`, { timeout, tags });
   metrics.checks.add(1, tags);
   const ready = res.status === 200;

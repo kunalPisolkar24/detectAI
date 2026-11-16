@@ -31,12 +31,25 @@ without a token, so the rig never reaches for the secrets plane.
 
 ## The wire
 
-The service speaks the Connect protocol over HTTP, not gRPC: a unary call is
-`POST {base_url}/chats.v1.ChatService/{Procedure}` with
-`Content-Type: application/json`, `Connect-Protocol-Version: 1`,
-`x-api-key`, and `x-user-id`. The owner of every chat is the `x-user-id`
-header, not a request field. A refused call answers with the Connect code's
-HTTP status and a `{"code": "...", "message": "..."}` body:
+`PROTOCOL` selects the transport; the helpers, checks, and thresholds are the
+same in both modes. Edit it in `infra/.env.load` — compose injects that file
+into k6, so shell overrides have no effect.
+
+- `http` (default): the Connect protocol over HTTP. A unary call is
+  `POST {base_url}/chats.v1.ChatService/{Procedure}` with
+  `Content-Type: application/json`, `Connect-Protocol-Version: 1`,
+  `x-api-key`, and `x-user-id`.
+- `grpc`: native gRPC over h2c (HTTP/2, no TLS). k6 connects to `API_URL`
+  (`host:port`, scheme optional; `https://` selects TLS for e2e targets) with
+  server reflection enabled, so no `.proto` files are needed and the service
+  stays a Connect handler — its handler accepts gRPC based on `Content-Type`.
+  gRPC status codes are mapped to the HTTP statuses and Connect code names the
+  checks assert. Auth rides as `x-api-key` / `x-user-id` metadata.
+
+The owner of every chat is the `x-user-id` header (or metadata), not a request
+field. A refused call answers with the Connect code's HTTP status and a
+`{"code": "...", "message": "..."}` body in `http` mode, or the equivalent
+gRPC status in `grpc` mode:
 
 | Guard | Status | Code |
 |---|---|---|
@@ -44,6 +57,13 @@ HTTP status and a `{"code": "...", "message": "..."}` body:
 | empty or over-long content, malformed cursor, analysis without a state | 400 | `invalid_argument` |
 | unknown chat, another owner's chat | 404 | `not_found` |
 | burst budget spent | 429 | `resource_exhausted` |
+
+Both health probes (`/api/v1/health` and `/api/v1/ready`) stay on HTTP in both
+modes — they are service probes, not RPC traffic, and the gRPC reflector only
+advertises `ChatService`. Both modes emit the same custom metrics with a `protocol` tag;
+`grpc` mode additionally emits k6's built-in `grpc_req_duration`. Both commands
+propagate the selected mode, so a rig run is h2c end-to-end while `load-e2e`
+negotiates TLS only when `API_URL` uses `https://`.
 
 ## Scenarios
 
@@ -93,7 +113,8 @@ the target's own limits, when that happens.
 ## Knobs
 
 Each knob is one env key read by its consumer with a built-in default
-(`lib/config.js`): `STAGES` and `MAX_VUS` shape the run, `CHATS_LOAD_OWNERS`
+(`lib/config.js`): `PROTOCOL` picks `http` or `grpc`, `STAGES` and `MAX_VUS`
+shape the run, `CHATS_LOAD_OWNERS`
 sizes the owner spread, the `CHATS_LOAD_MIX_*` trio and
 `CHATS_LOAD_DELETE_RATE` shape the workload, `CHATS_LOAD_CONTENT_BYTES` sizes
 the written payload, `CHATS_LOAD_CREATE_LIMIT` mirrors the target's

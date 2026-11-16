@@ -43,6 +43,18 @@ export function readRatio(names, fallback) {
   return value;
 }
 
+export function readProtocol(names, fallback) {
+  const setting = firstSetting(names);
+  if (!setting) {
+    return fallback;
+  }
+  const value = setting.raw.toLowerCase();
+  if (value !== "http" && value !== "grpc") {
+    throw new Error(`${setting.name} must be http or grpc`);
+  }
+  return value;
+}
+
 export function readDuration(names, fallback) {
   const raw = (firstSetting(names) || { raw: fallback || "" }).raw.trim();
   if (!raw) {
@@ -114,8 +126,13 @@ export function getRuntimeConfig() {
     if (!apiKey) {
       throw new Error("API_KEY must name the key the target booted with");
     }
+    const protocol = readProtocol("PROTOCOL", "http");
+    const apiUrl = (__ENV.API_URL || "http://chats:8090").trim().replace(/\/+$/, "");
     cachedRuntimeConfig = {
-      baseUrl: (__ENV.API_URL || "http://chats:8090").replace(/\/$/, ""),
+      protocol,
+      baseUrl: /^https?:\/\//i.test(apiUrl) ? apiUrl : `http://${apiUrl}`,
+      grpcAddress: apiUrl.replace(/^https?:\/\//i, ""),
+      grpcPlaintext: !/^https:\/\//i.test(apiUrl),
       apiKey,
       // The burst budgets are counted per owner per minute, so the owner pool
       // is what keeps the run off the limiter.
