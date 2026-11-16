@@ -90,7 +90,8 @@ jobs:
 
       - name: Run smoke scenario (service + k6 containers)
         run: |
-          docker compose -f infra/compose.load.yml -f infra/compose.ci.yml run --rm k6 run /load/scenarios/smoke.js
+          docker compose -f infra/compose.load.yml -f infra/compose.ci.yml \
+            run --rm -e PROTOCOL=grpc k6 run /load/scenarios/smoke.js
 
       - name: Tear down the rig
         if: always()
