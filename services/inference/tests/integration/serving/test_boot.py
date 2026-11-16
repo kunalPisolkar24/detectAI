@@ -18,7 +18,7 @@ from app.serving.generated import ai_service_pb2 as pb
 from app.serving.generated import ai_service_pb2_grpc
 from app.serving.server import _build, _serve_until_stopped
 
-from .conftest import BlockingEngine, build_analysis
+from .conftest import BlockingEngine, StubEngine, build_analysis
 
 _BOOT_KEY = "boot-integration-key"
 _MAX_INFLIGHT_REQUESTS = 8
@@ -29,7 +29,7 @@ async def _booted(
     analysis: DocumentAnalysis,
     max_inflight_requests: int = _MAX_INFLIGHT_REQUESTS,
     enable_reflection: bool = False,
-) -> AsyncIterator[tuple[int, asyncio.Task]]:
+) -> AsyncIterator[tuple[int, asyncio.Task, object]]:
     """The server on an ephemeral port, stopped whatever the probe does."""
     stop = asyncio.Event()
     server, health_servicer, port = _build(
@@ -41,7 +41,7 @@ async def _booted(
     )
     serve = asyncio.create_task(_serve_until_stopped(server, health_servicer, stop, analysis))
     try:
-        yield port, serve
+        yield port, serve, health_servicer
     finally:
         stop.set()
         await serve
@@ -54,7 +54,7 @@ def test_the_production_boot_serves_health_on_an_ephemeral_port(
 
 
 async def _serve_and_probe(analysis: DocumentAnalysis) -> None:
-    async for port, _serve in _booted(analysis):
+    async for port, _serve, _health in _booted(analysis):
         async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
             await asyncio.wait_for(channel.channel_ready(), timeout=5.0)
             stub = health_pb2_grpc.HealthStub(channel)
@@ -66,6 +66,38 @@ async def _serve_and_probe(analysis: DocumentAnalysis) -> None:
             assert named.status == health_pb2.HealthCheckResponse.SERVING
 
 
+def test_an_unknown_health_service_is_not_found(analysis: DocumentAnalysis) -> None:
+    asyncio.run(_probe_unknown_service(analysis))
+
+
+async def _probe_unknown_service(analysis: DocumentAnalysis) -> None:
+    async for port, _serve, _health in _booted(analysis):
+        async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+            stub = health_pb2_grpc.HealthStub(channel)
+            with pytest.raises(aio.AioRpcError) as failure:
+                await stub.Check(health_pb2.HealthCheckRequest(service="not.a.service"))
+
+            assert failure.value.code() == grpc.StatusCode.NOT_FOUND
+
+
+def test_an_overlong_submission_is_refused_at_the_rpc() -> None:
+    asyncio.run(_probe_the_text_limit())
+
+
+async def _probe_the_text_limit() -> None:
+    analysis = build_analysis(StubEngine(), max_text_chars=8)
+    async for port, _serve, _health in _booted(analysis):
+        async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+            detect = ai_service_pb2_grpc.AIServiceStub(channel).Detect
+            overlong = await _detect_code(
+                detect,
+                pb.DetectRequest(text="more than eight characters"),
+                api_key=_BOOT_KEY,
+            )
+
+            assert overlong == grpc.StatusCode.INVALID_ARGUMENT
+
+
 def test_the_gate_rejects_unkeyed_calls_and_admits_keyed_ones(
     analysis: DocumentAnalysis,
 ) -> None:
@@ -73,7 +105,7 @@ def test_the_gate_rejects_unkeyed_calls_and_admits_keyed_ones(
 
 
 async def _probe_the_gate(analysis: DocumentAnalysis) -> None:
-    async for port, _serve in _booted(analysis):
+    async for port, _serve, _health in _booted(analysis):
         async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
             detect = ai_service_pb2_grpc.AIServiceStub(channel).Detect
 
@@ -107,7 +139,7 @@ def test_the_streaming_rpc_answers_started_progress_and_the_result(
     asyncio.run(_stream_a_document(analysis))
 
 async def _stream_a_document(analysis: DocumentAnalysis) -> None:
-    async for port, _serve in _booted(analysis):
+    async for port, _serve, _health in _booted(analysis):
         async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
             analyze = ai_service_pb2_grpc.AIServiceStub(channel).AnalyzeDocument
             request = pb.AnalyzeDocumentRequest(text="a handful of words to analyse")
@@ -126,6 +158,39 @@ async def _stream_a_document(analysis: DocumentAnalysis) -> None:
             assert events[-1].result.model_id == "spark"
 
 
+def test_a_client_disconnect_mid_stream_leaves_the_server_serving() -> None:
+    asyncio.run(_probe_the_disconnect())
+
+
+async def _probe_the_disconnect() -> None:
+    engine = BlockingEngine()
+    analysis = build_analysis(engine)
+    async for port, _serve, _health in _booted(analysis):
+        async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+            analyze = ai_service_pb2_grpc.AIServiceStub(channel).AnalyzeDocument
+            request = pb.AnalyzeDocumentRequest(text="a handful of words to analyse")
+            call = analyze(request, metadata=(("x-api-key", _BOOT_KEY),))
+            try:
+                first = await call.read()
+                assert first.WhichOneof("event") == "started"
+                assert await asyncio.to_thread(engine.entered.wait, 5.0)
+                call.cancel()
+            finally:
+                engine.release.set()
+
+            # The client observes its own cancellation; the server-side code
+            # is asserted from the span in the observability boot test.
+            with pytest.raises(asyncio.CancelledError):
+                await call.read()
+
+            keyed = await _detect_code(
+                ai_service_pb2_grpc.AIServiceStub(channel).Detect,
+                pb.DetectRequest(text="x"),
+                api_key=_BOOT_KEY,
+            )
+            assert keyed is None
+
+
 def test_the_server_sheds_the_request_past_its_concurrency_limit() -> None:
     asyncio.run(_probe_the_limit())
 
@@ -137,7 +202,7 @@ def test_the_dev_plane_answers_reflection_without_a_key(
 
 
 async def _probe_reflection(analysis: DocumentAnalysis) -> None:
-    async for port, _serve in _booted(analysis, enable_reflection=True):
+    async for port, _serve, _health in _booted(analysis, enable_reflection=True):
         async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
             responses = await _reflection_responses(channel)
 
@@ -152,7 +217,7 @@ def test_a_plane_without_reflection_keeps_the_schema_closed(
 
 
 async def _probe_the_closed_schema(analysis: DocumentAnalysis) -> None:
-    async for port, _serve in _booted(analysis):
+    async for port, _serve, _health in _booted(analysis):
         async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
             call = channel.stream_stream(
                 _REFLECTION_METHOD,
@@ -181,7 +246,7 @@ async def _reflection_responses(channel: aio.Channel) -> list:
 async def _probe_the_limit() -> None:
     engine = BlockingEngine()
     analysis = build_analysis(engine)
-    async for port, _serve in _booted(analysis, max_inflight_requests=1):
+    async for port, _serve, _health in _booted(analysis, max_inflight_requests=1):
         async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
             detect = ai_service_pb2_grpc.AIServiceStub(channel).Detect
             metadata = (("x-api-key", _BOOT_KEY),)
@@ -193,13 +258,16 @@ async def _probe_the_limit() -> None:
                 await stub(pb.DetectRequest(text="x"), metadata=meta)
 
             first = asyncio.create_task(first_call())
-            for _ in range(200):
-                if engine.entered.is_set():
-                    break
-                await asyncio.sleep(0.01)
+            try:
+                assert await asyncio.to_thread(engine.entered.wait, 5.0)
 
-            second = await _detect_code(detect, pb.DetectRequest(text="x"), api_key=_BOOT_KEY)
+                second = await _detect_code(detect, pb.DetectRequest(text="x"), api_key=_BOOT_KEY)
 
-            assert second == grpc.StatusCode.RESOURCE_EXHAUSTED
-            engine.release.set()
-            await first
+                assert second == grpc.StatusCode.RESOURCE_EXHAUSTED
+            finally:
+                engine.release.set()
+                await first
+
+            # A shed request must not flip readiness, even while the server's
+            # RPC cap is busy: the health status stays SERVING.
+            assert _health._server_status[""] == health_pb2.HealthCheckResponse.SERVING

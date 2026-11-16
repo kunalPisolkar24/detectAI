@@ -13,7 +13,7 @@ help-tests:
 	@echo ""
 
 test: proto
-	poetry run pytest tests -q
+	poetry run pytest tests -q --cov=app --cov-report=term-missing
 
 test-unit: proto
 	poetry run pytest tests/unit -q

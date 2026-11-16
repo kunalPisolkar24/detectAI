@@ -66,13 +66,14 @@ def build_analysis(
     engine: StubEngine,
     max_inflight: int = 2,
     observability: Observability | None = None,
+    max_text_chars: int = 1_000_000,
 ) -> DocumentAnalysis:
     """The use case over a fake model: the service's own wiring, no weights."""
     preprocessor = DocumentPreprocessor(
         tokenizer=StubTokenizer(),
         chunk_token_limit=512,
         model_max_sequence_length=512,
-        max_text_chars=1_000_000,
+        max_text_chars=max_text_chars,
     )
     runtime = build_runtime(
         key="spark",

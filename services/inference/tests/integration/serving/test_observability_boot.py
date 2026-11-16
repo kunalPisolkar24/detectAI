@@ -6,6 +6,7 @@ nothing leaves the machine.
 
 import asyncio
 import gzip
+import logging
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -13,6 +14,12 @@ import grpc
 import pytest
 from grpc import aio
 from grpc_health.v1 import health_pb2, health_pb2_grpc
+from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import (
+    ExportLogsServiceRequest,
+)
+from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import (
+    ExportMetricsServiceRequest,
+)
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
     ExportTraceServiceRequest,
 )
@@ -23,7 +30,7 @@ from app.serving.generated import ai_service_pb2 as pb
 from app.serving.generated import ai_service_pb2_grpc
 from app.serving.server import _build, _serve_until_stopped
 
-from .conftest import StubEngine, build_analysis
+from .conftest import BlockingEngine, StubEngine, build_analysis
 
 _BOOT_KEY = "observability-boot-key"
 _RECEIVED: dict[str, list[bytes]] = {}
@@ -79,6 +86,28 @@ def _spans() -> list:
             for scope_spans in resource_spans.scope_spans:
                 spans.extend(scope_spans.spans)
     return spans
+
+
+def _metric_names() -> set[str]:
+    """The instrument names the wired build exported at the local receiver."""
+    names: set[str] = set()
+    for body in _RECEIVED.get("metrics", []):
+        request = ExportMetricsServiceRequest.FromString(body)
+        for resource in request.resource_metrics:
+            for scope in resource.scope_metrics:
+                names.update(metric.name for metric in scope.metrics)
+    return names
+
+
+def _log_bodies() -> list[str]:
+    """The log records the wired build exported at the local receiver."""
+    bodies: list[str] = []
+    for body in _RECEIVED.get("logs", []):
+        request = ExportLogsServiceRequest.FromString(body)
+        for resource in request.resource_logs:
+            for scope in resource.scope_logs:
+                bodies.extend(record.body.string_value for record in scope.log_records)
+    return bodies
 
 
 def _attributes(span) -> dict[str, object]:
@@ -173,3 +202,66 @@ def test_a_rejected_call_is_traced_as_a_failure(receiver: str) -> None:
     assert _status_code(spans[0]) == grpc.StatusCode.UNAUTHENTICATED.value[0]
     # New Relic reads the span status as the error flag.
     assert spans[0].status.code == 2
+
+
+def test_the_wired_build_exports_metrics_and_logs(receiver: str) -> None:
+    _RECEIVED.clear()
+    wiring = build_observability_service(_settings(receiver), "dev")
+    analysis = build_analysis(StubEngine(), observability=wiring.observability)
+
+    async def scenario() -> None:
+        async for port in _serve(wiring, analysis):
+            await _probe(port)
+
+    # main() sets INFO before the boot; the test process does not import it.
+    root = logging.getLogger()
+    original_level = root.level
+    root.setLevel(logging.INFO)
+    try:
+        asyncio.run(scenario())
+    finally:
+        root.setLevel(original_level)
+        wiring.observability.shutdown()
+
+    assert {
+        "inference_queue_depth",
+        "inference_batch_size",
+        "inference_inflight_chunks",
+        "inference_engine_duration_seconds",
+    } <= _metric_names()
+    assert _log_bodies()
+
+
+def test_a_disconnected_stream_is_traced_as_cancelled(receiver: str) -> None:
+    _RECEIVED.clear()
+    wiring = build_observability_service(_settings(receiver), "dev")
+    engine = BlockingEngine()
+    analysis = build_analysis(engine, observability=wiring.observability)
+
+    async def scenario() -> None:
+        async for port in _serve(wiring, analysis):
+            async with aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+                call = ai_service_pb2_grpc.AIServiceStub(channel).AnalyzeDocument(
+                    pb.AnalyzeDocumentRequest(text="a handful of words to analyse"),
+                    metadata=(("x-api-key", _BOOT_KEY),),
+                )
+                try:
+                    first = await call.read()
+                    assert first.WhichOneof("event") == "started"
+                    assert await asyncio.to_thread(engine.entered.wait, 5.0)
+                    call.cancel()
+                finally:
+                    engine.release.set()
+
+                with pytest.raises(asyncio.CancelledError):
+                    await call.read()
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        wiring.observability.shutdown()
+
+    spans = _spans()
+    assert [span.name for span in spans] == ["/inference.v1.AIService/AnalyzeDocument"]
+    assert spans[0].status.code == 2
+    assert spans[0].status.message == "CANCELLED"

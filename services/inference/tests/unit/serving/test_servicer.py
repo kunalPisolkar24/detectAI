@@ -7,7 +7,7 @@ from typing import NoReturn
 import grpc
 import pytest
 
-from app.inference.analysis import DocumentAnalysis
+from app.inference.analysis import AnalysisStarted, DocumentAnalysis
 from app.inference.preprocessing import DocumentPreprocessor, Encoding
 from app.inference.runtime import build_runtime
 from app.observability import NullObservability
@@ -308,3 +308,43 @@ def test_analyze_document_refuses_an_unknown_model() -> None:
         assert context.code == grpc.StatusCode.INVALID_ARGUMENT
 
     asyncio.run(scenario())
+
+
+class CancellingAnalysis:
+    """A client that walked away mid-request."""
+
+    async def analyze(self, text: str, model_id: str) -> None:
+        raise asyncio.CancelledError
+
+    async def stream(self, text: str, model_id: str):
+        yield AnalysisStarted(total_chars=len(text), total_chunks=1)
+        raise asyncio.CancelledError
+
+
+def test_a_disconnect_on_detect_is_marked_failed_and_propagates() -> None:
+    seam = RecordingObservability()
+    servicer = AIServiceServicer(CancellingAnalysis(), seam)  # type: ignore[arg-type]
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(
+            servicer.Detect(pb.DetectRequest(text="x"), FakeContext())  # type: ignore[arg-type]
+        )
+
+    assert seam.failures == ["CANCELLED"]
+
+
+def test_a_disconnect_on_the_stream_is_marked_failed_and_propagates() -> None:
+    seam = RecordingObservability()
+    servicer = AIServiceServicer(CancellingAnalysis(), seam)  # type: ignore[arg-type]
+
+    async def scenario() -> None:
+        events = servicer.AnalyzeDocument(
+            pb.AnalyzeDocumentRequest(text="x"), FakeContext()  # type: ignore[arg-type]
+        )
+        await events.__anext__()
+        with pytest.raises(asyncio.CancelledError):
+            await events.__anext__()
+
+    asyncio.run(scenario())
+
+    assert seam.failures == ["CANCELLED"]

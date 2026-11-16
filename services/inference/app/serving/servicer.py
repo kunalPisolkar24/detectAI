@@ -1,5 +1,6 @@
 """The RPC surface: Detect (unary) and AnalyzeDocument (server-streaming)."""
 
+import asyncio
 import logging
 from typing import NoReturn
 
@@ -49,6 +50,9 @@ class AIServiceServicer(pb_grpc.AIServiceServicer):
         model_id = normalize_model_id(request.model_id)
         try:
             verdict = await self._analysis.analyze(request.text, model_id)
+        except asyncio.CancelledError:
+            self._observability.mark_failed("CANCELLED")
+            raise
         except Exception as error:  # noqa: BLE001 - every failure has a contract status
             await self._abort(context, error)
         return to_detection_result(model_id, verdict)
@@ -71,6 +75,10 @@ class AIServiceServicer(pb_grpc.AIServiceServicer):
                     yield to_result_event(model_id, event)
                 else:
                     raise InferenceError(f"unknown analysis event: {type(event).__name__}")
+        except asyncio.CancelledError:
+            # A disconnect is not an Exception; the span would otherwise end OK.
+            self._observability.mark_failed("CANCELLED")
+            raise
         except Exception as error:  # noqa: BLE001 - every failure has a contract status
             await self._abort(context, error)
 

@@ -79,27 +79,30 @@ def test_the_first_failure_aborts_the_ensure() -> None:
 def test_a_failure_aborts_without_waiting_out_the_sibling() -> None:
     # The sibling is a multi-gigabyte download in the real world: the boot
     # must die on the failure, not after the sibling finishes.
-    started = threading.Event()
-
     class SlowStore:
+        def __init__(self) -> None:
+            self.started = threading.Event()
+            self.finished = threading.Event()
+
         def locate(self, spec: ModelSpec) -> Path:
             raise MissingArtifact(f"{spec.key} missing")
 
         def pull(self, spec: ModelSpec) -> Path:
             if spec.key == "bad":
-                assert started.wait(timeout=5)
+                assert self.started.wait(timeout=10)
                 raise ArtifactPullError("bad failed")
-            started.set()
+            self.started.set()
             time.sleep(3)
+            self.finished.set()
             return Path(f"/models/{spec.key}")
 
-    manager = ModelArtifactManager([_spec("bad"), _spec("slow")], SlowStore())
+    store = SlowStore()
+    manager = ModelArtifactManager([_spec("bad"), _spec("slow")], store)
 
-    began = time.perf_counter()
     with pytest.raises(ArtifactError):
         manager.ensure_all()
 
-    assert time.perf_counter() - began < 2.0
+    assert not store.finished.is_set()
 
 
 def test_every_miss_pulls_and_returns_its_local_path() -> None:
