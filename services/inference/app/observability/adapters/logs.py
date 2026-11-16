@@ -2,7 +2,8 @@
 
 import logging
 
-from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.instrumentation.logging.handler import LoggingHandler
+from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import (
     BatchLogRecordProcessor,
     LogRecordExporter,
@@ -31,7 +32,7 @@ class LogsAdapter:
             self._log_exporter, export_timeout_millis=_FLUSH_TIMEOUT_MILLIS
         )
         provider.add_log_record_processor(processor)
-        handler = LoggingHandler(logger_provider=provider)
+        handler = LoggingHandler(logger_provider=provider, log_code_attributes=True)
         logging.getLogger().addHandler(handler)
         self._processor = processor
         self._provider = provider
