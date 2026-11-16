@@ -29,6 +29,9 @@ poetry -C tools/tfctl run tfctl --stack-dir observability plan   # a stack outsi
 | `session-refresh` | drop and re-mint the stack's cached carrier triplet | [Carrier](../concepts/carrier.md#the-session-verbs) |
 | `session-clear-all` | remove every cached carrier triplet (all stacks) | [Carrier](../concepts/carrier.md#the-session-verbs) |
 | `session-refresh-all` | mint every ready service's triplet in one run — one MFA code per device on real AWS | [Carrier](../concepts/carrier.md#the-session-verbs) |
+| `state-save` | copy the stack's state ledger to a local timestamped snapshot (explicit; floci also snapshots automatically after apply) | [State snapshots](../guides/terraform-lifecycle.md#state-snapshots) |
+| `state-load` | restore a local snapshot into the state ledger (`--force` overwrites a non-empty ledger) | [State snapshots](../guides/terraform-lifecycle.md#state-snapshots) |
+| `state-status` | show the live ledger and the available local snapshots | [State snapshots](../guides/terraform-lifecycle.md#state-snapshots) |
 
 ## The flags
 
@@ -42,7 +45,8 @@ poetry -C tools/tfctl run tfctl --stack-dir observability plan   # a stack outsi
 | `--purge-state` | `destroy` | after destroy: delete every object version in the state bucket, then the bucket (previewed, warned on foreign prefixes) |
 | `--force-delete` | `destroy` | real AWS only: delete the secret immediately, skipping its recovery window |
 | `--drop-seeder` | `destroy` | after destroy: detach the carrier's inline policy, delete the role |
-| `--force` | `session-refresh-all` | re-mint triplets even when a cached one is still valid |
+| `--force` | `session-refresh-all`, `state-load` | re-mint triplets even when cached, or overwrite a non-empty state ledger |
+| `--file <path>` | `state-save`, `state-load` | explicit snapshot path (defaults to the plane's `latest`) |
 
 ## Guard rules (misplaced flags die loudly)
 
@@ -56,7 +60,8 @@ fix:   run a single-service verb without --service
 | Guard | Because |
 |-------|---------|
 | `--purge-state`, `--force-delete`, `--drop-seeder` accepted only by `destroy` | they are teardown steps of a destroy that succeeded |
-| `--force` accepted only by `session-refresh-all` | re-minting is a batch decision |
+| `--force` accepted only by `session-refresh-all` and `state-load` | re-minting is a batch decision; overwriting a ledger is explicit |
+| `--file` accepted only by `state-save` / `state-load` | no other verb reads or writes a snapshot file |
 | `--service` refused by `session-clear-all` / `session-refresh-all` | these verbs walk every service by design — target a single service with `session-clear` instead |
 | `--service` and `--stack-dir` never together | they name two different stacks; pass one |
 | `--stack-dir` refused by `session-clear-all` / `session-refresh-all` | the batch verbs walk the services namespaces — target a single stack with `session-clear` / `session-refresh` |

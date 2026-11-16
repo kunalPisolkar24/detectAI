@@ -99,7 +99,7 @@ def test_force_flag_only_applies_to_session_refresh_all(ws_env, capsys):
     with pytest.raises(SystemExit) as excinfo:
         cli.main(["plan", "--force"], workspace=ws_env)
     assert excinfo.value.code == 1
-    assert "only applies to the session-refresh-all command" in capsys.readouterr().out
+    assert "only applies to the session-refresh-all and state-load commands" in capsys.readouterr().out
 
 
 def test_session_cache_verbs_reject_service_targeting(capsys):

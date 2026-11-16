@@ -19,7 +19,28 @@ The tell-tale: `make plan` says **"N to add"** while the boards visibly exist
 on the account. Never let that plan run; an apply before state is recovered
 creates the copy.
 
-## Recovery
+## First: recover the ledger, not the boards
+
+On floci this is now automatic. `tfctl` snapshots the state ledger to
+`~/.local/share/tfctl/state/observability/floci/` after every successful apply
+and restores the latest snapshot before a `plan`/`apply` when the emulator has
+forgotten it. `make check` prints the ledger and snapshot status. If a restart
+happened, the normal `make plan` should say *No changes* without any manual step.
+
+If no snapshot exists (a fresh machine, or the backup directory was removed):
+
+1. `make state-restore FILE=<path> FORCE=1` with a snapshot copied from another machine, or
+2. `make recover-state` — generates `terraform/imports.tf` from the live New
+   Relic plane (boards, policies, conditions, notifications) and applies it so
+   those resources are **adopted** into state rather than created again. The
+   plan-guard runs before the apply, so a duplicate generation is still refused.
+
+Only if the account already holds **two full generations** — the actual
+duplication incident — continue with the destructive recovery below. The raw
+telemetry survives either path; what full teardown costs is board GUIDs,
+permalinks, alert IDs and incident continuity.
+
+## Recovery of an already-duplicated plane
 
 Everything below runs against the EU GraphQL API with the user key from
 `envs/.env`. Read the current picture first:

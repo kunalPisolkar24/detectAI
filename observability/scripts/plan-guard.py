@@ -20,7 +20,7 @@ ADD_PATTERN = re.compile(
 def board_modules():
     modules = {}
     for template in (ROOT / "terraform" / "dashboards").glob("*/*.tftpl"):
-        key = template.parent.name
+        key = template.parent.name.replace("-", "_")
         if template.stem != "prod":
             key += f"_{template.stem}"
         modules[key] = board_audit.template_board_name(template)

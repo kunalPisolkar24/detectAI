@@ -2,7 +2,7 @@
 # envs/.env, resolves the state plane (PLANE=floci|aws, default floci — the
 # same contract as document-parser) and drives terraform.
 
-.PHONY: check plan apply auto-apply destroy audit session-clear session-refresh help-newrelic
+.PHONY: check plan apply auto-apply destroy audit session-clear session-refresh state-backup state-restore state-status recover-state help-newrelic
 
 TFCTL := poetry -C $(abspath ../tools/tfctl) run tfctl
 AUDIT := python3 -B $(CURDIR)/scripts/board_audit.py
@@ -23,6 +23,10 @@ help-newrelic:
 	@echo "    plan         terraform plan on the PLANE (floci by default; PLANE=aws rides real AWS)"
 	@echo "    apply        plan, duplicate-guard, terraform apply (auto on Floci, interactive on real AWS; PLANE=aws rides real AWS), then audit"
 	@echo "    auto-apply   plan, duplicate-guard, then plan + apply in one run, then audit"
+	@echo "    state-backup save the state ledger locally (apply already does this on floci)"
+	@echo "    state-restore  load a snapshot back (FILE=... FORCE=1 to overwrite)"
+	@echo "    state-status   show the ledger and the available local snapshots"
+	@echo "    recover-state  rebuild state by importing the live New Relic resources"
 	@echo "    destroy      terraform destroy, auto-approved on both planes (tfctl --purge-state/--drop-seeder add teardown tails)"
 	@echo "    session-clear    drop this stack's cached carrier session (other stacks untouched)"
 	@echo "    session-refresh  drop and re-mint this stack's carrier session (MFA on real AWS)"
@@ -30,6 +34,7 @@ help-newrelic:
 
 check:
 	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) check
+	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) state-status
 	$(AUDIT)
 
 audit:
@@ -62,3 +67,24 @@ session-clear:
 
 session-refresh:
 	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) session-refresh
+
+state-backup:
+	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) state-save
+
+state-restore:
+	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) state-load \
+		$(if $(FILE),--file $(FILE),) $(if $(FORCE),--force,)
+
+state-status:
+	$(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) state-status
+
+recover-state:
+	@python3 -B $(CURDIR)/scripts/recover_state.py
+	@plan=$$(mktemp) \
+	 && { $(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) plan > $$plan 2>&1 \
+	        || { cat $$plan; exit 1; }; } \
+	 && $(GUARD) $$plan \
+	 && { grep -m1 'Plan:' $$plan || true; } \
+	 && $(TFCTL) --stack-dir $(CURDIR) $(PLANE_FLAG) auto-apply
+	@rm -f $(CURDIR)/terraform/imports.tf
+	$(AUDIT)
