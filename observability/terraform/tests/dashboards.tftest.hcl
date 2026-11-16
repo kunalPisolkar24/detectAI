@@ -25,6 +25,14 @@ run "boards_render" {
     error_message = "web board must have 4 pages."
   }
 
+  assert {
+    condition = (
+      [for p in jsondecode(module.dashboards.boards["chats"].json).pages : p.name] ==
+      ["Chat Service", "Logs"]
+    )
+    error_message = "Chats board must have exactly two pages: Chat Service and Logs."
+  }
+
   # Twin contract part 1: every dev twin keeps its prod board's pages,
   # page-for-page. Drift here means one side lost coverage.
   assert {
