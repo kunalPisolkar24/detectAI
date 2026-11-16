@@ -2,9 +2,11 @@
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncGenerator, Mapping, Sequence
 from dataclasses import dataclass
 
+from ..observability.contract import Observability
 from .errors import InferenceError, OverloadedError, UnknownModelError
 from .postprocessing import DocumentVerdict, ScoredRegion, VerdictAggregator
 from .preprocessing import Chunk, PreparedDocument
@@ -47,13 +49,19 @@ class DocumentAnalysis:
     rather than queueing work that would take minutes to drain.
     """
 
-    def __init__(self, runtimes: Mapping[str, ModelRuntime], threshold: float) -> None:
+    def __init__(
+        self,
+        runtimes: Mapping[str, ModelRuntime],
+        threshold: float,
+        observability: Observability,
+    ) -> None:
         self._runtimes = dict(runtimes)
         self._aggregator = VerdictAggregator(threshold)
         self._permits = {
             key: asyncio.Semaphore(runtime.max_inflight)
             for key, runtime in self._runtimes.items()
         }
+        self._observability = observability
         self._draining = False
 
     async def analyze(self, text: str, model_id: str) -> DocumentVerdict:
@@ -77,35 +85,55 @@ class DocumentAnalysis:
         """The document's events: started, progress as the chunks land, then the verdict."""
         runtime = self._runtime_for(model_id)
         permit = self._permits[runtime.key]
+        # The serving model is folded onto the live span first: a shed request
+        # still belongs to the model that shed it.
+        self._observability.annotate_model(runtime.key, runtime.revision, runtime.provider)
         if self._draining:
             raise OverloadedError("the service is draining")
         if permit.locked():
-            logger.warning("%s is at capacity; shedding the request", runtime.key)
+            logger.warning(
+                "%s is at capacity; the request was dropped (RESOURCE_EXHAUSTED)",
+                runtime.key,
+            )
             raise OverloadedError(f"{runtime.key} is at capacity")
         await permit.acquire()
-        try:
-            prepared = await self._prepare(runtime, text)
-            total = len(prepared.chunks)
-            yield AnalysisStarted(total_chars=prepared.total_chars, total_chunks=total)
-            regions: list[ScoredRegion] = []
-            for offset in range(0, total, runtime.batch_size):
-                batch = prepared.chunks[offset : offset + runtime.batch_size]
-                probabilities = await self._score(runtime, batch)
-                regions.extend(
-                    ScoredRegion(
-                        char_start=chunk.char_start,
-                        char_end=chunk.char_end,
-                        scored_tokens=chunk.scored_tokens,
-                        ai_probability=probability,
+        with self._observability.track_document():
+            try:
+                prepared = await self._prepare(runtime, text)
+                total = len(prepared.chunks)
+                logger.info(
+                    "%s: %d chunks over %d tokens",
+                    runtime.key,
+                    total,
+                    prepared.total_tokens,
+                )
+                yield AnalysisStarted(total_chars=prepared.total_chars, total_chunks=total)
+                regions: list[ScoredRegion] = []
+                for offset in range(0, total, runtime.batch_size):
+                    batch = prepared.chunks[offset : offset + runtime.batch_size]
+                    with self._observability.track_batch(len(batch)):
+                        started = time.perf_counter()
+                        try:
+                            probabilities = await self._score(runtime, batch)
+                        finally:
+                            self._observability.record_engine_duration(
+                                runtime.key, time.perf_counter() - started
+                            )
+                    regions.extend(
+                        ScoredRegion(
+                            char_start=chunk.char_start,
+                            char_end=chunk.char_end,
+                            scored_tokens=chunk.scored_tokens,
+                            ai_probability=probability,
+                        )
+                        for chunk, probability in zip(batch, probabilities, strict=True)
                     )
-                    for chunk, probability in zip(batch, probabilities, strict=True)
-                )
-                yield AnalysisProgress(
-                    processed_chunks=offset + len(batch), total_chunks=total
-                )
-            yield AnalysisFinished(verdict=self._aggregator.aggregate(regions))
-        finally:
-            permit.release()
+                    yield AnalysisProgress(
+                        processed_chunks=offset + len(batch), total_chunks=total
+                    )
+                yield AnalysisFinished(verdict=self._aggregator.aggregate(regions))
+            finally:
+                permit.release()
 
     def begin_draining(self) -> None:
         """Stop admitting documents; the ones in flight finish."""

@@ -14,6 +14,7 @@ from ..inference.analysis import (
 )
 from ..inference.errors import InferenceError, OverloadedError, UnknownModelError
 from ..inference.preprocessing import InvalidDocument
+from ..observability.contract import Observability
 from .generated import ai_service_pb2 as pb
 from .generated import ai_service_pb2_grpc as pb_grpc
 from .mapper import (
@@ -37,8 +38,9 @@ _MAX_DETAIL_CHARS = 500
 class AIServiceServicer(pb_grpc.AIServiceServicer):
     """The contract's two RPCs over the analysis use case."""
 
-    def __init__(self, analysis: DocumentAnalysis) -> None:
+    def __init__(self, analysis: DocumentAnalysis, observability: Observability) -> None:
         self._analysis = analysis
+        self._observability = observability
 
     async def Detect(
         self, request: pb.DetectRequest, context: aio.ServicerContext
@@ -77,6 +79,8 @@ class AIServiceServicer(pb_grpc.AIServiceServicer):
         code, detail = _status_for(error)
         if code is grpc.StatusCode.INTERNAL:
             logger.error("inference failed: %s", error, exc_info=error)
+        # The call failed: the board's error share counts it.
+        self._observability.mark_failed(code.name)
         await context.abort(code, detail)
 
 

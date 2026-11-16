@@ -53,13 +53,14 @@ class OnnxModelLoader:
         except Exception as error:
             raise ModelLoadError(f"{key}: load failed from {path}: {error}") from error
         max_sequence_length = self._max_sequence_length(key, path)
-        self._check_effective_providers(key, session)
+        providers = self._check_effective_providers(key, session)
         logger.info("%s: loaded in %.1fs", key, time.perf_counter() - started)
         return LoadedModel(
             key=key,
             session=session,
             tokenizer=tokenizer,
             max_sequence_length=max_sequence_length,
+            providers=providers,
         )
 
     def _max_sequence_length(self, key: str, path: Path) -> int:
@@ -110,7 +111,7 @@ class OnnxModelLoader:
         """The HF tokenizer from the artifact dir; strictly offline, never the hub."""
         return AutoTokenizer.from_pretrained(str(path), local_files_only=True)
 
-    def _check_effective_providers(self, key: str, session: Any) -> None:
+    def _check_effective_providers(self, key: str, session: Any) -> tuple[str, ...]:
         """The requested provider must be effective, or the boot fails.
 
         A silent fallback to the CPU is a silent slowdown that reports itself
@@ -127,3 +128,4 @@ class OnnxModelLoader:
                 f"effective; the session offers {', '.join(effective)}"
             )
         logger.info("%s: providers %s", key, effective)
+        return tuple(effective)

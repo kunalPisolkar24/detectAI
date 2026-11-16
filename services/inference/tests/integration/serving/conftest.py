@@ -9,8 +9,13 @@ import pytest
 from app.inference.analysis import DocumentAnalysis
 from app.inference.preprocessing import DocumentPreprocessor, Encoding
 from app.inference.runtime import build_runtime
+from app.observability import NullObservability
+from app.observability.contract import Observability
 
 _SCORE = 0.9
+
+# The pinned artifact identity the runtime carries into the span.
+_REVISION = "b0ab87257cc240d66622c2482270ec726e16c553"
 
 
 class StubTokenizer:
@@ -57,7 +62,11 @@ class BlockingEngine(StubEngine):
         return tuple(_SCORE for _ in sequences)
 
 
-def build_analysis(engine: StubEngine, max_inflight: int = 2) -> DocumentAnalysis:
+def build_analysis(
+    engine: StubEngine,
+    max_inflight: int = 2,
+    observability: Observability | None = None,
+) -> DocumentAnalysis:
     """The use case over a fake model: the service's own wiring, no weights."""
     preprocessor = DocumentPreprocessor(
         tokenizer=StubTokenizer(),
@@ -71,8 +80,14 @@ def build_analysis(engine: StubEngine, max_inflight: int = 2) -> DocumentAnalysi
         engine=engine,
         batch_size=8,
         max_inflight=max_inflight,
+        revision=_REVISION,
+        providers=("CPUExecutionProvider",),
     )
-    return DocumentAnalysis({"spark": runtime}, threshold=0.5)
+    return DocumentAnalysis(
+        {"spark": runtime},
+        threshold=0.5,
+        observability=observability or NullObservability(),
+    )
 
 
 @pytest.fixture

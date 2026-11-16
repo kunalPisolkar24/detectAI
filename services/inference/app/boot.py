@@ -80,6 +80,8 @@ def build_runtimes(
             engine=engine,
             batch_size=batch_size,
             max_inflight=settings.max_concurrent_batches,
+            revision=settings.model_settings(key).revision,
+            providers=model.providers,
         )
     logger.info(
         "model runtimes: %s",

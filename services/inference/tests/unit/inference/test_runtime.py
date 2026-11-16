@@ -8,6 +8,9 @@ from app.inference.engine import OnnxEngine
 from app.inference.preprocessing import DocumentPreprocessor, FastTokenizer
 from app.inference.runtime import ModelRuntime, build_runtime
 
+# The pinned artifact identity the runtime carries into the span.
+_REVISION = "b0ab87257cc240d66622c2482270ec726e16c553"
+
 
 class StubTokenizer:
     """Stands in for the HF tokenizer: the attributes and the one call the adapter makes."""
@@ -39,6 +42,8 @@ def _runtime() -> ModelRuntime:
         preprocessor=preprocessor,
         engine=engine,
         batch_size=8,
+        revision=_REVISION,
+        providers=("CUDAExecutionProvider", "CPUExecutionProvider"),
     )
 
 
@@ -73,3 +78,21 @@ def test_closing_a_runtime_shuts_both_pools() -> None:
         runtime.engine_executor.submit(lambda: None)
     with pytest.raises(RuntimeError):
         runtime.preparation_executor.submit(lambda: None)
+
+
+def test_the_bundle_carries_the_identity_the_span_reports() -> None:
+    runtime = _runtime()
+
+    assert runtime.revision == _REVISION
+    assert runtime.provider == "CUDAExecutionProvider"
+
+
+def test_a_runtime_without_providers_reports_no_provider() -> None:
+    runtime = build_runtime(
+        key="spark",
+        preprocessor=object(),
+        engine=object(),
+        batch_size=8,
+    )
+
+    assert runtime.provider == ""

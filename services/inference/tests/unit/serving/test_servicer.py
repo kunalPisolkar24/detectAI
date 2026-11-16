@@ -10,8 +10,11 @@ import pytest
 from app.inference.analysis import DocumentAnalysis
 from app.inference.preprocessing import DocumentPreprocessor, Encoding
 from app.inference.runtime import build_runtime
+from app.observability import NullObservability
+from app.observability.contract import Observability
 from app.serving.generated import ai_service_pb2 as pb
 from app.serving.servicer import AIServiceServicer
+from tests.support.observability import RecordingObservability
 
 
 class StubTokenizer:
@@ -92,6 +95,7 @@ def _servicer(
     max_inflight: int = 2,
     models: tuple[str, ...] = ("spark",),
     engine: StubEngine | None = None,
+    observability: Observability | None = None,
 ) -> AIServiceServicer:
     if engine is None:
         engine = FailingEngine() if failing else StubEngine(probability=probability)
@@ -111,11 +115,34 @@ def _servicer(
         )
         for key in models
     }
-    return AIServiceServicer(DocumentAnalysis(runtimes, threshold=0.5))
+    seam = observability or NullObservability()
+    return AIServiceServicer(
+        DocumentAnalysis(runtimes, threshold=0.5, observability=seam),
+        seam,
+    )
 
 
 def _text(words: int) -> str:
     return " ".join(f"word{index}" for index in range(words))
+
+
+def test_a_refused_call_is_marked_failed() -> None:
+    """The gRPC instrumentation leaves the contract's own codes unmarked;
+    the servicer marks them, or the board's error share misses them."""
+
+    async def scenario() -> None:
+        recorder = RecordingObservability()
+        servicer = _servicer(observability=recorder)
+        context = FakeContext()
+
+        with pytest.raises(Aborted):
+            await servicer.Detect(
+                pb.DetectRequest(text=_text(10), model_id="nope"), context
+            )
+
+        assert recorder.failures == ["INVALID_ARGUMENT"]
+
+    asyncio.run(scenario())
 
 
 def test_detect_answers_the_verdict() -> None:

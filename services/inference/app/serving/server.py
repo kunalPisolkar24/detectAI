@@ -7,6 +7,8 @@ from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
 
 from ..inference.analysis import DocumentAnalysis
+from ..observability import NullObservability
+from ..observability.contract import Observability
 from .auth import HEALTH_METHODS, ApiKeyAuthInterceptor
 from .generated import ai_service_pb2 as pb
 from .generated import ai_service_pb2_grpc as pb_grpc
@@ -30,9 +32,17 @@ async def run_server(
     analysis: DocumentAnalysis,
     max_inflight_requests: int,
     enable_reflection: bool = False,
+    server_interceptor: aio.ServerInterceptor | None = None,
+    observability: Observability | None = None,
 ) -> None:
     server, health_servicer, _ = _build(
-        port, api_key, analysis, max_inflight_requests, enable_reflection
+        port,
+        api_key,
+        analysis,
+        max_inflight_requests,
+        enable_reflection,
+        server_interceptor,
+        observability,
     )
     await _serve_until_stopped(server, health_servicer, _wait_for_signal(), analysis)
 
@@ -43,17 +53,27 @@ def _build(
     analysis: DocumentAnalysis,
     max_inflight_requests: int,
     enable_reflection: bool = False,
+    server_interceptor: aio.ServerInterceptor | None = None,
+    observability: Observability | None = None,
 ) -> tuple[aio.Server, health.aio.HealthServicer, int]:
     open_methods = HEALTH_METHODS
     if enable_reflection:
         open_methods = open_methods | {_REFLECTION_METHOD}
+    seam = observability or NullObservability()
+    interceptors: list[aio.ServerInterceptor] = []
+    if server_interceptor is not None:
+        # Outermost: the trace must wrap the auth gate, or a rejected call leaves no trace.
+        interceptors.append(server_interceptor)
+    interceptors.append(ApiKeyAuthInterceptor(api_key, open_methods, seam))
     server = aio.server(
-        interceptors=[ApiKeyAuthInterceptor(api_key, open_methods)],
+        interceptors=interceptors,
         maximum_concurrent_rpcs=max_inflight_requests,
     )
     health_servicer = health.aio.HealthServicer()
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
-    pb_grpc.add_AIServiceServicer_to_server(AIServiceServicer(analysis), server)
+    pb_grpc.add_AIServiceServicer_to_server(
+        AIServiceServicer(analysis, seam), server
+    )
     if enable_reflection:
         reflection.enable_server_reflection([_SERVICE_NAME], server)
 

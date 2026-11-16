@@ -1,6 +1,7 @@
 """The analysis use case: one document in, one verdict out, unary or streamed."""
 
 import asyncio
+import logging
 import threading
 from collections.abc import Iterator
 
@@ -15,6 +16,11 @@ from app.inference.analysis import (
 from app.inference.errors import OverloadedError, UnknownModelError
 from app.inference.preprocessing import DocumentPreprocessor, Encoding, InvalidDocument
 from app.inference.runtime import ModelRuntime, build_runtime
+from app.observability import NullObservability
+from tests.support.observability import RecordingObservability
+
+# The pinned artifact identity the runtime carries into the span.
+_REVISION = "b0ab87257cc240d66622c2482270ec726e16c553"
 
 
 class StubTokenizer:
@@ -82,6 +88,8 @@ def _runtime(engine: StubEngine, batch_size: int = 4, max_inflight: int = 2) -> 
         engine=engine,
         batch_size=batch_size,
         max_inflight=max_inflight,
+        revision=_REVISION,
+        providers=("CUDAExecutionProvider", "CPUExecutionProvider"),
     )
 
 
@@ -89,6 +97,7 @@ def _analysis(engine: StubEngine, batch_size: int = 4, max_inflight: int = 2) ->
     return DocumentAnalysis(
         {"spark": _runtime(engine, batch_size=batch_size, max_inflight=max_inflight)},
         threshold=0.5,
+        observability=NullObservability(),
     )
 
 
@@ -251,3 +260,83 @@ def test_a_draining_service_sheds_the_request() -> None:
             await analysis.analyze(_text(10), "spark")
 
     asyncio.run(scenario())
+
+
+def _recorded_analysis(
+    engine: StubEngine, batch_size: int = 4, max_inflight: int = 2
+) -> tuple[DocumentAnalysis, RecordingObservability]:
+    recorder = RecordingObservability()
+    analysis = DocumentAnalysis(
+        {"spark": _runtime(engine, batch_size=batch_size, max_inflight=max_inflight)},
+        threshold=0.5,
+        observability=recorder,
+    )
+    return analysis, recorder
+
+
+def test_the_serving_model_is_folded_onto_the_span() -> None:
+    async def scenario() -> None:
+        analysis, recorder = _recorded_analysis(StubEngine())
+
+        await analysis.analyze(_text(10), "spark")
+
+        assert recorder.models == [
+            ("spark", _REVISION, "CUDAExecutionProvider"),
+        ]
+
+    asyncio.run(scenario())
+
+
+def test_the_document_bracket_opens_and_closes_around_the_request() -> None:
+    async def scenario() -> None:
+        analysis, recorder = _recorded_analysis(StubEngine())
+
+        await analysis.analyze(_text(10), "spark")
+
+        assert recorder.document_brackets == 1
+        assert recorder.open_document_brackets == 0
+
+    asyncio.run(scenario())
+
+
+def test_every_batch_is_measured_and_reported() -> None:
+    async def scenario() -> None:
+        analysis, recorder = _recorded_analysis(StubEngine(), batch_size=2)
+
+        await analysis.analyze(_LONG, "spark")
+
+        assert recorder.batches == [2, 1]
+        assert recorder.open_batches == 0
+        assert [model for model, _ in recorder.engine_durations] == ["spark", "spark"]
+        assert all(seconds >= 0 for _, seconds in recorder.engine_durations)
+
+    asyncio.run(scenario())
+
+
+def test_a_shed_request_says_so_in_a_way_the_alert_can_read(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The alert matches on 'dropped' and 'RESOURCE_EXHAUSTED': the wording is the contract."""
+
+    async def scenario() -> None:
+        engine = BlockingEngine()
+        analysis = _analysis(engine, max_inflight=1)
+        first = asyncio.create_task(analysis.analyze(_text(10), "spark"))
+        for _ in range(200):
+            if engine.entered.is_set():
+                break
+            await asyncio.sleep(0.01)
+
+        with pytest.raises(OverloadedError):
+            await analysis.analyze(_text(10), "spark")
+
+        engine.release.set()
+        await first
+
+    with caplog.at_level(logging.WARNING):
+        asyncio.run(scenario())
+
+    assert any(
+        "dropped" in message and "RESOURCE_EXHAUSTED" in message
+        for message in caplog.messages
+    )

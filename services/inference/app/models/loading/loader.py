@@ -14,6 +14,9 @@ class LoadedModel:
     session: Any
     tokenizer: Any
     max_sequence_length: int
+    # The execution providers the session actually runs on, in preference order:
+    # the first one is the active provider the serving slice reports.
+    providers: tuple[str, ...] = ()
 
 
 class ModelLoader(Protocol):

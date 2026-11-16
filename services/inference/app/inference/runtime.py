@@ -23,6 +23,15 @@ class ModelRuntime:
     preparation_executor: Executor
     engine_executor: Executor
     max_inflight: int
+    # The identity the serving slice reports: the pinned artifact revision and
+    # the execution providers the session actually runs on.
+    revision: str = ""
+    providers: tuple[str, ...] = ()
+
+    @property
+    def provider(self) -> str:
+        """The active execution provider: the first one the session runs on."""
+        return self.providers[0] if self.providers else ""
 
     def close(self) -> None:
         """Close the pools the runtime opened."""
@@ -36,6 +45,8 @@ def build_runtime(
     engine: Engine,
     batch_size: int,
     max_inflight: int = _ENGINE_POOL_WORKERS,
+    revision: str = "",
+    providers: tuple[str, ...] = (),
 ) -> ModelRuntime:
     """One model's bundle: the preprocessor, the engine, and the two executor pools."""
     return ModelRuntime(
@@ -48,4 +59,6 @@ def build_runtime(
             max_workers=max_inflight, thread_name_prefix=f"{key}-engine"
         ),
         max_inflight=max_inflight,
+        revision=revision,
+        providers=providers,
     )
