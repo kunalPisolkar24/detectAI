@@ -2,7 +2,7 @@
 # with fakes and no boot, tests/integration drives the production app with the
 # real lifespan-config boot. The pytest targets always scope to tests/.
 
-.PHONY: test test-unit test-integration test-cov test-cov-unit test-cov-html load-fixtures help-tests
+.PHONY: test test-unit test-integration test-cov test-cov-unit test-cov-html help-tests
 
 COV_FLAGS := --cov=app --cov-report=term-missing
 
@@ -14,7 +14,6 @@ help-tests:
 	@echo "    test-cov          full suite with coverage, 95% gate (term-missing report)"
 	@echo "    test-cov-unit     unit tests with coverage, no gate (tests/unit)"
 	@echo "    test-cov-html     full suite with coverage + browsable HTML report (htmlcov/)"
-	@echo "    load-fixtures     regenerate the load corpus under tests/load/assets (gitignored)"
 	@echo ""
 
 test: test-cov
@@ -33,6 +32,3 @@ test-cov-unit:
 
 test-cov-html:
 	poetry run pytest tests -q $(COV_FLAGS) --cov-report=html
-
-load-fixtures:
-	poetry run python -m tests.load.generate

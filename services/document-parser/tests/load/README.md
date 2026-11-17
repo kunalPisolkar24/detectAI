@@ -18,7 +18,7 @@ in the error text.
 | `make load-test` | Provisions the container rig (`infra/compose.load.yml`: parser + k6 on an isolated network, no host ports) and runs the scenario against it |
 | `make load-e2e` | Runs the k6 container only (`run --rm --no-deps`) against whatever `infra/.env.load`'s `API_URL` names — `make run`, a docker stack, a Lambda function URL, prod |
 | `make load-down` | Removes the rig and any e2e-run leftovers |
-| `make load-fixtures` | Builds the corpus under `assets/` once per tree (`mk/tests.mk`) |
+| `make load-fixtures` | Builds the corpus under `assets/` once per tree (`mk/load.mk`) |
 
 Everything is configured in `infra/.env.load` — `SCENARIO` included: edit the
 file's `SCENARIO` line to pick the script, edit its other lines to change any
