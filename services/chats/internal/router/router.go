@@ -3,6 +3,7 @@ package router
 
 import (
 	"log/slog"
+	"time"
 
 	connectrpc "connectrpc.com/connect"
 	"connectrpc.com/grpchealth"
@@ -16,6 +17,10 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
+
+// The RPC budget sits above the driver's five-second server-selection timeout
+// so an unreachable source answers UNAVAILABLE before the deadline fires.
+const rpcTimeout = 8 * time.Second
 
 func New(database db.Database, service services.Service, apiKey string, limiter cache.Limiter, limits handlers.Limits, logger *slog.Logger, obs observability.Telemetry) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
@@ -43,6 +48,7 @@ func New(database db.Database, service services.Service, apiKey string, limiter 
 		handlers.New(service),
 		connectrpc.WithInterceptors(
 			handlers.NewTelemetryInterceptor(obs),
+			handlers.NewTimeoutInterceptor(rpcTimeout),
 			handlers.NewAuthInterceptor(apiKey),
 			handlers.NewRateLimitInterceptor(limiter, limits, logger, obs),
 		),

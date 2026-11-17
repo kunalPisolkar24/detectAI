@@ -21,9 +21,10 @@ import (
 )
 
 const (
-	bootBudget       = 10 * time.Second
-	disconnectBudget = 5 * time.Second
-	telemetryBudget  = 15 * time.Second
+	bootBudget           = 10 * time.Second
+	connectRetryInterval = 500 * time.Millisecond
+	disconnectBudget     = 5 * time.Second
+	telemetryBudget      = 15 * time.Second
 )
 
 func main() {
@@ -49,7 +50,7 @@ func main() {
 
 	bootCtx, cancelBoot := context.WithTimeout(context.Background(), bootBudget)
 	defer cancelBoot()
-	dbClient, err := db.Connect(bootCtx, cfg.MongoURI, cfg.MongoDatabase)
+	dbClient, err := db.ConnectWithRetry(bootCtx, cfg.MongoURI, cfg.MongoDatabase, connectRetryInterval)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -34,6 +34,26 @@ func Connect(ctx context.Context, uri, database string) (*Client, error) {
 	return &Client{client: client, database: client.Database(database)}, nil
 }
 
+// ConnectWithRetry dials until the server answers or the caller's budget runs
+// out. It absorbs the race where the process starts before mongo is ready, and
+// returns the last failure so a wrong URI is still reported at boot.
+func ConnectWithRetry(ctx context.Context, uri, database string, interval time.Duration) (*Client, error) {
+	for {
+		client, err := Connect(ctx, uri, database)
+		if err == nil {
+			return client, nil
+		}
+		if ctx.Err() != nil {
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-time.After(interval):
+		}
+	}
+}
+
 func (c *Client) Database() *driver.Database {
 	return c.database
 }
