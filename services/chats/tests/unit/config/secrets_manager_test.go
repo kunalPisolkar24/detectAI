@@ -65,6 +65,31 @@ func TestSecretsAdapterFailsOnNonStringValue(t *testing.T) {
 	}
 }
 
+func TestSecretsAdapterNamesEveryNonStringShape(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		blob string
+		want string
+	}{
+		{name: "string blob", blob: `"hello"`, want: "got string"},
+		{name: "boolean blob", blob: `true`, want: "got boolean"},
+		{name: "null blob", blob: `null`, want: "got null"},
+		{name: "object value", blob: `{"NESTED":{"a":1}}`, want: `value for "NESTED" is not a string (got object)`},
+		{name: "array value", blob: `{"LIST":[1]}`, want: `value for "LIST" is not a string (got array)`},
+		{name: "null value", blob: `{"EMPTY":null}`, want: `value for "EMPTY" is not a string (got null)`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fake := &fakeSecrets{output: &secretsmanager.GetSecretValueOutput{
+				SecretString: aws.String(test.blob),
+			}}
+			_, err := adapters.NewSecretsManagerAdapter(fake).Fetch()
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Errorf("err = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
 func TestSecretsAdapterFailsLoudOnAPIErrors(t *testing.T) {
 	fake := &fakeSecrets{err: &smithy.GenericAPIError{Code: "AccessDeniedException", Message: "nope"}}
 	_, err := adapters.NewSecretsManagerAdapter(fake).Fetch()
