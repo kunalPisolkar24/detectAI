@@ -22,16 +22,21 @@ A panel only has data when the chats process boots with `OTEL_EXPORTER_OTLP_ENDP
 |-------|-------------------|
 | RPC/min · Error share | Load and failure share. Both come from ConnectRPC spans (`rpc.system = 'connect_rpc'`); procedure spans are internal spans, so they are **not** filtered on `span.kind`. |
 | RPC p95 / p99 all ops | User latency, from span `duration.ms` |
-| RPC throughput / p95 / p99 by procedure | Which of the eight methods owns the traffic and the slow tail |
+| Avg RPC read / write latency | Full RPC average latency per group, un-faceted, from span `duration.ms` |
+| Avg cache read / write latency | Full cache-operation average per group — `chats_cache_operation_duration_seconds` |
+| Avg DB read / write latency · DB read / write ops/min | Mongo call cost and throughput per group — `chats_datastore_operation_duration_seconds`, `chats_datastore_operations_total` |
+| RPC throughput / p95 / p99 by procedure (reads / writes) | Which method owns the traffic and the slow tail, split so read calls do not drown out writes |
+| Cache operation latency (reads / writes) | Cost per cache operation, split by read and write operations |
+| Datastore operation latency (reads / writes) | Mongo call cost, split by read and write operations |
 | RPC errors by code | Which Connect code is failing (`not_found`, `resource_exhausted`, `internal`, …) |
 | Cache operations by result | Hits, misses, absorbed faults and writes — `chats_cache_operations_total` |
-| Cache operation latency | Cost per cache operation — `chats_cache_operation_duration_seconds` |
 | Datastore operations by result | Mongo outcomes, including `not_found`, `conflict`, `unavailable` — `chats_datastore_operations_total` |
-| Datastore operation latency | Mongo call cost — `chats_datastore_operation_duration_seconds` |
 | Rate-limit refusals by scope | Which burst budget (`create`/`write`) is exhausted |
 | Validation rejections by field | Which payload field clients get wrong |
 | Slowest RPCs | Ranked worst procedures by average and max latency |
 | Service versions reporting | Which build is live |
+
+The read/write split uses the values the service already emits: RPC reads are `GetChat`, `ListChats`, `GetChatHistory` and the other five procedures are writes; datastore reads are `chat`, `chats`, `chat_history` and writes include `rename_chat` (an update); cache reads are `chat`, `chat_list`, `head` and writes include the `put_*` and `invalidate_*` operations.
 
 The cache, datastore, rate-limit and validation panels use instruments the service emits itself. They are deliberately on this page rather than an Infra page: there is no exporter to scrape and no datastores-side telemetry in this pipeline.
 

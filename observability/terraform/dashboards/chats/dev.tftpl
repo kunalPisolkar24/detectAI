@@ -100,44 +100,179 @@
           }
         },
         {
-          "title": "RPC throughput by procedure (dev)",
+          "title": "Avg RPC read latency (dev)",
           "layout": {
             "column": 1,
             "row": 2,
             "height": 3,
-            "width": 6
+            "width": 3
           },
           "visualization": {
-            "id": "viz.area"
+            "id": "viz.gauge"
           },
           "rawConfiguration": {
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(chats_rpc_requests_total), 1 minute) AS `rpm` WHERE deployment.environment = 'dev' AND service.name = 'chats' FACET procedure TIMESERIES AUTO LIMIT 10"
+                "query": "FROM Span SELECT average(duration.ms) AS `avg ms` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND rpc.system = 'connect_rpc' AND `rpc.method` IN ('GetChat', 'ListChats', 'GetChatHistory')"
               }
             ],
-            "legend": {
-              "enabled": true
-            },
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
+            "limit": 500
           }
         },
         {
-          "title": "RPC p95 by procedure (dev)",
+          "title": "Avg RPC write latency (dev)",
+          "layout": {
+            "column": 4,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT average(duration.ms) AS `avg ms` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND rpc.system = 'connect_rpc' AND `rpc.method` IN ('CreateChat', 'RenameChat', 'DeleteChat', 'SaveUserMessage', 'SaveAnalysisMessage')"
+              }
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "title": "Avg cache read latency (dev)",
           "layout": {
             "column": 7,
             "row": 2,
             "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(chats_cache_operation_duration_seconds) * 1000 AS `avg ms` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND operation IN ('chat', 'chat_list', 'head')"
+              }
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "title": "Avg cache write latency (dev)",
+          "layout": {
+            "column": 10,
+            "row": 2,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(chats_cache_operation_duration_seconds) * 1000 AS `avg ms` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND operation IN ('put_chat', 'put_chat_list', 'put_head', 'invalidate_meta', 'invalidate_chat', 'invalidate_owner')"
+              }
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "title": "Avg DB read latency (dev)",
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(chats_datastore_operation_duration_seconds) * 1000 AS `avg ms` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND operation IN ('chat', 'chats', 'chat_history')"
+              }
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "title": "Avg DB write latency (dev)",
+          "layout": {
+            "column": 4,
+            "row": 3,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(chats_datastore_operation_duration_seconds) * 1000 AS `avg ms` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND operation IN ('create_chat', 'rename_chat', 'delete_chat', 'save_user_message', 'save_analysis_message')"
+              }
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "title": "DB read ops/min (dev)",
+          "layout": {
+            "column": 7,
+            "row": 3,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(chats_datastore_operations_total), 1 minute) AS `ops/min` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND operation IN ('chat', 'chats', 'chat_history')"
+              }
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "title": "DB write ops/min (dev)",
+          "layout": {
+            "column": 10,
+            "row": 3,
+            "height": 3,
+            "width": 3
+          },
+          "visualization": {
+            "id": "viz.gauge"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(chats_datastore_operations_total), 1 minute) AS `ops/min` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND operation IN ('create_chat', 'rename_chat', 'delete_chat', 'save_user_message', 'save_analysis_message')"
+              }
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "title": "RPC throughput by procedure (reads) (dev)",
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "height": 3,
             "width": 6
           },
           "visualization": {
@@ -147,7 +282,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Span SELECT percentile(duration.ms, 95) WHERE deployment.environment = 'dev' AND service.name = 'chats' AND rpc.system = 'connect_rpc' FACET `rpc.method` TIMESERIES AUTO LIMIT 10"
+                "query": "FROM Metric SELECT rate(sum(chats_rpc_requests_total), 1 minute) AS `rpm` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND procedure IN ('GetChat', 'ListChats', 'GetChatHistory') FACET procedure TIMESERIES AUTO LIMIT 10"
               }
             ],
             "legend": {
@@ -166,10 +301,10 @@
           }
         },
         {
-          "title": "RPC p99 by procedure (dev)",
+          "title": "RPC throughput by procedure (writes) (dev)",
           "layout": {
-            "column": 1,
-            "row": 3,
+            "column": 7,
+            "row": 4,
             "height": 3,
             "width": 6
           },
@@ -180,7 +315,337 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "FROM Span SELECT percentile(duration.ms, 99) WHERE deployment.environment = 'dev' AND service.name = 'chats' AND rpc.system = 'connect_rpc' FACET `rpc.method` TIMESERIES AUTO LIMIT 10"
+                "query": "FROM Metric SELECT rate(sum(chats_rpc_requests_total), 1 minute) AS `rpm` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND procedure IN ('CreateChat', 'RenameChat', 'DeleteChat', 'SaveUserMessage', 'SaveAnalysisMessage') FACET procedure TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "RPC p95 by procedure (reads) (dev)",
+          "layout": {
+            "column": 1,
+            "row": 5,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT percentile(duration.ms, 95) WHERE deployment.environment = 'dev' AND service.name = 'chats' AND rpc.system = 'connect_rpc' AND `rpc.method` IN ('GetChat', 'ListChats', 'GetChatHistory') FACET `rpc.method` TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "RPC p95 by procedure (writes) (dev)",
+          "layout": {
+            "column": 7,
+            "row": 5,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT percentile(duration.ms, 95) WHERE deployment.environment = 'dev' AND service.name = 'chats' AND rpc.system = 'connect_rpc' AND `rpc.method` IN ('CreateChat', 'RenameChat', 'DeleteChat', 'SaveUserMessage', 'SaveAnalysisMessage') FACET `rpc.method` TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "RPC p99 by procedure (reads) (dev)",
+          "layout": {
+            "column": 1,
+            "row": 6,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT percentile(duration.ms, 99) WHERE deployment.environment = 'dev' AND service.name = 'chats' AND rpc.system = 'connect_rpc' AND `rpc.method` IN ('GetChat', 'ListChats', 'GetChatHistory') FACET `rpc.method` TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "RPC p99 by procedure (writes) (dev)",
+          "layout": {
+            "column": 7,
+            "row": 6,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Span SELECT percentile(duration.ms, 99) WHERE deployment.environment = 'dev' AND service.name = 'chats' AND rpc.system = 'connect_rpc' AND `rpc.method` IN ('CreateChat', 'RenameChat', 'DeleteChat', 'SaveUserMessage', 'SaveAnalysisMessage') FACET `rpc.method` TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Cache operation latency (reads) (dev)",
+          "layout": {
+            "column": 1,
+            "row": 7,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(chats_cache_operation_duration_seconds) * 1000 AS `avg ms` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND operation IN ('chat', 'chat_list', 'head') FACET operation TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Cache operation latency (writes) (dev)",
+          "layout": {
+            "column": 7,
+            "row": 7,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(chats_cache_operation_duration_seconds) * 1000 AS `avg ms` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND operation IN ('put_chat', 'put_chat_list', 'put_head', 'invalidate_meta', 'invalidate_chat', 'invalidate_owner') FACET operation TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Datastore operation latency (reads) (dev)",
+          "layout": {
+            "column": 1,
+            "row": 8,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(chats_datastore_operation_duration_seconds) * 1000 AS `avg ms` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND operation IN ('chat', 'chats', 'chat_history') FACET operation TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Datastore operation latency (writes) (dev)",
+          "layout": {
+            "column": 7,
+            "row": 8,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT average(chats_datastore_operation_duration_seconds) * 1000 AS `avg ms` WHERE deployment.environment = 'dev' AND service.name = 'chats' AND operation IN ('create_chat', 'rename_chat', 'delete_chat', 'save_user_message', 'save_analysis_message') FACET operation TIMESERIES AUTO LIMIT 10"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Cache operations by result (dev)",
+          "layout": {
+            "column": 1,
+            "row": 9,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(chats_cache_operations_total), 1 minute) AS `ops/min` WHERE deployment.environment = 'dev' AND service.name = 'chats' FACET result TIMESERIES AUTO LIMIT 6"
+              }
+            ],
+            "legend": {
+              "enabled": true
+            },
+            "yAxisLeft": {
+              "zero": true,
+              "min": 0
+            },
+            "chartStyles": {
+              "lineInterpolation": "smooth",
+              "gradient": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "title": "Datastore operations by result (dev)",
+          "layout": {
+            "column": 7,
+            "row": 9,
+            "height": 3,
+            "width": 6
+          },
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "FROM Metric SELECT rate(sum(chats_datastore_operations_total), 1 minute) AS `ops/min` WHERE deployment.environment = 'dev' AND service.name = 'chats' FACET result TIMESERIES AUTO LIMIT 6"
               }
             ],
             "legend": {
@@ -201,8 +666,8 @@
         {
           "title": "RPC errors by code (dev)",
           "layout": {
-            "column": 7,
-            "row": 3,
+            "column": 1,
+            "row": 10,
             "height": 3,
             "width": 6
           },
@@ -235,142 +700,10 @@
           }
         },
         {
-          "title": "Cache operations by result (dev)",
-          "layout": {
-            "column": 1,
-            "row": 4,
-            "height": 3,
-            "width": 6
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(chats_cache_operations_total), 1 minute) AS `ops/min` WHERE deployment.environment = 'dev' AND service.name = 'chats' FACET result TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "legend": {
-              "enabled": true
-            },
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "Cache operation latency (dev)",
-          "layout": {
-            "column": 7,
-            "row": 4,
-            "height": 3,
-            "width": 6
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(chats_cache_operation_duration_seconds) * 1000 AS `avg ms` WHERE deployment.environment = 'dev' AND service.name = 'chats' FACET operation TIMESERIES AUTO LIMIT 10"
-              }
-            ],
-            "legend": {
-              "enabled": true
-            },
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "Datastore operations by result (dev)",
-          "layout": {
-            "column": 1,
-            "row": 5,
-            "height": 3,
-            "width": 6
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT rate(sum(chats_datastore_operations_total), 1 minute) AS `ops/min` WHERE deployment.environment = 'dev' AND service.name = 'chats' FACET result TIMESERIES AUTO LIMIT 6"
-              }
-            ],
-            "legend": {
-              "enabled": true
-            },
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
-          "title": "Datastore operation latency (dev)",
-          "layout": {
-            "column": 7,
-            "row": 5,
-            "height": 3,
-            "width": 6
-          },
-          "visualization": {
-            "id": "viz.area"
-          },
-          "rawConfiguration": {
-            "nrqlQueries": [
-              {
-                "accountId": ${account_id},
-                "query": "FROM Metric SELECT average(chats_datastore_operation_duration_seconds) * 1000 AS `avg ms` WHERE deployment.environment = 'dev' AND service.name = 'chats' FACET operation TIMESERIES AUTO LIMIT 10"
-              }
-            ],
-            "legend": {
-              "enabled": true
-            },
-            "yAxisLeft": {
-              "zero": true,
-              "min": 0
-            },
-            "chartStyles": {
-              "lineInterpolation": "smooth",
-              "gradient": {
-                "enabled": true
-              }
-            }
-          }
-        },
-        {
           "title": "Rate-limit refusals by scope (dev)",
           "layout": {
-            "column": 1,
-            "row": 6,
+            "column": 7,
+            "row": 10,
             "height": 3,
             "width": 6
           },
@@ -402,8 +735,8 @@
         {
           "title": "Validation rejections by field (dev)",
           "layout": {
-            "column": 7,
-            "row": 6,
+            "column": 1,
+            "row": 11,
             "height": 3,
             "width": 6
           },
@@ -436,7 +769,7 @@
           "title": "Slowest RPCs (dev)",
           "layout": {
             "column": 1,
-            "row": 7,
+            "row": 12,
             "height": 3,
             "width": 12
           },
@@ -456,7 +789,7 @@
           "title": "Service versions reporting (dev)",
           "layout": {
             "column": 1,
-            "row": 8,
+            "row": 13,
             "height": 3,
             "width": 12
           },

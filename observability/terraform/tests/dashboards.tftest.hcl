@@ -85,6 +85,18 @@ run "boards_render" {
     error_message = "web, payment-webhook and chats twins must keep the prod panel order."
   }
 
+  # A regenerated twin must not silently drop the marker from a panel title.
+  assert {
+    condition = alltrue([
+      for base in ["web", "payment-webhook", "workers", "document-parser", "chats"] :
+      alltrue([
+        for p in jsondecode(module.dashboards.boards["${base}-dev"].json).pages :
+        alltrue([for w in p.widgets : endswith(w.title, " (dev)")])
+      ])
+    ])
+    error_message = "Every dev twin panel title must end with \" (dev)\"."
+  }
+
   # Workers' one deliberate deviation: the Payments page swaps prod's
   # "Paddle API latency and cancels" (needs a real Paddle call) for the rig's
   # cancel path.
