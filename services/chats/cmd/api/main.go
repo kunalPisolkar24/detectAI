@@ -57,14 +57,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	cacheClient, err := cache.Connect(bootCtx, cfg.RedisEndpoint, cfg.RedisAuthToken)
-	if err != nil {
-		log.Fatal(err)
-	}
+	entries, limiter, disconnectCache := cache.Setup(bootCtx, cfg.RedisEndpoint, cfg.RedisAuthToken)
 
 	service := services.NewChatService(
 		repo,
-		cache.NewEntries(cacheClient),
+		entries,
 		slog.Default(),
 		obs,
 	)
@@ -79,7 +76,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:      ":" + strconv.Itoa(cfg.Port),
-		Handler:   router.New(dbClient, service, cfg.APIKey, cache.NewLimiter(cacheClient), limits, slog.Default(), obs),
+		Handler:   router.New(dbClient, service, cfg.APIKey, limiter, limits, slog.Default(), obs),
 		Protocols: protocols,
 	}
 
@@ -96,7 +93,7 @@ func main() {
 	if err := dbClient.Disconnect(drainCtx); err != nil {
 		log.Printf("mongo disconnect: %v", err)
 	}
-	if err := cacheClient.Disconnect(drainCtx); err != nil {
+	if err := disconnectCache(drainCtx); err != nil {
 		log.Printf("redis disconnect: %v", err)
 	}
 
