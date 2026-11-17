@@ -1,2 +1,4 @@
 # Committed template only — real .env.load files stay ignored (root .gitignore).
 !infra/.env.load.example
+.coverage
+htmlcov/
