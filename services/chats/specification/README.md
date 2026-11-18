@@ -1,6 +1,6 @@
 # Specification Index
 
-Specifications for the chats service. This file is the hub — every design doc links to related specs. The reference build-out (`slop/`) was kept as reference material while this one was built; it is now removed, recoverable from git history.
+Specifications for the chats service. This file is the hub — every design doc links to related specs. For usage-level documentation see [docs/](../docs/README.md).
 
 ## Specs
 
@@ -11,16 +11,9 @@ Specifications for the chats service. This file is the hub — every design doc 
 
 ## Read order
 
-[contract.md](contract.md) first (what the service must answer), then the [data model LLD](references/data-model.md) (how it is stored). Every doc states its resolved decisions at the bottom with rationale, so choices survive their authors.
+[contract.md](contract.md) first (what the service must answer), then the [data model LLD](references/data-model.md) (how it is stored). Every doc states its decisions at the bottom with rationale, so choices survive their authors.
 
 ## References
 
-- [references/data-model.md](references/data-model.md) — LLD for the data layer: the `chats` and `messages` documents, indexes, and the Redis cache overlay
-- [references/cache.md](references/cache.md) — LLD for the cache plane: shared-instance namespacing, key inventory, TTLs, eviction, and cutover
-
-## Planned
-
-| Doc | Covers |
-|-----|--------|
-| `requirements.md` | Functional and non-functional requirements, bounds, out-of-scope, deployment target |
-| `design.md` | Module layout, runtime model, config planes, packaging, testing strategy |
+- [references/data-model.md](references/data-model.md) — LLD for the data layer: the `chats` and `messages` documents, indexes, and the Redis overlay
+- [references/cache.md](references/cache.md) — LLD for the cache plane: shared-instance namespacing, key inventory, TTLs, and cutover

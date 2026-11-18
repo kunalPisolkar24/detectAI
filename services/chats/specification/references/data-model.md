@@ -1,8 +1,8 @@
 # Chats — Data Model (LLD)
 
-MongoDB documents, indexes, and the Redis overlay for the chats service. The consumer shape is fixed by the web BFF's domain types (`apps/web/lib/domain/chat.ts`); this doc maps those types onto storage and records the choices the pre-rebuild build-out got wrong.
+MongoDB documents, indexes, and the Redis overlay for the chats service. The consumer shape is fixed by the web BFF's domain types (`apps/web/lib/domain/chat.ts`); this doc maps those types onto storage. Usage-level docs: [Data Model](../../docs/concepts/data-model.md).
 
-The async worker path is dropped — the analysis flow is synchronous CRUD (BFF → chats RPC), so there is no queue payload, no bulk upsert, no consumer here.
+The async worker path is dropped — the analysis flow is synchronous CRUD (BFF → chats RPC), so there is no queue payload, no bulk upsert, and no consumer here.
 
 ## Entities
 
@@ -10,8 +10,6 @@ Two collections:
 
 - **`chats`** — one document per chat session. Owns identity (`user_id`), display (`title`), and ordering (`updated_at`).
 - **`messages`** — one flat document per message. Assistant analysis messages embed their analysis payload inline; the analysis state machine lives on the embedded document.
-
-## ER diagram
 
 ```mermaid
 erDiagram
@@ -24,17 +22,15 @@ erDiagram
         string user_id "session-authoritative, never from the request"
         string title "bounded at the service layer"
         datetime created_at "UTC"
-        datetime updated_at "sidebar order key; bumps on append, update-analysis, rename"
+        datetime updated_at "sidebar order key; bumps on append, analysis, rename"
     }
-
     MESSAGE {
-        string _id PK "BFF-supplied UUID, server fallback; duplicate insert = idempotent replay"
+        string _id PK "BFF-supplied UUID, server fallback; duplicate insert = replay"
         string chat_id FK "ownership resolves through the chat doc"
         string role "user or assistant"
         string content "bounded at the service layer"
-        datetime created_at "UTC; keyset cursor key together with _id"
+        datetime created_at "UTC; keyset cursor key with _id"
     }
-
     ANALYSIS {
         string state "running, completed, failed, cancelled"
         string model "spark or flare"
@@ -75,7 +71,7 @@ Embedded `analysis` object:
 | `model` | string | `spark` or `flare` |
 | `source_message_id` | string | The user message this analysis belongs to |
 | `error` | string | Optional, set on `failed` and `cancelled` |
-| `result` | object | Set once `completed`: `label`, `confidence`, `scores{ai, human}`, `highlights[]`, `raw` (capped) |
+| `result` | object | Set once `completed`: `label`, `confidence`, `scores{ai, human}`, `highlights[]`, `raw` |
 
 ## Indexes
 
@@ -84,41 +80,13 @@ Embedded `analysis` object:
 | `chats` | `{ user_id: 1, updated_at: -1 }` | Sidebar list — newest-first chats for one user |
 | `messages` | `{ chat_id: 1, created_at: -1, _id: -1 }` | Chat history — keyset pagination, newest-first, `_id` as timestamp tiebreaker |
 
-Two indexes beyond the defaults is the whole story. Cursor = `(created_at, _id)` of the last message on the page.
+Two indexes beyond the defaults is the whole story. Both are created at boot by `repository.New`; an index failure fails the boot. Cursor = `(created_at, _id)` of the last message on the page.
 
 ## Redis overlay
 
-Cache-aside, invalidate-on-write, TTL safety net. Mongo is the source of truth; staleness is tolerated by a chat UI. Keys carry the `chats:` service prefix — the shared-instance namespace convention, TTLs, value shapes, and failure semantics live in [cache.md](cache.md).
-
-| Key | Value | TTL | Serves | Invalidated by |
-|-----|-------|-----|--------|----------------|
-| `chats:chat:{id}` | Chat meta (owner, title, updated_at) | ~10m | Ownership check + `GetChat` | Append, update-analysis, rename, delete |
-| `chats:user:{id}:chats` | Sidebar list, newest-first | ~5m | Chat list | Create, append, update-analysis, rename, delete |
-| `chats:chat:{id}:head` | Last ~50 messages | ~10m | First page of history | Append, update-analysis, delete |
-
-```mermaid
-flowchart LR
-    W["write path: append, update analysis, rename, delete"] --> M[("MongoDB")]
-    W -->|"DEL the affected keys"| R[("Redis")]
-    P1["read: first history page"] --> R
-    P1 -. miss then warm head .-> M
-    P2["read: cursor pages and scrollback"] --> M
-    P3["read: chat meta and ownership"] --> R
-```
+Cache-aside, invalidate-on-write, TTL safety net. Mongo is the source of truth; staleness is tolerated by a chat UI. Keys carry the `chats:` service prefix on a shared instance; the key inventory, TTLs, and failure semantics live in [cache.md](cache.md), with a beginner-facing version in [Cache](../../docs/concepts/cache.md).
 
 Every mutation fans out to Mongo then `DEL`s the affected keys — an append touches all three. Cursor pages never touch Redis; only the common first page does.
-
-## Web type → storage mapping
-
-The contract layer maps these directly — no reinterpretation at the adapter.
-
-| Web (`apps/web/lib/domain/chat.ts`) | Stored |
-|-------------------------------------|--------|
-| `ChatSession` | `chats` doc + its `messages` |
-| `ChatHistoryItem` | `chats` doc projection |
-| `Message` | `messages` doc |
-| `Message.analysis` (`AnalysisResult`) | `messages.analysis.result` |
-| `PersistedAnalysisStatus` / `AnalysisLink` state | `messages.analysis.{state, source_message_id, error}` |
 
 ## Decisions
 
@@ -132,3 +100,4 @@ The contract layer maps these directly — no reinterpretation at the adapter.
 | Pagination | Keyset on `(created_at, _id)` | History is append-only; offset pagination was the pre-rebuild bug |
 | Cache strategy | Cache-aside, invalidate-on-write, TTL safety net | At human typing speed DEL-on-write is cheap; no ZSET or write-through cleverness |
 | Async path | Worker and SQS consumer dropped | Simple CRUD; analysis results flow synchronously BFF → chats RPC |
+| Terminal-state writes | Reject non-identical writes with `FAILED_PRECONDITION` | The BFF's cancel-after-failure path can double-write the same terminal state; the identical-replay rule admits that but not a different payload |
