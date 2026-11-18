@@ -1,0 +1,16 @@
+services:
+  k6:
+    image: grafana/k6:0.54.0
+    command: run /load/scenarios/${SCENARIO:-smoke}.js
+    env_file:
+      - .env.load
+    volumes:
+      - ../tests/load:/load:ro
+      - ../api/proto:/proto:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - loadnet
+
+networks:
+  loadnet:

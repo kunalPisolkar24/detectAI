@@ -1,0 +1,22 @@
+name: inference-load
+
+include:
+  - compose.yml
+  - compose.k6.yml
+
+services:
+  inference:
+    restart: "no"
+    env_file: !override
+      - .env.load
+    ports: !override []
+    networks:
+      - loadnet
+
+  k6:
+    depends_on:
+      inference:
+        condition: service_healthy
+
+networks:
+  loadnet:

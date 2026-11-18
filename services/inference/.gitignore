@@ -1,5 +1,8 @@
 .env
 !infra/.env.example
+.env.load
+!infra/.env.load.example
+tests/load/assets/
 venv/
 .venv/
 /models/
