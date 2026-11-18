@@ -47,7 +47,7 @@ run "atlas_fabric_carries_the_free_tier_contract" {
   }
 }
 
-run "atlas_is_skipped_on_floci" {
+run "atlas_is_planned_on_floci" {
   command = plan
 
   variables {
@@ -55,8 +55,8 @@ run "atlas_is_skipped_on_floci" {
   }
 
   assert {
-    condition     = length(module.atlas) == 0
-    error_message = "Atlas has no emulator: no cluster is planned on floci."
+    condition     = length(module.atlas) == 1
+    error_message = "Atlas is a public API: a real cluster is planned even when state lives on floci."
   }
 }
 

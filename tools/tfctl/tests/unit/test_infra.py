@@ -59,7 +59,7 @@ CACHE_ENV = {
 }
 ATLAS_ENV = {
     **INFRA_ENV,
-    "MONGODB_ATLAS_PUBLIC_KEY": "abcdefghijklmnopqrst",
+    "MONGODB_ATLAS_PUBLIC_KEY": "abcdefgh",
     "MONGODB_ATLAS_PRIVATE_KEY": "0123456789abcdef0123",
     "MONGODB_ATLAS_PROJECT_ID": "0123456789abcdef01234567",
     "ATLAS_DB_USERNAME": "chats_user",
@@ -288,21 +288,21 @@ def test_the_cache_credential_law_applies_only_when_a_cache_is_declared(tmp_path
     assert "16+ characters" in "\n".join(values.validate(cache_only, short, True))
 
 
-def test_the_atlas_law_applies_only_on_a_real_plane(tmp_path):
+def test_the_atlas_law_applies_on_every_plane(tmp_path):
     atlas_only = declaration(tmp_path, ATLAS_TOML)
-    assert values.validate(atlas_only, INFRA_ENV, True) == []
-    missing = "\n".join(values.validate(atlas_only, INFRA_ENV, False))
-    assert "MONGODB_ATLAS_PUBLIC_KEY is required" in missing
-    assert "ATLAS_IP_CIDRS is required" in missing
-    assert values.validate(atlas_only, ATLAS_ENV, False) == []
+    for is_emulator in (True, False):
+        missing = "\n".join(values.validate(atlas_only, INFRA_ENV, is_emulator))
+        assert "MONGODB_ATLAS_PUBLIC_KEY is required" in missing
+        assert "ATLAS_IP_CIDRS is required" in missing
+        assert values.validate(atlas_only, ATLAS_ENV, is_emulator) == []
 
     bad_cidr = {**ATLAS_ENV, "ATLAS_IP_CIDRS": "not-a-cidr"}
     assert "is not a valid IPv4 or IPv6 CIDR" in "\n".join(
-        values.validate(atlas_only, bad_cidr, False)
+        values.validate(atlas_only, bad_cidr, True)
     )
     bad_project = {**ATLAS_ENV, "MONGODB_ATLAS_PROJECT_ID": "xyz"}
     assert "24-character hex string" in "\n".join(
-        values.validate(atlas_only, bad_project, False)
+        values.validate(atlas_only, bad_project, True)
     )
 
 
@@ -426,7 +426,7 @@ def test_tf_vars_carry_the_atlas_ledger_and_credentials(tmp_path, clean_tf_env):
             "tier": "M0",
         }
     }
-    assert built["TF_VAR_atlas_public_key"] == "abcdefghijklmnopqrst"
+    assert built["TF_VAR_atlas_public_key"] == "abcdefgh"
     assert built["TF_VAR_atlas_private_key"] == "0123456789abcdef0123"
     assert built["TF_VAR_atlas_project_id"] == "0123456789abcdef01234567"
     assert built["TF_VAR_atlas_db_username"] == "chats_user"
@@ -460,7 +460,7 @@ def test_stack_verb_flow_dry_run_prints_the_backend_and_commands(
     assert "(dry run: no terraform, no AWS writes)" in out
 
 
-def test_stack_verb_flow_notes_the_atlas_skip_on_floci(
+def test_stack_verb_flow_notes_atlas_is_real_on_every_plane(
     tmp_path, capsys, monkeypatch, clean_tf_env
 ):
     atlas = declaration(tmp_path, ATLAS_TOML)
@@ -470,13 +470,11 @@ def test_stack_verb_flow_notes_the_atlas_skip_on_floci(
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("dry run must not run terraform")),
     )
     args = SimpleNamespace(dry_run=True)
-    assert flow_module.stack_verb_flow(atlas, INFRA_ENV, True, "plan", args, None) == 0
-    out = capsys.readouterr().out
-    assert "fabrics: queues=0, elasticache=0, atlas=1" in out
-    assert "note:   atlas fabric declared but skipped on floci" in out
-
-    assert flow_module.stack_verb_flow(atlas, ATLAS_ENV, False, "plan", args, None) == 0
-    assert "skipped on floci" not in capsys.readouterr().out
+    for is_emulator in (True, False):
+        assert flow_module.stack_verb_flow(atlas, ATLAS_ENV, is_emulator, "plan", args, None) == 0
+        out = capsys.readouterr().out
+        assert "fabrics: queues=0, elasticache=0, atlas=1" in out
+        assert "note:   atlas is real MongoDB Cloud (state tracked on this plane)" in out
 
 
 def test_stack_verb_flow_runs_init_then_the_verb_on_the_carrier_triplet(

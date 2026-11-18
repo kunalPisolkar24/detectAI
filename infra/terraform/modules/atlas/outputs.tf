@@ -1,11 +1,11 @@
 locals {
   srv_by_cluster = {
     for key, cluster in mongodbatlas_advanced_cluster.this : key =>
-    trimsuffix(trimprefix(try(cluster.connection_strings[0].standard_srv, ""), "mongodb+srv://"), "/")
+    trimsuffix(trimprefix(try(cluster.connection_strings.standard_srv, ""), "mongodb+srv://"), "/")
   }
   standard_by_cluster = {
     for key, cluster in mongodbatlas_advanced_cluster.this : key =>
-    trimprefix(try(cluster.connection_strings[0].standard, ""), "mongodb://")
+    trimprefix(try(cluster.connection_strings.standard, ""), "mongodb://")
   }
   credentials = "${urlencode(var.db_username)}:${urlencode(var.db_password)}@"
 }

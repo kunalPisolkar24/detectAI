@@ -77,8 +77,8 @@ def stack_verb_flow(
         f"fabrics: queues={len(declaration.queue_ledger)}, "
         f"elasticache={len(declaration.cache_ledger)}, atlas={len(declaration.atlas_ledger)}"
     )
-    if declaration.atlas_ledger and is_emulator:
-        print("note:   atlas fabric declared but skipped on floci — use a real plane")
+    if declaration.atlas_ledger:
+        print("note:   atlas is real MongoDB Cloud (state tracked on this plane)")
     print(f"state:  {bucket} / {state_key_value}")
 
     if args.dry_run:

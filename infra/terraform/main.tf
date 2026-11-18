@@ -19,9 +19,10 @@ module "elasticache" {
 
 module "atlas" {
   source = "./modules/atlas"
-  # Atlas has no emulator: declare it in infra.toml, but only land it on a
-  # real plane. The aliased provider is never configured when count is zero.
-  count = length(var.atlas_clusters) > 0 && !local.is_emulator ? 1 : 0
+  # Atlas has no emulator, but its API is public: the state plane only stores
+  # Terraform state, so a real M0 cluster can be tracked on floci too. The
+  # aliased provider is never configured when count is zero.
+  count = length(var.atlas_clusters) > 0 ? 1 : 0
 
   providers = {
     mongodbatlas = mongodbatlas.fabric

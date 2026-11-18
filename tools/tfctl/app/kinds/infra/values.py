@@ -2,8 +2,8 @@
 
 The queue fabric needs no credentials; the cache needs an AUTH token and a
 plane-specific subnet, and Atlas needs API keys, a DB user and explicit CIDRs.
-All of it lives in the gitignored values file. Atlas is skipped on floci, so
-its law only applies on a real plane.
+All of it lives in the gitignored values file. Atlas is a public API with its
+own keys, so its law applies on every plane when the fabric is declared.
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ def validate_cache(values: dict[str, str]) -> list[str]:
 
 
 def validate_atlas(values: dict[str, str]) -> list[str]:
-    """The Atlas law, applied only when declared on a real plane."""
+    """The Atlas law, applied whenever the fabric is declared."""
     errors: list[str] = []
 
     def fail(message: str, fix: str) -> None:
@@ -79,7 +79,8 @@ def validate_atlas(values: dict[str, str]) -> list[str]:
             )
         return value
 
-    required("MONGODB_ATLAS_PUBLIC_KEY", 16)
+    # Atlas public keys are 8 characters; the private key is a 36-char UUID.
+    required("MONGODB_ATLAS_PUBLIC_KEY", 8)
     required("MONGODB_ATLAS_PRIVATE_KEY", 16)
     project_id = required("MONGODB_ATLAS_PROJECT_ID")
     if project_id and not ATLAS_PROJECT_ID_RE.fullmatch(project_id):
@@ -111,6 +112,6 @@ def validate(declaration: Declaration, values: dict[str, str], is_emulator: bool
     errors = validate_state(values)
     if getattr(declaration, "cache_ledger", ()):
         errors.extend(validate_cache(values))
-    if getattr(declaration, "atlas_ledger", ()) and not is_emulator:
+    if getattr(declaration, "atlas_ledger", ()):
         errors.extend(validate_atlas(values))
     return errors
