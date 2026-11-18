@@ -1,0 +1,19 @@
+name: inference
+
+services:
+  inference:
+    image: detectai-inference:cpu
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: cpu
+    restart: unless-stopped
+    stop_grace_period: 130s
+    env_file:
+      - .env
+    environment:
+      MODEL_CACHE_DIR: /models
+    ports:
+      - "50051:50051"
+    volumes:
+      - ../models:/models

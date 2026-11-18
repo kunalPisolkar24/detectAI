@@ -1,0 +1,14 @@
+services:
+  inference:
+    image: detectai-inference:gpu
+    build:
+      target: gpu
+    environment:
+      INFERENCE_PROVIDERS: CUDAExecutionProvider,CPUExecutionProvider
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
