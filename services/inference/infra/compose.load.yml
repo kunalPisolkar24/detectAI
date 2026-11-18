@@ -7,8 +7,6 @@ include:
 services:
   inference:
     restart: "no"
-    env_file: !override
-      - .env.load
     ports: !override []
     networks:
       - loadnet

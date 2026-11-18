@@ -1,7 +1,9 @@
 # Inference load rig
 
-k6 gRPC load tests for the live `inference.v1` service. Everything is
-configured by `infra/.env.load`; the file's `SCENARIO` line selects the script.
+k6 gRPC load tests for the live `inference.v1` service. Load knobs live in
+`infra/.env.load`; service config stays in `infra/.env`, which the load-rig
+service reads like any other run. The file's `SCENARIO` line selects the
+script, and Compose passes `API_KEY` from `.env` to k6 without duplicating it.
 
 ## Run
 

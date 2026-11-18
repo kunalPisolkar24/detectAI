@@ -4,6 +4,9 @@ services:
     command: run /load/scenarios/${SCENARIO:-smoke}.js
     env_file:
       - .env.load
+    environment:
+      API_KEY: ${API_KEY:-}
+      ENABLED_MODELS: ${ENABLED_MODELS:-spark}
     volumes:
       - ../tests/load:/load:ro
       - ../api/proto:/proto:ro

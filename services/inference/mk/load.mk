@@ -23,7 +23,7 @@ load-check:
 	@test -f $(CORPUS_PROBE) || { echo "no generated load corpus - generate it once: make load-fixtures"; exit 1; }
 
 help-load:
-	@echo "Load + e2e (mk/load.mk): everything is configured in infra/.env.load"
+	@echo "Load + e2e (mk/load.mk): load knobs in infra/.env.load, service config in infra/.env"
 	@echo "  load-env       create infra/.env.load from infra/.env.load.example if missing"
 	@echo "  load-fixtures  regenerate the corpus under tests/load/assets (gitignored)"
 	@echo "  load-test      container rig: inference + k6 on an isolated network (IMAGE=cpu|gpu)"
