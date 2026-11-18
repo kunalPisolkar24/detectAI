@@ -28,7 +28,27 @@ INFRA_TOML = (
     '[[queues]]\nname = "payment_events_dlq.fifo"\n'
 )
 
+CACHE_TOML = (
+    '[service]\nslug = "infra"\nregion = "ap-southeast-2"\n\n'
+    '[[elasticache]]\nname = "detectai-dev-cache"\nengine = "redis"\n'
+    'engine_version = "7.0"\nnode_type = "cache.t3.micro"\nnum_cache_nodes = 1\n'
+    "port = 6379\n"
+)
+
+BOTH_TOML = (
+    INFRA_TOML
+    + '\n[[elasticache]]\nname = "detectai-dev-cache"\nengine = "redis"\n'
+    'engine_version = "7.0"\nnode_type = "cache.t3.micro"\nnum_cache_nodes = 1\n'
+    "port = 6379\n"
+)
+
 INFRA_ENV = {"AWS_REGION": "ap-southeast-2"}
+CACHE_ENV = {
+    **INFRA_ENV,
+    "REDIS_AUTH_TOKEN": "abcdefghijklmnopqrstuvwx",
+    "CACHE_SUBNET_IDS": "subnet-default-ap-southeast-2-a",
+    "CACHE_SECURITY_GROUP_IDS": "",
+}
 
 SESSION = {
     "role_arn": "arn:aws:iam::123456789012:role/detectai-infra-seeder",
@@ -55,8 +75,8 @@ def write_stack(tmp_path, env_values=None, toml_text=INFRA_TOML):
     return workspace
 
 
-def declaration(tmp_path):
-    (tmp_path / "infra.toml").write_text(INFRA_TOML)
+def declaration(tmp_path, toml_text=INFRA_TOML):
+    (tmp_path / "infra.toml").write_text(toml_text)
     return load(tmp_path / "infra.toml")
 
 
@@ -72,6 +92,23 @@ def test_declaration_matches_the_committed_schema(tmp_path):
         ("payment_events.fifo", "payment_events_dlq.fifo", 5),
         ("payment_events_dlq.fifo", "", 0),
     ]
+    assert infra.cache_ledger == ()
+
+
+def test_declaration_supports_each_fabric_independently(tmp_path):
+    queue_only = declaration(tmp_path, INFRA_TOML)
+    assert len(queue_only.queue_ledger) == 2 and queue_only.cache_ledger == ()
+
+    cache_only = declaration(tmp_path, CACHE_TOML)
+    assert cache_only.queue_ledger == ()
+    assert [(entry.name, entry.engine, entry.engine_version, entry.node_type,
+             entry.num_cache_nodes, entry.port, entry.parameter_group_name)
+            for entry in cache_only.cache_ledger] == [
+        ("detectai-dev-cache", "redis", "7.0", "cache.t3.micro", 1, 6379, "default.redis7")
+    ]
+
+    both = declaration(tmp_path, BOTH_TOML)
+    assert len(both.queue_ledger) == 2 and len(both.cache_ledger) == 1
 
 
 @pytest.mark.parametrize(
@@ -82,8 +119,29 @@ def test_declaration_matches_the_committed_schema(tmp_path):
         ('[service]\nslug = "infra"\nstate = "x"', "unknown field(s) ['state']"),
         ('[[queues]]\nname = "a.fifo"', "[service] is required"),
         ('[service]\nslug = "infra"\nregion = "e u 1"', "must be a plain region code"),
-        ('[service]\nslug = "infra"', "[queues] must list every queue"),
-        ('[service]\nslug = "infra"\nqueues = []', "[queues] must list every queue"),
+        ('[service]\nslug = "infra"', "declare at least one fabric"),
+        ('[service]\nslug = "infra"\nqueues = []', "declare at least one fabric"),
+        ('[service]\nslug = "infra"\nelasticache = []', "declare at least one fabric"),
+        (
+            '[service]\nslug = "infra"\n[[elasticache]]\nname = "Cache_One"',
+            "must be a lowercase DNS-style name",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[elasticache]]\nname = "cache-one"\nengine = "memcached"',
+            "must be 'redis'",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[elasticache]]\nname = "cache-one"\nnum_cache_nodes = 9',
+            "num_cache_nodes must be an integer 1-6",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[elasticache]]\nname = "cache-one"\nport = 70000',
+            "port must be an integer 1-65535",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[elasticache]]\nname = "cache-one"\nunrelated = 1',
+            "unknown field(s) ['unrelated']",
+        ),
         (
             '[service]\nslug = "infra"\n[[queues]]\nname = "queue"',
             "must be a FIFO name",
@@ -162,8 +220,23 @@ def test_a_stray_tf_state_bucket_line_is_inert(tmp_path):
     assert values.validate(declaration(tmp_path), stray, False) == []
 
 
-def test_the_kind_validate_is_state_only(tmp_path):
+def test_the_kind_validate_is_state_only_for_queue_only_stacks(tmp_path):
     assert values.validate(declaration(tmp_path), {"AWS_REGION": "ap-southeast-2"}, True) == []
+
+
+def test_the_cache_credential_law_applies_only_when_a_cache_is_declared(tmp_path):
+    queue_only = declaration(tmp_path, INFRA_TOML)
+    assert values.validate(queue_only, INFRA_ENV, True) == []
+
+    cache_only = declaration(tmp_path, CACHE_TOML)
+    errors = "\n".join(values.validate(cache_only, INFRA_ENV, True))
+    assert "REDIS_AUTH_TOKEN is required" in errors
+    assert "CACHE_SUBNET_IDS is required" in errors
+    assert values.validate(cache_only, CACHE_ENV, True) == []
+    assert values.validate(cache_only, CACHE_ENV, False) == []
+
+    short = {**CACHE_ENV, "REDIS_AUTH_TOKEN": "short"}
+    assert "16+ characters" in "\n".join(values.validate(cache_only, short, True))
 
 
 def test_the_seeder_policy_scopes_the_state_plane_and_exactly_the_ledger(tmp_path):
@@ -203,6 +276,34 @@ def test_the_seeder_policy_locks_the_queues_to_the_stacks_region(tmp_path):
     assert all(":sqs:ap-southeast-2:" in resource for resource in queue_resources)
 
 
+def test_the_seeder_policy_adds_cache_access_only_for_declared_caches(tmp_path):
+    cache_only = declaration(tmp_path, CACHE_TOML)
+    document = policy.seeder_policy_document(
+        cache_only, {}, True, "arn:aws:iam::123456789012:user/u"
+    )
+    assert [statement["Sid"] for statement in document["Statement"]] == [
+        "RunTerraformStateBucket",
+        "RunTerraformStateObjects",
+        "ManageCacheFabric",
+    ]
+    cache_statement = document["Statement"][2]
+    assert all(action.startswith("elasticache:") for action in cache_statement["Action"])
+    assert cache_statement["Resource"] == [
+        "arn:aws:elasticache:ap-southeast-2:000000000000:replicationgroup:detectai-dev-cache",
+        "arn:aws:elasticache:ap-southeast-2:000000000000:subnetgroup:detectai-dev-cache-subnet-group",
+    ]
+
+    both = policy.seeder_policy_document(
+        declaration(tmp_path, BOTH_TOML), {}, True, "arn:aws:iam::123456789012:user/u"
+    )
+    assert [statement["Sid"] for statement in both["Statement"]] == [
+        "RunTerraformStateBucket",
+        "RunTerraformStateObjects",
+        "ManageQueueFabric",
+        "ManageCacheFabric",
+    ]
+
+
 def test_tf_vars_carry_the_ledger_region_and_emulator(tmp_path, monkeypatch, clean_tf_env):
     infra = declaration(tmp_path)
     built = tfvars.build_tf_vars(infra, INFRA_ENV, True)
@@ -220,7 +321,31 @@ def test_tf_vars_carry_the_ledger_region_and_emulator(tmp_path, monkeypatch, cle
             "max_receive_count": 0,
         },
     }
+    assert json.loads(built["TF_VAR_cache_clusters"]) == {}
+    assert "TF_VAR_cache_auth_token" not in built
     assert "TF_VAR_emulator_endpoint" not in tfvars.build_tf_vars(infra, INFRA_ENV, False)
+
+
+def test_tf_vars_carry_the_cache_ledger_and_placement(tmp_path, clean_tf_env):
+    built = tfvars.build_tf_vars(declaration(tmp_path, CACHE_TOML), CACHE_ENV, True)
+    assert json.loads(built["TF_VAR_queues"]) == {}
+    assert json.loads(built["TF_VAR_cache_clusters"]) == {
+        "detectai-dev-cache": {
+            "name": "detectai-dev-cache",
+            "engine": "redis",
+            "engine_version": "7.0",
+            "node_type": "cache.t3.micro",
+            "num_cache_nodes": 1,
+            "port": 6379,
+            "parameter_group_name": "default.redis7",
+        }
+    }
+    assert built["TF_VAR_cache_auth_token"] == "abcdefghijklmnopqrstuvwx"
+    assert json.loads(built["TF_VAR_cache_subnet_ids"]) == [
+        "subnet-default-ap-southeast-2-a"
+    ]
+    assert json.loads(built["TF_VAR_cache_security_group_ids"]) == []
+    assert built["TF_VAR_emulator_endpoint"] == "http://localhost:4566"
 
 
 def test_stack_verb_flow_dry_run_prints_the_backend_and_commands(
@@ -237,7 +362,7 @@ def test_stack_verb_flow_dry_run_prints_the_backend_and_commands(
     assert code == 0
     out = capsys.readouterr().out
     assert "carrier: role session (promoted when the command runs)" in out
-    assert "queues:  2 declared" in out
+    assert "fabrics: queues=2, elasticache=0" in out
     assert "state:  detectai-infra-tfstate-000000000000 / infra/floci/terraform.tfstate" in out
     assert "endpoints = {" in out
     assert "then terraform plan" in out
@@ -375,7 +500,7 @@ def test_cli_plan_dry_run_previews_the_plane(tmp_path, monkeypatch, capsys, clea
     assert cli.main(["plan", "--dry-run"], workspace=workspace) == 0
     out = capsys.readouterr().out
     assert "plane:   floci" in out
-    assert "queues:  2 declared" in out
+    assert "fabrics: queues=2, elasticache=0" in out
     assert "(dry run: no terraform, no AWS writes)" in out
 
 
@@ -527,7 +652,7 @@ def test_cli_stack_dir_drives_a_stack_from_a_foreign_cwd(
     assert cli.main(["plan", "--dry-run", "--stack-dir", str(stack_dir)]) == 0
     out = capsys.readouterr().out
     assert "plane:   floci (emulator http://localhost:4566)" in out
-    assert "queues:  2 declared" in out
+    assert "fabrics: queues=2, elasticache=0" in out
 
 
 def test_cli_stack_dir_resolves_a_relative_name_against_the_repo_root(

@@ -1,4 +1,4 @@
-"""The infra kind: the shared queue fabric, driven by tfctl."""
+"""The infra kind: the shared infrastructure fabrics, driven by tfctl."""
 
 from __future__ import annotations
 

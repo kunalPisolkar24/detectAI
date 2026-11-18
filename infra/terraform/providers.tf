@@ -24,7 +24,8 @@ provider "aws" {
   skip_region_validation      = local.is_emulator
 
   endpoints {
-    sqs = local.effective_endpoint
+    sqs         = local.effective_endpoint
+    elasticache = local.effective_endpoint
   }
 
   default_tags {

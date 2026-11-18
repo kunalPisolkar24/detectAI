@@ -1,5 +1,5 @@
-# tfctl's infra kind: the shared queue fabric. The [queues] list is the
-# exhaustive ledger — a queue outside it never enters a plane.
+# tfctl's infra kind: the shared fabric ledger. Each section is optional —
+# declare [[queues]], [[elasticache]], or both; only declared fabrics land.
 
 [service]
 slug = "infra"
@@ -12,3 +12,11 @@ max_receive_count = 5
 
 [[queues]]
 name = "payment_events_dlq.fifo"
+
+[[elasticache]]
+name = "detectai-dev-cache"
+engine = "redis"
+engine_version = "7.0"
+node_type = "cache.t3.micro"
+num_cache_nodes = 1
+port = 6379

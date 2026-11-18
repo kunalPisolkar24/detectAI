@@ -1,8 +1,9 @@
-# The queue fabric flow, driven by tfctl's infra kind: it shapes envs/.env,
-# resolves the state plane (PLANE=floci|aws, default floci — the same contract
-# as the observability stack) and drives terraform.
+# The shared infra fabrics flow, driven by tfctl's infra kind: it shapes
+# envs/.env, resolves the state plane (PLANE=floci|aws, default floci), and
+# drives terraform. infra.toml decides which fabrics exist — [[queues]],
+# [[elasticache]], or both.
 
-.PHONY: plan apply auto-apply destroy seeder-drop session-clear session-refresh help-queues
+.PHONY: plan apply auto-apply destroy seeder-drop session-clear session-refresh help-fabrics
 
 TFCTL := poetry -C $(abspath ../tools/tfctl) run tfctl
 PLANE ?= floci
@@ -14,8 +15,8 @@ else
 $(error PLANE must be floci or aws)
 endif
 
-help-queues:
-	@echo "  Queue fabric (mk/queues.mk):"
+help-fabrics:
+	@echo "  Infra fabrics (mk/fabrics.mk — declared in infra.toml):"
 	@echo "    plan         terraform plan on the PLANE (floci by default; PLANE=aws rides real AWS)"
 	@echo "    apply        terraform apply (auto on Floci, interactive confirm on real AWS)"
 	@echo "    auto-apply   plan then apply in one run, stopping at the first failure"

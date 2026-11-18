@@ -1,6 +1,6 @@
 ---
 name: tfctl
-description: DetectAI's tfctl — the stack-agnostic engine in tools/tfctl that drives a stack's AWS + provider plane kind by kind — the per-service secrets stacks (Secrets Manager + SSM from infra/.env), the New Relic observability stack, and the shared SQS queue fabric (infra). Use when running or debugging tfctl verbs, seeding or verifying a service's secrets plane, working with the seeder carrier role, MFA prompts or cached sessions, onboarding a service's secrets.toml, or introducing a new kind.
+description: DetectAI's tfctl — the stack-agnostic engine in tools/tfctl that drives a stack's AWS + provider plane kind by kind — the per-service secrets stacks (Secrets Manager + SSM from infra/.env), the New Relic observability stack, and the shared infra fabrics (queues and/or ElastiCache). Use when running or debugging tfctl verbs, seeding or verifying a service's secrets plane, working with the seeder carrier role, MFA prompts or cached sessions, onboarding a service's secrets.toml, or introducing a new kind.
 ---
 
 # tfctl — the stack driver
@@ -24,7 +24,7 @@ tools/tfctl/
 │   └── kinds/             the registry — the one seam between engine and stacks
 │       ├── secrets/       the secrets kind + the vendored terraform stack it drives
 │       ├── observability/ the observability kind (stack-dir based, adds check)
-│       └── infra/         the infra kind — the shared queue fabric (stack-dir based)
+│       └── infra/         the infra kind — the shared fabrics: queues and/or ElastiCache (stack-dir based)
 ├── tests/                 unit (default) + integration (live Floci)
 ├── mk/ + Makefile         install / lint / test tiers / the secrets-verb wrappers
 └── docs/                  the deep documentation tree
@@ -36,7 +36,7 @@ Three kinds are registered today:
 |------|-------------------------|---------------------|-----------|
 | **secrets** | `secrets.toml` at the service root | `infra/.env` | `--service <name>`, or nearest declaration upward from cwd |
 | **observability** | `observability.toml` at the stack root | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
-| **infra** | `infra.toml` at the stack root — the shared queue fabric in `infra` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
+| **infra** | `infra.toml` at the stack root — the shared fabrics (queues and/or ElastiCache) in `infra` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
 
 A kind never edits the engine — it fills one slot table (`load`, `validate`,
 `resolve_plane`, `build_tf_vars`, `seeder_policy`, the flows), and `main.py`
@@ -199,4 +199,4 @@ laws, and the derived-name table live in
 | Test tiers | `tools/tfctl/docs/guides/testing.md` |
 | The service-side view of the secrets plane | the `payment-webhook` skill · the `document-parser` skill |
 | The observability stack this engine drives | the `observability` skill |
-| The queue fabric this engine drives | `infra/README.md` |
+| The fabrics this engine drives | `infra/README.md` |

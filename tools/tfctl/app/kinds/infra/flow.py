@@ -73,7 +73,10 @@ def stack_verb_flow(
     else:
         print("carrier: ambient credentials")
     print(f"stack:   {declaration.stack_root}")
-    print(f"queues:  {len(declaration.queue_ledger)} declared")
+    print(
+        f"fabrics: queues={len(declaration.queue_ledger)}, "
+        f"elasticache={len(declaration.cache_ledger)}"
+    )
     print(f"state:  {bucket} / {state_key_value}")
 
     if args.dry_run:

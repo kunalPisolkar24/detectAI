@@ -39,6 +39,59 @@ variable "queues" {
   }
 }
 
+variable "cache_clusters" {
+  description = "The ElastiCache fabric declared by infra.toml; empty means no cache."
+  type = map(object({
+    name                 = string
+    engine               = string
+    engine_version       = string
+    node_type            = string
+    num_cache_nodes      = number
+    port                 = number
+    parameter_group_name = string
+  }))
+  default = {}
+
+  validation {
+    condition     = alltrue([for cluster in var.cache_clusters : cluster.engine == "redis"])
+    error_message = "every cache engine must be redis (the shared cache contract)."
+  }
+
+  validation {
+    condition     = alltrue([for cluster in var.cache_clusters : can(regex("^[a-z][a-z0-9-]{0,39}$", cluster.name))])
+    error_message = "every cache name must be a lowercase DNS-style name: [a-z][a-z0-9-]{0,39}."
+  }
+
+  validation {
+    condition     = alltrue([for cluster in var.cache_clusters : cluster.num_cache_nodes >= 1 && cluster.num_cache_nodes <= 6])
+    error_message = "num_cache_nodes must be 1-6."
+  }
+
+  validation {
+    condition     = alltrue([for cluster in var.cache_clusters : cluster.port >= 1 && cluster.port <= 65535])
+    error_message = "cache port must be 1-65535."
+  }
+}
+
+variable "cache_auth_token" {
+  description = "AUTH token for the cache fabric; sensitive, supplied by envs/.env via tfctl."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "cache_subnet_ids" {
+  description = "VPC subnet IDs for the cache subnet groups; plane-specific, supplied by tfctl."
+  type        = list(string)
+  default     = []
+}
+
+variable "cache_security_group_ids" {
+  description = "Optional VPC security group IDs for the cache clusters."
+  type        = list(string)
+  default     = []
+}
+
 variable "visibility_timeout_seconds" {
   description = "The redrive budget per receive attempt, shared by the fabric."
   type        = number
