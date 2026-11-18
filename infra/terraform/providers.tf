@@ -32,3 +32,11 @@ provider "aws" {
     tags = local.common_tags
   }
 }
+
+# Aliased so queue/cache-only runs and every floci run never configure it —
+# the Atlas keys are absent offline and the emulator has no Atlas API.
+provider "mongodbatlas" {
+  alias       = "fabric"
+  public_key  = var.atlas_public_key
+  private_key = var.atlas_private_key
+}

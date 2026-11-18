@@ -92,6 +92,78 @@ variable "cache_security_group_ids" {
   default     = []
 }
 
+variable "atlas_clusters" {
+  description = "The Atlas free-tier fabric declared by infra.toml; empty means no Atlas."
+  type = map(object({
+    name   = string
+    region = string
+    tier   = string
+  }))
+  default = {}
+
+  validation {
+    condition     = alltrue([for cluster in var.atlas_clusters : cluster.tier == "M0"])
+    error_message = "the Atlas fabric is pinned to the M0 free tier."
+  }
+
+  validation {
+    condition     = alltrue([for cluster in var.atlas_clusters : can(regex("^[A-Z]{2}_[A-Z]+_[0-9]+$", cluster.region))])
+    error_message = "Atlas regions use names like AP_SOUTHEAST_2, not AWS codes."
+  }
+}
+
+variable "atlas_public_key" {
+  description = "Atlas programmatic API public key; sensitive, supplied by envs/.env via tfctl."
+  type        = string
+  # A placeholder keeps the provider quiet on runs that never configure it
+  # (queue/cache-only and every floci run); tfctl enforces real keys on a
+  # real plane when [[atlas]] is declared.
+  default   = "unused"
+  sensitive = true
+}
+
+variable "atlas_private_key" {
+  description = "Atlas programmatic API private key; sensitive, supplied by envs/.env via tfctl."
+  type        = string
+  default     = "unused"
+  sensitive   = true
+}
+
+variable "atlas_project_id" {
+  description = "The 24-hex Atlas project ID that owns the free cluster."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.atlas_project_id == "" || can(regex("^[0-9a-fA-F]{24}$", var.atlas_project_id))
+    error_message = "atlas_project_id must be a 24-character hex string."
+  }
+}
+
+variable "atlas_db_username" {
+  description = "SCRAM database user created on the Atlas free cluster."
+  type        = string
+  default     = ""
+}
+
+variable "atlas_db_password" {
+  description = "SCRAM database user password; sensitive, supplied by envs/.env via tfctl."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "atlas_ip_cidrs" {
+  description = "Explicit cluster access-list CIDRs (IPv4 or IPv6); no open default."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for cidr in var.atlas_ip_cidrs : can(cidrhost(cidr, 0))])
+    error_message = "every atlas_ip_cidrs entry must be a valid IPv4 or IPv6 CIDR."
+  }
+}
+
 variable "visibility_timeout_seconds" {
   description = "The redrive budget per receive attempt, shared by the fabric."
   type        = number

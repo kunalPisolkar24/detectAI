@@ -42,12 +42,29 @@ BOTH_TOML = (
     "port = 6379\n"
 )
 
+ATLAS_TOML = (
+    '[service]\nslug = "infra"\nregion = "ap-southeast-2"\n\n'
+    '[[atlas]]\nname = "detectai-dev-mongo"\nregion = "AP_SOUTHEAST_2"\n'
+    'tier = "M0"\n'
+)
+
+ALL_TOML = BOTH_TOML + '\n[[atlas]]\nname = "detectai-dev-mongo"\nregion = "AP_SOUTHEAST_2"\ntier = "M0"\n'
+
 INFRA_ENV = {"AWS_REGION": "ap-southeast-2"}
 CACHE_ENV = {
     **INFRA_ENV,
     "REDIS_AUTH_TOKEN": "abcdefghijklmnopqrstuvwx",
     "CACHE_SUBNET_IDS": "subnet-default-ap-southeast-2-a",
     "CACHE_SECURITY_GROUP_IDS": "",
+}
+ATLAS_ENV = {
+    **INFRA_ENV,
+    "MONGODB_ATLAS_PUBLIC_KEY": "abcdefghijklmnopqrst",
+    "MONGODB_ATLAS_PRIVATE_KEY": "0123456789abcdef0123",
+    "MONGODB_ATLAS_PROJECT_ID": "0123456789abcdef01234567",
+    "ATLAS_DB_USERNAME": "chats_user",
+    "ATLAS_DB_PASSWORD": "atlas-password-16-chars",
+    "ATLAS_IP_CIDRS": "203.0.113.7/32,2401:4900::/64",
 }
 
 SESSION = {
@@ -93,11 +110,13 @@ def test_declaration_matches_the_committed_schema(tmp_path):
         ("payment_events_dlq.fifo", "", 0),
     ]
     assert infra.cache_ledger == ()
+    assert infra.atlas_ledger == ()
 
 
 def test_declaration_supports_each_fabric_independently(tmp_path):
     queue_only = declaration(tmp_path, INFRA_TOML)
     assert len(queue_only.queue_ledger) == 2 and queue_only.cache_ledger == ()
+    assert queue_only.atlas_ledger == ()
 
     cache_only = declaration(tmp_path, CACHE_TOML)
     assert cache_only.queue_ledger == ()
@@ -109,6 +128,20 @@ def test_declaration_supports_each_fabric_independently(tmp_path):
 
     both = declaration(tmp_path, BOTH_TOML)
     assert len(both.queue_ledger) == 2 and len(both.cache_ledger) == 1
+    assert both.atlas_ledger == ()
+
+    atlas_only = declaration(tmp_path, ATLAS_TOML)
+    assert atlas_only.queue_ledger == () and atlas_only.cache_ledger == ()
+    assert [(entry.name, entry.region, entry.tier) for entry in atlas_only.atlas_ledger] == [
+        ("detectai-dev-mongo", "AP_SOUTHEAST_2", "M0")
+    ]
+
+    all_fabrics = declaration(tmp_path, ALL_TOML)
+    assert (
+        len(all_fabrics.queue_ledger) == 2
+        and len(all_fabrics.cache_ledger) == 1
+        and len(all_fabrics.atlas_ledger) == 1
+    )
 
 
 @pytest.mark.parametrize(
@@ -140,6 +173,22 @@ def test_declaration_supports_each_fabric_independently(tmp_path):
         ),
         (
             '[service]\nslug = "infra"\n[[elasticache]]\nname = "cache-one"\nunrelated = 1',
+            "unknown field(s) ['unrelated']",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[atlas]]\nname = "mongo-one"\nregion = "ap-southeast-2"',
+            "must be an Atlas region name",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[atlas]]\nname = "mongo-one"\nregion = "AP_SOUTHEAST_2"\ntier = "M10"',
+            "must be 'M0'",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[atlas]]\nname = "Mongo_One"\nregion = "AP_SOUTHEAST_2"',
+            "must be a lowercase DNS-style name",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[atlas]]\nname = "mongo-one"\nregion = "AP_SOUTHEAST_2"\nunrelated = 1',
             "unknown field(s) ['unrelated']",
         ),
         (
@@ -239,6 +288,24 @@ def test_the_cache_credential_law_applies_only_when_a_cache_is_declared(tmp_path
     assert "16+ characters" in "\n".join(values.validate(cache_only, short, True))
 
 
+def test_the_atlas_law_applies_only_on_a_real_plane(tmp_path):
+    atlas_only = declaration(tmp_path, ATLAS_TOML)
+    assert values.validate(atlas_only, INFRA_ENV, True) == []
+    missing = "\n".join(values.validate(atlas_only, INFRA_ENV, False))
+    assert "MONGODB_ATLAS_PUBLIC_KEY is required" in missing
+    assert "ATLAS_IP_CIDRS is required" in missing
+    assert values.validate(atlas_only, ATLAS_ENV, False) == []
+
+    bad_cidr = {**ATLAS_ENV, "ATLAS_IP_CIDRS": "not-a-cidr"}
+    assert "is not a valid IPv4 or IPv6 CIDR" in "\n".join(
+        values.validate(atlas_only, bad_cidr, False)
+    )
+    bad_project = {**ATLAS_ENV, "MONGODB_ATLAS_PROJECT_ID": "xyz"}
+    assert "24-character hex string" in "\n".join(
+        values.validate(atlas_only, bad_project, False)
+    )
+
+
 def test_the_seeder_policy_scopes_the_state_plane_and_exactly_the_ledger(tmp_path):
     document = policy.seeder_policy_document(
         declaration(tmp_path), {}, True, "arn:aws:iam::123456789012:user/u"
@@ -322,7 +389,9 @@ def test_tf_vars_carry_the_ledger_region_and_emulator(tmp_path, monkeypatch, cle
         },
     }
     assert json.loads(built["TF_VAR_cache_clusters"]) == {}
+    assert json.loads(built["TF_VAR_atlas_clusters"]) == {}
     assert "TF_VAR_cache_auth_token" not in built
+    assert "TF_VAR_atlas_public_key" not in built
     assert "TF_VAR_emulator_endpoint" not in tfvars.build_tf_vars(infra, INFRA_ENV, False)
 
 
@@ -348,6 +417,27 @@ def test_tf_vars_carry_the_cache_ledger_and_placement(tmp_path, clean_tf_env):
     assert built["TF_VAR_emulator_endpoint"] == "http://localhost:4566"
 
 
+def test_tf_vars_carry_the_atlas_ledger_and_credentials(tmp_path, clean_tf_env):
+    built = tfvars.build_tf_vars(declaration(tmp_path, ATLAS_TOML), ATLAS_ENV, False)
+    assert json.loads(built["TF_VAR_atlas_clusters"]) == {
+        "detectai-dev-mongo": {
+            "name": "detectai-dev-mongo",
+            "region": "AP_SOUTHEAST_2",
+            "tier": "M0",
+        }
+    }
+    assert built["TF_VAR_atlas_public_key"] == "abcdefghijklmnopqrst"
+    assert built["TF_VAR_atlas_private_key"] == "0123456789abcdef0123"
+    assert built["TF_VAR_atlas_project_id"] == "0123456789abcdef01234567"
+    assert built["TF_VAR_atlas_db_username"] == "chats_user"
+    assert built["TF_VAR_atlas_db_password"] == "atlas-password-16-chars"
+    assert json.loads(built["TF_VAR_atlas_ip_cidrs"]) == [
+        "203.0.113.7/32",
+        "2401:4900::/64",
+    ]
+    assert "TF_VAR_emulator_endpoint" not in built
+
+
 def test_stack_verb_flow_dry_run_prints_the_backend_and_commands(
     tmp_path, capsys, monkeypatch, clean_tf_env
 ):
@@ -362,12 +452,31 @@ def test_stack_verb_flow_dry_run_prints_the_backend_and_commands(
     assert code == 0
     out = capsys.readouterr().out
     assert "carrier: role session (promoted when the command runs)" in out
-    assert "fabrics: queues=2, elasticache=0" in out
+    assert "fabrics: queues=2, elasticache=0, atlas=0" in out
     assert "state:  detectai-infra-tfstate-000000000000 / infra/floci/terraform.tfstate" in out
     assert "endpoints = {" in out
     assert "then terraform plan" in out
     assert "-var-file" not in out
     assert "(dry run: no terraform, no AWS writes)" in out
+
+
+def test_stack_verb_flow_notes_the_atlas_skip_on_floci(
+    tmp_path, capsys, monkeypatch, clean_tf_env
+):
+    atlas = declaration(tmp_path, ATLAS_TOML)
+    monkeypatch.setattr(
+        flow_module,
+        "run_terraform",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("dry run must not run terraform")),
+    )
+    args = SimpleNamespace(dry_run=True)
+    assert flow_module.stack_verb_flow(atlas, INFRA_ENV, True, "plan", args, None) == 0
+    out = capsys.readouterr().out
+    assert "fabrics: queues=0, elasticache=0, atlas=1" in out
+    assert "note:   atlas fabric declared but skipped on floci" in out
+
+    assert flow_module.stack_verb_flow(atlas, ATLAS_ENV, False, "plan", args, None) == 0
+    assert "skipped on floci" not in capsys.readouterr().out
 
 
 def test_stack_verb_flow_runs_init_then_the_verb_on_the_carrier_triplet(
@@ -500,7 +609,7 @@ def test_cli_plan_dry_run_previews_the_plane(tmp_path, monkeypatch, capsys, clea
     assert cli.main(["plan", "--dry-run"], workspace=workspace) == 0
     out = capsys.readouterr().out
     assert "plane:   floci" in out
-    assert "fabrics: queues=2, elasticache=0" in out
+    assert "fabrics: queues=2, elasticache=0, atlas=0" in out
     assert "(dry run: no terraform, no AWS writes)" in out
 
 
@@ -652,7 +761,7 @@ def test_cli_stack_dir_drives_a_stack_from_a_foreign_cwd(
     assert cli.main(["plan", "--dry-run", "--stack-dir", str(stack_dir)]) == 0
     out = capsys.readouterr().out
     assert "plane:   floci (emulator http://localhost:4566)" in out
-    assert "fabrics: queues=2, elasticache=0" in out
+    assert "fabrics: queues=2, elasticache=0, atlas=0" in out
 
 
 def test_cli_stack_dir_resolves_a_relative_name_against_the_repo_root(

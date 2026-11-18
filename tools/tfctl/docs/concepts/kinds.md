@@ -10,11 +10,13 @@ Which file a stack directory holds decides which kind drives the run:
 |------|-------------------------|---------------------|-----------|
 | **secrets** | `secrets.toml` at the service root — per-service stacks under `services/<name>` ([Declaration](declaration.md)) | `infra/.env` | `--service <name>`, or nearest declaration upward from cwd |
 | **observability** | `observability.toml` at the stack root — the New Relic-as-code stack in `observability` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
-| **infra** | `infra.toml` at the stack root — the shared fabrics (queues and/or ElastiCache) in `infra` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
+| **infra** | `infra.toml` at the stack root — the shared fabrics (SQS, ElastiCache and/or Atlas) in `infra` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
 
-All three reach for the same two out-of-stack prerequisites — the state bucket and the seeder carrier role ([Carrier](carrier.md)) — created on demand and converged per run, on either plane. What differs is what the stack *is*: secrets turns `infra/.env` into Secrets Manager + SSM; observability terraform-drives the dashboards and alerts root and adds provider-only credentials (New Relic's NRAK triple, never AWS personal keys); infra terraform-drives the shared AWS fabrics — queues and/or ElastiCache —
-declared in `infra.toml`; its values law covers the region plus the cache's
-AUTH token and subnet placement only when a cache is declared.
+All three reach for the same two out-of-stack prerequisites — the state bucket and the seeder carrier role ([Carrier](carrier.md)) — created on demand and converged per run, on either plane. What differs is what the stack *is*: secrets turns `infra/.env` into Secrets Manager + SSM; observability terraform-drives the dashboards and alerts root and adds provider-only credentials (New Relic's NRAK triple, never AWS personal keys); infra terraform-drives the shared fabrics — SQS, ElastiCache and/or MongoDB
+Atlas — declared in `infra.toml`; its values law covers the region, the cache's
+AUTH token and subnet placement, and Atlas's API keys, DB user and CIDRs, each
+only when that fabric is declared. Atlas has no emulator and is skipped on
+floci.
 
 ## What a Kind supplies
 

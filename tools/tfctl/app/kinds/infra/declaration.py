@@ -13,7 +13,7 @@ SLUG = "infra"
 REGION_DEFAULT = "ap-southeast-2"
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-TOP_SECTIONS = {"service", "queues", "elasticache"}
+TOP_SECTIONS = {"service", "queues", "elasticache", "atlas"}
 SERVICE_FIELDS = {"slug", "region"}
 QUEUE_FIELDS = {"name", "dlq", "max_receive_count"}
 CACHE_FIELDS = {
@@ -25,6 +25,7 @@ CACHE_FIELDS = {
     "port",
     "parameter_group_name",
 }
+ATLAS_FIELDS = {"name", "region", "tier"}
 
 # FIFO queue name law: [A-Za-z0-9_-] up to 75 chars plus the .fifo suffix.
 QUEUE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,75}\.fifo$")
@@ -33,6 +34,8 @@ MAX_RECEIVE_COUNT_LIMIT = 1000
 CACHE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,39}$")
 CACHE_VERSION_RE = re.compile(r"^[0-9]+(?:\.[0-9]+){1,2}$")
 CACHE_NODE_TYPE_RE = re.compile(r"^cache\.[a-z0-9]+\.[a-z0-9]+$")
+ATLAS_REGION_RE = re.compile(r"^[A-Z]{2}_[A-Z]+_[0-9]+$")
+ATLAS_TIER = "M0"
 CACHE_ENGINE = "redis"
 CACHE_VERSION_DEFAULT = "7.0"
 CACHE_NODE_TYPE_DEFAULT = "cache.t3.micro"
@@ -73,11 +76,21 @@ class CacheEntry:
 
 
 @dataclass
+class AtlasEntry:
+    """One declared Atlas Free cluster; the name is the identity."""
+
+    name: str
+    region: str
+    tier: str
+
+
+@dataclass
 class InfraDeclaration(Declaration):
-    """The engine-facing face of the fabric: both ledgers ride along."""
+    """The engine-facing face of the fabric: all declared ledgers ride along."""
 
     queue_ledger: tuple[QueueEntry, ...] = ()
     cache_ledger: tuple[CacheEntry, ...] = ()
+    atlas_ledger: tuple[AtlasEntry, ...] = ()
 
 
 def declaration_errors(data: dict) -> list[str]:
@@ -119,8 +132,13 @@ def declaration_errors(data: dict) -> list[str]:
         fail("[elasticache] must be a list of [[elasticache]] entries")
         caches = []
 
-    if not entries and not caches:
-        fail("declare at least one fabric: [[queues]] and/or [[elasticache]]")
+    atlas = data.get("atlas", [])
+    if not isinstance(atlas, list):
+        fail("[atlas] must be a list of [[atlas]] entries")
+        atlas = []
+
+    if not entries and not caches and not atlas:
+        fail("declare at least one fabric: [[queues]], [[elasticache]] and/or [[atlas]]")
 
     declared: set[str] = set()
     valid: list[tuple[dict, str]] = []
@@ -236,6 +254,35 @@ def declaration_errors(data: dict) -> list[str]:
         group = entry.get("parameter_group_name", default_parameter_group(str(version)))
         if not isinstance(group, str) or not group:
             fail(f"{name} parameter_group_name must be a non-empty string, got {group!r}")
+
+    atlas_declared: set[str] = set()
+    for entry in atlas:
+        if not isinstance(entry, dict):
+            fail("every [[atlas]] entry must be a table")
+            continue
+        extra = set(entry) - ATLAS_FIELDS
+        if extra:
+            fail(
+                f"[[atlas]] has unknown field(s) {sorted(extra)}; allowed: {sorted(ATLAS_FIELDS)}"
+            )
+        name = entry.get("name")
+        if not isinstance(name, str) or not CACHE_NAME_RE.fullmatch(name):
+            fail(
+                f"atlas name {name!r} must be a lowercase DNS-style name: [a-z][a-z0-9-]{{0,39}}"
+            )
+            continue
+        if name in atlas_declared:
+            fail(f"{name} is declared twice; the name is the identity — declare it once")
+            continue
+        atlas_declared.add(name)
+        region = entry.get("region")
+        if not isinstance(region, str) or not ATLAS_REGION_RE.fullmatch(region):
+            fail(
+                f"{name} region {region!r} must be an Atlas region name, e.g. AP_SOUTHEAST_2"
+            )
+        tier = entry.get("tier", ATLAS_TIER)
+        if tier != ATLAS_TIER:
+            fail(f"{name} tier {tier!r} must be {ATLAS_TIER!r} (the free tier is the only option)")
     return errors
 
 
@@ -276,5 +323,13 @@ def load(toml_path: Path) -> InfraDeclaration:
                 ),
             )
             for entry in data.get("elasticache", [])
+        ),
+        atlas_ledger=tuple(
+            AtlasEntry(
+                name=entry["name"],
+                region=entry["region"],
+                tier=entry.get("tier", ATLAS_TIER),
+            )
+            for entry in data.get("atlas", [])
         ),
     )

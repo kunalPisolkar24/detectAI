@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    mongodbatlas = {
+      source  = "mongodb/mongodbatlas"
+      version = "~> 2.0"
+    }
   }
 
   # Partial config: tfctl always passes the plane's backend file, never a bare init.

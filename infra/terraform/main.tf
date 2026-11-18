@@ -16,3 +16,20 @@ module "elasticache" {
   subnet_ids         = var.cache_subnet_ids
   security_group_ids = var.cache_security_group_ids
 }
+
+module "atlas" {
+  source = "./modules/atlas"
+  # Atlas has no emulator: declare it in infra.toml, but only land it on a
+  # real plane. The aliased provider is never configured when count is zero.
+  count = length(var.atlas_clusters) > 0 && !local.is_emulator ? 1 : 0
+
+  providers = {
+    mongodbatlas = mongodbatlas.fabric
+  }
+
+  clusters    = var.atlas_clusters
+  project_id  = var.atlas_project_id
+  db_username = var.atlas_db_username
+  db_password = var.atlas_db_password
+  ip_cidrs    = var.atlas_ip_cidrs
+}

@@ -23,3 +23,20 @@ output "cache_fabric" {
   description = "Planned cache shape by declared cluster name."
   value       = try(module.elasticache[0].fabric, {})
 }
+
+output "atlas_connection_uris" {
+  description = "mongodb+srv:// URIs for chats' MONGO_URI; sensitive, contains credentials."
+  sensitive   = true
+  value       = try(module.atlas[0].connection_uris, {})
+}
+
+output "atlas_standard_connection_uris" {
+  description = "mongodb:// fallback URIs for networks without SRV resolution."
+  sensitive   = true
+  value       = try(module.atlas[0].standard_connection_uris, {})
+}
+
+output "atlas_fabric" {
+  description = "Planned Atlas shape by declared cluster name."
+  value       = try(module.atlas[0].fabric, {})
+}

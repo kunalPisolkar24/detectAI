@@ -1,15 +1,21 @@
-"""The infra values law: region shape, plus the cache fabric's placement and token.
+"""The infra values law: region shape, plus the declared fabrics' credentials.
 
-The queue fabric needs no credentials; the cache fabric needs an AUTH token and
-a plane-specific subnet, both of which live in the gitignored values file.
+The queue fabric needs no credentials; the cache needs an AUTH token and a
+plane-specific subnet, and Atlas needs API keys, a DB user and explicit CIDRs.
+All of it lives in the gitignored values file. Atlas is skipped on floci, so
+its law only applies on a real plane.
 """
 
 from __future__ import annotations
+
+import ipaddress
+import re
 
 from app.engine.declaration.model import REGION_RE, Declaration
 from app.kinds.infra.tfvars import csv_items
 
 CACHE_TOKEN_MIN = 16
+ATLAS_PROJECT_ID_RE = re.compile(r"^[0-9a-fA-F]{24}$")
 
 
 def resolve_plane(values: dict[str, str], aws: bool, floci: bool) -> bool:
@@ -55,9 +61,56 @@ def validate_cache(values: dict[str, str]) -> list[str]:
     return errors
 
 
+def validate_atlas(values: dict[str, str]) -> list[str]:
+    """The Atlas law, applied only when declared on a real plane."""
+    errors: list[str] = []
+
+    def fail(message: str, fix: str) -> None:
+        errors.append(f"error: {message}\nfix:   {fix}")
+
+    def required(key: str, minimum: int = 1) -> str:
+        value = values.get(key, "").strip()
+        if len(value) < minimum:
+            fail(
+                f"{key} is required when [[atlas]] is declared ({minimum}+ characters)"
+                if minimum > 1
+                else f"{key} is required when [[atlas]] is declared",
+                f"set {key} in envs/.env",
+            )
+        return value
+
+    required("MONGODB_ATLAS_PUBLIC_KEY", 16)
+    required("MONGODB_ATLAS_PRIVATE_KEY", 16)
+    project_id = required("MONGODB_ATLAS_PROJECT_ID")
+    if project_id and not ATLAS_PROJECT_ID_RE.fullmatch(project_id):
+        fail(
+            f"MONGODB_ATLAS_PROJECT_ID must be a 24-character hex string, got {project_id!r}",
+            "copy the project ID from Atlas Project Settings",
+        )
+    required("ATLAS_DB_USERNAME")
+    required("ATLAS_DB_PASSWORD", CACHE_TOKEN_MIN)
+    cidrs = csv_items(values.get("ATLAS_IP_CIDRS", ""))
+    if not cidrs:
+        fail(
+            "ATLAS_IP_CIDRS is required when [[atlas]] is declared",
+            "set explicit IPv4/IPv6 CIDRs in envs/.env — the free tier has no private endpoints",
+        )
+    for cidr in cidrs:
+        try:
+            ipaddress.ip_network(cidr, strict=False)
+        except ValueError:
+            fail(
+                f"ATLAS_IP_CIDRS entry {cidr!r} is not a valid IPv4 or IPv6 CIDR",
+                "use entries like 203.0.113.7/32 or 2401:db8::/64",
+            )
+    return errors
+
+
 def validate(declaration: Declaration, values: dict[str, str], is_emulator: bool) -> list[str]:
     """The kind's verb-wide validation: values shape plus the declared fabrics."""
     errors = validate_state(values)
     if getattr(declaration, "cache_ledger", ()):
         errors.extend(validate_cache(values))
+    if getattr(declaration, "atlas_ledger", ()) and not is_emulator:
+        errors.extend(validate_atlas(values))
     return errors

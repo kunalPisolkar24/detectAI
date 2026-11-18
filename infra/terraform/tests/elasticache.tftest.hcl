@@ -1,4 +1,5 @@
 mock_provider "aws" {}
+mock_provider "mongodbatlas" {}
 
 variables {
   aws_region = "ap-southeast-2"

@@ -1,11 +1,11 @@
 # infra — the shared fabrics as code
 
-This directory terraform-drives the AWS infrastructure the services share, via
+This directory terraform-drives the infrastructure the services share, via
 tfctl's `infra` kind. `infra.toml` is the exhaustive ledger of **which fabrics
-exist**: `[[queues]]` for the SQS queue fabric, `[[elasticache]]` for the shared
-Redis cache, or both. Each section is optional — a fabric is planned only when
-its ledger has entries, so you can stand up queues alone, cache alone, or both
-from the same stack. At least one fabric must be declared.
+exist**: `[[queues]]` for SQS, `[[elasticache]]` for the shared Redis cache, and
+`[[atlas]]` for a MongoDB Atlas Free (M0) cluster. Each section is optional — a
+fabric is planned only when its ledger has entries, so you can stand up any
+combination from the same stack. At least one fabric must be declared.
 
 The queue ledger carries the payment-webhook contract from
 `services/payment-webhook/specification/messaging.md` — `payment_events.fifo`
@@ -22,11 +22,20 @@ a TTL, and readers fail open to the source store. Cache shape (name, engine,
 node type, port) is declared here; its AUTH token and VPC placement are
 plane-specific values in `envs/.env`.
 
-Services stay endpoint-agnostic: `QUEUE_URL` / `AWS_ENDPOINT_URL_SQS` and
-`REDIS_ENDPOINT` / `REDIS_AUTH_TOKEN` decide which twin they talk to — the
-compose files under `infra/docker` in local dev, these fabrics on Floci or real
-AWS. Queue names and cache names are the ledger's identities; two fabrics may
-not share a name within their own ledger.
+The Atlas ledger pins one cluster to the `M0` Free tier on AWS-backed Atlas
+regions. Atlas has no emulator, so it is **skipped on the floci plane** with a
+loud note; only a real plane plans it. The Atlas API keys, project ID, SCRAM
+user, password, and explicit IPv4/IPv6 access-list CIDRs are plane values in
+`envs/.env`, never committed. The stack exposes a sensitive `mongodb+srv://`
+connection URI for chats' `MONGO_URI` (plus a `mongodb://` fallback). Atlas is
+for dev/demo only: Free tier is shared, ~512 MB, has no backups or private
+endpoints, and there is one free cluster per account.
+
+Services stay endpoint-agnostic: `QUEUE_URL` / `AWS_ENDPOINT_URL_SQS`,
+`REDIS_ENDPOINT` / `REDIS_AUTH_TOKEN`, and `MONGO_URI` / `MONGO_DATABASE` decide
+which twin they talk to — the compose files under `infra/docker` in local dev,
+these fabrics on Floci or real AWS. Queue, cache and Atlas names are each
+ledger's identity; two fabrics may not share a name within their own ledger.
 
 ## Start here
 
@@ -52,15 +61,16 @@ infra/
 ├── terraform/          the terraform root tfctl drives
 │   ├── modules/queues/       the SQS fabric
 │   ├── modules/elasticache/  the shared Redis fabric
-│   └── tests/                mocked contract tests for both, plus each standalone case
+│   ├── modules/atlas/        the MongoDB Atlas Free fabric
+│   └── tests/                mocked contract tests for all fabrics, plus standalone cases
 ├── envs/.env           the values file (gitignored; .env.example is the template)
 ├── mk/                 the make targets: fabrics.mk drives tfctl, tests.mk the offline gate
 └── docker/             the local service twins (ElasticMQ, Redis) — this root never touches them
 ```
 
 The offline gate never needs a plane: `terraform test` runs provider mocks and
-asserts each fabric's contract, including queue-only, cache-only, and empty
-runs. Beyond it, the integration suite
+asserts each fabric's contract, including queue-only, cache-only, Atlas-only,
+the floci skip, and empty runs. Beyond it, the integration suite
 (`poetry -C ../tools/tfctl run pytest -m integration`) plans read-only against
 the shared persistent namespace on the emulator — nothing there applies or
 destroys. Real AWS is reached only through an explicit `make PLANE=aws …`.

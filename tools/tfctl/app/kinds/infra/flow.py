@@ -75,8 +75,10 @@ def stack_verb_flow(
     print(f"stack:   {declaration.stack_root}")
     print(
         f"fabrics: queues={len(declaration.queue_ledger)}, "
-        f"elasticache={len(declaration.cache_ledger)}"
+        f"elasticache={len(declaration.cache_ledger)}, atlas={len(declaration.atlas_ledger)}"
     )
+    if declaration.atlas_ledger and is_emulator:
+        print("note:   atlas fabric declared but skipped on floci — use a real plane")
     print(f"state:  {bucket} / {state_key_value}")
 
     if args.dry_run:
