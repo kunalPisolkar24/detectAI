@@ -1,19 +1,14 @@
 services:
-  ai-service:
+  inference:
+    image: detectai-inference:gpu
     build:
-      context: ..
-      dockerfile: Dockerfile
+      target: gpu
     environment:
-      - INFERENCE_PROVIDERS=${INFERENCE_PROVIDERS:-CUDAExecutionProvider,CPUExecutionProvider}
+      INFERENCE_PROVIDERS: CUDAExecutionProvider,CPUExecutionProvider
     deploy:
       resources:
-        limits:
-          memory: 16G
-          cpus: "8.0"
         reservations:
-          memory: 4G
-          cpus: "2.0"
           devices:
             - driver: nvidia
-              count: 1
+              count: all
               capabilities: [gpu]

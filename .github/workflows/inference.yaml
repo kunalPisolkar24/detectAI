@@ -1,4 +1,4 @@
-name: Service - Inference
+name: Inference
 
 on:
   workflow_dispatch:
@@ -8,14 +8,14 @@ on:
       - staging
     paths:
       - "services/inference/**"
-      - ".github/workflows/service-inference.yaml"
+      - ".github/workflows/inference.yaml"
   pull_request:
     branches:
       - main
       - staging
     paths:
       - "services/inference/**"
-      - ".github/workflows/service-inference.yaml"
+      - ".github/workflows/inference.yaml"
 
 env:
   DOCKER_IMAGE_NAME: kunalpisolkar/detect-ai-inference
@@ -36,37 +36,21 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.14'
 
       - name: Install Poetry
         run: pipx install poetry
 
       - name: Install Dependencies
-        run: poetry install --extras cpu --no-interaction
-
-      - name: Generate Protobuf Stubs
-        run: |
-          mkdir -p src/generated
-          poetry run python -m grpc_tools.protoc \
-            -I./protos \
-            --python_out=./src/generated \
-            --grpc_python_out=./src/generated \
-            ./protos/ai_service.proto
-          sed -i 's/import ai_service_pb2/from . import ai_service_pb2/' src/generated/ai_service_pb2_grpc.py
-          touch src/generated/__init__.py
+        run: poetry install --no-interaction
 
       - name: Lint with Ruff
         run: poetry run ruff check . --select F,E --ignore E501
 
-      - name: Run Unit Tests & Coverage
+      - name: Run Tests & Coverage
         env:
           API_KEY: "ci-dummy-key-16chars-long"
-        run: poetry run pytest tests/unit --cov=src --cov-fail-under=60 -v
-
-      - name: Run Integration Tests
-        env:
-          API_KEY: "ci-dummy-key-16chars-long"
-        run: poetry run pytest tests/integration -v
+        run: make test-cov
 
   build-and-push:
     name: Build & Push Docker Image

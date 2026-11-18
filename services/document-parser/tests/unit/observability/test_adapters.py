@@ -176,6 +176,25 @@ def test_logs_adapter_flushes_its_records_on_shutdown(
     assert any("payload ready" in str(record.log_record.body) for record in exporter.finished_records)
 
 
+def test_logs_adapter_carries_the_code_attributes(
+    resource: Resource, app_log: logging.Logger
+) -> None:
+    """The handler drops them unless they are asked for: the wire shape must not move."""
+    exporter = MemoryLogExporter()
+    adapter = LogsAdapter(exporter)
+
+    adapter.start(resource)
+    app_log.info("payload ready")
+    adapter.shutdown()
+
+    attributes = exporter.finished_records[0].log_record.attributes
+    assert attributes["code.file.path"].endswith("test_adapters.py")
+    assert (
+        attributes["code.function.name"]
+        == "test_logs_adapter_carries_the_code_attributes"
+    )
+
+
 def test_logs_adapter_detaches_its_handler_from_the_root_logger(
     resource: Resource, app_log: logging.Logger
 ) -> None:

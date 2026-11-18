@@ -36,7 +36,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.14'
 
       - name: Install Poetry
         run: pipx install poetry
@@ -47,11 +47,8 @@ jobs:
       - name: Lint with Ruff
         run: poetry run ruff check . --select F,E --ignore E501
 
-      - name: Run Unit Tests & Coverage
-        run: poetry run pytest tests/unit -m "not integration" --cov=app --cov-fail-under=70 -v
-
-      - name: Run Integration Tests
-        run: poetry run pytest tests/integration -m integration -v
+      - name: Run Tests & Coverage
+        run: make test-cov
 
   load-test-smoke:
     name: Run Smoke Load Test

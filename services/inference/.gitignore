@@ -1,9 +1,13 @@
 .env
+!infra/.env.example
+.env.load
+!infra/.env.load.example
+tests/load/assets/
 venv/
 .venv/
-
-models/
+/models/
 .cache/
+app/serving/generated/
 
 __pycache__/
 *.py[cod]
@@ -11,12 +15,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-
-src/generated/
+.coverage
+htmlcov/
 
 .vscode/
 .idea/
 .DS_Store
-*.swp
-
-.coverage

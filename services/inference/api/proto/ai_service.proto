@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package inference.v1;
+
+service AIService {
+  rpc Detect (DetectRequest) returns (DetectionResult) {}
+  rpc AnalyzeDocument (AnalyzeDocumentRequest) returns (stream AnalyzeDocumentEvent) {}
+}
+
+message DetectRequest {
+  string text = 1;
+  string model_id = 2;
+}
+
+message AnalyzeDocumentRequest {
+  string text = 1;
+  string model_id = 2;
+}
+
+message AnalyzeDocumentStarted {
+  int32 total_chars = 1;
+  int32 total_chunks = 2;
+}
+
+message AnalyzeDocumentProgress {
+  int32 processed_chunks = 1;
+  int32 total_chunks = 2;
+}
+
+message AnalyzeDocumentEvent {
+  oneof event {
+    AnalyzeDocumentStarted started = 1;
+    AnalyzeDocumentProgress progress = 2;
+    DetectionResult result = 3;
+  }
+}
+
+message HighlightSpan {
+  int32 char_start = 1;
+  int32 char_end = 2;
+  float ai_confidence = 3;
+}
+
+message DetectionResult {
+  string model_id = 1;
+  bool is_ai_generated = 2;
+  float confidence_score = 3;
+  float ai_confidence = 4;
+  float human_confidence = 5;
+  repeated HighlightSpan highlight_spans = 6;
+}

@@ -28,7 +28,10 @@ from tests.support.documents import (
     surrogate_zip_bytes,
 )
 
-_FAR_DEADLINE = Deadline.from_budget(10.0)
+# A far deadline, not the production budget: the budget is the feature in
+# production, and here it is a fuse lit at import — the prod-plane test that
+# waits on a dead endpoint can outlast it.
+_FAR_DEADLINE = Deadline.from_budget(3600.0)
 
 
 def test_the_text_strategy_decodes_its_body_into_lines() -> None:

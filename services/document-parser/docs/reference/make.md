@@ -46,7 +46,6 @@ The compose stack reads `infra/.env` wholesale, so both ways of running answer t
 | `make test` | unit + integration in one go | before pushing anything |
 | `make test-unit` | pure logic only, no app boot (`tests/unit`) | iterating on a single validation or cleaning rule |
 | `make test-integration` | the production app with a real lifespan boot (`tests/integration`) | wires or config resolution changed |
-| `make load-fixtures` | generates the load corpus once (`tests/load/assets/`, gitignored) | before the first load run on a fresh tree |
 
 ## Load and e2e — `mk/load.mk`
 
@@ -54,6 +53,7 @@ One `infra/.env.load` configures everything, `SCENARIO` included (`smoke` or `lo
 
 | Target | What it does | Reach for it when |
 |--------|--------------|-------------------|
+| `make load-fixtures` | generates the load corpus once (`tests/load/assets/`, gitignored) | before the first load run on a fresh tree |
 | `make load-env` | creates `.env.load` from the template if missing | first run; the file is then the single lever for every knob |
 | `make load-test` | container rig: parser + k6 on an isolated network, k6's exit code survives the teardown | throughput, on your own private rig |
 | `make load-e2e` | k6 alone, against whatever the file's `API_URL` names | a specific target — local, docker, or prod |

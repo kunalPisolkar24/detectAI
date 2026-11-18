@@ -15,7 +15,7 @@ SCENARIO := $(if $(LOAD_FILE_SCENARIO),$(LOAD_FILE_SCENARIO),smoke)
 # Unknown scenario -> empty; load-check rejects with the valid list.
 K6_SCRIPT := $(if $(filter $(SCENARIO),smoke load),scenarios/$(SCENARIO).js,)
 
-.PHONY: load-env load-test load-e2e load-down load-down-remote help-load
+.PHONY: load-fixtures load-env load-test load-e2e load-down load-down-remote help-load
 .PHONY: load-check
 
 # Reject an unknown scenario and a missing corpus before compose runs.
@@ -25,16 +25,20 @@ load-check:
 
 help-load:
 	@echo "Load + e2e (mk/load.mk): everything is configured in infra/.env.load"
-	@echo "  load-env     create infra/.env.load from infra/.env.load.example if missing"
-	@echo "  load-test    container rig: parser + k6 on an isolated network"
-	@echo "  load-e2e     k6 only, against whatever the file's API_URL names"
-	@echo "  load-down    remove the rig and the e2e-run leftovers"
+	@echo "  load-env       create infra/.env.load from infra/.env.load.example if missing"
+	@echo "  load-fixtures  regenerate the load corpus under tests/load/assets (gitignored)"
+	@echo "  load-test      container rig: parser + k6 on an isolated network"
+	@echo "  load-e2e       k6 only, against whatever the file's API_URL names"
+	@echo "  load-down      remove the rig and the e2e-run leftovers"
 	@echo "  the file's SCENARIO line picks the script; edit the file to change anything"
 	@echo ""
 
 load-env:
 	@test -f $(LOAD_ENV_FILE) || cp $(LOAD_ENV_EXAMPLE) $(LOAD_ENV_FILE)
 	@echo "$(LOAD_ENV_FILE) ready (edit it to configure load + e2e runs)"
+
+load-fixtures:
+	poetry run python -m tests.load.generate
 
 # Boots the parser behind its health gate; k6's exit code survives the teardown.
 load-test: | load-check

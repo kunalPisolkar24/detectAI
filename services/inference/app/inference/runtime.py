@@ -1,0 +1,64 @@
+"""The per-model runtime: the bundle a model_id resolves to, and its two executor pools."""
+
+from concurrent.futures import Executor, ThreadPoolExecutor
+from dataclasses import dataclass
+
+from .engine import Engine
+from .preprocessing import DocumentPreprocessor
+
+# The engine pool's width: how many forward passes one model may run at once.
+# The serving slice's knob (MAX_CONCURRENT_BATCHES) sets it, and the admission
+# permit is the same width, so the pool never queues behind itself.
+_ENGINE_POOL_WORKERS = 2
+
+
+@dataclass(frozen=True)
+class ModelRuntime:
+    """One model's runtime: what a model_id resolves to."""
+
+    key: str
+    preprocessor: DocumentPreprocessor
+    engine: Engine
+    batch_size: int
+    preparation_executor: Executor
+    engine_executor: Executor
+    max_inflight: int
+    # The identity the serving slice reports: the pinned artifact revision and
+    # the execution providers the session actually runs on.
+    revision: str = ""
+    providers: tuple[str, ...] = ()
+
+    @property
+    def provider(self) -> str:
+        """The active execution provider: the first one the session runs on."""
+        return self.providers[0] if self.providers else ""
+
+    def close(self) -> None:
+        """Close the pools the runtime opened."""
+        self.preparation_executor.shutdown(wait=False)
+        self.engine_executor.shutdown(wait=False)
+
+
+def build_runtime(
+    key: str,
+    preprocessor: DocumentPreprocessor,
+    engine: Engine,
+    batch_size: int,
+    max_inflight: int = _ENGINE_POOL_WORKERS,
+    revision: str = "",
+    providers: tuple[str, ...] = (),
+) -> ModelRuntime:
+    """One model's bundle: the preprocessor, the engine, and the two executor pools."""
+    return ModelRuntime(
+        key=key,
+        preprocessor=preprocessor,
+        engine=engine,
+        batch_size=batch_size,
+        preparation_executor=ThreadPoolExecutor(thread_name_prefix=f"{key}-preparation"),
+        engine_executor=ThreadPoolExecutor(
+            max_workers=max_inflight, thread_name_prefix=f"{key}-engine"
+        ),
+        max_inflight=max_inflight,
+        revision=revision,
+        providers=providers,
+    )
