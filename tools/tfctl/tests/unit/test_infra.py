@@ -15,7 +15,12 @@ from app.kinds.locate import workspace_for
 from app.kinds.infra import kind as infra_kind
 from app.kinds.infra import policy, tfvars, values
 from app.kinds.infra import flow as flow_module
-from app.kinds.infra.declaration import DeclarationError, load
+from app.kinds.infra.declaration import (
+    DeclarationError,
+    declaration_errors,
+    default_parameter_group,
+    load,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -782,3 +787,53 @@ def test_cli_stack_dir_does_not_apply_to_batch_verbs(tmp_path, capsys):
         cli.main(["session-clear-all", "--stack-dir", str(tmp_path)])
     assert excinfo.value.code == 1
     assert "--stack-dir does not apply to the session-clear-all command" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "version, group",
+    (
+        ("7.0", "default.redis7"),
+        ("6.2", "default.redis6.x"),
+        ("5.0", "default.redis5.0"),
+        ("8.0", "default.redis7"),
+    ),
+)
+def test_default_parameter_group_follows_the_major_version(version, group):
+    assert default_parameter_group(version) == group
+
+
+@pytest.mark.parametrize(
+    "override, message",
+    (
+        ({"queues": "not a list"}, "[queues] must be a list"),
+        ({"elasticache": "not a list"}, "[elasticache] must be a list"),
+        ({"atlas": "not a list"}, "[atlas] must be a list"),
+        ({"queues": ["not a table"]}, "every [[queues]] entry must be a table"),
+        ({"queues": [{"name": "a.fifo", "dlq": "BAD"}]}, "dlq 'BAD' must be a FIFO name"),
+        ({"elasticache": ["not a table"]}, "every [[elasticache]] entry must be a table"),
+        (
+            {"elasticache": [{"name": "cache-one"}, {"name": "cache-one"}]},
+            "cache-one is declared twice",
+        ),
+        ({"elasticache": [{"name": "cache-one", "engine_version": "x"}]}, "engine_version 'x'"),
+        ({"elasticache": [{"name": "cache-one", "node_type": "x"}]}, "node_type 'x'"),
+        (
+            {"elasticache": [{"name": "cache-one", "parameter_group_name": ""}]},
+            "parameter_group_name must be a non-empty string",
+        ),
+        ({"atlas": ["not a table"]}, "every [[atlas]] entry must be a table"),
+        (
+            {
+                "atlas": [
+                    {"name": "mongo-one", "region": "AP_SOUTHEAST_2"},
+                    {"name": "mongo-one", "region": "AP_SOUTHEAST_2"},
+                ]
+            },
+            "mongo-one is declared twice",
+        ),
+    ),
+)
+def test_declaration_errors_cover_malformed_fabric_entries(override, message):
+    data = {"service": {"slug": "infra"}, "queues": [{"name": "a.fifo"}]}
+    data.update(override)
+    assert any(message in error for error in declaration_errors(data))

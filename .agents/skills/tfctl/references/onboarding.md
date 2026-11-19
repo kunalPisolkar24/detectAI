@@ -134,10 +134,10 @@ and no existing kind changes when a third appears.
 
 | Target | What it runs | When |
 |--------|--------------|------|
-| `make -C tools/tfctl test` | unit tier: `pytest -m "not integration"` | the default gate before any push |
+| `make -C tools/tfctl test` | alias of `test-cov`: full suite with coverage, failing below 95% | the default gate before any push |
 | `make test-integration` | `pytest -m integration` against live Floci (skips cleanly when unreachable) | verb-level behavior changed |
-| `make test-all` | both tiers in one go | before an onboarding-shaped change |
-| `make test-cov` | unit tier with a coverage report, failing below 65% | when coverage is the point |
+| `make test-all` | both tiers in one go, no coverage | before an onboarding-shaped change |
+| `make test-cov` | full suite with a coverage report, failing below 95% | when coverage is the point |
 | `make secrets-test` (from a service) | the same engine suite | the engine changed while working in a service |
 
 `make lint` (`ruff check .`) and `make format --check` are the style gates —

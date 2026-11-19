@@ -155,12 +155,14 @@ laws, and the derived-name table live in
 
 ## Testing
 
-- `make -C tools/tfctl test` — the unit tier, the default gate before any
-  push (no emulator needed).
+- `make -C tools/tfctl test` — aliases `test-cov`: the full suite with coverage
+  and a 95% gate, the default gate before any push (no emulator needed; the
+  integration tier skips when Floci is down).
 - `make -C tools/tfctl test-integration` — verb-level behavior against live
   Floci; skips cleanly when the emulator is unreachable.
-- `make test-all` both tiers; `make test-cov` fails unit coverage below 65%.
-  `make lint` / `make format` are the ruff gates. What each tier proves:
+- `make test-unit` / `make test-cov-unit` — the unit tier without / with a
+  report; `make test-all` runs both tiers without coverage. `make lint` /
+  `make format` are the ruff gates. What each tier proves:
   [references/onboarding.md](references/onboarding.md)
 
 ## Guardrails

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -298,3 +299,125 @@ def test_build_tf_vars_recovery_window_per_plane():
     assert zero["TF_VAR_secret_recovery_window"] == "0"
     seven = tfvars.build_tf_vars(DP, {**REAL_ENV, "SECRET_RECOVERY_WINDOW": "7"}, False)
     assert seven["TF_VAR_secret_recovery_window"] == "7"
+
+
+def test_ensure_state_bucket_reports_a_versioning_failure(monkeypatch, capsys):
+    monkeypatch.setattr(
+        state, "run_aws_captured", lambda command, is_emulator, session=None: (255, "", "")
+    )
+    monkeypatch.setattr(
+        state,
+        "run_aws",
+        lambda command, is_emulator, session=None: 0 if "mb" in command else 1,
+    )
+    assert state.ensure_state_bucket(DP, REAL_ENV, False, REAL_ACCOUNT) == 1
+    assert "fix: enable bucket versioning manually" in capsys.readouterr().out
+
+
+def test_list_bucket_versions_reports_failures(monkeypatch, capsys):
+    monkeypatch.setattr(
+        state,
+        "run_aws_captured",
+        lambda command, is_emulator, session=None: (1, "", "access denied"),
+    )
+    assert state.list_bucket_versions(DP, REAL_ENV, False, REAL_ACCOUNT) is None
+    out = capsys.readouterr().out
+    assert "could not list object versions" in out and "access denied" in out
+
+    monkeypatch.setattr(
+        state, "run_aws_captured", lambda command, is_emulator, session=None: (0, "not json", "")
+    )
+    assert state.list_bucket_versions(DP, REAL_ENV, False, REAL_ACCOUNT) is None
+    assert "unparseable output" in capsys.readouterr().out
+
+
+def test_purge_state_handles_listing_failures_and_empty_buckets(monkeypatch, capsys):
+    monkeypatch.setattr(state, "run_aws", lambda command, is_emulator, session=None: 0)
+    monkeypatch.setattr(
+        state,
+        "list_bucket_versions",
+        lambda declaration, values, is_emulator, account, session=None, bucket=None: None,
+    )
+    assert state.purge_state(DP, REAL_ENV, False, REAL_ACCOUNT) == 1
+
+    monkeypatch.setattr(
+        state,
+        "list_bucket_versions",
+        lambda declaration, values, is_emulator, account, session=None, bucket=None: [],
+    )
+    assert state.purge_state(DP, REAL_ENV, False, REAL_ACCOUNT) == 0
+    assert f"purge: {REAL_BUCKET} holds no objects" in capsys.readouterr().out
+
+
+def test_purge_state_reports_delete_failures(monkeypatch, capsys):
+    listing = [("document-parser/terraform.tfstate", "v1")]
+    monkeypatch.setattr(
+        state,
+        "list_bucket_versions",
+        lambda declaration, values, is_emulator, account, session=None, bucket=None: listing,
+    )
+    monkeypatch.setattr(
+        state,
+        "run_aws",
+        lambda command, is_emulator, session=None: 1 if "delete-object" in command else 0,
+    )
+    assert state.purge_state(DP, REAL_ENV, False, REAL_ACCOUNT) == 1
+
+    monkeypatch.setattr(
+        state,
+        "run_aws",
+        lambda command, is_emulator, session=None: 1 if "delete-bucket" in command else 0,
+    )
+    assert state.purge_state(DP, REAL_ENV, False, REAL_ACCOUNT) == 1
+    assert "fix: rerun the destroy verb" in capsys.readouterr().out
+
+
+def test_secrets_flow_aborts_when_the_state_bucket_cannot_be_healed(monkeypatch):
+    def boom(*arguments, **rest):
+        raise AssertionError("no terraform may run when the bucket is missing")
+
+    monkeypatch.setattr(secrets_flow, "ensure_state_bucket", lambda *a, **k: 1)
+    monkeypatch.setattr(secrets_flow, "run_terraform", boom)
+    args = SimpleNamespace(dry_run=False)
+    assert secrets_flow.terraform_verb_flow(DP, EMULATOR_ENV, True, "plan", args, {}) == 1
+
+
+def test_secrets_flow_hints_after_a_failed_init(monkeypatch, capsys, tmp_path):
+    calls = []
+    monkeypatch.setattr(secrets_flow, "ensure_state_bucket", lambda *a, **k: 0)
+    monkeypatch.setattr(secrets_flow, "write_backend_hcl", lambda hcl: tmp_path / "backend.hcl")
+
+    def fake_terraform(tf_dir, tf_args, tf_vars, overlay):
+        calls.append(tf_args[0])
+        return 1 if tf_args[0] == "init" else 0
+
+    monkeypatch.setattr(secrets_flow, "run_terraform", fake_terraform)
+    args = SimpleNamespace(dry_run=False)
+    carrier = {
+        "role_arn": "arn:aws:iam::123456789012:role/detectai-document-parser-seeder",
+        "access_key_id": "A",
+        "secret_access_key": "B",
+        "session_token": "C",
+    }
+    assert secrets_flow.terraform_verb_flow(DP, EMULATOR_ENV, True, "plan", args, carrier) == 1
+    assert "docker start floci" in capsys.readouterr().out
+    assert calls == ["init"]
+
+    calls.clear()
+    assert secrets_flow.terraform_verb_flow(DP, REAL_ENV, False, "plan", args, carrier) == 1
+    assert "check backend access to bucket" in capsys.readouterr().out
+
+
+def test_secrets_flow_destroy_dry_run_previews_the_tail(monkeypatch, capsys):
+    def boom(*arguments, **rest):
+        raise AssertionError("a dry run must not run terraform")
+
+    monkeypatch.setattr(secrets_flow, "run_terraform", boom)
+    values = {**EMULATOR_ENV, "ENV_TYPE": "prod"}
+    args = SimpleNamespace(dry_run=True, force_delete=True, purge_state=True, drop_seeder=True)
+    assert secrets_flow.terraform_verb_flow(DP, values, True, "destroy", args, {}) == 0
+    out = capsys.readouterr().out
+    assert "ENV_TYPE=prod with the emulator" in out  # plane_notes rendered
+    assert "no effect on the emulator" in out
+    assert "then purge: every object version" in out
+    assert "then drop:" in out

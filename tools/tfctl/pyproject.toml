@@ -24,7 +24,7 @@ build-backend = "poetry.core.masonry.api"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 pythonpath = ["tests", "."]
-addopts = "--cov=app --cov-report=term-missing -m 'not integration'"
+addopts = "-m 'not integration'"
 markers = [
     "unit: fast tests with no external calls (the default selection)",
     "integration: black-box tests against a live Floci/LocalStack (run with '-m integration')",
@@ -35,7 +35,7 @@ source = ["app"]
 omit = ["*/__pycache__/*", "*/tests/*"]
 
 [tool.coverage.report]
-fail_under = 65
+fail_under = 95
 show_missing = true
 skip_covered = false
 

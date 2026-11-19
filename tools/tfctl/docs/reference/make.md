@@ -15,11 +15,13 @@
 
 | Target | What it does | Reach for it when |
 |--------|--------------|-------------------|
-| `make test` | the unit tier: `pytest -m "not integration"` | the default gate before any push |
-| `make test-unit` | alias of `test` | habit |
+| `make test` | alias of `test-cov`: the full suite with coverage, failing below 95% | the default gate before any push |
+| `make test-unit` | the unit tier: `pytest -m "not integration"`, no coverage | a fast run without a report |
 | `make test-integration` | `pytest -m integration` against a live Floci (skips cleanly when the emulator is unreachable) | verb-level behavior changed, or the integration suite itself did |
-| `make test-all` | unit + integration in one go | the full pass before an onboarding-shaped change |
-| `make test-cov` | unit tier with a coverage report, failing below 65% | when test coverage is the point, not the side effect |
+| `make test-all` | unit + integration in one go, no coverage | the full pass before an onboarding-shaped change |
+| `make test-cov` | the full suite with a coverage report, failing below 95% | when test coverage is the point, not the side effect |
+| `make test-cov-unit` | the unit tier with a coverage report, no gate | checking where the unit gaps are |
+| `make test-cov-html` | the full suite with coverage plus a browsable `htmlcov/` report | inspecting coverage line by line |
 
 Both tiers and what each proves are described in the [testing guide](../guides/testing.md).
 

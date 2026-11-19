@@ -1,14 +1,15 @@
 # Testing
 
-The engine's confidence comes from two tiers that prove different things, plus the terraform module's own contract tests. The default `make test` runs the fast tier only — an integration run needs infrastructure, and it is honest about needing it.
+The engine's confidence comes from two tiers that prove different things, plus the terraform module's own contract tests. The default `make test` runs the full suite with coverage and a 95% gate — an integration run needs infrastructure, but skips cleanly when it is absent, and it is honest about needing it.
 
 ## Tier 1: unit — the default gate
 
 ```sh
-make -C tools/tfctl test          # (test-unit is an alias)
+make -C tools/tfctl test-unit     # the unit tier, no coverage report
+make -C tools/tfctl test          # aliases test-cov: full suite + 95% gate
 ```
 
-Fast, subprocess-mocked, no network, no emulator: every verb's logic against fakes — value validation, backend composition, trust/policy documents, cache margins, dispatch guards, and verify's fingerprint comparisons. It runs by default in CI-shaped pytest invocations (`-m "not integration"` via `addopts`), and `make test-cov` fails the run below 65% coverage.
+Fast, subprocess-mocked, no network, no emulator: every verb's logic against fakes — value validation, backend composition, trust/policy documents, cache margins, dispatch guards, and verify's fingerprint comparisons. Unit tests are the default pytest selection (`-m "not integration"` via `addopts`); `make test-unit` runs just that tier, `make test-cov-unit` adds a report, and the default `make test` (through `test-cov`) measures the full tree and fails below 95% coverage.
 
 | Bridge with a fake | What it lets the test assert |
 |--------------------|------------------------------|
