@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from conftest import DP, EMULATOR_ENV, REAL_ENV, ROLE_ARN, fake_carrier_session, render_env, write_service
+from conftest import DP, EMULATOR_ENV, REAL_ENV, ROLE_ARN, render_env, write_service
 from app import main as cli
 from app.engine.stack import state_store as store
 
