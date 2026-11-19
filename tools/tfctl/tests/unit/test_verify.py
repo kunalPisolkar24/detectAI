@@ -233,6 +233,31 @@ def test_verify_flow_reports_missing_and_extra(dp, monkeypatch, capsys):
     assert "note:   EXTRA is on the plane outside the .env seed list" in out
 
 
+def test_verify_flow_reports_declared_but_unseeded_ssm_keys(dp, monkeypatch, capsys):
+    monkeypatch.setattr(
+        flow_module,
+        "collect_ssm_parameters",
+        lambda declaration, values, is_emulator, session=None: {},
+    )
+    monkeypatch.setattr(
+        flow_module,
+        "collect_secret",
+        lambda declaration, values, is_emulator, session=None: (
+            {"Name": dp.secret_name},
+            {"API_KEY": "a" * 20},
+        ),
+    )
+    assert flow_module.verify_flow(dp, EMULATOR_ENV, True, False) == 0
+    out = capsys.readouterr().out
+    assert "MAX_PDF_PAGES" in out
+    assert "declared, not seeded (no value in .env)" in out
+    assert (
+        "note:   /detectai/document-parser/MAX_PDF_PAGES is declared in secrets.toml "
+        "but has no value in .env" in out
+    )
+    assert "ok:      the seeded plane matches the .env values" in out
+
+
 def test_verify_flow_flags_a_pending_deletion(dp, monkeypatch, capsys):
     monkeypatch.setattr(
         flow_module,

@@ -1,0 +1,198 @@
+name: Infra
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - staging
+    paths:
+      - "infra/**"
+      - "tools/tfctl/app/kinds/infra/**"
+      - "tools/tfctl/tests/**"
+      - ".github/workflows/infra.yaml"
+  pull_request:
+    branches:
+      - main
+      - staging
+    paths:
+      - "infra/**"
+      - "tools/tfctl/app/kinds/infra/**"
+      - "tools/tfctl/tests/**"
+      - ".github/workflows/infra.yaml"
+
+permissions:
+  contents: read
+
+env:
+  TF_VERSION: "1.10.5"
+  PYTHON_VERSION: "3.14"
+  FLOCI_URL: http://localhost:4566
+  AWS_REGION: ap-southeast-2
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+
+jobs:
+  validate:
+    name: fmt / init / validate / test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Offline gate
+        run: make fmt init validate test
+
+  tfctl-unit:
+    name: tfctl unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install tfctl dependencies
+        run: poetry -C tools/tfctl install --no-interaction
+
+      - name: Run unit suite
+        run: make -C tools/tfctl test
+
+  floci-plan:
+    name: read-only plan on Floci
+    runs-on: ubuntu-latest
+    needs: [validate, tfctl-unit]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install tfctl dependencies
+        run: poetry -C tools/tfctl install --no-interaction
+
+      - name: Verify AWS CLI
+        run: aws --version
+
+      - name: Start Floci
+        run: |
+          docker run -d --name floci -p 4566:4566 floci/floci:latest
+          for i in $(seq 1 60); do
+            if curl -fsS "${FLOCI_URL}/_localstack/health" >/dev/null 2>&1; then
+              echo "Floci healthy at ${FLOCI_URL}"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs floci
+          exit 1
+
+      - name: Prepare values
+        run: |
+          make -C infra env
+          cp infra/tests/ci/env infra/envs/.env
+
+      - name: Read-only infra integration tests
+        working-directory: tools/tfctl
+        run: poetry run pytest -q -m integration -o addopts="" tests/integration/test_infra_floci.py
+
+  floci-apply:
+    name: apply and verify on Floci
+    runs-on: ubuntu-latest
+    needs: [validate, tfctl-unit]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install tfctl dependencies
+        run: poetry -C tools/tfctl install --no-interaction
+
+      - name: Verify AWS CLI
+        run: aws --version
+
+      - name: Start Floci
+        run: |
+          docker run -d --name floci -p 4566:4566 floci/floci:latest
+          for i in $(seq 1 60); do
+            if curl -fsS "${FLOCI_URL}/_localstack/health" >/dev/null 2>&1; then
+              echo "Floci healthy at ${FLOCI_URL}"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs floci
+          exit 1
+
+      - name: Use the CI declaration
+        run: |
+          cp infra/tests/ci/infra.toml infra/infra.toml
+          make -C infra env
+          cp infra/tests/ci/env infra/envs/.env
+
+      - name: Apply the declared fabrics
+        working-directory: infra
+        run: make apply
+
+      - name: Verify the fabrics exist on Floci
+        run: |
+          aws --endpoint-url "${FLOCI_URL}" --region "${AWS_REGION}" \
+            sqs get-queue-url --queue-name payment_events.fifo
+          aws --endpoint-url "${FLOCI_URL}" --region "${AWS_REGION}" \
+            sqs get-queue-url --queue-name payment_events_dlq.fifo
+          aws --endpoint-url "${FLOCI_URL}" --region "${AWS_REGION}" \
+            elasticache describe-replication-groups \
+            --query 'ReplicationGroups[].ReplicationGroupId' --output text \
+            | grep -q 'detectai-dev-cache'
+
+      - name: Confirm a clean plan
+        working-directory: infra
+        run: |
+          make plan | tee /tmp/infra-plan.txt
+          grep -q "No changes" /tmp/infra-plan.txt
+
+      - name: Destroy the fabrics
+        if: always()
+        working-directory: infra
+        run: make destroy

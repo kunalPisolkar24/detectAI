@@ -77,6 +77,18 @@ def test_check_resolves_the_account_live(values_ready):
     assert "live: region EU" in result.stdout
 
 
+def test_state_verbs_report_and_snapshot(values_ready, tmp_path, monkeypatch):
+    monkeypatch.setenv("TFCTL_STATE_BACKUP_DIR", str(tmp_path / "snapshots"))
+    status = run_cli("state-status")
+    assert status.returncode == 0, status.stdout + status.stderr
+    assert "ledger:  present" in status.stdout
+
+    saved = run_cli("state-save")
+    assert saved.returncode == 0, saved.stdout + saved.stderr
+    assert "saved:" in saved.stdout
+    assert (tmp_path / "snapshots" / "observability" / "floci" / "latest.tfstate").is_file()
+
+
 def test_plan_rides_the_persistent_state_plane(values_ready):
     result = run_cli("plan")
     assert result.returncode == 0, result.stdout + result.stderr

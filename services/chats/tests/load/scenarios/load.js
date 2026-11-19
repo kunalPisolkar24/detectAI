@@ -1,118 +1,132 @@
-import { sleep, check } from 'k6';
-import { generateUserId, generateSharedUserId, generateChatTitle, generateNewTitle, generateMessage, generateLargeMessage, generateUUID, pickWeighted } from '../lib/data.js';
-import { createChat, saveMessage, getChat, renameChat, deleteChat, getChatHistory, getUserChats } from '../lib/chat.js';
-import { thresholds, config } from '../lib/config.js';
-import { closeClient } from '../lib/grpc.js';
+import exec from "k6/execution";
+
+import { getRuntimeConfig, readPositiveInt, readRatio, readStages } from "../lib/config.js";
+import { createReadinessMetrics, createRpcMetrics } from "../lib/metrics.js";
+import {
+  checkReadiness,
+  createChat,
+  deleteChat,
+  getChat,
+  getChatHistory,
+  listChats,
+  renameChat,
+  saveUserMessage,
+} from "../lib/connect.js";
+import { chatTitle, messageContent, ownerId, pickWeighted } from "../lib/data.js";
+
+const metrics = createRpcMetrics("chats_load");
+const readiness = createReadinessMetrics("chats_load_readiness");
+
+const p95ThresholdMs = readPositiveInt("CHATS_LOAD_P95_MS", 250);
+const p99ThresholdMs = readPositiveInt("CHATS_LOAD_P99_MS", 500);
+const minSuccessRate = readRatio("CHATS_LOAD_MIN_SUCCESS_RATE", 0.99);
+
+// The shape dial: duration:arrivals-per-second steps read from the file. A
+// ramp, a tall spike, and a flat marathon are edits of the same STAGES key;
+// the first entry seeds the start rate.
+const stages = readStages("STAGES", "5s:1,10s:2,5s:0");
 
 export const options = {
-    stages: [
-        { duration: '30s', target: config.loadVUs }, // Ramp up
-        { duration: config.loadDuration, target: config.loadVUs }, // Steady state
-        { duration: '30s', target: 0 }, // Ramp down
-    ],
-    ...(config.rps > 0 ? { rps: config.rps } : {}),
-    thresholds: {
-        'chat_rpc_success_rate': [`rate>=${thresholds.successRate}`],
-        'chat_create_duration': [`p(95)<${thresholds.createP95}`],
-        'chat_save_message_duration': [`p(95)<${thresholds.saveMessageP95}`, `p(99)<${thresholds.saveMessageP99}`],
-        'chat_get_history_duration': [`p(95)<${thresholds.getHistoryP95}`],
-        'chat_get_chat_duration': [`p(95)<${thresholds.getChatP95}`],
-        'chat_get_user_chats_duration': [`p(95)<${thresholds.getUserChatsP95}`],
-        'chat_rename_duration': [`p(95)<${thresholds.renameP95}`],
-        'chat_delete_duration': [`p(95)<${thresholds.deleteP95}`],
-        'checks': [`rate>=${thresholds.successRate}`],
+  scenarios: {
+    load: {
+      executor: "ramping-arrival-rate",
+      exec: "loadScenario",
+      startRate: stages[0].target,
+      timeUnit: "1s",
+      // k6 grows the VU pool on demand up to the ceiling; the ceiling is the
+      // file's burst headroom (MAX_VUS).
+      preAllocatedVUs: readPositiveInt("MAX_VUS", 20),
+      maxVUs: readPositiveInt("MAX_VUS", 20),
+      stages,
+      gracefulStop: "30s",
+      tags: {
+        service: "chats",
+        test_type: "load",
+      },
     },
+  },
+  thresholds: {
+    checks: [`rate>=${minSuccessRate}`],
+    chats_load_success_rate: [`rate>=${minSuccessRate}`],
+    chats_load_duration: [`p(95)<${p95ThresholdMs}`, `p(99)<${p99ThresholdMs}`],
+  },
 };
 
-export function teardown() {
-    closeClient();
+// The read path: the chat's meta with its head page, the history page, and
+// the owner's sidebar.
+function readWorkflow(common, chatId) {
+  getChat({ ...common, chatId });
+  getChatHistory({ ...common, chatId });
+  listChats({ ...common });
 }
 
-function resolveUser() {
-    if (config.sharedHotChat) return generateSharedUserId();
-    return generateUserId(__VU, __ITER);
+// The write path: two messages on the chat, then the history that carries
+// them.
+function writeWorkflow(common, chatId) {
+  saveUserMessage({ ...common, chatId, content: messageContent(common.contentBytes) });
+  saveUserMessage({ ...common, chatId, content: messageContent(common.contentBytes) });
+  getChatHistory({ ...common, chatId });
 }
 
-function readWritePath(userId) {
-    let chatId = config.hotChatId || null;
-    if (!chatId) {
-        chatId = createChat(userId, generateChatTitle());
-        check(chatId, { 'load: chat created': (id) => id !== null });
-        if (!chatId) return;
-    } else {
-        check(getChat(chatId, config.hotChatUser), {
-            'load: hot chat fetched': (c) => c !== null,
-        });
-    }
-    const writerId = config.hotChatId ? config.hotChatUser : userId;
-
-    const messageCount = 2 + Math.floor(Math.random() * 3);
-    for (let i = 0; i < messageCount; i++) {
-        const content = Math.random() < 0.15 ? generateLargeMessage() : generateMessage();
-        const ok = saveMessage(chatId, writerId, content, generateUUID());
-        check(ok, { 'load: message saved': (p) => p === true });
-        sleep(Math.random() * 1.5 + 0.5);
-    }
-
-    check(getChat(chatId, writerId), { 'load: chat fetched': (c) => c !== null });
-    check(getChatHistory(chatId, writerId), { 'load: history read': (h) => h !== null });
-    check(getUserChats(writerId), { 'load: user chats listed': (c) => c !== null });
+// The lifecycle path: a write, a rename, and the reads that must see both.
+function lifecycleWorkflow(common, chatId) {
+  saveUserMessage({ ...common, chatId, content: messageContent(common.contentBytes) });
+  renameChat({ ...common, chatId, title: chatTitle() });
+  getChat({ ...common, chatId });
+  getChatHistory({ ...common, chatId });
 }
 
-function lifecyclePath(userId) {
-    // Full CRUD on a VU-owned chat: safe to delete because no other VU
-    // references this chat. Skipped for pinned hot chats.
-    if (config.hotChatId) {
-        readWritePath(userId);
-        return;
-    }
-    const chatId = createChat(userId, generateChatTitle());
-    check(chatId, { 'load: lifecycle chat created': (id) => id !== null });
-    if (!chatId) return;
+// One arrival is one self-contained conversation: a chat is created, one
+// weighted workflow runs against it, and the chat is deleted again, so the
+// datastore stays the size it was.
+export function loadScenario() {
+  const config = getRuntimeConfig();
+  const scenario = "load";
+  // The burst budgets are counted per owner per minute, so the owner is
+  // drawn from a wide pool in a global round robin.
+  const owner = ownerId("load_owner", exec.scenario.iterationInTest % config.owners);
 
-    saveMessage(chatId, userId, generateMessage(), generateUUID());
-    check(renameChat(chatId, userId, generateNewTitle()), {
-        'load: chat renamed': (p) => p === true,
+  const common = {
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    ownerId: owner,
+    timeout: config.requestTimeout,
+    timeoutMs: config.requestTimeoutMs,
+    metrics,
+    scenario,
+    contentBytes: config.contentBytes,
+  };
+
+  const created = createChat({ ...common, content: messageContent(config.contentBytes) });
+  if (!created.passed) {
+    return;
+  }
+  const chatId = created.chatId;
+
+  const workflow = pickWeighted([
+    [config.mix.read, "read"],
+    [config.mix.write, "write"],
+    [config.mix.lifecycle, "lifecycle"],
+  ]);
+  if (workflow === "read") {
+    readWorkflow(common, chatId);
+  } else if (workflow === "write") {
+    writeWorkflow(common, chatId);
+  } else {
+    lifecycleWorkflow(common, chatId);
+  }
+
+  if (Math.random() < config.deleteRate) {
+    deleteChat({ ...common, chatId });
+  }
+
+  // Sample backpressure every 10th arrival without doubling request volume.
+  if (exec.scenario.iterationInTest % 10 === 0) {
+    checkReadiness({
+      baseUrl: config.baseUrl,
+      timeout: "5s",
+      metrics: readiness,
+      scenario,
     });
-    check(getChat(chatId, userId), { 'load: renamed chat fetched': (c) => c !== null });
-    check(getChatHistory(chatId, userId, 1, 10), {
-        'load: lifecycle history read': (h) => h !== null,
-    });
-    check(deleteChat(chatId, userId), { 'load: chat deleted': (p) => p === true });
-}
-
-function paginationPath(userId) {
-    const chatId = config.hotChatId || createChat(userId, generateChatTitle());
-    if (!chatId) return;
-    const readerId = config.hotChatId ? config.hotChatUser : userId;
-
-    for (let i = 0; i < 3; i++) {
-        saveMessage(chatId, readerId, generateMessage(), generateUUID());
-    }
-    // Exercise page>1 cold path, oversized page clamping (MaxPageSize=100),
-    // and user-chat limit clamping (MaxUserChatsLimit=100).
-    check(getChatHistory(chatId, readerId, 1, 10), { 'load: page 1 read': (h) => h !== null });
-    check(getChatHistory(chatId, readerId, 2, 10), { 'load: page 2 read': (h) => h !== null });
-    check(getChatHistory(chatId, readerId, 1, 500), { 'load: oversized page clamped': (h) => h !== null });
-    check(getUserChats(readerId, 200), { 'load: oversized limit clamped': (c) => c !== null });
-
-    if (!config.hotChatId) {
-        deleteChat(chatId, userId);
-    }
-}
-
-export default function () {
-    const userId = resolveUser();
-    const total = config.mixReadWrite + config.mixLifecycle + config.mixPagination;
-    const mode = pickWeighted([
-        [config.mixReadWrite / total, 'readwrite'],
-        [config.mixLifecycle / total, 'lifecycle'],
-        [config.mixPagination / total, 'pagination'],
-    ]);
-
-    if (mode === 'lifecycle') lifecyclePath(userId);
-    else if (mode === 'pagination') paginationPath(userId);
-    else readWritePath(userId);
-
-    sleep(1);
+  }
 }

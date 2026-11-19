@@ -12,26 +12,26 @@ A standalone Terraform root that publishes New Relic boards, policies and notifi
 
 ## How telemetry reaches New Relic
 
-Apps never talk to New Relic directly, with one exception. The prod stack routes everything through one collector:
+Most apps route through the prod stack's collector; services that run outside it push straight to New Relic:
 
 ```mermaid
 graph LR
     START(["start"]) --> PROD
 
     subgraph PROD["prod stack"]
-        APPS["web, payment-webhook,<br/>workers, chats, inference"] -->|OTLP traces + logs| COL["otel-collector"]
+        APPS["web, payment-webhook,<br/>workers, inference"] -->|OTLP traces + logs| COL["otel-collector"]
         WEBM["frontend :3000/api/metrics"] -->|Prometheus scrape| COL
         WMET["workers :7001-7003"] -->|Prometheus scrape| COL
         EXP["datastore exporters"] -->|Prometheus scrape| COL
     end
-    PARSER["document-parser"] -->|OTLP direct| EU["New Relic EU"]
+    PARSER["document-parser, chats"] -->|OTLP direct| EU["New Relic EU"]
     COL -->|OTLP/HTTP with license key| EU
     EU --> END(["end"])
 ```
 
 - **Push** — every service sets `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`; traces and logs flow from there to the EU endpoint.
 - **Scrape** — the collector also polls Prometheus endpoints (web, all three workers, the datastore exporters) and forwards those metrics in the same stream.
-- **The exception** — `document-parser` pushes all three signals straight to the EU endpoint. It is the reference pattern for any service that drops the collector later.
+- **Direct push** — `document-parser` and `chats` push all three signals straight to the EU endpoint. They own their resource labels and are the reference pattern for services outside the collector's reach; their boards must never rely on scraped exporter metrics.
 
 ## What Terraform creates
 

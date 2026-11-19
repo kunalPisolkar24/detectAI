@@ -1,15 +1,38 @@
-import { Trend, Rate } from 'k6/metrics';
+import { Counter, Rate, Trend } from "k6/metrics";
 
-export const chatMetrics = {
-    createDuration: new Trend('chat_create_duration', true),
-    saveMessageDuration: new Trend('chat_save_message_duration', true),
-    getHistoryDuration: new Trend('chat_get_history_duration', true),
-    getUserChatsDuration: new Trend('chat_get_user_chats_duration', true),
-    getChatDuration: new Trend('chat_get_chat_duration', true),
-    renameDuration: new Trend('chat_rename_duration', true),
-    deleteDuration: new Trend('chat_delete_duration', true),
-    e2eMessageLatency: new Trend('chat_e2e_message_latency', true),
-    rpcSuccessRate: new Rate('chat_rpc_success_rate'),
-    // Negative/edge expectations must not dilute the happy-path success rate.
-    negativeCheckRate: new Rate('chat_negative_check_rate'),
-};
+// One metric set per scenario prefix: the aggregate trend carries the
+// threshold, the per-procedure trends say which call moved it.
+export function createRpcMetrics(prefix) {
+  return {
+    duration: new Trend(`${prefix}_duration`, true),
+    successRate: new Rate(`${prefix}_success_rate`),
+    failures: new Counter(`${prefix}_failures`),
+    timeouts: new Counter(`${prefix}_timeouts`),
+    rateLimited: new Counter(`${prefix}_rate_limited`),
+    op: {
+      create: new Trend(`${prefix}_create_duration`, true),
+      save: new Trend(`${prefix}_save_duration`, true),
+      get: new Trend(`${prefix}_get_duration`, true),
+      history: new Trend(`${prefix}_history_duration`, true),
+      list: new Trend(`${prefix}_list_duration`, true),
+      rename: new Trend(`${prefix}_rename_duration`, true),
+      delete: new Trend(`${prefix}_delete_duration`, true),
+    },
+  };
+}
+
+export function createReadinessMetrics(prefix) {
+  return {
+    notReady: new Counter(`${prefix}_not_ready_total`),
+    checks: new Counter(`${prefix}_checks_total`),
+  };
+}
+
+// The expected-failure rows score on their own set: a refused call is the
+// row's success, not a failure of the run.
+export function createExpectationMetrics(prefix) {
+  return {
+    successRate: new Rate(`${prefix}_expectation_rate`),
+    failures: new Counter(`${prefix}_expectation_failures`),
+  };
+}

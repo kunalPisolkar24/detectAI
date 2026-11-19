@@ -44,11 +44,42 @@ From `observability`:
 2. `make fmt init validate test` — the offline gate; CI
    (`.github/workflows/observability.yaml`) runs exactly this on PRs to
    `main`/`staging` and pushes touching `observability/**`.
-3. `make check` — tfctl validates `envs/.env`, previews the plane, and
-   resolves the account name over GraphQL, so a valid key from the wrong
-   account fails before any plan.
-4. `make plan && make apply` — the plane's state bucket is
-   created on demand on the first run
+3. `make check` — tfctl validates `envs/.env`, previews the plane, resolves the
+   account name over GraphQL, and reports the live ledger plus local snapshots.
+4. `make plan && make apply` — the plane's state bucket is created on demand on
+   the first run; on floci a vanished ledger is restored from the latest local
+   snapshot before the plan, and a successful apply writes a fresh one.
+
+## State snapshots and recovery
+
+The bucket heals itself, but floci's **contents** do not. On the emulator,
+`plan`/`apply`/`auto-apply` restore `latest.tfstate` before planning when the
+ledger is gone (a `note:` line) and snapshot after a successful apply. On real
+AWS nothing is automatic — S3 is versioned and durable, so local snapshots
+would only risk rolling a newer authoritative ledger backwards.
+
+| Command | Purpose |
+|---------|---------|
+| `make state-status` | ledger present? list the last ten snapshots |
+| `make state-backup` | manual snapshot (apply already does this on floci) |
+| `make state-restore FILE=<path> FORCE=1` | restore a snapshot; `FORCE` overwrites a non-empty ledger |
+| `make recover-state` | generate `imports.tf` from the live NR plane and apply it |
+
+Snapshots live under `~/.local/share/tfctl/state/observability/floci/`
+(`TFCTL_STATE_BACKUP_DIR` overrides), with slug/plane metadata validated on
+restore. The recovery ladder, in order:
+
+1. **Automatic restore** — after a floci restart, just `make plan`; expect
+   *No changes*.
+2. **`make state-restore`** — when a snapshot was copied from another machine
+   and the ledger is empty.
+3. **`make recover-state`** — when no snapshot exists: import the 13 boards,
+   7 policies, 16 conditions and the notification resources into state, with
+   the plan-guard verifying no board would be duplicated.
+4. **Full teardown** — only for an account that already holds two complete
+   generations; see `docs/runbooks/recover-duplicate-dashboards.md`. The raw
+   telemetry survives either path, but board GUIDs, permalinks, alert IDs and
+   incident continuity do not.
 
 ## Failure modes
 
@@ -58,6 +89,9 @@ From `observability`:
 | key rejected as ingest-shaped | license key pasted instead of user key | copy the `NRAK-` key from NR *API keys* |
 | wrong account resolved | key belongs to another NR account | `make check` fails pre-plan — swap the key |
 | state bucket missing on real AWS | it self-heals; only a stale or wrong-region creds issue blocks it | rerun — the next plan/apply creates `detectai-observability-tfstate-<your account>` versioned on demand |
+| `note: state ledger is empty after emulator restart; restoring …` | expected on floci after a container restart | nothing — the plan should say *No changes* |
+| `warning: … empty and no local snapshot exists` | fresh machine or removed backup directory | check the plan; `make state-restore FILE=…` or `make recover-state` |
+| `make plan` says "N to add" while boards are live | empty or partial state ledger | stop before apply — restore or import; never let the duplicate-guard plan through |
 | apply pauses for confirmation | real AWS plane is interactive | confirm, or use the Floci plane for auto-approve |
 
 ## CI parity

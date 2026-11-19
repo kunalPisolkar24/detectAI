@@ -42,7 +42,7 @@ Start here:
 | [Workers](services/workers.md) | The three background workers on one board | Jobs lag, retry or dead-letter |
 | [Inference](services/inference.md) | The AI model-serving service | AI answers are slow or failing |
 | [Document Parser](services/document-parser.md) | Upload and extraction pipeline | Uploads fail or extraction lags |
-| [Chats](services/chats.md) | Chat API and chat worker together | Chat messages lag or Redis degrades |
+| [Chats](services/chats.md) | ConnectRPC chat service and its cache/datastore signals | RPC error share spikes or logs fill with errors |
 
 ## Project Structure
 

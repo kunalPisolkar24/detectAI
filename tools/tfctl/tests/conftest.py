@@ -67,6 +67,20 @@ def render_env(values: dict[str, str]) -> str:
     return "".join(f"{key}={value}\n" for key, value in values.items())
 
 
+@pytest.fixture(autouse=True)
+def no_state_hooks(monkeypatch, request):
+    """Unit tests drive verb wiring without an emulator; stub the S3-touching hooks.
+
+    Tests that cover the hooks or the state verbs patch them explicitly.
+    """
+    if request.node.get_closest_marker("unit") is None:
+        return
+    from app import main as cli
+
+    monkeypatch.setattr(cli, "ensure_state_ledger", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(cli, "snapshot_after_apply", lambda *args, **kwargs: 0)
+
+
 @pytest.fixture
 def ws_env(tmp_path):
     """A workspace whose values file is an empty .env; tests write text into it."""

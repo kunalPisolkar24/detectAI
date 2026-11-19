@@ -2,275 +2,221 @@ package config
 
 import (
 	"fmt"
-	"net/url"
-	"os"
+	"math"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// Config holds all runtime configuration for the chats service.
-// It is the single source of truth — no other package should read env directly.
+// Config is the typed boot contract; plane keys without a field are ignored.
 type Config struct {
-	EnvType              string
-	ServiceRole          string
-	GRPCPort             string
-	MetricsPort          string
-	MongoURI             string
-	MongoDatabase        string
-	MongoMode            string
-	MongoTLSEnabled      bool
-	MongoTLSCAFile       string
-	MongoMaxPoolSize     uint64
-	MongoMinPoolSize     uint64
-	MongoServerTimeout   time.Duration
-	RedisAddr            string
-	RedisPassword        string
-	RedisTLSEnabled      bool
-	RedisTLSCAFile       string
-	RedisPoolSize        int
-	BatchSize            int
-	StreamPartitionCount int
-	CacheTTL             time.Duration
-	LogLevel             string
-	OtelEndpoint         string
-	OtelServiceName      string
-	OtelServiceVersion   string
-	AWSRegion            string
+	Port            int
+	DrainTimeout    time.Duration
+	OTelEndpoint    string
+	NewRelicKey     string
+	OTelName        string
+	OTelVersion     string
+	OTelSampleRatio float64
+	MongoURI        string
+	MongoDatabase   string
+	RedisEndpoint   string
+	RedisAuthToken  string
+	APIKey          string
+
+	RateLimitCreateMax int
+	RateLimitWriteMax  int
 }
 
-// IsProd reports whether the service runs in production (AWS-backed) mode.
-func (c *Config) IsProd() bool { return c.EnvType == "prod" }
+const (
+	defaultPort        = 8090
+	defaultDrain       = 10 * time.Second
+	minCredentialChars = 16
+	defaultOTelName    = "chats"
+	defaultOTelVersion = "dev"
+	defaultSampleRatio = 1.0
 
-// IsDev reports whether the service runs in development (local compose) mode.
-func (c *Config) IsDev() bool { return c.EnvType == "dev" }
+	defaultMongoDatabase = "chat_db"
 
-// Validate checks all invariants, normalizes defaults and derived fields.
-// It mutates the receiver to fill mode-dependent defaults, mirroring the
-// gateway/document-parser Validate pattern.
-func (c *Config) Validate() error {
-	if c.EnvType != "dev" && c.EnvType != "prod" {
-		return fmt.Errorf("ENV_TYPE must be dev or prod, got %q", c.EnvType)
-	}
+	defaultRateLimitCreateMax = 10
+	defaultRateLimitWriteMax  = 60
+)
 
-	c.ServiceRole = strings.ToLower(strings.TrimSpace(c.ServiceRole))
-	if c.ServiceRole != "api" && c.ServiceRole != "worker" {
-		return fmt.Errorf("SERVICE_ROLE must be 'api' or 'worker', got %q", c.ServiceRole)
+// Resolve reads one plane source: numeric bounds fail closed, PORT and the
+// OTel gate fail the boot, and a set OTel endpoint demands the license key.
+func Resolve(source Source) (Config, error) {
+	cfg := Config{
+		Port:            defaultPort,
+		DrainTimeout:    defaultDrain,
+		OTelName:        defaultOTelName,
+		OTelVersion:     defaultOTelVersion,
+		OTelSampleRatio: defaultSampleRatio,
+		MongoDatabase:   defaultMongoDatabase,
 	}
-
-	if strings.TrimSpace(c.MongoURI) == "" {
-		return fmt.Errorf("MONGO_URI is required")
+	if raw, ok := source.Get("PORT"); ok {
+		port, err := strconv.Atoi(strings.TrimSpace(raw))
+		if err != nil || port < 1 || port > 65535 {
+			return Config{}, fmt.Errorf("config: PORT must be an integer between 1 and 65535; got %q", raw)
+		}
+		cfg.Port = port
 	}
-	lowerURI := strings.ToLower(strings.TrimSpace(c.MongoURI))
-	if !strings.HasPrefix(lowerURI, "mongodb://") && !strings.HasPrefix(lowerURI, "mongodb+srv://") {
-		return fmt.Errorf("MONGO_URI must start with mongodb:// or mongodb+srv://, got %q", redactMongoURI(c.MongoURI))
-	}
-
-	if strings.TrimSpace(c.MongoDatabase) == "" {
-		c.MongoDatabase = "chat_db"
-	}
-
-	c.MongoMode = strings.ToLower(strings.TrimSpace(c.MongoMode))
-	if c.MongoMode == "" {
-		c.MongoMode = "standalone"
-	}
-	if c.MongoMode != "standalone" && c.MongoMode != "sharded" {
-		return fmt.Errorf("MONGO_MODE must be 'standalone' or 'sharded', got %q", c.MongoMode)
-	}
-	if c.MongoTLSEnabled && c.MongoTLSCAFile != "" {
-		if _, err := os.Stat(c.MongoTLSCAFile); err != nil {
-			return fmt.Errorf("MONGO_TLS_CA_FILE not readable %q: %w", c.MongoTLSCAFile, err)
+	if raw, ok := source.Get("DRAIN_TIMEOUT"); ok {
+		drain, err := time.ParseDuration(strings.TrimSpace(raw))
+		if err == nil && drain > 0 {
+			cfg.DrainTimeout = drain
 		}
 	}
-	if c.RedisTLSEnabled && c.RedisTLSCAFile != "" {
-		if _, err := os.Stat(c.RedisTLSCAFile); err != nil {
-			return fmt.Errorf("REDIS_TLS_CA_FILE not readable %q: %w", c.RedisTLSCAFile, err)
-		}
+	if err := resolveObservability(source, &cfg); err != nil {
+		return Config{}, err
 	}
+	if err := resolveMongo(source, &cfg); err != nil {
+		return Config{}, err
+	}
+	if err := resolveRedis(source, &cfg); err != nil {
+		return Config{}, err
+	}
+	if err := resolveAPIKey(source, &cfg); err != nil {
+		return Config{}, err
+	}
+	if err := resolveRateLimits(source, &cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
 
-	if err := c.normalizeRedis(); err != nil {
+// resolveRateLimits reads the burst budgets; an unset key takes the conservative default and a malformed one fails the boot.
+func resolveRateLimits(source Source, cfg *Config) error {
+	create, err := resolveRateLimitMax(source, "RATE_LIMIT_CREATE_MAX", defaultRateLimitCreateMax)
+	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(c.RedisAddr) == "" {
-		return fmt.Errorf("CHAT_REDIS_ADDR or REDIS_URL is required (host:port)")
+	write, err := resolveRateLimitMax(source, "RATE_LIMIT_WRITE_MAX", defaultRateLimitWriteMax)
+	if err != nil {
+		return err
 	}
-	if !strings.Contains(c.RedisAddr, ":") {
-		return fmt.Errorf("CHAT_REDIS_ADDR must be host:port, got %q", c.RedisAddr)
-	}
-
-	if c.MongoMaxPoolSize == 0 {
-		if c.MongoMode == "sharded" {
-			c.MongoMaxPoolSize = 20
-		} else {
-			c.MongoMaxPoolSize = 100
-		}
-	}
-	if c.MongoMaxPoolSize == 0 || c.MongoMaxPoolSize > 500 {
-		return fmt.Errorf("MONGO_MAX_POOL_SIZE must be 1..500, got %d", c.MongoMaxPoolSize)
-	}
-	if c.MongoMinPoolSize == 0 {
-		if c.MongoMode == "sharded" {
-			c.MongoMinPoolSize = 5
-		} else {
-			c.MongoMinPoolSize = 10
-		}
-	}
-	if c.MongoMinPoolSize > c.MongoMaxPoolSize {
-		return fmt.Errorf("MONGO_MIN_POOL_SIZE (%d) must be <= MONGO_MAX_POOL_SIZE (%d)", c.MongoMinPoolSize, c.MongoMaxPoolSize)
-	}
-	if c.MongoServerTimeout == 0 {
-		if c.MongoMode == "sharded" {
-			c.MongoServerTimeout = 15 * time.Second
-		} else {
-			c.MongoServerTimeout = 5 * time.Second
-		}
-	}
-
-	if c.RedisPoolSize <= 0 {
-		c.RedisPoolSize = 100
-	}
-	if c.RedisPoolSize > 500 {
-		return fmt.Errorf("REDIS_POOL_SIZE must be <= 500, got %d", c.RedisPoolSize)
-	}
-
-	if c.BatchSize <= 0 {
-		c.BatchSize = 50
-	}
-	if c.BatchSize > 500 {
-		return fmt.Errorf("BATCH_SIZE must be <= 500, got %d", c.BatchSize)
-	}
-
-	if c.StreamPartitionCount <= 0 {
-		c.StreamPartitionCount = 16
-	}
-	if c.StreamPartitionCount > 128 {
-		return fmt.Errorf("STREAM_PARTITION_COUNT must be <= 128, got %d", c.StreamPartitionCount)
-	}
-
-	if c.CacheTTL <= 0 {
-		c.CacheTTL = 24 * time.Hour
-	}
-
-	if c.GRPCPort == "" {
-		c.GRPCPort = ":50051"
-	}
-	if c.MetricsPort == "" {
-		c.MetricsPort = ":9091"
-	}
-	if !isValidPort(c.GRPCPort) {
-		return fmt.Errorf("GRPC_PORT has invalid format %q", c.GRPCPort)
-	}
-	if !isValidPort(c.MetricsPort) {
-		return fmt.Errorf("METRICS_PORT has invalid format %q", c.MetricsPort)
-	}
-
-	if strings.TrimSpace(c.LogLevel) == "" {
-		c.LogLevel = "info"
-	}
-	ll := strings.ToLower(strings.TrimSpace(c.LogLevel))
-	allowed := map[string]bool{
-		"debug": true, "info": true, "warn": true, "warning": true,
-		"error": true, "dpanic": true, "panic": true, "fatal": true,
-	}
-	if !allowed[ll] {
-		return fmt.Errorf("LOG_LEVEL must be one of debug,info,warn,warning,error, got %q", c.LogLevel)
-	}
-	if ll == "warning" {
-		ll = "warn"
-	}
-	c.LogLevel = ll
-
-	if c.OtelEndpoint != "" {
-		if !strings.HasPrefix(c.OtelEndpoint, "http://") && !strings.HasPrefix(c.OtelEndpoint, "https://") {
-			return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT must be http(s) URL, got %q", c.OtelEndpoint)
-		}
-		if _, err := url.Parse(c.OtelEndpoint); err != nil {
-			return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT invalid URL %q: %w", c.OtelEndpoint, err)
-		}
-	}
-	if strings.TrimSpace(c.OtelServiceName) == "" {
-		if c.ServiceRole == "worker" {
-			c.OtelServiceName = "chat-worker"
-		} else {
-			c.OtelServiceName = "chat-service"
-		}
-	} else {
-		c.OtelServiceName = strings.TrimSpace(c.OtelServiceName)
-	}
-	if strings.TrimSpace(c.OtelServiceVersion) == "" {
-		c.OtelServiceVersion = "dev"
-	} else {
-		c.OtelServiceVersion = strings.TrimSpace(c.OtelServiceVersion)
-	}
-
-	if strings.TrimSpace(c.AWSRegion) == "" {
-		c.AWSRegion = "ap-south-1"
-	}
-
+	cfg.RateLimitCreateMax = create
+	cfg.RateLimitWriteMax = write
 	return nil
 }
 
-func (c *Config) normalizeRedis() error {
-	raw := strings.TrimSpace(c.RedisAddr)
-	if raw == "" {
-		return nil
+// resolveRateLimitMax reads one burst budget; an unset or empty key takes the fallback, a malformed one fails the boot.
+func resolveRateLimitMax(source Source, key string, fallback int) (int, error) {
+	raw, ok := source.Get(key)
+	if !ok {
+		return fallback, nil
 	}
-	lower := strings.ToLower(raw)
-	tlsFromScheme := false
-	if strings.HasPrefix(lower, "rediss://") {
-		raw = raw[len("rediss://"):]
-		tlsFromScheme = true
-	} else if strings.HasPrefix(lower, "redis://") {
-		raw = raw[len("redis://"):]
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return fallback, nil
 	}
-	if at := strings.LastIndex(raw, "@"); at >= 0 {
-		creds := raw[:at]
-		raw = raw[at+1:]
-		if c.RedisPassword == "" {
-			if i := strings.LastIndex(creds, ":"); i >= 0 {
-				c.RedisPassword = creds[i+1:]
-			} else {
-				c.RedisPassword = creds
+	value, err := strconv.Atoi(trimmed)
+	if err != nil || value <= 0 {
+		return 0, fmt.Errorf("config: %s must be a positive integer; got %q", key, trimmed)
+	}
+	return value, nil
+}
+
+// resolveAPIKey reads the service credential; API_KEY is required and must
+// clear the credential floor, because an unset key would authenticate everyone.
+func resolveAPIKey(source Source, cfg *Config) error {
+	raw, ok := source.Get("API_KEY")
+	if !ok {
+		return fmt.Errorf("config: API_KEY is required; set it in infra/.env (dev) or the secrets plane (prod)")
+	}
+	key := strings.TrimSpace(raw)
+	if len(key) < minCredentialChars {
+		return fmt.Errorf("config: API_KEY must be at least %d characters", minCredentialChars)
+	}
+	cfg.APIKey = key
+	return nil
+}
+
+// resolveRedis reads the cache keys; REDIS_ENDPOINT is required and a rediss endpoint demands REDIS_AUTH_TOKEN at the credential floor.
+func resolveRedis(source Source, cfg *Config) error {
+	raw, ok := source.Get("REDIS_ENDPOINT")
+	if !ok {
+		return fmt.Errorf("config: REDIS_ENDPOINT is required; set it in infra/.env (dev) or the SSM plane (prod)")
+	}
+	endpoint := strings.TrimSpace(raw)
+	if !redisEndpointShaped(endpoint) {
+		return fmt.Errorf("config: REDIS_ENDPOINT must be a redis:// or rediss:// endpoint")
+	}
+	cfg.RedisEndpoint = endpoint
+	if raw, ok := source.Get("REDIS_AUTH_TOKEN"); ok {
+		if token := strings.TrimSpace(raw); token != "" {
+			cfg.RedisAuthToken = token
+		}
+	}
+	if strings.HasPrefix(endpoint, "rediss://") && len(cfg.RedisAuthToken) < minCredentialChars {
+		return fmt.Errorf(
+			"config: REDIS_ENDPOINT is rediss://, so REDIS_AUTH_TOKEN must be at least %d characters (the ElastiCache AUTH token)",
+			minCredentialChars)
+	}
+	return nil
+}
+
+// redisEndpointShaped accepts both driver schemes; deeper validation belongs to the dial.
+func redisEndpointShaped(endpoint string) bool {
+	return strings.HasPrefix(endpoint, "redis://") || strings.HasPrefix(endpoint, "rediss://")
+}
+
+// resolveMongo reads the database keys; MONGO_URI is required and MONGO_DATABASE defaults to chat_db.
+func resolveMongo(source Source, cfg *Config) error {
+	raw, ok := source.Get("MONGO_URI")
+	if !ok {
+		return fmt.Errorf("config: MONGO_URI is required; set it in infra/.env (dev) or the secrets plane (prod)")
+	}
+	uri := strings.TrimSpace(raw)
+	if !mongoURIShaped(uri) {
+		return fmt.Errorf("config: MONGO_URI must be a mongodb:// or mongodb+srv:// URI")
+	}
+	cfg.MongoURI = uri
+	if raw, ok := source.Get("MONGO_DATABASE"); ok {
+		if name := strings.TrimSpace(raw); name != "" {
+			cfg.MongoDatabase = name
+		}
+	}
+	return nil
+}
+
+// mongoURIShaped accepts both driver schemes; deeper validation belongs to the dial.
+func mongoURIShaped(uri string) bool {
+	return strings.HasPrefix(uri, "mongodb://") || strings.HasPrefix(uri, "mongodb+srv://")
+}
+
+// resolveObservability reads the OTel keys; a set endpoint demands the license key at the credential floor.
+func resolveObservability(source Source, cfg *Config) error {
+	if raw, ok := source.Get("OTEL_EXPORTER_OTLP_ENDPOINT"); ok {
+		endpoint := strings.TrimSpace(raw)
+		if endpoint != "" {
+			key, _ := source.Get("NEW_RELIC_LICENSE_KEY")
+			key = strings.TrimSpace(key)
+			if len(key) < minCredentialChars {
+				return fmt.Errorf(
+					"config: OTEL_EXPORTER_OTLP_ENDPOINT is set, so NEW_RELIC_LICENSE_KEY must be at least %d characters (the ingest license key)",
+					minCredentialChars)
 			}
+			cfg.OTelEndpoint = endpoint
+			cfg.NewRelicKey = key
 		}
 	}
-	c.RedisAddr = strings.TrimSpace(raw)
-	if tlsFromScheme {
-		c.RedisTLSEnabled = true
+	if raw, ok := source.Get("OTEL_SERVICE_NAME"); ok {
+		if name := strings.TrimSpace(raw); name != "" {
+			cfg.OTelName = name
+		}
+	}
+	if raw, ok := source.Get("OTEL_SERVICE_VERSION"); ok {
+		if version := strings.TrimSpace(raw); version != "" {
+			cfg.OTelVersion = version
+		}
+	}
+	if raw, ok := source.Get("OTEL_TRACE_SAMPLE_RATIO"); ok {
+		trimmed := strings.TrimSpace(raw)
+		ratio, err := strconv.ParseFloat(trimmed, 64)
+		// NaN parses cleanly and defeats both bounds checks, so it is refused explicitly.
+		if err != nil || math.IsNaN(ratio) || ratio <= 0 || ratio > 1 {
+			return fmt.Errorf("config: OTEL_TRACE_SAMPLE_RATIO must lie in the interval (0, 1]; got %q", trimmed)
+		}
+		cfg.OTelSampleRatio = ratio
 	}
 	return nil
-}
-
-func isValidPort(p string) bool {
-	p = strings.TrimSpace(p)
-	if p == "" {
-		return false
-	}
-	if strings.HasPrefix(p, ":") {
-		portStr := strings.TrimPrefix(p, ":")
-		if portStr == "" {
-			return false
-		}
-		port, err := strconv.Atoi(portStr)
-		return err == nil && port >= 1 && port <= 65535
-	}
-	if strings.Contains(p, ":") {
-		parts := strings.Split(p, ":")
-		portStr := parts[len(parts)-1]
-		port, err := strconv.Atoi(portStr)
-		return err == nil && port >= 1 && port <= 65535
-	}
-	port, err := strconv.Atoi(p)
-	return err == nil && port >= 1 && port <= 65535
-}
-
-func redactMongoURI(raw string) string {
-	if !strings.Contains(raw, "@") {
-		return raw
-	}
-	if u, err := url.Parse(raw); err == nil && u.User != nil {
-		u.User = url.UserPassword(u.User.Username(), "***")
-		return u.String()
-	}
-	return raw
 }

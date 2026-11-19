@@ -340,10 +340,14 @@ func TestResolveContracts(t *testing.T) {
 	})
 
 	for caseName, bad := range map[string]string{
-		"garbage":  "junks",
-		"zero":     "0",
-		"negative": "-0.5",
-		"over one": "1.01",
+		"garbage":        "junks",
+		"zero":           "0",
+		"negative":       "-0.5",
+		"over one":       "1.01",
+		"NaN":            "NaN",
+		"lowercase NaN":  "nan",
+		"plus infinity":  "Inf",
+		"minus infinity": "-Inf",
 	} {
 		t.Run("OTEL_TRACE_SAMPLE_RATIO "+caseName+" fails loud naming the var", func(t *testing.T) {
 			_, err := config.Resolve(withkey(map[string]string{"OTEL_TRACE_SAMPLE_RATIO": bad}))
@@ -443,6 +447,44 @@ func TestLoadEndToEnd(t *testing.T) {
 		var cfgErr *config.ConfigError
 		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "needs AWS_REGION") {
 			t.Errorf("err = %v, want a *ConfigError naming the missing region", err)
+		}
+	})
+
+	t.Run("process env values never rescue a prod boot", func(t *testing.T) {
+		t.Setenv("ENV_TYPE", "prod")
+		offlineProd(t, "eu-central-1")
+		t.Setenv("AWS_ENDPOINT_URL_SECRETS_MANAGER", "http://127.0.0.1:1")
+		t.Setenv("AWS_ENDPOINT_URL_SSM", "http://127.0.0.1:1")
+		t.Setenv("PADDLE_WEBHOOK_SECRET", testPaddleSecret)
+		t.Setenv("QUEUE_URL", testQueueURL)
+		t.Setenv("PORT", "9137")
+		t.Setenv("DRAIN_TIMEOUT", "12s")
+		t.Setenv("MAX_BODY_BYTES", "2048")
+		t.Setenv("PUBLISH_BUDGET", "7s")
+
+		_, err := config.Load()
+		var cfgErr *config.ConfigError
+		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), `could not fetch secret "detectai/payment-webhook/secrets"`) {
+			t.Errorf("err = %v, want the prod fetch failure; the process env must not serve the prod plane", err)
+		}
+	})
+
+	t.Run("a malformed dev file plane fails wrapped", func(t *testing.T) {
+		t.Setenv("ENV_TYPE", "dev")
+		t.Setenv("PADDLE_WEBHOOK_SECRET", testPaddleSecret)
+		t.Setenv("QUEUE_URL", testQueueURL)
+		t.Chdir(t.TempDir())
+		if err := os.MkdirAll("infra", 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join("infra", ".env"), []byte("not a dotenv line\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := config.Load()
+		var cfgErr *config.ConfigError
+		if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), `is malformed at line 1`) {
+			t.Errorf("err = %v, want a *ConfigError naming the malformed line", err)
 		}
 	})
 

@@ -39,7 +39,7 @@ All four targets are local: formatting, validation, and the mocked Terraform tes
 make check
 ```
 
-`tfctl` validates `envs/.env`, shows which state plane it selected, and resolves the account name over New Relic's GraphQL. A valid-looking key from the wrong account fails here instead of poisoning a plan. On real AWS, tfctl rides the stack's seeder role (`detectai-observability-seeder`, created on demand) so the commands never use your personal keys to write state.
+`tfctl` validates `envs/.env`, shows which state plane it selected, resolves the account name over New Relic's GraphQL, and reports the state ledger plus available snapshots (`ledger:`, `snapshot:` lines). A valid-looking key from the wrong account fails here instead of poisoning a plan. On real AWS, tfctl rides the stack's seeder role (`detectai-observability-seeder`, created on demand) so the commands never use your personal keys to write state.
 
 ## Step 4: Plan and apply
 
@@ -48,7 +48,7 @@ make plan
 make apply
 ```
 
-> **Tip**: The first run creates the plane's state bucket on demand. On the Floci (emulator) plane, apply auto-approves; on real AWS, Terraform asks you to confirm. The plane follows `PLANE=floci|aws` (default floci) — pass `PLANE=aws` to ride the real plane.
+> **Tip**: The first run creates the plane's state bucket on demand. On the Floci (emulator) plane, apply auto-approves; on real AWS, Terraform asks you to confirm. The plane follows `PLANE=floci|aws` (default floci) — pass `PLANE=aws` to ride the real plane. Floci forgets its S3 contents on restart, so a later plan restores the ledger from a local snapshot automatically (a `note:` line) and a successful apply writes a fresh one; `make state-status` shows what is available. Recovering without a snapshot: `make recover-state`.
 
 ## What you just published
 

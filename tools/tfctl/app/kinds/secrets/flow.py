@@ -67,8 +67,17 @@ def terraform_verb_flow(
     print(f"state:  {state_bucket} / {state_key_value}")
     print(f"window: {resolve_recovery_window(declaration, values, is_emulator)} day(s)")
     config_keys = [key for key in declaration.ssm_keys if values.get(key, "") != ""]
+    unseeded_keys = [key for key in declaration.ssm_keys if values.get(key, "") == ""]
     if config_keys:
-        print(f"config: {len(config_keys)} key(s) -> SSM {declaration.ssm_prefix}")
+        print(
+            f"config: {len(config_keys)} key(s) -> SSM {declaration.ssm_prefix}: "
+            + " ".join(config_keys)
+        )
+    if unseeded_keys:
+        print(
+            f"warning: {len(unseeded_keys)} declared SSM key(s) not seeded "
+            "(no value in .env): " + " ".join(unseeded_keys)
+        )
     for note in plane_notes(declaration, values, is_emulator):
         print(note)
 

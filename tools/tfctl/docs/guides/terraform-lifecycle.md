@@ -29,7 +29,7 @@ No IAM, no S3 state-bucket-in-stack (the bucket is engine tooling, [healed on de
 
 ## The verb anatomy
 
-Every run opens with the banner — the run's whole world in eight lines:
+Every run opens with the banner — the run's whole world in eight lines, plus a warning line when a declared key has no value:
 
 ```text
 plane:   floci (emulator http://localhost:4566)
@@ -39,8 +39,11 @@ secret:  detectai/document-parser/secrets
 keys:    API_KEY *** (18 chars, hidden) NEW_RELIC_LICENSE_KEY *** (21 chars, hidden)
 state:   detectai-document-parser-tfstate-000000000000 / document-parser/floci/terraform.tfstate
 window:  0 day(s)
-config:  15 key(s) -> SSM /detectai/document-parser/
+config:  15 key(s) -> SSM /detectai/document-parser/: UPLOAD_LIMIT_BYTES MAX_PDF_PAGES ...
+warning: 2 declared SSM key(s) not seeded (no value in .env): OTEL_SERVICE_VERSION OTEL_TRACE_SAMPLE_RATIO
 ```
+
+The `config:` line names the keys that ride; the `warning:` line names the ones the declaration promises but the `.env` does not carry — they never reach the plane.
 
 Then the machinery, in fixed order:
 
@@ -69,6 +72,20 @@ The bucket is not a terraform resource, because terraform cannot stand on a ledg
 
 - The emulator restarts forget, so the first plan after `docker start floci` prints `note: state bucket … is missing; creating it` and proceeds. That note is normal, not an error.
 - A failed init still tells you where to look: on the emulator the fix is "is Floci reachable?"; on real AWS it is backend access to the named bucket in the named region.
+
+## State snapshots
+
+The bucket heals itself, but its **contents** do not: a floci restart forgets the ledger as well. On the emulator, `plan`, `apply` and `auto-apply` therefore restore the latest local snapshot before they plan (printing a `note:` when they do) and take a fresh snapshot after a successful apply. Real AWS never does this — S3 is durable and versioned, so snapshots there are explicit only.
+
+Snapshots live under `~/.local/share/tfctl/state/<slug>/<plane>/` (`TFCTL_STATE_BACKUP_DIR` overrides it), as timestamped files plus `latest` and a metadata sidecar. The metadata is checked on restore so a snapshot from another stack or plane can never be loaded. Directory permissions are `700` and files `600`, because a secrets stack's ledger holds secret values.
+
+| Verb | What it does |
+|------|--------------|
+| `state-save` | copy the live ledger to a timestamped snapshot and refresh `latest` |
+| `state-load --file <path>` | restore that snapshot; `--force` is required when the ledger is not empty |
+| `state-status` | show the live ledger and the last ten snapshots |
+
+When the ledger is empty and no snapshot exists, the engine warns and lets the plan decide: a brand-new stack has no resources to adopt. The per-stack guard is still the gate that refuses a plan creating resources that are already live.
 
 ## auto-apply: the whole seed in one verb
 

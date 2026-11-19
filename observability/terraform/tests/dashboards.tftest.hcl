@@ -25,6 +25,14 @@ run "boards_render" {
     error_message = "web board must have 4 pages."
   }
 
+  assert {
+    condition = (
+      [for p in jsondecode(module.dashboards.boards["chats"].json).pages : p.name] ==
+      ["Chat Service", "Logs"]
+    )
+    error_message = "Chats board must have exactly two pages: Chat Service and Logs."
+  }
+
   # Twin contract part 1: every dev twin keeps its prod board's pages,
   # page-for-page. Drift here means one side lost coverage.
   assert {
@@ -75,6 +83,18 @@ run "boards_render" {
       ])
     ])
     error_message = "web, payment-webhook and chats twins must keep the prod panel order."
+  }
+
+  # A regenerated twin must not silently drop the marker from a panel title.
+  assert {
+    condition = alltrue([
+      for base in ["web", "payment-webhook", "workers", "document-parser", "chats"] :
+      alltrue([
+        for p in jsondecode(module.dashboards.boards["${base}-dev"].json).pages :
+        alltrue([for w in p.widgets : endswith(w.title, " (dev)")])
+      ])
+    ])
+    error_message = "Every dev twin panel title must end with \" (dev)\"."
   }
 
   # Workers' one deliberate deviation: the Payments page swaps prod's

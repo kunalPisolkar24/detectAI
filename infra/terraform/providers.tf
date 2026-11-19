@@ -1,5 +1,4 @@
 locals {
-  # Non-empty endpoint = emulator (test creds, skip flags); empty/null = real AWS.
   effective_endpoint = (
     try(trimspace(var.emulator_endpoint), "") != ""
     ? trimspace(var.emulator_endpoint)
@@ -24,10 +23,18 @@ provider "aws" {
   skip_region_validation      = local.is_emulator
 
   endpoints {
-    sqs = local.effective_endpoint
+    sqs         = local.effective_endpoint
+    elasticache = local.effective_endpoint
   }
 
   default_tags {
     tags = local.common_tags
   }
+}
+
+# Aliased so offline runs never configure it: keys are absent and the emulator has no Atlas API.
+provider "mongodbatlas" {
+  alias       = "fabric"
+  public_key  = var.atlas_public_key
+  private_key = var.atlas_private_key
 }

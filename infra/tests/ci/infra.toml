@@ -1,0 +1,19 @@
+[service]
+slug = "infra"
+region = "ap-southeast-2"
+
+[[queues]]
+name = "payment_events.fifo"
+dlq = "payment_events_dlq.fifo"
+max_receive_count = 5
+
+[[queues]]
+name = "payment_events_dlq.fifo"
+
+[[elasticache]]
+name = "detectai-dev-cache"
+engine = "redis"
+engine_version = "7.0"
+node_type = "cache.t3.micro"
+num_cache_nodes = 1
+port = 6379

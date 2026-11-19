@@ -1,77 +1,65 @@
 # Chats Dashboard
 
-This page documents the **detectai-chats** board: what each page shows and which alerts page the team.
+This page documents the **detectai-chats** board: what each page shows and which alert pages the team.
 
 | | |
 |---|---|
-| Watches | `services/chats` — two roles on one board: `chat-service` (gRPC API) and `chat-worker` (stream consumer) |
-| Service names | `chat-service`, `chat-worker` |
-| Board | `detectai-chats`, 6 pages: Overview, Service, Service Logs, Worker, Worker Logs, Infra |
-| Dev twin | yes — same pages, ` (dev)` on every title |
+| Watches | `services/chats` — one ConnectRPC service, `chats` |
+| Service names | `chats` |
+| Board | `detectai-chats`, 2 pages: Chat Service, Logs |
+| Dev twin | yes — same pages, ` (dev)` on every title, filters `deployment.environment = 'dev'` |
 | Built from | `dashboards/chats/{prod,dev}.tftpl` · `alerts/chats.tf` |
 
 ## How data gets here
 
-- **Traces and logs** — pushed over OTLP through the collector.
-- **Metrics** — the collector scrapes the API and worker Prometheus endpoints (`:9091`, `:9099`).
+All three signals are pushed **directly from the service to New Relic EU** over OTLP/HTTP. There is no collector hop, no Prometheus endpoint and no exporter sidecar for this service — the app owns `service.name`, `service.version` and `deployment.environment` (`prod`/`dev`). See `services/chats/specification/observability.md` for the instrument inventory.
 
-## Overview — both roles in one look
+A panel only has data when the chats process boots with `OTEL_EXPORTER_OTLP_ENDPOINT` and `NEW_RELIC_LICENSE_KEY` set. Without the endpoint the service uses its null telemetry build and emits nothing — an empty board is an unconfigured service, not a broken board.
 
-| Panel | What it tells you |
-|-------|-------------------|
-| RPC/min · Error share | API load and failure share |
-| RPC p95 / p99 (all ops) | User experience on the API |
-| Redis degraded | The shared degraded flag — red here means both roles feel it |
-| Publish vs ingest · Tail latency p95 by family | Message flow and the slowest operation families |
-| Stream lag worst/avg + pending · Lag by partition | The worker's deficit, and where it sits |
-| Cache hit ratio · Container CPU/memory per role | Cache value and runtime health |
-| Service versions reporting | Which builds are live |
-
-## Service — the gRPC API
+## Chat Service
 
 | Panel | What it tells you |
 |-------|-------------------|
-| Reads / Writes / Updates-deletes p95 | Latency per operation family |
-| Read/Write/Update-delete p99 by method | Which method owns the slow tail |
-| Throughput by family · Slow RPC rate by family | Traffic mix and where it hurts |
-| API error share · Requests by status · Errors by family/code | Failure shape |
-| Published + sync fallback | Whether degraded-mode writes are being used |
-| Message size avg | Workload shape |
-| Slowest methods | Ranked worst RPCs |
+| RPC/min · Error share | Load and failure share. Both come from ConnectRPC spans (`rpc.system = 'connect_rpc'`); procedure spans are internal spans, so they are **not** filtered on `span.kind`. |
+| RPC p95 / p99 all ops | User latency, from span `duration.ms` |
+| Avg RPC read / write latency | Full RPC average latency per group, un-faceted, from span `duration.ms` |
+| Avg cache read / write latency | Full cache-operation average per group — `chats_cache_operation_duration_seconds` |
+| Avg DB read / write latency · DB read / write ops/min | Mongo call cost and throughput per group — `chats_datastore_operation_duration_seconds`, `chats_datastore_operations_total` |
+| RPC throughput / p95 / p99 by procedure (reads / writes) | Which method owns the traffic and the slow tail, split so read calls do not drown out writes |
+| Cache operation latency (reads / writes) | Cost per cache operation, split by read and write operations |
+| Datastore operation latency (reads / writes) | Mongo call cost, split by read and write operations |
+| RPC errors by code | Which Connect code is failing (`not_found`, `resource_exhausted`, `internal`, …) |
+| Cache operations by result | Hits, misses, absorbed faults and writes — `chats_cache_operations_total` |
+| Datastore operations by result | Mongo outcomes, including `not_found`, `conflict`, `unavailable` — `chats_datastore_operations_total` |
+| Rate-limit refusals by scope | Which burst budget (`create`/`write`) is exhausted |
+| Validation rejections by field | Which payload field clients get wrong |
+| Slowest RPCs | Ranked worst procedures by average and max latency |
+| Service versions reporting | Which build is live |
 
-## Service Logs
+The read/write split uses the values the service already emits: RPC reads are `GetChat`, `ListChats`, `GetChatHistory` and the other five procedures are writes; datastore reads are `chat`, `chats`, `chat_history` and writes include `rename_chat` (an update); cache reads are `chat`, `chat_list`, `head` and writes include the `put_*` and `invalidate_*` operations.
 
-Same layout as every service page: error stream (latest 100), volume by level, errors by method, recent api errors, and slow RPCs over 500 ms.
+The cache, datastore, rate-limit and validation panels use instruments the service emits itself. They are deliberately on this page rather than an Infra page: there is no exporter to scrape and no datastores-side telemetry in this pipeline.
 
-## Worker — the stream consumer
-
-| Panel | What it tells you |
-|-------|-------------------|
-| Ingested/min · Consumed/min | What arrived vs what got processed |
-| DLQ messages · Stream pending | Backlog and permanent loss |
-| Batch process vs BulkUpsert latency · Batch size avg | Pipeline efficiency per stage |
-| Stream errors · DB errors by operation | Which layer is failing |
-| Consumed vs ingested · Go runtime per role | Catch-up speed and runtime health |
-
-## Worker Logs
-
-Error stream (latest 100), volume by level, errors by message, recent worker errors, and slow BulkUpsert calls over 1000 ms.
-
-## Infra — the datastores behind chat
+## Logs
 
 | Panel | What it tells you |
 |-------|-------------------|
-| Mongo op p95 · Redis cmd p95 · Cache hit % | The three dependencies at a glance |
-| Mongo/Redis p95 slowest 4 ops | Which specific call owns the tail |
-| Cache read latency hit vs miss | The cost of a miss |
-| Mongo/Redis container CPU/mem · Datastore network rx/tx | Container-level pressure |
-| Redis exporter · Collector pipeline | Exporter health and delivery to New Relic |
-| Slowest datastore ops | Ranked worst datastore calls |
+| Error and warn stream | Latest 100 ERROR/WARN records with `trace.id`, so a line links into its trace |
+| Log volume by level | Overall logging shape |
+| Error and warn volume by message | Top repeated failure messages over time |
+| Recent errors and warnings | Grouped samples with a trace link |
+| Slow RPCs over 500ms | ConnectRPC spans that took longer than 500 ms |
+
+The service emits no `method`, `code` or `stream` log fields; method and code live on spans and metrics, and `stream` belonged to the retired worker.
 
 ## Alerts
 
 | Alert | Fires when | Why you care |
 |-------|------------|--------------|
-| **Chats Redis degraded** | The `chat_redis_degraded` gauge equals 1 for 5 minutes | Both roles shift to degraded mode — writes sync to Mongo instead of the cache |
+| **Chats RPC error share high** | More than 2% of ConnectRPC spans carry an error status for 10 minutes | The old `chat_redis_degraded` condition queried a metric the rebuilt service no longer emits; the replacement pages on a signal the service really produces. |
 
-Source: `alerts/chats.tf` — a single gauge condition shared by `chat-service` and `chat-worker`, so both roles' view of the same degradation cannot disagree.
+Source: `alerts/chats.tf` — one condition on the `chats` alert policy, filtered on `deployment.environment = '${var.environment}'` so a load-test run never pages.
+
+## Later: EKS
+
+Production is expected to move to EKS. There is no Kubernetes telemetry in the pipeline today, so no runtime page is published. When the cluster ships, add a third **prod-only** page — container CPU/throttling, memory vs limit, OOMKilled/restart counts, pod readiness and replica availability — once the telemetry path is chosen (New Relic Kubernetes integration or an OTel collector DaemonSet with kube-state-metrics/cAdvisor). It must stay out of the dev twin, and the twin-parity tests need a documented deviation for it, like the workers board's Payments swap.

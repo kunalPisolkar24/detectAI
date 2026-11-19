@@ -1,6 +1,6 @@
 ---
 name: tfctl
-description: DetectAI's tfctl — the stack-agnostic engine in tools/tfctl that drives a stack's AWS + provider plane kind by kind — the per-service secrets stacks (Secrets Manager + SSM from infra/.env), the New Relic observability stack, and the shared SQS queue fabric (infra). Use when running or debugging tfctl verbs, seeding or verifying a service's secrets plane, working with the seeder carrier role, MFA prompts or cached sessions, onboarding a service's secrets.toml, or introducing a new kind.
+description: DetectAI's tfctl — the stack-agnostic engine in tools/tfctl that drives a stack's AWS + provider plane kind by kind — the per-service secrets stacks (Secrets Manager + SSM from infra/.env), the New Relic observability stack, and the shared infra fabrics (SQS, ElastiCache and/or MongoDB Atlas). Use when running or debugging tfctl verbs, seeding or verifying a service's secrets plane, working with the seeder carrier role, MFA prompts or cached sessions, onboarding a service's secrets.toml, or introducing a new kind.
 ---
 
 # tfctl — the stack driver
@@ -24,7 +24,7 @@ tools/tfctl/
 │   └── kinds/             the registry — the one seam between engine and stacks
 │       ├── secrets/       the secrets kind + the vendored terraform stack it drives
 │       ├── observability/ the observability kind (stack-dir based, adds check)
-│       └── infra/         the infra kind — the shared queue fabric (stack-dir based)
+│       └── infra/         the infra kind — the shared fabrics: SQS, ElastiCache and/or Atlas (stack-dir based)
 ├── tests/                 unit (default) + integration (live Floci)
 ├── mk/ + Makefile         install / lint / test tiers / the secrets-verb wrappers
 └── docs/                  the deep documentation tree
@@ -36,7 +36,7 @@ Three kinds are registered today:
 |------|-------------------------|---------------------|-----------|
 | **secrets** | `secrets.toml` at the service root | `infra/.env` | `--service <name>`, or nearest declaration upward from cwd |
 | **observability** | `observability.toml` at the stack root | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
-| **infra** | `infra.toml` at the stack root — the shared queue fabric in `infra` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
+| **infra** | `infra.toml` at the stack root — the shared fabrics (SQS, ElastiCache and/or MongoDB Atlas) in `infra` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
 
 A kind never edits the engine — it fills one slot table (`load`, `validate`,
 `resolve_plane`, `build_tf_vars`, `seeder_policy`, the flows), and `main.py`
@@ -62,15 +62,17 @@ table: [references/verbs.md](references/verbs.md)
 
 ## The verb surface without breaking it
 
-- Eleven verbs: `plan`, `apply`, `auto-apply`, `verify` (secrets-only),
+- Fourteen verbs: `plan`, `apply`, `auto-apply`, `verify` (secrets-only),
   `check` (observability-only), `destroy`, `seeder-drop`, `session-clear`,
-  `session-refresh`, `session-clear-all`, `session-refresh-all`. Verbs a kind
-  does not declare die loudly.
+  `session-refresh`, `session-clear-all`, `session-refresh-all`, plus the
+  state-store verbs `state-save`, `state-load`, `state-status`. Verbs a kind
+  does not declare die loudly (the state verbs are engine-wide).
 - Flag guards are typed, not advisory: `--purge-state` / `--force-delete` /
-  `--drop-seeder` only with `destroy`; `--force` only with
-  `session-refresh-all`; the batch verbs refuse `--service` and `--stack-dir`;
-  `--service` and `--stack-dir` never together. Every failure prints
-  `error:` + a `fix:` line naming exactly what to type next.
+  `--drop-seeder` only with `destroy`; `--force` with `session-refresh-all`
+  or `state-load`; `--file` only with `state-save` / `state-load`; the batch
+  verbs refuse `--service` and `--stack-dir`; `--service` and `--stack-dir`
+  never together. Every failure prints `error:` + a `fix:` line naming
+  exactly what to type next.
 - `--dry-run` is a stakeout, not an execution: it resolves no carrier
   session, prompts for nothing, runs no terraform.
 - The output contract is scriptable: the `plane:`/`carrier:`/`state:` banner
@@ -110,6 +112,29 @@ names — a service never authors IAM.
 The full trust ladder, cache rules, and verb table:
 [references/carrier.md](references/carrier.md)
 
+## State snapshots — the ledger heals too
+
+The state bucket is created on demand, but floci's **contents** vanish on a
+restart. On the emulator, `plan`, `apply` and `auto-apply` therefore restore
+the latest snapshot before they plan (a loud `note:` line) and take a fresh
+one after a successful apply. Real AWS never does this — versioned S3 is
+durable, so snapshots there are explicit opt-in only.
+
+```sh
+poetry -C tools/tfctl run tfctl --stack-dir observability state-status
+poetry -C tools/tfctl run tfctl --stack-dir observability state-save
+poetry -C tools/tfctl run tfctl --stack-dir observability state-load --file <path> --force
+```
+
+Snapshots live under `~/.local/share/tfctl/state/<slug>/<plane>/`
+(`TFCTL_STATE_BACKUP_DIR` overrides), timestamped plus `latest` with a
+metadata sidecar; slug and plane are validated before a restore, directory
+`700` and files `600` (a secrets ledger holds secret values), last ten kept.
+An empty ledger with **no** snapshot only warns — a brand-new stack has
+nothing to adopt, and the per-stack guard (plan-guard for New Relic) is what
+refuses a plan creating resources that are already live. The full flow:
+`tools/tfctl/docs/guides/terraform-lifecycle.md#state-snapshots`.
+
 ## Declarations and values — the founding law
 
 | File | Committed? | Holds |
@@ -123,8 +148,10 @@ The slug is the only identity knob and it pins every AWS name — blob
 it is **forever**: renaming means a new plane, not a rename (and it must fit
 S3's 63-char bucket limit, hence the 34-char ceiling). The allowlists are
 exhaustive: a `.env` key outside `[secrets]`/`[ssm]` never reaches a plane,
-and a key in both is a refused declaration. The schemas, laws, and the
-derived-name table: [references/onboarding.md](references/onboarding.md)
+a key in both is a refused declaration, and a declared key with no `.env`
+value never reaches one either — the plan banner names those. The schemas,
+laws, and the derived-name table live in
+[references/onboarding.md](references/onboarding.md)
 
 ## Testing
 
@@ -165,11 +192,11 @@ derived-name table: [references/onboarding.md](references/onboarding.md)
 | Declaration schema and derived names | `tools/tfctl/docs/concepts/declaration.md` |
 | The values ladder (.env rules) | `tools/tfctl/docs/concepts/values.md` |
 | Trust ladder, MFA, cache rules, session verbs | [references/carrier.md](references/carrier.md) |
-| Every verb, flag, guard, exit code | [references/verbs.md](references/verbs.md) |
+| Every verb, flag, guard, exit code (incl. state verbs) | [references/verbs.md](references/verbs.md) |
 | Onboarding a service or a kind | [references/onboarding.md](references/onboarding.md) |
-| The terraform verbs under the hood | `tools/tfctl/docs/guides/terraform-lifecycle.md` |
+| The terraform verbs and state snapshots under the hood | `tools/tfctl/docs/guides/terraform-lifecycle.md` |
 | What verify proves, row by row | `tools/tfctl/docs/guides/verifying.md` |
 | Test tiers | `tools/tfctl/docs/guides/testing.md` |
 | The service-side view of the secrets plane | the `payment-webhook` skill · the `document-parser` skill |
 | The observability stack this engine drives | the `observability` skill |
-| The queue fabric this engine drives | `infra/README.md` |
+| The fabrics this engine drives | the `infra` skill |

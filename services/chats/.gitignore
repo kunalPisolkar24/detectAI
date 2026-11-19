@@ -1,1 +1,8 @@
-.env
+/api
+/coverage.out
+/coverage-unit.out
+/coverage.html
+
+infra/.env
+!infra/.env.example
+infra/.env.load

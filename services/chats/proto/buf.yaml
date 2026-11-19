@@ -1,0 +1,15 @@
+version: v2
+
+modules:
+  - path: .
+
+lint:
+  use:
+    - STANDARD
+  # Both exceptions are deliberate: the flat proto/ directory (no chats/v1
+  # nesting) and the contract's shared-resource responses (Chat, Message) —
+  # see specification/contract.md.
+  except:
+    - PACKAGE_DIRECTORY_MATCH
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - RPC_RESPONSE_STANDARD_NAME

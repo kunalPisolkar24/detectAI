@@ -39,6 +39,129 @@ variable "queues" {
   }
 }
 
+variable "cache_clusters" {
+  description = "The ElastiCache fabric declared by infra.toml; empty means no cache."
+  type = map(object({
+    name                 = string
+    engine               = string
+    engine_version       = string
+    node_type            = string
+    num_cache_nodes      = number
+    port                 = number
+    parameter_group_name = string
+  }))
+  default = {}
+
+  validation {
+    condition     = alltrue([for cluster in var.cache_clusters : cluster.engine == "redis"])
+    error_message = "every cache engine must be redis (the shared cache contract)."
+  }
+
+  validation {
+    condition     = alltrue([for cluster in var.cache_clusters : can(regex("^[a-z][a-z0-9-]{0,39}$", cluster.name))])
+    error_message = "every cache name must be a lowercase DNS-style name: [a-z][a-z0-9-]{0,39}."
+  }
+
+  validation {
+    condition     = alltrue([for cluster in var.cache_clusters : cluster.num_cache_nodes >= 1 && cluster.num_cache_nodes <= 6])
+    error_message = "num_cache_nodes must be 1-6."
+  }
+
+  validation {
+    condition     = alltrue([for cluster in var.cache_clusters : cluster.port >= 1 && cluster.port <= 65535])
+    error_message = "cache port must be 1-65535."
+  }
+}
+
+variable "cache_auth_token" {
+  description = "AUTH token for the cache fabric; sensitive, supplied by envs/.env via tfctl."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "cache_subnet_ids" {
+  description = "VPC subnet IDs for the cache subnet groups; plane-specific, supplied by tfctl."
+  type        = list(string)
+  default     = []
+}
+
+variable "cache_security_group_ids" {
+  description = "Optional VPC security group IDs for the cache clusters."
+  type        = list(string)
+  default     = []
+}
+
+variable "atlas_clusters" {
+  description = "The Atlas free-tier fabric declared by infra.toml; empty means no Atlas."
+  type = map(object({
+    name   = string
+    region = string
+    tier   = string
+  }))
+  default = {}
+
+  validation {
+    condition     = alltrue([for cluster in var.atlas_clusters : cluster.tier == "M0"])
+    error_message = "the Atlas fabric is pinned to the M0 free tier."
+  }
+
+  validation {
+    condition     = alltrue([for cluster in var.atlas_clusters : can(regex("^[A-Z]{2}_[A-Z]+_[0-9]+$", cluster.region))])
+    error_message = "Atlas regions use names like AP_SOUTHEAST_2, not AWS codes."
+  }
+}
+
+variable "atlas_public_key" {
+  description = "Atlas programmatic API public key; sensitive, supplied by envs/.env via tfctl."
+  type        = string
+  # Placeholder for runs that never configure the provider; tfctl enforces real keys for a real Atlas plane.
+  default   = "unused"
+  sensitive = true
+}
+
+variable "atlas_private_key" {
+  description = "Atlas programmatic API private key; sensitive, supplied by envs/.env via tfctl."
+  type        = string
+  default     = "unused"
+  sensitive   = true
+}
+
+variable "atlas_project_id" {
+  description = "The 24-hex Atlas project ID that owns the free cluster."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.atlas_project_id == "" || can(regex("^[0-9a-fA-F]{24}$", var.atlas_project_id))
+    error_message = "atlas_project_id must be a 24-character hex string."
+  }
+}
+
+variable "atlas_db_username" {
+  description = "SCRAM database user created on the Atlas free cluster."
+  type        = string
+  default     = ""
+}
+
+variable "atlas_db_password" {
+  description = "SCRAM database user password; sensitive, supplied by envs/.env via tfctl."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "atlas_ip_cidrs" {
+  description = "Explicit cluster access-list CIDRs (IPv4 or IPv6); no open default."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for cidr in var.atlas_ip_cidrs : can(cidrhost(cidr, 0))])
+    error_message = "every atlas_ip_cidrs entry must be a valid IPv4 or IPv6 CIDR."
+  }
+}
+
 variable "visibility_timeout_seconds" {
   description = "The redrive budget per receive attempt, shared by the fabric."
   type        = number

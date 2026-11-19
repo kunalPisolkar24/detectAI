@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 include mk/tests.mk
-include mk/queues.mk
+include mk/fabrics.mk
 
 .PHONY: help
-help: help-tests help-queues
+help: help-tests help-fabrics

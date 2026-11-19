@@ -37,6 +37,9 @@ the verb identically from any directory.
 | `session-refresh` | drop and re-mint the stack's cached carrier triplet |
 | `session-clear-all` | remove every cached carrier triplet (all stacks) |
 | `session-refresh-all` | mint every ready service's triplet in one run — one MFA code per device on real AWS |
+| `state-save` | copy the stack's state ledger to a local timestamped snapshot (floci also does this automatically after a successful apply) |
+| `state-load` | restore a local snapshot into the ledger; `--force` overwrites a non-empty one |
+| `state-status` | show whether the ledger is present and list the available local snapshots |
 
 ## The flags
 
@@ -50,14 +53,16 @@ the verb identically from any directory.
 | `--purge-state` | `destroy` | after destroy: delete every object version in the state bucket, then the bucket (previewed, warned on foreign prefixes) |
 | `--force-delete` | `destroy` | real AWS only: delete the secret immediately, skipping its recovery window |
 | `--drop-seeder` | `destroy` | after destroy: detach the carrier's inline policy, delete the role |
-| `--force` | `session-refresh-all` | re-mint triplets even when a cached one is still valid |
+| `--force` | `session-refresh-all`, `state-load` | re-mint triplets even when cached, or overwrite a non-empty ledger |
+| `--file <path>` | `state-save`, `state-load` | explicit snapshot path (defaults to the plane's `latest`) |
 
 ## Guards (misplaced flags die loudly)
 
 | Guard | Because |
 |-------|---------|
 | `--purge-state`, `--force-delete`, `--drop-seeder` accepted only by `destroy` | they are teardown steps of a destroy that succeeded |
-| `--force` accepted only by `session-refresh-all` | re-minting is a batch decision |
+| `--force` accepted only by `session-refresh-all` and `state-load` | re-minting is a batch decision; overwriting a ledger is explicit |
+| `--file` accepted only by `state-save` / `state-load` | no other verb reads or writes a snapshot file |
 | `--service` refused by `session-clear-all` / `session-refresh-all` | these verbs walk every service by design — target one with `session-clear` |
 | `--service` and `--stack-dir` never together | they name two different stacks; pass one |
 | `--stack-dir` refused by the batch verbs | they walk the services namespaces — target a single stack with `session-clear` / `session-refresh` |
@@ -86,6 +91,18 @@ switch names (`PLANE=floci|aws`, `DRY_RUN=0|1`, `FORCE_DELETE=0|1`,
 `FORCE=0|1`). A new service onboards by writing its two files, not a make
 fragment.
 
+## State snapshots in practice
+
+On floci the bucket's contents vanish on restart, so `plan`/`apply`/
+`auto-apply` restore `~/.local/share/tfctl/state/<slug>/floci/latest.tfstate`
+before planning and save a fresh snapshot after a successful apply. Real AWS
+is explicit-only: versioned S3 needs no local copy. A ledger with no snapshot
+only produces a `warning:` — the per-stack guard still blocks a plan that
+would create live resources. The observability stack wraps these verbs in
+`make state-backup` / `state-restore` / `state-status` and adds
+`make recover-state` to import the live New Relic plane when no snapshot
+exists; see the observability skill's publishing reference.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -106,6 +123,9 @@ Phrases remain valid across both planes, so text-asserting a run is stable:
 - the subprocess trio: `created: <thing>`, `removed: <path>`,
   `deleted: <thing>`; refresh-all's
   `summary: N refreshed, N valid, N skipped, N failed`
+- the state ledger: `note: state ledger is empty after emulator restart;
+  restoring <path>`, `note: state bucket <bucket> is missing; creating it`,
+  `saved: <path> (serial N)`, `restored: <path> -> <bucket> / <key>`
 - values appear only as `KEY *** (N chars, hidden)` and 12-hex fingerprints
 
 Every failure is shaped before it is printed — an `error:` line with a

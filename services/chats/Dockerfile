@@ -1,20 +1,33 @@
-FROM golang:1.25-alpine AS builder
+FROM golang:1.27-bookworm AS builder
+
+# A go.mod bump fails the build here instead of silently pulling a new toolchain.
+ENV GOTOOLCHAIN=local \
+    GOFLAGS=-mod=readonly
 
 WORKDIR /app
-
-RUN apk add --no-cache git
-
 COPY go.mod go.sum ./
 RUN go mod download
+COPY cmd cmd
+COPY internal internal
+COPY proto proto
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -trimpath -buildvcs=false -ldflags="-s -w" -o chats ./cmd/api
 
-COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -trimpath -buildvcs=false -ldflags="-s -w" -o healthcheck ./cmd/healthcheck
 
-RUN go build -o chat-service ./cmd/server/main.go
+# Distroless static ships the CA roots the mongo, redis and AWS clients need.
+FROM gcr.io/distroless/static-debian12:nonroot
 
-FROM alpine:3.19
+ENV PORT=8090
+
 WORKDIR /app
-COPY --from=builder /app/chat-service .
 
-EXPOSE 50051 9091
+COPY --from=builder --chown=65532:65532 /app/chats chats
+COPY --from=builder --chown=65532:65532 /app/healthcheck healthcheck
 
-CMD ["./chat-service"]
+USER 65532:65532
+
+EXPOSE 8090
+
+CMD ["/app/chats"]

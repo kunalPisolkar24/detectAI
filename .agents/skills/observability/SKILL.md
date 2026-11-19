@@ -93,8 +93,8 @@ Anatomy, thresholds, notifications: [references/alerts.md](references/alerts.md)
 cd observability                    # never the root Makefile's obs-* targets
 make env                          # creates envs/.env — put a real NRAK- key in it
 make fmt init validate test       # offline gate — exactly what CI runs
-make check                        # validates .env, previews the plane, resolves the account live
-make plan && make apply           # the bucket self-heals; auto-approves on Floci, interactive on real AWS
+make check                        # validates .env, previews the plane, resolves the account live, shows state + snapshots
+make plan && make apply           # bucket self-heals and floci auto-restores its ledger; auto-approves on Floci, interactive on real AWS
 ```
 
 tfctl (installed from `tools/tfctl`) is the driver — the make targets wrap its
@@ -112,13 +112,37 @@ committed.
 
 Planes, precedence, failure modes: [references/publishing.md](references/publishing.md)
 
+## State recovery
+
+Floci forgets the state ledger on restart. On that plane `plan`/`apply`
+restore the latest local snapshot before planning and save a fresh one after a
+successful apply, so a normal `make plan` after a restart should say
+*No changes*. Real AWS is explicit-only — versioned S3 is durable.
+
+```bash
+make state-status                       # ledger present? snapshots available?
+make state-backup                       # manual snapshot (apply already does this on floci)
+make state-restore FILE=<path> FORCE=1  # put a snapshot back; FORCE overwrites a non-empty ledger
+make recover-state                      # no snapshot: import the live boards/policies/conditions into state
+```
+
+`make recover-state` generates a temporary `terraform/imports.tf` from the
+live New Relic plane (39 imports today) and applies it, so resources are
+adopted rather than duplicated; the plan-guard runs before the apply. Never
+apply a plan that says "N to add" while the boards are visibly live — that is
+how an empty ledger duplicates the whole plane. Full teardown of the NR plane
+is a last resort, not a recovery step: see
+`docs/runbooks/recover-duplicate-dashboards.md`.
+
 ## Guardrails
 
 - Run everything from `observability`. The root `Makefile` has no
   obs targets; the make targets here (`check`/`plan`/`apply`/
-  `auto-apply`/`destroy`) drive tfctl directly.
+  `auto-apply`/`destroy`/`state-*`/`recover-state`) drive tfctl directly.
 - This root is pure New Relic: no AWS provider, and no edits reaching into
   `infra/terraform` or service code from here.
 - A widget is only as real as its telemetry: confirm the span/metric/log
   attribute actually flows before charting it (see the telemetry reference).
+- Never apply an "N to add" plan while boards are live — restore or import the
+  ledger first; the plan-guard exists to stop this, so don't bypass it.
 - The offline gate is the PR gate — never leave it failing.

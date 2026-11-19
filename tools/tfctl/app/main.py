@@ -14,6 +14,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+from app.engine.carrier.identity import plane_account
 from app.engine.carrier.role import drop_seeder_flow
 from app.engine.carrier.session import (
     clear_cached_session,
@@ -21,8 +22,15 @@ from app.engine.carrier.session import (
     resolve_carrier_session,
     session_cache_for,
 )
-from app.engine.declaration.model import DeclarationError
+from app.engine.declaration.model import DeclarationError, state_bucket_for
 from app.engine.shell import die
+from app.engine.stack.inputs import state_key
+from app.engine.stack.state_store import (
+    STATE_VERBS,
+    ensure_state_ledger,
+    snapshot_after_apply,
+    state_store_flow,
+)
 from app.engine.values.parse import parse_env_file
 from app.engine.values.rules import plane_errors
 from app.kinds import KINDS, register
@@ -41,7 +49,9 @@ register(secrets_kind())
 register(observability_kind())
 register(infra_kind())
 
-VERBS = tuple(dict.fromkeys(verb for kind in KINDS.values() for verb in kind.my_verbs))
+VERBS = tuple(
+    dict.fromkeys(STATE_VERBS + tuple(verb for kind in KINDS.values() for verb in kind.my_verbs))
+)
 
 
 def _print_errors(errors: list[str]) -> bool:
@@ -78,7 +88,8 @@ def build_parser() -> argparse.ArgumentParser:
         "drops every cached one, and session-refresh-all "
         "mints every ready service's seeder session in one run (one shared MFA code "
         "on real AWS); check drives the observability stack's credential "
-        "round-trip (envs/.env)",
+        "round-trip (envs/.env); state-save/state-load/state-status manage "
+        "local snapshots of the state ledger",
     )
     parser.add_argument(
         "--service",
@@ -105,6 +116,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="session-refresh-all only: re-mint every ready service's seeder session "
         "even when a cached one is still valid",
+    )
+    parser.add_argument(
+        "--file",
+        help="state-save/state-load only: the snapshot file (default: the plane's latest)",
     )
     parser.add_argument(
         "--values-file", help="alternate values file (default: the service's infra/.env)"
@@ -145,10 +160,15 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
         die("--force-delete only applies to the destroy command", "run it with destroy")
     if args.drop_seeder and args.command != "destroy":
         die("--drop-seeder only applies to the destroy command", "run it with destroy")
-    if args.force and args.command != "session-refresh-all":
+    if args.force and args.command not in ("session-refresh-all", "state-load"):
         die(
-            "--force only applies to the session-refresh-all command",
-            "run it with session-refresh-all",
+            "--force only applies to the session-refresh-all and state-load commands",
+            "run it with session-refresh-all or state-load",
+        )
+    if args.file and args.command not in ("state-save", "state-load"):
+        die(
+            f"--file does not apply to the {args.command} command",
+            "run state-save or state-load with --file",
         )
     if args.service and args.command in ("session-clear-all", "session-refresh-all"):
         die(
@@ -208,7 +228,7 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
             fix = "run session-clear-all to drop every cached seeder session, or fix the service's secrets.toml"
         die(str(exc), fix)
 
-    if args.command not in kind.my_verbs:
+    if args.command not in kind.my_verbs and args.command not in STATE_VERBS:
         die(
             f"{args.command} is not a verb of the {kind.name} kind",
             "see the kind's verbs in the tool's README",
@@ -270,7 +290,7 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
         return 1
 
     session = None
-    if args.command in kind.carried_verbs:
+    if args.command in kind.carried_verbs or args.command in STATE_VERBS:
         session = resolve_carrier_session(
             declaration,
             values,
@@ -280,6 +300,20 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
             kind.seeder_policy,
         )
 
+    if args.command in STATE_VERBS:
+        return state_store_flow(declaration, values, is_emulator, args.command, args, session)
+
+    bucket = state_bucket_for(declaration.slug, plane_account(session, is_emulator))
+    key = state_key(declaration, is_emulator)
+    hook_verbs = ("plan", "apply", "auto-apply")
+    if (
+        is_emulator
+        and not args.dry_run
+        and args.command in hook_verbs
+        and ensure_state_ledger(declaration, values, is_emulator, bucket, key, session) != 0
+    ):
+        return 1
+
     if args.command == "auto-apply":
         if args.dry_run:
             kind.terraform_flow(declaration, values, is_emulator, "plan", args, session)
@@ -287,6 +321,8 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
                 "then apply:  terraform apply with the same backend overrides (auto on the "
                 "emulator, interactive confirm on real AWS)"
             )
+            if is_emulator:
+                print("then snapshot: the state ledger to the local backup after a successful apply")
             if kind.verify is not None:
                 print(
                     "then verify: the live SSM parameters and secret blob vs the values file "
@@ -297,12 +333,17 @@ def main(argv: list[str] | None = None, workspace=None) -> int:
             code = kind.terraform_flow(declaration, values, is_emulator, step, args, session)
             if code != 0:
                 return code
+        if is_emulator and snapshot_after_apply(declaration, values, is_emulator, bucket, key, session) != 0:
+            return 1
         if kind.verify is None:
             return 0
         return _verify_flow(kind, declaration, values, is_emulator, False, session)
 
     if args.command in ("plan", "apply", "destroy"):
-        return kind.terraform_flow(declaration, values, is_emulator, args.command, args, session)
+        code = kind.terraform_flow(declaration, values, is_emulator, args.command, args, session)
+        if code == 0 and args.command == "apply" and not args.dry_run:
+            return snapshot_after_apply(declaration, values, is_emulator, bucket, key, session) or code
+        return code
     if kind.verb_flow is not None:
         return kind.verb_flow(declaration, values, is_emulator, args.command, args, session)
     die(
