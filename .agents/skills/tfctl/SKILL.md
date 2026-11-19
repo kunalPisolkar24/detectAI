@@ -199,4 +199,4 @@ laws, and the derived-name table live in
 | Test tiers | `tools/tfctl/docs/guides/testing.md` |
 | The service-side view of the secrets plane | the `payment-webhook` skill · the `document-parser` skill |
 | The observability stack this engine drives | the `observability` skill |
-| The fabrics this engine drives | `infra/README.md` |
+| The fabrics this engine drives | the `infra` skill |
