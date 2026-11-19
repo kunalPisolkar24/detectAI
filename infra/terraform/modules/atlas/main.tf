@@ -5,8 +5,7 @@ resource "mongodbatlas_advanced_cluster" "this" {
   name         = each.value.name
   cluster_type = "REPLICASET"
 
-  # M0 / Free is the only tier this fabric declares. TENANT + priority 7 is
-  # the provider's tenant-cluster shape; backing_provider_name pins AWS.
+  # M0 requires the provider's tenant-cluster shape (TENANT, priority 7, AWS backing).
   replication_specs = [{
     region_configs = [{
       electable_specs = {
@@ -20,8 +19,7 @@ resource "mongodbatlas_advanced_cluster" "this" {
   }]
 }
 
-# Database users are project-scoped, not cluster-scoped: one user serves every
-# declared cluster in the project, even if the ledger grows later.
+# Project-scoped, so one user covers every cluster in the project.
 resource "mongodbatlas_database_user" "this" {
   project_id         = var.project_id
   username           = var.db_username

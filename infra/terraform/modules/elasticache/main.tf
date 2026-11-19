@@ -15,9 +15,8 @@ resource "aws_elasticache_subnet_group" "this" {
   subnet_ids  = var.subnet_ids
 }
 
-# A replication group is the only ElastiCache resource that supports an AUTH
-# token in provider 5.x. With one node, cluster mode and failover off, it is a
-# single Redis instance — the shared, disposable cache the spec describes.
+# Only a replication group accepts an AUTH token in provider 5.x; one node with
+# cluster mode and failover off keeps it a single instance.
 resource "aws_elasticache_replication_group" "this" {
   for_each = var.clusters
 

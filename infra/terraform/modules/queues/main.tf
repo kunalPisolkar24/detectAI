@@ -1,6 +1,5 @@
-# Two resource classes by redrive role: a queue that redrives cannot read its
-# DLQ's arn from a block of its own, so targets live in a separate for_each.
-# The declaration's ledger law guarantees redrive targets are terminal.
+# Redrive sources need a separate resource: a queue cannot reference its own
+# DLQ's ARN from its own block.
 
 locals {
   terminal_queues      = { for key, queue in var.queues : key => queue if queue.dlq == "" }
@@ -8,9 +7,7 @@ locals {
   terminal_key_by_name = { for key, queue in var.queues : queue.name => key if queue.dlq == "" }
 }
 
-# Retention and visibility mirror specification/messaging.md: retention stays
-# IaC-only, not a runtime knob. Producers (payment-webhook) always carry an
-# explicit MessageDeduplicationId, so content-based dedup stays off.
+# Content-based dedup stays off: producers supply an explicit MessageDeduplicationId.
 
 resource "aws_sqs_queue" "terminal" {
   for_each = local.terminal_queues

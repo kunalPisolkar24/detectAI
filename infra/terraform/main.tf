@@ -19,9 +19,8 @@ module "elasticache" {
 
 module "atlas" {
   source = "./modules/atlas"
-  # Atlas has no emulator, but its API is public: the state plane only stores
-  # Terraform state, so a real M0 cluster can be tracked on floci too. The
-  # aliased provider is never configured when count is zero.
+  # No Atlas emulator; its public API needs only state tracking, so floci works.
+  # count = 0 leaves the aliased provider unconfigured.
   count = length(var.atlas_clusters) > 0 ? 1 : 0
 
   providers = {

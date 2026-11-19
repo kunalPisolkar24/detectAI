@@ -1,5 +1,4 @@
 locals {
-  # Non-empty endpoint = emulator (test creds, skip flags); empty/null = real AWS.
   effective_endpoint = (
     try(trimspace(var.emulator_endpoint), "") != ""
     ? trimspace(var.emulator_endpoint)
@@ -33,8 +32,7 @@ provider "aws" {
   }
 }
 
-# Aliased so queue/cache-only runs and every floci run never configure it —
-# the Atlas keys are absent offline and the emulator has no Atlas API.
+# Aliased so offline runs never configure it: keys are absent and the emulator has no Atlas API.
 provider "mongodbatlas" {
   alias       = "fabric"
   public_key  = var.atlas_public_key

@@ -1,9 +1,6 @@
 mock_provider "aws" {}
 mock_provider "mongodbatlas" {}
 
-# The committed fabric: one ledger entry per queue in infra.toml. Only the
-# ledger is set here — visibility/retention ride the variables' spec-pinned
-# defaults, so these asserts carry the contract.
 variables {
   aws_region = "ap-southeast-2"
   queues = {
