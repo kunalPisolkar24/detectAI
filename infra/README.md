@@ -1,7 +1,8 @@
 # infra — the shared fabrics as code
 
 This directory terraform-drives the infrastructure the services share, via
-tfctl's `infra` kind. `infra.toml` is the exhaustive ledger of **which fabrics
+tfctl's `infra` kind — full documentation in [docs/](docs/README.md).
+`infra.toml` is the exhaustive ledger of **which fabrics
 exist**: `[[queues]]` for SQS, `[[elasticache]]` for the shared Redis cache, and
 `[[atlas]]` for a MongoDB Atlas Free (M0) cluster. Each section is optional — a
 fabric is planned only when its ledger has entries, so you can stand up any
