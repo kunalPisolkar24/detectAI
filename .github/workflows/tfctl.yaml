@@ -1,0 +1,111 @@
+name: tfctl
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - staging
+    paths:
+      - "tools/tfctl/**"
+      - ".github/workflows/tfctl.yaml"
+  pull_request:
+    branches:
+      - main
+      - staging
+    paths:
+      - "tools/tfctl/**"
+      - ".github/workflows/tfctl.yaml"
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.14"
+  TF_VERSION: "1.10.5"
+  FLOCI_URL: http://localhost:4566
+  AWS_REGION: ap-southeast-2
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+
+jobs:
+  quality-assurance:
+    name: lint, unit tests and coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install tfctl dependencies
+        run: poetry -C tools/tfctl install --no-interaction
+
+      - name: Lint with Ruff
+        run: make -C tools/tfctl lint
+
+      - name: Run unit tests
+        run: make -C tools/tfctl test-unit
+
+      - name: Run full suite with 95% coverage gate
+        run: make -C tools/tfctl test-cov
+
+  integration:
+    name: black-box tests on Floci
+    runs-on: ubuntu-latest
+    needs: quality-assurance
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install tfctl dependencies
+        run: poetry -C tools/tfctl install --no-interaction
+
+      - name: Verify AWS CLI
+        run: aws --version
+
+      - name: Start Floci
+        run: |
+          docker run -d --name floci -p 4566:4566 floci/floci:latest
+          for i in $(seq 1 60); do
+            if curl -fsS "${FLOCI_URL}/_localstack/health" >/dev/null 2>&1; then
+              echo "Floci healthy at ${FLOCI_URL}"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs floci
+          exit 1
+
+      - name: Prepare infra values
+        run: |
+          mkdir -p infra/envs
+          cp infra/tests/ci/env infra/envs/.env
+
+      - name: Run integration suite
+        run: make -C tools/tfctl test-integration
+
+      - name: Stop Floci
+        if: always()
+        run: docker rm -f floci

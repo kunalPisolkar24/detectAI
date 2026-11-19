@@ -6,12 +6,12 @@ authors = ["DetectAI <hello@detectai.com>"]
 packages = [{ include = "app" }]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.14"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "9.0.2"
 pytest-cov = "4.1.0"
-ruff = "0.1.15"
+ruff = ">=0.17.2,<0.18.0"
 
 [tool.poetry.scripts]
 tfctl = "app.main:cli_main"
@@ -41,7 +41,6 @@ skip_covered = false
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
 
 [tool.ruff.lint]
 select = ["F", "E"]

@@ -6,7 +6,7 @@ Get the engine running, then drive a real service's whole secrets plane locally 
 
 | Need | Check | Notes |
 |------|-------|-------|
-| Poetry (Python ^3.11) | `poetry --version` | the engine is a Poetry package |
+| Poetry (Python ^3.14) | `poetry --version` | the engine is a Poetry package |
 | Terraform ~> 1.10 | `terraform version` | the stack pins it (1.10+ for the lockfile backend on real AWS) |
 | AWS CLI v2 | `aws --version` | the engine shells out to it for identity, STS, IAM, S3, SM, SSM |
 | Floci (or LocalStack) | `docker start floci` | the emulator plane on `http://localhost:4566` — needed only for local-plane runs |
