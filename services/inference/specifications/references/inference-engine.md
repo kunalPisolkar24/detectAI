@@ -15,10 +15,6 @@ part of the service that talks to ONNX Runtime at inference time, and it
 is deliberately ignorant of everything else — no chunks, no characters, no
 documents, no threads, no queues.
 
-The quarantined `services/inference/slop/` tree is the reference draft. Its
-`engines/` package held two per-model classes behind an async port, fed by
-a queue-and-worker batching proxy, and re-tokenized every chunk's text.
-
 The GPU story — the batch economics, the concurrency model, the executor
 pools, the deployment shape — lives in the companion reference
 (`inference-gpu.md`). Every measurement below was taken on a CPU-only dev
@@ -179,22 +175,27 @@ before it can mean anything.
 
 ---
 
-## 2. Mapping from the quarantined tree
+## 2. Design decisions
 
-| slop name | Design name | Module | Responsibility |
-| --- | --- | --- | --- |
-| `engines/base.py` — `BaseEngine.softmax` / `sigmoid` / `decode_logits` | `OnnxEngine._probability` | `app/inference/engine/adapters/onnx.py` | The draft's base class held a softmax, a sigmoid and three accepted output shapes. Only the two-class softmax survives, folded into the adapter — the draft's `(N,)` and `(N,1)` tolerances are dropped |
-| `engines/flare.py` — `FlareEngine.predict_batch` | `OnnxEngine.score` | `app/inference/engine/adapters/onnx.py` | The draft re-tokenized each chunk's text and truncated at its own `max_length=256`. The engine now consumes the IDs preparation produced and truncates nothing |
-| `engines/spark.py` — `SparkEngine.predict_batch` | **Deleted** | — | It fed a pickled sklearn TF-IDF vectorizer. Spark now ships an HF tokenizer and an ONNX transformer, so the per-model engine dies — one uniform adapter serves both artifacts |
-| `ports/outbound/inference.py` — `ISyncBatchInferenceEngine` | `Engine` | `app/inference/engine/engine.py` | Narrowed from `predict_batch(texts)` to one method over token-ID sequences |
-| `ports/outbound/inference.py` — `IAsyncInferenceEngine` | **Deleted** | — | The draft's async engine and the batching proxy's async wrapper. The engine is synchronous; the caller offloads it |
-| `batcher.py` — `BatchingProxy` | **Deferred to the GPU slice** | — | The queue, the linger timer, the health snapshot and the shutdown drain buy nothing measurable on CPU (§ baseline). That justification is CPU-scoped and does not transfer: on a device the batch width is the throughput knob, and filling a batch from a queue of chunks arriving out of several requests is what a device needs. It is the next slice after the GPU lands, and it lands with the servicer, where the contract's queue semantics already live (`inference-gpu.md`) |
-| `src/infrastructure/config/settings.py` — `batch_size_for(model_key)` | `Settings.batch_size_for(model_key)` | `app/config/settings.py` | The idea survives — one batch size per model — but the draft's override tuned the proxy's queue depth, which is a different quantity. Here it overrides the engine's guard, and a global knob sits beside it as the fallback |
-| `batching/processor.py` | **Deleted** | — | Belonged to the proxy |
-| `engines/*.warmup` | `OnnxEngine.warmup` | `app/inference/engine/adapters/onnx.py` | The draft warmed each engine at boot. The warmup now proves the session executes before traffic is served, and then warms the production shape the service will actually use |
-| `engines/flare.py` — `max_length: int = 256` | **Deleted** | — | The window belongs to preparation. The engine is handed the model's declared ceiling and refuses anything longer |
-| `domain/exceptions.py` — `InferenceError` | `InferenceError` | `app/inference/errors.py` | Graduated from the draft's domain package to the plane root; the engine's failure joins it |
-| `domain/exceptions.py` — `InferenceError` raised by the engines | `EngineError` | `app/inference/engine/errors.py` | A typed, single-name failure for every engine fault |
+- Only the two-class softmax survives, folded into `OnnxEngine._probability`;
+  the other output-shape tolerances are dropped.
+- `OnnxEngine.score` consumes the token IDs preparation produced. It does not
+  re-tokenize or truncate — the window belongs to preparation, and the engine
+  refuses anything over the model's declared ceiling.
+- One uniform adapter serves both models; the pickled TF-IDF path and the
+  per-model engines are gone.
+- `Engine` is a narrow synchronous port over token-ID sequences; the caller
+  offloads it.
+- `BatchingProxy` is deferred to the GPU slice. Its queue, linger timer,
+  health snapshot and shutdown drain buy nothing measurable on CPU; on a
+  device, filling a batch across requests is what matters, and that belongs
+  with the servicer (`inference-gpu.md`).
+- `Settings.batch_size_for(model_key)` overrides the engine's batch guard,
+  with a global fallback beside it.
+- Warmup proves the session executes before traffic is served, then warms the
+  production shape the service will actually use.
+- `InferenceError` lives at the plane root; `EngineError` is the typed failure
+  for every engine fault.
 
 ---
 
@@ -518,8 +519,7 @@ sequence at negligible cost — milliseconds against the ~2.9 s a full
 fact that it ran matters. It fails the boot fast on a corrupt artifact. The
 probe is built from the pad id alone — the engine holds no other vocabulary
 id, and the reference is explicit that it takes no tokenizer (§11.1), so the
-sequence is eight pad ids rather than the draft's `[CLS] + six pads + [SEP]`.
-Both exercise the same graph path; the output is discarded either way.
+sequence is eight pad ids. The output is discarded either way.
 
 **The production-shape run** warms the kernels the service will actually
 use. On the CPU the probe is enough, because the shape barely changes the
@@ -701,11 +701,10 @@ one. It is raised with the model owner alongside the calibration question
 
 ## 8. Configuration surface
 
-**This slice adds one knob, and it is the batch size.** That is a change
-from the previous draft of this reference, which added none. The batch
-size used to belong to the serving slice because the caller grouped the
-chunks; it now also bounds the engine, because the engine has to refuse a
-call it cannot hold.
+**This slice adds one knob, and it is the batch size.** The batch size used
+to belong to the serving slice because the caller grouped the chunks; it now
+also bounds the engine, because the engine has to refuse a call it cannot
+hold.
 
 | Field | Env key | Default | Lands in | Why |
 | --- | --- | --- | --- | --- |
@@ -852,9 +851,9 @@ Run with `make test-unit`; `make test-integration` when the boot changed.
    measurements put the gain there, not in the batch shape. **This holds on
    the CPU and inverts on a GPU** (§"What the GPU changes") — which is why
    the batch size is a knob and not a constant.
-5. **Strict `[batch, 2]` output shape.** The draft's `(N,)` and `(N,1)`
-   tolerances are dropped: both artifacts agree, and a divergent one is a
-   broken artifact, not something to degrade around at runtime.
+5. **Strict `[batch, 2]` output shape.** Both artifacts agree, and a
+   divergent one is a broken artifact, not something to degrade around at
+   runtime.
 6. **Padding is to the widest sequence in the call**, not to a fixed
    bucket. Compute-honest today, and cheap here because preparation emits
    a fixed window. If CUDA graphs are enabled later in the loading plane,
@@ -876,11 +875,10 @@ Run with `make test-unit`; `make test-integration` when the boot changed.
 10. **An over-length sequence is refused, never truncated.**
 11. **No fallback path and no default score.** Every engine fault is an
     `EngineError`.
-12. **One knob lands in this slice: the batch size.** The previous draft
-    added none, on the reasoning that the caller groups the chunks so the
-    knob belongs to the caller. That reasoning holds for the *grouping*,
-    which is still the caller's, but the engine also has to refuse a call
-    wider than it can hold — and that bound is the same number. The
+12. **One knob lands in this slice: the batch size.** The reasoning that the
+    caller groups the chunks so the knob belongs to the caller holds for the
+    *grouping*, which is still the caller's, but the engine also has to refuse
+    a call wider than it can hold — and that bound is the same number. The
     in-flight limits stay in the serving slice.
 13. **The tests pin correctness, never throughput.** No assertion may
     encode a seq/s figure, a latency, or a preferred batch size — those are

@@ -7,12 +7,9 @@ Status: design reference for the postprocessing slice, implemented in
 `app/config/settings.py` (the `ai_detection_threshold` knob), `secrets.toml`
 and `infra/.env.example` (the knob's declaration), and the unit tests.
 
-The quarantined `services/inference/slop/` tree is the reference draft. Its
-`application/services/aggregation.py` held a `ResultAggregator` that weighted
-chunks by a stride heuristic, gave the first chunk extra weight on purpose,
-and merged same-label spans into one. This slice replaces it with one rule:
-the scored regions of a document, weighted by their own size, in, one verdict
-out.
+Aggregation is one rule: the scored regions of a document, weighted by their
+own size, in, one verdict out. No stride heuristic, no bias toward the opening
+chunk, no merging of same-label spans.
 
 This slice delivers the item the preparation reference deferred — "result
 aggregation and highlight-span merging" (`inference-preprocessing.md` §1).
@@ -68,20 +65,17 @@ is why the spans are not merged (§11.6).
 
 ---
 
-## 2. Mapping from the quarantined tree
+## 2. Design decisions
 
-| slop name | Design name | Module | Responsibility |
-| --- | --- | --- | --- |
-| `aggregation.py` — `ResultAggregator.aggregate` | `VerdictAggregator.aggregate` | `app/inference/postprocessing/aggregation.py` | The draft weighted by a stride heuristic and gave the first chunk extra weight; the new aggregator weights each region by its own scored tokens |
-| `aggregation.py` — `min(stride, token_count)` weight | **Deleted** | — | It patched the double-count of a fixed-stride sliding window. The live tree cuts non-overlapping scored regions, so the patch has no referent |
-| `aggregation.py` — "the first chunk gets more weight because it typically contains the introduction" | **Deleted** | — | The draft's own note says it biased every document toward its opening. A size weight replaces it |
-| `aggregation.py` — `_build_highlight_spans` (the interval overlay over every boundary) | `VerdictAggregator` — one span per region | `app/inference/postprocessing/aggregation.py` | The draft covered the whole text; the new rule emits one span per scored region, in order |
-| `aggregation.py` — `_append_span` (merge same-label neighbours) | **Deleted** | — | A merged span carries a weighted mean, and the client re-derives the tone from that mean — so a merge can flip the tone (§11.7) |
-| `aggregation.py` — `label_threshold: float = 0.5` (a constructor default) | `Settings.ai_detection_threshold` | `app/config/settings.py` | The threshold becomes a config-plane value. The aggregator holds no default |
-| `domain/models.py` — `DocumentScore`, `HighlightSpan` | `DocumentVerdict`, `HighlightSpan` | `app/inference/postprocessing/results.py` | The draft's `DocumentScore` carried one probability; the new verdict carries the flag and both sides |
-| `domain/models.py` — `DocumentChunk` | `ScoredRegion` | `app/inference/postprocessing/results.py` | The slice takes its own input type and imports nothing from preparation (§11.3) |
-| `domain/exceptions.py` — `InvalidInputError` | `PostprocessingError` | `app/inference/postprocessing/errors.py` | Graduated to the plane root, as the engine's raiser was |
-| `chunking/` — the fixed-stride sliding window | **Not applicable** | — | The draft's `chunk_stride` was the stride its weights corrected for. The live tree has no stride, so the aggregator has no stride either |
+- `VerdictAggregator.aggregate` weights each region by its own scored tokens;
+  there is no stride heuristic and no opening-chunk bias.
+- One highlight span per scored region, in order — no interval overlay over
+  the whole text, and no merging of same-label neighbours (§11.7).
+- The threshold is a config-plane value, `Settings.ai_detection_threshold`;
+  the aggregator holds no default.
+- `DocumentVerdict` carries the flag and both confidence sides; `ScoredRegion`
+  keeps this slice independent of preparation's types (§11.3).
+- `PostprocessingError` lives at the plane root, as the engine's raiser does.
 
 ---
 
@@ -217,9 +211,8 @@ in the preprocessor's cut — and it is the **weight**, not `token_count`.
 
 `token_count` is context + content + the two special tokens, so weighting by
 it would count the overlap context twice and let the aggregate drift as
-`CHUNK_TOKEN_OVERLAP` moves. The draft's `min(stride, token_count)` was
-exactly a patch for that double-count in a sliding window; the patch died
-with the window, and this member is the honest replacement.
+`CHUNK_TOKEN_OVERLAP` moves. Counting only the contributed tokens avoids
+that double-count entirely.
 
 The invariant is exact:
 
@@ -477,8 +470,7 @@ scored regions.
   - a light region counts less than a heavy one — the same probability in a
     10-token region and a 1,000-token region does not aggregate the same
   - **no first-chunk bias** — two regions, one short and one long, aggregate
-    by size alone; the draft's "the first chunk gets more weight" heuristic
-    is gone
+    by size alone
   - the threshold is inclusive: a probability exactly at the threshold is AI
   - a probability below the threshold is Human
   - one span per region, in the region's order, each carrying that region's
@@ -538,12 +530,12 @@ Run with `make test-unit`.
 5. **The threshold is a config value with a fail-closed default of 0.5.**
    The alternative — fixing it in the aggregator — would make a calibration
    answer a code constant, and the artifacts cannot calibrate it today.
-6. **The spans are one per region and never merged.** The draft merged
-   same-label neighbours; a merged span carries a weighted mean, and the
-   client re-derives the tone from that mean — so a merge flips the tone
-   whenever the server's threshold differs from the client's. Not merging
-   keeps every region's own probability intact. The cost is one span per
-   chunk (303 spans, under 10 KB, for a 1M-character document).
+6. **The spans are one per region and never merged.** A merged span carries
+   a weighted mean, and the client re-derives the tone from that mean — so a
+   merge flips the tone whenever the server's threshold differs from the
+   client's. Not merging keeps every region's own probability intact. The
+   cost is one span per chunk (303 spans, under 10 KB, for a 1M-character
+   document).
 7. **The regions of both classes reach the wire.** The contract dropped the
    label because the client derives it, and the web's mapper derives a tone
    from each span's own confidence. A span without a probability could not

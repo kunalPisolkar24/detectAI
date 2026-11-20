@@ -13,7 +13,6 @@ models/
 **/.env.*
 secrets.toml
 infra/
-slop/
 specifications/
 mk/
 tests/

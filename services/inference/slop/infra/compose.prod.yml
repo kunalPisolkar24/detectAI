@@ -1,3 +1,0 @@
-services:
-  ai-service:
-    restart: always

@@ -4,10 +4,8 @@ Status: design reference for the model-loading slice, implemented in
 `app/models/loading/loader.py` (port), `app/models/loading/adapters/onnx.py` (adapter), and the
 `app/boot.py` boot wiring.
 
-The quarantined `services/inference/slop/` tree is the reference draft. Its
-`HuggingFaceLoader` mixed pulling, ONNX session building, tokenizer loading,
-and provider verification. The pulling slice already carved pulling out; this
-slice builds the remainder, consuming what `ensure_all()` produced.
+Pulling lives in its own slice; this one builds the remainder, consuming what
+`ensure_all()` produced.
 
 Both models are ModernBERT ONNX exports — flare is fp32 bert-large, spark is
 fp16 bert-base — and both ship HF-format tokenizers (`tokenizer.json`). One
@@ -28,15 +26,17 @@ uniform load path serves both; no per-model branches.
 | | Pruning old revisions / garbage collection |
 | | GPU (onnxruntime-gpu) — CPU-only this slice |
 
-## 2. Mapping from the quarantined loader
+## 2. Design decisions
 
-| slop name | Design name | Module | Responsibility |
-| --- | --- | --- | --- |
-| `HuggingFaceLoader._load_spark` / `_load_flare` | One uniform `_load(key, path)` | `app/models/loading/adapters/onnx.py` | Both builds share `model.onnx` + an HF tokenizer; the per-model if/else dies |
-| `hf_hub_download` / `snapshot_download` + offline fallback | **Deleted** | — | Loading consumes `ensure_all()`'s paths; the hub lives only in the pull plane |
-| `RestrictedUnpickler` | **Deleted** | — | Both models ship HF tokenizers; no pickle in the load path |
-| `build_session_options` | Settings knobs + fresh `SessionOptions` per session | `app/config/settings.py`, `app/models/loading/adapters/onnx.py` | Providers + intra-op threads only; `0` = leave ORT's default |
-| `provider_verifier.verify_providers` | Provider logging inside the adapter | `app/models/loading/adapters/onnx.py` | Requested vs effective; warning on mismatch; no telemetry hooks |
+- One uniform `_load(key, path)` serves both models: both ship `model.onnx`
+  and an HF tokenizer, so there is no per-model branch.
+- Loading consumes `ensure_all()`'s paths; the hub lives only in the pull
+  plane.
+- No pickle in the load path — both models ship HF tokenizers.
+- Providers and intra-op threads are the only session knobs; `0` leaves ORT's
+  default, and each session gets fresh `SessionOptions`.
+- Provider logging lives inside the adapter: requested vs effective, warning
+  on mismatch, no telemetry hooks.
 
 ## 3. Components
 
@@ -130,8 +130,7 @@ ort_intra_op_threads: int = 0
 - `ort_intra_op_threads`: the existing `_positive_int_or_default(value,
   default=0)`. Garbage or `<= 0` → `0` = leave ORT's default. This knob earns
   its place because two sessions each grabbing every core oversubscribes a
-  pod. Nothing else from slop's knob surface (inter-op, graph-opt level,
-  execution mode, mem pattern, cpu arena) is wired until a profile demands it.
+  pod. No other ORT knobs are wired until a profile demands them.
 
 ## 4. Class diagram
 
@@ -312,7 +311,7 @@ deliberate tightening.
 - `onnxruntime` is CPU-only; the CUDA EP requires `onnxruntime-gpu`, which
   arrives with the GPU slice, not this one.
 - The only ORT surface used: `InferenceSession`, `SessionOptions`,
-  `get_providers`. Slop's `GraphOptimizationLevel`/`ExecutionMode` maps stay
+  `get_providers`. Session tuning beyond providers and intra-op threads stays
   unwired.
 
 ## 10. Testing

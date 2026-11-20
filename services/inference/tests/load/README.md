@@ -64,8 +64,6 @@ iteration. Every request carries `sample_id`, `profile`, `label`, `domain` and
 
 ## Why this rig exists
 
-The quarantined `slop/load` suite targets the old `aidetection` contract, uses
-two recycled prose paragraphs grown to fixed lengths, and carries a duplicate
-proto. This rig uses the canonical proto from `api/proto` (mounted read-only),
+This rig uses the canonical proto from `api/proto` (mounted read-only),
 the real `x-api-key` auth, and a manifest-verified corpus, so a green run says
 something about the service that is actually deployed.

@@ -3,10 +3,8 @@
 Status: design reference for the model-pulling slice. Not yet implemented; the
 `app/` service today is the config plane plus the health-only gRPC bootstrap.
 
-The quarantined `services/inference/slop/` tree is the reference draft. Its
-`HuggingFaceLoader` mixed pulling, ONNX session building, tokenizer
-unpickling, and provider verification. This slice splits the pulling concern
-out and builds only that.
+This slice builds the pulling concern on its own, separate from session
+building, tokenizer construction, and provider verification.
 
 ---
 
@@ -317,9 +315,7 @@ Env keys are the uppercase field names (`Settings.from_provider` contract).
 
 ## 10. Dependencies
 
-- `huggingface_hub` added to `services/inference/pyproject.toml` — nothing in
-  the live app depends on it yet; only quarantined `slop/` does.
-- slop's hub imports came from the 0.x era (`huggingface_hub.utils`); verify
+- `huggingface_hub` is added to `services/inference/pyproject.toml`; verify
   the 1.x import paths (`huggingface_hub.errors`) when pinning.
 
 ## 11. Testing

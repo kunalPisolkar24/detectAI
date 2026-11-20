@@ -95,16 +95,22 @@ engine reference does.
 | The cancellation gap and its remedy | The window size, the overlap and the aggregation rule |
 | The sweep method | A claim about the throughput numbers — they do not exist yet |
 
-## 2. Mapping from the quarantined tree
+## 2. Design decisions
 
-| slop name | Design name | Module | Responsibility |
-| --- | --- | --- | --- |
-| `BatchingProxy` — a queue of per-chunk predictions | **Deferred to the next slice** | — | The draft queued *texts* one at a time and grouped them at run time. The new pipeline already hands the engine whole token-ID groups, so the queue's job is narrower: pooling chunks **across** requests so a small document can still fill a batch. It lands with the servicer, where the contract's queue semantics live |
-| `BatchingProxy.max_concurrent_batches` | `max_concurrent_batches` | serving slice | The draft's semaphore becomes the width of the engine executor pool. Same quantity, a different mechanism |
-| `BatchingProxy.batch_timeout` (the linger) | the linger, later | next slice | Only meaningful once the queue pools across requests. A per-request grouping needs no linger — it would only add latency |
-| `settings.batch_size_for(model_key)` | `Settings.batch_size_for(model_key)` | `app/config/settings.py` | **Kept.** One batch size per model, with a global fallback. The draft's per-model override was on the proxy's queue depth; here it overrides the engine's guard |
-| `session_options.py` — the ORT session tuning | the loading plane's knobs | `app/models/loading/` | `ORT_INTRA_OP_THREADS` already exists. The draft's `ORT_INTER_OP_THREADS`, `ORT_GRAPH_OPT_LEVEL` and `ORT_EXECUTION_MODE` are candidates for the GPU slice, not for this one |
-| the draft's `INFERENCE_MAX_WORKERS` | the engine executor's width | `app/inference/runtime.py` | The draft sized one pool for everything. The new design has two pools, because preparation and inference want opposite things from one |
+- `BatchingProxy` is deferred to the next slice. The pipeline already hands
+  the engine whole token-ID groups, so the queue's remaining job is pooling
+  chunks **across** requests to fill a batch; it lands with the servicer, where
+  the contract's queue semantics live.
+- `max_concurrent_batches` becomes the width of the engine executor pool.
+- The linger is deferred with the queue: a per-request grouping needs no
+  linger, only extra latency.
+- `Settings.batch_size_for(model_key)` stays — one batch size per model with a
+  global fallback — overriding the engine's guard.
+- `ORT_INTRA_OP_THREADS` is already a knob. `ORT_INTER_OP_THREADS`,
+  `ORT_GRAPH_OPT_LEVEL` and `ORT_EXECUTION_MODE` are candidates for the GPU
+  slice, not this one.
+- Two executor pools replace a single worker pool: preparation and inference
+  want opposite things from one.
 
 ## 3. Components
 

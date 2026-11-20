@@ -6,11 +6,9 @@ Status: design reference for the API-contract slice, implemented in
 `tests/unit/serving/test_contract.py` (the pins). The servicer is not
 implemented; the `app/` service today serves health and denies unkeyed calls.
 
-The quarantined `services/inference/slop/` tree is the reference draft. Its
-`aidetection` contract carried slop-era vocabulary (`PredictRequest`, a `final`
-event, display-name model strings) and left the important semantics unpinned —
-offset spaces, confidence units, model-id handling. This slice defines the
-standing contract both RPCs will be implemented against.
+This slice pins the semantics the contract needs — offset spaces, confidence
+units, and model-id handling — and defines the standing contract both RPCs are
+implemented against.
 
 ---
 
@@ -24,17 +22,16 @@ standing contract both RPCs will be implemented against.
 | Pinned semantics: offsets, units, model-id rules, error codes | The web-side adaptation to `inference.v1` |
 | Python stub codegen: `make proto` → `app/serving/generated/` | |
 
-## 2. Mapping from the quarantined contract
+## 2. Contract decisions
 
-| slop name | Contract name | Change |
-| --- | --- | --- |
-| `aidetection` | `inference.v1` | Versioned package; a breaking rename later would cost the same |
-| `PredictRequest` | `DetectRequest` / `AnalyzeDocumentRequest` | Message names match their RPCs; the ML engine vocabulary leaves the wire |
-| `PredictResponse` | `DetectionResult` | One result message shared by the unary response and the stream's `result` event |
-| `AnalyzeDocumentEvent.final` | `AnalyzeDocumentEvent.result` | The member is the shared result, not a unary-only wrapper |
-| `label` | dropped | Duplicates `is_ai_generated`; clients already derive it |
-| `model_name` (`"Spark"`) | `model_id` echo | Display names stay client-side; the echo is the canonical key clients key on |
-| `confidence_score` | kept | The one derived field consumers read directly, every time |
+- The package is versioned `inference.v1`.
+- Request messages match their RPCs: `DetectRequest` and
+  `AnalyzeDocumentRequest`.
+- `DetectionResult` is shared by the unary response and the stream's `result`
+  event; `result` carries the shared result, not a unary-only wrapper.
+- No `label` field — it duplicates `is_ai_generated`, which clients derive.
+- `model_id` is the canonical key clients read; display names stay client-side.
+- `confidence_score` stays because consumers read it directly.
 
 ## 3. The contract
 
@@ -199,8 +196,8 @@ as `app.serving.generated`. The directory is derived and gitignored; the
   offsets), the `readyz` / `analysis/status` probe strings, and the load-test
   mock server — is the web follow-up slice. Until then the old copy keeps
   working because the live server serves no `AIService` at all.
-- The load rig's copy (`slop/load/protos/`) stays quarantined with slop; the
-  load slice gets its own client on this contract.
+- The load rig gets its own client on this contract; no local proto copy is
+  carried alongside it.
 
 ## 9. Testing
 
@@ -239,7 +236,7 @@ answering `UNIMPLEMENTED`. `test`, `test-unit`, and `test-integration` depend on
 6. No proto `options` — a Python service; chats carries `go_package` because
    chats is Go.
 7. `x-api-key` only, no Bearer/JWT path — the single consumer (the web BFF)
-   sends the header; slop's JWT path served its load rig.
+   sends the header.
 8. Admission-reject at the text bound, not document-parser's truncate — a
    truncated document changes the analysis.
 9. A bad `MAX_TEXT_CHARS` seed falls back to the default — the `grpc_port`

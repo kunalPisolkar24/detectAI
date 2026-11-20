@@ -5,17 +5,11 @@ Status: design reference for the preprocessing slice, implemented in
 adapter, the results), `app/models/loading/` (the declared sequence
 ceiling), and the `chunk_token_limit` knob.
 
-The quarantined `services/inference/slop/` tree is the reference draft. Its
-`chunking/` package held a fixed-stride sliding window over token offsets,
-selected a tokenizer by `callable(tokenizer)` duck-typing, and let the engine
-re-tokenize each chunk's text — so the same text was tokenized twice per
-request and the two passes could disagree. It also rewrote the submission
-(control characters to spaces, then stripped) before chunking, which shifted
-every character offset away from the request text the contract's
-`HighlightSpan` ranges are measured against. This slice redoes the
-preparation around one observation the draft never made: the shipped
-tokenizers already know where every token lives in the text, so the boundary
-of a chunk can be *chosen* rather than *slid*.
+Preparation is built around one observation: the shipped tokenizers already
+know where every token lives in the text, so the boundary of a chunk can be
+*chosen* rather than *slid*. Tokenization happens once, the submitted text is
+never rewritten, and each token carries the character span the contract's
+`HighlightSpan` ranges are measured against.
 
 ---
 
@@ -44,8 +38,8 @@ Chunk counts at 1M chars (154,472 tokens):
 | Window | Stride | Chunks |
 | --- | --- | --- |
 | 510 content | 510 (no overlap) | 303 |
-| 510 content | 384 (draft's sliding window) | 402 |
-| 254 content | 192 (draft's sliding window) | 604 |
+| 510 content | 384 (sliding window) | 402 |
+| 254 content | 192 (sliding window) | 604 |
 
 ---
 
@@ -61,24 +55,21 @@ Chunk counts at 1M chars (154,472 tokens):
 | Config knob: `chunk_token_limit` | The boot wiring of the preprocessor registry (lands with the servicer) |
 | Unit tests + this design reference | A document token ceiling — `MAX_TEXT_CHARS` is the only admission bound |
 
-## 2. Mapping from the quarantined tree
+## 2. Design decisions
 
-| slop name | Design name | Module | Responsibility |
-| --- | --- | --- | --- |
-| `chunking/protocol.py` — `TokenChunker` | `Tokenizer` | `app/inference/preprocessing/tokenizer.py` | A narrow port: the tokenizer surface preparation actually needs, and nothing else |
-| `chunking/bert_chunker.py` — `BertTokenChunker` | `FastTokenizer` | `app/inference/preprocessing/adapters/tokenizer.py` | The only module that knows the HF calling convention; adapts a tokenizer to the `Tokenizer` port |
-| the draft's implicit `(ids, offsets)` pair | `Encoding` | `app/inference/preprocessing/tokenizer.py` | A named frozen type for the tokenizer's output; the draft returned a loose pair whose order meant nothing |
-| `chunking/regex_chunker.py` — `RegexTokenChunker` | **Deleted** | — | It existed only because the draft's spark model shipped a pickled sklearn vectorizer; both models ship HF tokenizers now |
-| `chunking/sliding_window.py` — `build_sliding_chunks` | **Deleted** | — | A fixed-stride window over a uniform grid; replaced by boundary-aligned cuts (§3) |
-| `chunking/planner.py` — `ChunkPlanner` | `DocumentPreprocessor.split` | `app/inference/preprocessing/preprocessor.py` | Folded in: the draft's planner was a wrapper carrying four positional config arguments and had exactly one caller |
-| `chunking/factory.py` — `build_chunk_planner` | **Deleted** | — | The draft selected a strategy by `callable(tokenizer)`; a mis-shaped tokenizer silently degraded to the regex path |
-| `text_pipeline.py` — `TextPreparationPipeline` | `DocumentPreprocessor` | `app/inference/preprocessing/preprocessor.py` | Admission + tokenization + windowing in one object; the draft's validator and planner were separate and both reconfigurable |
-| `validation.py` — `InputValidator.validate` | admission inside `DocumentPreprocessor.prepare` | `app/inference/preprocessing/preprocessor.py` | The draft **rewrote** the text (`re.sub` then `.strip()`), shifting every character offset; this one validates and never mutates |
-| `domain/models.py` — `DocumentChunk` | `Chunk` | `app/inference/preprocessing/chunk.py` | Carries token IDs and a character span; the draft carried text and no IDs |
-| `CHUNK_TOKEN_STRIDE` | **Deleted** | — | Overlap is gone: aligned chunks are contiguous and non-overlapping by construction (§11.3) |
-| `MAX_GLOBAL_TOKENS` | **Deleted** | — | No token ceiling this slice; `MAX_TEXT_CHARS` remains the only admission bound |
-| `engines/flare.py`, `engines/spark.py` — re-tokenizing chunk text | **Deleted** | — | The draft tokenized the document for offsets and then tokenized each chunk's text again; the engine now consumes the IDs preparation already produced |
-| `composition/container.py` — planner registry | **Deferred** | — | The registry has no consumer until the servicer exists (§11.9) |
+- `Tokenizer` is a narrow port: the surface preparation actually needs.
+  `FastTokenizer` is the only module that knows the HF calling convention.
+- `Encoding` is a named frozen `(ids, offsets)` pair — order is part of the
+  type, not a convention.
+- One HF tokenizer path serves both models; there is no regex fallback.
+- Cuts are boundary-aligned (§3), so chunks are contiguous and non-overlapping
+  (§11.3).
+- `DocumentPreprocessor` owns admission, tokenization and windowing in one
+  object. It validates the submitted text but never mutates it.
+- `Chunk` carries token IDs and a character span; the engine consumes those
+  IDs directly, so no text is tokenized twice.
+- `MAX_TEXT_CHARS` is the only admission bound; no token ceiling this slice.
+- The planner registry is deferred until the servicer exists (§11.9).
 
 ## 3. Components
 
@@ -229,10 +220,10 @@ than silently produce meaningless chunks.
    `not text.strip() or not text.strip(_BLANK_CHARS)`, where `_BLANK_CHARS`
    is the ASCII whitespace and control set — so `"\x00"` and `" \x00 "` are
    refused while `"a\x00b"` is admitted.
-   The text is **never rewritten**. The draft replaced control characters with
-   spaces and stripped the result, which moved every subsequent character
-   offset — `HighlightSpan` would then point into the sanitized text rather
-   than the request text the contract measures against.
+   The text is **never rewritten**. Replacing control characters with spaces
+   and stripping the result would move every subsequent character offset —
+   `HighlightSpan` would then point into the sanitized text rather than the
+   request text the contract measures against.
 2. **Tokenize.** One call through the `Tokenizer` port.
 3. **Window.** Hand the text and the encoding to `split`.
 
@@ -526,19 +517,12 @@ sequenceDiagram
 
 ### One tokenization, not two
 
-The draft tokenized the document to obtain offsets and then tokenized each
-chunk's text again to build the model's inputs. This slice does it once.
+Tokenization happens once: the document is tokenized for IDs and offsets,
+and the chunk carries those IDs straight to the model.
 
 ```mermaid
 sequenceDiagram
-    participant D as draft (slop)
     participant N as this design
-
-    Note over D: two passes, and the second can disagree
-    D->>D: tokenize(document) → offsets
-    D->>D: cut windows, slice the text out
-    D->>D: tokenize(chunk text) → ids
-    Note over D: the text slice re-tokenizes — byte-level<br/>normalization is not guaranteed to round-trip
 
     Note over N: one pass
     N->>N: tokenize(document) → ids + offsets
@@ -608,8 +592,8 @@ the CPU. The GPU wheel itself arrives with the engine slice.
 - The only tokenizer surface used: `cls_token_id`, `sep_token_id`,
   `num_special_tokens_to_add(pair=False)`, and one call with
   `add_special_tokens=False`, `return_offsets_mapping=True`,
-  `truncation=False`. The draft's `return_tensors="np"`, `padding=True` and
-  `truncation=True` belong to the engine slice, not this one.
+  `truncation=False`. Tensor conversion, padding and truncation belong to the
+  engine slice, not this one.
 
 ## 10. Testing
 
@@ -668,16 +652,15 @@ surface to boot. Run with `make test-unit`.
 ## 11. Defaults taken (override if any read wrong)
 
 1. **One tokenization per request.** The chunk carries token IDs; the engine
-   never re-tokenizes. The draft's double pass is the single largest source
-   of waste in the quarantined tree.
-2. **Boundary-aligned chunks, no stride knob.** The draft's overlap existed
-   to stop arbitrary cuts losing content at a boundary; alignment solves the
-   same problem and additionally makes the chunks non-overlapping, which the
-   contract's `highlight_spans` require anyway.
+   never re-tokenizes. A second pass would be the single largest source of
+   waste in the pipeline.
+2. **Boundary-aligned chunks, no stride knob.** Alignment stops arbitrary
+   cuts losing content at a boundary and additionally makes the chunks
+   non-overlapping, which the contract's `highlight_spans` require anyway.
 3. **The half-window floor** (cut at the last boundary in the upper half of
    the window) is a compromise: aligned when it can be, full when it cannot.
    A stricter or looser floor is a one-constant change.
-4. **The text is validated, never rewritten.** The draft's sanitization broke
+4. **The text is validated, never rewritten.** Rewriting the text would break
    the offset contract. Blank means *no analysable content* — whitespace-only
    and control-character-only alike — so a control-character-only submission is
    refused; a submission that carries content between the controls is kept as
@@ -703,18 +686,18 @@ surface to boot. Run with `make test-unit`.
    loader, which is already wired, so a malformed tokenizer config still
    fails the boot. The registry attaches with the servicer.
 10. **The prep is a blocking, up-front step.** It costs 0.4–1.3 s at the
-    character bound and 0.5 ms to plan. The draft's proposed
-    preprocessing/inference parallel pipelines were dropped: the total
-    preprocessing is well under 1% of an inference run, so overlapping it
-    with inference buys nothing. What *does* matter is that the tokenization
+    character bound and 0.5 ms to plan. Preprocessing/inference parallel
+    pipelines were dropped: the total preprocessing is well under 1% of an
+    inference run, so overlapping it with inference buys nothing. What *does*
+    matter is that the tokenization
     call blocks the event loop — the servicer slice should run it off-loop
     (`asyncio.to_thread`; the Rust tokenizer releases the GIL, verified) so
     one long submission does not stall the others. That is parallelism
     across requests, not within one.
-11. **No tokenizer fallback path.** The draft selected a strategy by
-    `callable(tokenizer)`; a mis-shaped tokenizer silently degraded to a
-    regex chunker. Both shipped models have HF tokenizers, and a missing one
-    is a load failure, not a runtime degradation.
+11. **No tokenizer fallback path.** Selecting a strategy by
+    `callable(tokenizer)` would let a mis-shaped tokenizer silently degrade
+    to a regex chunker. Both shipped models have HF tokenizers, and a missing
+    one is a load failure, not a runtime degradation.
 12. **The chunking rule is one method, not a class.** `split` had exactly one
     caller, so it lives on the preprocessor rather than behind its own
     abstraction. It stays public and side-effect free, so the rules are

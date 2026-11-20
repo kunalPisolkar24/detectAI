@@ -12,11 +12,10 @@ unchanged. What changes is that a chunk's **model input may now carry
 tokens of preceding context**, and that the amount is a config value
 rather than a fixed decision.
 
-The quarantined `services/inference/slop/` tree had a `CHUNK_TOKEN_STRIDE`
-knob — a fixed-stride sliding window over a uniform grid. It was deleted
-when the preparation slice replaced sliding with boundary-aligned cuts.
-This reference reintroduces the *idea* of overlap, with a different
-mechanism and a different purpose.
+The preparation slice replaced sliding with boundary-aligned cuts, so chunks
+did not carry preceding context. This amendment reintroduces overlap with a
+different mechanism and a different purpose: the amount is a config value,
+and the grid stays aligned to sentence boundaries.
 
 ---
 
@@ -102,7 +101,7 @@ coverage.
 | | (A) input overlaps | (B) regions overlap |
 | --- | --- | --- |
 | Scored regions | disjoint, tile the document | overlap → coverage-weighted merge |
-| Aggregation | stays a plain weighted mean | needs the draft's delta-array |
+| Aggregation | stays a plain weighted mean | needs a delta-array merge |
 | The contract's non-overlapping `highlight_spans` | falls out for free | still satisfiable, with more machinery |
 | A sentence split anywhere? | the **scored** region never is; the context prefix starts mid-sentence on purpose | yes, the region edges cut mid-sentence |
 | What it isolates | whether context helps the model | context *and* score-averaging at once |
@@ -155,15 +154,15 @@ answer "does the context help?" on its own.
 
 ---
 
-## 3. Mapping from the quarantined tree
+## 3. Design decisions
 
-| slop name | Design name | Module | Responsibility |
-| --- | --- | --- | --- |
-| `CHUNK_TOKEN_STRIDE` | `chunk_token_overlap` | `app/config/settings.py` | The draft's stride is the inverse quantity, and it slid over a uniform grid. The knob here counts **tokens shared with the previous chunk**, and the grid stays aligned to sentence boundaries |
-| `chunking/sliding_window.py` — `build_sliding_chunks` | **Deleted** | — | A fixed stride over arbitrary token positions. The cut rule of the preparation slice still decides where a chunk ends |
-| `chunking/planner.py` — stride arithmetic | folded into `DocumentPreprocessor` | `app/inference/preprocessing/preprocessor.py` | The content window shrinks by the overlap; the context prefix is prepended to the input |
-| `domain/models.py` — `DocumentChunk` | `Chunk` | `app/inference/preprocessing/chunk.py` | The draft carried text and no IDs. `Chunk` now also carries `context_tokens` |
-| `application/services/aggregation.py` — the delta-array merge | **Not needed** | — | Under (A) the scored regions stay disjoint, so the plain weighted mean still applies |
+- `chunk_token_overlap` counts **tokens shared with the previous chunk**;
+  the cut rule of the preparation slice still decides where a chunk ends.
+- The content window shrinks by the overlap and the context prefix is
+  prepended to the input, folded into `DocumentPreprocessor`.
+- `Chunk` carries `context_tokens` alongside its IDs and character span.
+- Scored regions stay disjoint under reading (A), so the plain weighted mean
+  still applies — no delta-array merge is needed.
 
 ---
 
@@ -543,9 +542,8 @@ once a working detector exists.
 
 1. **The knob counts overlap, not stride.** `CHUNK_TOKEN_OVERLAP` is the
    number of tokens shared with the previous chunk; stride is
-   `window − overlap` and stays internal. The draft's `CHUNK_TOKEN_STRIDE`
-   named the inverse quantity, and resurrecting that name for a different
-   semantic is how overlaps get shipped.
+   `window − overlap` and stays internal. Naming the knob after the inverse
+   quantity would invite a semantic mix-up; the name follows what it counts.
 2. **(A), not (B): the model input overlaps, the scored regions do not.**
    The regions stay disjoint, so the aggregation stays a plain weighted
    mean, the contract's non-overlapping spans still fall out, and no
