@@ -12,6 +12,11 @@ payment-webhook
 *.out
 /vendor/
 
+# Coverage artifacts
+/coverage.out
+/coverage-unit.out
+/coverage.html
+
 # Local env
 infra/.env
 !infra/.env.example

@@ -46,6 +46,10 @@ Two orderings the handler matrix exists to prove: an oversize body with a garbag
 
 `tests/integration/queue` boots the whole app face against a live ElasticMQ: testcontainers starts the emulator (same `1.7.1` image and queue/conf shape as the shared dev fabric), the harness assembles config → SQS adapter → router exactly as `cmd/api` does, and drives real signed posts through HTTP. The rows it owns are the delivery contract the fakes cannot see: the body arriving byte-for-byte with its ids on message attributes, the group ladder landing on `MessageGroupId`, dedup collapsing repeats, in-group FIFO order, the 250 KiB / 256 KiB sizing edges, the full rejection matrix leaving the queue sealed, and a stopped emulator earning the outage verdict — 503 + `Retry-After`, the verdict Paddle retries on. It skips when Docker is absent, same grammar as the floci skip.
 
+## Coverage
+
+`make coverage` runs unit + integration with `-coverpkg=./internal/...` and prints the total. `make coverage-unit` needs no Docker. `make coverage-check` fails under **95%**, and `make coverage-html` writes the browsable report. CI enforces the gate on pull requests into `main` and `staging`; `dev` runs no CI.
+
 ## Load + e2e — traffic, not tests
 
 k6 suites under `tests/load/`. One file — `infra/.env.load` (copy the template `.env.load.example`) — configures *everything*, `SCENARIO` included; there are no CLI overrides, so one edit re-arms the runner. The [full rig manual](../../tests/load/README.md) lives beside the scenarios; this page is the map.

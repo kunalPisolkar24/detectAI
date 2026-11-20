@@ -46,6 +46,10 @@ Details: the [Quick Start](../getting-started/quickstart.md) walks the main line
 | `make test` | the full suite, module-wide | before pushing anything |
 | `make test-unit` | the black-box unit tree (`tests/unit`) | iterating on one validator, the ladder, or the fault mapping |
 | `make test-integration` | the prod planes through the seeded floci emulator — skips when it is down | config plane wiring changed |
+| `make coverage` | unit + integration coverage of `./internal/...` (needs Docker) | reading the number |
+| `make coverage-unit` | unit-only coverage, no Docker required | a quick local check |
+| `make coverage-html` | write `coverage.html` from the combined run | browsing uncovered lines |
+| `make coverage-check` | fail when combined coverage is below 95% | the local quality gate |
 
 ## Load and e2e — `mk/load.mk`
 
