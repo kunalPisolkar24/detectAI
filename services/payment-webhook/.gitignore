@@ -16,3 +16,4 @@ payment-webhook
 infra/.env
 !infra/.env.example
 infra/.env.load
+!infra/.env.load.example
