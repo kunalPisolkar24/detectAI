@@ -11,6 +11,7 @@ export const rules = {
     "error",
     {
       allow: [
+        "bg-gradient-to-*",
         "*-blue-*",
         "*-purple-*",
         "*-cyan-*",
