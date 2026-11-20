@@ -1,6 +1,8 @@
 # detectai-inference
 
-gRPC inference service for DetectAI. It serves the `inference.v1` contract over the `DetectAI` text-detection models: `Detect` (unary) and `AnalyzeDocument` (server-streaming), plus the standard `grpc.health.v1` surface.
+gRPC inference service for DetectAI. It serves the `inference.v1` contract over the DetectAI text-detection models: `Detect` (unary) and `AnalyzeDocument` (server-streaming), plus the standard `grpc.health.v1` surface.
+
+Specification in [specification/](specification/README.md), full documentation in [docs/](docs/README.md).
 
 ## Quickstart
 
@@ -31,7 +33,7 @@ The prod plane registers nothing extra — the contract stays closed behind the 
 
 ## Contract
 
-`api/proto/ai_service.proto` defines the standing contract: `Detect` (unary) and `AnalyzeDocument` (server-streaming) under `inference.v1`. `make proto` generates the Python stubs into `app/serving/generated/`. See `specifications/references/inference-api-contract.md` for the pinned semantics.
+`api/proto/ai_service.proto` defines the standing contract: `Detect` (unary) and `AnalyzeDocument` (server-streaming) under `inference.v1`. `make proto` generates the Python stubs into `app/serving/generated/`. The pinned semantics live in [specification/api-contract.md](specification/api-contract.md); the client-facing reference is [docs/reference/rpc-api.md](docs/reference/rpc-api.md).
 
 Every RPC except the health check demands `x-api-key` metadata matching `API_KEY`, answered `UNAUTHENTICATED` otherwise. The `MAX_TEXT_CHARS` submission bound (default 1,000,000) is enforced on both RPCs; a bad input answers `INVALID_ARGUMENT`, a saturated model answers `RESOURCE_EXHAUSTED`, and an unexpected failure answers `INTERNAL`.
 
@@ -42,3 +44,7 @@ Every RPC except the health check demands `x-api-key` metadata matching `API_KEY
 `ENABLED_MODELS` names the models a process serves: `spark`, `flare`, or both. The default is `spark` alone, so a boot pulls and loads only what it answers for — and one model per process is what makes the one-model-per-card deployment shape expressible. A `model_id` the process does not serve answers `INVALID_ARGUMENT`.
 
 Each model's artifact is pulled at its pinned git SHA and verified against that SHA on disk, so a volume that outlived a revision bump is re-pulled rather than silently serving the old build.
+
+## Tests
+
+`make test-unit`, `make test-integration`, `make test-cov` (95% gate). The k6 rig manual is [tests/load/README.md](tests/load/README.md).
