@@ -44,7 +44,7 @@ graph TB
     MAIN --> AL["module alerts"]
 
     subgraph "board layer"
-        DL --> BD["13 boards<br/>8 prod + 5 dev twins"]
+        DL --> BD["14 boards<br/>8 prod + 6 dev twins"]
         DL --> BT["entity tags: team, managed-by,<br/>service, env, kind"]
     end
 
@@ -94,11 +94,11 @@ observability/
 
 ## Prod and dev boards
 
-| | Prod boards (8) | Dev twins (5) |
+| | Prod boards (8) | Dev twins (6) |
 |---|---|---|
-| Covers | `overview`, `datastores`, and one per service | `web`, `payment-webhook`, `workers`, `document-parser`, `chats` |
+| Covers | `overview`, `datastores`, and one per service | `web`, `payment-webhook`, `workers`, `document-parser`, `chats`, `inference` |
 | Board JSON | `account_id` + `environment` templated | `prod` values hardcoded to `dev` |
 | Wording | plain titles | identical pages, ` (dev)` on every title |
-| Prod-only pair | `inference`, `overview`, `datastores` have no twin — the load rigs never run the AI service | — |
+| Prod-only boards | `overview`, `datastores` have no twin | — |
 
 Terraform tests enforce the twin contract: same pages, same panel counts, same titles.

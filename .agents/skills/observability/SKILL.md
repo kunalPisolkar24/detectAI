@@ -8,8 +8,8 @@ description: DetectAI's New Relic observability — how telemetry flows to New R
 Boards and alerts are Terraform in the `observability/` stack root — its HCL
 (`terraform/`) is kept separate from `infra/` on purpose: destroying a
 datastore must not take the boards with it. Everything publishes to the
-New Relic **EU** datacenter (`one.eu.newrelic.com`). Current shape: 13 boards
-(8 prod + 5 dev twins), 7 alert policies with 16 conditions, one email
+New Relic **EU** datacenter (`one.eu.newrelic.com`). Current shape: 14 boards
+(8 prod + 6 dev twins), 7 alert policies with 16 conditions, one email
 workflow.
 
 ## Map
@@ -70,7 +70,7 @@ Board JSON format and widget cookbook: [references/dashboards.md](references/das
    dev stacks) and wire it in `dashboards/<name>.tf`, following
    `dashboards/web.tf`: a `modules/dashboard` call per board + entity tags via
    `scope`/`kind`/`env`.
-2. Update `tests/dashboards.tftest.hcl`: the board-count assertion (13 today)
+2. Update `tests/dashboards.tftest.hcl`: the board-count assertion (14 today)
    and the twin-parity lists.
 3. Add a tour at `docs/services/<name>.md`, run the offline gate, publish.
 

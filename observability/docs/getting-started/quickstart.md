@@ -55,7 +55,7 @@ make apply
 ```mermaid
 graph LR
     START(["start"]) --> A["make apply"]
-    A --> B["13 boards<br/>8 prod + 5 dev twins"]
+    A --> B["14 boards<br/>8 prod + 6 dev twins"]
     A --> C["7 alert policies<br/>16 conditions"]
     A --> D["1 email workflow<br/>all policies to one inbox"]
     B --> END(["live at one.eu.newrelic.com"])

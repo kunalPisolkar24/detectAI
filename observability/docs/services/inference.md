@@ -1,32 +1,45 @@
 # Inference Dashboard
 
-This page documents the **detectai-inference** board: what it shows and which alerts page the team.
+This page documents the **detectai-inference** board: what each page shows and which alerts page the team.
 
 | | |
 |---|---|
 | Watches | `services/inference` — the gRPC model-serving service behind DetectAI's verdicts |
 | Service name | `inference` |
-| Board | `detectai-inference`, 1 page: Inference |
-| Dev twin | **none** — the load rigs never run the AI service, so this board exists for prod only |
-| Built from | `dashboards/inference/prod.tftpl` · `alerts/inference.tf` |
+| Board | `detectai-inference`, 2 pages: Inference, Logs |
+| Dev twin | yes — same pages, ` (dev)` on every title |
+| Built from | `dashboards/inference/{prod,dev}.tftpl` · `alerts/inference.tf` |
 
 ## How data gets here
 
-- **Spans and logs** — pushed over OTLP through the collector (`deployment.environment = prod`).
-- **Device metrics** — the GPU/host panels read the runtime's own gauges.
+- **All three signals** — the service pushes spans, app metrics and logs over OTLP (`deployment.environment = prod`). The dev twin filters the same signals on `deployment.environment = dev`.
+- **Service-emitted metrics only** — `inference_batch_size`, `inference_queue_depth`, `inference_inflight_chunks` and `inference_engine_duration_seconds` come from the app itself. There are no scraped exporter metrics: provider fallback fails the boot rather than degrading silently, so there is no GPU/host or fallback-rate panel.
 
-## Inference — one page, deep rather than wide
+## Inference — golden signals and per-model behaviour
 
 | Panel | What it tells you |
 |-------|-------------------|
-| gRPC QPS · gRPC error share | Traffic and failure share at a glance |
-| Inference p95 · Latency by gRPC method | The fast path — and which method owns the slow tail |
-| Queue drops | Batches rejected when the queue is full (usually `RESOURCE_EXHAUSTED`) |
-| Batch efficiency | Whether requests are batching usefully |
-| Errors by gRPC code | Which failure code dominates |
-| Latency by model revision + provider | Which model version serves requests |
-| Device + host | GPU utilization, memory and CPU — shows the bottleneck, not just the symptom |
-| Chunk/token behaviour · Recent inference errors | Workload shape and the latest failures |
+| RPS/min · Error share | Traffic and failure share at a glance |
+| p95 · p99 | The speed the user feels, in milliseconds |
+| Request latency p50/p95/p99 | Full request latency, smoothed and gradiated |
+| Spark latency · Flare latency | The same latency split per served model (`model.id`); empty when that model is not enabled |
+| Failures by type | Which gRPC status code or error message dominates |
+| In-flight documents & chunks | Live pressure at the admission gate and in the engine |
+| Queue drops | Batches shed when a saturated model returns `RESOURCE_EXHAUSTED` |
+| Batch efficiency | How full each engine call is versus the configured width |
+| Engine forward-pass latency by model | Model compute time from the app histogram, faceted by `model` |
+| Latency by model revision + provider | Which build and execution provider actually served the traffic |
+
+## Logs
+
+| Panel | What it tells you |
+|-------|-------------------|
+| Error log stream (latest 100) · Recent inference errors | Raw errors with a trace sample, newest first |
+| Log volume by level | Health drift (click the legend to isolate) |
+| Errors by type | Which message dominates the failures |
+| Slow requests over 1500 ms | Requests whose spans outlasted the threshold |
+
+Inference logs carry no `path`, `status_code` or `duration_ms`, so the logs page facets on `message` and the slow-request table reads from spans. The 1500 ms threshold is a starting point, not a contract.
 
 ## Alerts
 

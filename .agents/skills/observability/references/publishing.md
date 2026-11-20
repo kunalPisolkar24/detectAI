@@ -73,7 +73,7 @@ restore. The recovery ladder, in order:
    *No changes*.
 2. **`make state-restore`** — when a snapshot was copied from another machine
    and the ledger is empty.
-3. **`make recover-state`** — when no snapshot exists: import the 13 boards,
+3. **`make recover-state`** — when no snapshot exists: import the 14 boards,
    7 policies, 16 conditions and the notification resources into state, with
    the plan-guard verifying no board would be duplicated.
 4. **Full teardown** — only for an account that already holds two complete

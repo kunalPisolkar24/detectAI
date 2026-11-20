@@ -1,0 +1,234 @@
+{
+  "name": "detectai-inference (dev)",
+  "description": "Dev view for inference (deployment.environment = dev): request latency, per-model engine timing, batching and logs. service.name = inference.",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Inference",
+      "description": "gRPC golden signals, per-model latency, batching and in-flight pressure",
+      "widgets": [
+        {
+          "title": "RPS/min (dev)",
+          "layout": { "column": 1, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS `req/min` WHERE service.name = 'inference' AND deployment.environment = 'dev'" }
+            ],
+            "limit": 200
+          }
+        },
+        {
+          "title": "Error share (dev)",
+          "layout": { "column": 4, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'inference' AND deployment.environment = 'dev'" }
+            ],
+            "thresholds": { "alert": { "value": 2 }, "warning": { "value": 1 } },
+            "limit": 2
+          }
+        },
+        {
+          "title": "p95 (dev)",
+          "layout": { "column": 7, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 95) AS `p95 ms` WHERE service.name = 'inference' AND deployment.environment = 'dev'" }
+            ],
+            "limit": 1500
+          }
+        },
+        {
+          "title": "p99 (dev)",
+          "layout": { "column": 10, "row": 2, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 99) AS `p99 ms` WHERE service.name = 'inference' AND deployment.environment = 'dev'" }
+            ],
+            "limit": 3000
+          }
+        },
+        {
+          "title": "Request latency p50/p95/p99 (dev)",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'inference' AND deployment.environment = 'dev' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Spark latency p50/p95/p99 (dev)",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'inference' AND deployment.environment = 'dev' AND `model.id` = 'spark' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Flare latency p50/p95/p99 (dev)",
+          "layout": { "column": 7, "row": 4, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT percentile(duration.ms, 50, 95, 99) WHERE service.name = 'inference' AND deployment.environment = 'dev' AND `model.id` = 'flare' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Failures by type (dev)",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.stacked-bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT count(*) WHERE service.name = 'inference' AND deployment.environment = 'dev' AND error = true FACET `rpc.grpc.status_code` TIMESERIES AUTO LIMIT 10" },
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'inference' AND deployment.environment = 'dev' AND `severity.text` = 'ERROR' FACET message TIMESERIES AUTO LIMIT 10" }
+            ],
+            "facet": { "showOtherSeries": false },
+            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+          }
+        },
+        {
+          "title": "In-flight documents & chunks (dev)",
+          "layout": { "column": 7, "row": 5, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(inference_queue_depth) AS `in-flight docs`, average(inference_inflight_chunks) AS `in-flight chunks` WHERE service.name = 'inference' AND deployment.environment = 'dev' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Queue drops (dev)",
+          "layout": { "column": 1, "row": 6, "height": 3, "width": 3 },
+          "visualization": { "id": "viz.gauge" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS drops WHERE service.name = 'inference' AND deployment.environment = 'dev' AND (message LIKE '%queue%full%' OR message LIKE '%dropped%' OR message LIKE '%RESOURCE_EXHAUSTED%')" }
+            ],
+            "thresholds": { "alert": { "value": 1 } },
+            "limit": 5
+          }
+        },
+        {
+          "title": "Batch efficiency (dev)",
+          "layout": { "column": 4, "row": 6, "height": 3, "width": 9 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT average(inference_batch_size) AS `avg batch`, max(inference_batch_size) AS `max batch` WHERE service.name = 'inference' AND deployment.environment = 'dev' TIMESERIES AUTO" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Engine forward-pass latency by model (dev)",
+          "layout": { "column": 1, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Metric SELECT percentile(inference_engine_duration_seconds, 50, 95, 99) WHERE service.name = 'inference' AND deployment.environment = 'dev' FACET model TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Latency by model revision + provider (dev)",
+          "layout": { "column": 7, "row": 7, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT rate(count(*), 1 minute) AS rpm, average(duration.ms) AS `avg ms`, percentile(duration.ms, 95) AS `p95 ms`, percentage(count(*), WHERE error = true) AS `error %` WHERE service.name = 'inference' AND deployment.environment = 'dev' FACET `model.revision`, `inference.provider` LIMIT 20" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Logs",
+      "description": "Error-first log stream plus volume and failure types",
+      "widgets": [
+        {
+          "title": "Error log stream (latest 100) (dev)",
+          "layout": { "column": 1, "row": 2, "height": 4, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT timestamp, `severity.text`, message, `trace.id` WHERE service.name = 'inference' AND deployment.environment = 'dev' AND `severity.text` = 'ERROR' LIMIT 100" }
+            ]
+          }
+        },
+        {
+          "title": "Log volume by level (click legend to isolate) (dev)",
+          "layout": { "column": 1, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.area" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'inference' AND deployment.environment = 'dev' FACET `severity.text` TIMESERIES AUTO LIMIT 10" }
+            ],
+            "yAxisLeft": { "zero": true },
+            "chartStyles": { "lineInterpolation": "smooth", "gradient": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Errors by type (dev)",
+          "layout": { "column": 7, "row": 3, "height": 3, "width": 6 },
+          "visualization": { "id": "viz.stacked-bar" },
+          "rawConfiguration": {
+            "legend": { "enabled": true },
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) WHERE service.name = 'inference' AND deployment.environment = 'dev' AND `severity.text` = 'ERROR' FACET message TIMESERIES AUTO" }
+            ],
+            "facet": { "showOtherSeries": false },
+            "chartStyles": { "gradient": { "enabled": true }, "seriesOrder": "original", "stacked": { "enabled": true } }
+          }
+        },
+        {
+          "title": "Recent inference errors (dev)",
+          "layout": { "column": 1, "row": 4, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Log SELECT count(*) AS n, latest(message) AS sample, latest(`trace.id`) AS `sample trace` WHERE service.name = 'inference' AND deployment.environment = 'dev' AND `severity.text` = 'ERROR' FACET message LIMIT 20" }
+            ]
+          }
+        },
+        {
+          "title": "Slow requests over 1500ms (dev)",
+          "layout": { "column": 1, "row": 5, "height": 3, "width": 12 },
+          "visualization": { "id": "viz.table" },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              { "accountId": ${account_id}, "query": "FROM Span SELECT timestamp, name, duration.ms, `model.id`, `rpc.grpc.status_code`, `trace.id` WHERE service.name = 'inference' AND deployment.environment = 'dev' AND duration.ms > 1500 LIMIT 100" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -11,8 +11,8 @@ run "boards_render" {
   command = plan
 
   assert {
-    condition     = length(module.dashboards.boards) == 13
-    error_message = "Expected 13 boards: 8 prod + 5 dev twins."
+    condition     = length(module.dashboards.boards) == 14
+    error_message = "Expected 14 boards: 8 prod + 6 dev twins."
   }
 
   assert {
@@ -37,7 +37,7 @@ run "boards_render" {
   # page-for-page. Drift here means one side lost coverage.
   assert {
     condition = alltrue([
-      for base in ["web", "payment-webhook", "workers", "document-parser", "chats"] :
+      for base in ["web", "payment-webhook", "workers", "document-parser", "chats", "inference"] :
       [for p in jsondecode(module.dashboards.boards[base].json).pages : p.name] ==
       [for p in jsondecode(module.dashboards.boards["${base}-dev"].json).pages : p.name]
     ])
@@ -47,7 +47,7 @@ run "boards_render" {
   # Twin contract part 2: same panel count on every page of every twin.
   assert {
     condition = alltrue([
-      for base in ["web", "payment-webhook", "workers", "document-parser", "chats"] :
+      for base in ["web", "payment-webhook", "workers", "document-parser", "chats", "inference"] :
       alltrue([
         for i in range(length(jsondecode(module.dashboards.boards[base].json).pages)) :
         length(jsondecode(module.dashboards.boards[base].json).pages[i].widgets) ==
@@ -61,7 +61,7 @@ run "boards_render" {
   # document-parser's twin reorders by design; the other four match exactly.
   assert {
     condition = alltrue([
-      for base in ["web", "payment-webhook", "document-parser", "chats"] :
+      for base in ["web", "payment-webhook", "document-parser", "chats", "inference"] :
       alltrue([
         for i in range(length(jsondecode(module.dashboards.boards[base].json).pages)) :
         sort([for w in jsondecode(module.dashboards.boards[base].json).pages[i].widgets : w.title]) ==
@@ -75,20 +75,20 @@ run "boards_render" {
   # order with the " (dev)" suffix on twin titles.
   assert {
     condition = alltrue([
-      for base in ["web", "payment-webhook", "chats"] :
+      for base in ["web", "payment-webhook", "chats", "inference"] :
       alltrue([
         for i in range(length(jsondecode(module.dashboards.boards[base].json).pages)) :
         [for w in jsondecode(module.dashboards.boards[base].json).pages[i].widgets : w.title] ==
         [for w in jsondecode(module.dashboards.boards["${base}-dev"].json).pages[i].widgets : trimsuffix(w.title, " (dev)")]
       ])
     ])
-    error_message = "web, payment-webhook and chats twins must keep the prod panel order."
+    error_message = "web, payment-webhook, chats and inference twins must keep the prod panel order."
   }
 
   # A regenerated twin must not silently drop the marker from a panel title.
   assert {
     condition = alltrue([
-      for base in ["web", "payment-webhook", "workers", "document-parser", "chats"] :
+      for base in ["web", "payment-webhook", "workers", "document-parser", "chats", "inference"] :
       alltrue([
         for p in jsondecode(module.dashboards.boards["${base}-dev"].json).pages :
         alltrue([for w in p.widgets : endswith(w.title, " (dev)")])

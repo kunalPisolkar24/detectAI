@@ -1,5 +1,5 @@
-# Boards keyed with prod unsuffixed and dev twins under <key>-dev. Inference
-# has no dev twin on purpose, and the two platform boards are prod-only.
+# Boards keyed with prod unsuffixed and dev twins under <key>-dev. The two
+# platform boards are prod-only.
 locals {
   boards = {
     overview              = module.overview
@@ -11,6 +11,7 @@ locals {
     workers               = module.workers
     "workers-dev"         = module.workers_dev
     inference             = module.inference
+    "inference-dev"       = module.inference_dev
     "document-parser"     = module.document_parser
     "document-parser-dev" = module.document_parser_dev
     chats                 = module.chats

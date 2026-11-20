@@ -12,7 +12,7 @@ state). When the emulator's filesystem loses that bucket — container
 recreation, `make floci-clean`, a `--purge-state` teardown — terraform quietly
 plans *"add everything"* on the next apply, because the boards it created live
 on the New Relic side, not in the emulator. Applying blind fans out a second
-full copy: 13 boards, 7 policies, the email destination, channel and workflow,
+full copy: 14 boards, 7 policies, the email destination, channel and workflow,
 all duplicated in the same run.
 
 The tell-tale: `make plan` says **"N to add"** while the boards visibly exist

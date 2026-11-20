@@ -6,8 +6,8 @@ One wiring file per board in `dashboards/`, each backed by JSON templates.
 
 Boards: prod set is `overview`, `datastores`, `web`, `payment-webhook`,
 `workers`, `inference`, `document-parser`, `chats`; dev twins exist for web,
-payment-webhook, workers, document-parser, chats (`overview`/`datastores`/
-`inference` have none — rigs never run the AI service). What each board shows:
+payment-webhook, workers, document-parser, chats and inference (`overview`/
+`datastores` have none). What each board shows:
 `docs/services/<name>.md`.
 
 ## Wiring pattern (`dashboards/web.tf`)
