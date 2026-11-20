@@ -73,7 +73,15 @@ jobs:
       - name: Install Dependencies
         run: poetry install --no-interaction
 
+      - name: Restore load fixtures
+        id: fixtures-cache
+        uses: actions/cache@v4
+        with:
+          path: services/document-parser/tests/load/assets
+          key: document-parser-fixtures-${{ runner.os }}-${{ hashFiles('services/document-parser/tests/load/generate.py', 'services/document-parser/tests/support/documents.py', 'services/document-parser/app/processing/**/*.py', 'services/document-parser/poetry.lock') }}
+
       - name: Generate the load corpus (gitignored)
+        if: steps.fixtures-cache.outputs.cache-hit != 'true'
         run: make load-fixtures
 
       - name: Load rig env file
