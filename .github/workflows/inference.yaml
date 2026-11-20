@@ -52,9 +52,90 @@ jobs:
           API_KEY: "ci-dummy-key-16chars-long"
         run: make test-cov
 
+  load-test-smoke:
+    name: Run Smoke Load Test
+    needs: quality-assurance
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.SERVICE_PATH }}
+    env:
+      API_KEY: ci-dummy-key-16chars-long
+      ENABLED_MODELS: flare,spark
+      INFERENCE_LOAD_DATASET_REVISION: 90826e6a592a4c11952497f64a2c01c0f9a864a1
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install Dependencies
+        run: poetry install --no-interaction
+
+      - name: Write service env for the rig
+        run: |
+          {
+            echo "ENV_TYPE=dev"
+            echo "API_KEY=$API_KEY"
+            echo "MODEL_CACHE_DIR=./models"
+            echo "ENABLED_MODELS=$ENABLED_MODELS"
+          } > infra/.env
+
+      - name: Load rig env file
+        run: make load-env
+
+      - name: Restore model cache
+        uses: actions/cache@v4
+        with:
+          path: services/inference/models
+          key: inference-models-${{ runner.os }}-${{ hashFiles('services/inference/app/config/settings.py', 'services/inference/app/models/pulling/spec.py') }}
+          restore-keys: inference-models-${{ runner.os }}-
+
+      - name: Restore load corpus
+        id: corpus-cache
+        uses: actions/cache@v4
+        with:
+          path: services/inference/tests/load/assets
+          key: inference-corpus-${{ runner.os }}-${{ env.INFERENCE_LOAD_DATASET_REVISION }}-${{ hashFiles('services/inference/tests/load/generate.py', 'services/inference/app/config/settings.py') }}
+          restore-keys: inference-corpus-${{ runner.os }}-${{ env.INFERENCE_LOAD_DATASET_REVISION }}-
+
+      - name: Generate the load corpus (gitignored)
+        if: steps.corpus-cache.outputs.cache-hit != 'true'
+        run: make load-fixtures
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image for the smoke rig
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ env.SERVICE_PATH }}
+          file: ${{ env.SERVICE_PATH }}/Dockerfile
+          target: cpu
+          push: false
+          load: true
+          tags: ${{ env.DOCKER_IMAGE_NAME }}:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run smoke scenario (service + k6 containers)
+        run: |
+          docker compose -f infra/compose.load.yml -f infra/compose.ci.yml run --rm k6 run /load/scenarios/smoke.js
+
+      - name: Tear down the rig
+        if: always()
+        run: docker compose -f infra/compose.load.yml -f infra/compose.ci.yml down -v --remove-orphans
+
   build-and-push:
     name: Build & Push Docker Image
-    needs: quality-assurance
+    needs: [quality-assurance, load-test-smoke]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 

@@ -1,0 +1,10 @@
+services:
+  inference:
+    image: kunalpisolkar/detect-ai-inference:ci
+    pull_policy: never
+    healthcheck:
+      test: ["CMD", "python", "-c", "import grpc, os; from grpc_health.v1 import health_pb2, health_pb2_grpc as h; r = h.HealthStub(grpc.insecure_channel('127.0.0.1:' + os.getenv('GRPC_PORT', '50051'))).Check(health_pb2.HealthCheckRequest(), timeout=5); raise SystemExit(0 if r.status == health_pb2.HealthCheckResponse.SERVING else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s

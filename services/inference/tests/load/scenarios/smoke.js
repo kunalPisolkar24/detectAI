@@ -48,19 +48,20 @@ export default async function () {
     }
   }
 
-  for (let index = 0; index < SMOKE_PROFILES.length; index += 1) {
-    const document = pickDocument([SMOKE_PROFILES[index]], index);
-    const modelId = config.models[0];
-    const tags = {
-      ...documentTags(document),
-      scenario: "smoke",
-      model: modelId,
-      rpc: "AnalyzeDocument",
-    };
-    const result = await invokeAnalyzeDocument({ text: document.text, modelId, tags });
-    const evaluated = evaluateStreamResult(result, document, modelId, stream, tags);
-    if (!evaluated.passed) {
-      failures += 1;
+  for (const modelId of config.models) {
+    for (let index = 0; index < SMOKE_PROFILES.length; index += 1) {
+      const document = pickDocument([SMOKE_PROFILES[index]], index);
+      const tags = {
+        ...documentTags(document),
+        scenario: "smoke",
+        model: modelId,
+        rpc: "AnalyzeDocument",
+      };
+      const result = await invokeAnalyzeDocument({ text: document.text, modelId, tags });
+      const evaluated = evaluateStreamResult(result, document, modelId, stream, tags);
+      if (!evaluated.passed) {
+        failures += 1;
+      }
     }
   }
 
