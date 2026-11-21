@@ -16,8 +16,10 @@ export const HERO_TEXT = {
   badge: "Introducing Detect AI",
   titleStart: "Detect your text",
   titleEnd: "in Seconds!",
-  description:
-    "Provide your text, and our model will predict its classification. Fast and efficient predictions in seconds.",
+  description: [
+    "Provide your text, and our model will predict its classification.",
+    "Fast and efficient predictions in seconds.",
+  ],
   cta: "Get started!",
   ctaHref: "/signup",
 } as const;

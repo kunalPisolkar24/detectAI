@@ -9,7 +9,11 @@ export function HeroHeadline() {
         <span className="mt-2 block">{HERO_TEXT.titleEnd}</span>
       </h1>
       <p className="mx-auto max-w-2xl px-4 font-editorial text-sm leading-relaxed tracking-wide text-muted-foreground sm:px-6 lg:text-lg">
-        {HERO_TEXT.description}
+        {HERO_TEXT.description.map((line) => (
+          <span className="block" key={line}>
+            {line}
+          </span>
+        ))}
       </p>
     </div>
   );
