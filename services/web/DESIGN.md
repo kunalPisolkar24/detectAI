@@ -2,6 +2,8 @@
 
 This document is the source of truth for the web service's visual language. It defines tokens and the rules for using them. The values are implemented in `app/globals.css`; fonts are loaded in `lib/fonts.ts`. Components in `components/ui` are consumers of these foundations.
 
+For component structure, state ownership, placement, and testing, see the React Component Design Guidelines in `AGENTS.md`.
+
 ## Principles
 
 - **Dark-first.** Dark is the default theme. Light is supported through the same semantic tokens, never a separate palette.
