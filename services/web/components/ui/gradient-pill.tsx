@@ -24,7 +24,7 @@ export function GradientPill({
     >
       <span
         className={cn(
-          "inline-flex items-center gap-2 rounded-full bg-background/60 px-4 py-1.5 text-sm font-medium backdrop-blur-md",
+          "inline-flex items-center gap-2 rounded-full bg-background px-4 py-1.5 text-sm font-medium backdrop-blur-md dark:bg-background/60",
           animated && "animate-gradient-x",
         )}
       >
