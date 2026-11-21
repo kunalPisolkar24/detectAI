@@ -19,8 +19,12 @@ export function ReviewCard({ review }: ReviewCardProps) {
       <GlassPanel className="h-full overflow-hidden">
         <div className="p-4">
           <div className="flex flex-row items-center gap-2">
-            <Avatar>
-              <AvatarFallback>{initialsOf(review.name)}</AvatarFallback>
+            <Avatar brand>
+              <AvatarFallback>
+                <span className="text-purple-600 dark:text-purple-400">
+                  {initialsOf(review.name)}
+                </span>
+              </AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
               <figcaption className="text-sm font-medium text-foreground">
