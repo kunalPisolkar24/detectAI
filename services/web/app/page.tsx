@@ -1,9 +1,12 @@
-import { Button } from "@/components/ui/button";
+import { Navigation } from "@/features/landing/components/navigation";
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen items-center justify-center">
-      <Button>Get started</Button>
-    </main>
+    <>
+      <Navigation />
+      <main className="flex min-h-screen items-center justify-center pt-32">
+        <p className="text-muted-foreground">Landing page coming soon.</p>
+      </main>
+    </>
   );
 }
