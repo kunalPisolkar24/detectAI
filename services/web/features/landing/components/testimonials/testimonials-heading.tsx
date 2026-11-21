@@ -12,8 +12,10 @@ export function TestimonialsHeading() {
         <GradientText animate>What Our Users Say</GradientText>
       </h2>
       <p className="mx-auto max-w-3xl font-editorial text-sm leading-relaxed tracking-wide text-muted-foreground sm:text-base">
-        See what people are saying about DetectAI. Read their experiences and find
-        out how it can help you.
+        <span className="block">See what people are saying about DetectAI.</span>
+        <span className="block">
+          Read their experiences and find out how it can help you.
+        </span>
       </p>
     </FadeIn>
   );
