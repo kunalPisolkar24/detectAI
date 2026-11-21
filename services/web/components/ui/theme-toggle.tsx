@@ -14,7 +14,7 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon"
       aria-label="Toggle theme"
-      className="rounded-full bg-black/5 text-foreground dark:bg-white/10"
+      className="rounded-full border border-blue-500/60 bg-black/5 text-foreground dark:border-purple-400/60 dark:bg-white/10"
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
     >
       <Sun className="block dark:hidden" aria-hidden="true" />

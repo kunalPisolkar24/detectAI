@@ -20,7 +20,7 @@ export function TextDetectionVisualizer() {
       transition={{ duration: 1, delay: 0.5 }}
       className="mt-12 w-full max-w-3xl"
     >
-      <GlassPanel elevated className="overflow-hidden">
+      <GlassPanel elevated brand className="overflow-hidden">
         <div className="p-6">
           <div className="mb-4 flex items-center gap-2">
             <Zap className="size-5 text-purple-500" aria-hidden="true" />
