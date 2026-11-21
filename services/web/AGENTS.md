@@ -28,12 +28,13 @@ Apply these principles pragmatically; do not add abstractions just to follow a r
 ## 2. Component Placement
 
 ```text
-src/
+services/web/
 ├── app/                         # Routes, layouts, pages, route handlers
 ├── components/
 │   ├── ui/                      # shadcn and generic design-system primitives
 │   ├── common/                  # Reusable, app-level components
-│   └── layouts/                 # Shared navigation and shell components
+│   ├── layout/                  # Shared navigation and shell components
+│   └── motion/                  # Shared animation primitives
 ├── features/
 │   └── <feature>/
 │       ├── components/          # Feature-specific UI
@@ -45,18 +46,19 @@ src/
 │       └── __tests__/
 ├── hooks/                       # Truly app-wide hooks
 ├── lib/                         # Shared clients and integrations
+├── providers/                   # Client-side context providers
 ├── stores/                      # Truly global Zustand stores
-└── types/                       # Truly global types
-
-tests/
-└── e2e/                         # Playwright end-to-end tests
+├── types/                       # Truly global types
+└── tests/
+    └── e2e/                     # Playwright end-to-end tests
 ```
 
 Placement rules:
 
 - `components/ui/`: Generic primitives such as Button, Input, Dialog, AlertDialog, Select, Badge, and Table. Customize shadcn components here to maintain the project's design system. Keep this directory flat by default; introduce subfolders only when navigation becomes difficult and tooling/aliases remain compatible.
 - `components/common/`: App-level components reusable across unrelated features, such as PageHeader, EmptyState, generic ConfirmDialog, or LoadingState.
-- `components/layouts/`: Shared application shell components, such as Navbar, Sidebar, and AppShell.
+- `components/layout/`: Shared application shell components, such as Navbar, Sidebar, and AppShell.
+- `components/motion/`: Shared animation primitives built on the project's motion library.
 - `features/<feature>/components/`: Components that know about a particular feature or its domain, such as ChatWindow, MessageList, or DeleteChatDialog.
 - `app/`: Route composition and Next.js routing concerns. Keep substantial feature UI and behavior in the feature layer rather than turning page files into large components.
 
@@ -124,7 +126,7 @@ Hooks should expose a clear, small API to components. Keep simple, one-off UI st
 Before adding or refactoring a component, consider:
 
 1. Does it have one clear, cohesive responsibility?
-2. Does it belong to `ui/`, `common/`, `layouts/`, or a specific feature?
+2. Does it belong to `ui/`, `common/`, `layout/`, `motion/`, or a specific feature?
 3. Can simpler composition replace a large set of configuration props?
 4. Is state kept at the lowest level that needs it?
 5. Is server state owned by TanStack Query or the server, rather than duplicated in Zustand?
