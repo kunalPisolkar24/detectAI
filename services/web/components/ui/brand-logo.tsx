@@ -40,7 +40,12 @@ export function BrandLogo({
         aria-hidden="true"
       />
       {showWordmark && (
-        <span className={cn("font-display font-medium leading-none tracking-wide", textSizes[size])}>
+        <span
+          className={cn(
+            "inline-block translate-y-1 font-display font-medium leading-none tracking-wide",
+            textSizes[size],
+          )}
+        >
           Detect AI
         </span>
       )}

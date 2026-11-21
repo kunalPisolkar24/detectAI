@@ -19,10 +19,10 @@ export function NavActions({
   return (
     <div className={cn("flex items-center gap-2", className)}>
       {showTheme && <ThemeToggle />}
-      <Button asChild variant="brand" className={loginClassName}>
+      <Button asChild variant="brand" size="nav" className={loginClassName}>
         <Link href="/login" className="flex items-center gap-2">
           <LogIn className="size-4" aria-hidden="true" />
-          <span className="uppercase">Log in</span>
+          <span className="inline-block translate-y-0.5 uppercase">Log in</span>
         </Link>
       </Button>
     </div>
