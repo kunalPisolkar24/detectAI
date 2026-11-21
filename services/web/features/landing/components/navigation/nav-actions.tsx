@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LogIn } from "lucide-react";
 import { cn } from "cn";
 
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,10 @@ export function NavActions({
     <div className={cn("flex items-center gap-2", className)}>
       {showTheme && <ThemeToggle />}
       <Button asChild variant="brand" className={loginClassName}>
-        <Link href="/login">Log in</Link>
+        <Link href="/login" className="flex items-center gap-2">
+          <LogIn className="size-4" aria-hidden="true" />
+          <span className="uppercase">Log in</span>
+        </Link>
       </Button>
     </div>
   );

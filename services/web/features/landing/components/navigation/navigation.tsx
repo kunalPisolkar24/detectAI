@@ -4,7 +4,6 @@ import { useMotionValueEvent, useScroll } from "framer-motion";
 import { useState } from "react";
 import { cn } from "cn";
 
-import { Container } from "@/components/layout/container";
 import { BrandLogo } from "@/components/ui/brand-logo";
 import { DesktopNav } from "./desktop-nav";
 import { MobileNav } from "./mobile-nav";
@@ -22,18 +21,20 @@ export function Navigation() {
   return (
     <header
       className={cn(
-        "animate-in fade-in slide-in-from-top-8 fixed inset-x-0 top-0 z-50 border-b duration-500 transition-all",
+        "animate-in fade-in slide-in-from-top-8 fixed inset-x-0 top-0 z-50 flex h-16 items-center border-b duration-500 transition-all",
         scrolled
-          ? "border-black/5 bg-white/70 py-3 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-black/70"
-          : "border-transparent bg-transparent py-5",
+          ? "border-black/5 bg-white/70 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-black/70"
+          : "border-transparent bg-transparent",
       )}
     >
-      <Container className="flex items-center justify-between gap-4">
+      <div className="flex w-full items-center justify-between gap-4 px-4 sm:px-6">
         <BrandLogo />
-        <DesktopNav />
-        <NavActions className="hidden lg:flex" />
-        <MobileNav />
-      </Container>
+        <div className="flex items-center gap-4">
+          <DesktopNav />
+          <NavActions className="hidden border-l border-black/10 pl-4 dark:border-white/10 lg:flex" />
+          <MobileNav />
+        </div>
+      </div>
     </header>
   );
 }

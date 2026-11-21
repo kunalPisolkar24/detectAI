@@ -35,9 +35,12 @@ export function BrandLogo({
         className,
       )}
     >
-      <Bot className={cn(iconSizes[size], "text-blue-600 dark:text-blue-400")} aria-hidden="true" />
+      <Bot
+        className={cn(iconSizes[size], "shrink-0 text-blue-600 dark:text-blue-400")}
+        aria-hidden="true"
+      />
       {showWordmark && (
-        <span className={cn("font-display font-medium tracking-wide", textSizes[size])}>
+        <span className={cn("font-display font-medium leading-none tracking-wide", textSizes[size])}>
           Detect AI
         </span>
       )}
