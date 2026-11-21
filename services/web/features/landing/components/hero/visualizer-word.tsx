@@ -6,9 +6,10 @@ import { cn } from "cn";
 interface VisualizerWordProps {
   word: string;
   index: number;
+  active?: boolean;
 }
 
-export function VisualizerWord({ word, index }: VisualizerWordProps) {
+export function VisualizerWord({ word, index, active = true }: VisualizerWordProps) {
   return (
     <m.span
       className={cn(
@@ -20,13 +21,17 @@ export function VisualizerWord({ word, index }: VisualizerWordProps) {
             : "text-foreground",
       )}
       initial={{ opacity: 0.3 }}
-      animate={{ opacity: 1 }}
-      transition={{
-        duration: 0.2,
-        delay: (index * 0.05) % 2,
-        repeat: Number.POSITIVE_INFINITY,
-        repeatType: "reverse",
-      }}
+      animate={{ opacity: active ? 1 : 0.3 }}
+      transition={
+        active
+          ? {
+              duration: 0.2,
+              delay: (index * 0.05) % 2,
+              repeat: Number.POSITIVE_INFINITY,
+              repeatType: "reverse",
+            }
+          : { duration: 0 }
+      }
     >
       {word}
     </m.span>
