@@ -51,7 +51,7 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 
   --animate-gradient-slow: gradient 15s ease infinite;
-  --animate-gradient-x: gradientMove 3s linear infinite;
+  --animate-gradient-x: gradientMove 3s linear infinite alternate;
   --animate-marquee: marquee var(--duration) infinite linear;
   --animate-marquee-vertical: marquee-vertical var(--duration) linear infinite;
 
