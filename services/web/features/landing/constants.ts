@@ -38,31 +38,31 @@ export const REVIEWS_DATA: Review[] = [
   {
     name: "Aarav Mehta",
     username: "@aaravm",
-    body: "I pasted a draft I wrote myself and DetectAI confirmed it was human. The verdict came back in seconds.",
+    body: "I pasted my own draft and DetectAI confirmed it was human in seconds.",
   },
   {
     name: "Priya Nair",
     username: "@priyanair",
-    body: "We use it to screen submissions before review. It flags the ones that need a closer look without slowing us down.",
+    body: "We use it to screen submissions before review. It flags what needs a closer look.",
   },
   {
     name: "Rohan Das",
     username: "@rohandas",
-    body: "The breakdown makes it easy to see which sentences feel machine-written. Far more useful than a simple score.",
+    body: "The breakdown shows which sentences feel machine-written far more useful than a score.",
   },
   {
     name: "Sneha Iyer",
     username: "@snehaiyer",
-    body: "Two models and a clear result — exactly what I needed for checking client copy before it goes out.",
+    body: "Two models and a clear result exactly what I need before client copy goes out.",
   },
   {
     name: "Kabir Shah",
     username: "@kabirshah",
-    body: "I uploaded a long report and got a verdict without any fuss. It has become part of my editing routine.",
+    body: "I uploaded a long report and got a verdict without fuss. It is part of my editing routine now.",
   },
   {
     name: "Meera Rao",
     username: "@meerarao",
-    body: "I was skeptical, but it caught AI-written passages I had missed. The confidence score matches my gut.",
+    body: "I was skeptical, but it caught AI passages I had missed. The score matches my gut.",
   },
 ];
