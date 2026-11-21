@@ -10,7 +10,7 @@ const buttonVariants = cva(
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/80",
         brand:
-          "bg-gradient-to-r from-blue-600 to-purple-600 font-display tracking-wide text-white shadow-lg shadow-blue-500/20 hover:from-blue-700 hover:to-purple-700",
+          "border-0 bg-gradient-to-r from-blue-600 to-purple-600 font-display tracking-wide text-white shadow-lg shadow-blue-500/20 hover:from-blue-700 hover:to-purple-700",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
@@ -27,6 +27,7 @@ const buttonVariants = cva(
         xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
         sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        hero: "h-12 gap-2 px-8 text-2xl hover:scale-105 active:scale-95",
         nav: "h-9 gap-1.5 px-3 text-xl font-semibold",
         icon: "size-8",
         "icon-xs":

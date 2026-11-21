@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { inter, merriweather, teko } from "@/lib/fonts";
+import { MotionProvider } from "@/providers/motion-provider";
 import { QueryProvider } from "@/providers/query-provider";
 import { ThemeProvider } from "@/providers/theme-provider";
 import "./globals.css";
@@ -19,9 +20,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
-          <QueryProvider>
-            <TooltipProvider>{children}</TooltipProvider>
-          </QueryProvider>
+          <MotionProvider>
+            <QueryProvider>
+              <TooltipProvider>{children}</TooltipProvider>
+            </QueryProvider>
+          </MotionProvider>
         </ThemeProvider>
       </body>
     </html>
