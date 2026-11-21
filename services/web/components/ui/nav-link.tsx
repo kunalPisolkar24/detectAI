@@ -27,7 +27,7 @@ export function NavLink({
     <Link
       {...props}
       className={cn(
-        "relative inline-flex items-center gap-2 py-1 font-display text-xl font-medium tracking-wide uppercase text-muted-foreground transition-colors hover:text-foreground",
+        "relative inline-flex translate-y-0.5 items-center gap-2 py-1 font-display text-xl font-medium tracking-wide uppercase text-muted-foreground transition-colors hover:text-foreground",
         active && "text-foreground",
         className,
       )}

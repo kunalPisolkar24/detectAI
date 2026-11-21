@@ -28,7 +28,7 @@ export function Navigation() {
       )}
     >
       <div className="flex w-full items-center justify-between gap-4 px-4 sm:px-6">
-        <BrandLogo />
+        <BrandLogo size="nav" />
         <div className="flex items-center gap-4">
           <DesktopNav />
           <NavActions className="hidden border-l border-black/10 pl-4 dark:border-white/10 lg:flex" />

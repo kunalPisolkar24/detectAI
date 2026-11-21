@@ -34,7 +34,7 @@ export function MobileNav() {
         <SheetTitle className="sr-only">Mobile navigation</SheetTitle>
         <div className="flex h-full flex-col p-6">
           <div className="mb-8 flex items-center justify-between">
-            <BrandLogo size="sm" />
+            <BrandLogo size="nav" />
             <Button
               variant="ghost"
               size="icon"
