@@ -8,6 +8,7 @@ interface MarqueeProps extends ComponentProps<"div"> {
   repeat?: number;
   duration?: string;
   gap?: string;
+  fadeEdges?: boolean;
 }
 
 export function Marquee({
@@ -17,6 +18,7 @@ export function Marquee({
   repeat = 4,
   duration = "40s",
   gap = "1rem",
+  fadeEdges = false,
   className,
   style,
   children,
@@ -24,7 +26,11 @@ export function Marquee({
 }: MarqueeProps) {
   return (
     <div
-      className={cn("group flex overflow-hidden p-2", className)}
+      className={cn(
+        "group flex overflow-hidden p-2",
+        fadeEdges && "[mask-image:linear-gradient(to_right,transparent,black_15%,black_85%,transparent)]",
+        className,
+      )}
       style={{ "--duration": duration, "--gap": gap, ...style } as CSSProperties}
       {...props}
     >
