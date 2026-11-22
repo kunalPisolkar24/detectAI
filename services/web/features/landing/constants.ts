@@ -11,6 +11,7 @@ import {
   Flame,
   Gauge,
   Highlighter,
+  LifeBuoy,
   Mail,
   ShieldCheck,
   Zap,
@@ -26,7 +27,7 @@ export interface NavItem {
 export const NAV_LINKS: NavItem[] = [
   { href: "#pricing", label: "Pricing", icon: CreditCard },
   { href: "#faq", label: "FAQs", icon: CircleHelp },
-  { href: "#contact", label: "Contact", icon: Mail },
+  { href: "/contact", label: "Contact", icon: Mail },
 ];
 
 export const HERO_TEXT = {
@@ -318,5 +319,49 @@ export const ABOUT_CAPABILITIES: AboutCardData[] = [
     description: "Submitted text is never stored or shared. Your words stay yours.",
     icon: ShieldCheck,
     iconBorder: true,
+  },
+];
+
+export const CONTACT_EMAIL = "info@detectai.com";
+
+export interface ContactChannel {
+  id: string;
+  icon: LucideIcon;
+  title: string;
+  tagline: string;
+  description: string;
+  subject?: string;
+  cta: string;
+}
+
+export const CONTACT_TEXT = {
+  badge: "Contact",
+  title: "Talk to a human.",
+  description:
+    "No bots, no ticket black holes. Write to us directly and a real person from the Detect AI team will get back to you.",
+  channelsTitle: "Reach out directly",
+  ctaTitle: "Prefer to browse first?",
+  ctaDescription:
+    "Most questions about accuracy, plans, and privacy already have answers.",
+  ctaLabel: "Visit support",
+} as const;
+
+export const CONTACT_CHANNELS: ContactChannel[] = [
+  {
+    id: "general",
+    icon: Mail,
+    title: "General contact",
+    tagline: "Say hello",
+    description: "Questions, feedback, partnerships, or just saying hello.",
+    cta: "Email us",
+  },
+  {
+    id: "support",
+    icon: LifeBuoy,
+    title: "Support",
+    tagline: "We're here to help",
+    description: "Trouble signing in, billing questions, or results that look off.",
+    subject: "Support request",
+    cta: "Get support",
   },
 ];
