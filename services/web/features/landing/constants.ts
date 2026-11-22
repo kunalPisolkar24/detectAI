@@ -132,6 +132,11 @@ export const FAQ_TEXT = {
   eyebrow: "FAQs",
   title: "Frequently Asked Questions",
   description: "Here are some of the most frequently asked questions about our product.",
+  ctaTitle: "Still have questions?",
+  ctaDescription:
+    "If you couldn't find the answer to your question, feel free to reach out to our support team.",
+  supportEmail: "info@detectai.com",
+  ctaLabel: "Contact Support",
 } as const;
 
 export const FAQ_ITEMS: FaqItemData[] = [
