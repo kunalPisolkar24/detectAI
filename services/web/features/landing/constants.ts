@@ -246,7 +246,7 @@ export const ABOUT_TEXT = {
   title: "Know the difference — Trust the evidence.",
   description:
     "Detect AI analyzes writing patterns, structure, and linguistic signals to tell AI-generated text apart from human writing — in seconds.",
-  storyTitle: "Why Detect AI exists",
+  storyTitle: "Why Detect AI exists?",
   story: [
     "AI-generated text is everywhere — in classrooms, newsrooms, hiring pipelines, and publishing queues. Knowing what you're reading matters, but spotting machine writing by eye is getting harder every month.",
     "Detect AI exists to give that clarity back. Paste any text and our models break it down chunk by chunk, highlight the passages that read as artificial, and score the result — so you can judge with evidence instead of gut feel.",
