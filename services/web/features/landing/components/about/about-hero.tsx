@@ -1,4 +1,4 @@
-import { Bot } from "lucide-react";
+import { InfoIcon } from "@hugeicons/core-free-icons";
 
 import { FadeIn } from "@/components/motion/fade-in";
 import { GradientPill } from "@/components/ui/gradient-pill";
@@ -9,7 +9,7 @@ import { ABOUT_TEXT } from "../../constants";
 export function AboutHero() {
   return (
     <FadeIn className="flex w-full flex-col items-center text-center">
-      <GradientPill icon={Bot}>{ABOUT_TEXT.badge}</GradientPill>
+      <GradientPill hugeIcon={InfoIcon}>{ABOUT_TEXT.badge}</GradientPill>
       <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
         <GradientText animate>{ABOUT_TEXT.title}</GradientText>
       </h1>

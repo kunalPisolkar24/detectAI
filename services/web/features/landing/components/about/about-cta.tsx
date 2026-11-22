@@ -11,13 +11,11 @@ export function AboutCta() {
     <FadeIn delay={0.5} className="w-full max-w-2xl text-center">
       <GlassPanel>
         <div className="p-6 sm:p-8">
-          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {ABOUT_TEXT.ctaTitle}
-          </h2>
-          <p className="mt-2 text-sm text-foreground sm:text-base">
+          <h2 className="text-lg font-semibold">{ABOUT_TEXT.ctaTitle}</h2>
+          <p className="mt-2 text-sm leading-relaxed text-foreground sm:text-base">
             {ABOUT_TEXT.ctaDescription}
           </p>
-          <Button asChild variant="brand" size="pricing" className="mt-5">
+          <Button asChild variant="brand" size="cta" className="mt-5">
             <Link href="/signup">{ABOUT_TEXT.ctaLabel}</Link>
           </Button>
         </div>

@@ -30,6 +30,7 @@ const buttonVariants = cva(
         sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         pricing: "h-11 gap-1.5 px-2.5 text-xl",
+        cta: "h-11 gap-1.5 px-2.5 text-2xl",
         hero: "h-12 gap-2 px-8 text-2xl hover:scale-105 active:scale-95",
         nav: "h-9 gap-1.5 px-3 text-xl font-semibold",
         icon: "size-8",

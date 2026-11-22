@@ -264,6 +264,8 @@ export interface AboutCardData {
   tagline: string;
   description: string;
   icon: LucideIcon;
+  iconTone?: "brand" | "purple";
+  iconBorder?: boolean;
   featured?: boolean;
   cta?: { label: string; href: string };
 }
@@ -275,6 +277,7 @@ export const ABOUT_MODELS: AboutCardData[] = [
     tagline: "Fast everyday checks",
     description: "Quick, reliable detection for everyday content — free with 100 scans a day.",
     icon: Zap,
+    iconBorder: true,
     cta: { label: "Try Spark free", href: "/signup" },
   },
   {
@@ -283,6 +286,8 @@ export const ABOUT_MODELS: AboutCardData[] = [
     tagline: "Deep multi-layer detection",
     description: "Advanced analysis with unlimited scans for professionals and heavy users.",
     icon: Flame,
+    iconTone: "purple",
+    iconBorder: true,
     cta: { label: "Go Flare", href: "/signup" },
     featured: true,
   },
@@ -296,6 +301,7 @@ export const ABOUT_CAPABILITIES: AboutCardData[] = [
     description:
       "See exactly which passages read as AI-generated, backed by per-span confidence.",
     icon: Highlighter,
+    iconBorder: true,
   },
   {
     id: "scores",
@@ -303,6 +309,7 @@ export const ABOUT_CAPABILITIES: AboutCardData[] = [
     tagline: "Clear verdicts",
     description: "A clear verdict with calibrated confidence — not just a black-box label.",
     icon: Gauge,
+    iconBorder: true,
   },
   {
     id: "privacy",
@@ -310,5 +317,6 @@ export const ABOUT_CAPABILITIES: AboutCardData[] = [
     tagline: "Your words stay yours",
     description: "Submitted text is never stored or shared. Your words stay yours.",
     icon: ShieldCheck,
+    iconBorder: true,
   },
 ];

@@ -21,7 +21,12 @@ export function AboutCard({ card, index = 0 }: AboutCardProps) {
         className="flex h-full flex-col overflow-hidden"
       >
         <div className="flex flex-1 flex-col p-6">
-          <IconTile icon={card.icon} tone="brand" size="md" />
+          <IconTile
+            icon={card.icon}
+            tone={card.iconTone ?? "brand"}
+            size="md"
+            bordered={card.iconBorder}
+          />
           <h3 className="mt-4 text-base font-semibold">{card.name}</h3>
           <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             {card.tagline}
