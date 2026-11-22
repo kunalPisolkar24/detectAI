@@ -278,7 +278,7 @@ export const ABOUT_MODELS: AboutCardData[] = [
     description: "Quick, reliable detection for everyday content — free with 100 scans a day.",
     icon: Zap,
     iconBorder: true,
-    cta: { label: "Try Spark free", href: "/signup" },
+    cta: { label: "Get Spark free", href: "/signup" },
   },
   {
     id: "flare",
