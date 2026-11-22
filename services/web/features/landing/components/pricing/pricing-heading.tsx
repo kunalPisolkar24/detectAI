@@ -13,7 +13,7 @@ export function PricingHeading() {
       <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
         <GradientText animate>{PRICING_TEXT.title}</GradientText>
       </h2>
-      <p className="mx-auto max-w-3xl font-editorial text-sm leading-relaxed tracking-wide text-muted-foreground sm:text-base">
+      <p className="mx-auto max-w-3xl font-editorial text-sm leading-relaxed tracking-wide text-foreground sm:text-base">
         {PRICING_TEXT.description.map((line) => (
           <span className="block" key={line}>
             {line}

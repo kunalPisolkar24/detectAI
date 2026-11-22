@@ -8,7 +8,7 @@ export function HeroHeadline() {
         <GradientText animate>{HERO_TEXT.titleStart}</GradientText>
         <span className="mt-2 block">{HERO_TEXT.titleEnd}</span>
       </h1>
-      <p className="mx-auto max-w-2xl px-4 font-editorial text-sm leading-relaxed tracking-wide text-muted-foreground sm:px-6 lg:text-lg">
+      <p className="mx-auto max-w-2xl px-4 font-editorial text-sm leading-relaxed tracking-wide text-foreground sm:px-6 lg:text-lg">
         {HERO_TEXT.description.map((line) => (
           <span className="block" key={line}>
             {line}

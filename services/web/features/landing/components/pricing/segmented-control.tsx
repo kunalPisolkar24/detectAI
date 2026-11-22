@@ -34,15 +34,15 @@ export function SegmentedControl<T extends string>({
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
           className={cn(
-            "inline-flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
+            "inline-flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm transition-colors",
             value === option.value
-              ? "bg-background text-foreground shadow-sm dark:bg-black/60"
-              : "text-muted-foreground hover:text-foreground",
+              ? "bg-background font-semibold text-foreground shadow-sm ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10"
+              : "font-medium text-muted-foreground hover:text-foreground",
           )}
         >
           {option.label}
           {option.badge && (
-            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+            <span className="rounded-full border border-blue-500/50 bg-gradient-to-r from-blue-500/15 to-purple-500/15 px-2 py-0.5 text-[10px] font-bold tracking-wide text-blue-600 dark:border-blue-400/50 dark:text-blue-400">
               {option.badge}
             </span>
           )}
