@@ -31,7 +31,7 @@ const buttonVariants = cva(
         lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         cta: "h-11 gap-1.5 px-2.5 text-2xl",
         model: "h-11 gap-1.5 px-2.5 text-2xl font-display",
-        hero: "h-12 gap-2 px-8 text-2xl hover:scale-105 active:scale-95",
+        hero: "h-12 gap-2 px-8 text-3xl hover:scale-105 active:scale-95",
         nav: "h-9 gap-1.5 px-3 text-xl font-semibold",
         icon: "size-8",
         "icon-xs":
