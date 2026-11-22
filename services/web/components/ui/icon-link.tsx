@@ -1,9 +1,11 @@
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "cn";
 
 interface IconLinkProps {
   href: string;
-  icon: LucideIcon;
+  icon?: LucideIcon;
+  hugeIcon?: IconSvgElement;
   label: string;
   external?: boolean;
   className?: string;
@@ -12,6 +14,7 @@ interface IconLinkProps {
 export function IconLink({
   href,
   icon: Icon,
+  hugeIcon,
   label,
   external = false,
   className,
@@ -27,7 +30,11 @@ export function IconLink({
         className,
       )}
     >
-      <Icon className="size-4" aria-hidden="true" />
+      {hugeIcon ? (
+        <HugeiconsIcon icon={hugeIcon} size={20} aria-hidden="true" />
+      ) : Icon ? (
+        <Icon className="size-5" aria-hidden="true" />
+      ) : null}
     </a>
   );
 }

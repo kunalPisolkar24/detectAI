@@ -1,3 +1,10 @@
+import { type IconSvgElement } from "@hugeicons/react";
+import {
+  Github01Icon,
+  Linkedin01Icon,
+  Mail01Icon,
+  NewTwitterEllipseIcon,
+} from "@hugeicons/core-free-icons";
 import { CircleHelp, CreditCard, Mail, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
@@ -168,4 +175,58 @@ export const FAQ_ITEMS: FaqItemData[] = [
     question: "How does Detect AI handle user data?",
     answer: "We prioritize privacy and do not store or share any text submitted for analysis.",
   },
+];
+
+export const FOOTER_TEXT = {
+  description:
+    "Detect AI helps you identify whether text is AI-generated or human-written with advanced machine learning models and high accuracy.",
+  copyright: "Detect AI Inc. All rights reserved.",
+} as const;
+
+export interface FooterLink {
+  name: string;
+  href: string;
+}
+
+export interface FooterLinkGroup {
+  title: string;
+  links: FooterLink[];
+}
+
+export const FOOTER_LINK_GROUPS: FooterLinkGroup[] = [
+  {
+    title: "Product",
+    links: [
+      { name: "Pricing", href: "#pricing" },
+      { name: "FAQs", href: "#faq" },
+    ],
+  },
+  {
+    title: "Company",
+    links: [
+      { name: "About", href: "/about" },
+      { name: "Contact", href: "/contact" },
+      { name: "Support", href: "/support" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { name: "Terms of Service", href: "/terms" },
+      { name: "Privacy Policy", href: "/privacy" },
+    ],
+  },
+];
+
+export interface FooterSocial {
+  name: string;
+  href: string;
+  icon: IconSvgElement;
+}
+
+export const FOOTER_SOCIALS: FooterSocial[] = [
+  { name: "GitHub", href: "https://github.com", icon: Github01Icon },
+  { name: "Twitter", href: "https://twitter.com", icon: NewTwitterEllipseIcon },
+  { name: "LinkedIn", href: "https://linkedin.com", icon: Linkedin01Icon },
+  { name: "Email", href: "mailto:info@detectai.com", icon: Mail01Icon },
 ];

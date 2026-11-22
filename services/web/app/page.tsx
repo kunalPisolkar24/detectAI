@@ -1,4 +1,5 @@
 import { Faq } from "@/features/landing/components/faq";
+import { Footer } from "@/features/landing/components/footer";
 import { HeroSection } from "@/features/landing/components/hero";
 import { Navigation } from "@/features/landing/components/navigation";
 import { Pricing } from "@/features/landing/components/pricing";
@@ -14,6 +15,7 @@ export default function Home() {
         <Pricing />
         <Faq />
       </main>
+      <Footer />
     </>
   );
 }
