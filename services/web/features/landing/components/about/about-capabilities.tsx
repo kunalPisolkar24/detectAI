@@ -7,7 +7,7 @@ export function AboutCapabilities() {
   return (
     <section className="w-full max-w-5xl">
       <FadeIn>
-        <h2 className="text-center text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h2 className="text-center text-2xl font-semibold">
           {ABOUT_TEXT.capabilitiesTitle}
         </h2>
       </FadeIn>
