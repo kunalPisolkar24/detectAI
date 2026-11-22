@@ -1,3 +1,4 @@
+import { Faq } from "@/features/landing/components/faq";
 import { HeroSection } from "@/features/landing/components/hero";
 import { Navigation } from "@/features/landing/components/navigation";
 import { Pricing } from "@/features/landing/components/pricing";
@@ -11,6 +12,7 @@ export default function Home() {
         <HeroSection />
         <Testimonials />
         <Pricing />
+        <Faq />
       </main>
     </>
   );
