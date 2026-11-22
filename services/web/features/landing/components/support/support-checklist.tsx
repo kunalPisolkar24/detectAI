@@ -1,6 +1,7 @@
 import { ListChecks } from "lucide-react";
 
 import { FadeIn } from "@/components/motion/fade-in";
+import { BulletList } from "@/components/ui/bullet-list";
 import { GlassPanel } from "@/components/ui/glass-panel";
 import { IconTile } from "@/components/ui/icon-tile";
 
@@ -15,20 +16,9 @@ export function SupportChecklist() {
             <IconTile icon={ListChecks} tone="purple" bordered />
             <h2 className="text-lg font-semibold">{SUPPORT_TEXT.checklistTitle}</h2>
           </div>
-          <ul className="mt-5 space-y-3">
-            {SUPPORT_CHECKLIST.map((item) => (
-              <li
-                key={item}
-                className="flex items-start gap-3 text-sm leading-relaxed text-foreground"
-              >
-                <span
-                  aria-hidden="true"
-                  className="mt-2 size-1.5 shrink-0 rounded-full bg-blue-500"
-                />
-                {item}
-              </li>
-            ))}
-          </ul>
+          <div className="mt-5 text-sm leading-relaxed text-foreground">
+            <BulletList items={SUPPORT_CHECKLIST} />
+          </div>
         </div>
       </GlassPanel>
     </FadeIn>
