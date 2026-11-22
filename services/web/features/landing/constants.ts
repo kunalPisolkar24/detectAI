@@ -68,3 +68,57 @@ export const REVIEWS_DATA: Review[] = [
     body: "I was skeptical, but it caught AI passages I had missed. The score matches my gut.",
   },
 ];
+
+export type BillingCycle = "monthly" | "yearly";
+
+export interface PricingPlan {
+  id: string;
+  name: string;
+  description: string;
+  price: Record<BillingCycle, string>;
+  features: string[];
+  featured?: boolean;
+  cta: string;
+}
+
+export const PRICING_TEXT = {
+  eyebrow: "Pricing",
+  title: "Choose The Plan For AI Text Detection",
+  description: [
+    "From simple AI text detection to in-depth analysis with advanced models,",
+    "choose the plan that fits your requirements.",
+  ],
+  note: "All plans include access to our web interface. Cancel anytime.",
+  yearlySavings: "Save 58%",
+} as const;
+
+export const PRICING_PLANS: PricingPlan[] = [
+  {
+    id: "spark",
+    name: "Spark",
+    description: "Perfect for individuals getting started with AI detection.",
+    price: { monthly: "₹0", yearly: "₹0" },
+    features: [
+      "Standard AI detection",
+      "100 scans per day",
+      "Basic reporting",
+      "Community support",
+    ],
+    cta: "Get Started",
+  },
+  {
+    id: "flare",
+    name: "Flare",
+    description: "Advanced power for professionals and heavy users.",
+    price: { monthly: "₹200", yearly: "₹1000" },
+    features: [
+      "Advanced AI detection",
+      "Unlimited scans",
+      "Deep analysis & insights",
+      "Priority support",
+      "Early access to features",
+    ],
+    featured: true,
+    cta: "Upgrade Now",
+  },
+];
