@@ -5,7 +5,17 @@ import {
   Mail01Icon,
   NewTwitterEllipseIcon,
 } from "@hugeicons/core-free-icons";
-import { CircleHelp, CreditCard, Mail, type LucideIcon } from "lucide-react";
+import {
+  CircleHelp,
+  CreditCard,
+  Flame,
+  Gauge,
+  Highlighter,
+  Mail,
+  ShieldCheck,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -229,4 +239,76 @@ export const FOOTER_SOCIALS: FooterSocial[] = [
   { name: "Twitter", href: "https://twitter.com", icon: NewTwitterEllipseIcon },
   { name: "LinkedIn", href: "https://linkedin.com", icon: Linkedin01Icon },
   { name: "Email", href: "mailto:info@detectai.com", icon: Mail01Icon },
+];
+
+export const ABOUT_TEXT = {
+  badge: "About Detect AI",
+  title: "Know the difference — Trust the evidence.",
+  description:
+    "Detect AI analyzes writing patterns, structure, and linguistic signals to tell AI-generated text apart from human writing — in seconds.",
+  storyTitle: "Why Detect AI exists",
+  story: [
+    "AI-generated text is everywhere — in classrooms, newsrooms, hiring pipelines, and publishing queues. Knowing what you're reading matters, but spotting machine writing by eye is getting harder every month.",
+    "Detect AI exists to give that clarity back. Paste any text and our models break it down chunk by chunk, highlight the passages that read as artificial, and score the result — so you can judge with evidence instead of gut feel.",
+  ],
+  modelsTitle: "Two models, one job",
+  capabilitiesTitle: "Built for evidence, not vibes",
+  ctaTitle: "Ready to check your text?",
+  ctaDescription: "Create a free account and run your first detection in seconds.",
+  ctaLabel: "Get started",
+} as const;
+
+export interface AboutCardData {
+  id: string;
+  name: string;
+  tagline: string;
+  description: string;
+  icon: LucideIcon;
+  featured?: boolean;
+  cta?: { label: string; href: string };
+}
+
+export const ABOUT_MODELS: AboutCardData[] = [
+  {
+    id: "spark",
+    name: "Spark",
+    tagline: "Fast everyday checks",
+    description: "Quick, reliable detection for everyday content — free with 100 scans a day.",
+    icon: Zap,
+    cta: { label: "Try Spark free", href: "/signup" },
+  },
+  {
+    id: "flare",
+    name: "Flare",
+    tagline: "Deep multi-layer detection",
+    description: "Advanced analysis with unlimited scans for professionals and heavy users.",
+    icon: Flame,
+    cta: { label: "Go Flare", href: "/signup" },
+    featured: true,
+  },
+];
+
+export const ABOUT_CAPABILITIES: AboutCardData[] = [
+  {
+    id: "highlights",
+    name: "Chunk-level highlights",
+    tagline: "See the evidence",
+    description:
+      "See exactly which passages read as AI-generated, backed by per-span confidence.",
+    icon: Highlighter,
+  },
+  {
+    id: "scores",
+    name: "AI vs human scores",
+    tagline: "Clear verdicts",
+    description: "A clear verdict with calibrated confidence — not just a black-box label.",
+    icon: Gauge,
+  },
+  {
+    id: "privacy",
+    name: "Privacy-first",
+    tagline: "Your words stay yours",
+    description: "Submitted text is never stored or shared. Your words stay yours.",
+    icon: ShieldCheck,
+  },
 ];
