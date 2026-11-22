@@ -1,4 +1,4 @@
-import { MessageSquare } from "lucide-react";
+import { BubbleChatUserIcon } from "@hugeicons/core-free-icons";
 
 import { FadeIn } from "@/components/motion/fade-in";
 import { GradientPill } from "@/components/ui/gradient-pill";
@@ -9,7 +9,7 @@ import { CONTACT_TEXT } from "../../constants";
 export function ContactHero() {
   return (
     <FadeIn className="flex w-full flex-col items-center text-center">
-      <GradientPill icon={MessageSquare}>{CONTACT_TEXT.badge}</GradientPill>
+      <GradientPill hugeIcon={BubbleChatUserIcon}>{CONTACT_TEXT.badge}</GradientPill>
       <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
         <GradientText animate>{CONTACT_TEXT.title}</GradientText>
       </h1>

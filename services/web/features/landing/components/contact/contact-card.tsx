@@ -4,6 +4,7 @@ import { GlassPanel } from "@/components/ui/glass-panel";
 import { IconTile } from "@/components/ui/icon-tile";
 
 import { CONTACT_EMAIL, type ContactChannel } from "../../constants";
+import { contactMailto } from "../../utils/contact-mailto";
 
 interface ContactCardProps {
   channel: ContactChannel;
@@ -11,9 +12,7 @@ interface ContactCardProps {
 }
 
 export function ContactCard({ channel, index = 0 }: ContactCardProps) {
-  const href = channel.subject
-    ? `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(channel.subject)}`
-    : `mailto:${CONTACT_EMAIL}`;
+  const href = contactMailto(channel.subject);
 
   return (
     <FadeIn delay={0.2 + index * 0.12} className="h-full">

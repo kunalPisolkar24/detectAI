@@ -6,6 +6,7 @@ import {
   NewTwitterEllipseIcon,
 } from "@hugeicons/core-free-icons";
 import {
+  BookOpen,
   CircleHelp,
   CreditCard,
   Flame,
@@ -365,3 +366,52 @@ export const CONTACT_CHANNELS: ContactChannel[] = [
     cta: "Get support",
   },
 ];
+
+export const SUPPORT_TEXT = {
+  badge: "Support",
+  title: "How can we help?",
+  description:
+    "Pick a topic below to email us with the right context attached. Every message is read by a real person on the Detect AI team.",
+  topicsTitle: "What do you need help with?",
+  checklistTitle: "Before you write in",
+  ctaLabel: "Email support",
+} as const;
+
+export interface SupportTopic {
+  id: string;
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  subject: string;
+}
+
+export const SUPPORT_TOPICS: SupportTopic[] = [
+  {
+    id: "getting-started",
+    icon: BookOpen,
+    title: "Getting started",
+    description: "Accounts, signing in, running your first detection, and understanding results.",
+    subject: "Getting started question",
+  },
+  {
+    id: "billing",
+    icon: CreditCard,
+    title: "Billing & Premium",
+    description: "Plans, upgrades, cancellations, and anything about Flare access.",
+    subject: "Billing question",
+  },
+  {
+    id: "results",
+    icon: Gauge,
+    title: "Detection questions",
+    description: "A result looks off, scores are confusing, or highlights seem wrong.",
+    subject: "Question about my results",
+  },
+];
+
+export const SUPPORT_CHECKLIST = [
+  "The email address on your account",
+  "Your plan (Spark or Flare) and the model you used",
+  "What you expected vs. what you saw",
+  "Never include passwords — we will never ask for them",
+] as const;
