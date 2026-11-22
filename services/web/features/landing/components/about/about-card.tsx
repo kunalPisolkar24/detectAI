@@ -40,7 +40,7 @@ export function AboutCard({ card, index = 0 }: AboutCardProps) {
             <Button
               asChild
               variant={card.featured ? "brand" : "outline"}
-              size="pricing"
+              size="model"
               className="mt-6 w-full"
             >
               <Link href={card.cta.href}>{card.cta.label}</Link>

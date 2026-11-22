@@ -37,7 +37,7 @@ export function PricingCard({ plan, billingCycle }: PricingCardProps) {
         <Button
           asChild
           variant={plan.featured ? "brand" : "outline"}
-          size={plan.featured ? "pricing" : "lg"}
+          size="model"
           className="w-full"
         >
           <Link href="/signup">{plan.cta}</Link>
