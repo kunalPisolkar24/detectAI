@@ -2,14 +2,14 @@ import { FadeIn } from "@/components/motion/fade-in";
 import { BulletList } from "@/components/ui/bullet-list";
 import { GlassPanel } from "@/components/ui/glass-panel";
 
-import type { TermsSection as TermsSectionData } from "../../constants";
+import type { LegalSection as LegalSectionData } from "../../constants";
 
-interface TermsSectionProps {
-  section: TermsSectionData;
+interface LegalSectionProps {
+  section: LegalSectionData;
   index: number;
 }
 
-export function TermsSection({ section, index }: TermsSectionProps) {
+export function LegalSection({ section, index }: LegalSectionProps) {
   return (
     <FadeIn
       id={section.id}

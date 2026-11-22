@@ -416,14 +416,14 @@ export const SUPPORT_CHECKLIST = [
   "Never include passwords — we will never ask for them",
 ] as const;
 
-export type TermsBlock =
+export type LegalBlock =
   | { type: "paragraph"; text: string }
   | { type: "list"; items: string[] };
 
-export interface TermsSection {
+export interface LegalSection {
   id: string;
   title: string;
-  blocks: TermsBlock[];
+  blocks: LegalBlock[];
 }
 
 export const TERMS_TEXT = {
@@ -439,7 +439,7 @@ export const TERMS_TEXT = {
   contactCta: "Contact us",
 } as const;
 
-export const TERMS_SECTIONS: TermsSection[] = [
+export const TERMS_SECTIONS: LegalSection[] = [
   {
     id: "acceptance",
     title: "Acceptance of these terms",
@@ -579,6 +579,140 @@ export const TERMS_SECTIONS: TermsSection[] = [
       {
         type: "paragraph",
         text: "Questions about these Terms? Contact us.",
+      },
+    ],
+  },
+];
+
+export const PRIVACY_TEXT = {
+  badge: "Legal",
+  title: "Privacy Policy",
+  description:
+    "What we collect, what we never keep, and the choices you have over your information.",
+  updated: "September 2026",
+  tocTitle: "On this page",
+  contactTitle: "Questions about your privacy?",
+  contactDescription:
+    "Write to us about your data, your rights, or anything in this policy.",
+  contactSubject: "Privacy question",
+  contactCta: "Contact us",
+} as const;
+
+export const PRIVACY_SECTIONS: LegalSection[] = [
+  {
+    id: "overview",
+    title: "Overview",
+    blocks: [
+      {
+        type: "paragraph",
+        text: "This Privacy Policy explains what information Detect AI collects, how we use it, and the choices you have. Our core principle is simple: we collect the minimum needed to run the Service, and your submitted text is never stored or shared.",
+      },
+    ],
+  },
+  {
+    id: "data-collected",
+    title: "Information we collect",
+    blocks: [
+      {
+        type: "list",
+        items: [
+          "Account information — email address and profile details you provide when registering or updating your profile.",
+          "Billing information — processed securely by our payment provider (Paddle). We receive subscription status, never your full card details.",
+          "Verification signals — our captcha provider (Cloudflare Turnstile) confirms you are human during sign-in and sign-up.",
+          "OAuth basics — if you sign in with Google or GitHub, we receive the basic profile they share (such as name and email).",
+          "Usage and diagnostics — aggregated, non-identifying metrics (such as scan counts and error rates) used to keep the Service reliable.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "submitted-text",
+    title: "Text you submit for analysis",
+    blocks: [
+      {
+        type: "paragraph",
+        text: "Text and documents you submit are analyzed in memory to produce your result and are never stored, logged, or shared. Once your analysis completes, the submitted content is discarded.",
+      },
+      {
+        type: "paragraph",
+        text: "Only the metadata needed for your account — such as your scan counts and subscription status — is retained.",
+      },
+    ],
+  },
+  {
+    id: "cookies",
+    title: "Cookies and local storage",
+    blocks: [
+      {
+        type: "list",
+        items: [
+          "Session cookies — keep you signed in and remember security preferences.",
+          "Local preferences — interface choices (such as theme and selected model) are stored in your own browser and never leave your device.",
+        ],
+      },
+      {
+        type: "paragraph",
+        text: "You can clear cookies and site data in your browser at any time; doing so will sign you out and reset local preferences.",
+      },
+    ],
+  },
+  {
+    id: "third-parties",
+    title: "Third-party services",
+    blocks: [
+      {
+        type: "paragraph",
+        text: "We share the minimum necessary data with the providers who power the Service:",
+      },
+      {
+        type: "list",
+        items: [
+          "Paddle — subscription billing and checkout.",
+          "Cloudflare Turnstile — bot protection on auth forms.",
+          "Google / GitHub — only if you choose OAuth sign-in.",
+        ],
+      },
+      {
+        type: "paragraph",
+        text: "Each provider processes data under its own privacy policy. We do not sell personal information to anyone, for any reason.",
+      },
+    ],
+  },
+  {
+    id: "retention",
+    title: "Data retention",
+    blocks: [
+      {
+        type: "paragraph",
+        text: "Account and billing records are kept while your account is active and as required for legal, tax, and accounting purposes. If you delete your account, we remove your profile data and revoke access; anonymized, aggregated metrics that cannot identify you may be retained for reliability monitoring.",
+      },
+    ],
+  },
+  {
+    id: "rights",
+    title: "Your rights",
+    blocks: [
+      {
+        type: "paragraph",
+        text: "Depending on where you live, you may have the right to access, correct, export, or delete your personal information, and to object to or restrict certain processing.",
+      },
+      {
+        type: "paragraph",
+        text: "To exercise any of these rights, write to us at the address below. We respond to all verified requests as required by applicable law.",
+      },
+    ],
+  },
+  {
+    id: "changes-contact",
+    title: "Changes and contact",
+    blocks: [
+      {
+        type: "paragraph",
+        text: "We may update this policy as the Service evolves. Material changes will be reflected in the “Last updated” date above.",
+      },
+      {
+        type: "paragraph",
+        text: "Privacy questions or requests? Contact us.",
       },
     ],
   },

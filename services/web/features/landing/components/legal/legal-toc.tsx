@@ -3,9 +3,14 @@ import { ListOrdered } from "lucide-react";
 import { FadeIn } from "@/components/motion/fade-in";
 import { GlassPanel } from "@/components/ui/glass-panel";
 
-import { TERMS_SECTIONS, TERMS_TEXT } from "../../constants";
+import type { LegalSection } from "../../constants";
 
-export function TermsToc() {
+interface LegalTocProps {
+  sections: readonly LegalSection[];
+  title: string;
+}
+
+export function LegalToc({ sections, title }: LegalTocProps) {
   return (
     <FadeIn className="lg:sticky lg:top-24 lg:col-span-4 lg:self-start">
       <nav aria-label="Table of contents">
@@ -16,10 +21,10 @@ export function TermsToc() {
                 className="size-4 text-blue-600 dark:text-blue-400"
                 aria-hidden="true"
               />
-              {TERMS_TEXT.tocTitle}
+              {title}
             </p>
             <ol className="mt-3 space-y-2">
-              {TERMS_SECTIONS.map((section, index) => (
+              {sections.map((section, index) => (
                 <li key={section.id}>
                   <a
                     href={`#${section.id}`}
