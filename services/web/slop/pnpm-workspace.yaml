@@ -1,12 +1,13 @@
 packages:
   - .
 
-ignoredBuiltDependencies:
-  - protobufjs
-  - sharp
-  - unrs-resolver
-
-onlyBuiltDependencies:
-  - '@prisma/engines'
-  - esbuild
-  - prisma
+allowBuilds:
+  '@prisma/engines': false
+  cpu-features: false
+  esbuild: false
+  msw: false
+  prisma: false
+  protobufjs: false
+  sharp: false
+  ssh2: false
+  unrs-resolver: false
