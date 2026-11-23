@@ -15,8 +15,9 @@ Which file a stack directory holds decides which kind drives the run:
 All three reach for the same two out-of-stack prerequisites — the state bucket and the seeder carrier role ([Carrier](carrier.md)) — created on demand and converged per run, on either plane. What differs is what the stack *is*: secrets turns `infra/.env` into Secrets Manager + SSM; observability terraform-drives the dashboards and alerts root and adds provider-only credentials (New Relic's NRAK triple, never AWS personal keys); infra terraform-drives the shared fabrics — SQS, ElastiCache and/or MongoDB
 Atlas — declared in `infra.toml`; its values law covers the region, the cache's
 AUTH token and subnet placement, and Atlas's API keys, DB user and CIDRs, each
-only when that fabric is declared. Atlas has no emulator, but its API is public,
-so a real cluster is planned on any state plane, including floci.
+only when that fabric is declared. Atlas has no emulator and is AWS-only: tfctl
+ignores `[[atlas]]` on Floci, so no Atlas credentials are needed there and no
+MongoDB Cloud API is called.
 
 ## What a Kind supplies
 

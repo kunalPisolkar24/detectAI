@@ -21,7 +21,7 @@ The backend is intentionally partial: tfctl always passes the plane's backend fi
 | Provider | Configuration |
 |----------|---------------|
 | `aws` | Region from `var.aws_region`; on an emulator, test credentials, four skip flags and SQS/ElastiCache/RDS endpoints pointed at `var.emulator_endpoint` |
-| `mongodbatlas.fabric` | Aliased, so Floci and queue/cache-only runs never configure it; keys come from variables with an `"unused"` placeholder when the fabric is absent |
+| `mongodbatlas.fabric` | Aliased, so Floci and any empty-ledger run never configure it; keys come from variables with an `"unused"` placeholder when the fabric is absent |
 
 `var.emulator_endpoint` is the single switch: a non-empty trimmed URL means emulator, empty or null means real AWS. tfctl sets it only on Floci.
 
@@ -37,8 +37,8 @@ The backend is intentionally partial: tfctl always passes the plane's backend fi
 | `cache_clusters` | `{}` | Redis, DNS-style names, major version, storage `1`–`5000` GB, ECPU `1000`–`15000000` |
 | `cache_subnet_ids` | `[]` | Plane-specific, from the values file |
 | `cache_security_group_ids` | `[]` | Optional |
-| `atlas_clusters` | `{}` | `M0` tier, Atlas-style region names |
-| `atlas_public_key` / `atlas_private_key` | `"unused"` (sensitive) | Placeholder kept the provider quiet on unconfigured runs |
+| `atlas_clusters` | `{}` | `M0` tier, Atlas-style region names; tfctl always sends `{}` on Floci |
+| `atlas_public_key` / `atlas_private_key` | `"unused"` (sensitive) | Placeholder for unconfigured runs; tfctl sends real keys only on AWS |
 | `atlas_project_id` | `""` | Empty or 24-character hex |
 | `atlas_db_username` / `atlas_db_password` | `""` (password sensitive) | Supplied by tfctl when Atlas is declared |
 | `atlas_ip_cidrs` | `[]` | Valid IPv4/IPv6 CIDRs |

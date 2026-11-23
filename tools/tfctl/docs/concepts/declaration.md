@@ -57,9 +57,9 @@ API_KEY = 16
 keys = ["UPLOAD_LIMIT_BYTES", "MAX_PDF_PAGES"]
 ```
 
-One `#` on the header is enough; leaving the body lines verbatim is what makes the block easy to bring back. The same works for `[[queues]]`, `[[elasticache]]`, `[[atlas]]` and `[[aurora]]` in `infra.toml`, and for `[requires]` here. The comment line must be *only* the header (plus optional trailing `#...`) — prose like `# the [ssm] section` stays an ordinary comment.
+One `#` on the header is enough; leaving the body lines verbatim is what makes the block easy to bring back. The same works for `[[queues]]`, `[[elasticache]]` and `[[aurora]]` in `infra.toml`, and for `[requires]` here. `[[atlas]]` needs no local commenting: tfctl ignores it on Floci and uses it only on the AWS plane. The comment line must be *only* the header (plus optional trailing `#...`) — prose like `# the [ssm] section` stays an ordinary comment.
 
-Coherence rules still apply to what remains: disabling a `[secrets]` key requires commenting its `min_lengths` floor and any `requires` entry that names it, and `[service]` must stay enabled. For a declared fabric that was already applied, removing it from `infra.toml` makes Terraform plan a destroy — use this for fresh local runs on the Floci plane.
+Coherence rules still apply to what remains: disabling a `[secrets]` key requires commenting its `min_lengths` floor and any `requires` entry that names it, and `[service]` must stay enabled. For a declared fabric that was already applied, removing it from `infra.toml` makes Terraform plan a destroy — use this for fresh local runs on the Floci plane. Existing Floci ledgers that already track Atlas need a one-time `terraform state rm module.atlas[0]` (state-only, no MongoDB Cloud API call).
 
 ## The rules the schema enforces
 

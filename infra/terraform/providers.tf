@@ -33,7 +33,7 @@ provider "aws" {
   }
 }
 
-# Aliased so offline runs never configure it: keys are absent and the emulator has no Atlas API.
+# Aliased so Floci and other Atlas-free runs never configure it.
 provider "mongodbatlas" {
   alias       = "fabric"
   public_key  = var.atlas_public_key

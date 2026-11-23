@@ -14,7 +14,7 @@ from app.engine.shell import die, run_terraform
 from app.engine.stack.inputs import build_backend_hcl, state_key, write_backend_hcl
 from app.engine.stack.state import ensure_state_bucket, preview_purge, purge_state
 from app.engine.values.plane import plane_display, resolve_floci_url, resolve_region
-from app.kinds.infra.declaration import InfraDeclaration
+from app.kinds.infra.declaration import InfraDeclaration, for_plane
 from app.kinds.infra.tfvars import build_tf_vars
 
 
@@ -57,6 +57,8 @@ def stack_verb_flow(
     session,
 ) -> int:
     """plan/apply: the banner, the self-healed bucket, init -reconfigure, then the verb."""
+    atlas_declared = bool(declaration.atlas_ledger)
+    declaration = for_plane(declaration, is_emulator)
     account = plane_account(session, is_emulator)
     bucket = state_bucket_for(declaration.slug, account)
     tf_vars = build_tf_vars(declaration, values, is_emulator)
@@ -73,12 +75,15 @@ def stack_verb_flow(
     else:
         print("carrier: ambient credentials")
     print(f"stack:   {declaration.stack_root}")
+    atlas = (
+        "skipped (AWS only)" if is_emulator and atlas_declared else len(declaration.atlas_ledger)
+    )
     print(
         f"fabrics: queues={len(declaration.queue_ledger)}, "
-        f"elasticache={len(declaration.cache_ledger)}, atlas={len(declaration.atlas_ledger)}, "
+        f"elasticache={len(declaration.cache_ledger)}, atlas={atlas}, "
         f"aurora={len(declaration.aurora_ledger)}"
     )
-    if declaration.atlas_ledger:
+    if not is_emulator and declaration.atlas_ledger:
         print("note:   atlas is real MongoDB Cloud (state tracked on this plane)")
     print(f"state:  {bucket} / {state_key_value}")
 

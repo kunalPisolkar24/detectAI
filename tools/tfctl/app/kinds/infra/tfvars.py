@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from app.engine.values.plane import resolve_floci_url, resolve_region
-from app.kinds.infra.declaration import InfraDeclaration
+from app.kinds.infra.declaration import InfraDeclaration, for_plane
 
 
 def csv_items(raw: str) -> list[str]:
@@ -71,6 +71,7 @@ def aurora_ledger_map(declaration: InfraDeclaration) -> dict[str, dict]:
 def build_tf_vars(
     declaration: InfraDeclaration, values: dict[str, str], is_emulator: bool
 ) -> dict[str, str]:
+    declaration = for_plane(declaration, is_emulator)
     tf_vars = {
         "TF_VAR_aws_region": resolve_region(declaration, values),
         "TF_VAR_queues": json.dumps(queue_ledger_map(declaration)),

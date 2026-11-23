@@ -3,8 +3,7 @@
 The queue fabric needs no credentials; the cache needs a plane-specific subnet,
 Aurora needs master credentials and subnet IDs, and Atlas needs API keys, a DB
 user and explicit CIDRs. All of it lives in the gitignored values file. Atlas is
-a public API with its own keys, so its law applies on every plane when the
-fabric is declared.
+AWS-only: on Floci its ledger is ignored, so its keys are not required.
 """
 
 from __future__ import annotations
@@ -13,6 +12,7 @@ import ipaddress
 import re
 
 from app.engine.declaration.model import REGION_RE, Declaration
+from app.kinds.infra.declaration import for_plane
 from app.kinds.infra.tfvars import csv_items
 
 CACHE_TOKEN_MIN = 16
@@ -130,6 +130,7 @@ def validate_db(values: dict[str, str]) -> list[str]:
 
 def validate(declaration: Declaration, values: dict[str, str], is_emulator: bool) -> list[str]:
     """The kind's verb-wide validation: values shape plus the declared fabrics."""
+    declaration = for_plane(declaration, is_emulator)
     errors = validate_state(values)
     if getattr(declaration, "cache_ledger", ()):
         errors.extend(validate_cache(values))

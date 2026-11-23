@@ -39,7 +39,7 @@ graph TB
     D --> MD --> Aurora
     A --> MA --> Atlas
     MQ -.->|"one module for the whole ledger"| SQS
-    MA -.->|"no emulator: real API on both planes"| Atlas
+    MA -.->|"no emulator: AWS plane only"| Atlas
 ```
 
 Each ledger maps to exactly one module. The `count` gate means an empty ledger plans no module at all — there is no "empty resource" fallback.
@@ -80,7 +80,7 @@ sequenceDiagram
     TF-->>T: plan: queues=2, elasticache=1, atlas=1, aurora=1
     T-->>U: exit 0 + the plan
     note over T,S: the bucket and role are created on demand - no bootstrap step
-    note over TF: Atlas is planned on both planes - its API is public
+    note over TF: Atlas is skipped on Floci - real API on the AWS plane only
 ```
 
 Apply adds the approval rule: auto on Floci, interactive on real AWS. Destroy auto-approves on both, then optionally purges state and drops the seeder role.
@@ -112,7 +112,7 @@ graph TB
 | State | S3 on the emulator | S3 in the caller's account |
 | AWS endpoints | `http://localhost:4566` with test credentials | Region defaults |
 | Seeder role | Emulated account | Assumed with MFA, cached 12 hours |
-| Atlas | Real MongoDB Cloud, state tracked on Floci | Real MongoDB Cloud |
+| Atlas | Skipped entirely (no state, no API calls) | Real MongoDB Cloud |
 | Apply | Auto-approved | Interactive confirmation |
 
 Services stay endpoint-agnostic: `QUEUE_URL` / `AWS_ENDPOINT_URL_SQS`, `REDIS_ENDPOINT`, and `MONGO_URI` / `MONGO_DATABASE` decide which twin they talk to — the [Docker twins](docker-twins.md) locally, these fabrics on a plane.

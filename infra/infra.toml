@@ -1,6 +1,7 @@
 # tfctl's infra kind: the shared fabric ledger. Each section is optional —
 # declare [[queues]], [[elasticache]], [[atlas]] and/or [[aurora]]; only declared
-# fabrics land. Atlas has no emulator, so it is always a real MongoDB Cloud API.
+# fabrics land. Atlas has no emulator: tfctl declares it here for the AWS plane
+# and ignores it on Floci.
 
 [service]
 slug = "infra"

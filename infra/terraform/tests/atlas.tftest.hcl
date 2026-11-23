@@ -47,16 +47,17 @@ run "atlas_fabric_carries_the_free_tier_contract" {
   }
 }
 
-run "atlas_is_planned_on_floci" {
+run "atlas_is_skipped_with_an_empty_ledger" {
   command = plan
 
   variables {
     emulator_endpoint = "http://localhost:4566"
+    atlas_clusters    = {}
   }
 
   assert {
-    condition     = length(module.atlas) == 1
-    error_message = "Atlas is a public API: a real cluster is planned even when state lives on floci."
+    condition     = length(module.atlas) == 0
+    error_message = "Floci sends an empty Atlas ledger, so no Atlas resources or provider are planned."
   }
 }
 

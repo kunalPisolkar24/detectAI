@@ -82,10 +82,10 @@ graph LR
     PLAN --> APPLY["make apply<br/>auto-approved on Floci"]
     APPLY --> VERIFY["make plan again<br/>no changes left"]
     VERIFY --> END(["end: fabrics landed"])
-    PLAN -.->|"Atlas is real MongoDB Cloud on both planes"| APPLY
+    PLAN -.->|"Atlas is skipped on Floci (AWS only)"| APPLY
 ```
 
-**Read the plan before applying.** Floci emulates the AWS fabrics, but Atlas has no emulator: a declared `[[atlas]]` cluster is real MongoDB Cloud on every plane, and the state plane only stores its Terraform state. Aurora Serverless v2 is only partially modeled by the emulator, so the committed ledger is verified with read-only plans, not applies. For a local-only run, remove the `[[atlas]]` and `[[aurora]]` sections from `infra.toml` before planning.
+**Read the plan before applying.** Floci emulates the AWS fabrics, and Atlas has no emulator at all: tfctl declares `[[atlas]]` for the AWS plane but ignores it on Floci, so local plans never call MongoDB Cloud. Aurora Serverless v2 is only partially modeled by the emulator, so the committed ledger is verified with read-only plans, not applies. To stop planning Aurora locally, comment its header in `infra.toml`.
 
 ## Working without a plane
 

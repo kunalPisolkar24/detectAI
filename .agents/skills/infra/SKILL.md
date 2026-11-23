@@ -73,9 +73,9 @@ auto-approves on both. State lives in the derived
 `detectai-infra-seeder` role — both created on demand, no bootstrap step.
 
 **Read the plan before applying.** Floci emulates the AWS fabrics but Atlas has
-no emulator: a declared cluster is real MongoDB Cloud on **both** planes, and
-the state plane stores only its Terraform state. Remove `[[atlas]]` for a
-local-only run. Full command tour and failure modes:
+no emulator: tfctl ignores `[[atlas]]` on Floci entirely, so local plans make
+no MongoDB Cloud calls. Atlas is real MongoDB Cloud on the AWS plane only.
+Full command tour and failure modes:
 [references/operations.md](references/operations.md)
 
 ## Change a fabric without breaking it
@@ -135,7 +135,7 @@ and destroys nothing. Real AWS is reached only by explicit `PLANE=aws` verbs.
   config (there are no `backend.*.hcl` files), so a bare `init` is invalid.
 - The declaration is the exhaustive allowlist — fix a fabric by editing it,
   not by hand-creating matching resources on a plane.
-- Review every plan before apply: Atlas is real on both planes.
+- Review every plan before apply: Atlas is real MongoDB Cloud on the AWS plane only.
 - The offline gate is the PR gate — `dev` runs no CI, so never leave it red.
 - Do not reach into `observability/` (a separate stack root) or service code
   from here; the shared fabrics end at the emitted endpoints.

@@ -55,7 +55,7 @@ def test_indented_header_with_trailing_comment_is_disabled(tmp_path):
     toml = tmp_path / "infra.toml"
     toml.write_text(
         '[service]\nslug = "infra"\n\n'
-        "   # [[atlas]] # local runs do not need Atlas\n"
+        "   # [[atlas]] # Atlas is AWS-only\n"
         'name = "detectai-dev-mongo"\nregion = "AP_SOUTHEAST_2"\n\n'
         '[[queues]]\nname = "a.fifo"\n'
     )

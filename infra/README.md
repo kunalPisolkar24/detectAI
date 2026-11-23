@@ -23,9 +23,8 @@ source store. Cache shape (name, engine, major version, usage limits) is
 declared here; VPC placement is plane-specific values in `envs/.env`.
 
 The Atlas ledger pins one cluster to the `M0` Free tier on AWS-backed Atlas
-regions. Atlas has no emulator, but its API is public: a real cluster is planned
-on **any** plane, including floci — the state plane only stores Terraform state.
-The Atlas API keys, project ID, SCRAM
+regions. Atlas has no emulator and is AWS-only: tfctl ignores `[[atlas]]` on
+Floci, so no cluster is planned there and no API is called. The Atlas API keys, project ID, SCRAM
 user, password, and explicit IPv4/IPv6 access-list CIDRs are plane values in
 `envs/.env`, never committed. The stack exposes a sensitive `mongodb+srv://`
 connection URI for chats' `MONGO_URI` (plus a `mongodb://` fallback). Atlas is
@@ -71,7 +70,7 @@ infra/
 
 The offline gate never needs a plane: `terraform test` runs provider mocks and
 asserts each fabric's contract, including queue-only, cache-only, Atlas-only,
-Atlas on floci, and empty runs. Beyond it, the integration suite
+an empty Atlas ledger, and empty runs. Beyond it, the integration suite
 (`poetry -C ../tools/tfctl run pytest -m integration`) plans read-only against
 the shared persistent namespace on the emulator — nothing there applies or
 destroys. Real AWS is reached only through an explicit `make PLANE=aws …`.

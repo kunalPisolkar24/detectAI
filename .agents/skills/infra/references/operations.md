@@ -50,7 +50,7 @@ plus this tier are the local PR gate.
 |---------|-------|-----|
 | `the emulator at … did not answer /_localstack/health` | Floci not running | `make -C .. floci-up`, rerun |
 | `CACHE_SUBNET_IDS is required` | cache declared without placement | set subnet IDs (Floci: `subnet-default-ap-southeast-2-a`) |
-| Atlas key/project/CIDR error | `[[atlas]]` declared but values absent or malformed | fill the Atlas keys; project ID is 24-hex; CIDRs are explicit |
+| Atlas key/project/CIDR error | `[[atlas]]` declared on AWS but values absent or malformed | fill the Atlas keys; project ID is 24-hex; CIDRs are explicit; on Floci Atlas is skipped |
 | `make init` consults a backend | stale `.terraform/terraform.tfstate` | use `make init` — it clears the record first |
 | apply pauses for confirmation | real-AWS plane | confirm, or use the default Floci plane |
 | MFA prompt on a plan → apply stretch | cached 12-hour session is short | enter the code once; `make session-refresh` to re-mint |

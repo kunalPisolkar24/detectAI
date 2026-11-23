@@ -111,7 +111,7 @@ variable "atlas_clusters" {
 variable "atlas_public_key" {
   description = "Atlas programmatic API public key; sensitive, supplied by envs/.env via tfctl."
   type        = string
-  # Placeholder for runs that never configure the provider; tfctl enforces real keys for a real Atlas plane.
+  # Placeholder for Floci runs; tfctl enforces real keys only on the AWS plane.
   default   = "unused"
   sensitive = true
 }

@@ -38,6 +38,9 @@ Three kinds are registered today:
 | **observability** | `observability.toml` at the stack root | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
 | **infra** | `infra.toml` at the stack root — the shared fabrics (SQS, ElastiCache and/or MongoDB Atlas) in `infra` | `envs/.env` | `--stack-dir <path>`, or nearest declaration upward |
 
+The infra kind treats Atlas as AWS-only: `for_plane()` drops `[[atlas]]` on
+Floci, so no Atlas credentials are required and no MongoDB Cloud API is called.
+
 A kind never edits the engine — it fills one slot table (`load`, `validate`,
 `resolve_plane`, `build_tf_vars`, `seeder_policy`, the flows), and `main.py`
 is the only engine-side reader of the registry. The secrets kind's terraform

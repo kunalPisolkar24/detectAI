@@ -18,7 +18,7 @@ module "elasticache" {
 
 module "atlas" {
   source = "./modules/atlas"
-  # No Atlas emulator; its public API needs only state tracking, so floci works.
+  # Atlas has no emulator; tfctl sends an empty ledger on Floci.
   # count = 0 leaves the aliased provider unconfigured.
   count = length(var.atlas_clusters) > 0 ? 1 : 0
 

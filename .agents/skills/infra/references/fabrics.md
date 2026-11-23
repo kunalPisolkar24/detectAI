@@ -42,10 +42,10 @@ Outputs: `addresses` (`host:port`), `endpoint_urls` (tokenless `rediss://`),
 
 ## Atlas — `[[atlas]]` → `modules/atlas`
 
-Atlas has no emulator but its API is public and the state plane stores only
-Terraform state, so a real M0 cluster is planned on every plane. The provider
-is aliased as `mongodbatlas.fabric` so Floci and non-Atlas runs never
-configure it.
+Atlas has no emulator: tfctl sends an empty ledger on Floci, so the M0 cluster,
+SCRAM user and access list are planned only on the AWS plane. The provider is
+aliased as `mongodbatlas.fabric` and is never configured when the ledger is
+empty.
 
 | Contract | Value |
 |----------|-------|
@@ -70,7 +70,7 @@ no apply, no network.
 |------|---------|
 | `queues.tftest.hcl` | FIFO/dedup, 300s visibility, 14-day retention, one 5-attempt terminal redrive; empty ledger plans nothing |
 | `elasticache.tftest.hcl` | Redis 7 serverless cache with 5 GB / 5000 ECPU/s ceilings; queue-less and fabric-less runs |
-| `atlas.tftest.hcl` | M0, Atlas region, `REPLICASET`, SCRAM user, explicit CIDRs; Atlas still plans on Floci and on an Atlas-only run |
+| `atlas.tftest.hcl` | M0, Atlas region, `REPLICASET`, SCRAM user, explicit CIDRs; an empty ledger plans no Atlas module |
 
 The `fabric` output is the executable contract — update it and its test
 together whenever a declared shape changes.

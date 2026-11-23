@@ -12,7 +12,7 @@ Infra has three inputs and no hidden ones: `infra.toml` declares **what exists**
 
 ## The declaration
 
-`infra.toml` has one `[service]` table and up to four ledger sections — `[[queues]]`, `[[elasticache]]`, `[[atlas]]`, `[[aurora]]`. Each section is optional, but at least one fabric must be declared. The name is the identity within its own ledger; a name may not appear twice.
+`infra.toml` has one `[service]` table and up to four ledger sections — `[[queues]]`, `[[elasticache]]`, `[[atlas]]`, `[[aurora]]`. Each section is optional, but at least one fabric must be declared. The name is the identity within its own ledger; a name may not appear twice. `[[atlas]]` is declared once here for the AWS plane; tfctl ignores it on Floci.
 
 | Ledger | Fields | Defaults applied when omitted |
 |--------|--------|-------------------------------|
@@ -43,7 +43,7 @@ name = "payment_events.fifo"
 name = "detectai-dev-cache"
 engine = "redis"
 
-# [[atlas]]
+[[atlas]]
 name = "detectai-dev-mongo"
 region = "AP_SOUTHEAST_2"
 
@@ -53,7 +53,7 @@ name = "detectai-dev-users"
 
 Only the headers need the `#`; leaving the body lines in place is fine. The remaining keys are commented by the parser, not deleted from the file, so uncommenting a header brings the whole entry back. Ordinary `#` line comments work as usual, including inside an active block.
 
-Cross-references must be disabled too: if you comment out the DLQ queue, also comment `dlq` and `max_receive_count` in the producer that points at it. `[service]` must stay enabled, and at least one fabric must remain. Terraform plans a destroy for any fabric that was previously applied but is no longer declared, so this is intended for fresh local runs (`PLANE=floci`).
+Atlas needs no such workaround: tfctl ignores `[[atlas]]` on Floci, so leave it declared for the AWS plane. Cross-references must be disabled too: if you comment out the DLQ queue, also comment `dlq` and `max_receive_count` in the producer that points at it. `[service]` must stay enabled, and at least one fabric must remain. Terraform plans a destroy for any fabric that was previously applied but is no longer declared, so this is intended for fresh local runs (`PLANE=floci`). If a Floci state ledger already tracks Atlas from an older run, remove those `module.atlas[0]` entries from the **Floci** state once with `terraform state rm`; no MongoDB Cloud API call is needed.
 
 ## The values file
 
@@ -75,7 +75,7 @@ Every value is a plain `KEY=value` line. Unknown keys are ignored; values are on
 | `ATLAS_DB_PASSWORD` | Atlas | At least 16 characters |
 | `ATLAS_IP_CIDRS` | Atlas | Comma-separated IPv4/IPv6 CIDRs; required when Atlas is declared |
 
-The queue fabric needs no credentials. Cache, Aurora and Atlas values are checked only for declared fabrics, so removing a ledger section removes its required keys. All of them are passed to Terraform as `TF_VAR_*` entries; secret values never print in a tfctl receipt.
+The queue fabric needs no credentials. Cache and Aurora values are checked only for declared fabrics, so removing a ledger section removes its required keys. Atlas values are required only on the AWS plane — on Floci the ledger is ignored and none of these keys are needed. All of them are passed to Terraform as `TF_VAR_*` entries; secret values never print in a tfctl receipt.
 
 ### Values to Terraform variables
 
@@ -100,7 +100,7 @@ The queue fabric needs no credentials. Cache, Aurora and Atlas values are checke
 | `floci` | `--floci` | `http://localhost:4566` for SQS, ElastiCache and RDS | Auto-approved |
 | `aws` | `--aws` | Region defaults | Interactive confirmation |
 
-Atlas is the exception on both planes: it has no emulator, so a declared cluster is always real MongoDB Cloud. Its API keys are required even on Floci.
+Atlas is the exception: it has no emulator and is AWS-only. tfctl ignores `[[atlas]]` on Floci — the ledger is not passed to Terraform, the aliased provider stays unconfigured, and no MongoDB Cloud API is called. On `PLANE=aws`, a declared cluster is real MongoDB Cloud and its keys are required.
 
 ## The input surfaces at a glance
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import floor
 from pathlib import Path
 from tomllib import TOMLDecodeError
@@ -121,6 +121,13 @@ class InfraDeclaration(Declaration):
     cache_ledger: tuple[CacheEntry, ...] = ()
     atlas_ledger: tuple[AtlasEntry, ...] = ()
     aurora_ledger: tuple[AuroraEntry, ...] = ()
+
+
+def for_plane(declaration: InfraDeclaration, is_emulator: bool) -> InfraDeclaration:
+    """Floci has no Atlas API: Atlas is declared for AWS and ignored here."""
+    if not is_emulator or not declaration.atlas_ledger:
+        return declaration
+    return replace(declaration, atlas_ledger=())
 
 
 def declaration_errors(data: dict) -> list[str]:

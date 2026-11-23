@@ -27,12 +27,13 @@ Rules the loader enforces:
 - Atlas names follow the cache name law; regions look like `AP_SOUTHEAST_2`;
   tier must be `M0`.
 
-To run with a subset of fabrics locally, comment the header of each entry you
-do not want (`# [[atlas]]`, `# [[aurora]]`): its body is ignored up to the next
-header, so uncommenting restores it. Comment cross-references too — a disabled
-DLQ queue needs its producer's `dlq` and `max_receive_count` commented as well.
-Already-applied fabrics removed from the declaration are planned as destroys,
-so this is for fresh Floci runs.
+Atlas needs no local workaround: tfctl ignores `[[atlas]]` on Floci, so its
+keys are not required there and no MongoDB Cloud API is called. For other
+fabrics, comment the header of each entry you do not want (`# [[aurora]]`): its
+body is ignored up to the next header, so uncommenting restores it. Comment
+cross-references too — a disabled DLQ queue needs its producer's `dlq` and
+`max_receive_count` commented as well. Already-applied fabrics removed from the
+declaration are planned as destroys, so this is for fresh Floci runs.
 
 ## The values file
 
@@ -65,7 +66,7 @@ values never print in its receipts.
 | Apply | Auto-approved | Interactive confirmation |
 | State | Emulator S3 bucket | Versioned S3 in the caller's account |
 | Carrier | Emulated account | `detectai-infra-seeder`, MFA-gated, cached 12 h |
-| Atlas | Real MongoDB Cloud, state on Floci | Real MongoDB Cloud |
+| Atlas | Skipped (no state, no API calls) | Real MongoDB Cloud |
 
 Floci must be running (`make -C .. floci-up` from `infra/`): the plan probes
 `/_localstack/health` with a 2-second timeout and fails with a start hint.

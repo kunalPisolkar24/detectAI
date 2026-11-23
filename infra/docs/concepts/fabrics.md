@@ -6,7 +6,7 @@ Four fabrics can be declared in `infra.toml`: SQS queues, a shared Redis cache, 
 |--------|--------|----------|----------|
 | `[[queues]]` | `modules/queues` | `aws` | Emulated |
 | `[[elasticache]]` | `modules/elasticache` | `aws` | Emulated |
-| `[[atlas]]` | `modules/atlas` | `mongodbatlas.fabric` (aliased) | Real API, state on the emulator |
+| `[[atlas]]` | `modules/atlas` | `mongodbatlas.fabric` (aliased) | Skipped (AWS plane only) |
 | `[[aurora]]` | `modules/aurora` | `aws` (RDS endpoint) | Partial emulation; plan only |
 
 ## The queue fabric
@@ -150,7 +150,7 @@ The instance set is flattened into a `for_each` map because a Terraform resource
 
 ## The Atlas fabric
 
-Atlas has no emulator, but its API is public and the state plane stores only Terraform state, so a real M0 cluster is planned on every plane. The keys are required on Floci too.
+Atlas has no emulator: tfctl declares it for the AWS plane and sends an empty ledger on Floci, so no M0 cluster is planned there and no keys are required locally.
 
 ```mermaid
 graph TB
