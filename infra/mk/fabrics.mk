@@ -1,8 +1,3 @@
-# The shared infra fabrics flow, driven by tfctl's infra kind: it shapes
-# envs/.env, resolves the state plane (PLANE=floci|aws, default floci), and
-# drives terraform. infra.toml decides which fabrics exist — [[queues]],
-# [[elasticache]] and/or [[atlas]].
-
 .PHONY: plan apply auto-apply destroy seeder-drop session-clear session-refresh help-fabrics
 
 TFCTL := poetry -C $(abspath ../tools/tfctl) run tfctl

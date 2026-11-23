@@ -1,7 +1,3 @@
-# Offline terraform checks; nothing here touches a plane. init clears the
-# recorded backend first: a plane run (Floci or real AWS) leaves an S3
-# record in .terraform/ that -backend=false init would still consult.
-
 .PHONY: env fmt init validate test help-tests
 
 TF_DIR := terraform

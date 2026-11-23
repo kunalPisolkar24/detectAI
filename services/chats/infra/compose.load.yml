@@ -6,13 +6,10 @@ include:
 
 services:
   chats:
-    # The rig must never collide with a dev stack's fixed container name.
     container_name: chats-load
     restart: "no"
     ports: !override []
     environment:
-      # The rig is a local rig: the dev plane over infra/.env and the local
-      # redis, both token-free.
       ENV_TYPE: dev
     healthcheck:
       test: ["CMD", "/app/healthcheck"]

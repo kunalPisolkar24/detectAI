@@ -1,6 +1,3 @@
-# tfctl drives this service's whole secrets plane; a rare one-off (an alternate
-# values file) runs tfctl directly: poetry -C ../../tools/tfctl run tfctl.
-
 PLANE ?= floci
 DRY_RUN ?= 0
 FORCE ?= 0
