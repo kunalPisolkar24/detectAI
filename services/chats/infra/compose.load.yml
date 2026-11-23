@@ -11,10 +11,9 @@ services:
     restart: "no"
     ports: !override []
     environment:
-      # The rig is a local rig: the dev plane over infra/.env, and the local
-      # redis without the token the dev file carries.
+      # The rig is a local rig: the dev plane over infra/.env and the local
+      # redis, both token-free.
       ENV_TYPE: dev
-      REDIS_AUTH_TOKEN: ""
     healthcheck:
       test: ["CMD", "/app/healthcheck"]
       interval: 5s

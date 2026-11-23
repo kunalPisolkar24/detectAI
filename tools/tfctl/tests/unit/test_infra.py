@@ -18,7 +18,6 @@ from app.kinds.infra import flow as flow_module
 from app.kinds.infra.declaration import (
     DeclarationError,
     declaration_errors,
-    default_parameter_group,
     load,
 )
 
@@ -36,15 +35,13 @@ INFRA_TOML = (
 CACHE_TOML = (
     '[service]\nslug = "infra"\nregion = "ap-southeast-2"\n\n'
     '[[elasticache]]\nname = "detectai-dev-cache"\nengine = "redis"\n'
-    'engine_version = "7.0"\nnode_type = "cache.t3.micro"\nnum_cache_nodes = 1\n'
-    "port = 6379\n"
+    'major_engine_version = "7"\nmax_data_storage_gb = 5\nmax_ecpu_per_second = 5000\n'
 )
 
 BOTH_TOML = (
     INFRA_TOML
     + '\n[[elasticache]]\nname = "detectai-dev-cache"\nengine = "redis"\n'
-    'engine_version = "7.0"\nnode_type = "cache.t3.micro"\nnum_cache_nodes = 1\n'
-    "port = 6379\n"
+    'major_engine_version = "7"\nmax_data_storage_gb = 5\nmax_ecpu_per_second = 5000\n'
 )
 
 ATLAS_TOML = (
@@ -75,7 +72,6 @@ ALL_TOML = (
 INFRA_ENV = {"AWS_REGION": "ap-southeast-2"}
 CACHE_ENV = {
     **INFRA_ENV,
-    "REDIS_AUTH_TOKEN": "abcdefghijklmnopqrstuvwx",
     "CACHE_SUBNET_IDS": "subnet-default-ap-southeast-2-a",
     "CACHE_SECURITY_GROUP_IDS": "",
 }
@@ -150,10 +146,10 @@ def test_declaration_supports_each_fabric_independently(tmp_path):
 
     cache_only = declaration(tmp_path, CACHE_TOML)
     assert cache_only.queue_ledger == ()
-    assert [(entry.name, entry.engine, entry.engine_version, entry.node_type,
-             entry.num_cache_nodes, entry.port, entry.parameter_group_name)
+    assert [(entry.name, entry.engine, entry.major_engine_version,
+             entry.max_data_storage_gb, entry.max_ecpu_per_second)
             for entry in cache_only.cache_ledger] == [
-        ("detectai-dev-cache", "redis", "7.0", "cache.t3.micro", 1, 6379, "default.redis7")
+        ("detectai-dev-cache", "redis", "7", 5, 5000)
     ]
 
     both = declaration(tmp_path, BOTH_TOML)
@@ -231,12 +227,12 @@ def test_declaration_supports_each_fabric_independently(tmp_path):
             "must be 'redis'",
         ),
         (
-            '[service]\nslug = "infra"\n[[elasticache]]\nname = "cache-one"\nnum_cache_nodes = 9',
-            "num_cache_nodes must be an integer 1-6",
+            '[service]\nslug = "infra"\n[[elasticache]]\nname = "cache-one"\nmax_data_storage_gb = 0',
+            "max_data_storage_gb must be an integer 1-5000",
         ),
         (
-            '[service]\nslug = "infra"\n[[elasticache]]\nname = "cache-one"\nport = 70000',
-            "port must be an integer 1-65535",
+            '[service]\nslug = "infra"\n[[elasticache]]\nname = "cache-one"\nmax_ecpu_per_second = 999',
+            "max_ecpu_per_second must be an integer 1000-15000000",
         ),
         (
             '[service]\nslug = "infra"\n[[elasticache]]\nname = "cache-one"\nunrelated = 1',
@@ -372,19 +368,16 @@ def test_the_kind_validate_is_state_only_for_queue_only_stacks(tmp_path):
     assert values.validate(declaration(tmp_path), {"AWS_REGION": "ap-southeast-2"}, True) == []
 
 
-def test_the_cache_credential_law_applies_only_when_a_cache_is_declared(tmp_path):
+def test_the_cache_placement_law_applies_only_when_a_cache_is_declared(tmp_path):
     queue_only = declaration(tmp_path, INFRA_TOML)
     assert values.validate(queue_only, INFRA_ENV, True) == []
 
     cache_only = declaration(tmp_path, CACHE_TOML)
     errors = "\n".join(values.validate(cache_only, INFRA_ENV, True))
-    assert "REDIS_AUTH_TOKEN is required" in errors
     assert "CACHE_SUBNET_IDS is required" in errors
+    assert "REDIS_AUTH_TOKEN" not in errors
     assert values.validate(cache_only, CACHE_ENV, True) == []
     assert values.validate(cache_only, CACHE_ENV, False) == []
-
-    short = {**CACHE_ENV, "REDIS_AUTH_TOKEN": "short"}
-    assert "16+ characters" in "\n".join(values.validate(cache_only, short, True))
 
 
 def test_the_atlas_law_applies_on_every_plane(tmp_path):
@@ -466,10 +459,17 @@ def test_the_seeder_policy_adds_cache_access_only_for_declared_caches(tmp_path):
         "ManageCacheFabric",
     ]
     cache_statement = document["Statement"][2]
-    assert all(action.startswith("elasticache:") for action in cache_statement["Action"])
+    assert set(cache_statement["Action"]) == {
+        "elasticache:CreateServerlessCache",
+        "elasticache:DeleteServerlessCache",
+        "elasticache:DescribeServerlessCaches",
+        "elasticache:ModifyServerlessCache",
+        "elasticache:ListTagsForResource",
+        "elasticache:AddTagsToResource",
+        "elasticache:RemoveTagsFromResource",
+    }
     assert cache_statement["Resource"] == [
-        "arn:aws:elasticache:ap-southeast-2:000000000000:replicationgroup:detectai-dev-cache",
-        "arn:aws:elasticache:ap-southeast-2:000000000000:subnetgroup:detectai-dev-cache-subnet-group",
+        "arn:aws:elasticache:ap-southeast-2:000000000000:serverlesscache:detectai-dev-cache",
     ]
 
     both = policy.seeder_policy_document(
@@ -536,14 +536,12 @@ def test_tf_vars_carry_the_cache_ledger_and_placement(tmp_path, clean_tf_env):
         "detectai-dev-cache": {
             "name": "detectai-dev-cache",
             "engine": "redis",
-            "engine_version": "7.0",
-            "node_type": "cache.t3.micro",
-            "num_cache_nodes": 1,
-            "port": 6379,
-            "parameter_group_name": "default.redis7",
+            "major_engine_version": "7",
+            "max_data_storage_gb": 5,
+            "max_ecpu_per_second": 5000,
         }
     }
-    assert built["TF_VAR_cache_auth_token"] == "abcdefghijklmnopqrstuvwx"
+    assert "TF_VAR_cache_auth_token" not in built
     assert json.loads(built["TF_VAR_cache_subnet_ids"]) == [
         "subnet-default-ap-southeast-2-a"
     ]
@@ -943,19 +941,6 @@ def test_cli_stack_dir_does_not_apply_to_batch_verbs(tmp_path, capsys):
 
 
 @pytest.mark.parametrize(
-    "version, group",
-    (
-        ("7.0", "default.redis7"),
-        ("6.2", "default.redis6.x"),
-        ("5.0", "default.redis5.0"),
-        ("8.0", "default.redis7"),
-    ),
-)
-def test_default_parameter_group_follows_the_major_version(version, group):
-    assert default_parameter_group(version) == group
-
-
-@pytest.mark.parametrize(
     "override, message",
     (
         ({"queues": "not a list"}, "[queues] must be a list"),
@@ -968,11 +953,17 @@ def test_default_parameter_group_follows_the_major_version(version, group):
             {"elasticache": [{"name": "cache-one"}, {"name": "cache-one"}]},
             "cache-one is declared twice",
         ),
-        ({"elasticache": [{"name": "cache-one", "engine_version": "x"}]}, "engine_version 'x'"),
-        ({"elasticache": [{"name": "cache-one", "node_type": "x"}]}, "node_type 'x'"),
         (
-            {"elasticache": [{"name": "cache-one", "parameter_group_name": ""}]},
-            "parameter_group_name must be a non-empty string",
+            {"elasticache": [{"name": "cache-one", "major_engine_version": "7.0"}]},
+            "major_engine_version '7.0' must be a major version",
+        ),
+        (
+            {"elasticache": [{"name": "cache-one", "max_data_storage_gb": 5001}]},
+            "max_data_storage_gb must be an integer 1-5000",
+        ),
+        (
+            {"elasticache": [{"name": "cache-one", "max_ecpu_per_second": True}]},
+            "max_ecpu_per_second must be an integer 1000-15000000",
         ),
         ({"atlas": ["not a table"]}, "every [[atlas]] entry must be a table"),
         (

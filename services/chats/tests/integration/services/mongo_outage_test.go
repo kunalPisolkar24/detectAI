@@ -40,7 +40,7 @@ func TestMongoOutageKeepsCachedReadsAndFailsWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repository.New: %v", err)
 	}
-	cacheClient, err := cache.Connect(ctx, support.Redis(t).Endpoint, "")
+	cacheClient, err := cache.Connect(ctx, support.Redis(t).Endpoint)
 	if err != nil {
 		t.Fatalf("cache.Connect: %v", err)
 	}

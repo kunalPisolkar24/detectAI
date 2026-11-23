@@ -16,10 +16,10 @@ type Client struct {
 	client *driver.Client
 }
 
-// Connect dials the endpoint, fails loud when the server is unreachable, and
-// authenticates with the token when one is set. The caller owns the context budget.
-func Connect(ctx context.Context, endpoint, authToken string) (*Client, error) {
-	opts, err := clientOptions(endpoint, authToken)
+// Connect dials the endpoint and fails loud when the server is unreachable.
+// A rediss:// endpoint enables TLS; the caller owns the context budget.
+func Connect(ctx context.Context, endpoint string) (*Client, error) {
+	opts, err := clientOptions(endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -35,13 +35,10 @@ func Connect(ctx context.Context, endpoint, authToken string) (*Client, error) {
 // timeout is enabled because the driver otherwise ignores the caller's
 // deadline and waits out the socket timeout, holding a caller for seconds
 // while the server stalls.
-func clientOptions(endpoint, authToken string) (*driver.Options, error) {
+func clientOptions(endpoint string) (*driver.Options, error) {
 	opts, err := driver.ParseURL(endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("redis: parse endpoint: %w", err)
-	}
-	if authToken != "" {
-		opts.Password = authToken
 	}
 	opts.DialTimeout = dialTimeout
 	opts.ContextTimeoutEnabled = true

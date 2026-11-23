@@ -34,11 +34,9 @@ AURORA_FIELDS = {
 CACHE_FIELDS = {
     "name",
     "engine",
-    "engine_version",
-    "node_type",
-    "num_cache_nodes",
-    "port",
-    "parameter_group_name",
+    "major_engine_version",
+    "max_data_storage_gb",
+    "max_ecpu_per_second",
 }
 ATLAS_FIELDS = {"name", "region", "tier"}
 
@@ -47,15 +45,17 @@ QUEUE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,75}\.fifo$")
 MAX_RECEIVE_COUNT_LIMIT = 1000
 
 CACHE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,39}$")
-CACHE_VERSION_RE = re.compile(r"^[0-9]+(?:\.[0-9]+){1,2}$")
-CACHE_NODE_TYPE_RE = re.compile(r"^cache\.[a-z0-9]+\.[a-z0-9]+$")
+CACHE_MAJOR_VERSION_RE = re.compile(r"^[0-9]+$")
 ATLAS_REGION_RE = re.compile(r"^[A-Z]{2}_[A-Z]+_[0-9]+$")
 ATLAS_TIER = "M0"
 CACHE_ENGINE = "redis"
-CACHE_VERSION_DEFAULT = "7.0"
-CACHE_NODE_TYPE_DEFAULT = "cache.t3.micro"
-CACHE_NODES_DEFAULT = 1
-CACHE_PORT_DEFAULT = 6379
+CACHE_MAJOR_VERSION_DEFAULT = "7"
+CACHE_STORAGE_GB_DEFAULT = 5
+CACHE_ECPU_DEFAULT = 5000
+CACHE_STORAGE_GB_MIN = 1
+CACHE_STORAGE_GB_MAX = 5000
+CACHE_ECPU_MIN = 1000
+CACHE_ECPU_MAX = 15000000
 AURORA_ENGINE = "aurora-postgresql"
 AURORA_ENGINE_VERSION_DEFAULT = "16.4"
 AURORA_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+(?:\.[0-9]+)?$")
@@ -63,16 +63,6 @@ AURORA_PORT_DEFAULT = 5432
 AURORA_MIN_ACU = 0.5
 AURORA_MAX_ACU = 128
 AURORA_BACKUP_DAYS_DEFAULT = 7
-
-
-def default_parameter_group(version: str) -> str:
-    if version.startswith("7."):
-        return "default.redis7"
-    if version.startswith("6."):
-        return "default.redis6.x"
-    if version.startswith("5."):
-        return "default.redis5.0"
-    return "default.redis7"
 
 
 @dataclass
@@ -86,15 +76,13 @@ class QueueEntry:
 
 @dataclass
 class CacheEntry:
-    """One declared ElastiCache cluster: the name is the identity."""
+    """One declared ElastiCache Serverless cache: the name is the identity."""
 
     name: str
     engine: str
-    engine_version: str
-    node_type: str
-    num_cache_nodes: int
-    port: int
-    parameter_group_name: str
+    major_engine_version: str
+    max_data_storage_gb: int
+    max_ecpu_per_second: int
 
 
 @dataclass
@@ -285,24 +273,29 @@ def declaration_errors(data: dict) -> list[str]:
         engine = entry.get("engine", CACHE_ENGINE)
         if engine != CACHE_ENGINE:
             fail(f"{name} engine {engine!r} must be {CACHE_ENGINE!r}")
-        version = entry.get("engine_version", CACHE_VERSION_DEFAULT)
-        if not isinstance(version, str) or not CACHE_VERSION_RE.fullmatch(version):
-            fail(f"{name} engine_version {version!r} must look like a version, e.g. 7.0")
-        node_type = entry.get("node_type", CACHE_NODE_TYPE_DEFAULT)
-        if not isinstance(node_type, str) or not CACHE_NODE_TYPE_RE.fullmatch(node_type):
+        version = entry.get("major_engine_version", CACHE_MAJOR_VERSION_DEFAULT)
+        if not isinstance(version, str) or not CACHE_MAJOR_VERSION_RE.fullmatch(version):
+            fail(f"{name} major_engine_version {version!r} must be a major version, e.g. 7")
+        storage = entry.get("max_data_storage_gb", CACHE_STORAGE_GB_DEFAULT)
+        if (
+            isinstance(storage, bool)
+            or not isinstance(storage, int)
+            or not CACHE_STORAGE_GB_MIN <= storage <= CACHE_STORAGE_GB_MAX
+        ):
             fail(
-                f"{name} node_type {node_type!r} must be an ElastiCache node type, "
-                f"e.g. {CACHE_NODE_TYPE_DEFAULT}"
+                f"{name} max_data_storage_gb must be an integer "
+                f"{CACHE_STORAGE_GB_MIN}-{CACHE_STORAGE_GB_MAX}, got {storage!r}"
             )
-        nodes = entry.get("num_cache_nodes", CACHE_NODES_DEFAULT)
-        if isinstance(nodes, bool) or not isinstance(nodes, int) or not 1 <= nodes <= 6:
-            fail(f"{name} num_cache_nodes must be an integer 1-6, got {nodes!r}")
-        port = entry.get("port", CACHE_PORT_DEFAULT)
-        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
-            fail(f"{name} port must be an integer 1-65535, got {port!r}")
-        group = entry.get("parameter_group_name", default_parameter_group(str(version)))
-        if not isinstance(group, str) or not group:
-            fail(f"{name} parameter_group_name must be a non-empty string, got {group!r}")
+        ecpu = entry.get("max_ecpu_per_second", CACHE_ECPU_DEFAULT)
+        if (
+            isinstance(ecpu, bool)
+            or not isinstance(ecpu, int)
+            or not CACHE_ECPU_MIN <= ecpu <= CACHE_ECPU_MAX
+        ):
+            fail(
+                f"{name} max_ecpu_per_second must be an integer "
+                f"{CACHE_ECPU_MIN}-{CACHE_ECPU_MAX}, got {ecpu!r}"
+            )
 
     atlas_declared: set[str] = set()
     for entry in atlas:
@@ -431,14 +424,11 @@ def load(toml_path: Path) -> InfraDeclaration:
             CacheEntry(
                 name=entry["name"],
                 engine=entry.get("engine", CACHE_ENGINE),
-                engine_version=entry.get("engine_version", CACHE_VERSION_DEFAULT),
-                node_type=entry.get("node_type", CACHE_NODE_TYPE_DEFAULT),
-                num_cache_nodes=entry.get("num_cache_nodes", CACHE_NODES_DEFAULT),
-                port=entry.get("port", CACHE_PORT_DEFAULT),
-                parameter_group_name=entry.get(
-                    "parameter_group_name",
-                    default_parameter_group(entry.get("engine_version", CACHE_VERSION_DEFAULT)),
+                major_engine_version=entry.get(
+                    "major_engine_version", CACHE_MAJOR_VERSION_DEFAULT
                 ),
+                max_data_storage_gb=entry.get("max_data_storage_gb", CACHE_STORAGE_GB_DEFAULT),
+                max_ecpu_per_second=entry.get("max_ecpu_per_second", CACHE_ECPU_DEFAULT),
             )
             for entry in data.get("elasticache", [])
         ),

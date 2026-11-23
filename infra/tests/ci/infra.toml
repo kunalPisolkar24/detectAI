@@ -13,7 +13,6 @@ name = "payment_events_dlq.fifo"
 [[elasticache]]
 name = "detectai-dev-cache"
 engine = "redis"
-engine_version = "7.0"
-node_type = "cache.t3.micro"
-num_cache_nodes = 1
-port = 6379
+major_engine_version = "7"
+max_data_storage_gb = 5
+max_ecpu_per_second = 5000

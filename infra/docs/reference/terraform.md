@@ -34,8 +34,7 @@ The backend is intentionally partial: tfctl always passes the plane's backend fi
 | `queues` | `{}` | FIFO names, unique |
 | `visibility_timeout_seconds` | `300` | 0–43200 |
 | `message_retention_seconds` | `1209600` | 60–1209600 |
-| `cache_clusters` | `{}` | Redis, DNS-style names, 1–6 nodes, port 1–65535 |
-| `cache_auth_token` | `""` (sensitive) | Supplied by tfctl when a cache is declared |
+| `cache_clusters` | `{}` | Redis, DNS-style names, major version, storage `1`–`5000` GB, ECPU `1000`–`15000000` |
 | `cache_subnet_ids` | `[]` | Plane-specific, from the values file |
 | `cache_security_group_ids` | `[]` | Optional |
 | `atlas_clusters` | `{}` | `M0` tier, Atlas-style region names |
@@ -54,7 +53,7 @@ An empty ledger means no module: `main.tf` gates each module on `length(var.<led
 | Module | Key inputs | Emitted outputs |
 |--------|-----------|-----------------|
 | `queues` | Ledger map, visibility, retention | `queue_urls`, `queue_arns`, `fabric`, `redrive_targets` |
-| `elasticache` | Cluster map, token, subnets, security groups | `addresses`, `endpoint_urls`, `fabric` |
+| `elasticache` | Cache map, subnets, security groups | `addresses`, `endpoint_urls`, `fabric` |
 | `atlas` | Cluster map, project ID, keys, SCRAM user, CIDRs | `connection_uris`, `standard_connection_uris`, `access_list_cidrs`, `fabric` |
 | `aurora` | Cluster map, master credentials, subnets, security groups | `endpoints`, `reader_endpoints`, `ports`, `connection_urls`, `instance_identifiers`, `fabric` |
 
@@ -66,7 +65,7 @@ Each `fabric` output is the plan-time shape — names, types and settings — so
 |--------|-----------|---------|
 | `queue_urls` / `queue_arns` | No | Queues by declared key |
 | `cache_addresses` | No | `host:port` by cluster name |
-| `cache_endpoint_urls` | Yes | `rediss://` URLs with the AUTH token |
+| `cache_endpoint_urls` | No | Tokenless `rediss://` URLs; serverless enforces TLS |
 | `cache_fabric` | No | Planned cache shape |
 | `atlas_connection_uris` | Yes | `mongodb+srv://` URIs with credentials |
 | `atlas_standard_connection_uris` | Yes | `mongodb://` fallback URIs |

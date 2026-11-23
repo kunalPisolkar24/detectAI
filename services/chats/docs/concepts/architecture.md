@@ -168,7 +168,7 @@ classDiagram
     }
     class cache {
         <<package>>
-        +Setup(ctx, endpoint, token)
+        +Setup(ctx, endpoint)
     }
     class services {
         <<package>>

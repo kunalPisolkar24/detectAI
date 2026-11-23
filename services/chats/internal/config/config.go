@@ -20,7 +20,6 @@ type Config struct {
 	MongoURI        string
 	MongoDatabase   string
 	RedisEndpoint   string
-	RedisAuthToken  string
 	APIKey          string
 
 	RateLimitCreateMax int
@@ -130,7 +129,8 @@ func resolveAPIKey(source Source, cfg *Config) error {
 	return nil
 }
 
-// resolveRedis reads the cache keys; REDIS_ENDPOINT is required and a rediss endpoint demands REDIS_AUTH_TOKEN at the credential floor.
+// resolveRedis reads the cache endpoint; serverless enforces TLS in transit
+// and carries no password, so a rediss:// endpoint needs no credential.
 func resolveRedis(source Source, cfg *Config) error {
 	raw, ok := source.Get("REDIS_ENDPOINT")
 	if !ok {
@@ -141,16 +141,6 @@ func resolveRedis(source Source, cfg *Config) error {
 		return fmt.Errorf("config: REDIS_ENDPOINT must be a redis:// or rediss:// endpoint")
 	}
 	cfg.RedisEndpoint = endpoint
-	if raw, ok := source.Get("REDIS_AUTH_TOKEN"); ok {
-		if token := strings.TrimSpace(raw); token != "" {
-			cfg.RedisAuthToken = token
-		}
-	}
-	if strings.HasPrefix(endpoint, "rediss://") && len(cfg.RedisAuthToken) < minCredentialChars {
-		return fmt.Errorf(
-			"config: REDIS_ENDPOINT is rediss://, so REDIS_AUTH_TOKEN must be at least %d characters (the ElastiCache AUTH token)",
-			minCredentialChars)
-	}
 	return nil
 }
 

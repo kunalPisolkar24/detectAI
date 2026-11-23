@@ -262,7 +262,7 @@ func newStackWith(t *testing.T, endpoint string, logger *slog.Logger) *stack {
 		t.Fatalf("repository.New: %v", err)
 	}
 
-	cacheClient, err := cache.Connect(ctx, endpoint, "")
+	cacheClient, err := cache.Connect(ctx, endpoint)
 	if err != nil {
 		t.Fatalf("cache.Connect: %v", err)
 	}

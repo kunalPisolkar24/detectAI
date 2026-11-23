@@ -13,10 +13,9 @@ Get the offline gate green, then land the declared fabrics on Floci. The loop is
 
    If `envs/.env` exists, this does nothing — it never overwrites.
 
-2. **Fill the values the declaration needs.** The committed `infra.toml` declares all four fabrics, so `envs/.env` needs the cache token and subnets, the Aurora master credentials and subnet IDs, plus the Atlas keys, project ID, SCRAM user and explicit CIDRs. The committed `.env.example` carries shape-valid dummy values for every key:
+2. **Fill the values the declaration needs.** The committed `infra.toml` declares all four fabrics, so `envs/.env` needs cache subnets, the Aurora master credentials and subnet IDs, plus the Atlas keys, project ID, SCRAM user and explicit CIDRs. The committed `.env.example` carries shape-valid dummy values for every key:
 
    ```ini
-   REDIS_AUTH_TOKEN=replace-with-a-16-char-minimum-token
    CACHE_SUBNET_IDS=subnet-default-ap-southeast-2-a
    DB_MASTER_USERNAME=<aurora-master-user>
    DB_MASTER_PASSWORD=<16-char-minimum-password>
@@ -76,7 +75,7 @@ Get the offline gate green, then land the declared fabrics on Floci. The loop is
 ```mermaid
 graph LR
     START(["start: fresh clone"]) --> ENV["make env<br/>envs/.env from the example"]
-    ENV --> FILL["fill cache + Atlas values<br/>placeholders are refused"]
+    ENV --> FILL["fill cache placement + Atlas values<br/>placeholders are refused"]
     FILL --> GATE["make fmt init validate test<br/>offline, no plane"]
     GATE --> EMU["make floci-up<br/>repo root, :4566"]
     EMU --> PLAN["make plan<br/>read-only, review the fabrics"]

@@ -43,8 +43,7 @@ Field names are the env keys. Unknown keys are ignored (consume-first), so typos
 | `DRAIN_TIMEOUT` | graceful drain on SIGTERM | 10s | falls back to default |
 | `MONGO_URI` | MongoDB connection string | — | **boot fails** unless `mongodb://` or `mongodb+srv://` |
 | `MONGO_DATABASE` | database name | `chat_db` | falls back to default |
-| `REDIS_ENDPOINT` | Redis address | — | **boot fails** unless `redis://` or `rediss://` |
-| `REDIS_AUTH_TOKEN` | Redis credential for `rediss://` | unset | **boot fails** unless ≥16 chars when the endpoint is `rediss://` |
+| `REDIS_ENDPOINT` | Redis address | — | **boot fails** unless `redis://` or `rediss://`; `rediss://` needs no token |
 | `API_KEY` | the service credential every RPC carries | — | **boot fails** unless trimmed value ≥16 chars |
 | `RATE_LIMIT_CREATE_MAX` | `CreateChat` burst budget | 10 | **boot fails** on ≤0 or non-integer |
 | `RATE_LIMIT_WRITE_MAX` | `SaveUserMessage` + `SaveAnalysisMessage` shared budget | 60 | **boot fails** on ≤0 or non-integer |
@@ -177,7 +176,6 @@ classDiagram
         +MongoURI: string
         +MongoDatabase: string
         +RedisEndpoint: string
-        +RedisAuthToken: string
         +APIKey: string
         +RateLimitCreateMax: int
         +RateLimitWriteMax: int

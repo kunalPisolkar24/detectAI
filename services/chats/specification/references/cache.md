@@ -4,7 +4,7 @@ The Redis overlay for the chats service: key namespacing on the shared ElastiCac
 
 ## The shared instance
 
-One ElastiCache cluster per environment (dev/staging/prod) serves every consumer — environment isolation comes from separate instances, never from key prefixes. Cluster-mode disabled; every current operation is single-key. In-transit encryption (`rediss://`) with an AUTH token.
+One ElastiCache Serverless cache per environment (dev/staging/prod) serves every consumer — environment isolation comes from separate caches, never from key prefixes. Every current operation is single-key. Serverless enforces TLS in transit (`rediss://`); there is no AUTH token — network access is governed by the cache's security group.
 
 Consumers today and the namespaces they own:
 
@@ -21,7 +21,7 @@ Consumers today and the namespaces they own:
 1. **The prefix lives in the service's key-builder module, not the client.** ioredis `keyPrefix` is a trap: it does not prefix keys inside Lua `EVAL` scripts, and the web rate limiter is a Lua `INCRBY`+`EXPIREAT`. One keys module per service is the single source of truth.
 2. **Every key carries a TTL, no exceptions.** TTL-bounded data plus a shared eviction policy is what makes eviction orderly — a swept key is indistinguishable from an expired one.
 3. **No `FLUSHDB`/`FLUSHALL`, ever.** A shared instance cannot be flushed on deploy. Instead every reader decodes defensively: a value that fails to unmarshal is treated as a miss, re-read from the source, and overwritten. This covers value-shape drift across deploys, which is also why there are no `:v1:` version segments.
-4. **No logical DBs (`SELECT 0–15`)** — cluster mode does not support them, and prefixes do the same job. **No hash tags** — single-node for now; no multi-key operations exist.
+4. **No logical DBs (`SELECT 0–15`)** — serverless does not support them, and prefixes do the same job. **No hash tags** — no multi-key operations exist.
 5. **No raw PII in key names** — keys are visible in `redis-cli` and monitoring. Web hashes emails; chats uses UUIDs.
 
 ## Chats keys
@@ -56,15 +56,15 @@ Rate-limit counters — `web:rate_limit` and `chats:rate_limit` — are correctn
 
 ## Config plane
 
-- **chats** — `REDIS_ENDPOINT` (prod: SSM under the service tree; dev: `infra/.env`) and `REDIS_AUTH_TOKEN` (prod: Secrets Manager alongside the service's secrets blob).
+- **chats** — `REDIS_ENDPOINT` (prod: SSM under the service tree; dev: `infra/.env`), carrying the tokenless `rediss://` endpoint of the serverless cache.
 - **web** — `REDIS_URL` / `REDIS_PASSWORD` repointed at the ElastiCache endpoint at cutover.
-- Infra provisioning (one cluster per environment) is an infra/terraform concern — a tfctl kind when needed.
+- Infra provisioning (one serverless cache per environment) is an infra/terraform concern — a tfctl kind when needed.
 
 ## Decisions
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Instance topology | One shared ElastiCache cluster per environment with service-scoped prefixes | Cheaper to operate than per-service instances; isolation is enforced by the convention, not by spend |
+| Instance topology | One shared ElastiCache Serverless cache per environment with service-scoped prefixes | Cheaper to operate than per-service caches; isolation is enforced by the convention, not by spend |
 | Prefix placement | In each service's key-builder module | Client-level `keyPrefix` silently misses Lua `EVAL` keys — the web rate limiter's exact pattern |
 | Eviction safety | TTL on every key, defensive decode on every read | Makes a shared eviction policy harmless and covers value-shape drift without version segments or flushes |
 | Rate limiting | Per-minute fixed-window counters via atomic Lua, fail-open, numbers owned by the config plane | Matches the proven web limiter pattern; chats owns burst protection while business quotas stay at the edge |

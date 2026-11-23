@@ -58,7 +58,7 @@ func newDegradedService(t *testing.T) *services.ChatService {
 		t.Fatalf("repository.New: %v", err)
 	}
 
-	entries, _, drain := cache.Setup(ctx, "redis://127.0.0.1:1", "")
+	entries, _, drain := cache.Setup(ctx, "redis://127.0.0.1:1")
 	t.Cleanup(func() { _ = drain(context.Background()) })
 
 	return services.NewChatService(repo, entries, slog.New(slog.DiscardHandler), observability.NullTelemetry{})

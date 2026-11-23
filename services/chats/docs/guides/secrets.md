@@ -8,7 +8,7 @@ Four credentials and one dependent key. Where they live depends on the plane; ho
 
 | Store | Keys | Rule |
 |-------|------|------|
-| Secrets Manager | `API_KEY`, `MONGO_URI`, `REDIS_AUTH_TOKEN`, `NEW_RELIC_LICENSE_KEY` | each ≥ 16 chars; never echoed |
+| Secrets Manager | `API_KEY`, `MONGO_URI`, `NEW_RELIC_LICENSE_KEY` | each ≥ 16 chars; never echoed |
 | SSM parameters | `PORT`, `DRAIN_TIMEOUT`, `MONGO_DATABASE`, `REDIS_ENDPOINT`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `OTEL_SERVICE_VERSION`, `OTEL_TRACE_SAMPLE_RATIO`, `RATE_LIMIT_CREATE_MAX`, `RATE_LIMIT_WRITE_MAX` | plain `String` only; `SecureString` refused |
 
 `OTEL_EXPORTER_OTLP_ENDPOINT` lives in SSM but *requires* the license key: setting it without a ≥16-char `NEW_RELIC_LICENSE_KEY` fails the boot. That dependency is declared in `secrets.toml` under `[requires]`.

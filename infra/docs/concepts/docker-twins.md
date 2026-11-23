@@ -35,7 +35,7 @@ graph TB
     end
 
     E1 --> SVC["services via<br/>QUEUE_URL / AWS_ENDPOINT_URL_SQS"]
-    R1 --> CACHE["services via<br/>REDIS_ENDPOINT / REDIS_AUTH_TOKEN"]
+    R1 --> CACHE["services via REDIS_ENDPOINT"]
     M1 --> DB["services via<br/>MONGO_URI / MONGO_DATABASE"]
 ```
 

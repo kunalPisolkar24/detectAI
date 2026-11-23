@@ -26,7 +26,7 @@ graph TB
 
     subgraph AWS["AWS plane — provider aws"]
         SQS["aws_sqs_queue<br/>.terminal + .redrive_source"]
-        Redis["subnet group +<br/>replication group"]
+        Redis["serverless cache"]
         Aurora["DB subnet group +<br/>cluster + serverless instances"]
     end
 
@@ -115,7 +115,7 @@ graph TB
 | Atlas | Real MongoDB Cloud, state tracked on Floci | Real MongoDB Cloud |
 | Apply | Auto-approved | Interactive confirmation |
 
-Services stay endpoint-agnostic: `QUEUE_URL` / `AWS_ENDPOINT_URL_SQS`, `REDIS_ENDPOINT` / `REDIS_AUTH_TOKEN`, and `MONGO_URI` / `MONGO_DATABASE` decide which twin they talk to — the [Docker twins](docker-twins.md) locally, these fabrics on a plane.
+Services stay endpoint-agnostic: `QUEUE_URL` / `AWS_ENDPOINT_URL_SQS`, `REDIS_ENDPOINT`, and `MONGO_URI` / `MONGO_DATABASE` decide which twin they talk to — the [Docker twins](docker-twins.md) locally, these fabrics on a plane.
 
 ## Next Steps
 

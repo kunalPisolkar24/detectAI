@@ -12,7 +12,7 @@ func TestSetupDegradesWhenRedisIsUnreachable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	entries, limiter, drain := cache.Setup(ctx, "redis://127.0.0.1:0", "")
+	entries, limiter, drain := cache.Setup(ctx, "redis://127.0.0.1:0")
 	if _, ok := entries.(cache.NullCache); !ok {
 		t.Errorf("entries = %T, want cache.NullCache", entries)
 	}

@@ -3,28 +3,19 @@ variable "clusters" {
   type = map(object({
     name                 = string
     engine               = string
-    engine_version       = string
-    node_type            = string
-    num_cache_nodes      = number
-    port                 = number
-    parameter_group_name = string
+    major_engine_version = string
+    max_data_storage_gb  = number
+    max_ecpu_per_second  = number
   }))
 }
 
-variable "auth_token" {
-  description = "AUTH token supplied by envs/.env through tfctl."
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
 variable "subnet_ids" {
-  description = "VPC subnet IDs for the cluster subnet groups; plane-specific, supplied by tfctl."
+  description = "VPC subnet IDs for the serverless cache VPC endpoints; plane-specific, supplied by tfctl."
   type        = list(string)
 }
 
 variable "security_group_ids" {
-  description = "Optional VPC security group IDs attached to each cluster."
+  description = "Optional VPC security group IDs attached to each cache."
   type        = list(string)
   default     = []
 }

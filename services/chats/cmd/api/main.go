@@ -58,7 +58,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	entries, limiter, disconnectCache := cache.Setup(bootCtx, cfg.RedisEndpoint, cfg.RedisAuthToken)
+	entries, limiter, disconnectCache := cache.Setup(bootCtx, cfg.RedisEndpoint)
 
 	service := services.NewChatService(
 		repo,

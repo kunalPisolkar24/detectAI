@@ -31,7 +31,7 @@ func TestConnectFailsLoudOnUnreachable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	client, err := chatscache.Connect(ctx, "redis://127.0.0.1:1", "")
+	client, err := chatscache.Connect(ctx, "redis://127.0.0.1:1")
 	if err == nil {
 		_ = client.Disconnect(context.Background())
 		t.Fatal("Connect = nil error, want a failure against a closed port")
@@ -44,7 +44,7 @@ func connectContainer(t *testing.T) *chatscache.Client {
 	endpoint := support.Redis(t).Endpoint
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	client, err := chatscache.Connect(ctx, endpoint, "")
+	client, err := chatscache.Connect(ctx, endpoint)
 	if err != nil {
 		t.Fatalf("Connect: %v", err)
 	}

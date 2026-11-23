@@ -24,7 +24,7 @@ func TestConsumeGivesUpOnASilentServer(t *testing.T) {
 	t.Cleanup(func() { _ = listener.Close() })
 	go serveSilentRedis(listener)
 
-	client, err := cache.Connect(context.Background(), "redis://"+listener.Addr().String(), "")
+	client, err := cache.Connect(context.Background(), "redis://"+listener.Addr().String())
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}

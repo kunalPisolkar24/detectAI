@@ -99,9 +99,6 @@ func TestResolveContracts(t *testing.T) {
 		if cfg.RedisEndpoint != testRedisEndpoint {
 			t.Errorf("RedisEndpoint = %q, want the seeded endpoint", cfg.RedisEndpoint)
 		}
-		if cfg.RedisAuthToken != "" {
-			t.Errorf("RedisAuthToken = non-empty; a plain endpoint boot stays token-free")
-		}
 	})
 
 	t.Run("a missing MONGO_URI fails the boot", func(t *testing.T) {
@@ -186,51 +183,15 @@ func TestResolveContracts(t *testing.T) {
 		}
 	})
 
-	t.Run("a rediss endpoint demands the auth token at its floor", func(t *testing.T) {
-		_, err := config.Resolve(with(map[string]string{"REDIS_ENDPOINT": "rediss://master.example:6379"}))
-		if err == nil || !strings.Contains(err.Error(), "REDIS_AUTH_TOKEN must be at least 16 characters") {
-			t.Errorf("err = %v, want the rediss gate failure", err)
-		}
-	})
-
-	t.Run("a short auth token fails without echo", func(t *testing.T) {
-		short := "tok-short"
-		_, err := config.Resolve(with(map[string]string{
-			"REDIS_ENDPOINT":   "rediss://master.example:6379",
-			"REDIS_AUTH_TOKEN": short,
-		}))
-		if err == nil || !strings.Contains(err.Error(), "REDIS_AUTH_TOKEN must be at least 16 characters") {
-			t.Errorf("err = %v, want the rediss gate failure", err)
-		}
-		if err != nil && strings.Contains(err.Error(), short) {
-			t.Errorf("err = %v; the attempted secret must never be echoed", err)
-		}
-	})
-
-	t.Run("a whitespace-only auth token counts as unset at the gate", func(t *testing.T) {
-		_, err := config.Resolve(with(map[string]string{
-			"REDIS_ENDPOINT":   "rediss://master.example:6379",
-			"REDIS_AUTH_TOKEN": "   ",
-		}))
-		if err == nil || !strings.Contains(err.Error(), "REDIS_AUTH_TOKEN must be at least 16 characters") {
-			t.Errorf("err = %v, want the rediss gate failure", err)
-		}
-	})
-
-	t.Run("a rediss endpoint with a floor-holding trimmed token serves", func(t *testing.T) {
-		token := "tok-0123456789abcdef"
+	t.Run("a tokenless rediss endpoint serves the serverless cache", func(t *testing.T) {
 		cfg, err := config.Resolve(with(map[string]string{
-			"REDIS_ENDPOINT":   " rediss://master.example:6379 ",
-			"REDIS_AUTH_TOKEN": " " + token + " ",
+			"REDIS_ENDPOINT": " rediss://master.example:6379 ",
 		}))
 		if err != nil {
 			t.Fatal(err)
 		}
 		if cfg.RedisEndpoint != "rediss://master.example:6379" {
 			t.Errorf("RedisEndpoint = %q, want the trimmed endpoint", cfg.RedisEndpoint)
-		}
-		if cfg.RedisAuthToken != token {
-			t.Errorf("RedisAuthToken = %q, want the trimmed token", cfg.RedisAuthToken)
 		}
 	})
 
@@ -239,8 +200,8 @@ func TestResolveContracts(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if cfg.RedisEndpoint != testRedisEndpoint || cfg.RedisAuthToken != "" {
-			t.Errorf("cfg = %+v, want the plain endpoint with no token", cfg)
+		if cfg.RedisEndpoint != testRedisEndpoint {
+			t.Errorf("RedisEndpoint = %q, want the plain endpoint", cfg.RedisEndpoint)
 		}
 	})
 

@@ -37,7 +37,7 @@ graph LR
 | File | Asserts |
 |------|---------|
 | `queues.tftest.hcl` | FIFO and dedup settings, 300s visibility, 14-day retention, one terminal redrive target with a 5-attempt budget; an empty ledger plans no module |
-| `elasticache.tftest.hcl` | Redis, one `cache.t3.micro` node on port 6379, encryption on, cluster mode and failover off, one subnet group; queue-less and fabric-less runs |
+| `elasticache.tftest.hcl` | Redis 7 serverless cache with 5 GB / 5000 ECPU/s ceilings; queue-less and fabric-less runs |
 | `atlas.tftest.hcl` | M0 tier, Atlas region, `REPLICASET`, the SCRAM user, explicit IPv4/IPv6 CIDRs; Atlas still plans on Floci and on an Atlas-only run |
 
 These assertions are the executable version of the [fabric contracts](../concepts/fabrics.md). When a contract changes, change the corresponding test with it.

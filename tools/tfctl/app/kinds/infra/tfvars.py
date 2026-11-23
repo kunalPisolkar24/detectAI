@@ -31,11 +31,9 @@ def cache_ledger_map(declaration: InfraDeclaration) -> dict[str, dict]:
         entry.name: {
             "name": entry.name,
             "engine": entry.engine,
-            "engine_version": entry.engine_version,
-            "node_type": entry.node_type,
-            "num_cache_nodes": entry.num_cache_nodes,
-            "port": entry.port,
-            "parameter_group_name": entry.parameter_group_name,
+            "major_engine_version": entry.major_engine_version,
+            "max_data_storage_gb": entry.max_data_storage_gb,
+            "max_ecpu_per_second": entry.max_ecpu_per_second,
         }
         for entry in declaration.cache_ledger
     }
@@ -81,7 +79,6 @@ def build_tf_vars(
         "TF_VAR_db_clusters": json.dumps(aurora_ledger_map(declaration)),
     }
     if declaration.cache_ledger:
-        tf_vars["TF_VAR_cache_auth_token"] = values.get("REDIS_AUTH_TOKEN", "")
         tf_vars["TF_VAR_cache_subnet_ids"] = json.dumps(
             csv_items(values.get("CACHE_SUBNET_IDS", ""))
         )

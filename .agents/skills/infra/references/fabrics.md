@@ -24,20 +24,21 @@ then `payment_events_dlq.fifo`.
 
 ## Cache — `[[elasticache]]` → `modules/elasticache`
 
-A replication group is the only ElastiCache resource that accepts an AUTH
-token in provider 5.x. With one node, cluster mode and failover off, it is a
-single Redis instance.
+`aws_elasticache_serverless_cache` provisions one Redis cache per declared
+entry. Serverless has no AUTH-token, node-type or cluster-mode arguments; TLS
+in transit is enforced by the service.
 
 | Contract | Value |
 |----------|-------|
-| Engine | Redis only |
-| Topology | 1 node, cluster mode disabled, no failover |
-| Transport | In-transit encryption + AUTH token |
-| Placement | One subnet group per cluster; subnets from the values file |
+| Engine | Redis only, major version like `7` |
+| Topology | Serverless — no nodes, failover or sharding to declare |
+| Scaling | Storage ceiling 1–5000 GB, ECPU/s ceiling 1000–15000000 |
+| Transport | TLS in transit, enforced by serverless; no AUTH token |
+| Placement | Subnet and security group IDs from the values file |
 | Consumers | Per-service key prefixes and TTLs, readers fail open |
 
-Outputs: `addresses` (`host:port`), `endpoint_urls` (sensitive `rediss://`),
-`fabric`. Shape is declared; token and VPC placement are plane values.
+Outputs: `addresses` (`host:port`), `endpoint_urls` (tokenless `rediss://`),
+`fabric`. Shape is declared; VPC placement is plane values.
 
 ## Atlas — `[[atlas]]` → `modules/atlas`
 
@@ -68,7 +69,7 @@ no apply, no network.
 | File | Asserts |
 |------|---------|
 | `queues.tftest.hcl` | FIFO/dedup, 300s visibility, 14-day retention, one 5-attempt terminal redrive; empty ledger plans nothing |
-| `elasticache.tftest.hcl` | Redis, one small node, port, encryption, no cluster mode or failover, one subnet group; queue-less and fabric-less runs |
+| `elasticache.tftest.hcl` | Redis 7 serverless cache with 5 GB / 5000 ECPU/s ceilings; queue-less and fabric-less runs |
 | `atlas.tftest.hcl` | M0, Atlas region, `REPLICASET`, SCRAM user, explicit CIDRs; Atlas still plans on Floci and on an Atlas-only run |
 
 The `fabric` output is the executable contract — update it and its test

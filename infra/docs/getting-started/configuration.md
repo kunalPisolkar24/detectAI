@@ -17,7 +17,7 @@ Infra has three inputs and no hidden ones: `infra.toml` declares **what exists**
 | Ledger | Fields | Defaults applied when omitted |
 |--------|--------|-------------------------------|
 | `[[queues]]` | `name`, `dlq`, `max_receive_count` | `dlq = ""`, `max_receive_count = 0` |
-| `[[elasticache]]` | `name`, `engine`, `engine_version`, `node_type`, `num_cache_nodes`, `port`, `parameter_group_name` | `redis`, `7.0`, `cache.t3.micro`, `1`, `6379`, matching parameter group |
+| `[[elasticache]]` | `name`, `engine`, `major_engine_version`, `max_data_storage_gb`, `max_ecpu_per_second` | `redis`, `7`, `5`, `5000` |
 | `[[atlas]]` | `name`, `region`, `tier` | `tier = "M0"`; region is required |
 | `[[aurora]]` | `name`, `engine`, `engine_version`, `database_name`, `port`, `min_acu`, `max_acu`, `num_read_replicas`, `storage_encrypted`, `backup_retention_days`, `deletion_protection`, `skip_final_snapshot` | `aurora-postgresql`, `16.4`, `5432`, `0` replicas, encryption on, `7` days, no deletion protection, final snapshot skipped |
 
@@ -25,7 +25,7 @@ The declaration is exhaustive and checked before any values are read:
 
 - A `dlq` must name a queue declared in the same ledger, and `max_receive_count` (1–1000) is then required.
 - Redrive targets are terminal — a DLQ may not have a DLQ of its own, and a queue may not redrive to itself.
-- Cache names are lowercase DNS-style; 1–6 nodes; port 1–65535.
+- Cache names are lowercase DNS-style; `major_engine_version` is a major version like `7`; storage is `1`–`5000` GB and throughput `1000`–`15000000` ECPU/s.
 - Atlas regions use names like `AP_SOUTHEAST_2`, and `M0` is the only tier.
 - Aurora is pinned to `aurora-postgresql`; ACUs are `0.5`–`128` in `0.5` steps with `max_acu >= min_acu`, replica count is non-negative, and backup retention is `1`–`35` days.
 
@@ -38,7 +38,6 @@ Every value is a plain `KEY=value` line. Unknown keys are ignored; values are on
 | Key | Used by | Rule |
 |-----|---------|------|
 | `AWS_REGION` | state bucket + AWS fabrics | Plain region code, e.g. `ap-southeast-2`; overrides the declaration's region |
-| `REDIS_AUTH_TOKEN` | cache | At least 16 characters |
 | `CACHE_SUBNET_IDS` | cache | Comma-separated subnet IDs; required when a cache is declared |
 | `CACHE_SECURITY_GROUP_IDS` | cache | Optional comma-separated security group IDs |
 | `DB_MASTER_USERNAME` | Aurora | Non-empty; master user |
@@ -64,7 +63,7 @@ The queue fabric needs no credentials. Cache, Aurora and Atlas values are checke
 | `[[atlas]]` ledger | `TF_VAR_atlas_clusters` map |
 | `[[aurora]]` ledger | `TF_VAR_db_clusters` map |
 | `DB_MASTER_*`, `DB_*` | `TF_VAR_db_master_username`, `TF_VAR_db_master_password`, `TF_VAR_db_subnet_ids`, `TF_VAR_db_security_group_ids` |
-| `REDIS_AUTH_TOKEN`, `CACHE_*` | `TF_VAR_cache_auth_token`, `TF_VAR_cache_subnet_ids`, `TF_VAR_cache_security_group_ids` |
+| `CACHE_*` | `TF_VAR_cache_subnet_ids`, `TF_VAR_cache_security_group_ids` |
 | `MONGODB_ATLAS_*`, `ATLAS_*` | The `TF_VAR_atlas_*` family |
 | Floci plane | `TF_VAR_emulator_endpoint` |
 

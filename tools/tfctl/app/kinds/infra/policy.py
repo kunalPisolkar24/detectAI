@@ -22,17 +22,14 @@ QUEUE_ACTIONS = (
     "sqs:ListQueueTags",
 )
 
-# The management surface the cache module exercises: replication groups (the
-# resource that carries the AUTH token), their subnet groups, and tags. No
-# data-plane or ec2 describe calls — placement comes from the values file.
+# The management surface the cache module exercises: serverless caches and
+# tags. No data-plane or ec2 describe calls — placement comes from the values
+# file.
 CACHE_ACTIONS = (
-    "elasticache:CreateReplicationGroup",
-    "elasticache:DeleteReplicationGroup",
-    "elasticache:DescribeReplicationGroups",
-    "elasticache:ModifyReplicationGroup",
-    "elasticache:CreateCacheSubnetGroup",
-    "elasticache:DeleteCacheSubnetGroup",
-    "elasticache:DescribeCacheSubnetGroups",
+    "elasticache:CreateServerlessCache",
+    "elasticache:DeleteServerlessCache",
+    "elasticache:DescribeServerlessCaches",
+    "elasticache:ModifyServerlessCache",
     "elasticache:ListTagsForResource",
     "elasticache:AddTagsToResource",
     "elasticache:RemoveTagsFromResource",
@@ -114,15 +111,8 @@ def seeder_policy_document(
                 "Effect": "Allow",
                 "Action": list(CACHE_ACTIONS),
                 "Resource": [
-                    *(
-                        f"arn:aws:elasticache:{region}:{account}:replicationgroup:{entry.name}"
-                        for entry in declaration.cache_ledger
-                    ),
-                    *(
-                        f"arn:aws:elasticache:{region}:{account}:subnetgroup:"
-                        f"{entry.name}-subnet-group"
-                        for entry in declaration.cache_ledger
-                    ),
+                    f"arn:aws:elasticache:{region}:{account}:serverlesscache:{entry.name}"
+                    for entry in declaration.cache_ledger
                 ],
             }
         )

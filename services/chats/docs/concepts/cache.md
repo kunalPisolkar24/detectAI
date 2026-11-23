@@ -46,7 +46,7 @@ classDiagram
     }
     class Client {
         -client: redis.Client
-        +Connect(ctx, endpoint, token)
+        +Connect(ctx, endpoint)
         +Ping(ctx)
         +Disconnect(ctx)
     }

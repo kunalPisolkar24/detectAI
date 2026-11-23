@@ -8,8 +8,8 @@ import (
 // Setup establishes the cache plane, or degrades to a no-op cache and limiter
 // when redis is unreachable so the source serves every call. The returned func
 // drains the connection when one was established.
-func Setup(ctx context.Context, endpoint, authToken string) (Cache, Limiter, func(context.Context) error) {
-	client, err := Connect(ctx, endpoint, authToken)
+func Setup(ctx context.Context, endpoint string) (Cache, Limiter, func(context.Context) error) {
+	client, err := Connect(ctx, endpoint)
 	if err != nil {
 		slog.Warn("redis unavailable; running without cache", "error", err)
 		return NullCache{}, NullLimiter{}, func(context.Context) error { return nil }

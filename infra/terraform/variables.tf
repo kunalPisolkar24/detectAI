@@ -40,44 +40,40 @@ variable "queues" {
 }
 
 variable "cache_clusters" {
-  description = "The ElastiCache fabric declared by infra.toml; empty means no cache."
+  description = "The ElastiCache Serverless fabric declared by infra.toml; empty means no cache."
   type = map(object({
     name                 = string
     engine               = string
-    engine_version       = string
-    node_type            = string
-    num_cache_nodes      = number
-    port                 = number
-    parameter_group_name = string
+    major_engine_version = string
+    max_data_storage_gb  = number
+    max_ecpu_per_second  = number
   }))
   default = {}
 
   validation {
-    condition     = alltrue([for cluster in var.cache_clusters : cluster.engine == "redis"])
+    condition     = alltrue([for cache in var.cache_clusters : cache.engine == "redis"])
     error_message = "every cache engine must be redis (the shared cache contract)."
   }
 
   validation {
-    condition     = alltrue([for cluster in var.cache_clusters : can(regex("^[a-z][a-z0-9-]{0,39}$", cluster.name))])
+    condition     = alltrue([for cache in var.cache_clusters : can(regex("^[a-z][a-z0-9-]{0,39}$", cache.name))])
     error_message = "every cache name must be a lowercase DNS-style name: [a-z][a-z0-9-]{0,39}."
   }
 
   validation {
-    condition     = alltrue([for cluster in var.cache_clusters : cluster.num_cache_nodes >= 1 && cluster.num_cache_nodes <= 6])
-    error_message = "num_cache_nodes must be 1-6."
+    condition     = alltrue([for cache in var.cache_clusters : can(regex("^[0-9]+$", cache.major_engine_version))])
+    error_message = "major_engine_version must be a major version, e.g. 7."
   }
 
   validation {
-    condition     = alltrue([for cluster in var.cache_clusters : cluster.port >= 1 && cluster.port <= 65535])
-    error_message = "cache port must be 1-65535."
+    condition     = alltrue([for cache in var.cache_clusters : cache.max_data_storage_gb >= 1 && cache.max_data_storage_gb <= 5000])
+    error_message = "max_data_storage_gb must be 1-5000."
   }
-}
 
-variable "cache_auth_token" {
-  description = "AUTH token for the cache fabric; sensitive, supplied by envs/.env via tfctl."
-  type        = string
-  default     = ""
-  sensitive   = true
+  validation {
+    condition     = alltrue([for cache in var.cache_clusters : cache.max_ecpu_per_second >= 1000 && cache.max_ecpu_per_second <= 15000000])
+    error_message = "max_ecpu_per_second must be 1000-15000000."
+  }
 }
 
 variable "cache_subnet_ids" {

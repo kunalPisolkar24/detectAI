@@ -14,8 +14,7 @@ output "cache_addresses" {
 }
 
 output "cache_endpoint_urls" {
-  description = "rediss:// endpoints with the AUTH token; sensitive, for the service config plane."
-  sensitive   = true
+  description = "rediss:// endpoints for the service config plane; serverless enforces TLS in transit."
   value       = try(module.elasticache[0].endpoint_urls, {})
 }
 

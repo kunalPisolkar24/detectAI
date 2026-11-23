@@ -46,7 +46,8 @@ The declaration is exhaustive and validated before any values are read:
 - A `dlq` must name a queue in the same ledger and requires
   `max_receive_count` (1–1000). Redrive targets are terminal: no DLQ chains,
   no queue redriving to itself.
-- Cache: Redis only, lowercase DNS-style names, 1–6 nodes, port 1–65535.
+- Cache: Redis only, lowercase DNS-style names, major version like `7`,
+  storage 1–5000 GB, throughput 1000–15000000 ECPU/s.
 - Atlas: `M0` only, Atlas-style region names (`AP_SOUTHEAST_2`), explicit
   IPv4/IPv6 CIDRs — the free tier has no private endpoints.
 - An empty ledger plans no module; the `count` gate removes it entirely.
@@ -83,10 +84,9 @@ local-only run. Full command tour and failure modes:
   explicit `MessageDeduplicationId`), 300s visibility, 14-day retention.
   Redrive needs a separate resource because a queue cannot read its own DLQ's
   ARN; the target must be terminal.
-- **Cache** — a replication group is the only provider 5.x resource accepting
-  an AUTH token. One node, cluster mode and failover off, encryption on,
-  subnet group per cluster. Cache shape is declared; token and placement are
-  plane values.
+- **Cache** — one `aws_elasticache_serverless_cache` per declared entry. Redis
+  only, TLS in transit enforced by serverless, no AUTH token. Storage and ECPU
+  ceilings are declared; subnet and security group IDs are plane values.
 - **Atlas** — `M0` tenant replica set on AWS, one project-scoped SCRAM user,
   explicit access-list CIDRs. Outputs a sensitive `mongodb+srv://` URI and a
   `mongodb://` fallback for SRV-less networks.
@@ -100,8 +100,8 @@ Resources, outputs and test assertions per fabric:
 
 Shape is committed (`infra.toml`), values are not (`envs/.env`, template in
 `.env.example`). Values are only required for fabrics that are actually
-declared: the queue fabric needs none; cache needs `REDIS_AUTH_TOKEN` (≥16
-chars) and `CACHE_SUBNET_IDS`; Atlas needs the API keys, 24-hex project ID,
+declared: the queue fabric needs none; cache needs `CACHE_SUBNET_IDS`;
+Atlas needs the API keys, 24-hex project ID,
 SCRAM user, ≥16-char password and explicit CIDRs. `AWS_REGION` overrides the
 declaration's region. Floci sets the emulator endpoint; real AWS uses region
 defaults. `docker/*/.env` holds only local port overrides.

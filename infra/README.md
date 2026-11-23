@@ -15,13 +15,12 @@ with a 300s visibility timeout, 14-day retention, and a redrive into
 terminal; DLQ chains are not modeled.
 
 The cache ledger carries the contract in
-`services/chats/specification/references/cache.md`: one small shared,
-single-node, cluster-mode-disabled Redis cluster per environment, with
-in-transit encryption and an AUTH token. Consumers isolate their keys with
-per-service prefixes (`web:`, `chats:`, `worker:`, `inference:`); every key has
-a TTL, and readers fail open to the source store. Cache shape (name, engine,
-node type, port) is declared here; its AUTH token and VPC placement are
-plane-specific values in `envs/.env`.
+`services/chats/specification/references/cache.md`: one shared ElastiCache
+Serverless Redis cache per environment, with TLS in transit and no AUTH token.
+Consumers isolate their keys with per-service prefixes (`web:`, `chats:`,
+`worker:`, `inference:`); every key has a TTL, and readers fail open to the
+source store. Cache shape (name, engine, major version, usage limits) is
+declared here; VPC placement is plane-specific values in `envs/.env`.
 
 The Atlas ledger pins one cluster to the `M0` Free tier on AWS-backed Atlas
 regions. Atlas has no emulator, but its API is public: a real cluster is planned
@@ -34,7 +33,7 @@ for dev/demo only: Free tier is shared, ~512 MB, has no backups or private
 endpoints, and there is one free cluster per account.
 
 Services stay endpoint-agnostic: `QUEUE_URL` / `AWS_ENDPOINT_URL_SQS`,
-`REDIS_ENDPOINT` / `REDIS_AUTH_TOKEN`, and `MONGO_URI` / `MONGO_DATABASE` decide
+`REDIS_ENDPOINT`, and `MONGO_URI` / `MONGO_DATABASE` decide
 which twin they talk to — the compose files under `infra/docker` in local dev,
 these fabrics on Floci or real AWS. Queue, cache and Atlas names are each
 ledger's identity; two fabrics may not share a name within their own ledger.

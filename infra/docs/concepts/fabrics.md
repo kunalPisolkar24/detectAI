@@ -69,23 +69,22 @@ The committed ledger carries the `payment-webhook` contract from `services/payme
 
 ## The cache fabric
 
-A replication group is the only ElastiCache resource that accepts an AUTH token in provider 5.x. With one node, cluster mode and failover off, it is a single Redis instance.
+`aws_elasticache_serverless_cache` provisions one Redis cache per declared entry. The declared shape is the engine line and the scaling ceilings; the provider has no AUTH-token, node-type or cluster-mode arguments — serverless encrypts in transit and scales within the declared limits.
 
 ```mermaid
 graph TB
     subgraph SHAPE["declared shape"]
-        NAME["cluster name + engine version"]
-        PLACE["plane values:<br/>subnets · security groups · AUTH token"]
+        NAME["cache name · engine · major version<br/>storage and ECPU ceilings"]
+        PLACE["plane values:<br/>subnets · security groups"]
     end
 
     subgraph RESOURCES["aws_elasticache"]
-        SG["aws_elasticache_subnet_group.this"]
-        RG["aws_elasticache_replication_group.this<br/>encryption + AUTH token"]
+        SC["aws_elasticache_serverless_cache.this"]
     end
 
-    NAME --> RG
-    PLACE --> SG --> RG
-    RG --> OUT["addresses · endpoint_urls<br/>fabric"]
+    NAME --> SC
+    PLACE --> SC
+    SC --> OUT["addresses · endpoint_urls<br/>fabric"]
 ```
 
 ### How a consumer connects
@@ -98,8 +97,8 @@ sequenceDiagram
     participant C as consumer
     participant R as cache cluster
 
-    TF->>CFG: rediss:// endpoint + AUTH token
-    CFG->>C: REDIS_ENDPOINT / REDIS_AUTH_TOKEN
+    TF->>CFG: tokenless rediss:// endpoint
+    CFG->>C: REDIS_ENDPOINT
     C->>R: prefixed key with a TTL
     R-->>C: hit, or miss filled from the source store
     note over C,R: readers fail open - a cache fault never fails a request
@@ -107,13 +106,14 @@ sequenceDiagram
 
 | Contract | Value |
 |----------|-------|
-| Engine | Redis only |
-| Topology | One node, cluster mode disabled, no failover |
-| Transport | In-transit encryption on; AUTH token required |
-| Placement | Subnet IDs from the values file, one subnet group per cluster |
+| Engine | Redis only; major version 7 |
+| Topology | Serverless — no nodes, replicas or sharding to declare |
+| Transport | TLS in transit, enforced by serverless; no AUTH token |
+| Scaling | Storage and ECPU ceilings declared per cache |
+| Placement | Subnet and security group IDs from the values file |
 | Consumers | Per-service key prefixes and TTLs, per `services/chats/specification/references/cache.md` |
 
-Cache shape (name, engine, node type, port) is declared here. The token and VPC placement are plane values in `envs/.env`.
+Cache shape (name, engine, major version, usage limits) is declared here. VPC placement is plane values in `envs/.env`.
 
 ## The Aurora fabric
 

@@ -17,7 +17,7 @@ help-tests:
 
 env:
 	@test -f envs/.env || cp envs/.env.example envs/.env
-	@echo "envs/.env ready (edit AWS_REGION, REDIS_AUTH_TOKEN, CACHE_SUBNET_IDS, DB_* and Atlas values as wanted)"
+	@echo "envs/.env ready (edit AWS_REGION, CACHE_SUBNET_IDS, DB_* and Atlas values as wanted)"
 
 fmt:
 	terraform -chdir=$(TF_DIR) fmt -check -recursive -diff

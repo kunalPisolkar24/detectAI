@@ -607,7 +607,7 @@ func boot(t *testing.T, mongoURI, redisEndpoint string, createLimit, writeLimit 
 		t.Fatalf("repository.New: %v", err)
 	}
 
-	cacheClient, err := cache.Connect(bootCtx, cfg.RedisEndpoint, cfg.RedisAuthToken)
+	cacheClient, err := cache.Connect(bootCtx, cfg.RedisEndpoint)
 	if err != nil {
 		t.Fatalf("cache.Connect: %v", err)
 	}

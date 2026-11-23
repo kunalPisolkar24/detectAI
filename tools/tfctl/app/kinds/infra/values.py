@@ -1,10 +1,10 @@
 """The infra values law: region shape, plus the declared fabrics' credentials.
 
-The queue fabric needs no credentials; the cache needs an AUTH token and a
-plane-specific subnet, Aurora needs master credentials and subnet IDs, and
-Atlas needs API keys, a DB user and explicit CIDRs. All of it lives in the
-gitignored values file. Atlas is a public API with its own keys, so its law
-applies on every plane when the fabric is declared.
+The queue fabric needs no credentials; the cache needs a plane-specific subnet,
+Aurora needs master credentials and subnet IDs, and Atlas needs API keys, a DB
+user and explicit CIDRs. All of it lives in the gitignored values file. Atlas is
+a public API with its own keys, so its law applies on every plane when the
+fabric is declared.
 """
 
 from __future__ import annotations
@@ -41,19 +41,12 @@ def validate_state(values: dict[str, str]) -> list[str]:
 
 
 def validate_cache(values: dict[str, str]) -> list[str]:
-    """The credential and placement law, applied only when a cache is declared."""
+    """The placement law, applied only when a cache is declared."""
     errors: list[str] = []
 
     def fail(message: str, fix: str) -> None:
         errors.append(f"error: {message}\nfix:   {fix}")
 
-    token = values.get("REDIS_AUTH_TOKEN", "").strip()
-    if len(token) < CACHE_TOKEN_MIN:
-        fail(
-            f"REDIS_AUTH_TOKEN is required when [[elasticache]] is declared "
-            f"({CACHE_TOKEN_MIN}+ characters)",
-            "set REDIS_AUTH_TOKEN in envs/.env — it is the ElastiCache AUTH token",
-        )
     if not csv_items(values.get("CACHE_SUBNET_IDS", "")):
         fail(
             "CACHE_SUBNET_IDS is required when [[elasticache]] is declared",

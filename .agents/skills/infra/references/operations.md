@@ -49,7 +49,6 @@ plus this tier are the local PR gate.
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `the emulator at … did not answer /_localstack/health` | Floci not running | `make -C .. floci-up`, rerun |
-| `REDIS_AUTH_TOKEN is required` | cache declared but token missing or < 16 chars | fill `envs/.env` |
 | `CACHE_SUBNET_IDS is required` | cache declared without placement | set subnet IDs (Floci: `subnet-default-ap-southeast-2-a`) |
 | Atlas key/project/CIDR error | `[[atlas]]` declared but values absent or malformed | fill the Atlas keys; project ID is 24-hex; CIDRs are explicit |
 | `make init` consults a backend | stale `.terraform/terraform.tfstate` | use `make init` — it clears the record first |

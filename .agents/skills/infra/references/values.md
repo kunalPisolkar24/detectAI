@@ -13,7 +13,7 @@ Unknown sections, fields and duplicate names are errors.
 |---------|--------|-----------------------|
 | `[service]` | `slug` (must be `infra`), `region` | `ap-southeast-2` |
 | `[[queues]]` | `name`, `dlq`, `max_receive_count` | `""`, `0` |
-| `[[elasticache]]` | `name`, `engine`, `engine_version`, `node_type`, `num_cache_nodes`, `port`, `parameter_group_name` | `redis`, `7.0`, `cache.t3.micro`, `1`, `6379`, version-matched group |
+| `[[elasticache]]` | `name`, `engine`, `major_engine_version`, `max_data_storage_gb`, `max_ecpu_per_second` | `redis`, `7`, `5`, `5000` |
 | `[[atlas]]` | `name`, `region`, `tier` | `tier = "M0"`; region required |
 
 Rules the loader enforces:
@@ -21,8 +21,9 @@ Rules the loader enforces:
 - Queue names are `[A-Za-z0-9_-]{1,75}.fifo`, unique within the ledger.
 - A `dlq` must be declared in the same ledger; it needs
   `max_receive_count` 1–1000; no self-redrive; targets are terminal.
-- Cache names are `[a-z][a-z0-9-]{0,39}`, unique; 1–6 nodes; port 1–65535;
-  engine must be `redis`.
+- Cache names are `[a-z][a-z0-9-]{0,39}`, unique; `major_engine_version` is a
+  major version like `7`; storage is 1–5000 GB and throughput 1000–15000000
+  ECPU/s; engine must be `redis`.
 - Atlas names follow the cache name law; regions look like `AP_SOUTHEAST_2`;
   tier must be `M0`.
 
@@ -34,7 +35,6 @@ only when their fabric is declared; the queue fabric needs no credentials.
 | Key | Fabric | Rule |
 |-----|--------|------|
 | `AWS_REGION` | all | Plain region code; overrides the declaration's region |
-| `REDIS_AUTH_TOKEN` | cache | ≥ 16 characters |
 | `CACHE_SUBNET_IDS` | cache | Comma-separated subnet IDs; required |
 | `CACHE_SECURITY_GROUP_IDS` | cache | Optional comma-separated IDs |
 | `MONGODB_ATLAS_PUBLIC_KEY` | Atlas | ≥ 8 characters |
