@@ -1,6 +1,6 @@
 # tfctl's infra kind: the shared fabric ledger. Each section is optional —
-# declare [[queues]], [[elasticache]] and/or [[atlas]]; only declared fabrics
-# land. Atlas has no emulator, so it is skipped on the floci plane.
+# declare [[queues]], [[elasticache]], [[atlas]] and/or [[aurora]]; only declared
+# fabrics land. Atlas has no emulator, so it is always a real MongoDB Cloud API.
 
 [service]
 slug = "infra"
@@ -26,3 +26,17 @@ port = 6379
 name = "detectai-dev-mongo"
 region = "AP_SOUTHEAST_2"
 tier = "M0"
+
+[[aurora]]
+name = "detectai-dev-users"
+engine = "aurora-postgresql"
+engine_version = "16.4"
+database_name = "users_db"
+port = 5432
+min_acu = 0.5
+max_acu = 1
+num_read_replicas = 0
+storage_encrypted = true
+backup_retention_days = 7
+deletion_protection = false
+skip_final_snapshot = true

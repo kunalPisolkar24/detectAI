@@ -162,6 +162,86 @@ variable "atlas_ip_cidrs" {
   }
 }
 
+variable "db_clusters" {
+  description = "The Aurora Serverless v2 fabric declared by infra.toml; empty means no database."
+  type = map(object({
+    name                  = string
+    engine                = string
+    engine_version        = string
+    database_name         = string
+    port                  = number
+    min_acu               = number
+    max_acu               = number
+    num_read_replicas     = number
+    storage_encrypted     = bool
+    backup_retention_days = number
+    deletion_protection   = bool
+    skip_final_snapshot   = bool
+  }))
+  default = {}
+
+  validation {
+    condition     = alltrue([for cluster in var.db_clusters : cluster.engine == "aurora-postgresql"])
+    error_message = "the Aurora fabric is pinned to the aurora-postgresql engine."
+  }
+
+  validation {
+    condition     = alltrue([for cluster in var.db_clusters : can(regex("^[a-z][a-z0-9-]{0,39}$", cluster.name))])
+    error_message = "every Aurora cluster name must be a lowercase DNS-style name: [a-z][a-z0-9-]{0,39}."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in var.db_clusters :
+      cluster.min_acu >= 0.5 && cluster.min_acu <= 128 &&
+      cluster.max_acu >= cluster.min_acu && cluster.max_acu <= 128 &&
+      cluster.min_acu * 2 == floor(cluster.min_acu * 2) &&
+      cluster.max_acu * 2 == floor(cluster.max_acu * 2)
+    ])
+    error_message = "ACU bounds must be 0.5-128 in 0.5 steps, with max_acu >= min_acu."
+  }
+
+  validation {
+    condition     = alltrue([for cluster in var.db_clusters : cluster.num_read_replicas >= 0])
+    error_message = "num_read_replicas cannot be negative; zero means writer only."
+  }
+
+  validation {
+    condition     = alltrue([for cluster in var.db_clusters : cluster.port >= 1 && cluster.port <= 65535])
+    error_message = "Aurora port must be 1-65535."
+  }
+
+  validation {
+    condition     = alltrue([for cluster in var.db_clusters : cluster.backup_retention_days >= 1 && cluster.backup_retention_days <= 35])
+    error_message = "backup_retention_days must be 1-35."
+  }
+}
+
+variable "db_master_username" {
+  description = "Aurora master username; supplied by envs/.env via tfctl when the fabric is declared."
+  type        = string
+  default     = ""
+}
+
+variable "db_master_password" {
+  description = "Aurora master password; sensitive, supplied by envs/.env via tfctl."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "db_subnet_ids" {
+  description = "VPC subnet IDs for the Aurora subnet groups; plane-specific, supplied by tfctl."
+  type        = list(string)
+  default     = []
+}
+
+variable "db_security_group_ids" {
+  description = "Optional VPC security group IDs for the Aurora clusters."
+  type        = list(string)
+  default     = []
+}
+
 variable "visibility_timeout_seconds" {
   description = "The redrive budget per receive attempt, shared by the fabric."
   type        = number

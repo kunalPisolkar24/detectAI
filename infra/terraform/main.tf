@@ -33,3 +33,14 @@ module "atlas" {
   db_password = var.atlas_db_password
   ip_cidrs    = var.atlas_ip_cidrs
 }
+
+module "aurora" {
+  source = "./modules/aurora"
+  count  = length(var.db_clusters) > 0 ? 1 : 0
+
+  clusters           = var.db_clusters
+  master_username    = var.db_master_username
+  master_password    = var.db_master_password
+  subnet_ids         = var.db_subnet_ids
+  security_group_ids = var.db_security_group_ids
+}

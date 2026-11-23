@@ -9,9 +9,9 @@ The Terraform root under `infra/terraform/` is driven only by tfctl's `infra` ki
 | `versions.tf` | Terraform `~> 1.10`, AWS `~> 5.0`, MongoDB Atlas `~> 2.0`, partial `backend "s3" {}` |
 | `providers.tf` | Emulator switching, common tags, the aliased Atlas provider |
 | `variables.tf` | All inputs, their validation and defaults |
-| `main.tf` | The three count-gated module calls |
+| `main.tf` | The four count-gated module calls |
 | `outputs.tf` | The contract surface handed back to callers |
-| `modules/{queues,elasticache,atlas}/` | One module per fabric: `main.tf`, `variables.tf`, `outputs.tf` |
+| `modules/{queues,elasticache,atlas,aurora}/` | One module per fabric: `main.tf`, `variables.tf`, `outputs.tf` |
 | `tests/` | Mocked contract tests, one file per fabric |
 
 The backend is intentionally partial: tfctl always passes the plane's backend file at `init`, never a bare init. The root itself never hard-codes a bucket.
@@ -20,7 +20,7 @@ The backend is intentionally partial: tfctl always passes the plane's backend fi
 
 | Provider | Configuration |
 |----------|---------------|
-| `aws` | Region from `var.aws_region`; on an emulator, test credentials, four skip flags and SQS/ElastiCache endpoints pointed at `var.emulator_endpoint` |
+| `aws` | Region from `var.aws_region`; on an emulator, test credentials, four skip flags and SQS/ElastiCache/RDS endpoints pointed at `var.emulator_endpoint` |
 | `mongodbatlas.fabric` | Aliased, so Floci and queue/cache-only runs never configure it; keys come from variables with an `"unused"` placeholder when the fabric is absent |
 
 `var.emulator_endpoint` is the single switch: a non-empty trimmed URL means emulator, empty or null means real AWS. tfctl sets it only on Floci.
@@ -43,6 +43,9 @@ The backend is intentionally partial: tfctl always passes the plane's backend fi
 | `atlas_project_id` | `""` | Empty or 24-character hex |
 | `atlas_db_username` / `atlas_db_password` | `""` (password sensitive) | Supplied by tfctl when Atlas is declared |
 | `atlas_ip_cidrs` | `[]` | Valid IPv4/IPv6 CIDRs |
+| `db_clusters` | `{}` | `aurora-postgresql`, DNS-style names, ACUs `0.5`–`128` in `0.5` steps, `max >= min`, replicas ≥ 0, port `1`–`65535`, retention `1`–`35` |
+| `db_master_username` / `db_master_password` | `""` (password sensitive) | Supplied by tfctl when Aurora is declared |
+| `db_subnet_ids` / `db_security_group_ids` | `[]` | Plane-specific, from the values file |
 
 An empty ledger means no module: `main.tf` gates each module on `length(var.<ledger>) > 0`.
 
@@ -53,6 +56,7 @@ An empty ledger means no module: `main.tf` gates each module on `length(var.<led
 | `queues` | Ledger map, visibility, retention | `queue_urls`, `queue_arns`, `fabric`, `redrive_targets` |
 | `elasticache` | Cluster map, token, subnets, security groups | `addresses`, `endpoint_urls`, `fabric` |
 | `atlas` | Cluster map, project ID, keys, SCRAM user, CIDRs | `connection_uris`, `standard_connection_uris`, `access_list_cidrs`, `fabric` |
+| `aurora` | Cluster map, master credentials, subnets, security groups | `endpoints`, `reader_endpoints`, `ports`, `connection_urls`, `instance_identifiers`, `fabric` |
 
 Each `fabric` output is the plan-time shape — names, types and settings — so the contract tests can assert it without applying.
 
@@ -67,6 +71,9 @@ Each `fabric` output is the plan-time shape — names, types and settings — so
 | `atlas_connection_uris` | Yes | `mongodb+srv://` URIs with credentials |
 | `atlas_standard_connection_uris` | Yes | `mongodb://` fallback URIs |
 | `atlas_fabric` | No | Planned Atlas shape |
+| `db_endpoints` / `db_reader_endpoints` / `db_ports` | No | Aurora endpoints and ports by cluster name |
+| `db_connection_urls` | Yes | `postgresql://` URLs with master credentials |
+| `db_fabric` | No | Planned Aurora shape |
 
 All outputs are wrapped in `try(module.<name>[0]...., {})` so an undeclared fabric contributes an empty map instead of failing the plan.
 
@@ -81,7 +88,7 @@ graph TB
 
     subgraph ROOT["terraform root"]
         VARS["variables.tf<br/>validation + defaults"]
-        MODS["main.tf<br/>3 gated modules"]
+        MODS["main.tf<br/>4 gated modules"]
     end
 
     TV --> VARS --> MODS

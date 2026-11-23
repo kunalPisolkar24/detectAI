@@ -38,6 +38,25 @@ CACHE_ACTIONS = (
     "elasticache:RemoveTagsFromResource",
 )
 
+# The Aurora Serverless v2 management surface: clusters, instances and subnet
+# groups. No RDS Proxy actions — that fabric is deliberately not modeled.
+RDS_ACTIONS = (
+    "rds:CreateDBCluster",
+    "rds:DeleteDBCluster",
+    "rds:DescribeDBClusters",
+    "rds:ModifyDBCluster",
+    "rds:CreateDBInstance",
+    "rds:DeleteDBInstance",
+    "rds:DescribeDBInstances",
+    "rds:ModifyDBInstance",
+    "rds:CreateDBSubnetGroup",
+    "rds:DeleteDBSubnetGroup",
+    "rds:DescribeDBSubnetGroups",
+    "rds:ListTagsForResource",
+    "rds:AddTagsToResource",
+    "rds:RemoveTagsFromResource",
+)
+
 
 def seeder_policy_document(
     declaration: InfraDeclaration, values: dict[str, str], is_emulator: bool, user_arn: str
@@ -105,6 +124,24 @@ def seeder_policy_document(
                         for entry in declaration.cache_ledger
                     ),
                 ],
+            }
+        )
+    if declaration.aurora_ledger:
+        resources: list[str] = []
+        for entry in declaration.aurora_ledger:
+            resources.append(f"arn:aws:rds:{region}:{account}:cluster:{entry.name}")
+            resources.append(f"arn:aws:rds:{region}:{account}:db:{entry.name}-writer")
+            resources.extend(
+                f"arn:aws:rds:{region}:{account}:db:{entry.name}-reader-{index}"
+                for index in range(1, entry.num_read_replicas + 1)
+            )
+            resources.append(f"arn:aws:rds:{region}:{account}:subgrp:{entry.name}-subnet-group")
+        statements.append(
+            {
+                "Sid": "ManageDatabaseFabric",
+                "Effect": "Allow",
+                "Action": list(RDS_ACTIONS),
+                "Resource": resources,
             }
         )
     return {"Version": "2012-10-17", "Statement": statements}

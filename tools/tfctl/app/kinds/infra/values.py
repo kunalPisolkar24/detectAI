@@ -1,9 +1,10 @@
 """The infra values law: region shape, plus the declared fabrics' credentials.
 
 The queue fabric needs no credentials; the cache needs an AUTH token and a
-plane-specific subnet, and Atlas needs API keys, a DB user and explicit CIDRs.
-All of it lives in the gitignored values file. Atlas is a public API with its
-own keys, so its law applies on every plane when the fabric is declared.
+plane-specific subnet, Aurora needs master credentials and subnet IDs, and
+Atlas needs API keys, a DB user and explicit CIDRs. All of it lives in the
+gitignored values file. Atlas is a public API with its own keys, so its law
+applies on every plane when the fabric is declared.
 """
 
 from __future__ import annotations
@@ -107,6 +108,33 @@ def validate_atlas(values: dict[str, str]) -> list[str]:
     return errors
 
 
+def validate_db(values: dict[str, str]) -> list[str]:
+    """The Aurora credential and placement law, applied only when declared."""
+    errors: list[str] = []
+
+    def fail(message: str, fix: str) -> None:
+        errors.append(f"error: {message}\nfix:   {fix}")
+
+    username = values.get("DB_MASTER_USERNAME", "").strip()
+    if not username:
+        fail(
+            "DB_MASTER_USERNAME is required when [[aurora]] is declared",
+            "set DB_MASTER_USERNAME in envs/.env — it is the Aurora master user",
+        )
+    password = values.get("DB_MASTER_PASSWORD", "").strip()
+    if len(password) < 16:
+        fail(
+            "DB_MASTER_PASSWORD is required when [[aurora]] is declared (16+ characters)",
+            "set DB_MASTER_PASSWORD in envs/.env — it is the Aurora master password",
+        )
+    if not csv_items(values.get("DB_SUBNET_IDS", "")):
+        fail(
+            "DB_SUBNET_IDS is required when [[aurora]] is declared",
+            "set at least two subnet IDs in envs/.env, one per AZ",
+        )
+    return errors
+
+
 def validate(declaration: Declaration, values: dict[str, str], is_emulator: bool) -> list[str]:
     """The kind's verb-wide validation: values shape plus the declared fabrics."""
     errors = validate_state(values)
@@ -114,4 +142,6 @@ def validate(declaration: Declaration, values: dict[str, str], is_emulator: bool
         errors.extend(validate_cache(values))
     if getattr(declaration, "atlas_ledger", ()):
         errors.extend(validate_atlas(values))
+    if getattr(declaration, "aurora_ledger", ()):
+        errors.extend(validate_db(values))
     return errors

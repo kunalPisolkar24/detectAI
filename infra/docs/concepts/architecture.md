@@ -14,17 +14,20 @@ graph TB
         Q["[[queues]]"]
         C["[[elasticache]]"]
         A["[[atlas]]"]
+        D["[[aurora]]"]
     end
 
     subgraph ROOT["terraform root — main.tf"]
         MQ["module queues<br/>count = queues > 0"]
         MC["module elasticache<br/>count = caches > 0"]
         MA["module atlas<br/>count = clusters > 0"]
+        MD["module aurora<br/>count = databases > 0"]
     end
 
     subgraph AWS["AWS plane — provider aws"]
         SQS["aws_sqs_queue<br/>.terminal + .redrive_source"]
         Redis["subnet group +<br/>replication group"]
+        Aurora["DB subnet group +<br/>cluster + serverless instances"]
     end
 
     subgraph PUBLIC["public API — mongodbatlas.fabric"]
@@ -33,6 +36,7 @@ graph TB
 
     Q --> MQ --> SQS
     C --> MC --> Redis
+    D --> MD --> Aurora
     A --> MA --> Atlas
     MQ -.->|"one module for the whole ledger"| SQS
     MA -.->|"no emulator: real API on both planes"| Atlas
@@ -73,7 +77,7 @@ sequenceDiagram
     A-->>T: carrier session
     T->>S: head bucket, create and version if missing
     T->>TF: init -reconfigure with the temp backend file
-    TF-->>T: plan: queues=2, elasticache=1, atlas=1
+    TF-->>T: plan: queues=2, elasticache=1, atlas=1, aurora=1
     T-->>U: exit 0 + the plan
     note over T,S: the bucket and role are created on demand - no bootstrap step
     note over TF: Atlas is planned on both planes - its API is public
@@ -93,8 +97,11 @@ graph TB
     C -->|"no"| A{"[[atlas]] entries?"}
     MC --> A
     A -->|"yes"| MA["module atlas<br/>count = 1"]
-    A -->|"no"| NONE["no modules planned"]
-    MA --> END(["end: terraform plan"])
+    A -->|"no"| D{"[[aurora]] entries?"}
+    MA --> D
+    D -->|"yes"| MD["module aurora<br/>count = 1"]
+    D -->|"no"| NONE["no modules planned"]
+    MD --> END(["end: terraform plan"])
     NONE --> END
 ```
 

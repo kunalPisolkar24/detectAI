@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import tomllib
 from dataclasses import dataclass
+from math import floor
 from pathlib import Path
 
 from app.engine.declaration.model import REGION_RE, Declaration, DeclarationError, seeder_role_for
@@ -13,9 +14,23 @@ SLUG = "infra"
 REGION_DEFAULT = "ap-southeast-2"
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-TOP_SECTIONS = {"service", "queues", "elasticache", "atlas"}
+TOP_SECTIONS = {"service", "queues", "elasticache", "atlas", "aurora"}
 SERVICE_FIELDS = {"slug", "region"}
 QUEUE_FIELDS = {"name", "dlq", "max_receive_count"}
+AURORA_FIELDS = {
+    "name",
+    "engine",
+    "engine_version",
+    "database_name",
+    "port",
+    "min_acu",
+    "max_acu",
+    "num_read_replicas",
+    "storage_encrypted",
+    "backup_retention_days",
+    "deletion_protection",
+    "skip_final_snapshot",
+}
 CACHE_FIELDS = {
     "name",
     "engine",
@@ -41,6 +56,13 @@ CACHE_VERSION_DEFAULT = "7.0"
 CACHE_NODE_TYPE_DEFAULT = "cache.t3.micro"
 CACHE_NODES_DEFAULT = 1
 CACHE_PORT_DEFAULT = 6379
+AURORA_ENGINE = "aurora-postgresql"
+AURORA_ENGINE_VERSION_DEFAULT = "16.4"
+AURORA_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+(?:\.[0-9]+)?$")
+AURORA_PORT_DEFAULT = 5432
+AURORA_MIN_ACU = 0.5
+AURORA_MAX_ACU = 128
+AURORA_BACKUP_DAYS_DEFAULT = 7
 
 
 def default_parameter_group(version: str) -> str:
@@ -85,12 +107,31 @@ class AtlasEntry:
 
 
 @dataclass
+class AuroraEntry:
+    """One declared Aurora Serverless v2 cluster; the name is the identity."""
+
+    name: str
+    engine: str
+    engine_version: str
+    database_name: str
+    port: int
+    min_acu: float
+    max_acu: float
+    num_read_replicas: int
+    storage_encrypted: bool
+    backup_retention_days: int
+    deletion_protection: bool
+    skip_final_snapshot: bool
+
+
+@dataclass
 class InfraDeclaration(Declaration):
     """The engine-facing face of the fabric: all declared ledgers ride along."""
 
     queue_ledger: tuple[QueueEntry, ...] = ()
     cache_ledger: tuple[CacheEntry, ...] = ()
     atlas_ledger: tuple[AtlasEntry, ...] = ()
+    aurora_ledger: tuple[AuroraEntry, ...] = ()
 
 
 def declaration_errors(data: dict) -> list[str]:
@@ -137,8 +178,16 @@ def declaration_errors(data: dict) -> list[str]:
         fail("[atlas] must be a list of [[atlas]] entries")
         atlas = []
 
-    if not entries and not caches and not atlas:
-        fail("declare at least one fabric: [[queues]], [[elasticache]] and/or [[atlas]]")
+    aurora = data.get("aurora", [])
+    if not isinstance(aurora, list):
+        fail("[aurora] must be a list of [[aurora]] entries")
+        aurora = []
+
+    if not entries and not caches and not atlas and not aurora:
+        fail(
+            "declare at least one fabric: [[queues]], [[elasticache]], "
+            "[[atlas]] and/or [[aurora]]"
+        )
 
     declared: set[str] = set()
     valid: list[tuple[dict, str]] = []
@@ -283,6 +332,75 @@ def declaration_errors(data: dict) -> list[str]:
         tier = entry.get("tier", ATLAS_TIER)
         if tier != ATLAS_TIER:
             fail(f"{name} tier {tier!r} must be {ATLAS_TIER!r} (the free tier is the only option)")
+
+    aurora_declared: set[str] = set()
+    for entry in aurora:
+        if not isinstance(entry, dict):
+            fail("every [[aurora]] entry must be a table")
+            continue
+        extra = set(entry) - AURORA_FIELDS
+        if extra:
+            fail(
+                f"[[aurora]] has unknown field(s) {sorted(extra)}; "
+                f"allowed: {sorted(AURORA_FIELDS)}"
+            )
+        name = entry.get("name")
+        if not isinstance(name, str) or not CACHE_NAME_RE.fullmatch(name):
+            fail(
+                f"aurora name {name!r} must be a lowercase DNS-style name: "
+                "[a-z][a-z0-9-]{0,39}"
+            )
+            continue
+        if name in aurora_declared:
+            fail(f"{name} is declared twice; the name is the identity — declare it once")
+            continue
+        aurora_declared.add(name)
+
+        engine = entry.get("engine", AURORA_ENGINE)
+        if engine != AURORA_ENGINE:
+            fail(f"{name} engine {engine!r} must be {AURORA_ENGINE!r}")
+        version = entry.get("engine_version", AURORA_ENGINE_VERSION_DEFAULT)
+        if not isinstance(version, str) or not AURORA_VERSION_RE.fullmatch(version):
+            fail(f"{name} engine_version {version!r} must look like a version, e.g. 16.4")
+        database = entry.get("database_name")
+        if not isinstance(database, str) or not re.fullmatch(
+            r"[A-Za-z][A-Za-z0-9_]{0,62}", database or ""
+        ):
+            fail(f"{name} database_name {database!r} must be a plain SQL identifier")
+        port = entry.get("port", AURORA_PORT_DEFAULT)
+        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+            fail(f"{name} port must be an integer 1-65535, got {port!r}")
+        for label in ("min_acu", "max_acu"):
+            value = entry.get(label)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not AURORA_MIN_ACU <= value <= AURORA_MAX_ACU
+                or value * 2 != floor(value * 2)
+            ):
+                fail(
+                    f"{name} {label} must be a number "
+                    f"{AURORA_MIN_ACU}-{AURORA_MAX_ACU} in 0.5 steps, got {value!r}"
+                )
+        minimum, maximum = entry.get("min_acu"), entry.get("max_acu")
+        if (
+            isinstance(minimum, (int, float))
+            and not isinstance(minimum, bool)
+            and isinstance(maximum, (int, float))
+            and not isinstance(maximum, bool)
+            and minimum > maximum
+        ):
+            fail(f"{name} min_acu {minimum} exceeds max_acu {maximum}")
+        replicas = entry.get("num_read_replicas", 0)
+        if isinstance(replicas, bool) or not isinstance(replicas, int) or replicas < 0:
+            fail(f"{name} num_read_replicas must be a non-negative integer, got {replicas!r}")
+        backup = entry.get("backup_retention_days", AURORA_BACKUP_DAYS_DEFAULT)
+        if isinstance(backup, bool) or not isinstance(backup, int) or not 1 <= backup <= 35:
+            fail(f"{name} backup_retention_days must be an integer 1-35, got {backup!r}")
+        for flag in ("storage_encrypted", "deletion_protection", "skip_final_snapshot"):
+            value = entry.get(flag, flag == "storage_encrypted")
+            if not isinstance(value, bool):
+                fail(f"{name} {flag} must be a boolean, got {value!r}")
     return errors
 
 
@@ -331,5 +449,24 @@ def load(toml_path: Path) -> InfraDeclaration:
                 tier=entry.get("tier", ATLAS_TIER),
             )
             for entry in data.get("atlas", [])
+        ),
+        aurora_ledger=tuple(
+            AuroraEntry(
+                name=entry["name"],
+                engine=entry.get("engine", AURORA_ENGINE),
+                engine_version=entry.get("engine_version", AURORA_ENGINE_VERSION_DEFAULT),
+                database_name=entry["database_name"],
+                port=entry.get("port", AURORA_PORT_DEFAULT),
+                min_acu=entry["min_acu"],
+                max_acu=entry["max_acu"],
+                num_read_replicas=entry.get("num_read_replicas", 0),
+                storage_encrypted=entry.get("storage_encrypted", True),
+                backup_retention_days=entry.get(
+                    "backup_retention_days", AURORA_BACKUP_DAYS_DEFAULT
+                ),
+                deletion_protection=entry.get("deletion_protection", False),
+                skip_final_snapshot=entry.get("skip_final_snapshot", False),
+            )
+            for entry in data.get("aurora", [])
         ),
     )

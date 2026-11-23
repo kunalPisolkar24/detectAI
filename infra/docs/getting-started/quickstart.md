@@ -13,11 +13,14 @@ Get the offline gate green, then land the declared fabrics on Floci. The loop is
 
    If `envs/.env` exists, this does nothing — it never overwrites.
 
-2. **Fill the values the declaration needs.** The committed `infra.toml` declares all three fabrics, so `envs/.env` needs the cache token and subnets plus the Atlas keys, project ID, SCRAM user and explicit CIDRs:
+2. **Fill the values the declaration needs.** The committed `infra.toml` declares all four fabrics, so `envs/.env` needs the cache token and subnets, the Aurora master credentials and subnet IDs, plus the Atlas keys, project ID, SCRAM user and explicit CIDRs. The committed `.env.example` carries shape-valid dummy values for every key:
 
    ```ini
    REDIS_AUTH_TOKEN=replace-with-a-16-char-minimum-token
    CACHE_SUBNET_IDS=subnet-default-ap-southeast-2-a
+   DB_MASTER_USERNAME=<aurora-master-user>
+   DB_MASTER_PASSWORD=<16-char-minimum-password>
+   DB_SUBNET_IDS=subnet-a,subnet-b
    MONGODB_ATLAS_PUBLIC_KEY=<atlas-public-key>
    MONGODB_ATLAS_PRIVATE_KEY=<atlas-private-key>
    MONGODB_ATLAS_PROJECT_ID=<24-hex-project-id>
@@ -83,7 +86,7 @@ graph LR
     PLAN -.->|"Atlas is real MongoDB Cloud on both planes"| APPLY
 ```
 
-**Read the plan before applying.** Floci emulates the AWS fabrics, but Atlas has no emulator: a declared `[[atlas]]` cluster is real MongoDB Cloud on every plane, and the state plane only stores its Terraform state. For a local-only run, remove the `[[atlas]]` section from `infra.toml` before planning.
+**Read the plan before applying.** Floci emulates the AWS fabrics, but Atlas has no emulator: a declared `[[atlas]]` cluster is real MongoDB Cloud on every plane, and the state plane only stores its Terraform state. Aurora Serverless v2 is only partially modeled by the emulator, so the committed ledger is verified with read-only plans, not applies. For a local-only run, remove the `[[atlas]]` and `[[aurora]]` sections from `infra.toml` before planning.
 
 ## Working without a plane
 

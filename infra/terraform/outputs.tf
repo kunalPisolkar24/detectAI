@@ -40,3 +40,29 @@ output "atlas_fabric" {
   description = "Planned Atlas shape by declared cluster name."
   value       = try(module.atlas[0].fabric, {})
 }
+
+output "db_endpoints" {
+  description = "Aurora writer endpoints by declared cluster name."
+  value       = try(module.aurora[0].endpoints, {})
+}
+
+output "db_reader_endpoints" {
+  description = "Aurora reader endpoints by declared cluster name."
+  value       = try(module.aurora[0].reader_endpoints, {})
+}
+
+output "db_ports" {
+  description = "Aurora ports by declared cluster name."
+  value       = try(module.aurora[0].ports, {})
+}
+
+output "db_connection_urls" {
+  description = "postgresql:// URLs with master credentials; sensitive, for the service config plane."
+  sensitive   = true
+  value       = try(module.aurora[0].connection_urls, {})
+}
+
+output "db_fabric" {
+  description = "Planned Aurora shape by declared cluster name."
+  value       = try(module.aurora[0].fabric, {})
+}

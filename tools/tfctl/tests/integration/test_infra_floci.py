@@ -76,7 +76,7 @@ def test_plan_rides_the_persistent_state_plane(values_ready):
     assert "state:  detectai-infra-tfstate-000000000000 / infra/floci/terraform.tfstate" in (
         result.stdout
     )
-    assert "fabrics: queues=2, elasticache=1, atlas=1" in result.stdout
+    assert "fabrics: queues=2, elasticache=1, atlas=1, aurora=1" in result.stdout
     assert "atlas is real MongoDB Cloud (state tracked on this plane)" in result.stdout
 
     rerun = run_cli("plan", "--stack-dir", str(INFRA_DIR))

@@ -1,12 +1,13 @@
 # Fabrics
 
-Three fabrics can be declared in `infra.toml`: SQS queues, a shared Redis cache, and an Atlas Free cluster. Each ledger maps to one Terraform module, and each name is the identity inside its ledger. Read [Architecture](architecture.md) for how a ledger becomes a module call.
+Four fabrics can be declared in `infra.toml`: SQS queues, a shared Redis cache, an Atlas Free cluster, and an Aurora PostgreSQL Serverless v2 database. Each ledger maps to one Terraform module, and each name is the identity inside its ledger. Read [Architecture](architecture.md) for how a ledger becomes a module call.
 
 | Ledger | Module | Provider | On Floci |
 |--------|--------|----------|----------|
 | `[[queues]]` | `modules/queues` | `aws` | Emulated |
 | `[[elasticache]]` | `modules/elasticache` | `aws` | Emulated |
 | `[[atlas]]` | `modules/atlas` | `mongodbatlas.fabric` (aliased) | Real API, state on the emulator |
+| `[[aurora]]` | `modules/aurora` | `aws` (RDS endpoint) | Partial emulation; plan only |
 
 ## The queue fabric
 
@@ -113,6 +114,39 @@ sequenceDiagram
 | Consumers | Per-service key prefixes and TTLs, per `services/chats/specification/references/cache.md` |
 
 Cache shape (name, engine, node type, port) is declared here. The token and VPC placement are plane values in `envs/.env`.
+
+## The Aurora fabric
+
+Aurora PostgreSQL Serverless v2 is the shared relational store. The ledger pins the engine to `aurora-postgresql`, the engine version (default `16.4`), the database name and port, and the scaling knobs: `min_acu` / `max_acu` (`0.5`–`1` in the committed declaration, accepted range `0.5`–`128` in `0.5` steps) and `num_read_replicas` (`0` means writer only).
+
+```mermaid
+graph TB
+    subgraph SHAPE["declared shape"]
+        SC["cluster: engine, version, ACU bounds, retention"]
+        REP["num_read_replicas = 0 → writer only"]
+    end
+
+    subgraph RESOURCES["aws_rds"]
+        SG["aws_db_subnet_group.this"]
+        CL["aws_rds_cluster.this<br/>serverlessv2_scaling_configuration"]
+        IN["aws_rds_cluster_instance.this<br/>db.serverless"]
+    end
+
+    SC --> CL
+    REP --> IN
+    SG --> CL --> IN
+    IN --> OUT["endpoints · ports · connection_urls · fabric"]
+```
+
+| Contract | Value |
+|----------|-------|
+| Engine | `aurora-postgresql`, `engine_mode = "provisioned"` |
+| Instance class | `db.serverless` for the writer and every reader |
+| Scaling | `min_acu` / `max_acu` from the ledger, currently `0.5`–`1` |
+| Topology | One writer plus `num_read_replicas`; no proxy resources |
+| Placement | Subnet IDs and optional security groups from `envs/.env` |
+
+The instance set is flattened into a `for_each` map because a Terraform resource cannot carry both `for_each` and `count`. New readers are additive; changing the replica count plans only additional instances. Floci's RDS emulation is partial, so this fabric is verified with read-only plans and mocked contract tests.
 
 ## The Atlas fabric
 

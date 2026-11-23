@@ -75,7 +75,8 @@ def stack_verb_flow(
     print(f"stack:   {declaration.stack_root}")
     print(
         f"fabrics: queues={len(declaration.queue_ledger)}, "
-        f"elasticache={len(declaration.cache_ledger)}, atlas={len(declaration.atlas_ledger)}"
+        f"elasticache={len(declaration.cache_ledger)}, atlas={len(declaration.atlas_ledger)}, "
+        f"aurora={len(declaration.aurora_ledger)}"
     )
     if declaration.atlas_ledger:
         print("note:   atlas is real MongoDB Cloud (state tracked on this plane)")

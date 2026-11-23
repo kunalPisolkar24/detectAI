@@ -53,7 +53,24 @@ ATLAS_TOML = (
     'tier = "M0"\n'
 )
 
-ALL_TOML = BOTH_TOML + '\n[[atlas]]\nname = "detectai-dev-mongo"\nregion = "AP_SOUTHEAST_2"\ntier = "M0"\n'
+AURORA_TOML = (
+    '[service]\nslug = "infra"\nregion = "ap-southeast-2"\n\n'
+    '[[aurora]]\nname = "detectai-dev-users"\nengine = "aurora-postgresql"\n'
+    'engine_version = "16.4"\ndatabase_name = "users_db"\nport = 5432\n'
+    "min_acu = 0.5\nmax_acu = 1\nnum_read_replicas = 0\n"
+    "storage_encrypted = true\nbackup_retention_days = 7\n"
+    "deletion_protection = false\nskip_final_snapshot = true\n"
+)
+
+ALL_TOML = (
+    BOTH_TOML
+    + '\n[[atlas]]\nname = "detectai-dev-mongo"\nregion = "AP_SOUTHEAST_2"\ntier = "M0"\n'
+    + '\n[[aurora]]\nname = "detectai-dev-users"\nengine = "aurora-postgresql"\n'
+    'engine_version = "16.4"\ndatabase_name = "users_db"\nport = 5432\n'
+    "min_acu = 0.5\nmax_acu = 1\nnum_read_replicas = 0\n"
+    "storage_encrypted = true\nbackup_retention_days = 7\n"
+    "deletion_protection = false\nskip_final_snapshot = true\n"
+)
 
 INFRA_ENV = {"AWS_REGION": "ap-southeast-2"}
 CACHE_ENV = {
@@ -70,6 +87,13 @@ ATLAS_ENV = {
     "ATLAS_DB_USERNAME": "chats_user",
     "ATLAS_DB_PASSWORD": "atlas-password-16-chars",
     "ATLAS_IP_CIDRS": "203.0.113.7/32,2401:4900::/64",
+}
+AURORA_ENV = {
+    **INFRA_ENV,
+    "DB_MASTER_USERNAME": "users",
+    "DB_MASTER_PASSWORD": "local-dev-db-password-16-chars",
+    "DB_SUBNET_IDS": "subnet-a,subnet-b",
+    "DB_SECURITY_GROUP_IDS": "sg-0123456789abcdef0",
 }
 
 SESSION = {
@@ -116,6 +140,7 @@ def test_declaration_matches_the_committed_schema(tmp_path):
     ]
     assert infra.cache_ledger == ()
     assert infra.atlas_ledger == ()
+    assert infra.aurora_ledger == ()
 
 
 def test_declaration_supports_each_fabric_independently(tmp_path):
@@ -141,11 +166,48 @@ def test_declaration_supports_each_fabric_independently(tmp_path):
         ("detectai-dev-mongo", "AP_SOUTHEAST_2", "M0")
     ]
 
+    aurora_only = declaration(tmp_path, AURORA_TOML)
+    assert aurora_only.queue_ledger == () and aurora_only.cache_ledger == ()
+    assert aurora_only.atlas_ledger == ()
+    assert [
+        (
+            entry.name,
+            entry.engine,
+            entry.engine_version,
+            entry.database_name,
+            entry.port,
+            entry.min_acu,
+            entry.max_acu,
+            entry.num_read_replicas,
+            entry.storage_encrypted,
+            entry.backup_retention_days,
+            entry.deletion_protection,
+            entry.skip_final_snapshot,
+        )
+        for entry in aurora_only.aurora_ledger
+    ] == [
+        (
+            "detectai-dev-users",
+            "aurora-postgresql",
+            "16.4",
+            "users_db",
+            5432,
+            0.5,
+            1,
+            0,
+            True,
+            7,
+            False,
+            True,
+        )
+    ]
+
     all_fabrics = declaration(tmp_path, ALL_TOML)
     assert (
         len(all_fabrics.queue_ledger) == 2
         and len(all_fabrics.cache_ledger) == 1
         and len(all_fabrics.atlas_ledger) == 1
+        and len(all_fabrics.aurora_ledger) == 1
     )
 
 
@@ -237,6 +299,38 @@ def test_declaration_supports_each_fabric_independently(tmp_path):
             '[service]\nslug = "infra"\n[[queues]]\nname = "a.fifo"\nunrelated = 1',
             "unknown field(s) ['unrelated']",
         ),
+        (
+            '[service]\nslug = "infra"\n[[aurora]]\nname = "DB_One"',
+            "must be a lowercase DNS-style name",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[aurora]]\nname = "db-one"\nengine = "mysql"',
+            "must be 'aurora-postgresql'",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[aurora]]\nname = "db-one"\ndatabase_name = "users_db"\nmin_acu = 0.25\nmax_acu = 1',
+            "min_acu must be a number 0.5-128 in 0.5 steps",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[aurora]]\nname = "db-one"\ndatabase_name = "users_db"\nmin_acu = 2\nmax_acu = 1',
+            "min_acu 2 exceeds max_acu 1",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[aurora]]\nname = "db-one"\ndatabase_name = "users_db"\nmin_acu = 0.5\nmax_acu = 1\nnum_read_replicas = -1',
+            "num_read_replicas must be a non-negative integer",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[aurora]]\nname = "db-one"\ndatabase_name = "users_db"\nmin_acu = 0.5\nmax_acu = 1\nbackup_retention_days = 0',
+            "backup_retention_days must be an integer 1-35",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[aurora]]\nname = "db-one"\ndatabase_name = "9bad"\nmin_acu = 0.5\nmax_acu = 1',
+            "must be a plain SQL identifier",
+        ),
+        (
+            '[service]\nslug = "infra"\n[[aurora]]\nname = "db-one"\ndatabase_name = "users_db"\nmin_acu = 0.5\nmax_acu = 1\nunrelated = 1',
+            "unknown field(s) ['unrelated']",
+        ),
         ("[queues", "cannot read"),
     ),
 )
@@ -311,6 +405,19 @@ def test_the_atlas_law_applies_on_every_plane(tmp_path):
     )
 
 
+def test_the_aurora_law_applies_only_when_a_database_is_declared(tmp_path):
+    aurora_only = declaration(tmp_path, AURORA_TOML)
+    missing = "\n".join(values.validate(aurora_only, INFRA_ENV, True))
+    assert "DB_MASTER_USERNAME is required" in missing
+    assert "DB_MASTER_PASSWORD is required" in missing
+    assert "DB_SUBNET_IDS is required" in missing
+    assert values.validate(aurora_only, AURORA_ENV, True) == []
+    assert values.validate(aurora_only, AURORA_ENV, False) == []
+
+    short = {**AURORA_ENV, "DB_MASTER_PASSWORD": "short"}
+    assert "16+ characters" in "\n".join(values.validate(aurora_only, short, True))
+
+
 def test_the_seeder_policy_scopes_the_state_plane_and_exactly_the_ledger(tmp_path):
     document = policy.seeder_policy_document(
         declaration(tmp_path), {}, True, "arn:aws:iam::123456789012:user/u"
@@ -376,6 +483,26 @@ def test_the_seeder_policy_adds_cache_access_only_for_declared_caches(tmp_path):
     ]
 
 
+def test_the_seeder_policy_adds_database_access_only_for_declared_aurora(tmp_path):
+    aurora_only = declaration(tmp_path, AURORA_TOML)
+    document = policy.seeder_policy_document(
+        aurora_only, {}, True, "arn:aws:iam::123456789012:user/u"
+    )
+    assert [statement["Sid"] for statement in document["Statement"]] == [
+        "RunTerraformStateBucket",
+        "RunTerraformStateObjects",
+        "ManageDatabaseFabric",
+    ]
+    db_statement = document["Statement"][2]
+    assert all(action.startswith("rds:") for action in db_statement["Action"])
+    assert not any("proxy" in action.lower() for action in db_statement["Action"])
+    assert db_statement["Resource"] == [
+        "arn:aws:rds:ap-southeast-2:000000000000:cluster:detectai-dev-users",
+        "arn:aws:rds:ap-southeast-2:000000000000:db:detectai-dev-users-writer",
+        "arn:aws:rds:ap-southeast-2:000000000000:subgrp:detectai-dev-users-subnet-group",
+    ]
+
+
 def test_tf_vars_carry_the_ledger_region_and_emulator(tmp_path, monkeypatch, clean_tf_env):
     infra = declaration(tmp_path)
     built = tfvars.build_tf_vars(infra, INFRA_ENV, True)
@@ -395,7 +522,9 @@ def test_tf_vars_carry_the_ledger_region_and_emulator(tmp_path, monkeypatch, cle
     }
     assert json.loads(built["TF_VAR_cache_clusters"]) == {}
     assert json.loads(built["TF_VAR_atlas_clusters"]) == {}
+    assert json.loads(built["TF_VAR_db_clusters"]) == {}
     assert "TF_VAR_cache_auth_token" not in built
+    assert "TF_VAR_db_master_username" not in built
     assert "TF_VAR_atlas_public_key" not in built
     assert "TF_VAR_emulator_endpoint" not in tfvars.build_tf_vars(infra, INFRA_ENV, False)
 
@@ -443,6 +572,30 @@ def test_tf_vars_carry_the_atlas_ledger_and_credentials(tmp_path, clean_tf_env):
     assert "TF_VAR_emulator_endpoint" not in built
 
 
+def test_tf_vars_carry_the_aurora_ledger_and_credentials(tmp_path, clean_tf_env):
+    built = tfvars.build_tf_vars(declaration(tmp_path, AURORA_TOML), AURORA_ENV, True)
+    assert json.loads(built["TF_VAR_db_clusters"]) == {
+        "detectai-dev-users": {
+            "name": "detectai-dev-users",
+            "engine": "aurora-postgresql",
+            "engine_version": "16.4",
+            "database_name": "users_db",
+            "port": 5432,
+            "min_acu": 0.5,
+            "max_acu": 1,
+            "num_read_replicas": 0,
+            "storage_encrypted": True,
+            "backup_retention_days": 7,
+            "deletion_protection": False,
+            "skip_final_snapshot": True,
+        }
+    }
+    assert built["TF_VAR_db_master_username"] == "users"
+    assert built["TF_VAR_db_master_password"] == "local-dev-db-password-16-chars"
+    assert json.loads(built["TF_VAR_db_subnet_ids"]) == ["subnet-a", "subnet-b"]
+    assert json.loads(built["TF_VAR_db_security_group_ids"]) == ["sg-0123456789abcdef0"]
+
+
 def test_stack_verb_flow_dry_run_prints_the_backend_and_commands(
     tmp_path, capsys, monkeypatch, clean_tf_env
 ):
@@ -457,7 +610,7 @@ def test_stack_verb_flow_dry_run_prints_the_backend_and_commands(
     assert code == 0
     out = capsys.readouterr().out
     assert "carrier: role session (promoted when the command runs)" in out
-    assert "fabrics: queues=2, elasticache=0, atlas=0" in out
+    assert "fabrics: queues=2, elasticache=0, atlas=0, aurora=0" in out
     assert "state:  detectai-infra-tfstate-000000000000 / infra/floci/terraform.tfstate" in out
     assert "endpoints = {" in out
     assert "then terraform plan" in out
@@ -478,7 +631,7 @@ def test_stack_verb_flow_notes_atlas_is_real_on_every_plane(
     for is_emulator in (True, False):
         assert flow_module.stack_verb_flow(atlas, ATLAS_ENV, is_emulator, "plan", args, None) == 0
         out = capsys.readouterr().out
-        assert "fabrics: queues=0, elasticache=0, atlas=1" in out
+        assert "fabrics: queues=0, elasticache=0, atlas=1, aurora=0" in out
         assert "note:   atlas is real MongoDB Cloud (state tracked on this plane)" in out
 
 
@@ -612,7 +765,7 @@ def test_cli_plan_dry_run_previews_the_plane(tmp_path, monkeypatch, capsys, clea
     assert cli.main(["plan", "--dry-run"], workspace=workspace) == 0
     out = capsys.readouterr().out
     assert "plane:   floci" in out
-    assert "fabrics: queues=2, elasticache=0, atlas=0" in out
+    assert "fabrics: queues=2, elasticache=0, atlas=0, aurora=0" in out
     assert "(dry run: no terraform, no AWS writes)" in out
 
 
@@ -764,7 +917,7 @@ def test_cli_stack_dir_drives_a_stack_from_a_foreign_cwd(
     assert cli.main(["plan", "--dry-run", "--stack-dir", str(stack_dir)]) == 0
     out = capsys.readouterr().out
     assert "plane:   floci (emulator http://localhost:4566)" in out
-    assert "fabrics: queues=2, elasticache=0, atlas=0" in out
+    assert "fabrics: queues=2, elasticache=0, atlas=0, aurora=0" in out
 
 
 def test_cli_stack_dir_resolves_a_relative_name_against_the_repo_root(

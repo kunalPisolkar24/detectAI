@@ -10,7 +10,7 @@ Start here:
 
 1. **[Quick Start](getting-started/quickstart.md)** — run the offline gate, then land the declared fabrics on Floci
 2. **[Architecture](concepts/architecture.md)** — how one `make plan` becomes a governed change
-3. **[Fabrics](concepts/fabrics.md)** — the three fabrics and the contracts they carry
+3. **[Fabrics](concepts/fabrics.md)** — the four fabrics and the contracts they carry
 
 ## Documentation by Topic
 
@@ -26,7 +26,7 @@ Start here:
 | Document | What You'll Learn | When to Read |
 |----------|-------------------|--------------|
 | [Architecture](concepts/architecture.md) | Component map, verb lifecycle, state and carrier | Understanding the system |
-| [Fabrics](concepts/fabrics.md) | Queues, cache, Atlas: resources, flows, contracts | Changing a fabric or debugging one |
+| [Fabrics](concepts/fabrics.md) | Queues, cache, Atlas, Aurora: resources, flows, contracts | Changing a fabric or debugging one |
 | [Docker Twins](concepts/docker-twins.md) | Local ElasticMQ, MongoDB and Redis stand-ins | Running services without a cloud plane |
 
 ### Guides
@@ -50,12 +50,12 @@ graph LR
     START --> VALS["envs/.env<br/>plane values"]
 
     subgraph DRIVE["tfctl infra kind — governed path"]
-        CHECK["validate values for<br/>the declared fabrics"] --> ROOT["terraform root<br/>three count-gated modules"]
+        CHECK["validate values for<br/>the declared fabrics"] --> ROOT["terraform root<br/>four count-gated modules"]
     end
 
     DECL --> CHECK
     VALS --> CHECK
-    ROOT --> FAB["queues · cache · atlas"]
+    ROOT --> FAB["queues · cache · atlas · aurora"]
     FAB --> OUT["fabric outputs<br/>URLs · URIs · shapes"]
     OUT --> END(["end: exit code + outputs"])
 
@@ -72,13 +72,14 @@ infra/
 ├── infra.toml          the declaration: which fabrics exist and their shape
 ├── envs/.env           the values file (gitignored; .env.example is the template)
 ├── terraform/          the root tfctl drives
-│   ├── main.tf               the three count-gated module calls
+│   ├── main.tf               the four count-gated module calls
 │   ├── providers.tf          AWS + aliased Atlas provider, emulator switching
 │   ├── variables.tf          inputs, validation, defaults
 │   ├── outputs.tf            the contract surface handed back to callers
 │   ├── modules/queues/       SQS fabric
 │   ├── modules/elasticache/  shared Redis fabric
 │   ├── modules/atlas/        MongoDB Atlas Free fabric
+│   ├── modules/aurora/       Aurora PostgreSQL Serverless v2 fabric
 │   └── tests/                mocked contract tests, one file per fabric
 ├── docker/             the local twins: elasticmq, mongo, redis
 ├── mk/                 make fragments: fabrics.mk (tfctl), tests.mk (offline gate)

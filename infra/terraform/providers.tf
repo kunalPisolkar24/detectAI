@@ -25,6 +25,7 @@ provider "aws" {
   endpoints {
     sqs         = local.effective_endpoint
     elasticache = local.effective_endpoint
+    rds         = local.effective_endpoint
   }
 
   default_tags {
