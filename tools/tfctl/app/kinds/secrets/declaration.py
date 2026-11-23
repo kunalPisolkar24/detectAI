@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import re
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from tomllib import TOMLDecodeError
 
 from app.engine.declaration.model import DeclarationError, REGION_RE, Declaration, seeder_role_for
+from app.engine.declaration.parse import parse_declaration
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 PLANE_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
@@ -154,8 +155,8 @@ def declaration_errors(data: dict) -> list[str]:
 
 def load(toml_path: Path) -> SecretsDeclaration:
     try:
-        data = tomllib.loads(toml_path.read_text())
-    except (tomllib.TOMLDecodeError, OSError) as exc:
+        data = parse_declaration(toml_path)
+    except (TOMLDecodeError, OSError) as exc:
         raise DeclarationError(f"cannot read {toml_path}: {exc}") from exc
     errors = declaration_errors(data)
     if errors:

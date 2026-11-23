@@ -27,6 +27,13 @@ Rules the loader enforces:
 - Atlas names follow the cache name law; regions look like `AP_SOUTHEAST_2`;
   tier must be `M0`.
 
+To run with a subset of fabrics locally, comment the header of each entry you
+do not want (`# [[atlas]]`, `# [[aurora]]`): its body is ignored up to the next
+header, so uncommenting restores it. Comment cross-references too — a disabled
+DLQ queue needs its producer's `dlq` and `max_receive_count` commented as well.
+Already-applied fabrics removed from the declaration are planned as destroys,
+so this is for fresh Floci runs.
+
 ## The values file
 
 `make env` copies `.env.example` → `envs/.env` if missing. Values are required

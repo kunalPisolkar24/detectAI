@@ -42,6 +42,25 @@ keys = ["UPLOAD_LIMIT_BYTES", "MAX_PDF_PAGES", "..."]
 
 Both planes take the same allowlist posture: a `.env` line whose key is not declared under `[secrets]` or `[ssm]` simply never reaches the plane. Nothing is seeded implicitly — the declaration is exhaustive.
 
+## Commenting out a whole section
+
+TOML's own `#` comments work on individual lines. For a whole table or array-of-tables entry, comment its **header** instead — the parser ignores that block up to the next header, so the body can stay in the file untouched:
+
+```toml
+[secrets]
+keys = ["API_KEY", "NEW_RELIC_LICENSE_KEY"]
+
+# [secrets.min_lengths]
+API_KEY = 16
+
+# [ssm]
+keys = ["UPLOAD_LIMIT_BYTES", "MAX_PDF_PAGES"]
+```
+
+One `#` on the header is enough; leaving the body lines verbatim is what makes the block easy to bring back. The same works for `[[queues]]`, `[[elasticache]]`, `[[atlas]]` and `[[aurora]]` in `infra.toml`, and for `[requires]` here. The comment line must be *only* the header (plus optional trailing `#...`) — prose like `# the [ssm] section` stays an ordinary comment.
+
+Coherence rules still apply to what remains: disabling a `[secrets]` key requires commenting its `min_lengths` floor and any `requires` entry that names it, and `[service]` must stay enabled. For a declared fabric that was already applied, removing it from `infra.toml` makes Terraform plan a destroy — use this for fresh local runs on the Floci plane.
+
 ## The rules the schema enforces
 
 The loader rejects the declaration before any verb runs (with an `error: secrets.toml — ...` line telling you exactly which rule broke):

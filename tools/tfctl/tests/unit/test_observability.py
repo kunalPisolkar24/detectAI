@@ -79,6 +79,7 @@ def test_declaration_matches_the_committed_schema(tmp_path):
         ('[extra]\nx = 1\n\n[service]\nslug = "observability"', "unknown section(s) ['extra']"),
         ('[service]\nslug = "o"\nstate = "x"', "unknown field(s) ['state']"),
         ("[secrets]\nkeys = []", "[service] is required"),
+        ('# [service]\nslug = "observability"', "[service] is required"),
         ('[service]\nslug = "observability"\nregion = "e u 1"', "must be a plain region code"),
         ("[service", "cannot read"),
     ),

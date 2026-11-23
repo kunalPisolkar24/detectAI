@@ -139,6 +139,28 @@ def test_declaration_matches_the_committed_schema(tmp_path):
     assert infra.aurora_ledger == ()
 
 
+def test_commented_fabric_headers_disable_only_those_fabrics(tmp_path):
+    text = ALL_TOML.replace("[[atlas]]", "# [[atlas]]").replace("[[aurora]]", "# [[aurora]]")
+    infra = declaration(tmp_path, text)
+    assert len(infra.queue_ledger) == 2
+    assert len(infra.cache_ledger) == 1
+    assert infra.atlas_ledger == ()
+    assert infra.aurora_ledger == ()
+
+
+def test_commented_queue_header_disables_that_entry(tmp_path):
+    infra = declaration(tmp_path, INFRA_TOML.replace("[[queues]]", "# [[queues]]", 1))
+    assert [(entry.name, entry.dlq, entry.max_receive_count) for entry in infra.queue_ledger] == [
+        ("payment_events_dlq.fifo", "", 0)
+    ]
+
+
+def test_commented_service_header_still_fails_validation(tmp_path):
+    with pytest.raises(DeclarationError) as excinfo:
+        declaration(tmp_path, INFRA_TOML.replace("[service]", "# [service]"))
+    assert "[service] is required" in str(excinfo.value)
+
+
 def test_declaration_supports_each_fabric_independently(tmp_path):
     queue_only = declaration(tmp_path, INFRA_TOML)
     assert len(queue_only.queue_ledger) == 2 and queue_only.cache_ledger == ()
@@ -527,6 +549,20 @@ def test_tf_vars_carry_the_ledger_region_and_emulator(tmp_path, monkeypatch, cle
     assert "TF_VAR_db_master_username" not in built
     assert "TF_VAR_atlas_public_key" not in built
     assert "TF_VAR_emulator_endpoint" not in tfvars.build_tf_vars(infra, INFRA_ENV, False)
+
+
+def test_commented_fabrics_produce_empty_tf_vars(tmp_path, clean_tf_env):
+    text = (
+        ALL_TOML.replace("[[elasticache]]", "# [[elasticache]]")
+        .replace("[[atlas]]", "# [[atlas]]")
+        .replace("[[aurora]]", "# [[aurora]]")
+    )
+    built = tfvars.build_tf_vars(declaration(tmp_path, text), INFRA_ENV, True)
+    assert len(json.loads(built["TF_VAR_queues"])) == 2
+    assert json.loads(built["TF_VAR_cache_clusters"]) == {}
+    assert json.loads(built["TF_VAR_atlas_clusters"]) == {}
+    assert json.loads(built["TF_VAR_db_clusters"]) == {}
+    assert "TF_VAR_atlas_public_key" not in built
 
 
 def test_tf_vars_carry_the_cache_ledger_and_placement(tmp_path, clean_tf_env):

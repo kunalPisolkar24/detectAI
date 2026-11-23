@@ -37,6 +37,12 @@ Optional extras: `region` and `recovery_window` (0 or 7–30 days) under
 `[service]`; `[requires]` pairing gates (if trigger key `X` is set in
 `.env`, blob key `Y` must also be set with at least `floor` chars).
 
+A whole table or `[[...]]` entry can be disabled by commenting just its header
+(`# [ssm]`, `# [[queues]]`): the parser ignores its body up to the next header,
+so uncommenting one line restores it. Cross-references must be disabled too —
+a removed secret key still needs its `min_lengths` floor and any `requires`
+entry commented out, and `[service]` must stay enabled.
+
 Three laws bite early — onboarding is where they all usually trip:
 
 - **The slug is forever.** Every AWS name derives from it; renaming later

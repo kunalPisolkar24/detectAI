@@ -31,6 +31,30 @@ The declaration is exhaustive and checked before any values are read:
 
 See [Fabrics](../concepts/fabrics.md) for what each ledger becomes.
 
+### Commenting out a fabric for a local run
+
+To run with a subset of the fabrics, comment out the **table header** of each entry you do not want. Everything up to the next header is ignored, so one `#` disables a whole block:
+
+```toml
+[[queues]]
+name = "payment_events.fifo"
+
+# [[elasticache]]
+name = "detectai-dev-cache"
+engine = "redis"
+
+# [[atlas]]
+name = "detectai-dev-mongo"
+region = "AP_SOUTHEAST_2"
+
+[[aurora]]
+name = "detectai-dev-users"
+```
+
+Only the headers need the `#`; leaving the body lines in place is fine. The remaining keys are commented by the parser, not deleted from the file, so uncommenting a header brings the whole entry back. Ordinary `#` line comments work as usual, including inside an active block.
+
+Cross-references must be disabled too: if you comment out the DLQ queue, also comment `dlq` and `max_receive_count` in the producer that points at it. `[service]` must stay enabled, and at least one fabric must remain. Terraform plans a destroy for any fabric that was previously applied but is no longer declared, so this is intended for fresh local runs (`PLANE=floci`).
+
 ## The values file
 
 Every value is a plain `KEY=value` line. Unknown keys are ignored; values are only required for fabrics the declaration actually contains. With all four ledgers declared, the full set is:

@@ -26,6 +26,20 @@ def test_document_parser_declaration_matches_the_committed_schema(tmp_path):
     assert load(toml) == DP
 
 
+def test_commented_secret_sections_disable_those_sections(tmp_path):
+    toml = tmp_path / "secrets.toml"
+    toml.write_text(
+        DP_TOML.replace("[secrets.min_lengths]", "# [secrets.min_lengths]")
+        .replace("[requires]", "# [requires]")
+        .replace("[ssm]", "# [ssm]")
+    )
+    declaration = load(toml)
+    assert declaration.blob_keys == ("API_KEY", "NEW_RELIC_LICENSE_KEY")
+    assert declaration.min_lengths == {}
+    assert declaration.requires == {}
+    assert declaration.ssm_keys == ()
+
+
 def test_derived_names_use_the_slug(tmp_path):
     toml = tmp_path / "secrets.toml"
     toml.write_text('[service]\nslug = "chats"\n\n[secrets]\nkeys = ["API_KEY"]\n')
