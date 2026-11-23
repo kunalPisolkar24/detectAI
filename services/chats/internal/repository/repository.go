@@ -1,4 +1,3 @@
-// Package repository owns the chat data access over MongoDB; it implements the Repository contract.
 package repository
 
 import (
@@ -22,7 +21,6 @@ const (
 // Repository is the chat data-access contract the service codes against. Every
 // method threads the owner's id — a chat missing or not owned answers models.ErrNotFound.
 type Repository interface {
-	// CreateChat inserts the chat shell; the service derives the title and saves the first message.
 	CreateChat(ctx context.Context, ownerID, title string) (models.Chat, error)
 	Chat(ctx context.Context, ownerID, chatID string) (models.Chat, error)
 	Chats(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, error)
@@ -49,7 +47,6 @@ type Mongo struct {
 
 var _ Repository = (*Mongo)(nil)
 
-// Ensures the data-model indexes.
 func New(ctx context.Context, database *driver.Database, telemetry observability.Telemetry) (*Mongo, error) {
 	if err := ensureIndexes(ctx, database); err != nil {
 		return nil, fmt.Errorf("repository: ensure indexes: %w", err)
@@ -61,12 +58,10 @@ func New(ctx context.Context, database *driver.Database, telemetry observability
 	}, nil
 }
 
-// record counts one datastore operation and times it.
 func (r *Mongo) record(operation string, err error, start time.Time) {
 	r.telemetry.RecordDatastoreOp(operation, datastoreResult(err), time.Since(start))
 }
 
-// datastoreResult classifies a repository call's outcome.
 func datastoreResult(err error) observability.DatastoreResult {
 	switch {
 	case err == nil:

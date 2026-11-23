@@ -24,8 +24,6 @@ func (m mapSource) Get(key string) (string, bool) {
 	return value, ok
 }
 
-// with merges the extra keys over the always-required MONGO_URI, REDIS_ENDPOINT,
-// and API_KEY.
 func with(extra map[string]string) mapSource {
 	source := mapSource{"MONGO_URI": testMongoURI, "REDIS_ENDPOINT": testRedisEndpoint, "API_KEY": testAPIKey}
 	for key, value := range extra {

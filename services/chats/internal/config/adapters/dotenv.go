@@ -1,4 +1,3 @@
-// Package adapters holds the plane readers; each fetches once and serves in-memory lookups.
 package adapters
 
 import (
@@ -36,7 +35,6 @@ func NewDotEnvAdapter(path string) (*DotEnvAdapter, error) {
 	return &DotEnvAdapter{values: values}, nil
 }
 
-// The parsed plane; treat the map as read-only.
 func (a *DotEnvAdapter) Fetch() map[string]string {
 	return a.values
 }

@@ -16,8 +16,6 @@ import (
 
 const seededBlob = `{"NEW_RELIC_LICENSE_KEY":"` + testLicenseKey + `"}`
 
-// seedProdPlane builds the prod source through the real adapters: one secrets
-// blob and one SSM page, or an SSM fetch failure.
 func seedProdPlane(t *testing.T, blob string, params map[string]string, ssmErr error) (config.Source, error) {
 	t.Helper()
 	secrets := &fakeSecrets{output: &secretsmanager.GetSecretValueOutput{SecretString: aws.String(blob)}}

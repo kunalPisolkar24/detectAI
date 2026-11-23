@@ -19,7 +19,6 @@ import (
 // writeAttempts bounds the read-insert race on the analysis upsert.
 const writeAttempts = 3
 
-// SaveUserMessage is insert-only: a duplicate id replays the stored message.
 func (r *Mongo) SaveUserMessage(ctx context.Context, ownerID string, msg models.Message) (models.Message, error) {
 	start := time.Now()
 	saved, err := r.saveUserMessage(ctx, ownerID, msg)
@@ -118,7 +117,6 @@ func (r *Mongo) saveAnalysisMessage(ctx context.Context, ownerID string, msg mod
 	return models.Message{}, errors.New("repository: save analysis message: concurrent write did not settle")
 }
 
-// ChatHistory pages a chat's messages newest-first.
 func (r *Mongo) ChatHistory(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]models.Message, string, error) {
 	start := time.Now()
 	messages, next, err := r.chatHistory(ctx, ownerID, chatID, cursor, limit)

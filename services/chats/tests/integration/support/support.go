@@ -1,4 +1,3 @@
-// Package support starts the container-backed planes the integration tree runs against.
 package support
 
 import (
@@ -27,13 +26,11 @@ const (
 	stopBudget  = 30 * time.Second
 )
 
-// MongoFixture is a running mongo container and the URI that reaches it.
 type MongoFixture struct {
 	Container *tcmongo.MongoDBContainer
 	URI       string
 }
 
-// RedisFixture is a running redis container and the endpoint that reaches it.
 type RedisFixture struct {
 	Container *tcredis.RedisContainer
 	Endpoint  string
@@ -52,8 +49,6 @@ var (
 	redisErr    error
 )
 
-// DockerUp reports whether the daemon is reachable; a machine without it skips
-// the container-backed layer instead of failing it.
 func DockerUp() bool {
 	dockerOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -68,8 +63,6 @@ func DockerUp() bool {
 	return dockerUp
 }
 
-// Mongo returns the mongo container the package runs against, starting it on
-// first use and keeping it for the rest of the package.
 func Mongo(t testing.TB) *MongoFixture {
 	t.Helper()
 	if !DockerUp() {
@@ -99,8 +92,6 @@ func Mongo(t testing.TB) *MongoFixture {
 	return mongoShared
 }
 
-// Redis returns the redis container the package runs against, starting it on
-// first use and keeping it for the rest of the package.
 func Redis(t testing.TB) *RedisFixture {
 	t.Helper()
 	if !DockerUp() {
@@ -130,8 +121,6 @@ func Redis(t testing.TB) *RedisFixture {
 	return redisShared
 }
 
-// NewMongo runs a mongo container the caller owns; the outage paths use one
-// they can kill without disturbing the shared plane.
 func NewMongo(ctx context.Context) (*MongoFixture, error) {
 	container, err := tcmongo.Run(ctx, MongoImage)
 	if err != nil {
@@ -149,8 +138,6 @@ func NewMongo(ctx context.Context) (*MongoFixture, error) {
 	return &MongoFixture{Container: container, URI: uri}, nil
 }
 
-// NewRedis runs a redis container the caller owns; the outage paths use one
-// they can kill without disturbing the shared plane.
 func NewRedis(ctx context.Context) (*RedisFixture, error) {
 	container, err := tcredis.Run(ctx, RedisImage)
 	if err != nil {
@@ -168,7 +155,6 @@ func NewRedis(ctx context.Context) (*RedisFixture, error) {
 	return &RedisFixture{Container: container, Endpoint: endpoint}, nil
 }
 
-// Stop kills the container so the outage paths run against real wire truth.
 func (m *MongoFixture) Stop(t testing.TB) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), stopBudget)
@@ -178,7 +164,6 @@ func (m *MongoFixture) Stop(t testing.TB) {
 	}
 }
 
-// Stop kills the container so the outage paths run against real wire truth.
 func (r *RedisFixture) Stop(t testing.TB) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), stopBudget)
@@ -188,25 +173,20 @@ func (r *RedisFixture) Stop(t testing.TB) {
 	}
 }
 
-// Terminate removes the container.
 func (m *MongoFixture) Terminate(ctx context.Context) {
 	terminate(ctx, m.Container)
 }
 
-// Terminate removes the container.
 func (r *RedisFixture) Terminate(ctx context.Context) {
 	terminate(ctx, r.Container)
 }
 
-// Main runs the package's tests and removes the containers they started; every
-// integration package calls it from TestMain.
 func Main(m *testing.M) {
 	code := m.Run()
 	shutdown()
 	os.Exit(code)
 }
 
-// shutdown removes the containers the package started.
 func shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), stopBudget)
 	defer cancel()
@@ -234,7 +214,6 @@ func waitForMongo(t testing.TB, uri string) {
 	}
 }
 
-// waitForRedis blocks until the server answers a ping.
 func waitForRedis(t testing.TB, endpoint string) {
 	t.Helper()
 	if err := waitRedis(endpoint); err != nil {
@@ -256,8 +235,6 @@ func waitMongo(uri string) error {
 	}
 }
 
-// probeMongo runs the checks the service's own dial performs: a handshake and
-// one write, the two calls the service opens its sessions with.
 func probeMongo(uri string) error {
 	if err := pingMongo(uri); err != nil {
 		return err

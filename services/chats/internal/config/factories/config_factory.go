@@ -1,4 +1,3 @@
-// Package factories selects and wires the config plane sources.
 package factories
 
 import (

@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
 )
 
-// The SSM tree the seeding contract provisions for this service.
 const SSMPrefix = "/detectai/chats/"
 
 // ParametersClient is the transport interface; the SDK ships no service-wide equivalent.
@@ -18,7 +17,6 @@ type ParametersClient interface {
 	GetParametersByPath(ctx context.Context, params *ssm.GetParametersByPathInput, optFns ...func(*ssm.Options)) (*ssm.GetParametersByPathOutput, error)
 }
 
-// Reads the service's SSM tree: paged, prefix-stripped, plain strings.
 type ParameterStoreAdapter struct {
 	client ParametersClient
 }
@@ -27,7 +25,6 @@ func NewParameterStoreAdapter(client ParametersClient) *ParameterStoreAdapter {
 	return &ParameterStoreAdapter{client: client}
 }
 
-// The plane's key/value map; treat it as read-only.
 func (a *ParameterStoreAdapter) Fetch() (map[string]string, error) {
 	values := make(map[string]string)
 	input := &ssm.GetParametersByPathInput{

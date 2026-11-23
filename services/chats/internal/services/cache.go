@@ -126,8 +126,6 @@ func (s *ChatService) putHead(ctx context.Context, chatID string, page models.Pa
 	}
 }
 
-// recordCacheRead counts one cache lookup: a hit, a miss, or a fault the read
-// absorbs.
 func (s *ChatService) recordCacheRead(operation string, found bool, err error, start time.Time) {
 	result := observability.CacheMiss
 	switch {
@@ -139,7 +137,6 @@ func (s *ChatService) recordCacheRead(operation string, found bool, err error, s
 	s.telemetry.RecordCacheOp(operation, result, time.Since(start))
 }
 
-// recordCacheWrite counts one cache write or invalidation.
 func (s *ChatService) recordCacheWrite(operation string, err error, start time.Time) {
 	result := observability.CacheOK
 	if err != nil {
@@ -148,7 +145,6 @@ func (s *ChatService) recordCacheWrite(operation string, err error, start time.T
 	s.telemetry.RecordCacheOp(operation, result, time.Since(start))
 }
 
-// absorb drops a cache fault: a cache fault never fails an RPC.
 func (s *ChatService) absorb(ctx context.Context, op string, err error) {
 	s.logger.WarnContext(ctx, "cache fault absorbed", "op", op, "error", err)
 }

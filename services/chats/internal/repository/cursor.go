@@ -6,7 +6,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 )
 
-// keysetFilter narrows a history query to the messages older than the cursor's tuple.
 func keysetFilter(chatID string, key models.CursorKey) bson.M {
 	return bson.M{
 		"chat_id": chatID,

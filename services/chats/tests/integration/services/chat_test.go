@@ -1,4 +1,3 @@
-// Package services_test drives the chat service against container-backed mongo and redis.
 package services_test
 
 import (
@@ -28,8 +27,6 @@ func TestMain(m *testing.M) {
 	support.Main(m)
 }
 
-// stack is the service wired to the container planes, with a raw redis client
-// for the assertions the cache surface does not expose.
 type stack struct {
 	service *services.ChatService
 	redis   *driver.Client
@@ -237,14 +234,11 @@ func TestARedisOutageDegradesToTheSource(t *testing.T) {
 	}
 }
 
-// newStack wires the service to the shared container planes.
 func newStack(t *testing.T) *stack {
 	t.Helper()
 	return newStackWith(t, support.Redis(t).Endpoint, slog.Default())
 }
 
-// newStackWith wires the service to the given redis endpoint, so the outage
-// paths can point it at a container they kill.
 func newStackWith(t *testing.T, endpoint string, logger *slog.Logger) *stack {
 	t.Helper()
 	mongoURI := support.Mongo(t).URI
@@ -281,7 +275,6 @@ func newStackWith(t *testing.T, endpoint string, logger *slog.Logger) *stack {
 	}
 }
 
-// owner returns an identity no other test shares.
 func owner() string {
 	return "owner-" + uuid.NewString()
 }

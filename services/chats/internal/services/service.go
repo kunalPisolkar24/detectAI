@@ -1,5 +1,3 @@
-// Package services holds the chats use cases and the contract the transport
-// layer codes against.
 package services
 
 import (
@@ -13,7 +11,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
 )
 
-// Service is the chats use-case surface the transport layer codes against.
 type Service interface {
 	CreateChat(ctx context.Context, ownerID, initialMessage string) (models.Chat, error)
 	GetChat(ctx context.Context, ownerID, chatID string) (models.Chat, []models.Message, string, error)

@@ -13,7 +13,6 @@ import (
 
 const exportInterval = 15 * time.Second
 
-// MetricsAdapter owns one MeterProvider reading on the push cadence.
 type MetricsAdapter struct {
 	exporter sdkmetric.Exporter
 	provider *sdkmetric.MeterProvider
@@ -23,7 +22,6 @@ func NewMetricsAdapter(exporter sdkmetric.Exporter) *MetricsAdapter {
 	return &MetricsAdapter{exporter: exporter}
 }
 
-// Start builds the provider once; a second call is a wiring bug.
 func (a *MetricsAdapter) Start(res *resource.Resource) error {
 	if a.provider != nil {
 		return fmt.Errorf("adapters: the metrics provider already started")
@@ -33,7 +31,6 @@ func (a *MetricsAdapter) Start(res *resource.Resource) error {
 	return nil
 }
 
-// Meter returns the started provider's meter; call after Start.
 func (a *MetricsAdapter) Meter() (otelmetric.Meter, error) {
 	if a.provider == nil {
 		return nil, fmt.Errorf("adapters: the metrics provider never started")
@@ -41,7 +38,6 @@ func (a *MetricsAdapter) Meter() (otelmetric.Meter, error) {
 	return a.provider.Meter("chats"), nil
 }
 
-// Shutdown stops the periodic reader within its flush cap.
 func (a *MetricsAdapter) Shutdown(ctx context.Context) error {
 	if a.provider == nil {
 		return nil

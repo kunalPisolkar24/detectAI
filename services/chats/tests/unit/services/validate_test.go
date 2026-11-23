@@ -24,7 +24,6 @@ func completedResult() *models.AnalysisResult {
 	return &models.AnalysisResult{Label: models.LabelAI, Confidence: 0.9, Scores: models.Scores{AI: 0.9, Human: 0.1}}
 }
 
-// assertPayload wants nil when want is empty, otherwise a validation error carrying it.
 func assertPayload(t *testing.T, err error, want string) {
 	t.Helper()
 	if want == "" {

@@ -12,12 +12,10 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config/adapters"
 )
 
-// AWSClientFactory resolves the region and optional endpoint override once; credentials stay ambient.
 type AWSClientFactory struct {
 	base aws.Config
 }
 
-// Loads the base AWS config for the prod plane; clients stay method-local.
 func NewAWSClientFactory(ctx context.Context) (AWSClientFactory, error) {
 	loaded, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {

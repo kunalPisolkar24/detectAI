@@ -1,4 +1,3 @@
-// Package router_test drives the mounted ChatService against container-backed mongo and redis.
 package router_test
 
 import (
@@ -39,7 +38,6 @@ func TestMain(m *testing.M) {
 	support.Main(m)
 }
 
-// stack is the whole service, booted the way cmd/api boots it.
 type stack struct {
 	client  chatv1connect.ChatServiceClient
 	http    *http.Client
@@ -548,7 +546,6 @@ func TestAMongoOutageAnswersUnavailable(t *testing.T) {
 	}
 }
 
-// request returns a request the auth interceptor accepts.
 func request[T any](ownerID string, msg *T) *connect.Request[T] {
 	req := connect.NewRequest(msg)
 	req.Header().Set("x-api-key", testAPIKey)
@@ -556,26 +553,21 @@ func request[T any](ownerID string, msg *T) *connect.Request[T] {
 	return req
 }
 
-// newStack boots the service against the shared container planes.
 func newStack(t *testing.T) *stack {
 	t.Helper()
 	return newStackWith(t, defaultCreate, defaultWrite)
 }
 
-// newStackWith boots the service with the given burst budgets.
 func newStackWith(t *testing.T, createLimit, writeLimit int) *stack {
 	t.Helper()
 	return boot(t, support.Mongo(t).URI, support.Redis(t).Endpoint, createLimit, writeLimit)
 }
 
-// newStackWithMongo boots the service against the given mongo, so the outage
-// path can point it at a container it kills.
 func newStackWithMongo(t *testing.T, mongoURI string) *stack {
 	t.Helper()
 	return boot(t, mongoURI, support.Redis(t).Endpoint, defaultCreate, defaultWrite)
 }
 
-// boot assembles the service exactly as cmd/api does and serves it on a listener.
 func boot(t *testing.T, mongoURI, redisEndpoint string, createLimit, writeLimit int) *stack {
 	t.Helper()
 
@@ -625,7 +617,6 @@ func boot(t *testing.T, mongoURI, redisEndpoint string, createLimit, writeLimit 
 	}
 }
 
-// owner returns an identity no other test shares.
 func owner() string {
 	return "owner-" + uuid.NewString()
 }

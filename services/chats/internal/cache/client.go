@@ -1,5 +1,3 @@
-// Package cache owns the cache plane: the redis client, the cache-aside
-// entries surface, the burst counter, and the contracts they implement.
 package cache
 
 import (
@@ -16,8 +14,6 @@ type Client struct {
 	client *driver.Client
 }
 
-// Connect dials the endpoint and fails loud when the server is unreachable.
-// A rediss:// endpoint enables TLS; the caller owns the context budget.
 func Connect(ctx context.Context, endpoint string) (*Client, error) {
 	opts, err := clientOptions(endpoint)
 	if err != nil {

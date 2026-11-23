@@ -1,4 +1,3 @@
-// Package services_test drives the chats service layer over fake data access and a fake cache.
 package services_test
 
 import (
@@ -16,8 +15,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 )
 
-// fakeRepository records the calls the service makes and answers from the
-// function fields a test sets.
 type fakeRepository struct {
 	createChat          func(ctx context.Context, ownerID, title string) (models.Chat, error)
 	chat                func(ctx context.Context, ownerID, chatID string) (models.Chat, error)
@@ -95,7 +92,6 @@ func (f *fakeRepository) ChatHistory(ctx context.Context, ownerID, chatID, curso
 	return f.chatHistory(ctx, ownerID, chatID, cursor, limit)
 }
 
-// countOf counts how often the service called one repository method.
 func countOf(calls []string, name string) int {
 	total := 0
 	for _, call := range calls {
@@ -106,7 +102,6 @@ func countOf(calls []string, name string) int {
 	return total
 }
 
-// fakeCache is an in-memory cache plane that can be told to fail.
 type fakeCache struct {
 	chats map[string]models.Chat
 	lists map[string][]models.ChatSummary

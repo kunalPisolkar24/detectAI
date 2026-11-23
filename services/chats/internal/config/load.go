@@ -1,4 +1,3 @@
-// Package config resolves the boot config per deployment plane.
 package config
 
 import (

@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// A prod plane reader the adapters satisfy structurally.
 type Plane interface {
 	Fetch() (map[string]string, error)
 }

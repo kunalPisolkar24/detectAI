@@ -32,8 +32,6 @@ func (s *ChatService) CreateChat(ctx context.Context, ownerID, initialMessage st
 	return chat, nil
 }
 
-// GetChat returns the chat meta with its head page and the cursor that
-// chains to the next one.
 func (s *ChatService) GetChat(ctx context.Context, ownerID, chatID string) (models.Chat, []models.Message, string, error) {
 	if err := ValidateChatID(chatID); err != nil {
 		return models.Chat{}, nil, "", s.reject(err)
@@ -117,8 +115,6 @@ func (s *ChatService) SaveAnalysisMessage(ctx context.Context, ownerID, chatID, 
 	return saved, nil
 }
 
-// GetChatHistory pages a chat's history newest-first. The first page comes
-// from the cache; the cursor pages read the source.
 func (s *ChatService) GetChatHistory(ctx context.Context, ownerID, chatID, cursor string, limit int) ([]models.Message, string, error) {
 	if err := ValidateChatID(chatID); err != nil {
 		return nil, "", s.reject(err)
@@ -141,7 +137,6 @@ func (s *ChatService) GetChatHistory(ctx context.Context, ownerID, chatID, curso
 	return page.Messages, page.NextCursor, nil
 }
 
-// reject counts the rejected payload field and hands the error back unchanged.
 func (s *ChatService) reject(err error) error {
 	var validation *ValidationError
 	if errors.As(err, &validation) {

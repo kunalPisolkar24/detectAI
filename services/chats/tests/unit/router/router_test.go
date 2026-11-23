@@ -35,7 +35,6 @@ type fakeDatabase struct {
 func (f fakeDatabase) Ping(context.Context) error       { return f.pingErr }
 func (f fakeDatabase) Disconnect(context.Context) error { return nil }
 
-// stubService answers the one RPC the router tests exercise.
 type stubService struct {
 	getChat func(ctx context.Context, ownerID, chatID string) (models.Chat, []models.Message, string, error)
 }
@@ -106,7 +105,6 @@ func newH2CServer(t *testing.T, database db.Database, service stubService) *http
 	return srv
 }
 
-// h2cClient speaks HTTP/2 without TLS, the way grpcurl reaches the service.
 func h2cClient() *http.Client {
 	protocols := new(http.Protocols)
 	protocols.SetUnencryptedHTTP2(true)

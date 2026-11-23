@@ -18,7 +18,6 @@ type Client struct {
 
 var _ Database = (*Client)(nil)
 
-// Connect dials the URI and fails loud when the server is unreachable. The caller owns the context budget.
 func Connect(ctx context.Context, uri, database string) (*Client, error) {
 	client, err := driver.Connect(options.Client().
 		ApplyURI(uri).

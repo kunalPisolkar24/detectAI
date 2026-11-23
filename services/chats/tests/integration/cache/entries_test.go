@@ -18,7 +18,6 @@ func newEntries(t *testing.T) *chatscache.Entries {
 	return chatscache.NewEntries(connectContainer(t))
 }
 
-// rawClient dials redis directly for the assertions the cache surface does not expose.
 func rawClient(t *testing.T) *driver.Client {
 	t.Helper()
 	opts, err := driver.ParseURL(support.Redis(t).Endpoint)

@@ -1,4 +1,3 @@
-// Package handlers implements the ChatService wire handler for the router.
 package handlers
 
 import (

@@ -17,8 +17,6 @@ import (
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
 
-// recordingTelemetry captures what the interceptor reports to the seam. The
-// server handles the call on its own goroutine, so every read is guarded.
 type recordingTelemetry struct {
 	mu         sync.Mutex
 	tracked    []string
@@ -65,7 +63,6 @@ func (r *recordingTelemetry) snapshot() ([]string, []observability.RPCStatus, []
 	return r.tracked, r.statuses, r.codes, r.procedures
 }
 
-// telemetryServer serves the chat RPCs behind the telemetry interceptor.
 func telemetryServer(t *testing.T, service *chatshandlers.Handler, recorder *recordingTelemetry) (*httptest.Server, chatv1connect.ChatServiceClient) {
 	t.Helper()
 	path, handler := chatv1connect.NewChatServiceHandler(
@@ -83,7 +80,6 @@ func telemetryServer(t *testing.T, service *chatshandlers.Handler, recorder *rec
 	return mux, chatv1connect.NewChatServiceClient(mux.Client(), mux.URL)
 }
 
-// getChatRequest is a request the auth interceptor accepts.
 func getChatRequest() *connect.Request[chatv1.GetChatRequest] {
 	req := connect.NewRequest(&chatv1.GetChatRequest{ChatId: "chat-1"})
 	req.Header().Set("x-user-id", "owner-1")
@@ -152,7 +148,6 @@ func TestTheInterceptorRecordsAPanicAsAnInternalFailure(t *testing.T) {
 		},
 	}), recorder)
 
-	// The server drops the connection on the panic, so the call itself fails.
 	if _, err := client.GetChat(context.Background(), getChatRequest()); err == nil {
 		t.Fatal("GetChat answered without an error, want the panic to fail the call")
 	}

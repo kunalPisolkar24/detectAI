@@ -14,7 +14,6 @@ func Health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// The database must answer a ping within the probe budget.
 func Ready(database db.Database) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), readyPingBudget)

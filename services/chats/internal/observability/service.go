@@ -32,7 +32,6 @@ const (
 	InstrumentValidationRejections = "chats_validation_rejections_total"
 )
 
-// The RPC semantic conventions the procedure spans carry.
 const (
 	attributeRPCSystem    = "rpc.system"
 	attributeRPCService   = "rpc.service"
@@ -42,7 +41,6 @@ const (
 	rpcSystemConnectRPC = "connect_rpc"
 )
 
-// TelemetryService realizes the Telemetry seam on the started SDK providers.
 type TelemetryService struct {
 	serviceName string
 	traces      *adapters.TracesAdapter
@@ -96,8 +94,6 @@ func newTelemetryService(serviceName string, traces *adapters.TracesAdapter, met
 	return s, nil
 }
 
-// TrackRPC opens the procedure's server span under the gin route span; the closer
-// ends it with the RPC's final status.
 func (s *TelemetryService) TrackRPC(ctx context.Context, procedure string) (context.Context, func(RPCStatus)) {
 	ctx, span := s.tracer.Start(ctx, strings.TrimPrefix(procedure, "/"), oteltrace.WithAttributes(
 		attribute.String(attributeRPCSystem, rpcSystemConnectRPC),
@@ -113,7 +109,6 @@ func (s *TelemetryService) TrackRPC(ctx context.Context, procedure string) (cont
 	}
 }
 
-// RecordRPC counts the answer and times it; the error counter takes only the failures.
 func (s *TelemetryService) RecordRPC(procedure string, code RPCStatus, duration time.Duration) {
 	method := methodOf(procedure)
 	s.rpcRequests.Add(context.Background(), 1, otelmetric.WithAttributes(
@@ -130,7 +125,6 @@ func (s *TelemetryService) RecordRPC(procedure string, code RPCStatus, duration 
 		otelmetric.WithAttributes(attribute.String("procedure", method)))
 }
 
-// RecordCacheOp counts one cache operation and times it.
 func (s *TelemetryService) RecordCacheOp(operation string, result CacheResult, duration time.Duration) {
 	s.cacheOperations.Add(context.Background(), 1, otelmetric.WithAttributes(
 		attribute.String("operation", operation),
@@ -140,7 +134,6 @@ func (s *TelemetryService) RecordCacheOp(operation string, result CacheResult, d
 		otelmetric.WithAttributes(attribute.String("operation", operation)))
 }
 
-// RecordDatastoreOp counts one datastore operation and times it.
 func (s *TelemetryService) RecordDatastoreOp(operation string, result DatastoreResult, duration time.Duration) {
 	s.datastoreOperations.Add(context.Background(), 1, otelmetric.WithAttributes(
 		attribute.String("operation", operation),
@@ -150,31 +143,26 @@ func (s *TelemetryService) RecordDatastoreOp(operation string, result DatastoreR
 		otelmetric.WithAttributes(attribute.String("operation", operation)))
 }
 
-// RecordRateLimitRefusal counts one exhausted burst budget.
 func (s *TelemetryService) RecordRateLimitRefusal(scope string) {
 	s.rateLimitRefusals.Add(context.Background(), 1,
 		otelmetric.WithAttributes(attribute.String("scope", scope)))
 }
 
-// RecordValidationRejection counts one rejected payload field.
 func (s *TelemetryService) RecordValidationRejection(field string) {
 	s.validationRejections.Add(context.Background(), 1,
 		otelmetric.WithAttributes(attribute.String("field", field)))
 }
 
-// instrumentEngine joins otelgin; its route spans frame every RPC span.
 func (s *TelemetryService) instrumentEngine(engine *gin.Engine) {
 	engine.Use(otelgin.Middleware(s.serviceName, otelgin.WithTracerProvider(s.traces.Provider())))
 }
 
-// Shutdown drains each adapter and restores the plain stdout handler without failing the process.
 func (s *TelemetryService) Shutdown(ctx context.Context) error {
 	err := errors.Join(s.traces.Shutdown(ctx), s.metrics.Shutdown(ctx), s.logs.Shutdown(ctx))
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	return err
 }
 
-// methodOf returns the procedure's method name: the segment after the last slash.
 func methodOf(procedure string) string {
 	if index := strings.LastIndex(procedure, "/"); index >= 0 {
 		return procedure[index+1:]
@@ -182,7 +170,6 @@ func methodOf(procedure string) string {
 	return procedure
 }
 
-// serviceOf returns the procedure's service name: the segment before the last slash.
 func serviceOf(procedure string) string {
 	if index := strings.LastIndex(procedure, "/"); index > 0 {
 		return strings.TrimPrefix(procedure[:index], "/")

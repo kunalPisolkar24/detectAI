@@ -207,7 +207,6 @@ func labelFromProto(label chatv1.Label) models.Label {
 	}
 }
 
-// An absent timestamp is the zero time.
 func timestampOf(ts *timestamppb.Timestamp) time.Time {
 	if ts == nil {
 		return time.Time{}

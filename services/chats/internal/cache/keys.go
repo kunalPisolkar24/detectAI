@@ -5,11 +5,8 @@ import (
 	"time"
 )
 
-// prefix scopes every chats key on the shared instance; the namespace keeps
-// one instance safe for many services.
 const prefix = "chats:"
 
-// TTLs bound every cached entry, so a swept key is indistinguishable from an expired one.
 const (
 	ChatMetaTTL = 10 * time.Minute
 	ChatHeadTTL = 10 * time.Minute

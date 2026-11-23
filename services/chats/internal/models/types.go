@@ -1,11 +1,7 @@
-// Package models holds the chats vocabulary: the document shapes the stores
-// persist, the enums they carry, and the rules the domain and the adapters share.
 package models
 
 import "time"
 
-// Chat is one chat session document; the service composes the wire Chat by
-// joining this meta with a head page of messages.
 type Chat struct {
 	ID        string    `bson:"_id"`
 	UserID    string    `bson:"user_id"`
@@ -20,8 +16,6 @@ type ChatSummary struct {
 	UpdatedAt time.Time `bson:"updated_at"`
 }
 
-// Message is one flat message document; assistant analysis messages embed
-// their analysis payload inline.
 type Message struct {
 	ID        string    `bson:"_id"`
 	ChatID    string    `bson:"chat_id"`
@@ -39,7 +33,6 @@ type Analysis struct {
 	Result          *AnalysisResult `bson:"result,omitempty"`
 }
 
-// AnalysisResult is the detection verdict; Raw is the capped passthrough payload.
 type AnalysisResult struct {
 	Label      Label          `bson:"label"`
 	Confidence float64        `bson:"confidence"`

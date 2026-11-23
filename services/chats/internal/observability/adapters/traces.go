@@ -12,7 +12,6 @@ import (
 // flushTimeout caps every single flush inside the server's drain window.
 const flushTimeout = 5 * time.Second
 
-// TracesAdapter owns one TracerProvider built from the injected exporter.
 type TracesAdapter struct {
 	exporter    sdktrace.SpanExporter
 	sampleRatio float64
@@ -23,7 +22,6 @@ func NewTracesAdapter(exporter sdktrace.SpanExporter, sampleRatio float64) *Trac
 	return &TracesAdapter{exporter: exporter, sampleRatio: sampleRatio}
 }
 
-// Start builds the provider once; a second call is a wiring bug.
 func (a *TracesAdapter) Start(res *resource.Resource) error {
 	if a.provider != nil {
 		return fmt.Errorf("adapters: the traces provider already started")
@@ -36,12 +34,10 @@ func (a *TracesAdapter) Start(res *resource.Resource) error {
 	return nil
 }
 
-// Provider returns the started provider; call after Start.
 func (a *TracesAdapter) Provider() *sdktrace.TracerProvider {
 	return a.provider
 }
 
-// Shutdown force-flushes without racing the retrying worker past its cap.
 func (a *TracesAdapter) Shutdown(ctx context.Context) error {
 	if a.provider == nil {
 		return nil

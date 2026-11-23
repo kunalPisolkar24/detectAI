@@ -14,7 +14,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 )
 
-// CreateChat inserts the chat shell; the service derives the title and saves the first message.
 func (r *Mongo) CreateChat(ctx context.Context, ownerID, title string) (models.Chat, error) {
 	start := time.Now()
 	chat, err := r.createChat(ctx, ownerID, title)
@@ -37,7 +36,6 @@ func (r *Mongo) createChat(ctx context.Context, ownerID, title string) (models.C
 	return chat, nil
 }
 
-// Chat returns the chat meta; a missing or unowned chat is models.ErrNotFound.
 func (r *Mongo) Chat(ctx context.Context, ownerID, chatID string) (models.Chat, error) {
 	start := time.Now()
 	chat, err := r.chat(ctx, ownerID, chatID)
@@ -57,7 +55,6 @@ func (r *Mongo) chat(ctx context.Context, ownerID, chatID string) (models.Chat, 
 	return chat, nil
 }
 
-// Chats lists the owner's chats newest-first.
 func (r *Mongo) Chats(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, error) {
 	start := time.Now()
 	chats, err := r.listChats(ctx, ownerID, limit)
@@ -83,7 +80,6 @@ func (r *Mongo) listChats(ctx context.Context, ownerID string, limit int) ([]mod
 	return summaries, nil
 }
 
-// RenameChat changes the title and bumps updated_at.
 func (r *Mongo) RenameChat(ctx context.Context, ownerID, chatID, title string) (models.ChatSummary, error) {
 	start := time.Now()
 	summary, err := r.renameChat(ctx, ownerID, chatID, title)

@@ -12,8 +12,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
 )
 
-// The prod plane through the real floci endpoint; the test skips when :4566 is unreachable.
-
 func flociReachable() bool {
 	conn, err := net.DialTimeout("tcp", "127.0.0.1:4566", time.Second)
 	if err != nil {
@@ -75,7 +73,6 @@ func TestProdLoadBranchesOnTheSeededFlociPlanes(t *testing.T) {
 	if cfg.OTelEndpoint != env["OTEL_EXPORTER_OTLP_ENDPOINT"] {
 		t.Errorf("OTelEndpoint = %q, want the seeded gate %q", cfg.OTelEndpoint, env["OTEL_EXPORTER_OTLP_ENDPOINT"])
 	}
-	// A key absent from the seeded file must serve its default; present, the seeded value.
 	wantPort := 8090
 	if env["PORT"] != "" {
 		wantPort, _ = strconv.Atoi(env["PORT"])

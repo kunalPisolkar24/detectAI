@@ -1,4 +1,3 @@
-// Package server owns the process lifecycle: serve until SIGINT/SIGTERM, then drain.
 package server
 
 import (

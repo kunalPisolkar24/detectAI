@@ -17,9 +17,7 @@ type Cache interface {
 	PutChatList(ctx context.Context, ownerID string, chats []models.ChatSummary) error
 	Head(ctx context.Context, chatID string) (models.Page, bool, error)
 	PutHead(ctx context.Context, chatID string, page models.Page) error
-	// InvalidateMeta drops a chat's meta entry; the rename path leaves the head page alone.
 	InvalidateMeta(ctx context.Context, chatID string) error
-	// InvalidateChat drops a chat's meta and head entries; the append, update-analysis, and delete paths.
 	InvalidateChat(ctx context.Context, chatID string) error
 	InvalidateOwner(ctx context.Context, ownerID string) error
 }

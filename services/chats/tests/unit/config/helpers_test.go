@@ -1,4 +1,3 @@
-// Package config_test covers the config stack black-box through the exported API.
 package config_test
 
 import (
@@ -9,7 +8,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config/adapters"
 )
 
-// writePlane writes one file and returns its path, creating intermediate directories.
 func writePlane(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)

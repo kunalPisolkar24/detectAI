@@ -1,4 +1,3 @@
-// Package db_test drives the database client against a container-backed mongo.
 package db_test
 
 import (
@@ -40,7 +39,6 @@ func TestConnectFailsLoudOnUnreachable(t *testing.T) {
 	}
 }
 
-// connectContainer dials the client against the package's mongo container.
 func connectContainer(t *testing.T) *db.Client {
 	t.Helper()
 	uri := support.Mongo(t).URI

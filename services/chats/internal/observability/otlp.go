@@ -10,7 +10,6 @@ const (
 	logsSignal    = "/v1/logs"
 )
 
-// NewRelicKeyHeader is the header New Relic's OTLP endpoint authenticates with.
 const NewRelicKeyHeader = "api-key"
 
 func signalURL(endpoint, signal string) string {

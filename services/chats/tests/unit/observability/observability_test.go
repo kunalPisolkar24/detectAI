@@ -1,5 +1,3 @@
-// Package observability_test drives the telemetry boot against a receiver inside
-// the test process, so the units stay network-free.
 package observability_test
 
 import (
@@ -22,7 +20,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 )
 
-// otlpReceiver swallows OTLP POSTs inside the test process.
 type otlpReceiver struct {
 	t        *testing.T
 	endpoint string
@@ -69,7 +66,6 @@ func (r *otlpReceiver) payloads(path string) [][]byte {
 	return r.bodies[path]
 }
 
-// wiredConfig points the boot at the receiver with a throwaway license key.
 func wiredConfig(endpoint string) observability.Config {
 	return observability.Config{
 		Endpoint:       endpoint,
@@ -190,7 +186,6 @@ func TestWiredBootFallsBackToTheServiceDefaults(t *testing.T) {
 	}
 }
 
-// resourceAttributes reads the first decodable resource payload; exporters may gzip the protobuf.
 func resourceAttributes(t *testing.T, payloads [][]byte) map[string]string {
 	t.Helper()
 	for _, payload := range payloads {

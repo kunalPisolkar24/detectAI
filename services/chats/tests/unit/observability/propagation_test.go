@@ -112,7 +112,6 @@ func TestTheAppLabelsWinOverTheEnvironment(t *testing.T) {
 	}
 }
 
-// flush drains the telemetry so the exporter has shipped every signal.
 func flush(t *testing.T, tel observability.Telemetry) {
 	t.Helper()
 	drain, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -122,7 +121,6 @@ func flush(t *testing.T, tel observability.Telemetry) {
 	}
 }
 
-// spanTraceIDs reads the trace id of every exported span.
 func spanTraceIDs(t *testing.T, payloads [][]byte) []string {
 	t.Helper()
 	var ids []string
@@ -142,7 +140,6 @@ func spanTraceIDs(t *testing.T, payloads [][]byte) []string {
 	return ids
 }
 
-// logTraceIDs reads the trace id of every exported log record.
 func logTraceIDs(t *testing.T, payloads [][]byte) []string {
 	t.Helper()
 	var ids []string
@@ -162,7 +159,6 @@ func logTraceIDs(t *testing.T, payloads [][]byte) []string {
 	return ids
 }
 
-// unwrapGzip returns the payload's plain bytes; the exporters compress what they send.
 func unwrapGzip(t *testing.T, payload []byte) []byte {
 	t.Helper()
 	gunzip, err := gzip.NewReader(bytes.NewReader(payload))

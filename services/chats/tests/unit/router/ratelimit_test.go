@@ -1,4 +1,3 @@
-// Package router_test drives the rate-limit surface over the mounted ChatService.
 package router_test
 
 import (
@@ -18,14 +17,12 @@ import (
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
 
-// allowAllLimiter lets every call through.
 type allowAllLimiter struct{}
 
 func (allowAllLimiter) Consume(context.Context, string, string, int) (cache.Decision, error) {
 	return cache.Decision{Allowed: true}, nil
 }
 
-// stubLimiter records the checks it answers and returns a fixed outcome.
 type stubLimiter struct {
 	err       error
 	decision  cache.Decision
@@ -50,7 +47,6 @@ func (l *stubLimiter) Consume(_ context.Context, ownerID, scope string, limit in
 	return l.decision, nil
 }
 
-// authenticated returns a request the auth interceptor accepts.
 func authenticated[T any](msg *T) *connect.Request[T] {
 	req := connect.NewRequest(msg)
 	req.Header().Set("x-api-key", testAPIKey)

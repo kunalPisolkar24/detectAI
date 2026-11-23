@@ -1,4 +1,3 @@
-// Package handlers_test drives the ChatService handler over a stub service.
 package handlers_test
 
 import (
@@ -18,7 +17,6 @@ import (
 
 const testAPIKey = "key-0123456789abcdef79"
 
-// stubService answers the RPCs the handler tests exercise.
 type stubService struct {
 	createChat          func(ctx context.Context, ownerID, initialMessage string) (models.Chat, error)
 	chat                func(ctx context.Context, ownerID, chatID string) (models.Chat, []models.Message, string, error)
@@ -86,7 +84,6 @@ func (s stubService) GetChatHistory(ctx context.Context, ownerID, chatID, cursor
 	return s.chatHistory(ctx, ownerID, chatID, cursor, limit)
 }
 
-// ownerContext runs the auth interceptor and returns the context it resolved.
 func ownerContext(t *testing.T, apiKey, ownerID string) context.Context {
 	t.Helper()
 	req := connect.NewRequest(&chatv1.GetChatRequest{})

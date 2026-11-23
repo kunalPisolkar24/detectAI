@@ -17,13 +17,11 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 )
 
-// metricPoint is one exported data point: its attributes and its counter value.
 type metricPoint struct {
 	attributes map[string]string
 	value      int64
 }
 
-// metricPoints collects every exported data point by metric name.
 func metricPoints(t *testing.T, payloads [][]byte) map[string][]metricPoint {
 	t.Helper()
 	points := map[string][]metricPoint{}
@@ -50,7 +48,6 @@ func metricPoints(t *testing.T, payloads [][]byte) map[string][]metricPoint {
 	return points
 }
 
-// metricNames lists every exported metric, histogram or counter.
 func metricNames(t *testing.T, payloads [][]byte) map[string]bool {
 	t.Helper()
 	names := map[string]bool{}
@@ -70,7 +67,6 @@ func metricNames(t *testing.T, payloads [][]byte) map[string]bool {
 	return names
 }
 
-// spanRecord is one exported span: its name, its attributes, and its status.
 type spanRecord struct {
 	name       string
 	attributes map[string]string
@@ -100,7 +96,6 @@ func exportedSpans(t *testing.T, payloads [][]byte) []spanRecord {
 	return spans
 }
 
-// decodeAll unwraps the gzipped payloads the exporters produce.
 func decodeAll(t *testing.T, payloads [][]byte) [][]byte {
 	t.Helper()
 	var decoded [][]byte
@@ -235,7 +230,6 @@ func TestTheProcedureSpanCarriesTheRPCConventions(t *testing.T) {
 	}
 }
 
-// assertPoint checks that one exported data point carries the attributes and the value.
 func assertPoint(t *testing.T, points map[string][]metricPoint, name string, attributes map[string]string, value int64) {
 	t.Helper()
 	for _, point := range points[name] {

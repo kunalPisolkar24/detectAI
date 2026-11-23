@@ -10,7 +10,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
 )
 
-// recordingTelemetry captures what the repository reports to the seam.
 type recordingTelemetry struct {
 	operations []string
 	results    []observability.DatastoreResult
@@ -36,7 +35,6 @@ func (r *recordingTelemetry) RecordValidationRejection(string) {}
 
 func (r *recordingTelemetry) Shutdown(context.Context) error { return nil }
 
-// datastoreOp is one recorded datastore operation.
 type datastoreOp struct {
 	operation string
 	result    observability.DatastoreResult

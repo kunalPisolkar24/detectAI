@@ -23,8 +23,6 @@ const (
 	defaultSampleRatio    = 1.0
 )
 
-// Config is the observability slice of the boot config; the rest of the boot
-// config never reaches this package.
 type Config struct {
 	Endpoint       string
 	LicenseKey     string
@@ -33,7 +31,6 @@ type Config struct {
 	SampleRatio    float64
 }
 
-// Boot switches on the endpoint: blank returns NullTelemetry, set pushes OTLP/HTTPS gzip.
 func Boot(cfg Config, flick string) (Telemetry, error) {
 	if cfg.Endpoint == "" {
 		return NullTelemetry{}, nil
@@ -123,7 +120,6 @@ func sampleRatio(cfg Config) float64 {
 	return cfg.SampleRatio
 }
 
-// teeHandler fans every slog record to stdout and the OTLP bridge.
 type teeHandler struct {
 	stdout slog.Handler
 	otlp   slog.Handler
@@ -148,14 +144,12 @@ func (t teeHandler) WithGroup(name string) slog.Handler {
 	return teeHandler{stdout: t.stdout.WithGroup(name), otlp: t.otlp.WithGroup(name)}
 }
 
-// Wire installs the route-span middleware on a wired boot; the null boot installs nothing.
 func Wire(t Telemetry, engine *gin.Engine) {
 	if instrumenter, ok := t.(engineInstrumenter); ok {
 		instrumenter.instrumentEngine(engine)
 	}
 }
 
-// engineInstrumenter is what the wired build carries so Wire can type-switch.
 type engineInstrumenter interface {
 	instrumentEngine(*gin.Engine)
 }

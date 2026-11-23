@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// Config is the typed boot contract; plane keys without a field are ignored.
 type Config struct {
 	Port            int
 	DrainTimeout    time.Duration
@@ -82,7 +81,6 @@ func Resolve(source Source) (Config, error) {
 	return cfg, nil
 }
 
-// resolveRateLimits reads the burst budgets; an unset key takes the conservative default and a malformed one fails the boot.
 func resolveRateLimits(source Source, cfg *Config) error {
 	create, err := resolveRateLimitMax(source, "RATE_LIMIT_CREATE_MAX", defaultRateLimitCreateMax)
 	if err != nil {
@@ -97,7 +95,6 @@ func resolveRateLimits(source Source, cfg *Config) error {
 	return nil
 }
 
-// resolveRateLimitMax reads one burst budget; an unset or empty key takes the fallback, a malformed one fails the boot.
 func resolveRateLimitMax(source Source, key string, fallback int) (int, error) {
 	raw, ok := source.Get(key)
 	if !ok {
@@ -144,12 +141,10 @@ func resolveRedis(source Source, cfg *Config) error {
 	return nil
 }
 
-// redisEndpointShaped accepts both driver schemes; deeper validation belongs to the dial.
 func redisEndpointShaped(endpoint string) bool {
 	return strings.HasPrefix(endpoint, "redis://") || strings.HasPrefix(endpoint, "rediss://")
 }
 
-// resolveMongo reads the database keys; MONGO_URI is required and MONGO_DATABASE defaults to chat_db.
 func resolveMongo(source Source, cfg *Config) error {
 	raw, ok := source.Get("MONGO_URI")
 	if !ok {
@@ -168,12 +163,10 @@ func resolveMongo(source Source, cfg *Config) error {
 	return nil
 }
 
-// mongoURIShaped accepts both driver schemes; deeper validation belongs to the dial.
 func mongoURIShaped(uri string) bool {
 	return strings.HasPrefix(uri, "mongodb://") || strings.HasPrefix(uri, "mongodb+srv://")
 }
 
-// resolveObservability reads the OTel keys; a set endpoint demands the license key at the credential floor.
 func resolveObservability(source Source, cfg *Config) error {
 	if raw, ok := source.Get("OTEL_EXPORTER_OTLP_ENDPOINT"); ok {
 		endpoint := strings.TrimSpace(raw)

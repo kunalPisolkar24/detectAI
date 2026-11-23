@@ -12,7 +12,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
 )
 
-// recordingTelemetry captures what the service reports to the seam.
 type recordingTelemetry struct {
 	operations []string
 	results    []observability.CacheResult
@@ -43,20 +42,17 @@ func (r *recordingTelemetry) RecordValidationRejection(field string) {
 
 func (r *recordingTelemetry) Shutdown(context.Context) error { return nil }
 
-// cacheOp is one recorded cache operation.
 type cacheOp struct {
 	operation string
 	result    observability.CacheResult
 }
 
-// newRecordingService builds a service over the fakes with the seam recording.
 func newRecordingService(repo *fakeRepository, entries *fakeCache) (*services.ChatService, *recordingTelemetry) {
 	recorder := &recordingTelemetry{}
 	service := services.NewChatService(repo, entries, slog.New(slog.DiscardHandler), recorder)
 	return service, recorder
 }
 
-// readingRepo answers the reads a GetChat makes.
 func readingRepo() *fakeRepository {
 	return &fakeRepository{
 		chat: func(_ context.Context, ownerID, chatID string) (models.Chat, error) {

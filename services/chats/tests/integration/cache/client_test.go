@@ -1,4 +1,3 @@
-// Package cache_test drives the cache plane against a container-backed redis.
 package cache_test
 
 import (
@@ -38,7 +37,6 @@ func TestConnectFailsLoudOnUnreachable(t *testing.T) {
 	}
 }
 
-// connectContainer dials the client against the package's redis container.
 func connectContainer(t *testing.T) *chatscache.Client {
 	t.Helper()
 	endpoint := support.Redis(t).Endpoint

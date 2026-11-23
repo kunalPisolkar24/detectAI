@@ -8,8 +8,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 )
 
-// ValidationError is a request payload failing the contract's validation; the
-// service maps it to the wire's invalid-argument code.
 type ValidationError struct {
 	Field  string
 	Reason string

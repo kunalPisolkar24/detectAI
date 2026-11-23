@@ -21,8 +21,6 @@ return current
 // rather than the seconds a stalled redis would otherwise hold a write.
 const limiterTimeout = 250 * time.Millisecond
 
-// Limiter counts a caller's calls inside a fixed window and reports whether
-// the call fits the budget. A fault in the cache plane fails open.
 type Limiter interface {
 	Consume(ctx context.Context, ownerID, scope string, limit int) (Decision, error)
 }

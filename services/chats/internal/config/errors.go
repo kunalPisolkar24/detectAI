@@ -1,6 +1,5 @@
 package config
 
-// ConfigError wraps every config failure so the boot reports one typed error.
 type ConfigError struct {
 	cause error
 }

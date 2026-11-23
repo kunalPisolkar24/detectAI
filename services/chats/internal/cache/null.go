@@ -6,9 +6,6 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 )
 
-// NullCache is the degraded cache: every read misses so the source serves every
-// call, and every write is a no-op. It is used when the cache plane cannot be
-// reached at boot.
 type NullCache struct{}
 
 var _ Cache = NullCache{}
@@ -37,8 +34,6 @@ func (NullCache) InvalidateMeta(context.Context, string) error  { return nil }
 func (NullCache) InvalidateChat(context.Context, string) error  { return nil }
 func (NullCache) InvalidateOwner(context.Context, string) error { return nil }
 
-// NullLimiter is the degraded limiter: every call fits. It matches the
-// fail-open behavior of a limiter whose cache plane is unreachable.
 type NullLimiter struct{}
 
 var _ Limiter = NullLimiter{}

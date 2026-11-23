@@ -1,4 +1,3 @@
-// Package router wires the route surface onto the gin engine.
 package router
 
 import (

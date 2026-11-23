@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// NullTelemetry is the disabled boot for an unset OTEL_EXPORTER_OTLP_ENDPOINT.
 type NullTelemetry struct{}
 
 var _ Telemetry = NullTelemetry{}

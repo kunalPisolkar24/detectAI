@@ -1,4 +1,3 @@
-// Package repository_test drives the repository against a container-backed mongo.
 package repository_test
 
 import (
@@ -27,7 +26,6 @@ func TestMain(m *testing.M) {
 	support.Main(m)
 }
 
-// owner returns an identity no other test shares.
 func owner() string {
 	return "owner-" + uuid.NewString()
 }
@@ -65,7 +63,6 @@ func assertErrorIs(t *testing.T, err error, target error) {
 	}
 }
 
-// countMessages counts the messages left on a chat.
 func countMessages(t *testing.T, chatID string) int64 {
 	t.Helper()
 	count, err := connectContainer(t).Database().
@@ -77,7 +74,6 @@ func countMessages(t *testing.T, chatID string) int64 {
 	return count
 }
 
-// connectContainer dials the client against the package's mongo container.
 func connectContainer(t *testing.T) *db.Client {
 	t.Helper()
 	uri := support.Mongo(t).URI
@@ -696,8 +692,6 @@ func TestChatHistoryRejectsAnotherOwner(t *testing.T) {
 	assertErrorIs(t, err, models.ErrNotFound)
 }
 
-// indexKeys lists one collection's indexes through a raw inspector connection,
-// keyed by the "field:direction" signature of each index.
 func indexKeys(t *testing.T, collection string) map[string]bool {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

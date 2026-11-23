@@ -176,7 +176,6 @@ func TestAFaultSurfacesAsAnError(t *testing.T) {
 	}
 }
 
-// scanKeys collects the keys matching a pattern.
 func scanKeys(t *testing.T, client *driver.Client, pattern string) []string {
 	t.Helper()
 	var keys []string

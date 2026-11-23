@@ -47,8 +47,6 @@ func TestConsumeGivesUpOnASilentServer(t *testing.T) {
 	}
 }
 
-// serveSilentRedis answers the handshake and the ping, then leaves every
-// script evaluation unanswered.
 func serveSilentRedis(listener net.Listener) {
 	for {
 		conn, err := listener.Accept()
@@ -67,7 +65,6 @@ func serveSilentRedis(listener net.Listener) {
 				case "PING":
 					_, _ = conn.Write([]byte("+PONG\r\n"))
 				case "EVAL", "EVALSHA":
-					// never answered: the caller's deadline has to end it
 					continue
 				default:
 					_, _ = conn.Write([]byte("-ERR unknown command\r\n"))
@@ -77,7 +74,6 @@ func serveSilentRedis(listener net.Listener) {
 	}
 }
 
-// readCommand reads one RESP array of bulk strings and returns its command name.
 func readCommand(reader *bufio.Reader) (string, error) {
 	header, err := reader.ReadString('\n')
 	if err != nil {

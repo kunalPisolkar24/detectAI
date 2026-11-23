@@ -14,7 +14,6 @@ const (
 	userIDHeader = "x-user-id"
 )
 
-// ownerKey is the context key the resolved owner travels under.
 type ownerKey struct{}
 
 func OwnerFrom(ctx context.Context) (string, error) {
@@ -25,7 +24,6 @@ func OwnerFrom(ctx context.Context) (string, error) {
 	return ownerID, nil
 }
 
-// NewAuthInterceptor authenticates the caller and resolves the owner.
 func NewAuthInterceptor(apiKey string) connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
