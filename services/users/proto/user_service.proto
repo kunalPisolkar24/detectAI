@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package users.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/kunalPisolkar24/detectAI/services/users/proto;usersv1";
+
+service AuthService {
+  rpc Register(RegisterRequest) returns (User);
+  rpc Login(LoginRequest) returns (AuthTokens);
+  rpc Refresh(RefreshRequest) returns (AuthTokens);
+}
+
+service UserService {
+  rpc GetMe(GetMeRequest) returns (User);
+  rpc Logout(LogoutRequest) returns (google.protobuf.Empty);
+  rpc LogoutAll(LogoutAllRequest) returns (google.protobuf.Empty);
+}
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  string first_name = 3;
+  string last_name = 4;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message RefreshRequest {}
+
+message GetMeRequest {}
+
+message LogoutRequest {}
+
+message LogoutAllRequest {}
+
+message User {
+  string id = 1;
+  string email = 2;
+  string name = 3;
+  string first_name = 4;
+  string last_name = 5;
+  string image = 6;
+  bool email_verified = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message AuthTokens {
+  string access_token = 1;
+  string refresh_token = 2;
+  int64 expires_in = 3;
+  User user = 4;
+}

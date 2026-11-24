@@ -3,6 +3,7 @@ module github.com/kunalPisolkar24/detectAI/services/users
 go 1.27.1
 
 require (
+	connectrpc.com/connect v1.21.1
 	github.com/aws/aws-sdk-go-v2 v1.48.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.18
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.50.12
@@ -11,6 +12,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/redis/go-redis/v9 v9.7.3
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
@@ -60,5 +62,4 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
 )

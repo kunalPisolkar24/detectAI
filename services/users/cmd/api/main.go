@@ -10,6 +10,7 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/config"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/db"
+	"github.com/kunalPisolkar24/detectAI/services/users/internal/handlers"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/router"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/server"
 )
@@ -39,7 +40,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:      ":" + strconv.Itoa(cfg.Port),
-		Handler:   router.New(dbClient),
+		Handler:   router.New(dbClient, handlers.NewAuth(), handlers.NewUser()),
 		Protocols: protocols,
 	}
 
