@@ -10,10 +10,11 @@ import (
 
 // Config is the typed boot contract; plane keys without a field are ignored.
 type Config struct {
-	Port         int
-	DrainTimeout time.Duration
-	APIKey       string
-	DatabaseURL  string
+	Port          int
+	DrainTimeout  time.Duration
+	APIKey        string
+	DatabaseURL   string
+	RedisEndpoint string
 }
 
 const (
@@ -42,6 +43,9 @@ func Resolve(source Source) (Config, error) {
 	if err := resolveDatabaseURL(source, &cfg); err != nil {
 		return Config{}, err
 	}
+	if err := resolveRedis(source, &cfg); err != nil {
+		return Config{}, err
+	}
 	if err := resolveAPIKey(source, &cfg); err != nil {
 		return Config{}, err
 	}
@@ -66,6 +70,25 @@ func resolveDatabaseURL(source Source, cfg *Config) error {
 
 func databaseURLShaped(dsn string) bool {
 	return strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://")
+}
+
+// resolveRedis reads the cache endpoint; serverless enforces TLS in transit
+// and carries no password, so a rediss:// endpoint needs no credential.
+func resolveRedis(source Source, cfg *Config) error {
+	raw, ok := source.Get("REDIS_ENDPOINT")
+	if !ok {
+		return fmt.Errorf("config: REDIS_ENDPOINT is required; set it in infra/.env (dev) or the SSM plane (prod)")
+	}
+	endpoint := strings.TrimSpace(raw)
+	if !redisEndpointShaped(endpoint) {
+		return fmt.Errorf("config: REDIS_ENDPOINT must be a redis:// or rediss:// endpoint")
+	}
+	cfg.RedisEndpoint = endpoint
+	return nil
+}
+
+func redisEndpointShaped(endpoint string) bool {
+	return strings.HasPrefix(endpoint, "redis://") || strings.HasPrefix(endpoint, "rediss://")
 }
 
 // resolveAPIKey reads the service credential; an unset or short key would

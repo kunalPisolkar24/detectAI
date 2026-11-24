@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/config"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/router"
@@ -31,6 +32,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	_, disconnectCache := cache.Setup(bootCtx, cfg.RedisEndpoint)
 
 	protocols := new(http.Protocols)
 	protocols.SetHTTP1(true)
@@ -47,6 +49,9 @@ func main() {
 	defer cancelDrain()
 	if err := dbClient.Disconnect(drainCtx); err != nil {
 		log.Printf("postgres disconnect: %v", err)
+	}
+	if err := disconnectCache(drainCtx); err != nil {
+		log.Printf("redis disconnect: %v", err)
 	}
 
 	if runErr != nil {

@@ -41,7 +41,7 @@ cache-up:
 	fi
 	@echo ""
 	@echo "  addr    localhost:$(or $(REDIS_PORT),$(REDIS_PORT_FILE),6379)"
-	@echo "  next    add REDIS_ENDPOINT to infra/.env when the service reads it"
+	@echo "  next    REDIS_ENDPOINT=redis://localhost:$(or $(REDIS_PORT),$(REDIS_PORT_FILE),6379) in infra/.env"
 
 cache-down:
 	$(REDIS_COMPOSE) down --remove-orphans
