@@ -1,7 +1,11 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Mail, User } from "lucide-react"
+import {
+  AtSignIcon,
+  SquareUnlock02Icon,
+  UserIcon,
+} from "@hugeicons/core-free-icons"
 import { useForm } from "react-hook-form"
 
 import { Button } from "@/components/ui/button"
@@ -52,19 +56,14 @@ export function SignupForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>{AUTH_COPY.fields.firstName.label}</FormLabel>
-                  <div className="relative pl-9">
-                    <User
-                      className="absolute top-2.5 left-3 size-4 text-muted-foreground"
-                      aria-hidden="true"
+                  <FormControl>
+                    <Input
+                      {...field}
+                      icon={UserIcon}
+                      autoComplete="given-name"
+                      placeholder={AUTH_COPY.fields.firstName.placeholder}
                     />
-                    <FormControl>
-                      <Input
-                        {...field}
-                        autoComplete="given-name"
-                        placeholder={AUTH_COPY.fields.firstName.placeholder}
-                      />
-                    </FormControl>
-                  </div>
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -75,19 +74,14 @@ export function SignupForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>{AUTH_COPY.fields.lastName.label}</FormLabel>
-                  <div className="relative pl-9">
-                    <User
-                      className="absolute top-2.5 left-3 size-4 text-muted-foreground"
-                      aria-hidden="true"
+                  <FormControl>
+                    <Input
+                      {...field}
+                      icon={UserIcon}
+                      autoComplete="family-name"
+                      placeholder={AUTH_COPY.fields.lastName.placeholder}
                     />
-                    <FormControl>
-                      <Input
-                        {...field}
-                        autoComplete="family-name"
-                        placeholder={AUTH_COPY.fields.lastName.placeholder}
-                      />
-                    </FormControl>
-                  </div>
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -99,20 +93,15 @@ export function SignupForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>{AUTH_COPY.fields.email.label}</FormLabel>
-                <div className="relative pl-9">
-                  <Mail
-                    className="absolute top-2.5 left-3 size-4 text-muted-foreground"
-                    aria-hidden="true"
+                <FormControl>
+                  <Input
+                    {...field}
+                    icon={AtSignIcon}
+                    type="email"
+                    autoComplete="email"
+                    placeholder={AUTH_COPY.fields.email.placeholder}
                   />
-                  <FormControl>
-                    <Input
-                      {...field}
-                      type="email"
-                      autoComplete="email"
-                      placeholder={AUTH_COPY.fields.email.placeholder}
-                    />
-                  </FormControl>
-                </div>
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -126,6 +115,7 @@ export function SignupForm() {
                 <FormControl>
                   <PasswordInput
                     {...field}
+                    icon={SquareUnlock02Icon}
                     autoComplete="new-password"
                     placeholder={AUTH_COPY.fields.password.placeholder}
                   />
@@ -143,6 +133,7 @@ export function SignupForm() {
                 <FormControl>
                   <PasswordInput
                     {...field}
+                    icon={SquareUnlock02Icon}
                     autoComplete="new-password"
                     placeholder={AUTH_COPY.fields.confirmPassword.placeholder}
                   />

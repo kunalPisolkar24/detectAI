@@ -1,19 +1,25 @@
 "use client"
 
 import * as React from "react"
+import type { IconSvgElement } from "@hugeicons/react"
 import { Eye, EyeOff } from "lucide-react"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-function PasswordInput({ ref, className, disabled, ...props }: React.ComponentProps<"input">) {
+interface PasswordInputProps extends React.ComponentProps<"input"> {
+  icon?: IconSvgElement
+}
+
+function PasswordInput({ ref, icon, className, disabled, ...props }: PasswordInputProps) {
   const [visible, setVisible] = React.useState(false)
 
   return (
     <div className="relative">
       <Input
         ref={ref}
+        icon={icon}
         type={visible ? "text" : "password"}
         disabled={disabled}
         className={cn("pr-9", className)}

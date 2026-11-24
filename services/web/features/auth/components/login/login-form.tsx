@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Mail } from "lucide-react"
+import { AtSignIcon, SquareUnlock02Icon } from "@hugeicons/core-free-icons"
 import { useForm } from "react-hook-form"
 
 import { Button } from "@/components/ui/button"
@@ -49,20 +49,15 @@ export function LoginForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>{AUTH_COPY.fields.email.label}</FormLabel>
-                <div className="relative pl-9">
-                  <Mail
-                    className="absolute top-2.5 left-3 size-4 text-muted-foreground"
-                    aria-hidden="true"
+                <FormControl>
+                  <Input
+                    {...field}
+                    icon={AtSignIcon}
+                    type="email"
+                    autoComplete="email"
+                    placeholder={AUTH_COPY.fields.email.placeholder}
                   />
-                  <FormControl>
-                    <Input
-                      {...field}
-                      type="email"
-                      autoComplete="email"
-                      placeholder={AUTH_COPY.fields.email.placeholder}
-                    />
-                  </FormControl>
-                </div>
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -76,6 +71,7 @@ export function LoginForm() {
                 <FormControl>
                   <PasswordInput
                     {...field}
+                    icon={SquareUnlock02Icon}
                     autoComplete="current-password"
                     placeholder={AUTH_COPY.fields.password.placeholder}
                   />

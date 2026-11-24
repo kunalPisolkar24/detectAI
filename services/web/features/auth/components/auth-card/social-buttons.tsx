@@ -1,4 +1,4 @@
-import { GithubIcon, GoogleIcon } from "@hugeicons/core-free-icons"
+import { Github01Icon, GoogleIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { Button } from "@/components/ui/button"
@@ -12,7 +12,7 @@ export function SocialButtons() {
         {AUTH_COPY.social.google}
       </Button>
       <Button type="button" variant="outline" size="lg" disabled className="w-full">
-        <HugeiconsIcon icon={GithubIcon} size={18} aria-hidden="true" />
+        <HugeiconsIcon icon={Github01Icon} size={18} aria-hidden="true" />
         {AUTH_COPY.social.github}
       </Button>
     </div>
