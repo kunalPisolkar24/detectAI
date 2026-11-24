@@ -49,7 +49,7 @@ export function SignupForm() {
     >
       <Form {...form}>
         <form onSubmit={form.handleSubmit(() => undefined)} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
             <FormField
               control={form.control}
               name="firstName"
@@ -148,7 +148,7 @@ export function SignupForm() {
           <Button
             type="submit"
             variant="brand"
-            size="lg"
+            size="cta-sm"
             disabled={isSubmitting || !isValid || !turnstile.token}
             className="w-full"
           >

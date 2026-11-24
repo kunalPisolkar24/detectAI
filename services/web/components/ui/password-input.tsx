@@ -34,7 +34,11 @@ function PasswordInput({ ref, icon, className, disabled, ...props }: PasswordInp
         onClick={() => setVisible((current) => !current)}
         className="absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground hover:text-foreground"
       >
-        {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+        {visible ? (
+          <EyeOff aria-hidden="true" className="size-[18px]" />
+        ) : (
+          <Eye aria-hidden="true" className="size-[18px]" />
+        )}
       </Button>
     </div>
   )

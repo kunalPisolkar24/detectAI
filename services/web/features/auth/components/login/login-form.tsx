@@ -94,7 +94,7 @@ export function LoginForm() {
           <Button
             type="submit"
             variant="brand"
-            size="lg"
+            size="cta-sm"
             disabled={isSubmitting || !isValid || !turnstile.token}
             className="w-full"
           >

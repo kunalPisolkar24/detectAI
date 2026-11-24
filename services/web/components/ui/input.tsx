@@ -26,9 +26,9 @@ function Input({ className, type, icon, ...props }: InputProps) {
     <div className="relative">
       <HugeiconsIcon
         icon={icon}
-        size={16}
+        size={18}
         aria-hidden="true"
-        className="absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground"
+        className="absolute top-1/2 left-3 -translate-y-1/2 size-[18px] text-muted-foreground"
       />
       {input}
     </div>
