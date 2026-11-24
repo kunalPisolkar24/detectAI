@@ -1,16 +1,20 @@
 // Package router wires the route surface onto the gin engine.
 package router
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
 
-func New() *gin.Engine {
+	"github.com/kunalPisolkar24/detectAI/services/users/internal/db"
+)
+
+func New(database db.Database) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 
 	v1 := r.Group("/api/v1")
 	v1.GET("/health", Health)
-	v1.GET("/ready", Ready)
+	v1.GET("/ready", Ready(database))
 
 	return r
 }

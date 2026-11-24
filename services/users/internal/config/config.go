@@ -13,6 +13,7 @@ type Config struct {
 	Port         int
 	DrainTimeout time.Duration
 	APIKey       string
+	DatabaseURL  string
 }
 
 const (
@@ -38,10 +39,33 @@ func Resolve(source Source) (Config, error) {
 			cfg.DrainTimeout = drain
 		}
 	}
+	if err := resolveDatabaseURL(source, &cfg); err != nil {
+		return Config{}, err
+	}
 	if err := resolveAPIKey(source, &cfg); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+// resolveDatabaseURL reads the postgres DSN; the URL carries the credentials,
+// so an unset or malformed value would leave the service unable to reach its
+// store at boot.
+func resolveDatabaseURL(source Source, cfg *Config) error {
+	raw, ok := source.Get("DATABASE_URL")
+	if !ok {
+		return fmt.Errorf("config: DATABASE_URL is required; set it in infra/.env (dev) or the secrets plane (prod)")
+	}
+	dsn := strings.TrimSpace(raw)
+	if !databaseURLShaped(dsn) {
+		return fmt.Errorf("config: DATABASE_URL must be a postgres:// or postgresql:// URL")
+	}
+	cfg.DatabaseURL = dsn
+	return nil
+}
+
+func databaseURLShaped(dsn string) bool {
+	return strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://")
 }
 
 // resolveAPIKey reads the service credential; an unset or short key would

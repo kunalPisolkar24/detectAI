@@ -3,6 +3,7 @@ POSTGRES_COMPOSE := docker compose --env-file $(POSTGRES_ENV_FILE) -f ../../infr
 POSTGRES_PORT_FILE := $(shell sed -n 's/^POSTGRES_PORT=//p' $(POSTGRES_ENV_FILE) 2>/dev/null)
 POSTGRES_USER_FILE := $(shell sed -n 's/^POSTGRES_USER=//p' $(POSTGRES_ENV_FILE) 2>/dev/null)
 POSTGRES_DB_FILE := $(shell sed -n 's/^POSTGRES_DB=//p' $(POSTGRES_ENV_FILE) 2>/dev/null)
+POSTGRES_DSN := postgresql://$(or $(POSTGRES_USER),$(POSTGRES_USER_FILE),users):<password>@localhost:$(or $(POSTGRES_PORT),$(POSTGRES_PORT_FILE),5432)/$(or $(POSTGRES_DB),$(POSTGRES_DB_FILE),users_db)?sslmode=disable
 REDIS_ENV_FILE := $(if $(wildcard ../../infra/docker/redis/.env),../../infra/docker/redis/.env,../../infra/docker/redis/.env.example)
 REDIS_COMPOSE := docker compose --env-file $(REDIS_ENV_FILE) -f ../../infra/docker/redis/compose.yml
 REDIS_PORT_FILE := $(shell sed -n 's/^REDIS_PORT=//p' $(REDIS_ENV_FILE) 2>/dev/null)
@@ -27,7 +28,7 @@ db-up:
 	@echo "  addr    localhost:$(or $(POSTGRES_PORT),$(POSTGRES_PORT_FILE),5432)"
 	@echo "  db      $(or $(POSTGRES_DB),$(POSTGRES_DB_FILE),users_db)"
 	@echo "  user    $(or $(POSTGRES_USER),$(POSTGRES_USER_FILE),users)"
-	@echo "  next    add DATABASE_URL to infra/.env when the service reads it"
+	@echo "  next    DATABASE_URL=$(POSTGRES_DSN) in infra/.env"
 
 db-down:
 	$(POSTGRES_COMPOSE) down --remove-orphans
