@@ -8,7 +8,7 @@ export function HeroCta() {
   return (
     <Button asChild variant="brand" size="hero">
       <Link href={HERO_TEXT.ctaHref}>
-        {HERO_TEXT.cta}
+        <span className="inline-block translate-y-0.5">{HERO_TEXT.cta}</span>
         <ArrowRight className="ml-2 size-5" />
       </Link>
     </Button>
