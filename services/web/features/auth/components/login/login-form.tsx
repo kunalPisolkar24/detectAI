@@ -22,17 +22,28 @@ import { AuthCard } from "@/features/auth/components/auth-card"
 import { TurnstileField } from "@/features/auth/components/turnstile-field"
 import { AUTH_COPY } from "@/features/auth/constants"
 import { useTurnstile } from "@/features/auth/hooks/use-turnstile"
+import { useTurnstileVerification } from "@/features/auth/hooks/use-turnstile-verification"
 import { LoginSchema, type LoginValues } from "@/features/auth/schemas/auth"
 
 export function LoginForm() {
   const [rememberMe, setRememberMe] = useState(false)
   const turnstile = useTurnstile()
+  const verification = useTurnstileVerification()
   const form = useForm<LoginValues>({
     resolver: zodResolver(LoginSchema),
     defaultValues: { email: "", password: "" },
     mode: "onBlur",
   })
   const { isValid, isSubmitting } = form.formState
+
+  const onSubmit = async () => {
+    if (!turnstile.token) return
+
+    const verified = await verification.verify(turnstile.token)
+    if (!verified) {
+      turnstile.reset()
+    }
+  }
 
   return (
     <AuthCard
@@ -42,7 +53,7 @@ export function LoginForm() {
       backLabel={AUTH_COPY.login.backLabel}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(() => undefined)} className="space-y-4">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <FormField
             control={form.control}
             name="email"
@@ -91,6 +102,9 @@ export function LoginForm() {
           <div className="flex justify-center pt-2">
             <TurnstileField turnstile={turnstile} />
           </div>
+          {verification.errorMessage ? (
+            <p className="text-center text-sm text-destructive">{verification.errorMessage}</p>
+          ) : null}
           <Button
             type="submit"
             variant="brand"

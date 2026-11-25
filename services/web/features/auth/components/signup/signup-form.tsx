@@ -23,10 +23,12 @@ import { AuthCard } from "@/features/auth/components/auth-card"
 import { TurnstileField } from "@/features/auth/components/turnstile-field"
 import { AUTH_COPY } from "@/features/auth/constants"
 import { useTurnstile } from "@/features/auth/hooks/use-turnstile"
+import { useTurnstileVerification } from "@/features/auth/hooks/use-turnstile-verification"
 import { SignupSchema, type SignupValues } from "@/features/auth/schemas/auth"
 
 export function SignupForm() {
   const turnstile = useTurnstile()
+  const verification = useTurnstileVerification()
   const form = useForm<SignupValues>({
     resolver: zodResolver(SignupSchema),
     defaultValues: {
@@ -40,6 +42,15 @@ export function SignupForm() {
   })
   const { isValid, isSubmitting } = form.formState
 
+  const onSubmit = async () => {
+    if (!turnstile.token) return
+
+    const verified = await verification.verify(turnstile.token)
+    if (!verified) {
+      turnstile.reset()
+    }
+  }
+
   return (
     <AuthCard
       label={AUTH_COPY.signup.label}
@@ -48,7 +59,7 @@ export function SignupForm() {
       backLabel={AUTH_COPY.signup.backLabel}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(() => undefined)} className="space-y-4">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
             <FormField
               control={form.control}
@@ -145,6 +156,9 @@ export function SignupForm() {
           <div className="flex justify-center pt-2">
             <TurnstileField turnstile={turnstile} />
           </div>
+          {verification.errorMessage ? (
+            <p className="text-center text-sm text-destructive">{verification.errorMessage}</p>
+          ) : null}
           <Button
             type="submit"
             variant="brand"

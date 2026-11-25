@@ -16,7 +16,6 @@ const PREVIEW_SECRET_KEY = "1x0000000000000000000000000000000AA";
 
 export type AuthEnv = z.infer<typeof serverSchema> & {
   isPreview: boolean;
-  skipTurnstileVerification: boolean;
 };
 
 export type PublicAuthEnv = Omit<AuthEnv, "secretKey">;
@@ -29,7 +28,6 @@ export function getPublicAuthEnv(): PublicAuthEnv {
       envType: "preview",
       siteKey: PREVIEW_SITE_KEY,
       isPreview: true,
-      skipTurnstileVerification: true,
     };
   }
 
@@ -38,7 +36,7 @@ export function getPublicAuthEnv(): PublicAuthEnv {
     siteKey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
   });
 
-  return { ...parsed, isPreview: false, skipTurnstileVerification: false };
+  return { ...parsed, isPreview: false };
 }
 
 export function getAuthEnv(): AuthEnv {
@@ -54,5 +52,12 @@ export function getAuthEnv(): AuthEnv {
     secretKey: process.env.TURNSTILE_SECRET_KEY,
   });
 
-  return { ...parsed, isPreview: false, skipTurnstileVerification: false };
+  if (
+    parsed.envType === "prod" &&
+    (parsed.siteKey === PREVIEW_SITE_KEY || parsed.secretKey === PREVIEW_SECRET_KEY)
+  ) {
+    throw new Error("Production must not use Turnstile test keys");
+  }
+
+  return { ...parsed, isPreview: false };
 }
