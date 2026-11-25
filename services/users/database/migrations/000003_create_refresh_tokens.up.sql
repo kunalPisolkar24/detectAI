@@ -61,8 +61,7 @@ BEGIN
         RETURN false;
     END IF;
 
-    INSERT INTO refresh_tokens (id, user_id, expires_at)
-    VALUES (p_new_id, v_user_id, p_new_expires_at);
+    PERFORM refresh_tokens_create(p_new_id, v_user_id, p_new_expires_at);
     RETURN true;
 END;
 $$;
