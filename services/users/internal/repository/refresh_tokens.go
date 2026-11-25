@@ -13,9 +13,9 @@ import (
 
 type RefreshTokenRepository interface {
 	CreateRefreshToken(ctx context.Context, token models.RefreshToken) error
-	GetRefreshToken(ctx context.Context, id uuid.UUID) (models.RefreshTokenLookup, error)
-	RevokeRefreshToken(ctx context.Context, id, userID uuid.UUID) error
-	RotateRefreshToken(ctx context.Context, oldID, newID uuid.UUID, expectedVersion int, expiresAt time.Time) error
+	GetRefreshToken(ctx context.Context, tokenHash []byte) (models.RefreshTokenLookup, error)
+	RevokeRefreshToken(ctx context.Context, tokenHash []byte, userID uuid.UUID) error
+	RotateRefreshToken(ctx context.Context, oldHash, newHash []byte, newID uuid.UUID, expectedVersion int, expiresAt time.Time) error
 	RevokeAllRefreshTokensForUser(ctx context.Context, userID uuid.UUID) error
 	DeleteExpiredRefreshTokens(ctx context.Context, userID uuid.UUID) error
 }
@@ -24,13 +24,14 @@ func (r *Postgres) CreateRefreshToken(ctx context.Context, token models.RefreshT
 	err := r.queries.CreateRefreshToken(ctx, sqlc.CreateRefreshTokenParams{
 		ID:        token.ID,
 		UserID:    token.UserID,
+		TokenHash: token.TokenHash,
 		ExpiresAt: timestamp(token.ExpiresAt),
 	})
 	return wrap("create refresh token", err, models.ErrNotFound, nil)
 }
 
-func (r *Postgres) GetRefreshToken(ctx context.Context, id uuid.UUID) (models.RefreshTokenLookup, error) {
-	row, err := r.queries.GetRefreshToken(ctx, id)
+func (r *Postgres) GetRefreshToken(ctx context.Context, tokenHash []byte) (models.RefreshTokenLookup, error) {
+	row, err := r.queries.GetRefreshToken(ctx, tokenHash)
 	if err != nil {
 		return models.RefreshTokenLookup{}, wrap("get refresh token", err, models.ErrInvalidToken, nil)
 	}
@@ -38,6 +39,7 @@ func (r *Postgres) GetRefreshToken(ctx context.Context, id uuid.UUID) (models.Re
 		Token: models.RefreshToken{
 			ID:        row.ID,
 			UserID:    row.UserID,
+			TokenHash: row.TokenHash,
 			ExpiresAt: row.ExpiresAt.Time,
 			RevokedAt: nullTime(row.RevokedAt),
 			CreatedAt: row.CreatedAt.Time,
@@ -47,15 +49,16 @@ func (r *Postgres) GetRefreshToken(ctx context.Context, id uuid.UUID) (models.Re
 	}, nil
 }
 
-func (r *Postgres) RevokeRefreshToken(ctx context.Context, id, userID uuid.UUID) error {
-	err := r.queries.RevokeRefreshToken(ctx, sqlc.RevokeRefreshTokenParams{ID: id, UserID: userID})
+func (r *Postgres) RevokeRefreshToken(ctx context.Context, tokenHash []byte, userID uuid.UUID) error {
+	err := r.queries.RevokeRefreshToken(ctx, sqlc.RevokeRefreshTokenParams{TokenHash: tokenHash, UserID: userID})
 	return wrap("revoke refresh token", err, nil, nil)
 }
 
-func (r *Postgres) RotateRefreshToken(ctx context.Context, oldID, newID uuid.UUID, expectedVersion int, expiresAt time.Time) error {
+func (r *Postgres) RotateRefreshToken(ctx context.Context, oldHash, newHash []byte, newID uuid.UUID, expectedVersion int, expiresAt time.Time) error {
 	rotated, err := r.queries.RotateRefreshToken(ctx, sqlc.RotateRefreshTokenParams{
-		OldID:           oldID,
+		OldHash:         oldHash,
 		NewID:           newID,
+		NewHash:         newHash,
 		ExpectedVersion: int32(expectedVersion),
 		NewExpiresAt:    timestamp(expiresAt),
 	})

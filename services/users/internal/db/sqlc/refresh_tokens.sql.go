@@ -13,17 +13,23 @@ import (
 )
 
 const createRefreshToken = `-- name: CreateRefreshToken :exec
-SELECT refresh_tokens_create($1, $2, $3)
+SELECT refresh_tokens_create($1, $2, $3, $4)
 `
 
 type CreateRefreshTokenParams struct {
 	ID        uuid.UUID
 	UserID    uuid.UUID
+	TokenHash []byte
 	ExpiresAt pgtype.Timestamptz
 }
 
 func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error {
-	_, err := q.db.Exec(ctx, createRefreshToken, arg.ID, arg.UserID, arg.ExpiresAt)
+	_, err := q.db.Exec(ctx, createRefreshToken,
+		arg.ID,
+		arg.UserID,
+		arg.TokenHash,
+		arg.ExpiresAt,
+	)
 	return err
 }
 
@@ -39,17 +45,19 @@ func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context, userID uuid.UU
 const getRefreshToken = `-- name: GetRefreshToken :one
 SELECT t.id::uuid AS id,
        t.user_id::uuid AS user_id,
+       t.token_hash::bytea AS token_hash,
        t.expires_at::timestamptz AS expires_at,
        t.revoked_at::timestamptz AS revoked_at,
        t.created_at::timestamptz AS created_at,
        t.updated_at::timestamptz AS updated_at,
        t.token_version::integer AS token_version
-FROM refresh_tokens_get($1) AS t
+FROM refresh_tokens_get_by_hash($1) AS t
 `
 
 type GetRefreshTokenRow struct {
 	ID           uuid.UUID
 	UserID       uuid.UUID
+	TokenHash    []byte
 	ExpiresAt    pgtype.Timestamptz
 	RevokedAt    pgtype.Timestamptz
 	CreatedAt    pgtype.Timestamptz
@@ -57,12 +65,13 @@ type GetRefreshTokenRow struct {
 	TokenVersion int32
 }
 
-func (q *Queries) GetRefreshToken(ctx context.Context, id uuid.UUID) (GetRefreshTokenRow, error) {
-	row := q.db.QueryRow(ctx, getRefreshToken, id)
+func (q *Queries) GetRefreshToken(ctx context.Context, tokenHash []byte) (GetRefreshTokenRow, error) {
+	row := q.db.QueryRow(ctx, getRefreshToken, tokenHash)
 	var i GetRefreshTokenRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.TokenHash,
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
@@ -82,16 +91,16 @@ func (q *Queries) RevokeAllRefreshTokensForUser(ctx context.Context, userID uuid
 }
 
 const revokeRefreshToken = `-- name: RevokeRefreshToken :exec
-SELECT refresh_tokens_revoke($1, $2)
+SELECT refresh_tokens_revoke_by_hash($1, $2)
 `
 
 type RevokeRefreshTokenParams struct {
-	ID     uuid.UUID
-	UserID uuid.UUID
+	TokenHash []byte
+	UserID    uuid.UUID
 }
 
 func (q *Queries) RevokeRefreshToken(ctx context.Context, arg RevokeRefreshTokenParams) error {
-	_, err := q.db.Exec(ctx, revokeRefreshToken, arg.ID, arg.UserID)
+	_, err := q.db.Exec(ctx, revokeRefreshToken, arg.TokenHash, arg.UserID)
 	return err
 }
 
@@ -100,21 +109,24 @@ SELECT refresh_tokens_rotate(
     $1,
     $2,
     $3,
-    $4
+    $4,
+    $5
 )
 `
 
 type RotateRefreshTokenParams struct {
-	OldID           uuid.UUID
+	OldHash         []byte
 	NewID           uuid.UUID
+	NewHash         []byte
 	ExpectedVersion int32
 	NewExpiresAt    pgtype.Timestamptz
 }
 
 func (q *Queries) RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenParams) (bool, error) {
 	row := q.db.QueryRow(ctx, rotateRefreshToken,
-		arg.OldID,
+		arg.OldHash,
 		arg.NewID,
+		arg.NewHash,
 		arg.ExpectedVersion,
 		arg.NewExpiresAt,
 	)

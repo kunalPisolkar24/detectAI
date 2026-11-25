@@ -19,7 +19,7 @@ type Querier interface {
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	GetAuthIdentity(ctx context.Context, arg GetAuthIdentityParams) (GetAuthIdentityRow, error)
 	GetCredentialsByEmail(ctx context.Context, email string) (GetCredentialsByEmailRow, error)
-	GetRefreshToken(ctx context.Context, id uuid.UUID) (GetRefreshTokenRow, error)
+	GetRefreshToken(ctx context.Context, tokenHash []byte) (GetRefreshTokenRow, error)
 	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
 	ListAuthIdentitiesForUser(ctx context.Context, userID uuid.UUID) ([]ListAuthIdentitiesForUserRow, error)

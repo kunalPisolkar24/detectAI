@@ -22,6 +22,7 @@ type AuthIdentity struct {
 type RefreshToken struct {
 	ID        uuid.UUID
 	UserID    uuid.UUID
+	TokenHash []byte
 	ExpiresAt pgtype.Timestamptz
 	RevokedAt pgtype.Timestamptz
 	CreatedAt pgtype.Timestamptz

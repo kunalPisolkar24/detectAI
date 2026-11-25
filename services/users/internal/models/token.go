@@ -10,6 +10,7 @@ import (
 type RefreshToken struct {
 	ID        uuid.UUID
 	UserID    uuid.UUID
+	TokenHash []byte
 	ExpiresAt time.Time
 	RevokedAt sql.NullTime
 	CreatedAt time.Time
