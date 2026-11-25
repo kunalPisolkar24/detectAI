@@ -2,6 +2,8 @@
 package config
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
@@ -15,7 +17,7 @@ type Config struct {
 	APIKey          string
 	DatabaseURL     string
 	RedisEndpoint   string
-	TokenSecret     string
+	TokenPrivateKey ed25519.PrivateKey
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
 }
@@ -24,13 +26,12 @@ const (
 	defaultPort            = 8090
 	defaultDrain           = 5 * time.Second
 	minCredentialChars     = 16
-	minTokenSecretChars    = 32
 	defaultAccessTokenTTL  = 15 * time.Minute
 	defaultRefreshTokenTTL = 720 * time.Hour
 )
 
-// Resolve reads one plane source: PORT, API_KEY and TOKEN_SECRET fail the boot,
-// while an unreadable DRAIN_TIMEOUT falls back to the safe default.
+// Resolve reads one plane source: PORT, API_KEY and TOKEN_SIGNING_KEY fail the
+// boot, while an unreadable DRAIN_TIMEOUT falls back to the safe default.
 func Resolve(source Source) (Config, error) {
 	cfg := Config{
 		Port:            defaultPort,
@@ -60,7 +61,7 @@ func Resolve(source Source) (Config, error) {
 	if err := resolveAPIKey(source, &cfg); err != nil {
 		return Config{}, err
 	}
-	if err := resolveTokenSecret(source, &cfg); err != nil {
+	if err := resolveTokenSigningKey(source, &cfg); err != nil {
 		return Config{}, err
 	}
 	if err := resolveDuration(source, "ACCESS_TOKEN_TTL", &cfg.AccessTokenTTL); err != nil {
@@ -126,16 +127,18 @@ func resolveAPIKey(source Source, cfg *Config) error {
 	return nil
 }
 
-func resolveTokenSecret(source Source, cfg *Config) error {
-	raw, ok := source.Get("TOKEN_SECRET")
+// resolveTokenSigningKey reads the base64url Ed25519 seed; both token keys are
+// derived from it so no public key material has to be provisioned separately.
+func resolveTokenSigningKey(source Source, cfg *Config) error {
+	raw, ok := source.Get("TOKEN_SIGNING_KEY")
 	if !ok {
-		return fmt.Errorf("config: TOKEN_SECRET is required; set it in infra/.env (dev) or the secrets plane (prod)")
+		return fmt.Errorf("config: TOKEN_SIGNING_KEY is required; set it in infra/.env (dev) or the secrets plane (prod)")
 	}
-	secret := strings.TrimSpace(raw)
-	if len(secret) < minTokenSecretChars {
-		return fmt.Errorf("config: TOKEN_SECRET must be at least %d characters", minTokenSecretChars)
+	seed, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(raw))
+	if err != nil || len(seed) != ed25519.SeedSize {
+		return fmt.Errorf("config: TOKEN_SIGNING_KEY must be a base64url-encoded %d-byte seed", ed25519.SeedSize)
 	}
-	cfg.TokenSecret = secret
+	cfg.TokenPrivateKey = ed25519.NewKeyFromSeed(seed)
 	return nil
 }
 
