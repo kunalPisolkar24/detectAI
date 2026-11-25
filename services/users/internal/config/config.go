@@ -10,23 +10,34 @@ import (
 
 // Config is the typed boot contract; plane keys without a field are ignored.
 type Config struct {
-	Port          int
-	DrainTimeout  time.Duration
-	APIKey        string
-	DatabaseURL   string
-	RedisEndpoint string
+	Port            int
+	DrainTimeout    time.Duration
+	APIKey          string
+	DatabaseURL     string
+	RedisEndpoint   string
+	TokenSecret     string
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
 }
 
 const (
-	defaultPort        = 8090
-	defaultDrain       = 5 * time.Second
-	minCredentialChars = 16
+	defaultPort            = 8090
+	defaultDrain           = 5 * time.Second
+	minCredentialChars     = 16
+	minTokenSecretChars    = 32
+	defaultAccessTokenTTL  = 15 * time.Minute
+	defaultRefreshTokenTTL = 720 * time.Hour
 )
 
-// Resolve reads one plane source: PORT and API_KEY fail the boot, while an
-// unreadable DRAIN_TIMEOUT falls back to the safe default.
+// Resolve reads one plane source: PORT, API_KEY and TOKEN_SECRET fail the boot,
+// while an unreadable DRAIN_TIMEOUT falls back to the safe default.
 func Resolve(source Source) (Config, error) {
-	cfg := Config{Port: defaultPort, DrainTimeout: defaultDrain}
+	cfg := Config{
+		Port:            defaultPort,
+		DrainTimeout:    defaultDrain,
+		AccessTokenTTL:  defaultAccessTokenTTL,
+		RefreshTokenTTL: defaultRefreshTokenTTL,
+	}
 	if raw, ok := source.Get("PORT"); ok {
 		port, err := strconv.Atoi(strings.TrimSpace(raw))
 		if err != nil || port < 1 || port > 65535 {
@@ -47,6 +58,15 @@ func Resolve(source Source) (Config, error) {
 		return Config{}, err
 	}
 	if err := resolveAPIKey(source, &cfg); err != nil {
+		return Config{}, err
+	}
+	if err := resolveTokenSecret(source, &cfg); err != nil {
+		return Config{}, err
+	}
+	if err := resolveDuration(source, "ACCESS_TOKEN_TTL", &cfg.AccessTokenTTL); err != nil {
+		return Config{}, err
+	}
+	if err := resolveDuration(source, "REFRESH_TOKEN_TTL", &cfg.RefreshTokenTTL); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
@@ -103,5 +123,31 @@ func resolveAPIKey(source Source, cfg *Config) error {
 		return fmt.Errorf("config: API_KEY must be at least %d characters", minCredentialChars)
 	}
 	cfg.APIKey = key
+	return nil
+}
+
+func resolveTokenSecret(source Source, cfg *Config) error {
+	raw, ok := source.Get("TOKEN_SECRET")
+	if !ok {
+		return fmt.Errorf("config: TOKEN_SECRET is required; set it in infra/.env (dev) or the secrets plane (prod)")
+	}
+	secret := strings.TrimSpace(raw)
+	if len(secret) < minTokenSecretChars {
+		return fmt.Errorf("config: TOKEN_SECRET must be at least %d characters", minTokenSecretChars)
+	}
+	cfg.TokenSecret = secret
+	return nil
+}
+
+func resolveDuration(source Source, key string, target *time.Duration) error {
+	raw, ok := source.Get(key)
+	if !ok {
+		return nil
+	}
+	value, err := time.ParseDuration(strings.TrimSpace(raw))
+	if err != nil || value <= 0 {
+		return fmt.Errorf("config: %s must be a positive Go duration; got %q", key, raw)
+	}
+	*target = value
 	return nil
 }
