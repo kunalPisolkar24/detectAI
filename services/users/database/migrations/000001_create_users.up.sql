@@ -70,7 +70,7 @@ RETURNS TABLE (
     password_hash text,
     token_version integer
 ) LANGUAGE sql AS $$
-    SELECT u.id, u.password_hash, u.token_version
+    SELECT u.id, coalesce(u.password_hash, '') AS password_hash, u.token_version
     FROM users u
     WHERE u.email = lower(p_email);
 $$;
