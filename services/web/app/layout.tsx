@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { inter, merriweather, teko } from "@/lib/fonts";
 import { MotionProvider } from "@/providers/motion-provider";
 import { QueryProvider } from "@/providers/query-provider";
+import { SessionProvider } from "@/providers/session-provider";
 import { ThemeProvider } from "@/providers/theme-provider";
 import "./globals.css";
 
@@ -22,7 +23,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ThemeProvider>
           <MotionProvider>
             <QueryProvider>
-              <TooltipProvider>{children}</TooltipProvider>
+              <SessionProvider>
+                <TooltipProvider>{children}</TooltipProvider>
+              </SessionProvider>
             </QueryProvider>
           </MotionProvider>
         </ThemeProvider>

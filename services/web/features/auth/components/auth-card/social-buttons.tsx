@@ -1,5 +1,8 @@
+"use client"
+
 import { Github01Icon, GoogleIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
+import { signIn } from "next-auth/react"
 
 import { Button } from "@/components/ui/button"
 import { AUTH_COPY } from "@/features/auth/constants"
@@ -7,7 +10,13 @@ import { AUTH_COPY } from "@/features/auth/constants"
 export function SocialButtons() {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <Button type="button" variant="outline" size="lg" disabled className="w-full">
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        className="w-full"
+        onClick={() => signIn("google")}
+      >
         <HugeiconsIcon
           icon={GoogleIcon}
           size={24}
@@ -16,7 +25,13 @@ export function SocialButtons() {
         />
         {AUTH_COPY.social.google}
       </Button>
-      <Button type="button" variant="outline" size="lg" disabled className="w-full">
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        className="w-full"
+        onClick={() => signIn("github")}
+      >
         <HugeiconsIcon
           icon={Github01Icon}
           size={24}
