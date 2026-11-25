@@ -7,6 +7,12 @@ import (
 	"github.com/google/uuid"
 )
 
+type Credentials struct {
+	UserID       uuid.UUID
+	PasswordHash string
+	TokenVersion int
+}
+
 type User struct {
 	ID              uuid.UUID
 	Email           string
