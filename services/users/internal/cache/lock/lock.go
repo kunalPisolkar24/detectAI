@@ -1,4 +1,4 @@
-package cache
+package lock
 
 import (
 	"context"
@@ -7,12 +7,6 @@ import (
 )
 
 var ErrLockHeld = errors.New("cache: lock held")
-
-type Store interface {
-	Get(ctx context.Context, key string, into any) (found bool, err error)
-	Set(ctx context.Context, key string, value any, ttl time.Duration) error
-	Delete(ctx context.Context, keys ...string) error
-}
 
 type Locker interface {
 	Acquire(ctx context.Context, key string, ttl time.Duration) (token string, err error)

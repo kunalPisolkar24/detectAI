@@ -3,7 +3,9 @@ package services
 import (
 	"time"
 
-	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache/coalescer"
+	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache/lock"
+	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache/store"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/password"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/repository"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/token"
@@ -11,11 +13,11 @@ import (
 
 func NewCachedUsers(
 	repo repository.UserRepository,
-	store cache.Store,
-	locker cache.Locker,
-	policy cache.Policy,
+	store store.Store,
+	locker lock.Locker,
+	policy lock.Policy,
 	queryTimeout time.Duration,
-	flights cache.Coalescer,
+	flights coalescer.Coalescer,
 ) *CachedUsers {
 	return &CachedUsers{
 		repo:         repo,

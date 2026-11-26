@@ -12,7 +12,7 @@ import (
 
 	connectrpc "connectrpc.com/connect"
 
-	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache/limiter"
 	usersv1connect "github.com/kunalPisolkar24/detectAI/services/users/proto/usersv1connect"
 )
 
@@ -46,7 +46,7 @@ func (l Limits) forScope(s scope) int {
 }
 
 // The check fails open: a cache fault lets the call through.
-func NewRateLimitInterceptor(limiter cache.Limiter, limits Limits, logger *slog.Logger) connectrpc.UnaryInterceptorFunc {
+func NewRateLimitInterceptor(limiter limiter.Limiter, limits Limits, logger *slog.Logger) connectrpc.UnaryInterceptorFunc {
 	return func(next connectrpc.UnaryFunc) connectrpc.UnaryFunc {
 		return func(ctx context.Context, req connectrpc.AnyRequest) (connectrpc.AnyResponse, error) {
 			selected, limited := scopeByProcedure[req.Spec().Procedure]
@@ -105,7 +105,7 @@ func shortDigest(value string) string {
 // The refusal is logged once per exhausted budget per window. The counter moves
 // by one, so the first refusal of a window is limit+1; later ones stay silent
 // and a client hammering the limit cannot flood the logs.
-func logRefusal(ctx context.Context, logger *slog.Logger, identity string, selected scope, decision cache.Decision) {
+func logRefusal(ctx context.Context, logger *slog.Logger, identity string, selected scope, decision limiter.Decision) {
 	if decision.Count != decision.Limit+1 {
 		return
 	}
@@ -117,7 +117,7 @@ func logRefusal(ctx context.Context, logger *slog.Logger, identity string, selec
 		"retry_after_ms", decision.RetryAfter.Milliseconds())
 }
 
-func rateLimitError(decision cache.Decision) error {
+func rateLimitError(decision limiter.Decision) error {
 	err := connectrpc.NewError(connectrpc.CodeResourceExhausted, errors.New("rate limit exceeded"))
 	err.Meta().Set("retry-after-ms", strconv.FormatInt(decision.RetryAfter.Milliseconds(), 10))
 	err.Meta().Set("x-ratelimit-limit", strconv.Itoa(decision.Limit))

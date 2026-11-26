@@ -1,4 +1,4 @@
-package cache
+package lock
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"time"
 
 	driver "github.com/redis/go-redis/v9"
+
+	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache/client"
 )
 
 var releaseScript = driver.NewScript(`
@@ -17,17 +19,17 @@ end
 return 0
 `)
 
-type RedisLocker struct {
+type Redis struct {
 	client *driver.Client
 }
 
-var _ Locker = (*RedisLocker)(nil)
+var _ Locker = (*Redis)(nil)
 
-func NewLocker(client *Client) *RedisLocker {
-	return &RedisLocker{client: client.client}
+func NewRedis(client *client.Client) *Redis {
+	return &Redis{client: client.Raw()}
 }
 
-func (l *RedisLocker) Acquire(ctx context.Context, key string, ttl time.Duration) (string, error) {
+func (l *Redis) Acquire(ctx context.Context, key string, ttl time.Duration) (string, error) {
 	token, err := newToken()
 	if err != nil {
 		return "", fmt.Errorf("cache: lock token: %w", err)
@@ -42,7 +44,7 @@ func (l *RedisLocker) Acquire(ctx context.Context, key string, ttl time.Duration
 	return token, nil
 }
 
-func (l *RedisLocker) Release(ctx context.Context, key, token string) error {
+func (l *Redis) Release(ctx context.Context, key, token string) error {
 	if err := releaseScript.Run(ctx, l.client, []string{key}, token).Err(); err != nil {
 		return fmt.Errorf("cache: unlock %s: %w", key, err)
 	}

@@ -8,7 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache/coalescer"
+	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache/lock"
+	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache/setup"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/config"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/db/sqlc"
@@ -39,7 +41,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	plane, disconnectCache := cache.Setup(bootCtx, cfg.RedisEndpoint)
+	plane, disconnectCache := setup.New(bootCtx, cfg.RedisEndpoint)
 
 	accessIssuer, err := token.NewAccessIssuer(cfg.TokenPrivateKey, cfg.AccessTokenTTL)
 	if err != nil {
@@ -60,7 +62,7 @@ func main() {
 
 	repo := repository.New(sqlc.New(dbClient.Pool()))
 	cachedUsers := services.NewCachedUsers(
-		repo, plane.Store, plane.Locker, cache.NewPolicy(cfg.LockTTL), cfg.QueryTimeout, cache.NewFlightGroup(),
+		repo, plane.Store, plane.Locker, lock.NewPolicy(cfg.LockTTL), cfg.QueryTimeout, coalescer.NewFlightGroup(),
 	)
 	authService := services.NewAuthService(
 		cachedUsers, repo, password.New(), accessIssuer, refreshTokens, cfg.AccessTokenTTL,

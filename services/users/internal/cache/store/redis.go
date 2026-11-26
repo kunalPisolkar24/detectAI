@@ -1,4 +1,4 @@
-package cache
+package store
 
 import (
 	"context"
@@ -9,21 +9,23 @@ import (
 	"time"
 
 	driver "github.com/redis/go-redis/v9"
+
+	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache/client"
 )
 
 const ttlJitterPercent = 15
 
-type RedisStore struct {
+type Redis struct {
 	client *driver.Client
 }
 
-var _ Store = (*RedisStore)(nil)
+var _ Store = (*Redis)(nil)
 
-func NewStore(client *Client) *RedisStore {
-	return &RedisStore{client: client.client}
+func NewRedis(client *client.Client) *Redis {
+	return &Redis{client: client.Raw()}
 }
 
-func (s *RedisStore) Get(ctx context.Context, key string, into any) (bool, error) {
+func (s *Redis) Get(ctx context.Context, key string, into any) (bool, error) {
 	payload, err := s.client.Get(ctx, key).Bytes()
 	if errors.Is(err, driver.Nil) {
 		return false, nil
@@ -37,7 +39,7 @@ func (s *RedisStore) Get(ctx context.Context, key string, into any) (bool, error
 	return true, nil
 }
 
-func (s *RedisStore) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+func (s *Redis) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	payload, err := json.Marshal(value)
 	if err != nil {
 		return fmt.Errorf("cache: encode %s: %w", key, err)
@@ -59,7 +61,7 @@ func jitteredTTL(ttl time.Duration) time.Duration {
 	return ttl + time.Duration(rand.Int64N(spread+1))
 }
 
-func (s *RedisStore) Delete(ctx context.Context, keys ...string) error {
+func (s *Redis) Delete(ctx context.Context, keys ...string) error {
 	if len(keys) == 0 {
 		return nil
 	}

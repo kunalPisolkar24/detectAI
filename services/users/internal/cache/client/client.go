@@ -1,4 +1,4 @@
-package cache
+package client
 
 import (
 	"context"
@@ -30,6 +30,10 @@ func Connect(ctx context.Context, endpoint string) (*Client, error) {
 		return nil, fmt.Errorf("redis: ping: %w", err)
 	}
 	return &Client{client: client}, nil
+}
+
+func (c *Client) Raw() *driver.Client {
+	return c.client
 }
 
 func (c *Client) Ping(ctx context.Context) error {
