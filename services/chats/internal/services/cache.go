@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/coalescer"
@@ -27,6 +28,9 @@ func (s *ChatService) cachedChat(ctx context.Context, ownerID, chatID string) (m
 			}
 			chat, err := s.repo.Chat(ctx, ownerID, chatID)
 			if err != nil {
+				if errors.Is(err, models.ErrNotFound) {
+					s.markMissing(ctx, ownerID, chatID)
+				}
 				return models.Chat{}, err
 			}
 			s.putChat(ctx, chat)
@@ -87,13 +91,42 @@ func (s *ChatService) readChatCache(ctx context.Context, ownerID, chatID string)
 		s.absorb(ctx, "chat read", err)
 		return models.Chat{}, false, nil
 	}
-	if !found {
+	if found {
+		if cached.UserID != ownerID {
+			return models.Chat{}, false, models.ErrNotFound
+		}
+		return cached, true, nil
+	}
+
+	start = time.Now()
+	missing, err := s.cache.Missing(ctx, ownerID, chatID)
+	s.recordCacheRead(observability.CacheOperationNegative, missing, err, start)
+	if err != nil {
+		s.absorb(ctx, "negative read", err)
 		return models.Chat{}, false, nil
 	}
-	if cached.UserID != ownerID {
+	if missing {
 		return models.Chat{}, false, models.ErrNotFound
 	}
-	return cached, true, nil
+	return models.Chat{}, false, nil
+}
+
+func (s *ChatService) markMissing(ctx context.Context, ownerID, chatID string) {
+	start := time.Now()
+	err := s.cache.MarkMissing(ctx, ownerID, chatID)
+	s.recordCacheWrite(observability.CacheOperationPutNegative, err, start)
+	if err != nil {
+		s.absorb(ctx, "negative write", err)
+	}
+}
+
+func (s *ChatService) clearMissing(ctx context.Context, ownerID, chatID string) {
+	start := time.Now()
+	err := s.cache.ClearMissing(ctx, ownerID, chatID)
+	s.recordCacheWrite(observability.CacheOperationClearNegative, err, start)
+	if err != nil {
+		s.absorb(ctx, "negative invalidation", err)
+	}
 }
 
 func (s *ChatService) readListCache(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, bool) {
@@ -132,6 +165,7 @@ func (s *ChatService) invalidateChat(ctx context.Context, chatID, ownerID string
 	if err != nil {
 		s.absorb(ctx, "chat invalidation", err)
 	}
+	s.clearMissing(ctx, ownerID, chatID)
 	s.invalidateOwner(ctx, ownerID)
 }
 
@@ -142,6 +176,7 @@ func (s *ChatService) invalidateMeta(ctx context.Context, chatID, ownerID string
 	if err != nil {
 		s.absorb(ctx, "chat meta invalidation", err)
 	}
+	s.clearMissing(ctx, ownerID, chatID)
 	s.invalidateOwner(ctx, ownerID)
 }
 

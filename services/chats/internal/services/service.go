@@ -35,6 +35,9 @@ type Cache interface {
 	InvalidateMeta(ctx context.Context, chatID string) error
 	InvalidateChat(ctx context.Context, chatID string) error
 	InvalidateOwner(ctx context.Context, ownerID string) error
+	Missing(ctx context.Context, ownerID, chatID string) (bool, error)
+	MarkMissing(ctx context.Context, ownerID, chatID string) error
+	ClearMissing(ctx context.Context, ownerID, chatID string) error
 }
 
 type Locker interface {

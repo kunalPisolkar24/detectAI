@@ -46,6 +46,15 @@ func TestNullCacheDiscardsWrites(t *testing.T) {
 	if err := cachePlane.InvalidateOwner(ctx, "owner-1"); err != nil {
 		t.Errorf("InvalidateOwner: %v", err)
 	}
+	if missing, err := cachePlane.Missing(ctx, "owner-1", "chat-1"); err != nil || missing {
+		t.Errorf("Missing = (%v, %v), want a miss", missing, err)
+	}
+	if err := cachePlane.MarkMissing(ctx, "owner-1", "chat-1"); err != nil {
+		t.Errorf("MarkMissing: %v", err)
+	}
+	if err := cachePlane.ClearMissing(ctx, "owner-1", "chat-1"); err != nil {
+		t.Errorf("ClearMissing: %v", err)
+	}
 }
 
 func TestNullLimiterAllowsEveryCall(t *testing.T) {

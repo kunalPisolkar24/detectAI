@@ -28,7 +28,7 @@ internal/
 proto/                     chat_service.proto + generated Go stubs
 ```
 
-The layering is strict and inward-facing: `handlers` speaks the wire, `services` owns the use cases, `repository`/`cache` own the two stores, and `models` is the vocabulary everybody shares. `services` declares its own narrow `Cache`, `Locker` and `Coalescer` interfaces; the cache packages satisfy them structurally, so the concrete fill strategy can be swapped without changing the use cases. Cold fills run through singleflight and a distributed lock before reaching Mongo. `config` and `observability` serve them all. Nothing inside `services` knows about Connect or MongoDB.
+The layering is strict and inward-facing: `handlers` speaks the wire, `services` owns the use cases, `repository`/`cache` own the two stores, and `models` is the vocabulary everybody shares. `services` declares its own narrow `Cache`, `Locker` and `Coalescer` interfaces; the cache packages satisfy them structurally, so the concrete fill strategy can be swapped without changing the use cases. Cold fills run through singleflight and a distributed lock before reaching Mongo, and `not_found` answers are cached briefly so a bad chat id cannot spend the read budget on Mongo. `config` and `observability` serve them all. Nothing inside `services` knows about Connect or MongoDB.
 
 ## The components at a glance
 
@@ -62,7 +62,7 @@ classDiagram
     class Mongo
     class Cache {
         <<interface>>
-        +9 cache operations
+        +12 cache operations
     }
     class Entries
     class Limiter {

@@ -104,9 +104,10 @@ func countOf(calls []string, name string) int {
 }
 
 type fakeCache struct {
-	chats map[string]models.Chat
-	lists map[string][]models.ChatSummary
-	heads map[string]models.Page
+	chats  map[string]models.Chat
+	lists  map[string][]models.ChatSummary
+	heads  map[string]models.Page
+	misses map[string]bool
 
 	readErr  error
 	writeErr error
@@ -116,9 +117,10 @@ type fakeCache struct {
 
 func newFakeCache() *fakeCache {
 	return &fakeCache{
-		chats: map[string]models.Chat{},
-		lists: map[string][]models.ChatSummary{},
-		heads: map[string]models.Page{},
+		chats:  map[string]models.Chat{},
+		lists:  map[string][]models.ChatSummary{},
+		heads:  map[string]models.Page{},
+		misses: map[string]bool{},
 	}
 }
 
@@ -195,6 +197,29 @@ func (f *fakeCache) InvalidateOwner(_ context.Context, ownerID string) error {
 	}
 	delete(f.lists, ownerID)
 	f.invalidated = append(f.invalidated, "owner:"+ownerID)
+	return nil
+}
+
+func (f *fakeCache) Missing(_ context.Context, ownerID, chatID string) (bool, error) {
+	if f.readErr != nil {
+		return false, f.readErr
+	}
+	return f.misses[ownerID+":"+chatID], nil
+}
+
+func (f *fakeCache) MarkMissing(_ context.Context, ownerID, chatID string) error {
+	if f.writeErr != nil {
+		return f.writeErr
+	}
+	f.misses[ownerID+":"+chatID] = true
+	return nil
+}
+
+func (f *fakeCache) ClearMissing(_ context.Context, ownerID, chatID string) error {
+	if f.writeErr != nil {
+		return f.writeErr
+	}
+	delete(f.misses, ownerID+":"+chatID)
 	return nil
 }
 

@@ -38,6 +38,8 @@ Names are a contract — a rename is a dashboard migration, not an edit.
 | `chats_rpc_duration_seconds` | Histogram | `procedure` | RPC wall time |
 | `chats_cache_operations_total` | Counter | `operation`, `result` | cache reads, writes, invalidations |
 | `chats_cache_operation_duration_seconds` | Histogram | `operation` | cache operation cost |
+
+Negative-marker lookups and writes are recorded under the `negative`, `put_negative` and `clear_negative` operation values — additive labels on the existing metric, so dashboards keep working.
 | `chats_datastore_operations_total` | Counter | `operation`, `result` | one per repository call |
 | `chats_datastore_operation_duration_seconds` | Histogram | `operation` | Mongo call cost |
 | `chats_rate_limit_refusals_total` | Counter | `scope` | exhausted burst budgets |

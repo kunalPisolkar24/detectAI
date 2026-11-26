@@ -51,6 +51,9 @@ const (
 
 const (
 	CacheOperationChat            = "chat"
+	CacheOperationNegative        = "negative"
+	CacheOperationPutNegative     = "put_negative"
+	CacheOperationClearNegative   = "clear_negative"
 	CacheOperationChatList        = "chat_list"
 	CacheOperationHead            = "head"
 	CacheOperationPutChat         = "put_chat"

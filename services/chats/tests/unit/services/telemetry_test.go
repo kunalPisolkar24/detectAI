@@ -77,9 +77,12 @@ func TestTheServiceRecordsEveryCacheOperationItMakes(t *testing.T) {
 
 	// A cold fill reads the cache twice: once before the lock and once inside
 	// it, so the winner never repeats a fill another caller already finished.
+	// Each of those misses also consults the negative marker.
 	want := []cacheOp{
 		{observability.CacheOperationChat, observability.CacheMiss},
+		{observability.CacheOperationNegative, observability.CacheMiss},
 		{observability.CacheOperationChat, observability.CacheMiss},
+		{observability.CacheOperationNegative, observability.CacheMiss},
 		{observability.CacheOperationPutChat, observability.CacheOK},
 		{observability.CacheOperationHead, observability.CacheMiss},
 		{observability.CacheOperationHead, observability.CacheMiss},

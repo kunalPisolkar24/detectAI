@@ -28,6 +28,7 @@ func (s *ChatService) CreateChat(ctx context.Context, ownerID, initialMessage st
 	}); err != nil {
 		return models.Chat{}, err
 	}
+	s.clearMissing(ctx, ownerID, chat.ID)
 	s.invalidateOwner(ctx, ownerID)
 	return chat, nil
 }

@@ -22,7 +22,12 @@ type Cache interface {
 	InvalidateMeta(ctx context.Context, chatID string) error
 	InvalidateChat(ctx context.Context, chatID string) error
 	InvalidateOwner(ctx context.Context, ownerID string) error
+	Missing(ctx context.Context, ownerID, chatID string) (bool, error)
+	MarkMissing(ctx context.Context, ownerID, chatID string) error
+	ClearMissing(ctx context.Context, ownerID, chatID string) error
 }
+
+const missingMarker = "1"
 
 type Entries struct {
 	store store.Store
@@ -89,4 +94,21 @@ func (e *Entries) InvalidateChat(ctx context.Context, chatID string) error {
 
 func (e *Entries) InvalidateOwner(ctx context.Context, ownerID string) error {
 	return e.store.Delete(ctx, keys.OwnerChatsKey(ownerID))
+}
+
+func (e *Entries) Missing(ctx context.Context, ownerID, chatID string) (bool, error) {
+	var marker string
+	found, err := e.store.Get(ctx, keys.MissKey(keys.ChatLookupResource(ownerID, chatID)), &marker)
+	if err != nil || !found {
+		return false, err
+	}
+	return marker == missingMarker, nil
+}
+
+func (e *Entries) MarkMissing(ctx context.Context, ownerID, chatID string) error {
+	return e.store.Set(ctx, keys.MissKey(keys.ChatLookupResource(ownerID, chatID)), missingMarker, keys.NegativeTTL)
+}
+
+func (e *Entries) ClearMissing(ctx context.Context, ownerID, chatID string) error {
+	return e.store.Delete(ctx, keys.MissKey(keys.ChatLookupResource(ownerID, chatID)))
 }

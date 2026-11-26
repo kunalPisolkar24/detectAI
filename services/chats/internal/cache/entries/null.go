@@ -33,3 +33,7 @@ func (Null) PutHead(context.Context, string, models.Page) error { return nil }
 func (Null) InvalidateMeta(context.Context, string) error  { return nil }
 func (Null) InvalidateChat(context.Context, string) error  { return nil }
 func (Null) InvalidateOwner(context.Context, string) error { return nil }
+
+func (Null) Missing(context.Context, string, string) (bool, error) { return false, nil }
+func (Null) MarkMissing(context.Context, string, string) error     { return nil }
+func (Null) ClearMissing(context.Context, string, string) error    { return nil }

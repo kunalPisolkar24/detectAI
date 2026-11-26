@@ -47,8 +47,9 @@ func (l *singleHolderLocker) Release(_ context.Context, key, _ string) error {
 }
 
 type stampedeCache struct {
-	mu    sync.Mutex
-	chats map[string]models.Chat
+	mu     sync.Mutex
+	chats  map[string]models.Chat
+	misses map[string]bool
 }
 
 func (c *stampedeCache) Chat(_ context.Context, chatID string) (models.Chat, bool, error) {
@@ -78,6 +79,26 @@ func (c *stampedeCache) PutHead(context.Context, string, models.Page) error { re
 func (c *stampedeCache) InvalidateMeta(context.Context, string) error       { return nil }
 func (c *stampedeCache) InvalidateChat(context.Context, string) error       { return nil }
 func (c *stampedeCache) InvalidateOwner(context.Context, string) error      { return nil }
+
+func (c *stampedeCache) Missing(_ context.Context, ownerID, chatID string) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.misses[ownerID+":"+chatID], nil
+}
+
+func (c *stampedeCache) MarkMissing(_ context.Context, ownerID, chatID string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.misses[ownerID+":"+chatID] = true
+	return nil
+}
+
+func (c *stampedeCache) ClearMissing(_ context.Context, ownerID, chatID string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.misses, ownerID+":"+chatID)
+	return nil
+}
 
 type stampedeRepo struct {
 	chats atomic.Int32
@@ -111,7 +132,7 @@ func (r *stampedeRepo) ChatHistory(context.Context, string, string, string, int)
 
 func TestConcurrentColdReadsFetchTheSourceOnce(t *testing.T) {
 	repo := &stampedeRepo{}
-	entries := &stampedeCache{chats: map[string]models.Chat{}}
+	entries := &stampedeCache{chats: map[string]models.Chat{}, misses: map[string]bool{}}
 	service := services.NewChatService(
 		repo, entries, newSingleHolderLocker(), passthroughCoalescer{}, lock.NewPolicy(time.Second),
 		slog.New(slog.DiscardHandler), observability.NullTelemetry{},

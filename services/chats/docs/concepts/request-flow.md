@@ -15,7 +15,7 @@ Inside the Connect handler, four interceptors wrap every RPC. The first is outer
 | 3 | auth | `x-api-key` constant-time compare, then `x-user-id` | `unauthenticated` |
 | 4 | rate limit | `read` / `create` / `write` scopes, all eight procedures | `resource_exhausted` + retry metadata |
 
-The handler runs last: it re-reads the owner from the context, validates, calls the service, and maps the domain error onto a Connect code. On a cache miss the service collapses same-process duplicates, takes a Redis fill lock, re-reads the cache, and only then queries Mongo — see [Cache](cache.md).
+The handler runs last: it re-reads the owner from the context, validates, calls the service, and maps the domain error onto a Connect code. On a cache miss the service collapses same-process duplicates, takes a Redis fill lock, re-reads the cache (including a short-lived `not_found` marker), and only then queries Mongo — see [Cache](cache.md).
 
 ## The admission flow
 

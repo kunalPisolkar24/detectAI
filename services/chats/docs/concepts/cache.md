@@ -11,10 +11,13 @@ Redis is a read-through overlay on MongoDB, never the source of truth. Chats key
 | `chats:user:<id>:chats` | sidebar summaries, newest-first | 5m | `ListChats` | create, append, analysis, rename, delete |
 | `chats:rate_limit:<id>:<scope>:<window>` | burst counter | window end + 2m grace | rate limiter | TTL only |
 | `chats:lock:<resource>` | fill lock token | `LOCK_TTL` (10s) | stampede protection | token-guarded `DEL` on release |
+| `chats:nf:user:<owner>:chat:<id>` | not-found marker | 1m | skip Mongo for an unknown chat | any successful write to that chat, or TTL |
 
 Rate-limit counters use the same fixed window as the web BFF: an atomic Lua `INCRBY` + `EXPIREAT`, a one-minute window keyed by epoch minute, and a 250 ms call deadline. They fail open — see [Request Flow](request-flow.md).
 
 A cold read is protected in two layers, the same way the users service protects its repository reads. An in-process `singleflight` group collapses duplicate calls for one resource before they reach Redis; the survivor takes the distributed lock, re-reads the cache, and only then fetches from Mongo. Other replicas contend on the lock with jittered backoff, then re-read the filled cache. A locker fault or exhausted retries falls through to the unprotected path, so Redis still never fails an RPC. Lock keys are distinct for chat meta, the head page, and an owner's list.
+
+A chat lookup that ends in `not_found` writes a marker with a one-minute TTL. Both the pre-lock read and the double-check consult it, so repeated requests for a missing or foreign chat stop spending Mongo reads. The marker is keyed by **owner and chat id**: ownership is part of the query, so a foreign owner's miss must never hide the chat from its owner. Successful writes clear the marker; a marker fault is absorbed and the lookup falls through to Mongo. Empty sidebar lists and head pages need no marker — they are already cached as empty values — and cursor history pages stay uncached by design.
 
 ## The read and write paths
 
@@ -46,6 +49,9 @@ classDiagram
         +InvalidateMeta(ctx, id)
         +InvalidateChat(ctx, id)
         +InvalidateOwner(ctx, owner)
+        +Missing(ctx, owner, id)
+        +MarkMissing(ctx, owner, id)
+        +ClearMissing(ctx, owner, id)
     }
     class Client {
         -client: redis.Client
@@ -62,7 +68,7 @@ classDiagram
     }
     class Entries {
         -store: Store
-        +9 cache operations
+        +12 cache operations
     }
     class keys {
         <<package>>
@@ -72,6 +78,8 @@ classDiagram
         +RateLimitKey(owner, scope, window)
         +LockKey(resource)
         +FlightKey(kind, resource)
+        +MissKey(resource)
+        +ChatLookupResource(owner, id)
     }
     class NullEntries
     class Locker {
@@ -99,7 +107,7 @@ classDiagram
     note for NullEntries "all reads miss, all writes no-op - installed when Redis is unreachable or absent"
     note for Locker "SETNX plus a token-guarded Lua release - SETNX failure means the lock is held"
     note for FlightGroup "in-process singleflight - collapses duplicates before they reach Redis"
-    note for keys "prefix chats: · meta/head 10m · list 5m · rate window + 2m grace · lock LOCK_TTL"
+    note for keys "prefix chats: · meta/head 10m · list 5m · negative 1m · rate window + 2m grace · lock LOCK_TTL"
 ```
 
 The prefix lives in `internal/cache/keys`, never in the Redis client: client-level `keyPrefix` silently misses keys inside Lua `EVAL` scripts, and the limiter and locker are exactly such scripts. The cache surface is split by responsibility the way the users service splits its cache — `client`, `keys`, `store`, `entries`, `limiter`, `lock`, `coalescer` and `setup` — so each layer can be swapped without rewriting the callers.
