@@ -60,7 +60,7 @@ func main() {
 
 	repo := repository.New(sqlc.New(dbClient.Pool()))
 	cachedUsers := services.NewCachedUsers(
-		repo, plane.Store, plane.Locker, cache.NewPolicy(cfg.LockTTL), cfg.QueryTimeout,
+		repo, plane.Store, plane.Locker, cache.NewPolicy(cfg.LockTTL), cfg.QueryTimeout, cache.NewFlightGroup(),
 	)
 	authService := services.NewAuthService(
 		cachedUsers, repo, password.New(), accessIssuer, refreshTokens, cfg.AccessTokenTTL,
@@ -70,9 +70,10 @@ func main() {
 	protocols := new(http.Protocols)
 	protocols.SetHTTP1(true)
 
+	limits := handlers.Limits{Read: cfg.RateLimitReadMax, Write: cfg.RateLimitWriteMax}
 	srv := &http.Server{
 		Addr:      ":" + strconv.Itoa(cfg.Port),
-		Handler:   router.New(dbClient, handlers.NewAuth(authService), handlers.NewUser(userService, accessVerifier, cachedUsers)),
+		Handler:   router.New(dbClient, handlers.NewAuth(authService), handlers.NewUser(userService, accessVerifier, cachedUsers), plane.Limiter, limits),
 		Protocols: protocols,
 	}
 

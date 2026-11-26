@@ -33,3 +33,11 @@ func (NullLocker) Acquire(context.Context, string, time.Duration) (string, error
 func (NullLocker) Release(context.Context, string, string) error {
 	return nil
 }
+
+type NullLimiter struct{}
+
+var _ Limiter = NullLimiter{}
+
+func (NullLimiter) Consume(_ context.Context, _ string, _ string, limit int) (Decision, error) {
+	return Decision{Allowed: true, Limit: limit}, nil
+}

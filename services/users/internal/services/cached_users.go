@@ -30,6 +30,7 @@ type CachedUsers struct {
 	locker       cache.Locker
 	policy       cache.Policy
 	queryTimeout time.Duration
+	flights      cache.Coalescer
 }
 
 var _ repository.UserRepository = (*CachedUsers)(nil)
@@ -54,23 +55,27 @@ func (s *CachedUsers) CreateUser(ctx context.Context, user models.User) error {
 
 func (s *CachedUsers) GetCredentialsByEmail(ctx context.Context, email string) (models.Credentials, error) {
 	resource := cache.EmailResource(email)
-	if s.missing(ctx, cache.MissKey(resource)) {
-		return models.Credentials{}, models.ErrNotFound
-	}
+	return cache.Coalesce(s.flights, ctx, cache.FlightKey("credentials", resource), func(ctx context.Context) (models.Credentials, error) {
+		if s.missing(ctx, cache.MissKey(resource)) {
+			return models.Credentials{}, models.ErrNotFound
+		}
 
-	credentials, err := within(ctx, s.queryTimeout, func(ctx context.Context) (models.Credentials, error) {
-		return s.repo.GetCredentialsByEmail(ctx, email)
+		credentials, err := within(ctx, s.queryTimeout, func(ctx context.Context) (models.Credentials, error) {
+			return s.repo.GetCredentialsByEmail(ctx, email)
+		})
+		if err != nil && errors.Is(err, models.ErrNotFound) {
+			s.markMissing(ctx, resource)
+		}
+		return credentials, err
 	})
-	if err != nil && errors.Is(err, models.ErrNotFound) {
-		s.markMissing(ctx, resource)
-	}
-	return credentials, err
 }
 
 func (s *CachedUsers) GetUserByID(ctx context.Context, id uuid.UUID) (models.User, error) {
 	resource := cache.UserResource(id.String())
-	return s.read(ctx, cache.DataKey(resource), resource, func(ctx context.Context) (models.User, error) {
-		return s.repo.GetUserByID(ctx, id)
+	return cache.Coalesce(s.flights, ctx, cache.FlightKey("user", resource), func(ctx context.Context) (models.User, error) {
+		return s.read(ctx, cache.DataKey(resource), resource, func(ctx context.Context) (models.User, error) {
+			return s.repo.GetUserByID(ctx, id)
+		})
 	})
 }
 
@@ -177,17 +182,10 @@ func (s *CachedUsers) read(
 
 func (s *CachedUsers) resolveIDByEmail(ctx context.Context, email string) (string, error) {
 	resource := cache.EmailResource(email)
-	key := cache.DataKey(resource)
-	missKey := cache.MissKey(resource)
+	return cache.Coalesce(s.flights, ctx, cache.FlightKey("email", resource), func(ctx context.Context) (string, error) {
+		key := cache.DataKey(resource)
+		missKey := cache.MissKey(resource)
 
-	if s.missing(ctx, missKey) {
-		return "", models.ErrNotFound
-	}
-	if id, ok := s.pointer(ctx, key); ok {
-		return id, nil
-	}
-
-	return cache.Execute(ctx, s.locker, cache.LockKey(resource), s.policy, func(ctx context.Context) (string, error) {
 		if s.missing(ctx, missKey) {
 			return "", models.ErrNotFound
 		}
@@ -195,17 +193,26 @@ func (s *CachedUsers) resolveIDByEmail(ctx context.Context, email string) (strin
 			return id, nil
 		}
 
-		user, err := within(ctx, s.queryTimeout, func(ctx context.Context) (models.User, error) {
-			return s.repo.GetUserByEmail(ctx, email)
-		})
-		if err != nil {
-			if errors.Is(err, models.ErrNotFound) {
-				s.markMissing(ctx, resource)
+		return cache.Execute(ctx, s.locker, cache.LockKey(resource), s.policy, func(ctx context.Context) (string, error) {
+			if s.missing(ctx, missKey) {
+				return "", models.ErrNotFound
 			}
-			return "", err
-		}
-		s.put(ctx, key, user.ID.String(), cache.EmailTTL)
-		return user.ID.String(), nil
+			if id, ok := s.pointer(ctx, key); ok {
+				return id, nil
+			}
+
+			user, err := within(ctx, s.queryTimeout, func(ctx context.Context) (models.User, error) {
+				return s.repo.GetUserByEmail(ctx, email)
+			})
+			if err != nil {
+				if errors.Is(err, models.ErrNotFound) {
+					s.markMissing(ctx, resource)
+				}
+				return "", err
+			}
+			s.put(ctx, key, user.ID.String(), cache.EmailTTL)
+			return user.ID.String(), nil
+		})
 	})
 }
 

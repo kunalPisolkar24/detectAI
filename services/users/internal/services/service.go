@@ -15,6 +15,7 @@ func NewCachedUsers(
 	locker cache.Locker,
 	policy cache.Policy,
 	queryTimeout time.Duration,
+	flights cache.Coalescer,
 ) *CachedUsers {
 	return &CachedUsers{
 		repo:         repo,
@@ -22,6 +23,7 @@ func NewCachedUsers(
 		locker:       locker,
 		policy:       policy,
 		queryTimeout: queryTimeout,
+		flights:      flights,
 	}
 }
 

@@ -12,39 +12,45 @@ import (
 
 // Config is the typed boot contract; plane keys without a field are ignored.
 type Config struct {
-	Port            int
-	DrainTimeout    time.Duration
-	APIKey          string
-	DatabaseURL     string
-	RedisEndpoint   string
-	TokenPrivateKey ed25519.PrivateKey
-	AccessTokenTTL  time.Duration
-	RefreshTokenTTL time.Duration
-	QueryTimeout    time.Duration
-	LockTTL         time.Duration
+	Port              int
+	DrainTimeout      time.Duration
+	APIKey            string
+	DatabaseURL       string
+	RedisEndpoint     string
+	TokenPrivateKey   ed25519.PrivateKey
+	AccessTokenTTL    time.Duration
+	RefreshTokenTTL   time.Duration
+	QueryTimeout      time.Duration
+	LockTTL           time.Duration
+	RateLimitReadMax  int
+	RateLimitWriteMax int
 }
 
 const (
-	defaultPort            = 8090
-	defaultDrain           = 5 * time.Second
-	minCredentialChars     = 16
-	defaultAccessTokenTTL  = 15 * time.Minute
-	defaultRefreshTokenTTL = 720 * time.Hour
-	defaultQueryTimeout    = 3 * time.Second
-	defaultLockTTL         = 10 * time.Second
-	lockTTLSlack           = time.Second
+	defaultPort              = 8090
+	defaultDrain             = 5 * time.Second
+	minCredentialChars       = 16
+	defaultAccessTokenTTL    = 15 * time.Minute
+	defaultRefreshTokenTTL   = 720 * time.Hour
+	defaultQueryTimeout      = 3 * time.Second
+	defaultLockTTL           = 10 * time.Second
+	lockTTLSlack             = time.Second
+	defaultRateLimitReadMax  = 120
+	defaultRateLimitWriteMax = 20
 )
 
 // Resolve reads one plane source: PORT, API_KEY and TOKEN_SIGNING_KEY fail the
 // boot, while an unreadable DRAIN_TIMEOUT falls back to the safe default.
 func Resolve(source Source) (Config, error) {
 	cfg := Config{
-		Port:            defaultPort,
-		DrainTimeout:    defaultDrain,
-		AccessTokenTTL:  defaultAccessTokenTTL,
-		RefreshTokenTTL: defaultRefreshTokenTTL,
-		QueryTimeout:    defaultQueryTimeout,
-		LockTTL:         defaultLockTTL,
+		Port:              defaultPort,
+		DrainTimeout:      defaultDrain,
+		AccessTokenTTL:    defaultAccessTokenTTL,
+		RefreshTokenTTL:   defaultRefreshTokenTTL,
+		QueryTimeout:      defaultQueryTimeout,
+		LockTTL:           defaultLockTTL,
+		RateLimitReadMax:  defaultRateLimitReadMax,
+		RateLimitWriteMax: defaultRateLimitWriteMax,
 	}
 	if raw, ok := source.Get("PORT"); ok {
 		port, err := strconv.Atoi(strings.TrimSpace(raw))
@@ -86,7 +92,40 @@ func Resolve(source Source) (Config, error) {
 	if cfg.LockTTL <= cfg.QueryTimeout+lockTTLSlack {
 		return Config{}, fmt.Errorf("config: LOCK_TTL must exceed QUERY_TIMEOUT by at least %s", lockTTLSlack)
 	}
+	if err := resolveRateLimits(source, &cfg); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+func resolveRateLimits(source Source, cfg *Config) error {
+	read, err := resolveRateLimitMax(source, "RATE_LIMIT_READ_MAX", defaultRateLimitReadMax)
+	if err != nil {
+		return err
+	}
+	write, err := resolveRateLimitMax(source, "RATE_LIMIT_WRITE_MAX", defaultRateLimitWriteMax)
+	if err != nil {
+		return err
+	}
+	cfg.RateLimitReadMax = read
+	cfg.RateLimitWriteMax = write
+	return nil
+}
+
+func resolveRateLimitMax(source Source, key string, fallback int) (int, error) {
+	raw, ok := source.Get(key)
+	if !ok {
+		return fallback, nil
+	}
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(trimmed)
+	if err != nil || value <= 0 {
+		return 0, fmt.Errorf("config: %s must be a positive integer; got %q", key, trimmed)
+	}
+	return value, nil
 }
 
 // resolveDatabaseURL reads the postgres DSN; the URL carries the credentials,
