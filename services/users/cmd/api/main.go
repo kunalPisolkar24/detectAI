@@ -40,7 +40,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:      ":" + strconv.Itoa(cfg.Port),
-		Handler:   router.New(dbClient, handlers.NewAuth(), handlers.NewUser()),
+		Handler:   router.New(dbClient, handlers.NewAuth(nil), handlers.NewUser(nil, nil)),
 		Protocols: protocols,
 	}
 
