@@ -15,6 +15,8 @@ Redis is a read-through overlay on MongoDB, never the source of truth. Chats key
 
 Rate-limit counters use the same fixed window as the web BFF: an atomic Lua `INCRBY` + `EXPIREAT`, a one-minute window keyed by epoch minute, and a 250 ms call deadline. They fail open — see [Request Flow](request-flow.md).
 
+Every `store.Set` adds up to 15% random jitter to the TTL, the same avalanche guard the users service uses: keys written together do not expire in one instant. That covers chat meta, head pages, sidebar lists and negative markers. Rate-limit windows and fill locks keep exact TTLs — the former is pinned to the window edge, the latter must stay predictably longer than a source read.
+
 A cold read is protected in two layers, the same way the users service protects its repository reads. An in-process `singleflight` group collapses duplicate calls for one resource before they reach Redis; the survivor takes the distributed lock, re-reads the cache, and only then fetches from Mongo. Other replicas contend on the lock with jittered backoff, then re-read the filled cache. A locker fault or exhausted retries falls through to the unprotected path, so Redis still never fails an RPC. Lock keys are distinct for chat meta, the head page, and an owner's list.
 
 A chat lookup that ends in `not_found` writes a marker with a one-minute TTL. Both the pre-lock read and the double-check consult it, so repeated requests for a missing or foreign chat stop spending Mongo reads. The marker is keyed by **owner and chat id**: ownership is part of the query, so a foreign owner's miss must never hide the chat from its owner. Successful writes clear the marker; a marker fault is absorbed and the lookup falls through to Mongo. Empty sidebar lists and head pages need no marker — they are already cached as empty values — and cursor history pages stay uncached by design.
@@ -103,7 +105,7 @@ classDiagram
     Entries o--> Store
     Entries ..> keys : every key carries a TTL
     note for Client "ParseURL, 5s dial timeout, context deadlines enabled - Raw hands the Lua limiter and lock scripts"
-    note for Store "JSON get/set/delete - a value that fails to decode is a miss"
+    note for Store "JSON get/set/delete - a value that fails to decode is a miss, and every Set jitters its TTL by up to 15%"
     note for NullEntries "all reads miss, all writes no-op - installed when Redis is unreachable or absent"
     note for Locker "SETNX plus a token-guarded Lua release - SETNX failure means the lock is held"
     note for FlightGroup "in-process singleflight - collapses duplicates before they reach Redis"

@@ -2,6 +2,7 @@ package cache_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -27,8 +28,9 @@ func TestNegativeMarkerRoundTripsWithItsTTL(t *testing.T) {
 
 	key := keys.MissKey(keys.ChatLookupResource(owner, chatID))
 	ttl := rawClient(t).TTL(ctx, key).Val()
-	if ttl <= 0 || ttl > keys.NegativeTTL {
-		t.Errorf("ttl = %v, want a live marker inside %v", ttl, keys.NegativeTTL)
+	upper := keys.NegativeTTL + keys.NegativeTTL*15/100
+	if ttl < keys.NegativeTTL-time.Second || ttl > upper {
+		t.Errorf("ttl = %v, want a live marker within [%v, %v]", ttl, keys.NegativeTTL-time.Second, upper)
 	}
 
 	if err := entries.ClearMissing(ctx, owner, chatID); err != nil {

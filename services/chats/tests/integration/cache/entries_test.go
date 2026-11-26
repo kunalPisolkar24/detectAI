@@ -308,8 +308,10 @@ func TestKeysCarryThePrefixAndTTL(t *testing.T) {
 		keys.ChatHeadKey(chatID):    keys.ChatHeadTTL,
 		keys.OwnerChatsKey(ownerID): keys.ChatListTTL,
 	} {
-		if ttl := raw.TTL(ctx, key).Val(); ttl <= 0 || ttl > wantTTL {
-			t.Errorf("ttl of %s = %v, want it within (0, %v]", key, ttl, wantTTL)
+		ttl := raw.TTL(ctx, key).Val()
+		upper := wantTTL + wantTTL*15/100
+		if ttl < wantTTL-time.Second || ttl > upper {
+			t.Errorf("ttl of %s = %v, want it within [%v, %v]", key, ttl, wantTTL-time.Second, upper)
 		}
 	}
 }

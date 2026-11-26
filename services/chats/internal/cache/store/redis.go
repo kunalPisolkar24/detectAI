@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	driver "github.com/redis/go-redis/v9"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/client"
 )
+
+const ttlJitterPercent = 15
 
 type Redis struct {
 	client *driver.Client
@@ -43,10 +46,23 @@ func (s *Redis) Set(ctx context.Context, key string, value any, ttl time.Duratio
 	if err != nil {
 		return fmt.Errorf("redis: encode %s: %w", key, err)
 	}
-	if err := s.client.Set(ctx, key, payload, ttl).Err(); err != nil {
+	if err := s.client.Set(ctx, key, payload, jitteredTTL(ttl)).Err(); err != nil {
 		return fmt.Errorf("redis: set %s: %w", key, err)
 	}
 	return nil
+}
+
+// jitteredTTL spreads expiries so keys written together do not expire in one
+// instant and stampede the source. A non-positive TTL has no expiry to spread.
+func jitteredTTL(ttl time.Duration) time.Duration {
+	if ttl <= 0 {
+		return ttl
+	}
+	spread := int64(ttl) * ttlJitterPercent / 100
+	if spread <= 0 {
+		return ttl
+	}
+	return ttl + time.Duration(rand.Int64N(spread+1))
 }
 
 func (s *Redis) Delete(ctx context.Context, keys ...string) error {
