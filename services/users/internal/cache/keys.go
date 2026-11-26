@@ -8,11 +8,13 @@ import (
 )
 
 const (
-	UserTTL  = time.Hour
-	EmailTTL = time.Hour
+	UserTTL     = time.Hour
+	EmailTTL    = time.Hour
+	NegativeTTL = time.Minute
 
 	keyPrefix   = "users:"
 	lockSegment = "lock:"
+	missSegment = "nf:"
 	hashLength  = 16
 )
 
@@ -30,6 +32,10 @@ func EmailResource(email string) string {
 
 func LockKey(resource string) string {
 	return keyPrefix + lockSegment + resource
+}
+
+func MissKey(resource string) string {
+	return keyPrefix + missSegment + resource
 }
 
 func emailHash(email string) string {
