@@ -1,15 +1,35 @@
 package cache
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
-type NullConnection struct{}
+type NullStore struct{}
 
-var _ Connection = NullConnection{}
+var (
+	_ Store  = NullStore{}
+	_ Locker = NullLocker{}
+)
 
-func (NullConnection) Ping(context.Context) error {
+func (NullStore) Get(context.Context, string, any) (bool, error) {
+	return false, nil
+}
+
+func (NullStore) Set(context.Context, string, any, time.Duration) error {
 	return nil
 }
 
-func (NullConnection) Disconnect(context.Context) error {
+func (NullStore) Delete(context.Context, ...string) error {
+	return nil
+}
+
+type NullLocker struct{}
+
+func (NullLocker) Acquire(context.Context, string, time.Duration) (string, error) {
+	return "null", nil
+}
+
+func (NullLocker) Release(context.Context, string, string) error {
 	return nil
 }

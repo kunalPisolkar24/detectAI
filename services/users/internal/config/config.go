@@ -20,6 +20,8 @@ type Config struct {
 	TokenPrivateKey ed25519.PrivateKey
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
+	QueryTimeout    time.Duration
+	LockTTL         time.Duration
 }
 
 const (
@@ -28,6 +30,9 @@ const (
 	minCredentialChars     = 16
 	defaultAccessTokenTTL  = 15 * time.Minute
 	defaultRefreshTokenTTL = 720 * time.Hour
+	defaultQueryTimeout    = 3 * time.Second
+	defaultLockTTL         = 10 * time.Second
+	lockTTLSlack           = time.Second
 )
 
 // Resolve reads one plane source: PORT, API_KEY and TOKEN_SIGNING_KEY fail the
@@ -38,6 +43,8 @@ func Resolve(source Source) (Config, error) {
 		DrainTimeout:    defaultDrain,
 		AccessTokenTTL:  defaultAccessTokenTTL,
 		RefreshTokenTTL: defaultRefreshTokenTTL,
+		QueryTimeout:    defaultQueryTimeout,
+		LockTTL:         defaultLockTTL,
 	}
 	if raw, ok := source.Get("PORT"); ok {
 		port, err := strconv.Atoi(strings.TrimSpace(raw))
@@ -69,6 +76,15 @@ func Resolve(source Source) (Config, error) {
 	}
 	if err := resolveDuration(source, "REFRESH_TOKEN_TTL", &cfg.RefreshTokenTTL); err != nil {
 		return Config{}, err
+	}
+	if err := resolveDuration(source, "QUERY_TIMEOUT", &cfg.QueryTimeout); err != nil {
+		return Config{}, err
+	}
+	if err := resolveDuration(source, "LOCK_TTL", &cfg.LockTTL); err != nil {
+		return Config{}, err
+	}
+	if cfg.LockTTL <= cfg.QueryTimeout+lockTTLSlack {
+		return Config{}, fmt.Errorf("config: LOCK_TTL must exceed QUERY_TIMEOUT by at least %s", lockTTLSlack)
 	}
 	return cfg, nil
 }

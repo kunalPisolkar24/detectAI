@@ -14,8 +14,6 @@ type Client struct {
 	client *driver.Client
 }
 
-var _ Connection = (*Client)(nil)
-
 func Connect(ctx context.Context, endpoint string) (*Client, error) {
 	opts, err := driver.ParseURL(endpoint)
 	if err != nil {
