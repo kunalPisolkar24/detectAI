@@ -12,6 +12,10 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/token"
 )
 
+func unauthenticated() error {
+	return connect.NewError(connect.CodeUnauthenticated, errors.New("authentication failed"))
+}
+
 func connectError(err error) error {
 	if err == nil {
 		return nil

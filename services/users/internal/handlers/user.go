@@ -19,15 +19,15 @@ type User struct {
 
 var _ usersv1connect.UserServiceHandler = (*User)(nil)
 
-func NewUser(users *services.UserService, verifier token.AccessVerifier) *User {
-	return &User{users: users, identity: newIdentity(verifier)}
+func NewUser(users *services.UserService, verifier token.AccessVerifier, lookup UserLookup) *User {
+	return &User{users: users, identity: newIdentity(verifier, lookup)}
 }
 
 func (u *User) GetMe(ctx context.Context, req *connect.Request[usersv1.GetMeRequest]) (*connect.Response[usersv1.User], error) {
 	if u.users == nil {
 		return nil, unimplemented()
 	}
-	userID, err := u.identity.userID(req.Header())
+	userID, err := u.identity.userID(ctx, req.Header())
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (u *User) Logout(ctx context.Context, req *connect.Request[usersv1.LogoutRe
 	if u.users == nil {
 		return nil, unimplemented()
 	}
-	userID, err := u.identity.userID(req.Header())
+	userID, err := u.identity.userID(ctx, req.Header())
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (u *User) LogoutAll(ctx context.Context, req *connect.Request[usersv1.Logou
 	if u.users == nil {
 		return nil, unimplemented()
 	}
-	userID, err := u.identity.userID(req.Header())
+	userID, err := u.identity.userID(ctx, req.Header())
 	if err != nil {
 		return nil, err
 	}

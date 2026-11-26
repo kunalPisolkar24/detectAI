@@ -134,6 +134,14 @@ func (s *CachedUsers) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	})
 }
 
+func (s *CachedUsers) Invalidate(ctx context.Context, id uuid.UUID) error {
+	resource := cache.UserResource(id.String())
+	return s.write(ctx, resource, func(ctx context.Context) error {
+		s.invalidate(ctx, cache.DataKey(resource))
+		return nil
+	})
+}
+
 func (s *CachedUsers) read(
 	ctx context.Context,
 	key, resource string,

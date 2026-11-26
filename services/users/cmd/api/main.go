@@ -65,14 +65,14 @@ func main() {
 	authService := services.NewAuthService(
 		cachedUsers, repo, password.New(), accessIssuer, refreshTokens, cfg.AccessTokenTTL,
 	)
-	userService := services.NewUserService(cachedUsers, repo, refreshTokens)
+	userService := services.NewUserService(cachedUsers, repo, refreshTokens, cachedUsers)
 
 	protocols := new(http.Protocols)
 	protocols.SetHTTP1(true)
 
 	srv := &http.Server{
 		Addr:      ":" + strconv.Itoa(cfg.Port),
-		Handler:   router.New(dbClient, handlers.NewAuth(authService), handlers.NewUser(userService, accessVerifier)),
+		Handler:   router.New(dbClient, handlers.NewAuth(authService), handlers.NewUser(userService, accessVerifier, cachedUsers)),
 		Protocols: protocols,
 	}
 

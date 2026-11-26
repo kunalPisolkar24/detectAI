@@ -47,10 +47,12 @@ func NewUserService(
 	users repository.UserRepository,
 	refresh repository.RefreshTokenRepository,
 	refreshTokens *token.RefreshTokens,
+	cache UserCacheInvalidator,
 ) *UserService {
 	return &UserService{
 		users:         users,
 		refresh:       refresh,
 		refreshTokens: refreshTokens,
+		cache:         cache,
 	}
 }

@@ -1,32 +1,50 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/kunalPisolkar24/detectAI/services/users/internal/models"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/token"
 )
 
+type UserLookup interface {
+	GetUserByID(ctx context.Context, id uuid.UUID) (models.User, error)
+}
+
 type identity struct {
 	verifier token.AccessVerifier
+	lookup   UserLookup
 }
 
-func newIdentity(verifier token.AccessVerifier) identity {
-	return identity{verifier: verifier}
+func newIdentity(verifier token.AccessVerifier, lookup UserLookup) identity {
+	return identity{verifier: verifier, lookup: lookup}
 }
 
-func (i identity) userID(header http.Header) (uuid.UUID, error) {
+func (i identity) userID(ctx context.Context, header http.Header) (uuid.UUID, error) {
 	raw := bearer(header.Get("Authorization"))
-	if i.verifier == nil || raw == "" {
-		return uuid.Nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authentication required"))
+	if i.verifier == nil || i.lookup == nil || raw == "" {
+		return uuid.Nil, unauthenticated()
 	}
+
 	claims, err := i.verifier.Verify(raw)
 	if err != nil {
 		return uuid.Nil, connectError(err)
+	}
+
+	user, err := i.lookup.GetUserByID(ctx, claims.UserID)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return uuid.Nil, unauthenticated()
+		}
+		return uuid.Nil, connectError(err)
+	}
+	if user.TokenVersion != claims.Version {
+		return uuid.Nil, unauthenticated()
 	}
 	return claims.UserID, nil
 }
