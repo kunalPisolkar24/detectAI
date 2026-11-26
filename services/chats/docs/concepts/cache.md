@@ -1,6 +1,6 @@
 # Cache
 
-Redis is a read-through overlay on MongoDB, never the source of truth. Chats keys live behind a `chats:` prefix on a shared instance, every key carries a TTL, and no cache fault can fail an RPC.
+Redis is a read-through overlay on MongoDB, never the source of truth. Chats keys live behind a `chats:` prefix on a shared instance — the GCRA limiter's keys are prefixed `rate:` by `redis_rate` — every key carries a TTL, and no cache fault can fail an RPC.
 
 ## The keys
 
@@ -9,13 +9,13 @@ Redis is a read-through overlay on MongoDB, never the source of truth. Chats key
 | `chats:chat:<id>` | chat meta (owner, title, updated_at) | 10m | ownership check + `GetChat` | append, analysis, rename, delete |
 | `chats:chat:<id>:head` | first ~50 messages + next cursor | 10m | first page of history | append, analysis, delete |
 | `chats:user:<id>:chats` | sidebar summaries, newest-first | 5m | `ListChats` | create, append, analysis, rename, delete |
-| `chats:rate_limit:<id>:<scope>:<window>` | burst counter | window end + 2m grace | rate limiter | TTL only |
+| `rate:chats:rate_limit:<id>:<scope>` | GCRA arrival time | up to one period | rate limiter | TTL only |
 | `chats:lock:<resource>` | fill lock token | `LOCK_TTL` (10s) | stampede protection | token-guarded `DEL` on release |
 | `chats:nf:user:<owner>:chat:<id>` | not-found marker | 1m | skip Mongo for an unknown chat | any successful write to that chat, or TTL |
 
-Rate-limit counters use the same fixed window as the web BFF: an atomic Lua `INCRBY` + `EXPIREAT`, a one-minute window keyed by epoch minute, and a 250 ms call deadline. They fail open — see [Request Flow](request-flow.md).
+Rate limiting uses `redis_rate`, a GCRA (leaky bucket) limiter backed by one atomic Lua script. Each scope holds a single theoretical-arrival-time value: capacity equals the configured per-minute budget, refilling continuously at `budget / minute`. There is no window edge to double-spend and no epoch-minute key churn. `budget` calls are allowed back-to-back; the next one waits one emission interval. The call carries a 250 ms deadline and fails open — see [Request Flow](request-flow.md).
 
-Every `store.Set` adds up to 15% random jitter to the TTL, the same avalanche guard the users service uses: keys written together do not expire in one instant. That covers chat meta, head pages, sidebar lists and negative markers. Rate-limit windows and fill locks keep exact TTLs — the former is pinned to the window edge, the latter must stay predictably longer than a source read.
+Every `store.Set` adds up to 15% random jitter to the TTL, the same avalanche guard the users service uses: keys written together do not expire in one instant. That covers chat meta, head pages, sidebar lists and negative markers. The limiter's TTL is set by `redis_rate` to the time until the bucket resets (at most one period) and fill locks keep exact TTLs — the latter must stay predictably longer than a source read.
 
 A cold read is protected in two layers, the same way the users service protects its repository reads. An in-process `singleflight` group collapses duplicate calls for one resource before they reach Redis; the survivor takes the distributed lock, re-reads the cache, and only then fetches from Mongo. Other replicas contend on the lock with jittered backoff, then re-read the filled cache. A locker fault or exhausted retries falls through to the unprotected path, so Redis still never fails an RPC. Lock keys are distinct for chat meta, the head page, and an owner's list.
 
@@ -77,7 +77,7 @@ classDiagram
         +ChatKey(id)
         +ChatHeadKey(id)
         +OwnerChatsKey(owner)
-        +RateLimitKey(owner, scope, window)
+        +RateLimitKey(owner, scope)
         +LockKey(resource)
         +FlightKey(kind, resource)
         +MissKey(resource)
@@ -104,12 +104,12 @@ classDiagram
     Coalescer <|.. FlightGroup
     Entries o--> Store
     Entries ..> keys : every key carries a TTL
-    note for Client "ParseURL, 5s dial timeout, context deadlines enabled - Raw hands the Lua limiter and lock scripts"
+    note for Client "ParseURL, 5s dial timeout, context deadlines enabled - Raw hands the redis_rate limiter and the lock script"
     note for Store "JSON get/set/delete - a value that fails to decode is a miss, and every Set jitters its TTL by up to 15%"
     note for NullEntries "all reads miss, all writes no-op - installed when Redis is unreachable or absent"
     note for Locker "SETNX plus a token-guarded Lua release - SETNX failure means the lock is held"
     note for FlightGroup "in-process singleflight - collapses duplicates before they reach Redis"
-    note for keys "prefix chats: · meta/head 10m · list 5m · negative 1m · rate window + 2m grace · lock LOCK_TTL"
+    note for keys "prefix chats: · meta/head 10m · list 5m · negative 1m · rate TAT ≤ 1 period · lock LOCK_TTL"
 ```
 
 The prefix lives in `internal/cache/keys`, never in the Redis client: client-level `keyPrefix` silently misses keys inside Lua `EVAL` scripts, and the limiter and locker are exactly such scripts. The cache surface is split by responsibility the way the users service splits its cache — `client`, `keys`, `store`, `entries`, `limiter`, `lock`, `coalescer` and `setup` — so each layer can be swapped without rewriting the callers.
@@ -123,15 +123,16 @@ classDiagram
         +Consume(ctx, owner, scope, limit) Decision
     }
     class Redis {
-        -client: redis.Client
+        -rate: redis_rate.Limiter
         -timeout: Duration
         +Consume(ctx, owner, scope, limit) Decision
     }
     class Decision {
         +Allowed: bool
-        +Count: int
         +Limit: int
+        +Remaining: int
         +RetryAfter: Duration
+        +ResetAfter: Duration
     }
     class Null {
         +Consume() Decision
@@ -152,9 +153,9 @@ classDiagram
     Locker <|.. RedisLocker
     Locker <|.. NullLocker
     setup ..> Plane : returns the real plane or all nulls
-    note for Redis "limiter.Redis behind NewRedis - atomic Lua INCRBY + EXPIREAT"
-    note for Redis "250ms deadline · count ≤ limit allowed · RetryAfter = window end - now"
-    note for Decision "the refusal metadata on the wire comes from Count, Limit and RetryAfter"
+    note for Redis "limiter.Redis wraps redis_rate - GCRA with Redis TIME and burst = limit"
+    note for Redis "250ms deadline · PerMinute(limit) · Redis failures surface as errors and fail open"
+    note for Decision "RetryAfter is the wait for the next call; ResetAfter gates refusal logs until the bucket recovers"
     note for Null "always allows - a Redis fault must never surface as resource_exhausted"
     note for RedisLocker "SETNX with a random token - release only deletes the key when the token still matches"
     note for NullLocker "always acquires - a cache fault never blocks a read"

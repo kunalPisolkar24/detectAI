@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -53,8 +55,45 @@ func (l Limits) forScope(s scope) int {
 	}
 }
 
+const refusalLogSlots = 256
+
+type logSlot struct {
+	key   string
+	until time.Time
+}
+
+// logGate suppresses duplicate refusal log lines until an owner's budget has
+// recovered. A fixed ring keeps the gate bounded no matter how many owners are
+// refused; duplicate lines across replicas are bounded by the replica count.
+type logGate struct {
+	mu    sync.Mutex
+	slots []logSlot
+	next  int
+}
+
+func newLogGate() *logGate {
+	return &logGate{slots: make([]logSlot, refusalLogSlots)}
+}
+
+func (g *logGate) allow(key string, hold time.Duration, now time.Time) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, slot := range g.slots {
+		if slot.key == key && now.Before(slot.until) {
+			return false
+		}
+	}
+	if hold <= 0 {
+		hold = time.Second
+	}
+	g.slots[g.next] = logSlot{key: key, until: now.Add(hold)}
+	g.next = (g.next + 1) % len(g.slots)
+	return true
+}
+
 // The check fails open: a cache fault lets the call through.
 func NewRateLimitInterceptor(limiter limiter.Limiter, limits Limits, logger *slog.Logger, obs observability.Telemetry) connect.UnaryInterceptorFunc {
+	gate := newLogGate()
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			selected, limited := scopeByProcedure[req.Spec().Procedure]
@@ -75,27 +114,15 @@ func NewRateLimitInterceptor(limiter limiter.Limiter, limits Limits, logger *slo
 			}
 			if !decision.Allowed {
 				obs.RecordRateLimitRefusal(string(selected))
-				logRefusal(ctx, logger, ownerID, selected, decision)
+				ownerHash := ownerIDHash(ownerID)
+				if gate.allow(ownerHash+":"+string(selected), decision.ResetAfter, time.Now()) {
+					logRefusal(ctx, logger, ownerHash, selected, decision)
+				}
 				return nil, rateLimitError(decision)
 			}
 			return next(ctx, req)
 		}
 	}
-}
-
-// The refusal is logged once per exhausted budget per window. The counter moves
-// by one, so the first refusal of a window is limit+1; later ones stay silent
-// and a client hammering the limit cannot flood the logs.
-func logRefusal(ctx context.Context, logger *slog.Logger, ownerID string, selected scope, decision limiter.Decision) {
-	if decision.Count != decision.Limit+1 {
-		return
-	}
-	logger.InfoContext(ctx, "rate limit refused",
-		"scope", string(selected),
-		"owner", ownerIDHash(ownerID),
-		"count", decision.Count,
-		"limit", decision.Limit,
-		"retry_after_ms", decision.RetryAfter.Milliseconds())
 }
 
 // A short digest of an owner id; raw ids never reach the logs.
@@ -104,10 +131,19 @@ func ownerIDHash(ownerID string) string {
 	return hex.EncodeToString(digest[:])[:16]
 }
 
+func logRefusal(ctx context.Context, logger *slog.Logger, ownerHash string, selected scope, decision limiter.Decision) {
+	logger.InfoContext(ctx, "rate limit refused",
+		"scope", string(selected),
+		"owner", ownerHash,
+		"remaining", decision.Remaining,
+		"limit", decision.Limit,
+		"retry_after_ms", decision.RetryAfter.Milliseconds())
+}
+
 func rateLimitError(decision limiter.Decision) error {
 	err := connect.NewError(connect.CodeResourceExhausted, errors.New("rate limit exceeded"))
 	err.Meta().Set("retry-after-ms", strconv.FormatInt(decision.RetryAfter.Milliseconds(), 10))
 	err.Meta().Set("x-ratelimit-limit", strconv.Itoa(decision.Limit))
-	err.Meta().Set("x-ratelimit-remaining", "0")
+	err.Meta().Set("x-ratelimit-remaining", strconv.Itoa(decision.Remaining))
 	return err
 }

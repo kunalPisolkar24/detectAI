@@ -15,8 +15,8 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/limiter"
 )
 
-// TestConsumeGivesUpOnASilentServer checks that the burst counter's own
-// deadline ends the call when the cache plane stops answering.
+// TestConsumeGivesUpOnASilentServer checks that the limiter's own deadline
+// ends the call when the cache plane stops answering.
 func TestConsumeGivesUpOnASilentServer(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

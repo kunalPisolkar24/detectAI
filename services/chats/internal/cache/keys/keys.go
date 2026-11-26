@@ -1,7 +1,6 @@
 package keys
 
 import (
-	"strconv"
 	"time"
 )
 
@@ -20,14 +19,6 @@ const (
 	NegativeTTL = time.Minute
 )
 
-// RateLimitWindow is the fixed window the burst counters run on; the window
-// id is the epoch minute it opens at.
-const RateLimitWindow = time.Minute
-
-// RateLimitGrace outlives the window edge, so a counter never expires while
-// its window still counts.
-const RateLimitGrace = 2 * time.Minute
-
 func ChatKey(chatID string) string {
 	return prefix + "chat:" + chatID
 }
@@ -40,8 +31,8 @@ func OwnerChatsKey(ownerID string) string {
 	return prefix + "user:" + ownerID + ":chats"
 }
 
-func RateLimitKey(ownerID, scope string, windowMinute int64) string {
-	return prefix + "rate_limit:" + ownerID + ":" + scope + ":" + strconv.FormatInt(windowMinute, 10)
+func RateLimitKey(ownerID, scope string) string {
+	return prefix + "rate_limit:" + ownerID + ":" + scope
 }
 
 func LockKey(resource string) string {

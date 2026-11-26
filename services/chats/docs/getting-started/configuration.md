@@ -45,9 +45,9 @@ Field names are the env keys. Unknown keys are ignored (consume-first), so typos
 | `MONGO_DATABASE` | database name | `chat_db` | falls back to default |
 | `REDIS_ENDPOINT` | Redis address | — | **boot fails** unless `redis://` or `rediss://`; `rediss://` needs no token |
 | `API_KEY` | the service credential every RPC carries | — | **boot fails** unless trimmed value ≥16 chars |
-| `RATE_LIMIT_READ_MAX` | `GetChat` + `ListChats` + `GetChatHistory` shared budget | 600 | **boot fails** on ≤0 or non-integer |
-| `RATE_LIMIT_CREATE_MAX` | `CreateChat` burst budget | 10 | **boot fails** on ≤0 or non-integer |
-| `RATE_LIMIT_WRITE_MAX` | `RenameChat` + `DeleteChat` + `SaveUserMessage` + `SaveAnalysisMessage` shared budget | 60 | **boot fails** on ≤0 or non-integer |
+| `RATE_LIMIT_READ_MAX` | `GetChat` + `ListChats` + `GetChatHistory` shared GCRA budget per minute | 600 | **boot fails** on ≤0 or non-integer |
+| `RATE_LIMIT_CREATE_MAX` | `CreateChat` GCRA budget per minute | 10 | **boot fails** on ≤0 or non-integer |
+| `RATE_LIMIT_WRITE_MAX` | `RenameChat` + `DeleteChat` + `SaveUserMessage` + `SaveAnalysisMessage` shared GCRA budget per minute | 60 | **boot fails** on ≤0 or non-integer |
 | `LOCK_TTL` | cache-fill lock lifetime | 10s | **boot fails** unless positive and >6s (5s driver selection + 1s slack) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | the observability gate | unset → nothing emitted | set without a ≥16-char license key → **boot fails** |
 | `NEW_RELIC_LICENSE_KEY` | ingest key, sent as `api-key` | unset | demanded only when the endpoint is set |

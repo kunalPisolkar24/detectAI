@@ -130,7 +130,7 @@ Per-user burst limits on all eight procedures, enforced by an interceptor beside
 | `create` | `CreateChat` | 10 per minute |
 | `write` | `RenameChat`, `DeleteChat`, `SaveUserMessage`, `SaveAnalysisMessage` (one shared budget) | 60 per minute |
 
-Every RPC draws from a scope. The read budget is deliberately generous because history pagination and sidebar refreshes are read-heavy, but it is still a hard per-user cap. Business quotas (daily usage) stay at the web BFF — chats does only operational burst protection. The window is a fixed minute (`chats:rate_limit:{user}:{scope}:{epochMinute}`), limits come from config (`RATE_LIMIT_READ_MAX`, `RATE_LIMIT_CREATE_MAX`, `RATE_LIMIT_WRITE_MAX`), and Redis loss fails open. An over-limit answer carries `retry-after-ms`, `x-ratelimit-limit`, and `x-ratelimit-remaining=0` as error metadata.
+Every RPC draws from a scope. The read budget is deliberately generous because history pagination and sidebar refreshes are read-heavy, but it is still a hard per-user cap. Business quotas (daily usage) stay at the web BFF — chats does only operational burst protection. Limiting is GCRA via `redis_rate`: one arrival-time value per user and scope under `rate:chats:rate_limit:{user}:{scope}`, capacity equal to the budget, continuous refill at `budget / minute`, and no minute boundary to double-spend. Limits come from config (`RATE_LIMIT_READ_MAX`, `RATE_LIMIT_CREATE_MAX`, `RATE_LIMIT_WRITE_MAX`), and Redis loss fails open. An over-limit answer carries `retry-after-ms`, `x-ratelimit-limit`, and `x-ratelimit-remaining=0` as error metadata.
 
 The interceptor order matters: telemetry is outermost and auth precedes rate limiting, so an unauthenticated call never reaches a counter and a refusal is still counted.
 

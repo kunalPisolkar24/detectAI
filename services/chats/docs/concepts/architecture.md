@@ -117,7 +117,7 @@ classDiagram
     note for Locker "consumer-owned in services - singleflight first, then a SETNX lock with a token-guarded release"
     note for Coalescer "consumer-owned in services - FlightGroup collapses same-process duplicate reads"
     note for Telemetry "no OTel import crosses the seam - both realizations satisfy the same seven methods"
-    note for RedisLimiter "limiter.Redis behind NewRedis - atomic Lua INCRBY + EXPIREAT"
+    note for RedisLimiter "limiter.Redis behind NewRedis - redis_rate GCRA with burst equal to the configured budget"
     note for RedisLocker "SETNX with a random token - a stale holder cannot delete another caller's lock"
     note for NullEntries "an unreachable Redis at boot installs null entries, null limiter and null locker - the RPC still serves"
     note for Database "the readiness probe is its only runtime caller - repository.New takes the driver database directly"

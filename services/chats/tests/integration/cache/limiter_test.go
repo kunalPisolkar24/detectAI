@@ -2,15 +2,12 @@ package cache_test
 
 import (
 	"context"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	driver "github.com/redis/go-redis/v9"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/keys"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/limiter"
 )
 
@@ -19,52 +16,55 @@ func newLimiter(t *testing.T) limiter.Limiter {
 	return limiter.NewRedis(connectContainer(t))
 }
 
-func TestConsumeCountsTowardsTheLimit(t *testing.T) {
-	limiter := newLimiter(t)
+func TestConsumeSpendsTheBudgetThenRefuses(t *testing.T) {
+	lim := newLimiter(t)
 	owner := uuid.NewString()
 	ctx := testContext(t)
 
-	for count := 1; count <= 2; count++ {
-		decision, err := limiter.Consume(ctx, owner, "create", 2)
+	for remaining := 1; remaining >= 0; remaining-- {
+		decision, err := lim.Consume(ctx, owner, "create", 2)
 		if err != nil {
 			t.Fatalf("Consume: %v", err)
 		}
 		if !decision.Allowed {
-			t.Errorf("call %d was refused, want it allowed", count)
+			t.Fatalf("a call inside the budget was refused, remaining %d", remaining)
 		}
-		if decision.Count != count {
-			t.Errorf("count = %d, want %d", decision.Count, count)
+		if decision.Remaining != remaining {
+			t.Errorf("remaining = %d, want %d", decision.Remaining, remaining)
 		}
 		if decision.Limit != 2 {
 			t.Errorf("limit = %d, want %d", decision.Limit, 2)
 		}
 	}
 
-	decision, err := limiter.Consume(ctx, owner, "create", 2)
+	decision, err := lim.Consume(ctx, owner, "create", 2)
 	if err != nil {
 		t.Fatalf("Consume: %v", err)
 	}
 	if decision.Allowed {
-		t.Error("the third call was allowed, want it refused")
+		t.Error("the call past the budget was allowed, want it refused")
 	}
-	if decision.Count != 3 {
-		t.Errorf("count = %d, want %d", decision.Count, 3)
+	if decision.Remaining != 0 {
+		t.Errorf("remaining = %d, want 0", decision.Remaining)
 	}
-	if decision.RetryAfter <= 0 || decision.RetryAfter > keys.RateLimitWindow {
-		t.Errorf("retry after = %v, want it inside the window", decision.RetryAfter)
+	if decision.RetryAfter <= 0 || decision.RetryAfter > 30*time.Second {
+		t.Errorf("retry after = %v, want one emission interval", decision.RetryAfter)
+	}
+	if decision.ResetAfter <= 0 || decision.ResetAfter > time.Minute {
+		t.Errorf("reset after = %v, want inside the period", decision.ResetAfter)
 	}
 }
 
 func TestEachOwnerAndScopeHasItsOwnBudget(t *testing.T) {
-	limiter := newLimiter(t)
+	lim := newLimiter(t)
 	ctx := testContext(t)
 	owner := uuid.NewString()
 	other := uuid.NewString()
 
-	if _, err := limiter.Consume(ctx, owner, "create", 1); err != nil {
+	if _, err := lim.Consume(ctx, owner, "create", 1); err != nil {
 		t.Fatalf("Consume: %v", err)
 	}
-	decision, err := limiter.Consume(ctx, owner, "create", 1)
+	decision, err := lim.Consume(ctx, owner, "create", 1)
 	if err != nil {
 		t.Fatalf("Consume: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestEachOwnerAndScopeHasItsOwnBudget(t *testing.T) {
 		t.Error("the owner's second call was allowed, want it refused")
 	}
 
-	decision, err = limiter.Consume(ctx, owner, "write", 1)
+	decision, err = lim.Consume(ctx, owner, "write", 1)
 	if err != nil {
 		t.Fatalf("Consume: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestEachOwnerAndScopeHasItsOwnBudget(t *testing.T) {
 		t.Error("the write scope was refused, want its own budget")
 	}
 
-	decision, err = limiter.Consume(ctx, other, "create", 1)
+	decision, err = lim.Consume(ctx, other, "create", 1)
 	if err != nil {
 		t.Fatalf("Consume: %v", err)
 	}
@@ -89,90 +89,70 @@ func TestEachOwnerAndScopeHasItsOwnBudget(t *testing.T) {
 	}
 }
 
-func TestTheCounterCarriesTheWindowTTL(t *testing.T) {
-	limiter := newLimiter(t)
+func TestTheLimitKeyHasABoundedTTL(t *testing.T) {
+	lim := newLimiter(t)
 	owner := uuid.NewString()
 	ctx := testContext(t)
 
-	if _, err := limiter.Consume(ctx, owner, "create", 10); err != nil {
+	if _, err := lim.Consume(ctx, owner, "create", 10); err != nil {
 		t.Fatalf("Consume: %v", err)
 	}
 
-	found := scanKeys(t, rawClient(t), "chats:rate_limit:"+owner+":create:*")
-	if len(found) != 1 {
-		t.Fatalf("counter keys = %v, want exactly one", found)
+	want := "rate:chats:rate_limit:" + owner + ":create"
+	found := scanKeys(t, rawClient(t), "rate:chats:rate_limit:"+owner+":create*")
+	if len(found) != 1 || found[0] != want {
+		t.Fatalf("limit keys = %v, want exactly %q", found, want)
 	}
 
-	ttl := rawClient(t).TTL(ctx, found[0]).Val()
-	if ttl <= 0 {
-		t.Errorf("ttl = %v, want a live counter", ttl)
-	}
-	if ttl > keys.RateLimitWindow+keys.RateLimitGrace {
-		t.Errorf("ttl = %v, want it inside the window and its grace", ttl)
+	ttl := rawClient(t).TTL(ctx, want).Val()
+	if ttl <= 0 || ttl > time.Minute+time.Second {
+		t.Errorf("ttl = %v, want a lifetime bounded by the period", ttl)
 	}
 }
 
-func TestTheCounterKeyCarriesTheEpochMinute(t *testing.T) {
-	limiter := newLimiter(t)
+func TestTheBudgetRefillsWithoutAWindowBoundary(t *testing.T) {
+	lim := newLimiter(t)
 	owner := uuid.NewString()
 	ctx := testContext(t)
+	const budget = 600
 
-	before := time.Now().Unix() / 60
-	if _, err := limiter.Consume(ctx, owner, "create", 10); err != nil {
-		t.Fatalf("Consume: %v", err)
+	spent := 0
+	for ; spent < budget*2; spent++ {
+		decision, err := lim.Consume(ctx, owner, "read", budget)
+		if err != nil {
+			t.Fatalf("Consume: %v", err)
+		}
+		if !decision.Allowed {
+			break
+		}
 	}
-	after := time.Now().Unix() / 60
-
-	keys := scanKeys(t, rawClient(t), "chats:rate_limit:"+owner+":create:*")
-	if len(keys) != 1 {
-		t.Fatalf("counter keys = %v, want exactly one", keys)
-	}
-
-	windowMinute, err := strconv.ParseInt(keys[0][strings.LastIndex(keys[0], ":")+1:], 10, 64)
-	if err != nil {
-		t.Fatalf("parse the window id of %q: %v", keys[0], err)
-	}
-	if windowMinute < before || windowMinute > after {
-		t.Errorf("window minute = %d, want it between %d and %d", windowMinute, before, after)
-	}
-}
-
-func TestTheBudgetIsFreshInTheNextWindow(t *testing.T) {
-	limiter := newLimiter(t)
-	owner := uuid.NewString()
-	ctx := testContext(t)
-
-	previous := time.Now().UTC().Truncate(keys.RateLimitWindow).Add(-keys.RateLimitWindow)
-	previousKey := keys.RateLimitKey(owner, "create", previous.Unix()/int64(keys.RateLimitWindow/time.Second))
-	if err := rawClient(t).Set(ctx, previousKey, 99, time.Minute).Err(); err != nil {
-		t.Fatalf("seed the previous window: %v", err)
+	if spent == budget*2 {
+		t.Fatal("the budget was never refused")
 	}
 
-	decision, err := limiter.Consume(ctx, owner, "create", 10)
+	time.Sleep(120 * time.Millisecond)
+	decision, err := lim.Consume(ctx, owner, "read", budget)
 	if err != nil {
 		t.Fatalf("Consume: %v", err)
 	}
 	if !decision.Allowed {
-		t.Error("the call was refused, want a fresh budget")
-	}
-	if decision.Count != 1 {
-		t.Errorf("count = %d, want %d", decision.Count, 1)
+		t.Error("the budget did not refill after one emission interval")
 	}
 }
 
 func TestAFaultSurfacesAsAnError(t *testing.T) {
 	client := connectContainer(t)
-	limiter := limiter.NewRedis(client)
+	lim := limiter.NewRedis(client)
 	ctx := testContext(t)
 
-	if _, err := limiter.Consume(ctx, uuid.NewString(), "create", 10); err != nil {
+	if _, err := lim.Consume(ctx, uuid.NewString(), "create", 10); err != nil {
 		t.Fatalf("Consume: %v", err)
 	}
 	if err := client.Disconnect(ctx); err != nil {
 		t.Fatalf("Disconnect: %v", err)
 	}
 
-	if _, err := limiter.Consume(ctx, uuid.NewString(), "create", 10); err == nil {
+	if _, err := lim.Consume(ctx, uuid.NewString(), "create", 10); err == nil {
 		t.Error("Consume over a closed client = nil error, want the fault surfaced")
 	}
 }

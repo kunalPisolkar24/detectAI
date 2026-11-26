@@ -124,7 +124,7 @@ func TestEveryProcedureDrawsFromItsScope(t *testing.T) {
 }
 
 func TestAnOverLimitReadIsRefused(t *testing.T) {
-	stub := &stubLimiter{decision: limiter.Decision{Allowed: false, Count: 601, Limit: 600, RetryAfter: 42 * time.Second}}
+	stub := &stubLimiter{decision: limiter.Decision{Allowed: false, Remaining: 0, Limit: 600, RetryAfter: 42 * time.Second}}
 	srv := newServerWithLimiter(t, fakeDatabase{}, stubService{}, stub)
 	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
 
@@ -146,7 +146,7 @@ func TestAnOverLimitReadIsRefused(t *testing.T) {
 }
 
 func TestAnOverLimitCallIsRefused(t *testing.T) {
-	limiter := &stubLimiter{decision: limiter.Decision{Allowed: false, Count: 11, Limit: 10, RetryAfter: 42 * time.Second}}
+	limiter := &stubLimiter{decision: limiter.Decision{Allowed: false, Remaining: 0, Limit: 10, RetryAfter: 42 * time.Second}}
 	srv := newServerWithLimiter(t, fakeDatabase{}, stubService{}, limiter)
 	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
 
@@ -188,27 +188,37 @@ func TestACacheFaultFailsOpen(t *testing.T) {
 	}
 }
 
-func TestARefusalIsLoggedOncePerWindow(t *testing.T) {
+func TestARefusalIsLoggedOncePerExhaustion(t *testing.T) {
 	limiter := &stubLimiter{decisions: []limiter.Decision{
-		{Allowed: false, Count: 11, Limit: 10, RetryAfter: 42 * time.Second},
-		{Allowed: false, Count: 12, Limit: 10, RetryAfter: 41 * time.Second},
+		{Allowed: false, Limit: 10, RetryAfter: 42 * time.Second, ResetAfter: 20 * time.Millisecond},
+		{Allowed: false, Limit: 10, RetryAfter: 41 * time.Second, ResetAfter: 19 * time.Millisecond},
+		{Allowed: false, Limit: 10, RetryAfter: 42 * time.Second, ResetAfter: 20 * time.Millisecond},
 	}}
 	var logs bytes.Buffer
 	srv := newServerWithLogger(t, fakeDatabase{}, stubService{}, limiter, slog.New(slog.NewTextHandler(&logs, nil)))
 	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
 
-	for attempt := 0; attempt < 2; attempt++ {
+	refuse := func() {
+		t.Helper()
 		_, err := client.CreateChat(context.Background(), authenticated(&chatv1.CreateChatRequest{InitialMessage: "hello"}))
 		if connect.CodeOf(err) != connect.CodeResourceExhausted {
 			t.Fatalf("CreateChat code = %v, want %v", connect.CodeOf(err), connect.CodeResourceExhausted)
 		}
 	}
 
+	refuse()
+	refuse()
 	if got := strings.Count(logs.String(), "rate limit refused"); got != 1 {
 		t.Errorf("refusal log lines = %d, want exactly one: %s", got, logs.String())
 	}
 	if strings.Contains(logs.String(), "owner-1") {
 		t.Errorf("the log carries the raw owner id: %s", logs.String())
+	}
+
+	time.Sleep(30 * time.Millisecond)
+	refuse()
+	if got := strings.Count(logs.String(), "rate limit refused"); got != 2 {
+		t.Errorf("refusal log lines = %d, want one for the fresh exhaustion: %s", got, logs.String())
 	}
 }
 

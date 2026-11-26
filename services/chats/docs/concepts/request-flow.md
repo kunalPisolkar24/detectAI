@@ -105,7 +105,11 @@ classDiagram
     class RateLimitInterceptor {
         -limiter: Limiter
         -limits: Limits
+        -gate: logGate
         +Wrap(next)
+    }
+    class logGate {
+        -slots: bounded ring
     }
     class Limits {
         +Read: int
@@ -124,7 +128,7 @@ classDiagram
     note for toConnectError "domain errors: not_found · invalid_argument · failed_precondition · unavailable · internal"
 ```
 
-The handler also owns the proto↔domain mapping (one function per shape) and the refusal metadata: an over-limit answer carries `retry-after-ms`, `x-ratelimit-limit`, and `x-ratelimit-remaining=0`. Refusals are logged once per exhausted window, and owner ids are hashed before logging.
+The handler also owns the proto↔domain mapping (one function per shape) and the refusal metadata: an over-limit answer carries `retry-after-ms`, `x-ratelimit-limit`, and `x-ratelimit-remaining=0`. Refusals are logged at most once per exhausted budget per replica — a bounded in-process gate suppresses duplicates until the limiter reports the bucket has recovered — and owner ids are hashed before logging.
 
 ## The use cases
 
