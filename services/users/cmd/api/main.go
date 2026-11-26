@@ -75,7 +75,7 @@ func main() {
 	limits := handlers.Limits{Read: cfg.RateLimitReadMax, Write: cfg.RateLimitWriteMax}
 	srv := &http.Server{
 		Addr:      ":" + strconv.Itoa(cfg.Port),
-		Handler:   router.New(dbClient, handlers.NewAuth(authService), handlers.NewUser(userService, accessVerifier, cachedUsers), plane.Limiter, limits),
+		Handler:   router.New(dbClient, handlers.NewAuth(authService), handlers.NewUser(userService), accessVerifier, cachedUsers, plane.Limiter, limits),
 		Protocols: protocols,
 	}
 
