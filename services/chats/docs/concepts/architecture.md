@@ -20,7 +20,7 @@ internal/
 ├── handlers/              the Connect face: interceptors, 8 RPCs, proto↔domain mapping, error codes
 ├── services/              use cases, validation, cache-aside orchestration
 ├── repository/            MongoDB data access, the keyset cursor, index creation
-├── cache/                 client · keys · store · entries · limiter · setup (users-style split)
+├── cache/                 client · keys · store · entries · limiter · lock · coalescer · setup
 ├── db/                    MongoDB connection + retry
 ├── config/                typed Config, dev/prod planes, fail-fast
 ├── models/                shared vocabulary: shapes, enums, sentinels, limits, cursor codec
@@ -28,7 +28,7 @@ internal/
 proto/                     chat_service.proto + generated Go stubs
 ```
 
-The layering is strict and inward-facing: `handlers` speaks the wire, `services` owns the use cases, `repository`/`cache` own the two stores, and `models` is the vocabulary everybody shares. `services` declares its own narrow `Cache` interface and the cache packages satisfy it structurally, so a future coalescing or locking decorator can be swapped in without changing the use cases. `config` and `observability` serve them all. Nothing inside `services` knows about Connect or MongoDB.
+The layering is strict and inward-facing: `handlers` speaks the wire, `services` owns the use cases, `repository`/`cache` own the two stores, and `models` is the vocabulary everybody shares. `services` declares its own narrow `Cache`, `Locker` and `Coalescer` interfaces; the cache packages satisfy them structurally, so the concrete fill strategy can be swapped without changing the use cases. Cold fills run through singleflight and a distributed lock before reaching Mongo. `config` and `observability` serve them all. Nothing inside `services` knows about Connect or MongoDB.
 
 ## The components at a glance
 
@@ -50,6 +50,9 @@ classDiagram
     class ChatService {
         -repo: Repository
         -cache: Cache
+        -locker: Locker
+        -flights: Coalescer
+        -policy: Policy
         -telemetry: Telemetry
     }
     class Repository {
@@ -67,6 +70,17 @@ classDiagram
         +Consume(ctx, owner, scope, limit)
     }
     class RedisLimiter
+    class Locker {
+        <<interface>>
+        +Acquire(ctx, key, ttl) token
+        +Release(ctx, key, token)
+    }
+    class Coalescer {
+        <<interface>>
+        +Do(ctx, key, fn)
+    }
+    class RedisLocker
+    class FlightGroup
     class Database {
         <<interface>>
         +Ping(ctx)
@@ -88,17 +102,24 @@ classDiagram
     Cache <|.. NullEntries
     Limiter <|.. RedisLimiter
     Limiter <|.. Null
+    Locker <|.. RedisLocker
+    Coalescer <|.. FlightGroup
     Database <|.. Client
     Telemetry <|.. TelemetryService
     Telemetry <|.. NullTelemetry
     ChatService o--> Repository
     ChatService o--> Cache
+    ChatService o--> Locker
+    ChatService o--> Coalescer
     ChatService o--> Telemetry
     note for Service "the handler builds against this interface - no proto or driver type crosses it"
     note for Cache "consumer-owned in services - entries and null entries satisfy it structurally"
+    note for Locker "consumer-owned in services - singleflight first, then a SETNX lock with a token-guarded release"
+    note for Coalescer "consumer-owned in services - FlightGroup collapses same-process duplicate reads"
     note for Telemetry "no OTel import crosses the seam - both realizations satisfy the same seven methods"
     note for RedisLimiter "limiter.Redis behind NewRedis - atomic Lua INCRBY + EXPIREAT"
-    note for NullEntries "an unreachable Redis at boot installs null entries and a null limiter - the RPC still serves"
+    note for RedisLocker "SETNX with a random token - a stale holder cannot delete another caller's lock"
+    note for NullEntries "an unreachable Redis at boot installs null entries, null limiter and null locker - the RPC still serves"
     note for Database "the readiness probe is its only runtime caller - repository.New takes the driver database directly"
 ```
 
@@ -173,7 +194,7 @@ classDiagram
     }
     class services {
         <<package>>
-        +NewChatService(repo, entries, logger, telemetry)
+        +NewChatService(repo, entries, locker, flights, policy, logger, telemetry)
     }
     class router {
         <<package>>

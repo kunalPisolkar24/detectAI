@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/client"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/coalescer"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/entries"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/lock"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/store"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
@@ -48,7 +50,7 @@ func TestMongoOutageKeepsCachedReadsAndFailsWrites(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = cacheClient.Disconnect(context.Background()) })
 
-	svc := services.NewChatService(repo, entries.New(store.NewRedis(cacheClient)), slog.New(slog.DiscardHandler), observability.NullTelemetry{})
+	svc := services.NewChatService(repo, entries.New(store.NewRedis(cacheClient)), lock.NewRedis(cacheClient), coalescer.NewFlightGroup(), lock.NewPolicy(10*time.Second), slog.New(slog.DiscardHandler), observability.NullTelemetry{})
 	ownerID := owner()
 	chat, err := svc.CreateChat(ctx, ownerID, "a question")
 	if err != nil {

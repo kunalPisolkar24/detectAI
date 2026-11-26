@@ -20,6 +20,7 @@ type Config struct {
 	MongoDatabase   string
 	RedisEndpoint   string
 	APIKey          string
+	LockTTL         time.Duration
 
 	RateLimitReadMax   int
 	RateLimitCreateMax int
@@ -36,6 +37,10 @@ const (
 
 	defaultMongoDatabase = "chat_db"
 
+	defaultLockTTL        = 10 * time.Second
+	mongoSelectionTimeout = 5 * time.Second
+	lockTTLSlack          = time.Second
+
 	defaultRateLimitReadMax   = 600
 	defaultRateLimitCreateMax = 10
 	defaultRateLimitWriteMax  = 60
@@ -51,6 +56,7 @@ func Resolve(source Source) (Config, error) {
 		OTelVersion:     defaultOTelVersion,
 		OTelSampleRatio: defaultSampleRatio,
 		MongoDatabase:   defaultMongoDatabase,
+		LockTTL:         defaultLockTTL,
 	}
 	if raw, ok := source.Get("PORT"); ok {
 		port, err := strconv.Atoi(strings.TrimSpace(raw))
@@ -80,7 +86,39 @@ func Resolve(source Source) (Config, error) {
 	if err := resolveRateLimits(source, &cfg); err != nil {
 		return Config{}, err
 	}
+	if err := resolveLockTTL(source, &cfg); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// A lock must outlive the slowest source read it protects, or two workers can
+// fill the same cold key after the first lock expires.
+func resolveLockTTL(source Source, cfg *Config) error {
+	if err := resolveDuration(source, "LOCK_TTL", &cfg.LockTTL); err != nil {
+		return err
+	}
+	if cfg.LockTTL <= mongoSelectionTimeout+lockTTLSlack {
+		return fmt.Errorf("config: LOCK_TTL must exceed the %s driver selection timeout by at least %s", mongoSelectionTimeout, lockTTLSlack)
+	}
+	return nil
+}
+
+func resolveDuration(source Source, key string, target *time.Duration) error {
+	raw, ok := source.Get(key)
+	if !ok {
+		return nil
+	}
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+	value, err := time.ParseDuration(trimmed)
+	if err != nil || value <= 0 {
+		return fmt.Errorf("config: %s must be a positive duration; got %q", key, trimmed)
+	}
+	*target = value
+	return nil
 }
 
 func resolveRateLimits(source Source, cfg *Config) error {

@@ -7,12 +7,14 @@ import (
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/client"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/entries"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/limiter"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/lock"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/store"
 )
 
 type Plane struct {
 	Entries entries.Cache
 	Limiter limiter.Limiter
+	Locker  lock.Locker
 }
 
 // New establishes the cache plane, or degrades to no-op entries and a limiter
@@ -24,10 +26,12 @@ func New(ctx context.Context, endpoint string) (Plane, func(context.Context) err
 		return Plane{
 			Entries: entries.Null{},
 			Limiter: limiter.Null{},
+			Locker:  lock.Null{},
 		}, func(context.Context) error { return nil }
 	}
 	return Plane{
 		Entries: entries.New(store.NewRedis(conn)),
 		Limiter: limiter.NewRedis(conn),
+		Locker:  lock.NewRedis(conn),
 	}, conn.Disconnect
 }

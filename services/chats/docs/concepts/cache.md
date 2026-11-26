@@ -10,8 +10,11 @@ Redis is a read-through overlay on MongoDB, never the source of truth. Chats key
 | `chats:chat:<id>:head` | first ~50 messages + next cursor | 10m | first page of history | append, analysis, delete |
 | `chats:user:<id>:chats` | sidebar summaries, newest-first | 5m | `ListChats` | create, append, analysis, rename, delete |
 | `chats:rate_limit:<id>:<scope>:<window>` | burst counter | window end + 2m grace | rate limiter | TTL only |
+| `chats:lock:<resource>` | fill lock token | `LOCK_TTL` (10s) | stampede protection | token-guarded `DEL` on release |
 
 Rate-limit counters use the same fixed window as the web BFF: an atomic Lua `INCRBY` + `EXPIREAT`, a one-minute window keyed by epoch minute, and a 250 ms call deadline. They fail open — see [Request Flow](request-flow.md).
+
+A cold read is protected in two layers, the same way the users service protects its repository reads. An in-process `singleflight` group collapses duplicate calls for one resource before they reach Redis; the survivor takes the distributed lock, re-reads the cache, and only then fetches from Mongo. Other replicas contend on the lock with jittered backoff, then re-read the filled cache. A locker fault or exhausted retries falls through to the unprotected path, so Redis still never fails an RPC. Lock keys are distinct for chat meta, the head page, and an owner's list.
 
 ## The read and write paths
 
@@ -67,19 +70,39 @@ classDiagram
         +ChatHeadKey(id)
         +OwnerChatsKey(owner)
         +RateLimitKey(owner, scope, window)
+        +LockKey(resource)
+        +FlightKey(kind, resource)
     }
     class NullEntries
+    class Locker {
+        <<interface>>
+        +Acquire(ctx, key, ttl) token
+        +Release(ctx, key, token)
+    }
+    class Coalescer {
+        <<interface>>
+        +Do(ctx, key, fn)
+    }
+    class FlightGroup
+    class Plane {
+        +Entries: Cache
+        +Limiter: Limiter
+        +Locker: Locker
+    }
     Cache <|.. Entries
     Cache <|.. NullEntries
+    Coalescer <|.. FlightGroup
     Entries o--> Store
     Entries ..> keys : every key carries a TTL
-    note for Client "ParseURL, 5s dial timeout, context deadlines enabled - Raw hands the driver to the Lua limiter"
+    note for Client "ParseURL, 5s dial timeout, context deadlines enabled - Raw hands the Lua limiter and lock scripts"
     note for Store "JSON get/set/delete - a value that fails to decode is a miss"
     note for NullEntries "all reads miss, all writes no-op - installed when Redis is unreachable or absent"
-    note for keys "prefix chats: · meta/head 10m · list 5m · rate window + 2m grace"
+    note for Locker "SETNX plus a token-guarded Lua release - SETNX failure means the lock is held"
+    note for FlightGroup "in-process singleflight - collapses duplicates before they reach Redis"
+    note for keys "prefix chats: · meta/head 10m · list 5m · rate window + 2m grace · lock LOCK_TTL"
 ```
 
-The prefix lives in `internal/cache/keys`, never in the Redis client: client-level `keyPrefix` silently misses keys inside Lua `EVAL` scripts, and the limiter is exactly such a script. The cache surface is split by responsibility the way the users service splits its cache — `client`, `keys`, `store`, `entries`, `limiter` and `setup` — so a singleflight or locking layer can be added as another package without rewriting the callers.
+The prefix lives in `internal/cache/keys`, never in the Redis client: client-level `keyPrefix` silently misses keys inside Lua `EVAL` scripts, and the limiter and locker are exactly such scripts. The cache surface is split by responsibility the way the users service splits its cache — `client`, `keys`, `store`, `entries`, `limiter`, `lock`, `coalescer` and `setup` — so each layer can be swapped without rewriting the callers.
 
 ## The limiter and the null builds
 
@@ -103,9 +126,12 @@ classDiagram
     class Null {
         +Consume() Decision
     }
+    class RedisLocker
+    class NullLocker
     class Plane {
         +Entries: Cache
         +Limiter: Limiter
+        +Locker: Locker
     }
     class setup {
         <<package>>
@@ -113,17 +139,21 @@ classDiagram
     }
     Limiter <|.. Redis
     Limiter <|.. Null
-    setup ..> Plane : returns the real plane or both nulls
+    Locker <|.. RedisLocker
+    Locker <|.. NullLocker
+    setup ..> Plane : returns the real plane or all nulls
     note for Redis "limiter.Redis behind NewRedis - atomic Lua INCRBY + EXPIREAT"
     note for Redis "250ms deadline · count ≤ limit allowed · RetryAfter = window end - now"
     note for Decision "the refusal metadata on the wire comes from Count, Limit and RetryAfter"
     note for Null "always allows - a Redis fault must never surface as resource_exhausted"
-    note for setup "an unreachable Redis at boot returns null entries + null limiter + a no-op disconnect, with a warning"
+    note for RedisLocker "SETNX with a random token - release only deletes the key when the token still matches"
+    note for NullLocker "always acquires - a cache fault never blocks a read"
+    note for setup "an unreachable Redis at boot returns null entries, null limiter and null locker plus a no-op disconnect, with a warning"
 ```
 
 ## Failure semantics
 
-- **At boot:** `setup.New` pings Redis. An unreachable endpoint installs null entries and a null limiter and the boot continues — Mongo and the RPCs are unaffected.
+- **At boot:** `setup.New` pings Redis. An unreachable endpoint installs null entries, a null limiter and a null locker, and the boot continues — Mongo and the RPCs are unaffected.
 - **At runtime:** every cache fault is absorbed — a warning log and a metric, never a failed RPC. A limiter fault fails open. The 250 ms deadline keeps a fault from costing the driver's socket timeout.
 - **No singleflight:** at chat-UI concurrency a cold head key produces a handful of concurrent Mongo reads, which the compound index serves without ceremony.
 

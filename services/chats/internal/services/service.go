@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/lock"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
@@ -36,15 +37,38 @@ type Cache interface {
 	InvalidateOwner(ctx context.Context, ownerID string) error
 }
 
+type Locker interface {
+	Acquire(ctx context.Context, key string, ttl time.Duration) (string, error)
+	Release(ctx context.Context, key, token string) error
+}
+
+type Coalescer interface {
+	Do(ctx context.Context, key string, fn func(context.Context) (any, error)) (any, error)
+}
+
 type ChatService struct {
 	repo      repository.Repository
 	cache     Cache
+	locker    Locker
+	flights   Coalescer
+	policy    lock.Policy
 	logger    *slog.Logger
 	telemetry observability.Telemetry
 }
 
-func NewChatService(repo repository.Repository, entries Cache, logger *slog.Logger, telemetry observability.Telemetry) *ChatService {
-	return &ChatService{repo: repo, cache: entries, logger: logger, telemetry: telemetry}
+func NewChatService(
+	repo repository.Repository,
+	entries Cache,
+	locker Locker,
+	flights Coalescer,
+	policy lock.Policy,
+	logger *slog.Logger,
+	telemetry observability.Telemetry,
+) *ChatService {
+	return &ChatService{
+		repo: repo, cache: entries, locker: locker, flights: flights,
+		policy: policy, logger: logger, telemetry: telemetry,
+	}
 }
 
 var _ Service = (*ChatService)(nil)

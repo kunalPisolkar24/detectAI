@@ -4,7 +4,10 @@ import (
 	"context"
 	"log/slog"
 	"testing"
+	"time"
 
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/coalescer"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/lock"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/setup"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
@@ -61,5 +64,5 @@ func newDegradedService(t *testing.T) *services.ChatService {
 	plane, drain := setup.New(ctx, "redis://127.0.0.1:1")
 	t.Cleanup(func() { _ = drain(context.Background()) })
 
-	return services.NewChatService(repo, plane.Entries, slog.New(slog.DiscardHandler), observability.NullTelemetry{})
+	return services.NewChatService(repo, plane.Entries, plane.Locker, coalescer.NewFlightGroup(), lock.NewPolicy(10*time.Second), slog.New(slog.DiscardHandler), observability.NullTelemetry{})
 }

@@ -4,70 +4,125 @@ import (
 	"context"
 	"time"
 
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/coalescer"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/keys"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/lock"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 )
 
-// cachedChat returns the chat meta, cache first. A cached chat carries its owner, so the ownership rule holds on a hit as well as on a miss.
+// cachedChat returns the chat meta, cache first. Same-process duplicates are
+// coalesced, then a distributed lock serializes cold fills across replicas;
+// the locked closure re-reads the cache before touching Mongo. A cached chat
+// carries its owner, so the ownership rule holds on a hit as well as on a miss.
 func (s *ChatService) cachedChat(ctx context.Context, ownerID, chatID string) (models.Chat, error) {
-	start := time.Now()
-	cached, found, err := s.cache.Chat(ctx, chatID)
-	s.recordCacheRead(observability.CacheOperationChat, found, err, start)
-	if err != nil {
-		s.absorb(ctx, "chat read", err)
-	} else if found {
-		if cached.UserID != ownerID {
-			return models.Chat{}, models.ErrNotFound
+	resource := keys.ChatResource(chatID)
+	return coalescer.Coalesce(s.flights, ctx, keys.FlightKey("chat", resource), func(ctx context.Context) (models.Chat, error) {
+		if cached, found, err := s.readChatCache(ctx, ownerID, chatID); found || err != nil {
+			return cached, err
 		}
-		return cached, nil
-	}
-
-	chat, err := s.repo.Chat(ctx, ownerID, chatID)
-	if err != nil {
-		return models.Chat{}, err
-	}
-	s.putChat(ctx, chat)
-	return chat, nil
+		return lock.Execute(ctx, s.locker, keys.LockKey(resource), s.policy, func(ctx context.Context) (models.Chat, error) {
+			if cached, found, err := s.readChatCache(ctx, ownerID, chatID); found || err != nil {
+				return cached, err
+			}
+			chat, err := s.repo.Chat(ctx, ownerID, chatID)
+			if err != nil {
+				return models.Chat{}, err
+			}
+			s.putChat(ctx, chat)
+			return chat, nil
+		})
+	})
 }
 
 func (s *ChatService) cachedList(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, error) {
-	start := time.Now()
-	cached, found, err := s.cache.ChatList(ctx, ownerID)
-	s.recordCacheRead(observability.CacheOperationChatList, found, err, start)
-	if err != nil {
-		s.absorb(ctx, "chat list read", err)
-	} else if found {
-		return trimSummaries(cached, limit), nil
-	}
-
-	chats, err := s.repo.Chats(ctx, ownerID, models.DefaultChatsLimit)
-	if err != nil {
-		return nil, err
-	}
-	s.putChatList(ctx, ownerID, chats)
-	return trimSummaries(chats, limit), nil
+	resource := keys.OwnerChatsResource(ownerID)
+	return coalescer.Coalesce(s.flights, ctx, keys.FlightKey("chats", resource), func(ctx context.Context) ([]models.ChatSummary, error) {
+		if cached, found := s.readListCache(ctx, ownerID, limit); found {
+			return cached, nil
+		}
+		return lock.Execute(ctx, s.locker, keys.LockKey(resource), s.policy, func(ctx context.Context) ([]models.ChatSummary, error) {
+			if cached, found := s.readListCache(ctx, ownerID, limit); found {
+				return cached, nil
+			}
+			chats, err := s.repo.Chats(ctx, ownerID, models.DefaultChatsLimit)
+			if err != nil {
+				return nil, err
+			}
+			s.putChatList(ctx, ownerID, chats)
+			return trimSummaries(chats, limit), nil
+		})
+	})
 }
 
 // headPage returns a chat's head page, cache first, trimmed to the requested
 // limit. The cache always holds a full page, so a smaller request trims it
 // and the larger one reads the source.
 func (s *ChatService) headPage(ctx context.Context, ownerID, chatID string, limit int) (models.Page, error) {
+	resource := keys.ChatHeadResource(chatID)
+	return coalescer.Coalesce(s.flights, ctx, keys.FlightKey("head", resource), func(ctx context.Context) (models.Page, error) {
+		if page, found, err := s.readHeadCache(ctx, chatID, limit); found || err != nil {
+			return page, err
+		}
+		return lock.Execute(ctx, s.locker, keys.LockKey(resource), s.policy, func(ctx context.Context) (models.Page, error) {
+			if page, found, err := s.readHeadCache(ctx, chatID, limit); found || err != nil {
+				return page, err
+			}
+			messages, next, err := s.repo.ChatHistory(ctx, ownerID, chatID, "", models.DefaultHistoryLimit)
+			if err != nil {
+				return models.Page{}, err
+			}
+			page := models.Page{Messages: messages, NextCursor: next}
+			s.putHead(ctx, chatID, page)
+			return trimPage(chatID, page, limit)
+		})
+	})
+}
+
+func (s *ChatService) readChatCache(ctx context.Context, ownerID, chatID string) (models.Chat, bool, error) {
+	start := time.Now()
+	cached, found, err := s.cache.Chat(ctx, chatID)
+	s.recordCacheRead(observability.CacheOperationChat, found, err, start)
+	if err != nil {
+		s.absorb(ctx, "chat read", err)
+		return models.Chat{}, false, nil
+	}
+	if !found {
+		return models.Chat{}, false, nil
+	}
+	if cached.UserID != ownerID {
+		return models.Chat{}, false, models.ErrNotFound
+	}
+	return cached, true, nil
+}
+
+func (s *ChatService) readListCache(ctx context.Context, ownerID string, limit int) ([]models.ChatSummary, bool) {
+	start := time.Now()
+	cached, found, err := s.cache.ChatList(ctx, ownerID)
+	s.recordCacheRead(observability.CacheOperationChatList, found, err, start)
+	if err != nil {
+		s.absorb(ctx, "chat list read", err)
+		return nil, false
+	}
+	if !found {
+		return nil, false
+	}
+	return trimSummaries(cached, limit), true
+}
+
+func (s *ChatService) readHeadCache(ctx context.Context, chatID string, limit int) (models.Page, bool, error) {
 	start := time.Now()
 	cached, found, err := s.cache.Head(ctx, chatID)
 	s.recordCacheRead(observability.CacheOperationHead, found, err, start)
 	if err != nil {
 		s.absorb(ctx, "head read", err)
-	} else if found {
-		return trimPage(chatID, cached, limit)
+		return models.Page{}, false, nil
 	}
-
-	messages, next, err := s.repo.ChatHistory(ctx, ownerID, chatID, "", models.DefaultHistoryLimit)
-	if err != nil {
-		return models.Page{}, err
+	if !found {
+		return models.Page{}, false, nil
 	}
-	page := models.Page{Messages: messages, NextCursor: next}
-	s.putHead(ctx, chatID, page)
-	return trimPage(chatID, page, limit)
+	page, err := trimPage(chatID, cached, limit)
+	return page, true, err
 }
 
 func (s *ChatService) invalidateChat(ctx context.Context, chatID, ownerID string) {

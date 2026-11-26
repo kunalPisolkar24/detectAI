@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/coalescer"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/lock"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
@@ -197,7 +199,11 @@ func (f *fakeCache) InvalidateOwner(_ context.Context, ownerID string) error {
 }
 
 func newService(repo repository.Repository, cachePlane services.Cache) *services.ChatService {
-	return services.NewChatService(repo, cachePlane, slog.New(slog.DiscardHandler), observability.NullTelemetry{})
+	return services.NewChatService(repo, cachePlane, lock.Null{}, coalescer.NewFlightGroup(), testPolicy(), slog.New(slog.DiscardHandler), observability.NullTelemetry{})
+}
+
+func testPolicy() lock.Policy {
+	return lock.NewPolicy(10 * time.Second)
 }
 
 func TestCreateChatDerivesTheTitleAndStoresTheFirstMessage(t *testing.T) {

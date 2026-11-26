@@ -7,6 +7,7 @@ import (
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/entries"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/limiter"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/lock"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/setup"
 )
 
@@ -20,6 +21,9 @@ func TestSetupDegradesWhenRedisIsUnreachable(t *testing.T) {
 	}
 	if _, ok := plane.Limiter.(limiter.Null); !ok {
 		t.Errorf("limiter = %T, want limiter.Null", plane.Limiter)
+	}
+	if _, ok := plane.Locker.(lock.Null); !ok {
+		t.Errorf("locker = %T, want lock.Null", plane.Locker)
 	}
 	if err := drain(ctx); err != nil {
 		t.Errorf("drain: %v", err)

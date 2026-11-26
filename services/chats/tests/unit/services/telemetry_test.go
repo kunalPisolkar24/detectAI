@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/coalescer"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/lock"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/services"
@@ -49,7 +51,7 @@ type cacheOp struct {
 
 func newRecordingService(repo *fakeRepository, entries *fakeCache) (*services.ChatService, *recordingTelemetry) {
 	recorder := &recordingTelemetry{}
-	service := services.NewChatService(repo, entries, slog.New(slog.DiscardHandler), recorder)
+	service := services.NewChatService(repo, entries, lock.Null{}, coalescer.NewFlightGroup(), testPolicy(), slog.New(slog.DiscardHandler), recorder)
 	return service, recorder
 }
 
@@ -73,9 +75,13 @@ func TestTheServiceRecordsEveryCacheOperationItMakes(t *testing.T) {
 		}
 	}
 
+	// A cold fill reads the cache twice: once before the lock and once inside
+	// it, so the winner never repeats a fill another caller already finished.
 	want := []cacheOp{
 		{observability.CacheOperationChat, observability.CacheMiss},
+		{observability.CacheOperationChat, observability.CacheMiss},
 		{observability.CacheOperationPutChat, observability.CacheOK},
+		{observability.CacheOperationHead, observability.CacheMiss},
 		{observability.CacheOperationHead, observability.CacheMiss},
 		{observability.CacheOperationPutHead, observability.CacheOK},
 		{observability.CacheOperationChat, observability.CacheHit},
@@ -103,7 +109,9 @@ func TestTheServiceRecordsAnAbsorbedCacheFault(t *testing.T) {
 
 	want := []cacheOp{
 		{observability.CacheOperationChat, observability.CacheError},
+		{observability.CacheOperationChat, observability.CacheError},
 		{observability.CacheOperationPutChat, observability.CacheOK},
+		{observability.CacheOperationHead, observability.CacheError},
 		{observability.CacheOperationHead, observability.CacheError},
 		{observability.CacheOperationPutHead, observability.CacheOK},
 	}

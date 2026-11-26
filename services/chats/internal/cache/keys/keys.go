@@ -8,6 +8,11 @@ import (
 const prefix = "chats:"
 
 const (
+	lockSegment   = "lock:"
+	flightSegment = "flight:"
+)
+
+const (
 	ChatMetaTTL = 10 * time.Minute
 	ChatHeadTTL = 10 * time.Minute
 	ChatListTTL = 5 * time.Minute
@@ -35,4 +40,24 @@ func OwnerChatsKey(ownerID string) string {
 
 func RateLimitKey(ownerID, scope string, windowMinute int64) string {
 	return prefix + "rate_limit:" + ownerID + ":" + scope + ":" + strconv.FormatInt(windowMinute, 10)
+}
+
+func LockKey(resource string) string {
+	return prefix + lockSegment + resource
+}
+
+func FlightKey(kind, resource string) string {
+	return prefix + flightSegment + kind + ":" + resource
+}
+
+func ChatResource(chatID string) string {
+	return "chat:" + chatID
+}
+
+func ChatHeadResource(chatID string) string {
+	return "chat:" + chatID + ":head"
+}
+
+func OwnerChatsResource(ownerID string) string {
+	return "user:" + ownerID + ":chats"
 }

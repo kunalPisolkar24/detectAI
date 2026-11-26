@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/coalescer"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/lock"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/setup"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
@@ -63,6 +65,9 @@ func main() {
 	service := services.NewChatService(
 		repo,
 		plane.Entries,
+		plane.Locker,
+		coalescer.NewFlightGroup(),
+		lock.NewPolicy(cfg.LockTTL),
 		slog.Default(),
 		obs,
 	)

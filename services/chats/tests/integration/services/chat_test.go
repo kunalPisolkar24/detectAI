@@ -13,8 +13,10 @@ import (
 	driver "github.com/redis/go-redis/v9"
 
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/client"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/coalescer"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/entries"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/keys"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/lock"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/store"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
@@ -273,7 +275,7 @@ func newStackWith(t *testing.T, endpoint string, logger *slog.Logger) *stack {
 	t.Cleanup(func() { _ = raw.Close() })
 
 	return &stack{
-		service: services.NewChatService(repo, entries.New(store.NewRedis(cacheClient)), logger, observability.NullTelemetry{}),
+		service: services.NewChatService(repo, entries.New(store.NewRedis(cacheClient)), lock.NewRedis(cacheClient), coalescer.NewFlightGroup(), lock.NewPolicy(10*time.Second), logger, observability.NullTelemetry{}),
 		redis:   raw,
 	}
 }
