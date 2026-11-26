@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	driver "github.com/redis/go-redis/v9"
 )
+
+const ttlJitterPercent = 15
 
 type RedisStore struct {
 	client *driver.Client
@@ -39,10 +42,21 @@ func (s *RedisStore) Set(ctx context.Context, key string, value any, ttl time.Du
 	if err != nil {
 		return fmt.Errorf("cache: encode %s: %w", key, err)
 	}
-	if err := s.client.Set(ctx, key, payload, ttl).Err(); err != nil {
+	if err := s.client.Set(ctx, key, payload, jitteredTTL(ttl)).Err(); err != nil {
 		return fmt.Errorf("cache: set %s: %w", key, err)
 	}
 	return nil
+}
+
+func jitteredTTL(ttl time.Duration) time.Duration {
+	if ttl <= 0 {
+		return ttl
+	}
+	spread := int64(ttl) * ttlJitterPercent / 100
+	if spread <= 0 {
+		return ttl
+	}
+	return ttl + time.Duration(rand.Int64N(spread+1))
 }
 
 func (s *RedisStore) Delete(ctx context.Context, keys ...string) error {
