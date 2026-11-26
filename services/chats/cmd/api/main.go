@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/setup"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
@@ -58,15 +58,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	entries, limiter, disconnectCache := cache.Setup(bootCtx, cfg.RedisEndpoint)
+	plane, disconnectCache := setup.New(bootCtx, cfg.RedisEndpoint)
 
 	service := services.NewChatService(
 		repo,
-		entries,
+		plane.Entries,
 		slog.Default(),
 		obs,
 	)
 	limits := handlers.Limits{
+		Read:   cfg.RateLimitReadMax,
 		Create: cfg.RateLimitCreateMax,
 		Write:  cfg.RateLimitWriteMax,
 	}
@@ -77,7 +78,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:      ":" + strconv.Itoa(cfg.Port),
-		Handler:   router.New(dbClient, service, cfg.APIKey, limiter, limits, slog.Default(), obs),
+		Handler:   router.New(dbClient, service, cfg.APIKey, plane.Limiter, limits, slog.Default(), obs),
 		Protocols: protocols,
 	}
 

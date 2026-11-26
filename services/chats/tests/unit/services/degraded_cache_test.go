@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/entries"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 )
 
@@ -18,7 +18,7 @@ func TestNullCacheServesEveryReadFromTheRepository(t *testing.T) {
 			return []models.Message{{ID: "m1", ChatID: chatID}}, "", nil
 		},
 	}
-	service := newService(repo, cache.NullCache{})
+	service := newService(repo, entries.Null{})
 
 	chat, messages, _, err := service.GetChat(context.Background(), "owner-1", "chat-1")
 	if err != nil {

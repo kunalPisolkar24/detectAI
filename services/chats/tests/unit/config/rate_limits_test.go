@@ -13,6 +13,9 @@ func TestResolveRateLimits(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if cfg.RateLimitReadMax != 600 {
+			t.Errorf("RateLimitReadMax = %d, want %d", cfg.RateLimitReadMax, 600)
+		}
 		if cfg.RateLimitCreateMax != 10 {
 			t.Errorf("RateLimitCreateMax = %d, want %d", cfg.RateLimitCreateMax, 10)
 		}
@@ -23,11 +26,15 @@ func TestResolveRateLimits(t *testing.T) {
 
 	t.Run("a set budget wins", func(t *testing.T) {
 		cfg, err := config.Resolve(with(map[string]string{
+			"RATE_LIMIT_READ_MAX":   "30",
 			"RATE_LIMIT_CREATE_MAX": "3",
 			"RATE_LIMIT_WRITE_MAX":  "12",
 		}))
 		if err != nil {
 			t.Fatal(err)
+		}
+		if cfg.RateLimitReadMax != 30 {
+			t.Errorf("RateLimitReadMax = %d, want %d", cfg.RateLimitReadMax, 30)
 		}
 		if cfg.RateLimitCreateMax != 3 {
 			t.Errorf("RateLimitCreateMax = %d, want %d", cfg.RateLimitCreateMax, 3)
@@ -43,6 +50,8 @@ func TestResolveRateLimits(t *testing.T) {
 			value   string
 			wantErr string
 		}{
+			"read is not a number":   {key: "RATE_LIMIT_READ_MAX", value: "many", wantErr: "RATE_LIMIT_READ_MAX must be a positive integer"},
+			"read is zero":           {key: "RATE_LIMIT_READ_MAX", value: "0", wantErr: "RATE_LIMIT_READ_MAX must be a positive integer"},
 			"create is not a number": {key: "RATE_LIMIT_CREATE_MAX", value: "many", wantErr: "RATE_LIMIT_CREATE_MAX must be a positive integer"},
 			"write is not a number":  {key: "RATE_LIMIT_WRITE_MAX", value: "12.5", wantErr: "RATE_LIMIT_WRITE_MAX must be a positive integer"},
 			"create is zero":         {key: "RATE_LIMIT_CREATE_MAX", value: "0", wantErr: "RATE_LIMIT_CREATE_MAX must be a positive integer"},

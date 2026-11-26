@@ -45,15 +45,16 @@ Field names are the env keys. Unknown keys are ignored (consume-first), so typos
 | `MONGO_DATABASE` | database name | `chat_db` | falls back to default |
 | `REDIS_ENDPOINT` | Redis address | — | **boot fails** unless `redis://` or `rediss://`; `rediss://` needs no token |
 | `API_KEY` | the service credential every RPC carries | — | **boot fails** unless trimmed value ≥16 chars |
+| `RATE_LIMIT_READ_MAX` | `GetChat` + `ListChats` + `GetChatHistory` shared budget | 600 | **boot fails** on ≤0 or non-integer |
 | `RATE_LIMIT_CREATE_MAX` | `CreateChat` burst budget | 10 | **boot fails** on ≤0 or non-integer |
-| `RATE_LIMIT_WRITE_MAX` | `SaveUserMessage` + `SaveAnalysisMessage` shared budget | 60 | **boot fails** on ≤0 or non-integer |
+| `RATE_LIMIT_WRITE_MAX` | `RenameChat` + `DeleteChat` + `SaveUserMessage` + `SaveAnalysisMessage` shared budget | 60 | **boot fails** on ≤0 or non-integer |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | the observability gate | unset → nothing emitted | set without a ≥16-char license key → **boot fails** |
 | `NEW_RELIC_LICENSE_KEY` | ingest key, sent as `api-key` | unset | demanded only when the endpoint is set |
 | `OTEL_SERVICE_NAME` | resource name on all signals | `chats` | falls back to default |
 | `OTEL_SERVICE_VERSION` | resource version | `dev` | falls back to default |
 | `OTEL_TRACE_SAMPLE_RATIO` | fraction of traces sampled, `(0, 1]` | 1.0 | **boot fails** (NaN rejected) |
 
-The split that matters: **identity fields and the OTel gate fail the boot** (a half-configured instance never serves) — **numeric bounds fail closed** (an unreadable value falls back to the safe default, boot continues). Redis itself is special: an unreachable Redis endpoint does **not** fail the boot — see [Cache](../concepts/cache.md).
+The split that matters: **identity fields, the port, the OTel gate, and the three rate-limit bounds fail the boot** (a half-configured instance never serves) — **optional durations and names fall back to defaults** (a malformed `DRAIN_TIMEOUT`, a blank database or service name). Redis itself is special: an unreachable Redis endpoint does **not** fail the boot — see [Cache](../concepts/cache.md).
 
 ## How a boot resolves
 
@@ -177,6 +178,7 @@ classDiagram
         +MongoDatabase: string
         +RedisEndpoint: string
         +APIKey: string
+        +RateLimitReadMax: int
         +RateLimitCreateMax: int
         +RateLimitWriteMax: int
         +OTelEndpoint: string

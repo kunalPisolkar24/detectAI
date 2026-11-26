@@ -1,4 +1,4 @@
-package cache
+package client
 
 import (
 	"context"
@@ -39,6 +39,10 @@ func clientOptions(endpoint string) (*driver.Options, error) {
 	opts.DialTimeout = dialTimeout
 	opts.ContextTimeoutEnabled = true
 	return opts, nil
+}
+
+func (c *Client) Raw() *driver.Client {
+	return c.client
 }
 
 func (c *Client) Ping(ctx context.Context) error {

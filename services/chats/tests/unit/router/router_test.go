@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/limiter"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	chatshandlers "github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
@@ -77,14 +77,14 @@ func newServer(t *testing.T, database db.Database, service stubService) *httptes
 	return newServerWithLimiter(t, database, service, allowAllLimiter{})
 }
 
-func newServerWithLimiter(t *testing.T, database db.Database, service stubService, limiter cache.Limiter) *httptest.Server {
+func newServerWithLimiter(t *testing.T, database db.Database, service stubService, rateLimiter limiter.Limiter) *httptest.Server {
 	t.Helper()
-	return newServerWithLogger(t, database, service, limiter, slog.Default())
+	return newServerWithLogger(t, database, service, rateLimiter, slog.Default())
 }
 
-func newServerWithLogger(t *testing.T, database db.Database, service stubService, limiter cache.Limiter, logger *slog.Logger) *httptest.Server {
+func newServerWithLogger(t *testing.T, database db.Database, service stubService, rateLimiter limiter.Limiter, logger *slog.Logger) *httptest.Server {
 	t.Helper()
-	srv := httptest.NewServer(router.New(database, service, testAPIKey, limiter, chatshandlers.Limits{Create: 10, Write: 60}, logger, observability.NullTelemetry{}))
+	srv := httptest.NewServer(router.New(database, service, testAPIKey, rateLimiter, chatshandlers.Limits{Read: 600, Create: 10, Write: 60}, logger, observability.NullTelemetry{}))
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -98,7 +98,7 @@ func newH2CServer(t *testing.T, database db.Database, service stubService) *http
 	protocols.SetHTTP1(true)
 	protocols.SetUnencryptedHTTP2(true)
 
-	srv := httptest.NewUnstartedServer(router.New(database, service, testAPIKey, allowAllLimiter{}, chatshandlers.Limits{Create: 10, Write: 60}, slog.Default(), observability.NullTelemetry{}))
+	srv := httptest.NewUnstartedServer(router.New(database, service, testAPIKey, allowAllLimiter{}, chatshandlers.Limits{Read: 600, Create: 10, Write: 60}, slog.Default(), observability.NullTelemetry{}))
 	srv.Config.Protocols = protocols
 	srv.Start()
 	t.Cleanup(srv.Close)

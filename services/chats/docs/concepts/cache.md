@@ -47,14 +47,19 @@ classDiagram
     class Client {
         -client: redis.Client
         +Connect(ctx, endpoint)
+        +Raw()
         +Ping(ctx)
         +Disconnect(ctx)
     }
+    class Store {
+        <<interface>>
+        +Get(ctx, key, into)
+        +Set(ctx, key, value, ttl)
+        +Delete(ctx, keys...)
+    }
     class Entries {
-        -client: Client
-        +get()
-        +put()
-        +del()
+        -store: Store
+        +9 cache operations
     }
     class keys {
         <<package>>
@@ -63,17 +68,18 @@ classDiagram
         +OwnerChatsKey(owner)
         +RateLimitKey(owner, scope, window)
     }
-    class NullCache
+    class NullEntries
     Cache <|.. Entries
-    Cache <|.. NullCache
-    Entries o--> Client
+    Cache <|.. NullEntries
+    Entries o--> Store
     Entries ..> keys : every key carries a TTL
-    note for Client "ParseURL, optional password, 5s dial timeout, context deadlines enabled"
-    note for NullCache "all reads miss, all writes no-op - installed when Redis is unreachable or absent"
+    note for Client "ParseURL, 5s dial timeout, context deadlines enabled - Raw hands the driver to the Lua limiter"
+    note for Store "JSON get/set/delete - a value that fails to decode is a miss"
+    note for NullEntries "all reads miss, all writes no-op - installed when Redis is unreachable or absent"
     note for keys "prefix chats: · meta/head 10m · list 5m · rate window + 2m grace"
 ```
 
-The prefix lives in `keys.go`, never in the Redis client: client-level `keyPrefix` silently misses keys inside Lua `EVAL` scripts, and the limiter is exactly such a script.
+The prefix lives in `internal/cache/keys`, never in the Redis client: client-level `keyPrefix` silently misses keys inside Lua `EVAL` scripts, and the limiter is exactly such a script. The cache surface is split by responsibility the way the users service splits its cache — `client`, `keys`, `store`, `entries`, `limiter` and `setup` — so a singleflight or locking layer can be added as another package without rewriting the callers.
 
 ## The limiter and the null builds
 
@@ -83,8 +89,8 @@ classDiagram
         <<interface>>
         +Consume(ctx, owner, scope, limit) Decision
     }
-    class limiter {
-        -client: Client
+    class Redis {
+        -client: redis.Client
         -timeout: Duration
         +Consume(ctx, owner, scope, limit) Decision
     }
@@ -94,26 +100,30 @@ classDiagram
         +Limit: int
         +RetryAfter: Duration
     }
-    class NullLimiter {
+    class Null {
         +Consume() Decision
     }
-    class Setup {
-        <<function>>
+    class Plane {
+        +Entries: Cache
+        +Limiter: Limiter
     }
-    Limiter <|.. limiter
-    Limiter <|.. NullLimiter
-    Setup ..> Limiter : returns the real one or the null
-    Setup ..> Cache : same degradation for reads and writes
-    note for limiter "unexported implementation behind NewLimiter - atomic Lua INCRBY + EXPIREAT"
-    note for limiter "250ms deadline · count ≤ limit allowed · RetryAfter = window end - now"
+    class setup {
+        <<package>>
+        +New(ctx, endpoint) Plane
+    }
+    Limiter <|.. Redis
+    Limiter <|.. Null
+    setup ..> Plane : returns the real plane or both nulls
+    note for Redis "limiter.Redis behind NewRedis - atomic Lua INCRBY + EXPIREAT"
+    note for Redis "250ms deadline · count ≤ limit allowed · RetryAfter = window end - now"
     note for Decision "the refusal metadata on the wire comes from Count, Limit and RetryAfter"
-    note for NullLimiter "always allows - a Redis fault must never surface as resource_exhausted"
-    note for Setup "an unreachable Redis at boot returns NullCache + NullLimiter + a no-op disconnect, with a warning"
+    note for Null "always allows - a Redis fault must never surface as resource_exhausted"
+    note for setup "an unreachable Redis at boot returns null entries + null limiter + a no-op disconnect, with a warning"
 ```
 
 ## Failure semantics
 
-- **At boot:** `cache.Setup` pings Redis. An unreachable endpoint installs `NullCache` + `NullLimiter` and the boot continues — Mongo and the RPCs are unaffected.
+- **At boot:** `setup.New` pings Redis. An unreachable endpoint installs null entries and a null limiter and the boot continues — Mongo and the RPCs are unaffected.
 - **At runtime:** every cache fault is absorbed — a warning log and a metric, never a failed RPC. A limiter fault fails open. The 250 ms deadline keeps a fault from costing the driver's socket timeout.
 - **No singleflight:** at chat-UI concurrency a cold head key produces a handful of concurrent Mongo reads, which the compound index serves without ceremony.
 

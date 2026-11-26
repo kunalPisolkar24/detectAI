@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/setup"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/repository"
@@ -58,8 +58,8 @@ func newDegradedService(t *testing.T) *services.ChatService {
 		t.Fatalf("repository.New: %v", err)
 	}
 
-	entries, _, drain := cache.Setup(ctx, "redis://127.0.0.1:1")
+	plane, drain := setup.New(ctx, "redis://127.0.0.1:1")
 	t.Cleanup(func() { _ = drain(context.Background()) })
 
-	return services.NewChatService(repo, entries, slog.New(slog.DiscardHandler), observability.NullTelemetry{})
+	return services.NewChatService(repo, plane.Entries, slog.New(slog.DiscardHandler), observability.NullTelemetry{})
 }

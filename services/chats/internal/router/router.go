@@ -9,7 +9,7 @@ import (
 	"connectrpc.com/grpcreflect"
 	"github.com/gin-gonic/gin"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/limiter"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
@@ -21,7 +21,7 @@ import (
 // so an unreachable source answers UNAVAILABLE before the deadline fires.
 const rpcTimeout = 8 * time.Second
 
-func New(database db.Database, service services.Service, apiKey string, limiter cache.Limiter, limits handlers.Limits, logger *slog.Logger, obs observability.Telemetry) *gin.Engine {
+func New(database db.Database, service services.Service, apiKey string, rateLimiter limiter.Limiter, limits handlers.Limits, logger *slog.Logger, obs observability.Telemetry) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	// The trace middleware is registered first so its span brackets the
 	// recovery: a panic the recovery absorbs would otherwise leave the span
@@ -49,7 +49,7 @@ func New(database db.Database, service services.Service, apiKey string, limiter 
 			handlers.NewTelemetryInterceptor(obs),
 			handlers.NewTimeoutInterceptor(rpcTimeout),
 			handlers.NewAuthInterceptor(apiKey),
-			handlers.NewRateLimitInterceptor(limiter, limits, logger, obs),
+			handlers.NewRateLimitInterceptor(rateLimiter, limits, logger, obs),
 		),
 	)
 	r.Any(chatPath+"*any", gin.WrapH(chatHandler))

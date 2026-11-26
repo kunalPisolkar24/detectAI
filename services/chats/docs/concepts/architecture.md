@@ -20,7 +20,7 @@ internal/
 ├── handlers/              the Connect face: interceptors, 8 RPCs, proto↔domain mapping, error codes
 ├── services/              use cases, validation, cache-aside orchestration
 ├── repository/            MongoDB data access, the keyset cursor, index creation
-├── cache/                 Redis client, entries, key inventory, limiter, null builds
+├── cache/                 client · keys · store · entries · limiter · setup (users-style split)
 ├── db/                    MongoDB connection + retry
 ├── config/                typed Config, dev/prod planes, fail-fast
 ├── models/                shared vocabulary: shapes, enums, sentinels, limits, cursor codec
@@ -28,7 +28,7 @@ internal/
 proto/                     chat_service.proto + generated Go stubs
 ```
 
-The layering is strict and inward-facing: `handlers` speaks the wire, `services` owns the use cases, `repository`/`cache` own the two stores, and `models` is the vocabulary everybody shares. `config` and `observability` serve them all. Nothing inside `services` knows about Connect or MongoDB.
+The layering is strict and inward-facing: `handlers` speaks the wire, `services` owns the use cases, `repository`/`cache` own the two stores, and `models` is the vocabulary everybody shares. `services` declares its own narrow `Cache` interface and the cache packages satisfy it structurally, so a future coalescing or locking decorator can be swapped in without changing the use cases. `config` and `observability` serve them all. Nothing inside `services` knows about Connect or MongoDB.
 
 ## The components at a glance
 
@@ -66,7 +66,7 @@ classDiagram
         <<interface>>
         +Consume(ctx, owner, scope, limit)
     }
-    class limiter
+    class RedisLimiter
     class Database {
         <<interface>>
         +Ping(ctx)
@@ -79,15 +79,15 @@ classDiagram
     }
     class TelemetryService
     class NullTelemetry
-    class NullCache
-    class NullLimiter
+    class NullEntries
+    class Null
 
     Service <|.. ChatService
     Repository <|.. Mongo
     Cache <|.. Entries
-    Cache <|.. NullCache
-    Limiter <|.. limiter
-    Limiter <|.. NullLimiter
+    Cache <|.. NullEntries
+    Limiter <|.. RedisLimiter
+    Limiter <|.. Null
     Database <|.. Client
     Telemetry <|.. TelemetryService
     Telemetry <|.. NullTelemetry
@@ -95,9 +95,10 @@ classDiagram
     ChatService o--> Cache
     ChatService o--> Telemetry
     note for Service "the handler builds against this interface - no proto or driver type crosses it"
+    note for Cache "consumer-owned in services - entries and null entries satisfy it structurally"
     note for Telemetry "no OTel import crosses the seam - both realizations satisfy the same seven methods"
-    note for limiter "unexported implementation behind NewLimiter - atomic Lua INCRBY + EXPIREAT"
-    note for NullCache "an unreachable Redis at boot installs the null cache and null limiter - the RPC still serves"
+    note for RedisLimiter "limiter.Redis behind NewRedis - atomic Lua INCRBY + EXPIREAT"
+    note for NullEntries "an unreachable Redis at boot installs null entries and a null limiter - the RPC still serves"
     note for Database "the readiness probe is its only runtime caller - repository.New takes the driver database directly"
 ```
 
@@ -166,9 +167,9 @@ classDiagram
         <<package>>
         +New(ctx, database, telemetry)
     }
-    class cache {
+    class setup {
         <<package>>
-        +Setup(ctx, endpoint)
+        +New(ctx, endpoint) Plane
     }
     class services {
         <<package>>
@@ -187,7 +188,7 @@ classDiagram
     main --> observability : Boot, null or wired
     main --> db : connect with retry
     main --> repository : New creates the two indexes
-    main --> cache : Setup, real or degraded
+    main --> setup : New returns the plane, real or degraded
     main --> services : compose the use cases
     main --> router : New builds the engine
     main --> server : Run with that engine as handler
@@ -268,7 +269,7 @@ graph LR
     LOAD --> OBS["boot observability<br/>null or wired"]
     OBS --> MONGO["Mongo connect + retry<br/>within the 10 s budget"]
     MONGO --> IDX["create the two indexes"]
-    IDX --> CACHE["cache.Setup<br/>unreachable Redis degrades to nulls"]
+    IDX --> CACHE["setup.New<br/>unreachable Redis degrades to nulls"]
     CACHE --> WIRE["build repo → service → router"]
     WIRE --> SERVE["server.Run on :PORT"]
     SERVE --> SIG["SIGINT / SIGTERM"]

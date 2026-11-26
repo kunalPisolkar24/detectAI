@@ -8,14 +8,16 @@ import (
 	"github.com/google/uuid"
 	driver "github.com/redis/go-redis/v9"
 
-	chatscache "github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/entries"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/keys"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/store"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 	"github.com/kunalPisolkar24/detectAI/services/chats/tests/integration/support"
 )
 
-func newEntries(t *testing.T) *chatscache.Entries {
+func newEntries(t *testing.T) *entries.Entries {
 	t.Helper()
-	return chatscache.NewEntries(connectContainer(t))
+	return entries.New(store.NewRedis(connectContainer(t)))
 }
 
 func rawClient(t *testing.T) *driver.Client {
@@ -86,7 +88,7 @@ func TestChatTreatsAnUndecodableValueAsAMiss(t *testing.T) {
 	chatID := uuid.NewString()
 	raw := rawClient(t)
 
-	if err := raw.Set(testContext(t), chatscache.ChatKey(chatID), "not json", time.Minute).Err(); err != nil {
+	if err := raw.Set(testContext(t), keys.ChatKey(chatID), "not json", time.Minute).Err(); err != nil {
 		t.Fatalf("seed the raw value: %v", err)
 	}
 
@@ -302,9 +304,9 @@ func TestKeysCarryThePrefixAndTTL(t *testing.T) {
 	}
 
 	for key, wantTTL := range map[string]time.Duration{
-		chatscache.ChatKey(chatID):        chatscache.ChatMetaTTL,
-		chatscache.ChatHeadKey(chatID):    chatscache.ChatHeadTTL,
-		chatscache.OwnerChatsKey(ownerID): chatscache.ChatListTTL,
+		keys.ChatKey(chatID):        keys.ChatMetaTTL,
+		keys.ChatHeadKey(chatID):    keys.ChatHeadTTL,
+		keys.OwnerChatsKey(ownerID): keys.ChatListTTL,
 	} {
 		if ttl := raw.TTL(ctx, key).Val(); ttl <= 0 || ttl > wantTTL {
 			t.Errorf("ttl of %s = %v, want it within (0, %v]", key, ttl, wantTTL)

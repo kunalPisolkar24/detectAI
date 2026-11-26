@@ -78,7 +78,7 @@ services/chats/
 │   ├── handlers/            the Connect face: interceptors, the 8 RPCs, mapping, errors
 │   ├── services/            the use cases + validation + cache-aside orchestration
 │   ├── repository/          MongoDB data access + the keyset cursor
-│   ├── cache/               Redis client, entries, key inventory, rate limiter, null builds
+│   ├── cache/               client · keys · store · entries · limiter · setup
 │   ├── db/                  MongoDB connection + retry
 │   ├── config/              typed Config, dev/prod planes, fail-fast
 │   ├── models/              the shared vocabulary: shapes, enums, errors, limits, cursor

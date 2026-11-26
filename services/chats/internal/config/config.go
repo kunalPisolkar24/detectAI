@@ -21,6 +21,7 @@ type Config struct {
 	RedisEndpoint   string
 	APIKey          string
 
+	RateLimitReadMax   int
 	RateLimitCreateMax int
 	RateLimitWriteMax  int
 }
@@ -35,6 +36,7 @@ const (
 
 	defaultMongoDatabase = "chat_db"
 
+	defaultRateLimitReadMax   = 600
 	defaultRateLimitCreateMax = 10
 	defaultRateLimitWriteMax  = 60
 )
@@ -82,6 +84,10 @@ func Resolve(source Source) (Config, error) {
 }
 
 func resolveRateLimits(source Source, cfg *Config) error {
+	read, err := resolveRateLimitMax(source, "RATE_LIMIT_READ_MAX", defaultRateLimitReadMax)
+	if err != nil {
+		return err
+	}
 	create, err := resolveRateLimitMax(source, "RATE_LIMIT_CREATE_MAX", defaultRateLimitCreateMax)
 	if err != nil {
 		return err
@@ -90,6 +96,7 @@ func resolveRateLimits(source Source, cfg *Config) error {
 	if err != nil {
 		return err
 	}
+	cfg.RateLimitReadMax = read
 	cfg.RateLimitCreateMax = create
 	cfg.RateLimitWriteMax = write
 	return nil

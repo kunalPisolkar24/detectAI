@@ -11,7 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/limiter"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
@@ -19,6 +19,7 @@ import (
 type scope string
 
 const (
+	scopeRead   scope = "read"
 	scopeCreate scope = "create"
 	scopeWrite  scope = "write"
 )
@@ -26,24 +27,34 @@ const (
 // A procedure that is not listed is not limited.
 var scopeByProcedure = map[string]scope{
 	chatv1connect.ChatServiceCreateChatProcedure:          scopeCreate,
+	chatv1connect.ChatServiceGetChatProcedure:             scopeRead,
+	chatv1connect.ChatServiceListChatsProcedure:           scopeRead,
+	chatv1connect.ChatServiceGetChatHistoryProcedure:      scopeRead,
+	chatv1connect.ChatServiceRenameChatProcedure:          scopeWrite,
+	chatv1connect.ChatServiceDeleteChatProcedure:          scopeWrite,
 	chatv1connect.ChatServiceSaveUserMessageProcedure:     scopeWrite,
 	chatv1connect.ChatServiceSaveAnalysisMessageProcedure: scopeWrite,
 }
 
 type Limits struct {
+	Read   int
 	Create int
 	Write  int
 }
 
 func (l Limits) forScope(s scope) int {
-	if s == scopeCreate {
+	switch s {
+	case scopeRead:
+		return l.Read
+	case scopeCreate:
 		return l.Create
+	default:
+		return l.Write
 	}
-	return l.Write
 }
 
 // The check fails open: a cache fault lets the call through.
-func NewRateLimitInterceptor(limiter cache.Limiter, limits Limits, logger *slog.Logger, obs observability.Telemetry) connect.UnaryInterceptorFunc {
+func NewRateLimitInterceptor(limiter limiter.Limiter, limits Limits, logger *slog.Logger, obs observability.Telemetry) connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			selected, limited := scopeByProcedure[req.Spec().Procedure]
@@ -75,7 +86,7 @@ func NewRateLimitInterceptor(limiter cache.Limiter, limits Limits, logger *slog.
 // The refusal is logged once per exhausted budget per window. The counter moves
 // by one, so the first refusal of a window is limit+1; later ones stay silent
 // and a client hammering the limit cannot flood the logs.
-func logRefusal(ctx context.Context, logger *slog.Logger, ownerID string, selected scope, decision cache.Decision) {
+func logRefusal(ctx context.Context, logger *slog.Logger, ownerID string, selected scope, decision limiter.Decision) {
 	if decision.Count != decision.Limit+1 {
 		return
 	}
@@ -93,7 +104,7 @@ func ownerIDHash(ownerID string) string {
 	return hex.EncodeToString(digest[:])[:16]
 }
 
-func rateLimitError(decision cache.Decision) error {
+func rateLimitError(decision limiter.Decision) error {
 	err := connect.NewError(connect.CodeResourceExhausted, errors.New("rate limit exceeded"))
 	err.Meta().Set("retry-after-ms", strconv.FormatInt(decision.RetryAfter.Milliseconds(), 10))
 	err.Meta().Set("x-ratelimit-limit", strconv.Itoa(decision.Limit))

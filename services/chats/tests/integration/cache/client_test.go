@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	chatscache "github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/client"
 	"github.com/kunalPisolkar24/detectAI/services/chats/tests/integration/support"
 )
 
@@ -14,14 +14,14 @@ func TestMain(m *testing.M) {
 }
 
 func TestConnectPingsAndDisconnects(t *testing.T) {
-	client := connectContainer(t)
+	conn := connectContainer(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := client.Ping(ctx); err != nil {
+	if err := conn.Ping(ctx); err != nil {
 		t.Fatalf("Ping: %v", err)
 	}
-	if err := client.Disconnect(ctx); err != nil {
+	if err := conn.Disconnect(ctx); err != nil {
 		t.Fatalf("Disconnect: %v", err)
 	}
 }
@@ -30,26 +30,26 @@ func TestConnectFailsLoudOnUnreachable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	client, err := chatscache.Connect(ctx, "redis://127.0.0.1:1")
+	conn, err := client.Connect(ctx, "redis://127.0.0.1:1")
 	if err == nil {
-		_ = client.Disconnect(context.Background())
+		_ = conn.Disconnect(context.Background())
 		t.Fatal("Connect = nil error, want a failure against a closed port")
 	}
 }
 
-func connectContainer(t *testing.T) *chatscache.Client {
+func connectContainer(t *testing.T) *client.Client {
 	t.Helper()
 	endpoint := support.Redis(t).Endpoint
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	client, err := chatscache.Connect(ctx, endpoint)
+	conn, err := client.Connect(ctx, endpoint)
 	if err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	t.Cleanup(func() {
 		disCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = client.Disconnect(disCtx)
+		_ = conn.Disconnect(disCtx)
 	})
-	return client
+	return conn
 }

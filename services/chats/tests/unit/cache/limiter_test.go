@@ -11,7 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/client"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/limiter"
 )
 
 // TestConsumeGivesUpOnASilentServer checks that the burst counter's own
@@ -24,16 +25,16 @@ func TestConsumeGivesUpOnASilentServer(t *testing.T) {
 	t.Cleanup(func() { _ = listener.Close() })
 	go serveSilentRedis(listener)
 
-	client, err := cache.Connect(context.Background(), "redis://"+listener.Addr().String())
+	conn, err := client.Connect(context.Background(), "redis://"+listener.Addr().String())
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	t.Cleanup(func() { _ = client.Disconnect(context.Background()) })
+	t.Cleanup(func() { _ = conn.Disconnect(context.Background()) })
 
-	limiter := cache.NewLimiter(client)
+	lim := limiter.NewRedis(conn)
 
 	start := time.Now()
-	_, err = limiter.Consume(context.Background(), "owner-1", "create", 10)
+	_, err = lim.Consume(context.Background(), "owner-1", "create", 10)
 	elapsed := time.Since(start)
 
 	if err == nil {

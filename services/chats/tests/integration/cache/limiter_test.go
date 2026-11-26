@@ -10,12 +10,13 @@ import (
 	"github.com/google/uuid"
 	driver "github.com/redis/go-redis/v9"
 
-	chatscache "github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/keys"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/limiter"
 )
 
-func newLimiter(t *testing.T) chatscache.Limiter {
+func newLimiter(t *testing.T) limiter.Limiter {
 	t.Helper()
-	return chatscache.NewLimiter(connectContainer(t))
+	return limiter.NewRedis(connectContainer(t))
 }
 
 func TestConsumeCountsTowardsTheLimit(t *testing.T) {
@@ -49,7 +50,7 @@ func TestConsumeCountsTowardsTheLimit(t *testing.T) {
 	if decision.Count != 3 {
 		t.Errorf("count = %d, want %d", decision.Count, 3)
 	}
-	if decision.RetryAfter <= 0 || decision.RetryAfter > chatscache.RateLimitWindow {
+	if decision.RetryAfter <= 0 || decision.RetryAfter > keys.RateLimitWindow {
 		t.Errorf("retry after = %v, want it inside the window", decision.RetryAfter)
 	}
 }
@@ -97,16 +98,16 @@ func TestTheCounterCarriesTheWindowTTL(t *testing.T) {
 		t.Fatalf("Consume: %v", err)
 	}
 
-	keys := scanKeys(t, rawClient(t), "chats:rate_limit:"+owner+":create:*")
-	if len(keys) != 1 {
-		t.Fatalf("counter keys = %v, want exactly one", keys)
+	found := scanKeys(t, rawClient(t), "chats:rate_limit:"+owner+":create:*")
+	if len(found) != 1 {
+		t.Fatalf("counter keys = %v, want exactly one", found)
 	}
 
-	ttl := rawClient(t).TTL(ctx, keys[0]).Val()
+	ttl := rawClient(t).TTL(ctx, found[0]).Val()
 	if ttl <= 0 {
 		t.Errorf("ttl = %v, want a live counter", ttl)
 	}
-	if ttl > chatscache.RateLimitWindow+chatscache.RateLimitGrace {
+	if ttl > keys.RateLimitWindow+keys.RateLimitGrace {
 		t.Errorf("ttl = %v, want it inside the window and its grace", ttl)
 	}
 }
@@ -141,8 +142,8 @@ func TestTheBudgetIsFreshInTheNextWindow(t *testing.T) {
 	owner := uuid.NewString()
 	ctx := testContext(t)
 
-	previous := time.Now().UTC().Truncate(chatscache.RateLimitWindow).Add(-chatscache.RateLimitWindow)
-	previousKey := chatscache.RateLimitKey(owner, "create", previous.Unix()/int64(chatscache.RateLimitWindow/time.Second))
+	previous := time.Now().UTC().Truncate(keys.RateLimitWindow).Add(-keys.RateLimitWindow)
+	previousKey := keys.RateLimitKey(owner, "create", previous.Unix()/int64(keys.RateLimitWindow/time.Second))
 	if err := rawClient(t).Set(ctx, previousKey, 99, time.Minute).Err(); err != nil {
 		t.Fatalf("seed the previous window: %v", err)
 	}
@@ -161,7 +162,7 @@ func TestTheBudgetIsFreshInTheNextWindow(t *testing.T) {
 
 func TestAFaultSurfacesAsAnError(t *testing.T) {
 	client := connectContainer(t)
-	limiter := chatscache.NewLimiter(client)
+	limiter := limiter.NewRedis(client)
 	ctx := testContext(t)
 
 	if _, err := limiter.Consume(ctx, uuid.NewString(), "create", 10); err != nil {

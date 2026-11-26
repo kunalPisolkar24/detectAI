@@ -12,7 +12,10 @@ import (
 	"github.com/google/uuid"
 	driver "github.com/redis/go-redis/v9"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/client"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/entries"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/keys"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/store"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/models"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/observability"
@@ -77,9 +80,9 @@ func TestAReadPopulatesTheCache(t *testing.T) {
 	}
 
 	for _, key := range []string{
-		cache.ChatKey(chat.ID),
-		cache.ChatHeadKey(chat.ID),
-		cache.OwnerChatsKey(owner),
+		keys.ChatKey(chat.ID),
+		keys.ChatHeadKey(chat.ID),
+		keys.OwnerChatsKey(owner),
 	} {
 		if exists := stack.redis.Exists(ctx, key).Val(); exists == 0 {
 			t.Errorf("key %s is missing, want the read to populate it", key)
@@ -107,7 +110,7 @@ func TestARenameInvalidatesTheCachedChat(t *testing.T) {
 	if summary.Title != "after" {
 		t.Errorf("title = %q, want %q", summary.Title, "after")
 	}
-	if exists := stack.redis.Exists(ctx, cache.ChatKey(chat.ID)).Val(); exists != 0 {
+	if exists := stack.redis.Exists(ctx, keys.ChatKey(chat.ID)).Val(); exists != 0 {
 		t.Error("the cached chat survived the rename, want it invalidated")
 	}
 }
@@ -128,7 +131,7 @@ func TestAnAppendInvalidatesTheCachedHead(t *testing.T) {
 	if _, err := stack.service.SaveUserMessage(ctx, owner, chat.ID, uuid.NewString(), "second", time.Now().UTC()); err != nil {
 		t.Fatalf("SaveUserMessage: %v", err)
 	}
-	if exists := stack.redis.Exists(ctx, cache.ChatHeadKey(chat.ID)).Val(); exists != 0 {
+	if exists := stack.redis.Exists(ctx, keys.ChatHeadKey(chat.ID)).Val(); exists != 0 {
 		t.Error("the cached head survived the append, want it invalidated")
 	}
 }
@@ -141,14 +144,14 @@ func TestACreateInvalidatesTheOwnerList(t *testing.T) {
 	if _, err := stack.service.ListChats(ctx, owner, 0); err != nil {
 		t.Fatalf("ListChats: %v", err)
 	}
-	if exists := stack.redis.Exists(ctx, cache.OwnerChatsKey(owner)).Val(); exists == 0 {
+	if exists := stack.redis.Exists(ctx, keys.OwnerChatsKey(owner)).Val(); exists == 0 {
 		t.Fatal("the sidebar list is missing, want the read to populate it")
 	}
 
 	if _, err := stack.service.CreateChat(ctx, owner, "a new chat"); err != nil {
 		t.Fatalf("CreateChat: %v", err)
 	}
-	if exists := stack.redis.Exists(ctx, cache.OwnerChatsKey(owner)).Val(); exists != 0 {
+	if exists := stack.redis.Exists(ctx, keys.OwnerChatsKey(owner)).Val(); exists != 0 {
 		t.Error("the cached sidebar survived the create, want it invalidated")
 	}
 }
@@ -169,7 +172,7 @@ func TestADeleteInvalidatesTheChat(t *testing.T) {
 	if err := stack.service.DeleteChat(ctx, owner, chat.ID); err != nil {
 		t.Fatalf("DeleteChat: %v", err)
 	}
-	for _, key := range []string{cache.ChatKey(chat.ID), cache.ChatHeadKey(chat.ID)} {
+	for _, key := range []string{keys.ChatKey(chat.ID), keys.ChatHeadKey(chat.ID)} {
 		if exists := stack.redis.Exists(ctx, key).Val(); exists != 0 {
 			t.Errorf("key %s survived the delete, want it invalidated", key)
 		}
@@ -256,9 +259,9 @@ func newStackWith(t *testing.T, endpoint string, logger *slog.Logger) *stack {
 		t.Fatalf("repository.New: %v", err)
 	}
 
-	cacheClient, err := cache.Connect(ctx, endpoint)
+	cacheClient, err := client.Connect(ctx, endpoint)
 	if err != nil {
-		t.Fatalf("cache.Connect: %v", err)
+		t.Fatalf("client.Connect: %v", err)
 	}
 	t.Cleanup(func() { _ = cacheClient.Disconnect(context.Background()) })
 
@@ -270,7 +273,7 @@ func newStackWith(t *testing.T, endpoint string, logger *slog.Logger) *stack {
 	t.Cleanup(func() { _ = raw.Close() })
 
 	return &stack{
-		service: services.NewChatService(repo, cache.NewEntries(cacheClient), logger, observability.NullTelemetry{}),
+		service: services.NewChatService(repo, entries.New(store.NewRedis(cacheClient)), logger, observability.NullTelemetry{}),
 		redis:   raw,
 	}
 }

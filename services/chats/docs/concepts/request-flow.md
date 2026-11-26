@@ -13,7 +13,7 @@ Inside the Connect handler, four interceptors wrap every RPC. The first is outer
 | 1 | telemetry | opens the procedure span, counts the answer on the way out — even on panic | never refuses |
 | 2 | timeout | `context.WithTimeout` for 8 s | `deadline_exceeded` |
 | 3 | auth | `x-api-key` constant-time compare, then `x-user-id` | `unauthenticated` |
-| 4 | rate limit | `create` / `write` scopes, three procedures only | `resource_exhausted` + retry metadata |
+| 4 | rate limit | `read` / `create` / `write` scopes, all eight procedures | `resource_exhausted` + retry metadata |
 
 The handler runs last: it re-reads the owner from the context, validates, calls the service, and maps the domain error onto a Connect code.
 
@@ -26,11 +26,9 @@ graph TB
     DEAD -->|"no"| RDEAD["deadline_exceeded"]
     DEAD -->|"yes"| KEY{"x-api-key matches<br/>and x-user-id present?"}
     KEY -->|"no"| RAUTH["unauthenticated"]
-    KEY -->|"yes"| SCOPE{"procedure in<br/>a limited scope?"}
-    SCOPE -->|"yes"| BUDGET{"burst budget left?"}
+    KEY -->|"yes"| BUDGET{"burst budget left<br/>in the procedure's scope?"}
     BUDGET -->|"no"| RRATE["resource_exhausted<br/>+ retry-after-ms"]
     BUDGET -->|"yes"| VALID{"payload fields valid?"}
-    SCOPE -->|"no"| VALID
     VALID -->|"no"| RINV["invalid_argument"]
     VALID -->|"yes"| OWN{"chat exists<br/>and is owned?"}
     OWN -->|"no"| RNF["not_found"]
@@ -110,6 +108,7 @@ classDiagram
         +Wrap(next)
     }
     class Limits {
+        +Read: int
         +Create: int
         +Write: int
     }
@@ -120,7 +119,7 @@ classDiagram
     RateLimitInterceptor o--> Limits
     note for AuthInterceptor "ConstantTimeCompare on x-api-key - missing and wrong are indistinguishable"
     note for AuthInterceptor "x-user-id is trusted only because the key authenticated its holder"
-    note for RateLimitInterceptor "only 3 procedures have a scope - reads are unlimited in v1"
+    note for RateLimitInterceptor "all eight procedures have a scope - reads share one generous 600/min budget"
     note for TelemetryInterceptor "outermost: a panic records internal, closes the span, and is re-raised for gin.Recovery"
     note for toConnectError "domain errors: not_found · invalid_argument · failed_precondition · unavailable · internal"
 ```

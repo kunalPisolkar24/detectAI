@@ -12,32 +12,32 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/limiter"
 	"github.com/kunalPisolkar24/detectAI/services/chats/proto"
 	chatv1connect "github.com/kunalPisolkar24/detectAI/services/chats/proto/chatv1connect"
 )
 
 type allowAllLimiter struct{}
 
-func (allowAllLimiter) Consume(context.Context, string, string, int) (cache.Decision, error) {
-	return cache.Decision{Allowed: true}, nil
+func (allowAllLimiter) Consume(context.Context, string, string, int) (limiter.Decision, error) {
+	return limiter.Decision{Allowed: true}, nil
 }
 
 type stubLimiter struct {
 	err       error
-	decision  cache.Decision
-	decisions []cache.Decision
+	decision  limiter.Decision
+	decisions []limiter.Decision
 	owners    []string
 	scopes    []string
 	limits    []int
 }
 
-func (l *stubLimiter) Consume(_ context.Context, ownerID, scope string, limit int) (cache.Decision, error) {
+func (l *stubLimiter) Consume(_ context.Context, ownerID, scope string, limit int) (limiter.Decision, error) {
 	l.owners = append(l.owners, ownerID)
 	l.scopes = append(l.scopes, scope)
 	l.limits = append(l.limits, limit)
 	if l.err != nil {
-		return cache.Decision{}, l.err
+		return limiter.Decision{}, l.err
 	}
 	if len(l.decisions) > 0 {
 		decision := l.decisions[0]
@@ -54,51 +54,99 @@ func authenticated[T any](msg *T) *connect.Request[T] {
 	return req
 }
 
-func TestEachScopeDrawsFromItsOwnBudget(t *testing.T) {
-	limiter := &stubLimiter{decision: cache.Decision{Allowed: true}}
-	srv := newServerWithLimiter(t, fakeDatabase{}, stubService{}, limiter)
+func TestEveryProcedureDrawsFromItsScope(t *testing.T) {
+	stub := &stubLimiter{decision: limiter.Decision{Allowed: true}}
+	srv := newServerWithLimiter(t, fakeDatabase{}, stubService{}, stub)
 	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
+	ctx := context.Background()
 
-	if _, err := client.CreateChat(context.Background(), authenticated(&chatv1.CreateChatRequest{InitialMessage: "hello"})); err != nil {
-		t.Fatalf("CreateChat: %v", err)
+	calls := []struct {
+		name string
+		call func() error
+	}{
+		{"CreateChat", func() error {
+			_, err := client.CreateChat(ctx, authenticated(&chatv1.CreateChatRequest{InitialMessage: "hello"}))
+			return err
+		}},
+		{"GetChat", func() error {
+			_, err := client.GetChat(ctx, authenticated(&chatv1.GetChatRequest{ChatId: "chat-1"}))
+			return err
+		}},
+		{"ListChats", func() error {
+			_, err := client.ListChats(ctx, authenticated(&chatv1.ListChatsRequest{}))
+			return err
+		}},
+		{"GetChatHistory", func() error {
+			_, err := client.GetChatHistory(ctx, authenticated(&chatv1.GetChatHistoryRequest{ChatId: "chat-1"}))
+			return err
+		}},
+		{"RenameChat", func() error {
+			_, err := client.RenameChat(ctx, authenticated(&chatv1.RenameChatRequest{ChatId: "chat-1", Title: "new"}))
+			return err
+		}},
+		{"DeleteChat", func() error {
+			_, err := client.DeleteChat(ctx, authenticated(&chatv1.DeleteChatRequest{ChatId: "chat-1"}))
+			return err
+		}},
+		{"SaveUserMessage", func() error {
+			_, err := client.SaveUserMessage(ctx, authenticated(&chatv1.SaveUserMessageRequest{ChatId: "chat-1", Content: "hi"}))
+			return err
+		}},
+		{"SaveAnalysisMessage", func() error {
+			_, err := client.SaveAnalysisMessage(ctx, authenticated(&chatv1.SaveAnalysisMessageRequest{ChatId: "chat-1", MessageId: "message-1"}))
+			return err
+		}},
 	}
-	if _, err := client.SaveUserMessage(context.Background(), authenticated(&chatv1.SaveUserMessageRequest{ChatId: "chat-1", Content: "hi"})); err != nil {
-		t.Fatalf("SaveUserMessage: %v", err)
-	}
-	if _, err := client.SaveAnalysisMessage(context.Background(), authenticated(&chatv1.SaveAnalysisMessageRequest{ChatId: "chat-1", MessageId: "message-1"})); err != nil {
-		t.Fatalf("SaveAnalysisMessage: %v", err)
+	for _, c := range calls {
+		if err := c.call(); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
 	}
 
-	wantScopes := []string{"create", "write", "write"}
-	wantLimits := []int{10, 60, 60}
+	wantScopes := []string{"create", "read", "read", "read", "write", "write", "write", "write"}
+	wantLimits := []int{10, 600, 600, 600, 60, 60, 60, 60}
+	if len(stub.scopes) != len(wantScopes) {
+		t.Fatalf("scopes = %v, want one entry per procedure", stub.scopes)
+	}
 	for i, scope := range wantScopes {
-		if limiter.scopes[i] != scope {
-			t.Errorf("scope %d = %q, want %q", i, limiter.scopes[i], scope)
+		if stub.scopes[i] != scope {
+			t.Errorf("scope %d = %q, want %q", i, stub.scopes[i], scope)
 		}
-		if limiter.limits[i] != wantLimits[i] {
-			t.Errorf("limit %d = %d, want %d", i, limiter.limits[i], wantLimits[i])
+		if stub.limits[i] != wantLimits[i] {
+			t.Errorf("limit %d = %d, want %d", i, stub.limits[i], wantLimits[i])
 		}
 	}
-	if limiter.owners[0] != "owner-1" {
-		t.Errorf("owner = %q, want %q", limiter.owners[0], "owner-1")
+	for i, owner := range stub.owners {
+		if owner != "owner-1" {
+			t.Errorf("owner %d = %q, want %q", i, owner, "owner-1")
+		}
 	}
 }
 
-func TestAnUnlimitedProcedureIsNeverCounted(t *testing.T) {
-	limiter := &stubLimiter{decision: cache.Decision{Allowed: true}}
-	srv := newServerWithLimiter(t, fakeDatabase{}, stubService{}, limiter)
+func TestAnOverLimitReadIsRefused(t *testing.T) {
+	stub := &stubLimiter{decision: limiter.Decision{Allowed: false, Count: 601, Limit: 600, RetryAfter: 42 * time.Second}}
+	srv := newServerWithLimiter(t, fakeDatabase{}, stubService{}, stub)
 	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
 
-	if _, err := client.GetChat(context.Background(), authenticated(&chatv1.GetChatRequest{ChatId: "chat-1"})); err != nil {
-		t.Fatalf("GetChat: %v", err)
+	_, err := client.GetChat(context.Background(), authenticated(&chatv1.GetChatRequest{ChatId: "chat-1"}))
+	if connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("GetChat code = %v, want %v", connect.CodeOf(err), connect.CodeResourceExhausted)
 	}
-	if len(limiter.scopes) != 0 {
-		t.Errorf("counted %v, want no counted procedure", limiter.scopes)
+	if stub.scopes[0] != "read" || stub.limits[0] != 600 {
+		t.Errorf("read call used scope %q and limit %d, want read/600", stub.scopes[0], stub.limits[0])
+	}
+
+	var connectErr *connect.Error
+	if !errors.As(err, &connectErr) {
+		t.Fatalf("err = %v, want a connect error", err)
+	}
+	if got := connectErr.Meta().Get("x-ratelimit-limit"); got != "600" {
+		t.Errorf("x-ratelimit-limit = %q, want %q", got, "600")
 	}
 }
 
 func TestAnOverLimitCallIsRefused(t *testing.T) {
-	limiter := &stubLimiter{decision: cache.Decision{Allowed: false, Count: 11, Limit: 10, RetryAfter: 42 * time.Second}}
+	limiter := &stubLimiter{decision: limiter.Decision{Allowed: false, Count: 11, Limit: 10, RetryAfter: 42 * time.Second}}
 	srv := newServerWithLimiter(t, fakeDatabase{}, stubService{}, limiter)
 	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
 
@@ -141,7 +189,7 @@ func TestACacheFaultFailsOpen(t *testing.T) {
 }
 
 func TestARefusalIsLoggedOncePerWindow(t *testing.T) {
-	limiter := &stubLimiter{decisions: []cache.Decision{
+	limiter := &stubLimiter{decisions: []limiter.Decision{
 		{Allowed: false, Count: 11, Limit: 10, RetryAfter: 42 * time.Second},
 		{Allowed: false, Count: 12, Limit: 10, RetryAfter: 41 * time.Second},
 	}}
@@ -165,7 +213,7 @@ func TestARefusalIsLoggedOncePerWindow(t *testing.T) {
 }
 
 func TestAnUnauthenticatedCallIsNeverCounted(t *testing.T) {
-	limiter := &stubLimiter{decision: cache.Decision{Allowed: true}}
+	limiter := &stubLimiter{decision: limiter.Decision{Allowed: true}}
 	srv := newServerWithLimiter(t, fakeDatabase{}, stubService{}, limiter)
 	client := chatv1connect.NewChatServiceClient(srv.Client(), srv.URL)
 

@@ -14,7 +14,10 @@ import (
 	"connectrpc.com/grpchealth"
 	"github.com/google/uuid"
 
-	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/client"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/entries"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/limiter"
+	"github.com/kunalPisolkar24/detectAI/services/chats/internal/cache/store"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/config"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/db"
 	"github.com/kunalPisolkar24/detectAI/services/chats/internal/handlers"
@@ -599,15 +602,15 @@ func boot(t *testing.T, mongoURI, redisEndpoint string, createLimit, writeLimit 
 		t.Fatalf("repository.New: %v", err)
 	}
 
-	cacheClient, err := cache.Connect(bootCtx, cfg.RedisEndpoint)
+	cacheClient, err := client.Connect(bootCtx, cfg.RedisEndpoint)
 	if err != nil {
-		t.Fatalf("cache.Connect: %v", err)
+		t.Fatalf("client.Connect: %v", err)
 	}
 	t.Cleanup(func() { _ = cacheClient.Disconnect(context.Background()) })
 
-	service := services.NewChatService(repo, cache.NewEntries(cacheClient), slog.Default(), observability.NullTelemetry{})
-	limits := handlers.Limits{Create: cfg.RateLimitCreateMax, Write: cfg.RateLimitWriteMax}
-	srv := httptest.NewServer(router.New(dbClient, service, cfg.APIKey, cache.NewLimiter(cacheClient), limits, slog.Default(), observability.NullTelemetry{}))
+	service := services.NewChatService(repo, entries.New(store.NewRedis(cacheClient)), slog.Default(), observability.NullTelemetry{})
+	limits := handlers.Limits{Read: cfg.RateLimitReadMax, Create: cfg.RateLimitCreateMax, Write: cfg.RateLimitWriteMax}
+	srv := httptest.NewServer(router.New(dbClient, service, cfg.APIKey, limiter.NewRedis(cacheClient), limits, slog.Default(), observability.NullTelemetry{}))
 	t.Cleanup(srv.Close)
 
 	return &stack{

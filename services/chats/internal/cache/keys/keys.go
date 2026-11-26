@@ -1,4 +1,4 @@
-package cache
+package keys
 
 import (
 	"strconv"
