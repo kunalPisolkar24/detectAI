@@ -14,7 +14,7 @@ import (
 	usersv1connect "github.com/kunalPisolkar24/detectAI/services/users/proto/usersv1connect"
 )
 
-func New(database db.Database, auth usersv1connect.AuthServiceHandler, user usersv1connect.UserServiceHandler, verifier token.AccessVerifier, lookup handlers.UserLookup, rateLimiter limiter.Limiter, limits handlers.Limits) *gin.Engine {
+func New(database db.Database, auth usersv1connect.AuthServiceHandler, user usersv1connect.UserServiceHandler, apiKey string, verifier token.AccessVerifier, lookup handlers.UserLookup, rateLimiter limiter.Limiter, limits handlers.Limits) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
@@ -24,7 +24,8 @@ func New(database db.Database, auth usersv1connect.AuthServiceHandler, user user
 	v1.GET("/ready", Ready(database))
 
 	interceptors := connectrpc.WithInterceptors(
-		handlers.NewAuthInterceptor(verifier, lookup),
+		handlers.NewAPIKeyInterceptor(apiKey),
+		handlers.NewUserAuthInterceptor(verifier, lookup),
 		handlers.NewRateLimitInterceptor(rateLimiter, limits, slog.Default()),
 	)
 

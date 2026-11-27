@@ -30,7 +30,7 @@ var authenticatedProcedures = map[string]bool{
 	usersv1connect.UserServiceLogoutAllProcedure: true,
 }
 
-func NewAuthInterceptor(verifier token.AccessVerifier, lookup UserLookup) connectrpc.UnaryInterceptorFunc {
+func NewUserAuthInterceptor(verifier token.AccessVerifier, lookup UserLookup) connectrpc.UnaryInterceptorFunc {
 	return func(next connectrpc.UnaryFunc) connectrpc.UnaryFunc {
 		return func(ctx context.Context, req connectrpc.AnyRequest) (connectrpc.AnyResponse, error) {
 			if !authenticatedProcedures[req.Spec().Procedure] {
