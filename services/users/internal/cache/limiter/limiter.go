@@ -11,7 +11,8 @@ type Limiter interface {
 
 type Decision struct {
 	Allowed    bool
-	Count      int
 	Limit      int
+	Remaining  int
 	RetryAfter time.Duration
+	ResetAfter time.Duration
 }

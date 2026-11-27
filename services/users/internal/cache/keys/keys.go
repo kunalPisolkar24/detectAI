@@ -3,7 +3,6 @@ package keys
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -20,14 +19,6 @@ const (
 	rateLimitSegment = "rate_limit:"
 	hashLength       = 16
 )
-
-// RateLimitWindow is the fixed window the burst counters run on; the window
-// id is the epoch minute it opens at.
-const RateLimitWindow = time.Minute
-
-// RateLimitGrace outlives the window edge, so a counter never expires while
-// its window still counts.
-const RateLimitGrace = 2 * time.Minute
 
 func DataKey(resource string) string {
 	return keyPrefix + resource
@@ -53,8 +44,8 @@ func FlightKey(kind, resource string) string {
 	return keyPrefix + flightSegment + kind + ":" + resource
 }
 
-func RateLimitKey(identity, scope string, windowMinute int64) string {
-	return keyPrefix + rateLimitSegment + identity + ":" + scope + ":" + strconv.FormatInt(windowMinute, 10)
+func RateLimitKey(identity, scope string) string {
+	return keyPrefix + rateLimitSegment + identity + ":" + scope
 }
 
 func emailHash(email string) string {

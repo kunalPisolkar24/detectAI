@@ -5,19 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	driver "github.com/redis/go-redis/v9"
+	"github.com/go-redis/redis_rate/v10"
 
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache/client"
 	"github.com/kunalPisolkar24/detectAI/services/users/internal/cache/keys"
 )
-
-// incrementScript counts a call and pins the counter's expiry to the window
-// edge; a non-atomic INCR-then-EXPIRE can leave an immortal key behind.
-const incrementScript = `
-local current = redis.call('INCRBY', KEYS[1], ARGV[1])
-redis.call('EXPIREAT', KEYS[1], ARGV[2])
-return current
-`
 
 // limiterTimeout bounds the counter call. The check fails open, so the cost of
 // a cache fault is the wait: it must be a fraction of the socket timeout
@@ -25,40 +17,35 @@ return current
 const limiterTimeout = 250 * time.Millisecond
 
 type Redis struct {
-	client *driver.Client
+	rate *redis_rate.Limiter
 }
 
 var _ Limiter = (*Redis)(nil)
 
 func NewRedis(client *client.Client) *Redis {
-	return &Redis{client: client.Raw()}
+	return &Redis{rate: redis_rate.NewLimiter(client.Raw())}
 }
 
 func (l *Redis) Consume(ctx context.Context, identity, scope string, limit int) (Decision, error) {
 	ctx, cancel := context.WithTimeout(ctx, limiterTimeout)
 	defer cancel()
 
-	now := time.Now().UTC()
-	windowStart := now.Truncate(keys.RateLimitWindow)
-	windowEnd := windowStart.Add(keys.RateLimitWindow)
-	key := keys.RateLimitKey(identity, scope, windowStart.Unix()/int64(keys.RateLimitWindow/time.Second))
-
-	count, err := l.increment(ctx, key, windowEnd.Add(keys.RateLimitGrace))
+	result, err := l.rate.Allow(ctx, keys.RateLimitKey(identity, scope), redis_rate.PerMinute(limit))
 	if err != nil {
-		return Decision{}, err
+		return Decision{}, fmt.Errorf("redis: rate limit check %s: %w", scope, err)
 	}
 	return Decision{
-		Allowed:    count <= limit,
-		Count:      count,
+		Allowed:    result.Allowed > 0,
 		Limit:      limit,
-		RetryAfter: windowEnd.Sub(now),
+		Remaining:  result.Remaining,
+		RetryAfter: positive(result.RetryAfter),
+		ResetAfter: positive(result.ResetAfter),
 	}, nil
 }
 
-func (l *Redis) increment(ctx context.Context, key string, expiresAt time.Time) (int, error) {
-	count, err := l.client.Eval(ctx, incrementScript, []string{key}, 1, expiresAt.Unix()).Int64()
-	if err != nil {
-		return 0, fmt.Errorf("redis: rate limit increment %s: %w", key, err)
+func positive(value time.Duration) time.Duration {
+	if value < 0 {
+		return 0
 	}
-	return int(count), nil
+	return value
 }
