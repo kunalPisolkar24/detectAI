@@ -1,6 +1,6 @@
 import { getUsersServiceEnv } from "@/lib/config/users-env"
 
-type UsersServiceUser = {
+export type UsersServiceUser = {
   id: string
   email: string
   name?: string
@@ -11,7 +11,7 @@ type UsersServiceUser = {
   createdAt?: string
 }
 
-type AuthTokens = {
+export type AuthTokens = {
   accessToken: string
   refreshToken: string
   expiresIn: number
@@ -31,8 +31,13 @@ export class UsersServiceError extends Error {
 }
 
 const AUTH_PROCEDURES = "/users.v1.AuthService"
+const USER_PROCEDURES = "/users.v1.UserService"
 
-async function call<T>(procedure: string, body: object): Promise<T> {
+async function call<T>(
+  procedure: string,
+  body: object,
+  headers: Record<string, string> = {},
+): Promise<T> {
   const { url, apiKey } = getUsersServiceEnv()
 
   const response = await fetch(`${url.replace(/\/$/, "")}${procedure}`, {
@@ -41,6 +46,7 @@ async function call<T>(procedure: string, body: object): Promise<T> {
       "Content-Type": "application/json",
       "Connect-Protocol-Version": "1",
       "x-api-key": apiKey,
+      ...headers,
     },
     body: JSON.stringify(body),
     cache: "no-store",
@@ -87,4 +93,19 @@ export async function login(input: {
     password: input.password,
   })
   return toAuthTokens(wire)
+}
+
+export async function refresh(refreshToken: string): Promise<AuthTokens> {
+  const wire = await call<WireAuthTokens>(
+    `${AUTH_PROCEDURES}/Refresh`,
+    {},
+    { "X-Refresh-Token": refreshToken },
+  )
+  return toAuthTokens(wire)
+}
+
+export function getMe(accessToken: string): Promise<UsersServiceUser> {
+  return call<UsersServiceUser>(`${USER_PROCEDURES}/GetMe`, {}, {
+    Authorization: `Bearer ${accessToken}`,
+  })
 }

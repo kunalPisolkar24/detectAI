@@ -4,8 +4,7 @@ import GitHub from "next-auth/providers/github"
 import Google from "next-auth/providers/google"
 
 import { authenticate } from "@/features/auth/services/auth"
-
-const isProd = process.env.NEXT_PUBLIC_ENV_TYPE === "prod"
+import { getAuthSecret } from "@/lib/config/session-secret"
 
 type TokenUser = {
   id?: string
@@ -14,7 +13,7 @@ type TokenUser = {
   expiresAt?: number
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   providers: [
     GitHub,
     Google,
@@ -32,10 +31,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   session: { strategy: "jwt" },
-  secret: process.env.AUTH_SECRET ?? (isProd ? undefined : "dev-auth-secret-not-for-production-32chars"),
+  secret: getAuthSecret(),
   pages: { signIn: "/login" },
   callbacks: {
-    jwt({ token, user }) {
+    jwt({ token, user, session }) {
+      if (session && typeof session === "object") {
+        const update = session as {
+          accessToken?: unknown
+          refreshToken?: unknown
+          expiresAt?: unknown
+        }
+        if (typeof update.accessToken === "string") token.accessToken = update.accessToken
+        if (typeof update.refreshToken === "string") token.refreshToken = update.refreshToken
+        if (typeof update.expiresAt === "number") token.expiresAt = update.expiresAt
+      }
+
       const credentialUser = user as TokenUser | undefined
       if (credentialUser?.accessToken && credentialUser.refreshToken && credentialUser.expiresAt) {
         token.accessToken = credentialUser.accessToken
