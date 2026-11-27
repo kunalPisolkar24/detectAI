@@ -21,14 +21,14 @@ import { PasswordInput } from "@/components/ui/password-input"
 import { AuthCard } from "@/features/auth/components/auth-card"
 import { TurnstileField } from "@/features/auth/components/turnstile-field"
 import { AUTH_COPY } from "@/features/auth/constants"
+import { useCredentialsAuth } from "@/features/auth/hooks/use-credentials-auth"
 import { useTurnstile } from "@/features/auth/hooks/use-turnstile"
-import { useTurnstileVerification } from "@/features/auth/hooks/use-turnstile-verification"
 import { LoginSchema, type LoginValues } from "@/features/auth/schemas/auth"
 
 export function LoginForm() {
   const [rememberMe, setRememberMe] = useState(false)
   const turnstile = useTurnstile()
-  const verification = useTurnstileVerification()
+  const auth = useCredentialsAuth("login")
   const form = useForm<LoginValues>({
     resolver: zodResolver(LoginSchema),
     defaultValues: { email: "", password: "" },
@@ -36,13 +36,14 @@ export function LoginForm() {
   })
   const { isValid, isSubmitting } = form.formState
 
-  const onSubmit = async () => {
+  const onSubmit = (values: LoginValues) => {
     if (!turnstile.token) return
 
-    const verified = await verification.verify(turnstile.token)
-    if (!verified) {
-      turnstile.reset()
-    }
+    auth.submit({
+      email: values.email,
+      password: values.password,
+      turnstileToken: turnstile.token,
+    })
   }
 
   return (
@@ -102,17 +103,19 @@ export function LoginForm() {
           <div className="flex justify-center pt-2">
             <TurnstileField turnstile={turnstile} />
           </div>
-          {verification.errorMessage ? (
-            <p className="text-center text-sm text-destructive">{verification.errorMessage}</p>
+          {turnstile.errorMessage || auth.errorMessage ? (
+            <p className="text-center text-sm text-destructive">
+              {turnstile.errorMessage ?? auth.errorMessage}
+            </p>
           ) : null}
           <Button
             type="submit"
             variant="brand"
             size="cta-sm"
-            disabled={isSubmitting || !isValid || !turnstile.token}
+            disabled={isSubmitting || auth.isPending || !isValid || !turnstile.token}
             className="w-full"
           >
-            {isSubmitting ? AUTH_COPY.login.submitting : AUTH_COPY.login.submit}
+            {isSubmitting || auth.isPending ? AUTH_COPY.login.submitting : AUTH_COPY.login.submit}
           </Button>
         </form>
       </Form>

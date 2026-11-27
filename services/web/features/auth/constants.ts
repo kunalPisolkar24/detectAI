@@ -38,6 +38,14 @@ export const AUTH_COPY = {
   },
 } as const
 
+export const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  invalid_credentials: "Invalid email or password.",
+  email_taken: "An account with this email already exists.",
+  captcha_failed: "Verification failed. Retry to continue.",
+  service_unavailable: "Authentication is unavailable right now. Please try again.",
+  unknown: "Something went wrong. Please try again.",
+}
+
 export const TURNSTILE_ERROR_MESSAGES: Record<string, string> = {
   expired: AUTH_COPY.turnstile.expired,
   timeout: AUTH_COPY.turnstile.timeout,
