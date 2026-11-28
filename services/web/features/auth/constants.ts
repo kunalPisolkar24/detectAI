@@ -52,8 +52,3 @@ export const TURNSTILE_ERROR_MESSAGES: Record<string, string> = {
   unsupported: AUTH_COPY.turnstile.unsupported,
   config: AUTH_COPY.turnstile.config,
 }
-
-export const PLACEHOLDER_SITE_KEYS = new Set([
-  "mock-turnstile-site-key-not-configured",
-  "dummy",
-])

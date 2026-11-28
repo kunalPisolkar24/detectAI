@@ -1,7 +1,7 @@
 import { getToken } from "next-auth/jwt"
 
 import { unstable_update } from "@/auth"
-import { getAuthSecret } from "@/lib/config/session-secret"
+import { env } from "@/lib/config/env"
 import { refresh, UsersServiceError } from "@/lib/users/client"
 
 const REFRESH_SKEW_MS = 30_000
@@ -17,7 +17,7 @@ export type AccessResult<T> =
   | { ok: false; status: number }
 
 export async function readSessionTokens(request: Request): Promise<SessionTokens | null> {
-  const token = await getToken({ req: request, secret: getAuthSecret() })
+  const token = await getToken({ req: request, secret: env.auth.secret })
 
   if (
     !token ||

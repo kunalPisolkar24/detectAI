@@ -1,4 +1,4 @@
-import { getUsersServiceEnv } from "@/lib/config/users-env"
+import { env } from "@/lib/config/env"
 
 export type UsersServiceUser = {
   id: string
@@ -38,7 +38,7 @@ async function call<T>(
   body: object,
   headers: Record<string, string> = {},
 ): Promise<T> {
-  const { url, apiKey } = getUsersServiceEnv()
+  const { url, apiKey } = env.users
 
   const response = await fetch(`${url.replace(/\/$/, "")}${procedure}`, {
     method: "POST",

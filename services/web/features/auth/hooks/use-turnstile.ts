@@ -2,20 +2,16 @@
 
 import { useCallback, useMemo, useState } from "react"
 
-import { getPublicAuthEnv } from "@/lib/config/auth-env"
-import {
-  AUTH_COPY,
-  PLACEHOLDER_SITE_KEYS,
-  TURNSTILE_ERROR_MESSAGES,
-} from "@/features/auth/constants"
+import { publicEnv } from "@/lib/config/public-env"
+import { AUTH_COPY, TURNSTILE_ERROR_MESSAGES } from "@/features/auth/constants"
 
 export const useTurnstile = () => {
   const [token, setToken] = useState<string | null>(null)
   const [key, setKey] = useState(0)
   const [errorCode, setErrorCode] = useState<string | null>(null)
 
-  const siteKey = getPublicAuthEnv().siteKey.trim()
-  const isConfigured = siteKey.length > 0 && !PLACEHOLDER_SITE_KEYS.has(siteKey)
+  const { siteKey } = publicEnv.turnstile
+  const isConfigured = !publicEnv.turnstile.isTestKey
 
   const reset = useCallback(() => {
     setToken(null)

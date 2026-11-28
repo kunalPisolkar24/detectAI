@@ -1,7 +1,7 @@
 "use server"
 
 import { TurnstileVerifyRequestSchema } from "@/features/auth/schemas/turnstile"
-import { getAuthEnv } from "@/lib/config/auth-env"
+import { env } from "@/lib/config/env"
 
 const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 const TIMEOUT_MS = 5000
@@ -19,7 +19,7 @@ export async function verifyTurnstileAction(token: string): Promise<{ verified: 
   }
 
   try {
-    const { secretKey } = getAuthEnv()
+    const { secretKey } = env.turnstile
     const body = new FormData()
     body.append("secret", secretKey)
     body.append("response", parsed.data.token)

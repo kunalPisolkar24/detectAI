@@ -4,7 +4,7 @@ import GitHub from "next-auth/providers/github"
 import Google from "next-auth/providers/google"
 
 import { authenticate } from "@/features/auth/services/auth"
-import { getAuthSecret } from "@/lib/config/session-secret"
+import { env } from "@/lib/config/env"
 
 type TokenUser = {
   id?: string
@@ -15,8 +15,8 @@ type TokenUser = {
 
 export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   providers: [
-    GitHub,
-    Google,
+    GitHub({ clientId: env.auth.github.id, clientSecret: env.auth.github.secret }),
+    Google({ clientId: env.auth.google.id, clientSecret: env.auth.google.secret }),
     Credentials({
       credentials: {
         email: { label: "Email", type: "email" },
@@ -31,7 +31,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
     }),
   ],
   session: { strategy: "jwt" },
-  secret: getAuthSecret(),
+  secret: env.auth.secret,
   pages: { signIn: "/login" },
   callbacks: {
     jwt({ token, user, session }) {
