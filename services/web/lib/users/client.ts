@@ -1,4 +1,5 @@
 import { env } from "@/lib/config/env"
+import { ConnectError, createConnectClient } from "@/lib/connect/client"
 
 export type UsersServiceUser = {
   id: string
@@ -33,37 +34,24 @@ export class UsersServiceError extends Error {
 const AUTH_PROCEDURES = "/users.v1.AuthService"
 const USER_PROCEDURES = "/users.v1.UserService"
 
+const client = createConnectClient({
+  baseUrl: env.users.url,
+  headers: { "x-api-key": env.users.apiKey },
+})
+
 async function call<T>(
   procedure: string,
   body: object,
   headers: Record<string, string> = {},
 ): Promise<T> {
-  const { url, apiKey } = env.users
-
-  const response = await fetch(`${url.replace(/\/$/, "")}${procedure}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Connect-Protocol-Version": "1",
-      "x-api-key": apiKey,
-      ...headers,
-    },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  })
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as {
-      code?: string
-      message?: string
-    } | null
-    throw new UsersServiceError(
-      payload?.code ?? "unknown",
-      payload?.message ?? `users service returned ${response.status}`,
-    )
+  try {
+    return await client.call<T>(procedure, body, headers)
+  } catch (error) {
+    if (error instanceof ConnectError) {
+      throw new UsersServiceError(error.code, error.message)
+    }
+    throw error
   }
-
-  return (await response.json()) as T
 }
 
 function toAuthTokens(wire: WireAuthTokens): AuthTokens {
