@@ -2,10 +2,9 @@ import { getToken } from "next-auth/jwt"
 
 import { unstable_update } from "@/auth"
 import { getAuthSecret } from "@/lib/config/session-secret"
-import { refresh, UsersServiceError, type AuthTokens } from "@/lib/users/client"
+import { refresh, UsersServiceError } from "@/lib/users/client"
 
 const REFRESH_SKEW_MS = 30_000
-const pendingRefreshes = new Map<string, Promise<AuthTokens>>()
 
 export type SessionTokens = {
   accessToken: string
@@ -36,21 +35,8 @@ export async function readSessionTokens(request: Request): Promise<SessionTokens
   }
 }
 
-function rotate(refreshToken: string): Promise<AuthTokens> {
-  const pending = pendingRefreshes.get(refreshToken)
-  if (pending) return pending
-
-  const next = refresh(refreshToken)
-  pendingRefreshes.set(refreshToken, next)
-  void next.then(
-    () => pendingRefreshes.delete(refreshToken),
-    () => pendingRefreshes.delete(refreshToken),
-  )
-  return next
-}
-
 async function rotateAndPersist(refreshToken: string): Promise<SessionTokens> {
-  const rotated = await rotate(refreshToken)
+  const rotated = await refresh(refreshToken)
   const tokens: SessionTokens = {
     accessToken: rotated.accessToken,
     refreshToken: rotated.refreshToken,
